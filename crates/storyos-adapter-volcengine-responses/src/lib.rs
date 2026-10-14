@@ -20,6 +20,10 @@ const EXECUTION_PROFILE: &str = "storyos.volcengine-agent-plan.execution.v1";
 /// (live observation, 2026-10-12). It does not tell an expired reference from another one.
 const PREVIOUS_RESPONSE_NOT_FOUND: &str = "http_400:InvalidParameter.PreviousResponseNotFound";
 
+/// The start of the native message of an input above the model window (live observation,
+/// 2026-10-14). Its code `InvalidParameter` is the same as for other parameter errors.
+const INPUT_TOO_LONG_MESSAGE: &str = "Total tokens of image and text exceed max message tokens";
+
 /// Sends each admitted Create or Retrieve request once, with no retry, redirect, or fallback. It
 /// asks for no explicit cache. The streaming mapping reads typed server-sent events. The route
 /// has no abort operation, so it refuses each Abort before the dispatch claim.
@@ -329,20 +333,33 @@ async fn send(
     Sent::Accepted(response)
 }
 
-/// The HTTP status and the native error code. The Provider message text is not kept.
+/// The HTTP status and the native error code. The Provider message text is not kept. An input
+/// above the model window gets the `input_too_long` condition before them.
 fn rejection_reason(status: u16, body: &[u8]) -> String {
-    let code = serde_json::from_slice::<serde_json::Value>(body)
+    let error = serde_json::from_slice::<serde_json::Value>(body)
         .ok()
-        .and_then(|body| body.get("error")?.get("code")?.as_str().map(str::to_owned))
+        .and_then(|body| body.get("error").cloned());
+    let too_long = error
+        .as_ref()
+        .and_then(|error| error.get("message")?.as_str())
+        .is_some_and(|message| message.starts_with(INPUT_TOO_LONG_MESSAGE));
+    let code = error
+        .as_ref()
+        .and_then(|error| error.get("code")?.as_str().map(str::to_owned))
         .filter(|code| {
             (1..=64).contains(&code.len())
                 && code
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
         });
-    match code {
+    let reason = match code {
         Some(code) => format!("http_{status}:{code}"),
         None => format!("http_{status}"),
+    };
+    if too_long {
+        format!("input_too_long:{reason}")
+    } else {
+        reason
     }
 }
 

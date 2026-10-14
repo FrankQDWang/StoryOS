@@ -14,7 +14,8 @@ import {
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
 import {
-  NO_RESULT_SENTENCE, PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, settledRun, stoppedWithoutResult,
+  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, NO_RESULT_SENTENCE,
+  PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
@@ -170,7 +171,9 @@ function resultText(run: GetAgentRunResponse): string | undefined {
         case "disclosure_outside_grant":
           return "这次请求超出了本项目允许发送给 AI 的范围，没有发送任何内容。你可以继续手动写作。";
         case "conversation_too_long":
-          return "这段对话已经太长，请开始一个新对话。你可以继续手动写作。";
+          return CONVERSATION_TOO_LONG_SENTENCE;
+        case "destination_refused":
+          return DESTINATION_REFUSED_SENTENCE;
         case "expiry_rebuild_unknown_create":
           return PREVIOUS_REQUEST_UNRESOLVED_SENTENCE;
         default:

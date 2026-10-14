@@ -17,7 +17,7 @@ On 2026-10-12 and 2026-10-13, the author selected the rule that starts Host-mana
 - Before the first decision request of an AgentRun, the Host calculates the expected input. It is the reported input and output tokens of the last response of the chain, plus the counted tokens of the new turn. Compaction starts when the expected input reaches the threshold.
 - A profile with no window, an unknown output bound, or unreported usage gives no automatic compaction.
 - With a known window, a requested compaction can fail to install: the summary request refuses, no complete summary comes, or the install check refuses. When the expected input then reaches the window after the output bound, the AgentRun refuses before dispatch with `conversation_too_long`. The author sees one sentence: this conversation is too long, so start a new conversation ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)).
-- With no known window, StoryOS does not refuse before dispatch. The mapping of a destination rejection for an input that is too long waits until the native rejection shape is observed ([#1110](https://github.com/FrankQDWang/StoryOS/issues/1110)).
+- With no known window, StoryOS does not refuse before dispatch. When the destination rejects an input that is too long, the AgentRun refuses with `conversation_too_long`, and the author sees the same sentence. The section below gives the mapping.
 - The author message prefix of the Host fake compacts only on the Host fake. It is a test request, not a product trigger.
 - Registrations `018f0000-0000-7001-8000-00000000fa10` (profile v9, documented window, pending trigger) and `018f0000-0000-7001-8000-00000000fa11` (profile v10, documented window, qualified trigger) follow `fa09`.
 
@@ -31,3 +31,11 @@ On 2026-10-12 and 2026-10-13, the author selected the rule that starts Host-mana
 
 - The live qualification sent 6 requests. The automatic trigger started a compaction, and its summary request had 190,516 input tokens. The route accepted it. The window stays a documented value, because no request examined the full window ([evidence record](../research/agent-plan-compaction-threshold-qualification-2026-10-13.md)).
 - The expected input counts the new turn with the Token Counting Profile of StoryOS, which counts Unicode scalars. The provider can count more tokens for the same text. In the measured run, the margin of 20 percent covered this difference.
+
+## Destination rejection of an input that is too long
+
+On 2026-10-14, [Show a Result Sentence When the Real Destination Refuses a Request](https://github.com/FrankQDWang/StoryOS/issues/1110) added this section. The author decided on 2026-10-13 that a Registration with no known window does not compact and does not refuse before dispatch.
+
+- A live request above the window got HTTP 400 with the native code `InvalidParameter` and a message that starts with `Total tokens of image and text exceed max message tokens` ([evidence record](../research/agent-plan-over-long-input-rejection-2026-10-14.md)). Other parameter errors have the same code, so the Agent Plan adapter reads the start of the message. It reports the rejection as `input_too_long:http_400:InvalidParameter` and keeps no message text.
+- The Host refuses an AgentRun whose Create gets the `input_too_long` condition with `conversation_too_long`. It refuses an AgentRun whose Create gets another rejection with `destination_refused`. The author sees one sentence for each ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)). A rejection of a prior response reference keeps its recovery.
+- The same live run found that the route served `doubao-seed-2-1-pro-260915`. The Ark model list gives this version a 1024k window. The documented 262,144-token window above is the window of the earlier version. This section does not change the window fact or the threshold.
