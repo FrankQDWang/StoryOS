@@ -12,6 +12,21 @@ export const DESTINATION_REFUSED_SENTENCE = "模型服务拒绝了这次请求�
 /** The sentence for a conversation that is too long for the model (ADR 0056). */
 export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开始一个新对话。你可以继续手动写作。";
 
+/** The sentence for a model reply that looks like a structured reply but does not validate (#1145). */
+export const MALFORMED_REPLY_SENTENCE = "模型这次的回复格式不正确，正文没有改动。你可以重试，或继续手动写作。";
+
+/**
+ * An Advisory text that is a malformed structured reply. The adapter removes one Markdown code
+ * fence, and this function does the same. Then the text is an object with a `kind` key. A valid
+ * reply does not arrive here as an Advisory text. The text can be invalid JSON.
+ */
+export function malformedStructuredReply(text: string): boolean {
+  const trimmed = text.trim();
+  const fenced = /^```(?:json)?([\s\S]*)```$/.exec(trimmed);
+  const reply = fenced === null ? trimmed : fenced[1]!.trim();
+  return reply.startsWith("{") && reply.endsWith("}") && reply.includes('"kind"');
+}
+
 /**
  * A request whose recovery stopped without a result: an unknown outcome that waits, a paused
  * successor, or a successor that also gave no result. Nothing changes it later.

@@ -503,6 +503,8 @@ fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() 
             r#"{{"kind":"prose_change","summary":"Shorter.","changes":[{{"block_id":"{block}","candidate_text":"Rain hammered the roof.","explanation":"A stronger verb."}}]}}"#
         )
     };
+    // The shape of the S4-03 live reply: one change has a duplicated "block_id": key.
+    let duplicated_key = prose(BLOCK).replace(r#""block_id":"#, r#""block_id":"block_id":"#);
     let map = |text: &str| super::decision::map_output(text, &[target()]);
     let shorter = DecisionCandidate::ProseChange {
         text: "Shorter.".to_owned(),
@@ -515,6 +517,7 @@ fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() 
             map("```json\n{\"kind\":\"clarification\",\"question\":\"Which scene?\"}\n```"),
             map("Keep the second sentence."),
             map(r#"{"kind":"prose_change","summary":"Shorter."}"#),
+            map(&duplicated_key),
             super::decision::map_output(&prose(BLOCK), &[]),
         ],
         [
@@ -535,6 +538,7 @@ fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() 
             ),
             advisory("Keep the second sentence."),
             advisory(r#"{"kind":"prose_change","summary":"Shorter."}"#),
+            advisory(&duplicated_key),
             advisory(&prose(BLOCK)),
         ]
     );
