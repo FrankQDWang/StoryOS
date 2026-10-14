@@ -160,14 +160,14 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 ## Observations of #396
 
 - A malformed JSON reply becomes an Advisory. This is contract behavior; the UX follow-up is #1145. Not blocking.
-- Outline selection is read-only by Stage 2 design; the UX follow-up is #1146. Not blocking. The journey uses "设为当前章节" to change the current Chapter.
+- Outline selection was read-only by Stage 2 design; the UX follow-up #1146 was delivered on `main` `020e5575`. Since then, a click on a Chapter makes it current, and the "设为当前章节" menu item is removed. This journey ran before `020e5575` and used "设为当前章节". Steps 4 and 7 do not run again: #1146 changes only how the author changes the current Chapter. The Proposal flow and the editor flow with no model destination did not change.
 
 ## Gaps
 
 | Issue | Finding | Effect on S4-JRN-001 |
 | --- | --- | --- |
 | #1145 | Malformed reply UX | None |
-| #1146 | Outline selection is read-only | None |
+| #1146 | Outline selection is read-only | None; delivered on `020e5575` |
 | #1147 | A stale candidate target of a rejected Proposal makes the next send fail with "无法提交请求，请稍后再试。". Work-around: click ordinary prose to clear the focus, then send. | None with the work-around |
 | #1148 | The successor result has no decision | Fixed by PR #1150; the second step 5 rerun on `4c29bb6e` passes |
 | #1161 | A reply that changes only some declared targets gives no Proposal | One live request after #1161 merges |
