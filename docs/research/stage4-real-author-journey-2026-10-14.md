@@ -27,6 +27,7 @@ The standing authorization on #362 covers each request. The planned cap started 
 | 12 → 13 | R11 was an automatic Retrieve by the finalizing worker after the cancellation. |
 | 13 → 14 | The confirmed-expiry step needs a Conversation whose latest Attempt settled normally. Conversations 1 and 2 end in an unknown or a cancelled Attempt (see "Confirmed reference expiry"). |
 | 14 → 18 | The step 5 rerun on the `main` that contains #1148: interrupted Create, Retrieve, successor, and the automatic `late_retrieval`. |
+| 18 → 22 | The first rerun (S1–S4) gave no Decision, because the reply covered one of two targets. A second rerun (S5–S8) uses the two-paragraph instruction of R6. |
 
 | # | Time (UTC) | Run | Kind | Result | Usage in / out |
 | --- | --- | --- | --- | --- | --- |
@@ -49,6 +50,10 @@ The standing authorization on #362 covers each request. The planned cap started 
 | S2 | 09:27:16 | same | Retrieve | Rejected: the response was not stored. | — |
 | S3 | 09:27 | same | Successor Create | Valid JSON `prose_change` with one change for two declared targets. Core validation gave no decision, so no Proposal opened (see "Rerun after #1148 and #1151"). | 462 / 1160 |
 | S4 | 09:28 | same | Automatic `late_retrieval` | Rejected. Run `completed`, fence 2, allowance consumed. | — |
+| S5 | 09:41:57 | `01a139ca-2f70-7351-af06-1badd5177295` | Create, stream, new Conversation 5, on `4c29bb6e` | Worker killed when the reference committed. Attempt `uncertain`. | unknown |
+| S6 | 09:42:27 | same | Retrieve | Rejected: the response was not stored. | — |
+| S7 | 09:42 | same | Successor Create | `prose_change` with one change for each of the two targets. Decision `01a139cb-59f9-7e63-bb3d-45f3d6a29d04` opened Proposal `01a139cb-5a0a-7362-8878-265325fcfdf0`. | 459 / 1389 |
+| S8 | 09:43 | same | Automatic `late_retrieval` | Rejected. Run `completed`, fence 2, allowance consumed. | — |
 
 ## Journey steps
 
@@ -131,7 +136,16 @@ Ran on `main` `4c29bb6e` (branch merge `5689ae5c`, release package rebuilt). The
 
 - The recovery path ran as planned: the predecessor was fenced, Retrieve was rejected, one successor ran (`same_request` = true, `allowance_consumed` = true), and the automatic `late_retrieval` was rejected.
 - The successor reply was valid JSON, but it had one change (the second paragraph) for the two declared targets of 渡口. `prose_changes_match_targets` requires one change for each declared target, so core validation gave no decision and no Proposal. The panel showed "没有收到这次的结果，正文没有改动。请开始新对话重试。". A normal Create applies the same validation.
-- The instruction asked to expand only the second paragraph. R8 had one change for each target, so #1148 did block R8. This rerun did not yet show a successor Proposal on the live route.
+- The instruction asked to expand only the second paragraph. R8 had one change for each target, so #1148 did block R8. This rerun is not live evidence of #1148. The coordinator records the single-target reply problem as a separate ticket for the author; S4-05 does not change it.
+
+### Step 5, second rerun (S5–S8): live evidence of #1148
+
+Ran on `main` `4c29bb6e`, with the instruction of R6 ("请把这一章的两段各自扩写到大约三百字，增加渡口清晨的细节。") in a new Conversation 5.
+
+- Recovery: the Create became `uncertain`, Retrieve was rejected, the predecessor was fenced, one successor ran, and the automatic `late_retrieval` was rejected. Run `completed`, fence 2.
+- The successor decision `01a139cb-59f9-7e63-bb3d-45f3d6a29d04` (`prose_change`, `opened_proposal` present) opened Proposal `01a139cb-5a0a-7362-8878-265325fcfdf0` on 渡口. The Proposal `source_decision_id` is the successor decision.
+- Editor: the panel showed "这次修改涉及 1 个章节、2 处文字", and the main editor showed both inline locations with "接受" and "拒绝". The author accepted location 1 (`acceptProposal` → `authoritative_applied`, Acceptance Receipt `authoritative_applied`) and rejected location 2 (`rejectProposalOperations` → `proposal_operations_resolved`, Rejection Receipt `author_declined`, resolution `pending` → `rejected`, Author Action 30). 渡口 has 293 scalars and shows "已保存".
+- Step 5 unknown-create recovery and step 6 queries: pass on `4c29bb6e`. Confirmed reference expiry (R13, R14) is still pending.
 
 After #1151 merges, the takeover part of step 7 runs again with no live request. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
 
