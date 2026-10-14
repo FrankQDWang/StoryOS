@@ -461,6 +461,12 @@ function ProjectReadyView({
               });
               onReopened(next);
             }}
+            onUndoCurrentChapter={(chapterId) => {
+              // An Undo of a chapter switch moves the editor back to the earlier Current Chapter.
+              if (chapterId === currentChapterId) return;
+              void openControlledProject({ baseUrl, projectId: state.project.project.project_id, fetchImpl, cryptoImpl })
+                .then(onReopened);
+            }}
             blocks={editorBlocks}
             editable={!readOnly && !archived}
             persistWorkspace={

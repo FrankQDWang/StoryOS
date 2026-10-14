@@ -62,8 +62,9 @@ export interface EditorSessionWritingController {
   /**
    * Starts one Author Undo with the rules of ADR 0038. Does nothing while an Undo is in progress.
    * Resolves with the Proposal that the Undo changed, or `undefined` when it has no result to show.
+   * A compensation also gives the Current Chapter after the Undo, because an Undo can change it (ADR 0026).
    */
-  undo(): Promise<{ proposalId: string | undefined } | undefined>;
+  undo(): Promise<{ proposalId: string | undefined; currentChapterId?: string | undefined } | undefined>;
   /**
    * Runs a structural command after the editor is quiet. `journaled` needs every captured input in the Journal.
    * `settled` also submits and needs no unsettled input.
@@ -437,7 +438,8 @@ export function createEditorSessionWritingController({
               return { proposalId };
             case "compensated":
               await refresh();
-              return { proposalId };
+              return { proposalId, currentChapterId: "project" in settled && settled.project.open.kind === "current_chapter"
+                ? settled.project.open.current_chapter_id : undefined };
             default:
               onFailure(new Error("Author Undo did not compensate"));
               return undefined;

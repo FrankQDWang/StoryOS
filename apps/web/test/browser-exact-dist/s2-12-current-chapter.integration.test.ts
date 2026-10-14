@@ -88,7 +88,7 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, body = te
   });
 }
 
-it("writes in each selected Chapter and reopens the last selected Chapter", async () => {
+it("writes in each selected Chapter, undoes a chapter switch, and reopens the Current Chapter", async () => {
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist current Chapter";
@@ -175,6 +175,20 @@ it("writes in each selected Chapter and reopens the last selected Chapter", asyn
   await selectEditable("Chapter A");
   expect(manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame)))).toBe("Alpha prose");
   await typeIntoCurrent(frame, ", again", "Alpha prose, again");
+
+  // An Author Undo of a chapter switch returns the editor to the earlier Chapter.
+  await selectEditable("Chapter B");
+  manuscriptEditor(appRoot(frame), applicationWindow(frame)).focus();
+  await applyTrustedInput({ operation: "undo_latest_author_action" });
+  await expect.poll(() => {
+    const nextRoot = appRoot(frame);
+    const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return {
+      title: nextRoot.querySelector("h2")?.textContent,
+      body: editor === null ? undefined : manuscriptBody(editor),
+      editable: editor !== null && manuscriptIsEditable(editor),
+    };
+  }, { timeout: 15_000 }).toEqual({ title: "Chapter A", body: "Alpha prose, again", editable: true });
 
   const childWindow = applicationWindow(frame);
   const authoritativeA = await getChapter({
