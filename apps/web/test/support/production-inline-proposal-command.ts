@@ -251,7 +251,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
         .getAttribute("data-chapter-id"))!;
       assert.ok(chapterId);
       // The earlier Chapter stays editable until the switch opens the new Chapter.
-      await expect(page.locator(".editor-panel h2")).toHaveText(title, { timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible({ timeout: 15_000 });
       await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
       await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)
         .toBe(SOURCE);
