@@ -16,15 +16,13 @@ export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开
 export const MALFORMED_REPLY_SENTENCE = "模型这次的回复格式不正确，正文没有改动。你可以重试，或继续手动写作。";
 
 /**
- * An Advisory text that is a malformed structured reply. The adapter removes one Markdown code
- * fence, and this function does the same. Then the text is an object with a `kind` key. A valid
- * reply does not arrive here as an Advisory text. The text can be invalid JSON.
+ * An Advisory text that is a malformed structured reply. The function removes a Markdown code
+ * fence, also a fence without its end. Then the text starts as an object with a `kind` key. A
+ * valid reply does not arrive here as an Advisory text. The text can be invalid or incomplete JSON.
  */
 export function malformedStructuredReply(text: string): boolean {
-  const trimmed = text.trim();
-  const fenced = /^```(?:json)?([\s\S]*)```$/.exec(trimmed);
-  const reply = fenced === null ? trimmed : fenced[1]!.trim();
-  return reply.startsWith("{") && reply.endsWith("}") && reply.includes('"kind"');
+  const reply = text.trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
+  return reply.startsWith("{") && reply.includes('"kind"');
 }
 
 /**

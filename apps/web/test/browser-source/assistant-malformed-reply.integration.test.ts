@@ -13,10 +13,12 @@ const DUPLICATED_KEY = '{"kind":"prose_change","summary":"改写两段。","chan
   + '{"block_id":"b1","candidate_text":"雨更大了。","explanation":"更紧凑。"},'
   + '{"block_id":"block_id":"b2","candidate_text":"渡口很静。","explanation":"更紧凑。"}]}';
 const FENCED_WITHOUT_CHANGES = '```json\n{"kind":"prose_change","summary":"Shorter."}\n```';
+const WITHOUT_END = '```json\n{"kind":"prose_change","summary":"Shorter.","changes":[';
 
 it.each([
   ["a change JSON that is not valid JSON", DUPLICATED_KEY, MALFORMED_REPLY],
   ["a fenced change JSON without changes", FENCED_WITHOUT_CHANGES, MALFORMED_REPLY],
+  ["a fenced change JSON without its end", WITHOUT_END, MALFORMED_REPLY],
   ["a prose Advisory", "Keep the second sentence.", "Keep the second sentence."],
 ])("shows %s as the author result and changes no chapter", async (_, text, result) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
