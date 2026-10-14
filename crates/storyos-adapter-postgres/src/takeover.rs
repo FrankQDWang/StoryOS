@@ -214,6 +214,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         if generation_inserts != 1 {
             return Err(ProjectCommandError::BindingConflict);
         }
+        let snapshot_id = Uuid::now_v7().to_string();
         let base_updates = client
             .execute(
                 "UPDATE storyos.editor_session_base_snapshots AS snapshot
@@ -234,7 +235,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
                     &self.editor_session_id.as_ref(),
-                    &Uuid::now_v7().to_string(),
+                    &snapshot_id,
                     &current_chapter_id,
                     &current_head,
                     &activity.project_activity_position.to_string(),
@@ -246,7 +247,6 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         if base_updates != 1 {
             return Err(ProjectCommandError::BindingConflict);
         }
-        let snapshot_id = Uuid::now_v7().to_string();
         crate::snapshot::persist_canonical_snapshot(
             client,
             scope,

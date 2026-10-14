@@ -235,7 +235,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     assert.match(winner.base_snapshot.snapshot_id, UUID);
     assert.match(winner.base_snapshot.created_at, ISO_INSTANT);
     assert.notEqual(winner.base_snapshot.snapshot_id, observer.base_snapshot.snapshot_id);
-    assert.notEqual(winner.base_snapshot.snapshot_id, canonical.snapshot.snapshot_id);
+    assert.equal(winner.base_snapshot.snapshot_id, canonical.snapshot.snapshot_id);
     const expectedWinner = {
       ...observer,
       schema_id: "storyos.query.editor-session.response.v1",
