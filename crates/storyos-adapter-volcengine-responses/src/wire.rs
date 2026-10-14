@@ -16,8 +16,10 @@ Reply with exactly one JSON object and no other text. Use one of these forms:
 \"changes\":[{\"block_id\":\"<the id of one target block>\",\"candidate_text\":\"<the complete \
 new text of that block>\",\"explanation\":\"<one sentence that tells why>\"}]}
 
-Use \"prose_change\" only when the request has target blocks. Then give exactly one change for \
-each target block, with its exact block_id. Do not change text outside the target blocks.";
+Use \"prose_change\" only when the request has target blocks. Then give one change for each \
+target block that you change, with its exact block_id. Give at least one change. Do not include a \
+target block that you do not change, because it keeps its text. Do not change text outside the \
+target blocks.";
 
 /// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
 /// not carry forward with a prior response reference, so each request sends them.

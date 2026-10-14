@@ -58,16 +58,20 @@ async fn open_chapter(
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let multiple = produced.is_some();
-    let selected: Vec<_> = if multiple {
-        targets
-    } else {
-        targets.into_iter().take(1).collect()
-    };
     let candidates = produced.unwrap_or_default();
     let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
         .iter()
         .map(|candidate| (candidate.manuscript_block_id.as_str(), candidate))
         .collect();
+    // ADR 0061: a target block that the reply does not change keeps its text.
+    let selected: Vec<_> = if multiple {
+        targets
+            .into_iter()
+            .filter(|target| candidate_by_block.contains_key(target.block_id.as_str()))
+            .collect()
+    } else {
+        targets.into_iter().take(1).collect()
+    };
     let mut locations = Vec::new();
     let mut validation_result = "invalid";
     for target in &selected {

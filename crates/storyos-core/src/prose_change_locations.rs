@@ -11,7 +11,8 @@ pub struct ProseChangeCandidate {
     pub explanation: String,
 }
 
-/// Validate the whole declared result before any candidate can open.
+/// Validate the whole result before any candidate can open: one or more changes, each for a
+/// different declared target with its declared base (ADR 0061).
 pub fn prose_changes_match_targets(
     targets: &[(String, String, String)],
     candidates: &[ProseChangeCandidate],
@@ -27,8 +28,7 @@ pub fn prose_changes_match_targets(
     !candidates.is_empty()
         && targets.len() <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1
         && declared.len() == targets.len()
-        && actual.len() == targets.len()
-        && candidates.len() == targets.len()
+        && actual.len() == candidates.len()
         && candidates.iter().all(|candidate| {
             declared
                 .get(&(&candidate.chapter_id, &candidate.manuscript_block_id))
