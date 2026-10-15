@@ -81,7 +81,7 @@ export function AddReferenceControl({ editor, source, tracked }: {
     // The editor keeps its selection while the author clicks the control.
     onMouseDown={(event) => event.preventDefault()}
     onClick={() => {
-      for (const key of addDraftReferences(source.scope, selectedEntries(editor, source)) ?? []) tracked.add(key);
+      addDraftReferences(source.scope, selectedEntries(editor, source), tracked);
       setAnchor(undefined);
     }}>添加到对话</button>;
 }

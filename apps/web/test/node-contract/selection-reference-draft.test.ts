@@ -147,6 +147,23 @@ test("a candidate reference moves with candidate edits and becomes Chapter text 
     label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } }]);
 });
 
+test("an accepted candidate reference keeps the accepted Revision when a hydrate of the older Revision comes first", () => {
+  const project = scope();
+  const tracked = new Set<string>();
+  const [key] = addDraftReferences(project, [candidateEntry(1, 3)], tracked)!;
+  assert.equal(tracked.size, 0);
+  acceptDraftCandidates(project, PROPOSAL, [OPERATION!], NEXT);
+  // The Proposals refresh removes the candidate while the editor still shows the Revision before the acceptance.
+  const before = withCandidate("雨停了。");
+  trackDraftReferences(project, CHAPTER, tracked,
+    before.tr.replaceWith(0, before.doc.content.size, state("雨夜。", "船夫在等着。").doc.content), tree);
+  rebaseDraftReferences(project, CHAPTER, tracked, REVISION);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(FIRST!, 1, 3, NEXT), false]]);
+  // The hydrate of the accepted Revision then starts the tracking.
+  assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
+});
+
 test("a candidate reference stays while a replaced document keeps its text, and goes with its candidate", () => {
   const project = scope();
   addDraftReferences(project, [candidateEntry(1, 3)]);
@@ -170,7 +187,8 @@ test("a paste of a copy adds its references and tracks them in the editor of the
   assert.equal(pasteReferences(project, data), true);
   assert.deepEqual(draftEntries(project).map((item) => item.reference),
     [reference(SECOND!, 0, 2), candidateEntry(0, 1).reference]);
-  assert.deepEqual([...tracked], draftEntries(project).map((item) => item.key));
+  // The editor tracks the Chapter text reference. A candidate reference moves with its candidate.
+  assert.deepEqual([...tracked], [draftEntries(project)[0]!.key]);
   // A paste that the draft cannot hold adds nothing.
   addDraftReferences(project, Array.from({ length: 6 }, (_, index) => entry(reference(FIRST!, index, index + 1))));
   assert.equal(pasteReferences(project,

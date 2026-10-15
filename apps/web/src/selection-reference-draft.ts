@@ -87,10 +87,11 @@ export function draftCanAdd(draft: Draft, added: readonly SelectionReference[]):
 
 /**
  * Adds the references that are not in the draft yet and returns their keys. When the draft cannot hold
- * all of them, it adds nothing.
+ * all of them, it adds nothing. The keys of the added Chapter text references go into `tracked`. A
+ * candidate reference is not in it, so after an acceptance the editor tracks it only from the accepted Revision.
  */
-export function addDraftReferences(scope: ProjectScope,
-  added: readonly Omit<DraftReference, "key">[]): string[] | undefined {
+export function addDraftReferences(scope: ProjectScope, added: readonly Omit<DraftReference, "key">[],
+  tracked?: Set<string>): string[] | undefined {
   const draft = read(scope);
   if (!draftCanAdd(draft, added.map((entry) => entry.reference))) return undefined;
   const entries = [...draft.entries];
@@ -100,6 +101,7 @@ export function addDraftReferences(scope: ProjectScope,
     const key = `${Date.now()}:${Math.random()}`;
     entries.push({ ...entry, key });
     keys.push(key);
+    if (entry.reference.kind === "chapter_text") tracked?.add(key);
   }
   write(scope, { ...draft, entries });
   return keys;
@@ -339,8 +341,5 @@ export function pasteReferences(scope: ProjectScope, data: string): boolean {
   const added = entries as Omit<DraftReference, "key">[];
   const current = lastCopy !== undefined && value.copy === lastCopy.id && lastCopy.current() === lastCopy.doc;
   if (!current && added.some((entry) => entry.moved || entry.reference.kind !== "chapter_text")) return false;
-  const keys = addDraftReferences(scope, added);
-  if (keys === undefined) return false;
-  if (current) for (const key of keys) lastCopy!.tracked.add(key);
-  return true;
+  return addDraftReferences(scope, added, current ? lastCopy!.tracked : undefined) !== undefined;
 }
