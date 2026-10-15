@@ -11,14 +11,14 @@ Claim ceiling: implementation evidence completeness only (HND-003). This record 
 | Product code | `main` at `f03cebc0d4aa9baf0be131f686234e4907a5580c`. The release package was built at `f7a5435b`, which changes only the contract crosswalk generator. |
 | Topology | ADR 0022 production surface: `storyos-server` with `STORYOS_WORKER=0`, and a separate `storyos-worker` process (`--once` for each step). Both from `make release-package`. |
 | Settings | ADR 0050 settings layer. `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`. The key comes from the settings env file; this run never read it. |
-| Database | Disposable PostgreSQL from `scripts/dev-postgres.sh`. No Chapter text was written into the database directly. Each manuscript change went through the editor. |
+| Database | Disposable PostgreSQL from `scripts/dev-postgres.sh`. No Chapter text was written into the database directly. Each manuscript change went through the editor. The rerun after #1165 used a second disposable database (see "Rerun after #1165"). |
 | Registration | Head `018f0000-0000-7001-8000-00000000fa15`, model `doubao-seed-2-1-pro-260915`, window 1,048,576, compaction threshold 812,646 (ADR 0059). |
 | Author surface | The exact-dist Web client from the release package, in a browser, with the bootstrap session of the local owner. |
 | Project | `01a138f4-08da-7a20-b1c6-4b83da691945` ("S4 真实作者旅程"), Chapters 雨夜 `01a138f5-005a-…` and 渡口 `01a138f5-983a-7f31-9ad3-6a41b80b4718`. |
 
 ## Live request log
 
-The standing authorization on #362 covers each request. The planned cap started at 10. The coordinator raised it six times; each change is below. The final count is 22, equal to the cap.
+The standing authorization on #362 covers each request. The planned cap started at 10. The coordinator raised it seven times; each change is below. The final count is 25, equal to the cap.
 
 | Cap change | Reason |
 | --- | --- |
@@ -28,6 +28,7 @@ The standing authorization on #362 covers each request. The planned cap started 
 | 13 → 14 | The confirmed-expiry step needs a Conversation whose latest Attempt settled normally. Conversations 1 and 2 end in an unknown or a cancelled Attempt (see "Confirmed reference expiry"). |
 | 14 → 18 | The step 5 rerun on the `main` that contains #1148: interrupted Create, Retrieve, successor, and the automatic `late_retrieval`. |
 | 18 → 22 | The first rerun (S1–S4) gave no Decision, because the reply covered one of two targets. A second rerun (S5–S8) uses the two-paragraph instruction of R6. |
+| 22 → 25 | The step 2 and step 4 rerun with the selection references of #1165, which also gives the part-only request of #1161. Three Creates; no automatic request was expected or sent. |
 
 | # | Time (UTC) | Run | Kind | Result | Usage in / out |
 | --- | --- | --- | --- | --- | --- |
@@ -54,6 +55,9 @@ The standing authorization on #362 covers each request. The planned cap started 
 | S6 | 09:42:27 | same | Retrieve | Rejected: the response was not stored. | — |
 | S7 | 09:42 | same | Successor Create | `prose_change` with one change for each of the two targets. Decision `01a139cb-59f9-7e63-bb3d-45f3d6a29d04` opened Proposal `01a139cb-5a0a-7362-8878-265325fcfdf0`. | 459 / 1389 |
 | S8 | 09:43 | same | Automatic `late_retrieval` | Rejected. Run `completed`, fence 2, allowance consumed. | — |
+| R15 | 10-15 19:34 | `01a1410e-8c7e-7a01-be41-35114da2abf2` | Create, new Conversation (second database), on `bda9138a` | One `chapter_text` reference to part of paragraph 2. `prose_change` on 1 of 2 declared blocks; Proposal `01a1410e-d449-7e70-99b9-f28d84972647`. Response `resp_021792092844693cd31eac8229c74daa7d4d74052dc3c321080d4`. | 741 / 349 |
+| R16 | 10-15 19:36 | `01a14110-7e95-71e0-9445-acb74a89f7b0` | Create, incremental continuation of R15 | One `chapter_text` reference to both paragraphs. `prose_change` on 2 blocks; Proposal `01a14110-e0f6-7731-884a-521cd368f368`. | 1454 / 733 |
+| R17 | 10-15 19:37 | `01a14111-6e3b-73e3-9dd8-9e184d3a8027` | Create, incremental continuation of R16 | One `proposal_candidate_text` reference to R16 location 1. Candidate revision, outcome `revised`. | 2013 / 978 |
 
 ## Journey steps
 
@@ -63,7 +67,7 @@ Ran on `f03cebc0`. The author created the Project, Volume 第一卷, Chapters �
 
 ### Step 2: bounded request and Context Inspect
 
-Ran on `f03cebc0`. Context Inspect is a read-only audit query (ADR 0040), so this step read `storyos.context_assembly_manifests` for R2:
+Ran on `f03cebc0`. The Working Target part is superseded by the rerun with selection references on `bda9138a` (see "Rerun after #1165"); this Context Inspect evidence stays valid. Context Inspect is a read-only audit query (ADR 0040), so this step read `storyos.context_assembly_manifests` for R2:
 
 - `operation_requirement.purpose` = `current_passage_assistance`, `chapter_id` = 渡口, `chapter_revision_id` = `01a138f6-071b-7493-aea8-68bc5f642045`, `proposal_target_block_ids` = the two blocks of 渡口.
 - `selected` = `author_instruction` (23 scalars) and `working_target` (73 scalars), both `exact_required`. `considered` also lists `host_control` and an absent `instruction_binding`. `sufficiency` = `complete`. `item_token_limit` = 32000.
@@ -79,13 +83,13 @@ Ran on `f03cebc0`.
 - R2 Attempt `01a138f9-14cc-76f1-82cd-c1637c3333ae`: `continuation.input_mapping` = `incremental`, `prior_continuation_binding_id` = R1 binding, wire `previous_response_id` = R1 response, `stream: true`, `store: true`, model `doubao-seed-2-1-pro-260915`. The serialized payload has no credential and no header.
 - Evidence items separate `sent_content`, `stored_reference`, `provider_report` (`provider_usage_reported`), and `provider_opaque` (`provider_internal_content` unknown).
 - Cache: `explicit` = `not_requested`, `implicit` = `destination_default`, `observed` = reported 0 cached input tokens. This proves no cache hit and no savings.
-- Usage: R1, R2, R3, R5, R8, R12, R14 have `reported` usage. R4, R6, R10 stay `unknown`. The rejected R13 has `unknown` usage.
+- Usage: R1, R2, R3, R5, R8, R12, R14, R15, R16, R17 have `reported` usage. R4, R6, R10 stay `unknown`. The rejected R13 has `unknown` usage.
 - Instruction and target change: R2 changed the current Chapter and the instruction inside the same Conversation, and the manifest shows the new Working Target.
 - Active compaction: the author waived a live compaction run on 2026-10-14. The evidence is S4-06c2b2 and S4-06c3, the fa14 qualification of #1143 (`agent-plan-compaction-threshold-qualification-2026-10-13.md`, `agent-plan-pinned-version-qualification-2026-10-14.md`), and the deterministic compaction tests in the crosswalk.
 
 ### Step 4: inspect, edit, Accept, Reject
 
-Ran on `f03cebc0`.
+Ran on `f03cebc0`. Superseded by the rerun with selection references on `bda9138a` (see "Rerun after #1165"). #1165 removed the caret-based candidate target.
 
 - R1 Proposal: the author edited candidate 2 in the main editor (`applyAuthorEdit` → `proposal_revised`, a new Proposal revision with the edited operation), then accepted it (`acceptProposal` → `authoritative_applied`, Acceptance Receipt `authoritative_applied`). The author rejected locations 1 and 3 (`rejectProposalOperations` → `proposal_operations_resolved`, two Rejection Receipts `author_declined`).
 - R2 Proposal: the author rejected both locations in a separate Run (two Rejection Receipts).
@@ -158,8 +162,38 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 - The panel showed "写作助手当前不可用。你仍可以直接写作。".
 - Step 7: pass on `6d511d93`.
 
+## Rerun after #1165
+
+#1165 (S4-08, ADR 0062) was delivered by PR #1168, #1170, #1171, #1172, #1173, and #1174 (`main` `bda9138a`). The author decided that steps 2 and 4 run again with the new interaction, and that the part-only request of #1161 (ADR 0061, PR #1162) joins this rerun.
+
+### Setup of the rerun
+
+- Branch merge `6605d07a` of `main` `bda9138a`, release package rebuilt.
+- `main` `bda9138a` adds migration 0093, so the persistence identity of the package changed. The packaged `storyos-storage` refused the first disposable database with `identity_mismatch`; release 1 has no in-place upgrade. A second disposable database (container `storyos-s405-journey2`) was activated by the new package and loaded with the controlled fixture. The first database stays unchanged for the R1–R14 queries.
+- `storyos-server` ran on a new origin (port 8746, `STORYOS_WORKER=0`), so the browser had no storage from the first database. One `storyos-worker --once` ran each request.
+- The author created Project `01a1410c-6f12-7b31-a122-6d425ef7298f` ("S4 选区引用旅程"), Volume 第一卷, and Chapter 渡口 `01a1410c-f2af-7072-8081-e992d71206e9` in the editor, and typed two paragraphs by hand. The first admission created the Grant `01a1410e-8ca3-7420-95d7-f1f7e7e25c4e` (`project_writing_assistance_v2`) and one use binding through `create_agent_run`. Nothing was written into the database directly.
+
+### Step 2 with a selection reference, and the part-only request (R15)
+
+- The author selected the first sentence of paragraph 2 ("林远在人群里找了很久，没有找到写信的人。") with the keyboard, clicked "添加到对话", and the composer showed the label 「第 1 章 渡口（第 2 段）」. After the send, the label left the composer, and the history showed it as a sent reference.
+- Operation Requirement: `selection_references` has one `chapter_text` reference, `base_authoritative_revision_id` = the Chapter head `01a1410d-315a-7ef3-bea8-77942c68f468`, start = paragraph 2 block offset 0, end = the same block offset 20, `selected_text` = the selected sentence, covered block = paragraph 2 only. `proposal_target_block_ids` = both blocks (Current Chapter and the reference, ADR 0062).
+- Context Inspect (public `getAgentRun`): `context.selection_references` shows the same reference with `coordinate_profile` `storyos.editor.utf16-code-unit.v1`, the covered block, and `availability` `current`.
+- Wire: the request text has an "Author references" part with the range and the exact text. No `previous_response_id` (first request of the Conversation). No credential.
+- Result: `prose_change` with one change, for paragraph 2. Paragraph 1 has no operation. This is the live evidence of #1161: a reply that changes 1 of 2 declared target blocks opened Proposal `01a1410e-d449-7e70-99b9-f28d84972647`, and the panel showed "这次修改涉及 1 个章节、1 处文字".
+- Author check (ADR 0062 has no mechanical check): the candidate replaces the selected sentence with a longer search scene, and the text outside the reference ("他把信放进衣袋，坐上了第一班渡船。") is unchanged. The author accepted it (`acceptProposal` → `authoritative_applied`).
+- Step 2: pass on `bda9138a`.
+
+### Step 4 with Chapter and candidate references (R16, R17)
+
+- Copy and paste: real Cmd+C in the editor and Cmd+V in the composer of the built-in browser added nothing, because the automated keys did not reach the system clipboard. As agreed with the coordinator, the author used "添加到对话". The paste path evidence is the browser-source test `selection-reference-paste`.
+- R16: the author selected both paragraphs and added them (label 「第 1 章 渡口（第 1–2 段）」), then sent "把这两段各自改写得更安静一些。". The reference is `chapter_text` from paragraph 1 offset 0 to paragraph 2 offset 93, on the new head. The continuation was `incremental` with `previous_response_id` = R15. The reply changed both blocks, and Proposal `01a14110-e0f6-7731-884a-521cd368f368` showed two inline locations.
+- R17: the author selected the first sentence of candidate 1 in the editor and added it (label 「第 1 章 渡口（第 1 段的修改建议）」), then sent "把这条修改建议缩短一半。". The reference is `proposal_candidate_text` with the Proposal, Operation, and revision of R16, `start_offset` 0, `end_offset` 14, and the exact selected and candidate text. The reply revised that candidate: location outcome `revised`, new Proposal revision `01a14112-15da-7232-aca7-8a8781e432f1`.
+- Author actions: the author edited the revised candidate 1 by hand (`applyAuthorEdit` → `proposal_revised`), accepted it (`acceptProposal`, Acceptance Receipt `authoritative_applied`), and rejected location 2 (`rejectProposalOperations` → `proposal_operations_resolved`, Rejection Receipt `author_declined`). Author Action entries 1–9 are all `forward` and match the Receipts.
+- Step 4: pass on `bda9138a`.
+
 ## Observations of #396
 
+- In the rerun, the "添加到对话" control did not show for a selection in the Chapter that the author had just created and typed. After a page reload it showed. This was seen once and its cause was not examined. Reported to the coordinator.
 - A malformed JSON reply becomes an Advisory. This is contract behavior; the UX follow-up is #1145. Not blocking.
 - Outline selection was read-only by Stage 2 design; the UX follow-up #1146 was delivered on `main` `020e5575`. Since then, a click on a Chapter makes it current, and the "设为当前章节" menu item is removed. This journey ran before `020e5575` and used "设为当前章节". Steps 4 and 7 do not run again: #1146 changes only how the author changes the current Chapter. The Proposal flow and the editor flow with no model destination did not change.
 
@@ -171,8 +205,8 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 | #1146 | Outline selection is read-only | None; delivered on `020e5575` |
 | #1147 | A stale candidate target of a rejected Proposal makes the next send fail with "无法提交请求，请稍后再试。". Work-around: click ordinary prose to clear the focus, then send. | Closed as superseded by #1165 |
 | #1148 | The successor result has no decision | Fixed by PR #1150; the second step 5 rerun on `4c29bb6e` passes |
-| #1161 | A reply that changes only some declared targets gives no Proposal | Fixed by PR #1162 (`e5a58b17`); the part-only live request runs with the step 2 and step 4 rerun after #1165 |
-| #1165 | The author decided to replace the caret-based candidate target with a selection added to the Conversation (S4-08) | Steps 2 and 4 run again with the new interaction after #1165 merges |
+| #1161 | A reply that changes only some declared targets gives no Proposal | Fixed by PR #1162 (`e5a58b17`); R15 on `bda9138a` is the live evidence |
+| #1165 | The author decided to replace the caret-based candidate target with a selection added to the Conversation (S4-08) | Delivered on `bda9138a`; the step 2 and step 4 rerun passes |
 | #1151 | Writer takeover leaves the base snapshot id out of `project_snapshots`, so the editor becomes read-only | Fixed by PR #1154 (ADR 0060); the takeover rerun on `6d511d93` passes |
 
 ## Superseded contract text
