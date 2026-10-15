@@ -57,6 +57,8 @@ type RequestReference = {
   /** The references of the message, and their labels for the history. */
   references?: SelectionReference[];
   referenceLabels?: string[];
+  /** The draft keys of the references, which go from the composer when the Host admitted the Run. */
+  referenceKeys?: string[];
   guidance?: GuidanceReferences[];
 };
 
@@ -309,6 +311,8 @@ export function WritingAssistantPanel({
     saveReference(current);
     setReference(current);
     setRun(result);
+    // The Run exists, so its references go from the composer also after a lost acknowledgement.
+    clearDraftReferences(current.scope, current.referenceKeys ?? []);
     if (result.decision.kind === "prose_change") {
       for (const location of result.decision.locations ?? []) {
         if (location.outcome.kind === "revised") {
@@ -478,6 +482,7 @@ export function WritingAssistantPanel({
       if (references.length > 0) {
         current.references = references;
         current.referenceLabels = draftLabels(entries);
+        current.referenceKeys = entries.map((entry) => entry.key);
       }
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
@@ -541,7 +546,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
-      clearDraftReferences(context.scope, entries.map((entry) => entry.key));
+      clearDraftReferences(context.scope, current.referenceKeys ?? []);
       onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
