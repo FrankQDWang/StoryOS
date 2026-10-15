@@ -134,19 +134,31 @@ pub(crate) async fn availability(
             ),
             SelectionReference::ProposalCandidateText {
                 proposal_id,
+                operation_id,
                 revision_id,
                 ..
             } => (
                 revision_id,
+                // A rejected, withdrawn, or closed candidate is unavailable at each revision.
                 client
                     .query_opt(
-                        "SELECT current_revision_id::text FROM storyos.proposal_heads
-                          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-                            AND proposal_id=$3::text::uuid",
+                        "SELECT head.current_revision_id::text
+                           FROM storyos.proposal_heads AS head
+                           JOIN storyos.proposal_revisions AS revision ON
+                             (revision.owner_user_id,revision.project_id,revision.proposal_id,revision.revision_id)=
+                             (head.owner_user_id,head.project_id,head.proposal_id,head.current_revision_id)
+                           JOIN storyos.proposal_operations AS operation ON
+                             (operation.owner_user_id,operation.project_id,operation.proposal_id)=
+                             (head.owner_user_id,head.project_id,head.proposal_id)
+                          WHERE head.owner_user_id=$1::text::uuid AND head.project_id=$2::text::uuid
+                            AND head.proposal_id=$3::text::uuid AND operation.operation_id=$4::text::uuid
+                            AND revision.closure='open' AND operation.resolution='pending'
+                            AND operation.reservation_state='unresolved'",
                         &[
                             &scope.owner_user_id.as_ref(),
                             &scope.project_id.as_ref(),
                             proposal_id,
+                            operation_id,
                         ],
                     )
                     .await

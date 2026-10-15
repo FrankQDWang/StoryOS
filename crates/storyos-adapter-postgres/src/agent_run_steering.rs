@@ -49,40 +49,26 @@ pub(crate) async fn advance(
             ..
         } = location.outcome
         {
-            let revised = |target: &storyos_core::ProposalCandidateTarget| {
-                target.proposal_id == proposal_id
-                    && target.operation_id == operation_id
-                    && target.revision_id == prior_revision_id
+            let prior = storyos_core::ProposalCandidateTarget {
+                proposal_id,
+                operation_id,
+                revision_id: prior_revision_id,
             };
             if let Some(target) = retained.operation_requirement.candidate_target.as_mut()
-                && revised(target)
+                && *target == prior
             {
                 target.revision_id = revision_id.clone();
             }
-            // A revised candidate gets a new text, so its reference covers all of that text.
-            for admitted in retained
-                .operation_requirement
-                .selection_references
-                .iter_mut()
-                .flatten()
-            {
-                if admitted
-                    .reference
-                    .candidate_target()
-                    .is_some_and(|target| revised(&target))
-                    && let storyos_core::SelectionReference::ProposalCandidateText {
-                        revision_id: reference_revision,
-                        start_offset,
-                        end_offset,
-                        ..
-                    } = &mut admitted.reference
-                {
-                    *reference_revision = revision_id.clone();
-                    *start_offset = 0;
-                    *end_offset = u32::try_from(location.candidate_text.encode_utf16().count())
-                        .unwrap_or(u32::MAX);
-                }
-            }
+            storyos_core::advance_candidate_references(
+                retained
+                    .operation_requirement
+                    .selection_references
+                    .iter_mut()
+                    .flatten(),
+                &prior,
+                &revision_id,
+                &location.candidate_text,
+            );
         }
     }
     let position: String = row.get(3);

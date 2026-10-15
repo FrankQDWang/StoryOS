@@ -1195,7 +1195,7 @@ test("a candidate reference sends its exact range and a stale candidate referenc
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Candidate references", `${ns}2`);
-    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const seeded = await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const proposalId = openedProposal(await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       "Revise these passages: keep the voice.", id(`${ns}41`)));
     const before = (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
@@ -1226,6 +1226,18 @@ test("a candidate reference sends its exact range and a stale candidate referenc
     assert.equal(stale.context.sufficiency.kind, "blocked");
     assert.deepEqual(stale.model_attempt, { kind: "absent" });
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, after);
+    const reject = { command_schema: "storyos.command.reject-proposal-operations.request.v1",
+      reject_proposal_operations_input: { proposal_revision_id: after.revision_id,
+        selected_pending_operation_ids: [operation.operation_id], expected_target_revisions: [seeded.revisionId],
+        editor_session_id: seeded.session.editor_session.editor_session_id,
+        rejection_reason: { kind: "author_declined" as const, note: { kind: "omitted" as const } },
+        ...BINDING, correlation_id: id(`${ns}71`) } };
+    await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", reject.command_schema,
+      await digestRejectProposalOperations(reject), id(`${ns}72`), (antiForgery) => rejectProposalOperations({
+        baseUrl: started.baseUrl, projectId, proposalId, fetchImpl, request: reject, antiForgery, idempotencyKey: id(`${ns}72`) }));
+    const rejected = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: revised.run_id, fetchImpl });
+    assert.deepEqual(rejected.context.selection_references?.map(({ availability }) => availability), [{ kind: "unavailable" }]);
   } finally { await stopRealServer(started.server); }
 });
 

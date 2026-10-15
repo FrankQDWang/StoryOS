@@ -83,6 +83,36 @@ impl AdmittedSelection {
     }
 }
 
+/// Move the candidate references of a revised Proposal to its new revision. Each Operation of
+/// the Proposal shares the revision. The revised candidate gets a new text, so its reference
+/// covers all of that text. The ranges of the other Operations stay.
+pub fn advance_candidate_references<'a>(
+    references: impl IntoIterator<Item = &'a mut AdmittedSelection>,
+    revised: &super::ProposalCandidateTarget,
+    new_revision_id: &str,
+    new_text: &str,
+) {
+    for admitted in references {
+        if let SelectionReference::ProposalCandidateText {
+            proposal_id,
+            operation_id,
+            revision_id,
+            start_offset,
+            end_offset,
+            ..
+        } = &mut admitted.reference
+            && *proposal_id == revised.proposal_id
+            && *revision_id == revised.revision_id
+        {
+            *revision_id = new_revision_id.to_owned();
+            if *operation_id == revised.operation_id {
+                *start_offset = 0;
+                *end_offset = u32::try_from(new_text.encode_utf16().count()).unwrap_or(u32::MAX);
+            }
+        }
+    }
+}
+
 /// Complete a passage collection record with the referenced candidate texts and the admitted
 /// references. An unavailable reference blocks the assembly.
 pub fn assemble_selection_references(
