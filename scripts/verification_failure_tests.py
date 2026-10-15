@@ -44,7 +44,7 @@ class FlakeRegisterTests(unittest.TestCase):
     def test_repository_register_has_the_documented_shape(self):
         entries = json.loads((ROOT / verification_failure.REGISTER).read_text())
         verification_failure.validate(entries)
-        self.assertEqual(sorted({entry["issue"] for entry in entries}), [707, 928, 942, 973, 985])
+        self.assertEqual(sorted({entry["issue"] for entry in entries}), [707, 928, 942, 973, 985, 1163])
         self.assertEqual([entry["file"] for entry in entries if not (ROOT / entry["file"]).is_file()], [])
 
     def test_entry_with_a_missing_or_invalid_field_is_refused(self):
