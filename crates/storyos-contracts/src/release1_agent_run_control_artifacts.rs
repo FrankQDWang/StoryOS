@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_agent_run::AgentRunStatus;
+use crate::release1_agent_run_artifacts::SELECTION_REFERENCE_UUID_FIELDS;
 use crate::release1_agent_run_control::{
     CANCEL_AGENT_RUN, CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
     CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID, CancelAgentRunConflictReason, CancelAgentRunEffect,
@@ -540,6 +541,14 @@ pub(super) fn steer_request_schema_bytes() -> Vec<u8> {
     }
     schema["$defs"]["AuthorMessage"]["properties"]["text"]["minLength"] = json!(1);
     schema["$defs"]["AuthorMessage"]["properties"]["text"]["maxLength"] = json!(8000);
+    constrain_uuid_fields(
+        &mut schema["$defs"]["SelectionReference"],
+        SELECTION_REFERENCE_UUID_FIELDS,
+    );
+    constrain_uuid_fields(
+        &mut schema["$defs"]["SelectionPoint"],
+        &["manuscript_block_id"],
+    );
     json_bytes(&schema)
 }
 pub(super) fn steer_response_schema_bytes() -> Vec<u8> {

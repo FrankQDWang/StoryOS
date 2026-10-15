@@ -10,7 +10,8 @@ pub(crate) async fn advance(
     let Some(row) = client.query_opt(
         "SELECT run.author_message, run.chapter_id::text, input.receipt_id::text,
                 input.payload->>'input_position', COALESCE(requirement.payload, 'null'::jsonb)::text,
-                COALESCE(attempt.payload, 'null'::jsonb)::text
+                COALESCE(attempt.payload, 'null'::jsonb)::text,
+                COALESCE(input.payload->'selection_references', 'null'::jsonb)::text
            FROM storyos.agent_runs AS run
            LEFT JOIN storyos.operation_requirements AS requirement
              ON (requirement.owner_user_id,requirement.project_id,requirement.run_id)=
@@ -93,16 +94,27 @@ pub(crate) async fn advance(
                     "Current guidance admission is unavailable",
                 )))
             })?;
-    let references: Option<Vec<_>> =
+    // The references of this input join the Run references (ADR 0062).
+    let added: Option<Vec<storyos_core::SelectionReference>> =
+        serde_json::from_str(&row.get::<_, String>(/*idx*/ 6))
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let run_references =
         retained
             .operation_requirement
             .selection_references
-            .map(|references| {
+            .map(|references| -> Vec<_> {
                 references
                     .into_iter()
                     .map(|admitted| admitted.reference)
                     .collect()
             });
+    let references = match (run_references, added) {
+        (None, None) => None,
+        (run, added) => Some(storyos_core::merge_steering_references(
+            run.into_iter().flatten(),
+            added.as_deref().unwrap_or_default(),
+        )),
+    };
     persist_current_passage_assembly(
         client,
         &PassageContextInput {

@@ -105,3 +105,29 @@ fn a_revised_candidate_moves_each_reference_of_its_proposal_to_the_new_revision(
         })
     );
 }
+
+#[test]
+fn a_steering_input_adds_only_the_references_that_the_run_does_not_have() {
+    let chapter = |start| SelectionReference::ChapterText {
+        chapter_id: "chapter-1".to_owned(),
+        base_authoritative_revision_id: "revision-1".to_owned(),
+        start: point("b1", start),
+        end: point("b1", start + 2),
+    };
+
+    assert_eq!(
+        merge_steering_references(
+            [chapter(/*start*/ 0), chapter(/*start*/ 4)],
+            &[chapter(/*start*/ 4), chapter(/*start*/ 2)]
+        ),
+        [
+            chapter(/*start*/ 0),
+            chapter(/*start*/ 4),
+            chapter(/*start*/ 2)
+        ]
+    );
+    assert_eq!(
+        merge_steering_references([], &[chapter(/*start*/ 1)]),
+        [chapter(/*start*/ 1)]
+    );
+}

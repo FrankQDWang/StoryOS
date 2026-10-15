@@ -407,7 +407,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/steer-agent-run-request.schema.json",
       "schema_id": "storyos.command.steer-agent-run.request.v1",
-      "sha256": "sha256:8e59cda50e1448cf34b802726279f329c8013f349018fcf3fe4b13310d8d67e8"
+      "sha256": "sha256:953dbbe8f034061dbdc5b062c88a56933ab5d46d8836800df406e1a7a70239f1"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/steer-agent-run-response.schema.json",

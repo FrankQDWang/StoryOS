@@ -113,6 +113,21 @@ pub fn advance_candidate_references<'a>(
     }
 }
 
+/// The references of a Run after a steering input adds its references (ADR 0062). A reference
+/// that the Run already has does not go in again, so the order of the first entry stays.
+pub fn merge_steering_references(
+    run: impl IntoIterator<Item = SelectionReference>,
+    added: &[SelectionReference],
+) -> Vec<SelectionReference> {
+    let mut merged: Vec<_> = run.into_iter().collect();
+    for reference in added {
+        if !merged.contains(reference) {
+            merged.push(reference.clone());
+        }
+    }
+    merged
+}
+
 /// Complete a passage collection record with the referenced candidate texts and the admitted
 /// references. An unavailable reference blocks the assembly.
 pub fn assemble_selection_references(

@@ -12,12 +12,12 @@ import {
   createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
   digestCompleteReadyPartialProposal, digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations, digestReplanProposal,
-  reopenRejectedOperations, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
+  reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CompleteReadyPartialProposalRequest,
   CreateAgentRunRequest, CreateEditorSessionRequest, GetProposalResponse, ReopenRejectedOperationsRequest,
-  ReplanProposalRequest, SelectionReference,
+  ReplanProposalRequest, SelectionReference, SteerAgentRunRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
@@ -393,6 +393,59 @@ test.each(["current", "stale", "empty", "reversed"])("a %s selection reference d
     if (run.decision.kind !== "prose_change") throw new Error("expected reference Decision");
     assert.deepEqual(run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, kind: outcome.kind })),
       covered.flat().map((manuscript_block_id) => ({ manuscript_block_id, kind: "opened" })));
+    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
+    assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),
+      ["lo \nWo", "lantern"]);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("guidance adds its distinct references to the Run up to eight references", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const setup = await collectionSetup(started.baseUrl, ns);
+    const [first, second] = setup.chapters.map(({ chapter }) => chapter);
+    const reference = (chapter: typeof first, from: number, to: number, last = 0): SelectionReference => ({
+      kind: "chapter_text", chapter_id: chapter!.chapter_id, base_authoritative_revision_id: chapter!.current_revision.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: { manuscript_block_id: chapter!.current_revision.blocks[0]!.manuscript_block_id, offset: from },
+      end: { manuscript_block_id: chapter!.current_revision.blocks[last]!.manuscript_block_id, offset: to } });
+    const [initial, added] = [reference(first, 3, 2, 1), reference(second, 2, 9)];
+    const queued = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "What would make this sharper?", id(`${ns}a1`), undefined, false,
+      { kind: "selection_references", source_chapter_id: setup.chapterId, references: [initial] });
+    const options = { baseUrl: started.baseUrl, projectId: setup.projectId, runId: queued.run_id, fetchImpl: setup.fetchImpl };
+    const steer = async (key: string, references: SelectionReference[]) => {
+      const request: SteerAgentRunRequest = { command_schema: "storyos.command.steer-agent-run.request.v1",
+        steer_agent_run_input: { conversation_id: queued.conversation_id, author_message: { text: "Use these lines too." },
+          selection_references: references, ...BINDING, correlation_id: id(key) } };
+      return challenged(started.baseUrl, setup.fetchImpl, setup.projectId, "POST",
+        "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", request.command_schema,
+        await digestSteerAgentRun(request), id(key), (antiForgery) => steerAgentRun({ ...options,
+          request, idempotencyKey: id(key), antiForgery }));
+    };
+    // The repeated reference does not count again, so seven more references pass the limit by one.
+    assert.equal((await steer(`${ns}a2`, [added, initial])).effect.kind, "retained");
+    await assert.rejects(() => steer(`${ns}a3`, Array.from({ length: 7 }, (_, index) => reference(second, index, index + 1))),
+      (error: unknown) => {
+        const protocol = requireStoryOSProtocolError(error);
+        assert.equal(protocol.status, 413);
+        assert.equal(JSON.parse(protocol.responseBody ?? "{}").code, "steering_reference_limit");
+        return true;
+      });
+    let run = await getAgentRun(options);
+    for (let attempt = 0; attempt < 8 && run.status !== "completed"; attempt++) {
+      await settleOnce();
+      run = await getAgentRun(options);
+    }
+    assert.equal(run.status, "completed");
+    assert.deepEqual(run.context.selection_references, [
+      { reference: initial, manuscript_block_ids: first!.current_revision.blocks.map((block) => block.manuscript_block_id),
+        availability: { kind: "current" } },
+      { reference: added, manuscript_block_ids: [second!.current_revision.blocks[0]!.manuscript_block_id],
+        availability: { kind: "current" } }]);
     const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
     assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),

@@ -570,7 +570,7 @@ export type UnknownCreateSuccessorDisposition = "fenced" | "dispatched" | "pause
 
 export type OptionalUnknownCreateSuccessorInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: UnknownCreateSuccessorDisposition, pause_reason?: string | null, lookup_unavailable_reason?: string | null, predecessor_model_attempt_id: string, successor_model_attempt_id?: string | null, model_invocation_id: string, predecessor_fenced: boolean, allowance_consumed: boolean, predecessor_usage_kind: string, predecessor_reservation_released: boolean, successor_settles_predecessor: boolean, supplies_tool_call: boolean, advances_predecessor_continuation: boolean, reuses_changed_context: boolean, };
 
-export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, selection_references?: Array<SelectionReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type SteerAgentRunRequest = { command_schema: string, steer_agent_run_input: SteerAgentRunInput, };
 
