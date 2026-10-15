@@ -498,9 +498,17 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
       }
       return prepared.fetchImpl(input, init);
     };
-    await queryPostgres(`UPDATE storyos.project_command_challenge_rate_windows
-      SET issued_count = 10, window_started_at = date_trunc('minute', now())
-      WHERE project_id = '${prepared.projectId}'::uuid;`);
+    // Fill the current and the next minute window. Earlier Challenges can leave rows on two sides of a
+    // minute boundary, and the minute can change before the refused request.
+    await queryPostgres(`INSERT INTO storyos.project_command_challenge_rate_windows
+        (owner_user_id, project_id, client_session_generation, policy_revision, window_started_at, issued_count)
+      SELECT DISTINCT rate.owner_user_id, rate.project_id, rate.client_session_generation, rate.policy_revision,
+        date_trunc('minute', now()) + window_offset.value, 10
+      FROM storyos.project_command_challenge_rate_windows AS rate
+      CROSS JOIN (VALUES (interval '0 minutes'), (interval '1 minute')) AS window_offset(value)
+      WHERE rate.project_id = '${prepared.projectId}'::uuid
+      ON CONFLICT (owner_user_id, project_id, client_session_generation, policy_revision, window_started_at)
+      DO UPDATE SET issued_count = 10;`);
     const request = cancelRequest(id("c332"));
     const digest = await digestCancelAgentRun(request);
     await assert.rejects(() => createProjectCommandChallenge({
