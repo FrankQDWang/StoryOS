@@ -18,7 +18,7 @@ Claim ceiling: implementation evidence completeness only (HND-003). This record 
 
 ## Live request log
 
-The standing authorization on #362 covers each request. The planned cap started at 10. The coordinator raised it three times; each change is below.
+The standing authorization on #362 covers each request. The planned cap started at 10. The coordinator raised it six times; each change is below. The final count is 22, equal to the cap.
 
 | Cap change | Reason |
 | --- | --- |
@@ -44,8 +44,8 @@ The standing authorization on #362 covers each request. The planned cap started 
 | R10 | 06:26:48 | `01a13917-810c-7fc2-8f6c-6583a1bb5aea` | Create, stream, new Conversation 2 | `cancelAgentRun` through the public Host during the stream: `cancelled`, fence 2. The worker saw `stale_fence`. Attempt `uncertain`. No successor. | unknown |
 | R11 | 06:27 | same | Automatic Retrieve by the finalizing worker | Rejected. The Abort was a `pre_dispatch_refusal` (the route has no cancel), so no request. | — |
 | R12 | 06:31:18 | `01a1391b-9459-7af1-a170-755a5e4ca0dc` | Create, new Conversation 3 | Advisory. Response `resp_02179195947923884888bb83e57e5fbf0ee20dce84dcf97ac5b20`. | 457 / 83 |
-| R13 | pending (after 14:06Z) | | Create, continuation with an expired reference | | |
-| R14 | pending | | Automatic rebuild Create in the same Run | | |
+| R13 | 10-15 02:20:14 | `01a13d5c-1b8f-75e2-8638-0f92c3a0d561` | Create, continuation of Conversation 3 with the injected expired reference | 400 `InvalidParameter.PreviousResponseNotFound`. Attempt `01a13d5c-3195-71f1-864a-54ffd882d868` `rejected_create`. | unknown |
+| R14 | 10-15 02:20 | same | Automatic rebuild Create in the same Run | Full Context, no `previous_response_id`. Advisory. Response `resp_021792030821236b6ef94156a979b704a6b85dbeb7998fa8e7b1d`. Run `completed`. | 805 / 125 |
 | S1 | 09:26:46 | `01a139bc-494a-7953-82f5-fa8dfed5105a` | Create, stream, new Conversation 4, on `4c29bb6e` | Worker killed when the reference committed. Attempt `uncertain`. | unknown |
 | S2 | 09:27:16 | same | Retrieve | Rejected: the response was not stored. | — |
 | S3 | 09:27 | same | Successor Create | Valid JSON `prose_change` with one change for two declared targets. Core validation gave no decision, so no Proposal opened (see "Rerun after #1148 and #1151"). | 462 / 1160 |
@@ -79,7 +79,7 @@ Ran on `f03cebc0`.
 - R2 Attempt `01a138f9-14cc-76f1-82cd-c1637c3333ae`: `continuation.input_mapping` = `incremental`, `prior_continuation_binding_id` = R1 binding, wire `previous_response_id` = R1 response, `stream: true`, `store: true`, model `doubao-seed-2-1-pro-260915`. The serialized payload has no credential and no header.
 - Evidence items separate `sent_content`, `stored_reference`, `provider_report` (`provider_usage_reported`), and `provider_opaque` (`provider_internal_content` unknown).
 - Cache: `explicit` = `not_requested`, `implicit` = `destination_default`, `observed` = reported 0 cached input tokens. This proves no cache hit and no savings.
-- Usage: R1, R2, R3, R5, R8, R12 have `reported` usage. R4, R6, R10 stay `unknown`.
+- Usage: R1, R2, R3, R5, R8, R12, R14 have `reported` usage. R4, R6, R10 stay `unknown`. The rejected R13 has `unknown` usage.
 - Instruction and target change: R2 changed the current Chapter and the instruction inside the same Conversation, and the manifest shows the new Working Target.
 - Active compaction: the author waived a live compaction run on 2026-10-14. The evidence is S4-06c2b2 and S4-06c3, the fa14 qualification of #1143 (`agent-plan-compaction-threshold-qualification-2026-10-13.md`, `agent-plan-pinned-version-qualification-2026-10-14.md`), and the deterministic compaction tests in the crosswalk.
 
@@ -103,12 +103,13 @@ Ran on `f03cebc0`. Verdict on `f03cebc0`: **BLOCK** (#1148). The second rerun on
 
 #### Confirmed reference expiry
 
-Pending after 14:06Z. Plan:
+Ran on 2026-10-15 on the release package of branch head `7358c9c5` (`main` `020e5575`). Verdict: **pass**.
 
-- Conversation 1 ends in an `uncertain` Create (R6), so a new request gets `UnknownCreate`. Conversation 2 ends in a cancelled Run with an `uncertain` Attempt. Neither can show a confirmed expiry, so R12 opened Conversation 3 and settled normally.
-- Fault injection in the disposable database: the `response_reference` of the R12 Attempt `01a1391b-b2dc-7162-9b55-e58f35ee67fd` is replaced with `resp_02179172752875438521d8aeb1173234c174f01c4d2f3c18d455c`, a real response that the same route created on 2026-10-11T14:05:28Z (`agent-plan-runtime-qualification-2026-10-11.md`, request 1). The route keeps a stored response for 72 hours.
-- R13 continues Conversation 3. The expected route result is 400 `InvalidParameter.PreviousResponseNotFound`, which the adapter maps to `continuation_unusable`. `record_continuation_rejection` marks the R13 Attempt `rejected_create` and the prior reference `confirmed_unusable`.
-- R14 is the automatic rebuild in the same Run (`plan_expiry_rebuild`, full Context, no `previous_response_id`). If R14 is also rejected, the Run settles and no request follows.
+- Why Conversation 3: Conversation 1 ends in an `uncertain` Create (R6), so a new request gets `UnknownCreate`. Conversation 2 ends in a cancelled Run with an `uncertain` Attempt. Neither can show a confirmed expiry, so R12 opened Conversation 3 and settled normally.
+- Fault injection in the disposable database at 2026-10-15T02:19:54Z: the `response_reference` of the R12 Attempt `01a1391b-b2dc-7162-9b55-e58f35ee67fd` changed from `resp_02179195947923884888bb83e57e5fbf0ee20dce84dcf97ac5b20` to `resp_02179172752875438521d8aeb1173234c174f01c4d2f3c18d455c`. That is a real response that the same route created on 2026-10-11T14:05:28Z (`agent-plan-runtime-qualification-2026-10-11.md`, request 1). The route keeps a stored response for 72 hours, so it expired at 2026-10-14T14:05:28Z. `binding_reference` in `agent_run_create_dispatch.rs` reads this payload field as the `previous_response_id`.
+- Why not the panel: the writing assistant panel continues only the Conversation that it keeps in the session storage of its tab, or starts a new one. Its current Conversation was 5. So a script sent R13 with the same public command as the panel: `createProjectCommandChallenge`, then `createAgentRun` from the generated release-1 client, `POST /api/v1/projects/{project_id}/agent-runs`, `command_schema` `storyos.command.create-agent-run.request.v2`, `conversation` = `{ kind: "existing", conversation_id: "01a1391b-9459-7af1-a170-754e73e08ae8" }`, `working_target` = `current_chapter` 渡口, `instruction` absent, `cause` `author_request`, author message "不要修改正文。请用一句话告诉我：这一章发生在一天中的什么时候？". The script sent only the bootstrap session cookie and the anti-forgery nonce; it had no credential. One `storyos-worker --once` then ran the Run.
+- R13: the continuation sent the expired reference as `previous_response_id`. The route returned 400 `InvalidParameter.PreviousResponseNotFound`. The R13 Attempt became `rejected_create`, `settled`, with `rejection` = `continuation_unusable:http_400:InvalidParameter.PreviousResponseNotFound`. The R12 Attempt now has `produced_binding.reference_condition` = `confirmed_unusable`.
+- R14: in the same worker pass and the same Run, `plan_expiry_rebuild` admitted one rebuild Create. Its wire payload has no `previous_response_id` and no prior continuation binding, and it carries the full Context. The recovery row `01a13d5c-3ebf-74c3-b206-650e2bf2833b` has disposition `rebuilt`, predecessor Run R12, successor Run R13/R14, `opaque_reused` = false, `covered_content_included` = true. R14 settled as decision `01a13d5c-6331-72e3-8629-dbabfb3f8cda` (Advisory "这一章发生在清晨天刚蒙蒙亮、朝阳还未升高的时候。", `advances_continuation` = true). The Run completed. No more requests followed.
 
 ### Step 6: queries of Run, Proposal, disclosure, Receipt, and authority
 
@@ -145,7 +146,7 @@ Ran on `main` `4c29bb6e`, with the instruction of R6 ("请把这一章的两段�
 - Recovery: the Create became `uncertain`, Retrieve was rejected, the predecessor was fenced, one successor ran, and the automatic `late_retrieval` was rejected. Run `completed`, fence 2.
 - The successor decision `01a139cb-59f9-7e63-bb3d-45f3d6a29d04` (`prose_change`, `opened_proposal` present) opened Proposal `01a139cb-5a0a-7362-8878-265325fcfdf0` on 渡口. The Proposal `source_decision_id` is the successor decision.
 - Editor: the panel showed "这次修改涉及 1 个章节、2 处文字", and the main editor showed both inline locations with "接受" and "拒绝". The author accepted location 1 (`acceptProposal` → `authoritative_applied`, Acceptance Receipt `authoritative_applied`) and rejected location 2 (`rejectProposalOperations` → `proposal_operations_resolved`, Rejection Receipt `author_declined`, resolution `pending` → `rejected`, Author Action 30). 渡口 has 293 scalars and shows "已保存".
-- Step 5 unknown-create recovery and step 6 queries: pass on `4c29bb6e`. Confirmed reference expiry (R13, R14) is still pending.
+- Step 5 unknown-create recovery and step 6 queries: pass on `4c29bb6e`. Confirmed reference expiry (R13, R14): pass on `020e5575` (see "Confirmed reference expiry").
 
 ### Step 7, takeover rerun
 
@@ -168,9 +169,10 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 | --- | --- | --- |
 | #1145 | Malformed reply UX | None |
 | #1146 | Outline selection is read-only | None; delivered on `020e5575` |
-| #1147 | A stale candidate target of a rejected Proposal makes the next send fail with "无法提交请求，请稍后再试。". Work-around: click ordinary prose to clear the focus, then send. | None with the work-around |
+| #1147 | A stale candidate target of a rejected Proposal makes the next send fail with "无法提交请求，请稍后再试。". Work-around: click ordinary prose to clear the focus, then send. | Closed as superseded by #1165 |
 | #1148 | The successor result has no decision | Fixed by PR #1150; the second step 5 rerun on `4c29bb6e` passes |
-| #1161 | A reply that changes only some declared targets gives no Proposal | One live request after #1161 merges |
+| #1161 | A reply that changes only some declared targets gives no Proposal | Fixed by PR #1162 (`e5a58b17`); the part-only live request runs with the step 2 and step 4 rerun after #1165 |
+| #1165 | The author decided to replace the caret-based candidate target with a selection added to the Conversation (S4-08) | Steps 2 and 4 run again with the new interaction after #1165 merges |
 | #1151 | Writer takeover leaves the base snapshot id out of `project_snapshots`, so the editor becomes read-only | Fixed by PR #1154 (ADR 0060); the takeover rerun on `6d511d93` passes |
 
 ## Superseded contract text
