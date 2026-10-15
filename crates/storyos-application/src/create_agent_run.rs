@@ -19,6 +19,7 @@ pub struct CreateAgentRunInput {
     pub chapter_id: String,
     pub passage_targets: Option<Vec<storyos_core::PassageContextTarget>>,
     pub candidate_target: Option<storyos_core::ProposalCandidateTarget>,
+    pub selection_references: Option<Vec<storyos_core::SelectionReference>>,
     pub run_id: String,
     pub conversation_id: String,
     pub project_agent_id: String,
@@ -41,6 +42,8 @@ pub struct AgentRunContext {
     pub destination_context_manifest_id: Option<String>,
     pub outbound_disclosure_manifest_id: Option<String>,
     pub working_target_availability: WorkingTargetAvailability,
+    /// The current availability of each selection reference, in reference order.
+    pub reference_availability: Vec<WorkingTargetAvailability>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

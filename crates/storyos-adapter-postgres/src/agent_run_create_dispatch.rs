@@ -158,6 +158,11 @@ pub(crate) async fn create_request(
             .collect(),
         declared_targets,
         candidate_revision,
+        selection_references: assembly
+            .operation_requirement
+            .selection_references
+            .clone()
+            .unwrap_or_default(),
         previous_response_reference: previous_response_reference(client, claim, run, prior_context)
             .await?,
         successor_of: None,

@@ -80,6 +80,16 @@ pub(crate) async fn advance(
                     "Current guidance admission is unavailable",
                 )))
             })?;
+    let references: Option<Vec<_>> =
+        retained
+            .operation_requirement
+            .selection_references
+            .map(|references| {
+                references
+                    .into_iter()
+                    .map(|admitted| admitted.reference)
+                    .collect()
+            });
     persist_current_passage_assembly(
         client,
         &PassageContextInput {
@@ -91,6 +101,7 @@ pub(crate) async fn advance(
             decision_position: &position,
             passage_targets: retained.operation_requirement.passage_targets.as_deref(),
             candidate_target: retained.operation_requirement.candidate_target.as_ref(),
+            selection_references: references.as_deref(),
         },
         &assistance.processing_destination_identity,
     )

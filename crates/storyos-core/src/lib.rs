@@ -751,7 +751,12 @@ pub use close_editor_flow_draft::{
 };
 
 mod prose_change_locations;
+mod selection_reference;
 pub use prose_change_locations::{ProseChangeCandidate, prose_changes_match_targets};
+pub use selection_reference::{
+    AdmittedSelection, SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint,
+    assemble_selection_references, select_chapter_text,
+};
 
 mod assemble_candidate_context;
 pub use assemble_candidate_context::{ProposalCandidateTarget, assemble_candidate_context};

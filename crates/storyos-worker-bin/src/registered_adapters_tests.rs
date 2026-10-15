@@ -53,6 +53,7 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         context: Vec::new(),
         declared_targets: Vec::new(),
         candidate_revision: None,
+        selection_references: Vec::new(),
         previous_response_reference: None,
         successor_of: None,
     })

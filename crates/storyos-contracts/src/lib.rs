@@ -20,6 +20,7 @@ mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_draft_retry;
 mod release1_editor_session_artifacts;
+mod release1_selection_reference;
 pub use release1_draft_retry::{
     DraftPayloadPosition, DraftRetry, DraftRetryKind, DraftRetryReplacement, ExactStructuredRange,
     ExactStructuredRangeKind, ObservedDraftClosure, RetryDraftClosure, RetryDraftKind,
@@ -148,6 +149,7 @@ pub use release1_agent_run::{
     OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
     ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
     ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
     SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{

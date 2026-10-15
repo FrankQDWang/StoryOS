@@ -122,6 +122,7 @@ pub(crate) async fn summary_request(
         context: Vec::new(),
         declared_targets: Vec::new(),
         candidate_revision: None,
+        selection_references: Vec::new(),
         previous_response_reference,
         successor_of: None,
     }))

@@ -356,6 +356,50 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
   } finally { await stopRealServer(started.server); }
 });
 
+test.each(["current", "stale", "empty", "reversed"])("a %s selection reference declares its covered blocks or blocks the Context Assembly", async (base) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const setup = await collectionSetup(started.baseUrl, ns);
+    const [first, second] = setup.chapters.map(({ chapter }) => chapter);
+    const point = (block: { manuscript_block_id: string }, offset: number) => ({ manuscript_block_id: block.manuscript_block_id, offset });
+    const references = [
+      { kind: "chapter_text" as const, chapter_id: first!.chapter_id, base_authoritative_revision_id: first!.current_revision.revision_id,
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1" as const,
+        start: point(first!.current_revision.blocks[0]!, 3), end: point(first!.current_revision.blocks[1]!, 2) },
+      { kind: "chapter_text" as const, chapter_id: second!.chapter_id, base_authoritative_revision_id: base === "stale"
+        ? first!.current_revision.revision_id : second!.current_revision.revision_id,
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1" as const,
+        start: point(second!.current_revision.blocks[0]!, base === "empty" ? 4 : base === "reversed" ? 9 : 2),
+        end: point(second!.current_revision.blocks[0]!, base === "empty" ? 4 : base === "reversed" ? 2 : 9) },
+    ];
+    const run = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}91`), undefined, true,
+      { kind: "selection_references", source_chapter_id: setup.chapterId, references });
+    const covered = [first!.current_revision.blocks.map((block) => block.manuscript_block_id),
+      [second!.current_revision.blocks[0]!.manuscript_block_id]];
+    if (base !== "current") {
+      assert.deepEqual(run.context.selection_references, [
+        { reference: references[0], manuscript_block_ids: covered[0], availability: { kind: "current" } },
+        { reference: references[1], manuscript_block_ids: [], availability: { kind: "unavailable" } }]);
+      assert.equal(run.context.sufficiency.kind, "blocked");
+      assert.deepEqual(run.model_attempt, { kind: "absent" });
+      return;
+    }
+    assert.deepEqual(run.context.selection_references, references.map((reference, index) =>
+      ({ reference, manuscript_block_ids: covered[index], availability: { kind: "current" } })));
+    assert.deepEqual(run.context.passage_targets, setup.target.targets);
+    if (run.decision.kind !== "prose_change") throw new Error("expected reference Decision");
+    assert.deepEqual(run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, kind: outcome.kind })),
+      covered.flat().map((manuscript_block_id) => ({ manuscript_block_id, kind: "opened" })));
+    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
+    assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),
+      ["lo \nWo", "lantern"]);
+  } finally { await stopRealServer(started.server); }
+});
+
 test("one request produces explained exact locations and keeps them after restart", async () => {
   let started = await startRealServer();
   try {

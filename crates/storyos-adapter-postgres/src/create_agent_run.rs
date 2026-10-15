@@ -217,6 +217,7 @@ impl ProjectCommand for CreateAgentRunInput {
                 decision_position: "0",
                 passage_targets: self.passage_targets.as_deref(),
                 candidate_target: self.candidate_target.as_ref(),
+                selection_references: self.selection_references.as_deref(),
             },
             &assistance.processing_destination_identity,
         )

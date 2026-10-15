@@ -180,6 +180,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         ],
         declared_targets: vec![target()],
         candidate_revision: None,
+        selection_references: Vec::new(),
         previous_response_reference: None,
         successor_of: None,
     })
