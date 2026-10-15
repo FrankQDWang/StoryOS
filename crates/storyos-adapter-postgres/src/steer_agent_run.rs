@@ -23,8 +23,9 @@ use crate::command_sequence::{
 const ACTIVITY_KIND: &str = "agent_run_steering_retained";
 
 impl PostgresProjectReader {
-    /// Settles one steerAgentRun. A missing AgentRun, another conversation, and an input above
-    /// the Context item bound are refusals before Admission.
+    /// Settles one steerAgentRun. A missing AgentRun, another conversation, an input above the
+    /// Context item bound, and a Run with more than eight references are refusals before
+    /// Admission.
     pub async fn steer_agent_run(
         &self,
         envelope: &ProjectCommandEnvelope,
@@ -66,7 +67,9 @@ impl ProjectCommand for SteerAgentRunInput {
             || RefusableCommandError::RefusedBeforeAdmission(AgentRunControlRefusal::MissingRun);
         let run = client
             .query_opt(
-                "SELECT status, conversation_id::text, author_message FROM storyos.agent_runs
+                "SELECT status, conversation_id::text, author_message,
+                        active_decision_position::text
+                   FROM storyos.agent_runs
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
                   FOR UPDATE",
@@ -111,6 +114,16 @@ impl ProjectCommand for SteerAgentRunInput {
                 return Err(RefusableCommandError::RefusedBeforeAdmission(
                     AgentRunControlRefusal::InputLimit,
                 ));
+            }
+            if let Some(added) = &self.selection_references {
+                let position = run.get::<_, String>(/*idx*/ 3);
+                let current = run_references(client, envelope, &self.run_id, &position).await?;
+                let merged = storyos_core::merge_steering_references(current, added);
+                if merged.len() > storyos_core::SELECTION_REFERENCE_LIMIT {
+                    return Err(RefusableCommandError::RefusedBeforeAdmission(
+                        AgentRunControlRefusal::ReferenceLimit,
+                    ));
+                }
             }
         }
         Ok(Classification {
@@ -194,17 +207,18 @@ impl ProjectCommand for SteerAgentRunInput {
             input_position,
         };
         // The Worker reads these keys, with the input position as decimal text.
-        Ok(ZeroAuthorityWrite {
-            activity: serde_json::json!({
-                "kind": ACTIVITY_KIND,
-                "run_id": effect.run_id,
-                "conversation_id": self.conversation_id,
-                "steering_input_id": effect.steering_input_id,
-                "input_position": effect.input_position.to_string(),
-                "author_message": self.author_message,
-            }),
-            effect,
-        })
+        let mut activity = serde_json::json!({
+            "kind": ACTIVITY_KIND,
+            "run_id": effect.run_id,
+            "conversation_id": self.conversation_id,
+            "steering_input_id": effect.steering_input_id,
+            "input_position": effect.input_position.to_string(),
+            "author_message": self.author_message,
+        });
+        if let Some(references) = &self.selection_references {
+            activity["selection_references"] = serde_json::json!(references);
+        }
+        Ok(ZeroAuthorityWrite { activity, effect })
     }
 
     fn decode_zero_authority_effect(
@@ -226,4 +240,65 @@ impl ProjectCommand for SteerAgentRunInput {
             TransitionOutcome::Refused(reason) => match reason {},
         }
     }
+}
+
+/// The references of the Run at its active decision, then the references of each retained input
+/// that the Run has not read yet.
+async fn run_references(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    run_id: &str,
+    position: &str,
+) -> Result<Vec<storyos_core::SelectionReference>, SteerAgentRunError> {
+    let scope = &envelope.project_scope;
+    let params: [&(dyn tokio_postgres::types::ToSql + Sync); 4] = [
+        &scope.owner_user_id.as_ref(),
+        &scope.project_id.as_ref(),
+        &run_id,
+        &position,
+    ];
+    let requirement = client
+        .query_opt(
+            "SELECT payload::text FROM storyos.operation_requirements
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND requirement_role = 'primary'
+                AND decision_position = $4::text::numeric",
+            &params,
+        )
+        .await
+        .map_err(unavailable)?;
+    let mut references = match requirement {
+        Some(row) => {
+            let payload: serde_json::Value =
+                serde_json::from_str(&row.get::<_, String>(/*idx*/ 0)).map_err(unavailable)?;
+            storyos_core::decode_assembly_record(&payload)
+                .ok_or_else(|| unavailable("the active Operation Requirement is unavailable"))?
+                .operation_requirement
+                .selection_references
+                .into_iter()
+                .flatten()
+                .map(|admitted| admitted.reference)
+                .collect()
+        }
+        None => Vec::new(),
+    };
+    let retained = client
+        .query(
+            "SELECT (payload->'selection_references')::text
+               FROM storyos.project_activity_event_payloads
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND event_kind = 'agent_run_steering_retained' AND payload->>'run_id' = $3
+                AND (payload->>'input_position')::numeric > $4::text::numeric
+                AND payload ? 'selection_references'
+              ORDER BY (payload->>'input_position')::numeric",
+            &params,
+        )
+        .await
+        .map_err(unavailable)?;
+    for row in retained {
+        let added: Vec<storyos_core::SelectionReference> =
+            serde_json::from_str(&row.get::<_, String>(/*idx*/ 0)).map_err(unavailable)?;
+        references = storyos_core::merge_steering_references(references, &added);
+    }
+    Ok(references)
 }

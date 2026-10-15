@@ -38,6 +38,11 @@ pub(super) const STEER_AGENT_RUN: QueryOperation = QueryOperation {
 pub struct SteerAgentRunInput {
     pub conversation_id: String,
     pub author_message: crate::release1_agent_run::AuthorMessage,
+    // The exact text ranges that this steering input adds to the Run (ADR 0062).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1, max = 8))]
+    #[ts(optional)]
+    pub selection_references: Option<Vec<crate::SelectionReference>>,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,

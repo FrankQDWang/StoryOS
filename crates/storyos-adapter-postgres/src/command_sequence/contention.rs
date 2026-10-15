@@ -67,6 +67,7 @@ impl RefusalCode for AgentRunControlRefusal {
         match self {
             Self::MissingRun => "missing_run",
             Self::InputLimit => "input_limit",
+            Self::ReferenceLimit => "reference_limit",
         }
     }
 }

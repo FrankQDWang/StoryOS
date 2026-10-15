@@ -67,10 +67,16 @@ pub(super) async fn steer_agent_run(
         &STEER_AGENT_RUN,
         AntiForgery::Required,
         |body: &contracts::SteerAgentRunRequest| {
+            let input = &body.steer_agent_run_input;
             Ok(SteerAgentRunInput {
                 run_id: run_id.clone(),
-                conversation_id: body.steer_agent_run_input.conversation_id.clone(),
-                author_message: body.steer_agent_run_input.author_message.text.clone(),
+                conversation_id: input.conversation_id.clone(),
+                author_message: input.author_message.text.clone(),
+                selection_references: input
+                    .selection_references
+                    .as_deref()
+                    .map(super::selection_references::resolve)
+                    .transpose()?,
             })
         },
     )
@@ -138,6 +144,11 @@ pub(super) fn control_refusal(refusal: AgentRunControlRefusal) -> ApiError {
             StatusCode::PAYLOAD_TOO_LARGE,
             "steering_input_limit",
             "The correction exceeds the admitted Context input limit.",
+        ),
+        AgentRunControlRefusal::ReferenceLimit => problem(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "steering_reference_limit",
+            "The correction makes the AgentRun hold more than eight references.",
         ),
     }
 }

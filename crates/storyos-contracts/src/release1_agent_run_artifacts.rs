@@ -110,7 +110,7 @@ pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
 ];
 
-const SELECTION_REFERENCE_UUID_FIELDS: &[&str] = &[
+pub(super) const SELECTION_REFERENCE_UUID_FIELDS: &[&str] = &[
     "chapter_id",
     "base_authoritative_revision_id",
     "proposal_id",
