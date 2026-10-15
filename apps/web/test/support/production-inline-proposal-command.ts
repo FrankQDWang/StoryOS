@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Locator } from "playwright";
 import {
   createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
   getChapter, getEditorSession, getProposal, updateProjectAssistance,
@@ -23,6 +23,7 @@ function uuidV7() {
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const SOURCE = "Guard the narrator voice in this passage.";
 const SIBLING = "The second door opened.";
+const CANDIDATE_LABEL = "第 1 章 Inline Chapter（第 1 段的修改建议）";
 
 export async function verifyProductionInlineProposal(context: BrowserContext, origin: string) {
   const page = await context.newPage();
@@ -89,7 +90,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       admitted = undefined;
       await page.locator('[data-assistant-availability="available"]').waitFor();
       await page.locator('[name="assistant-message"]').fill("Revise this phrase: keep the voice.");
-      await page.locator(".composer button").click();
+      await page.locator(".composer button.send-button").click();
       await expect.poll(() => admitted?.effect.kind).toBe("admitted");
       const admission = admitted as CreateAgentRunResponse | undefined;
       assert.ok(admission?.effect.kind === "admitted");
@@ -112,6 +113,19 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     };
     const { proposalId, proposal } = await openInline();
     const candidate = page.locator(`span[data-inline-proposal-id="${proposalId}"]`);
+    /** Selects the text between two offsets of an inline candidate, as a mouse selection does. */
+    const selectIn = (target: Locator, start: number, end: number) => target.evaluate((element, [from, to]) => {
+      element.closest<HTMLElement>("[data-manuscript-editor]")!.focus();
+      document.getSelection()!.setBaseAndExtent(element.firstChild!, from, element.firstChild!, to);
+    }, [start, end] as const);
+    const selectCandidate = (start: number, end: number) => selectIn(candidate, start, end);
+    /** The references of the next message, from the draft of the Project in the session storage. */
+    const draftReferences = () => page.evaluate((project) => {
+      const key = Object.keys(sessionStorage).find((item) => item.startsWith("selection_references:")
+        && item.endsWith(`:${project}`));
+      return key === undefined ? undefined
+        : (JSON.parse(sessionStorage.getItem(key)!) as { entries: { reference: unknown }[] }).entries.map((item) => item.reference);
+    }, projectId);
     await expect(candidate).toHaveCount(1);
     assert.equal(await candidate.textContent(), "narrator tone");
     assert.equal(await candidate.evaluate((element) => element.parentElement?.textContent),
@@ -160,10 +174,13 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     });
     await page.unroute(editRoute);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-edited-reloaded.png") });
-    await candidate.click();
+    // The author selects all of the candidate text and adds it to the message (ADR 0062).
+    await selectCandidate(0, edited.operations[0]!.candidate_text.length);
+    await page.locator("[data-add-selection-reference]").click();
+    await expect(page.locator(`[data-selection-reference-label="${CANDIDATE_LABEL}"]`)).toHaveCount(1);
     admitted = undefined;
     await page.locator('[name="assistant-message"]').fill("Revise the selected candidate and preserve its meaning.");
-    await page.locator(".composer button").click();
+    await page.locator(".composer button.send-button").click();
     await expect.poll(() => admitted?.effect.kind).toBe("admitted");
     assert.deepEqual(requestTarget, { kind: "selection_references", source_chapter_id: chapterId, references: [{
       kind: "proposal_candidate_text", chapter_id: chapterId, proposal_id: proposalId,
@@ -210,6 +227,11 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       else await route.fulfill({ response });
       if (acceptancePosts === 2) finishAcceptanceLoss();
     });
+    // The acceptance result is lost, so the client cannot know the accepted text: the reference goes
+    // when the candidate goes.
+    await selectCandidate(0, "narraxxtor".length);
+    await page.locator("[data-add-selection-reference]").click();
+    await expect(page.locator(`[data-selection-reference-label="${CANDIDATE_LABEL}"]`)).toHaveCount(1);
     await page.locator(`[data-proposal-accept="${proposalId}"]`).click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operation_resolution)
       .toBe("applied");
@@ -232,6 +254,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.getByRole("button", { name: "重试接受", exact: true }).click();
     await expect.poll(() => acceptancePosts).toBe(3);
     await expect(page.getByRole("button", { name: "重试接受", exact: true })).toHaveCount(0);
+    await expect(page.locator("[data-selection-reference-label]")).toHaveCount(0);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
@@ -400,6 +423,26 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
     }
+    // A reference to part of an inline candidate becomes a reference to the same Chapter text when the
+    // author accepts the candidate. The candidate starts at offset 10 of its block (ADR 0062).
+    await createInlineChapter("Inline accepted reference Chapter");
+    const referenced = await openInline();
+    const referencedCandidate = page.locator(`span[data-inline-proposal-id="${referenced.proposalId}"]`);
+    await expect(referencedCandidate).toHaveText("narrator tone");
+    await page.locator(`[data-proposal-id="${referenced.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
+    await selectIn(referencedCandidate, 0, "narrator".length);
+    await page.locator("[data-add-selection-reference]").click();
+    await expect(page.locator('[data-selection-reference-label$="（第 1 段的修改建议）"]')).toHaveCount(1);
+    await page.locator(`[data-proposal-accept="${referenced.proposalId}"]`).click();
+    await expect(page.locator('[data-selection-reference-label$="（第 1 段）"]')).toHaveCount(1);
+    const referencedChapter = (await getChapter({ ...options, chapterId })).chapter;
+    const referencedBlock = referencedChapter.current_revision.blocks[0]!.manuscript_block_id;
+    assert.equal(referencedChapter.current_revision.blocks[0]!.text.slice(10, 18), "narrator");
+    assert.deepEqual(await draftReferences(), [{ kind: "chapter_text", chapter_id: chapterId,
+      base_authoritative_revision_id: referencedChapter.current_revision.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: { manuscript_block_id: referencedBlock, offset: 10 }, end: { manuscript_block_id: referencedBlock, offset: 18 } }]);
+    await page.locator("[data-remove-selection-reference]").click();
     await createInlineChapter("Inline writer refusal Chapter");
     const writerBase = await getChapter({ ...options, chapterId });
     const writerProposal = await openInline();
