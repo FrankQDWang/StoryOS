@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import {
-  addDraftReference, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
+  addDraftReference, clearDraftReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
   trackableDraftReferences, trackDraftReferences, type DraftReference,
 } from "../../src/selection-reference-draft.ts";
 
@@ -53,6 +53,15 @@ test("a draft adds distinct references while the message and the active AgentRun
   assert.equal(addDraftReference(project, entry(reference(SECOND!, 4, 5))), undefined);
   removeDraftReference(project, key);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [run[0], reference(SECOND!, 2, 4)]);
+});
+
+test("a send removes only its references, and a reference added while it waits stays", () => {
+  const project = scope();
+  addDraftReference(project, entry(reference(FIRST!, 0, 2)));
+  const sent = draftEntries(project).map((item) => item.reference);
+  addDraftReference(project, entry(reference(SECOND!, 2, 4)));
+  clearDraftReferences(project, sent);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(SECOND!, 2, 4)]);
 });
 
 test("an author edit moves a tracked reference, and the saved Revision becomes its base", () => {

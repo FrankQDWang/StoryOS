@@ -52,9 +52,9 @@ export function AssistantComposer({ context, available, sending, current, run, o
       setPending(undefined);
       if (response.effect.kind === "retained" && intent.kind === "guidance") {
         setMessage("");
-        clearDraftReferences(intent.scope);
-        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
-          intent.request.steer_agent_run_input.selection_references ?? []);
+        const sent = intent.request.steer_agent_run_input.selection_references ?? [];
+        clearDraftReferences(intent.scope, sent);
+        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [], sent);
       }
       try {
         await onRefresh();

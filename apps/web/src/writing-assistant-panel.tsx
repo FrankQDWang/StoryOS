@@ -539,7 +539,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
-      clearDraftReferences(context.scope);
+      clearDraftReferences(context.scope, references);
       onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {

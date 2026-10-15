@@ -91,9 +91,14 @@ export function removeDraftReference(scope: ProjectScope, key: string): void {
   write(scope, { ...draft, entries: draft.entries.filter((entry) => entry.key !== key) });
 }
 
-/** Clears the references after a send. The history keeps their labels. */
-export function clearDraftReferences(scope: ProjectScope): void {
-  write(scope, { ...read(scope), entries: [] });
+/**
+ * Removes the sent references after the Host received them. The history keeps their labels. A reference
+ * that the author added while the send waited stays for the next message.
+ */
+export function clearDraftReferences(scope: ProjectScope, sent: readonly SelectionReference[]): void {
+  const draft = read(scope);
+  const entries = draft.entries.filter((entry) => mergeReferences(sent, [entry.reference]).length > sent.length);
+  if (entries.length !== draft.entries.length) write(scope, { ...draft, entries });
 }
 
 /** Records the references of the active AgentRun, or none when no Run is active. */
