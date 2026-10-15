@@ -24,6 +24,7 @@ import { verifyProductionCapturedMemory } from "./production-captured-memory.ts"
 import { verifyProductionComposerControls } from "./production-composer-controls.ts";
 
 import { verifyProductionMultiProposal } from "./production-multi-proposal-command.ts";
+import { verifyProductionSelectionReference } from "./production-selection-reference-command.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
@@ -104,6 +105,9 @@ export const storyOSBrowserCommands = {
       } else if (request.scenario === "inline_proposal") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionInlineProposal(context.context, process.env.STORYOS_DEV_SERVER);
+      } else if (request.scenario === "selection_reference") {
+        if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
+        await verifyProductionSelectionReference(context.context, process.env.STORYOS_DEV_SERVER);
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
