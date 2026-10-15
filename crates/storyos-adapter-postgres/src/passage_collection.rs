@@ -75,5 +75,8 @@ pub(crate) fn passage_input(
     if let Some(target) = record.pointer("/operation_requirement/candidate_target") {
         input["candidate_target"] = target.clone();
     }
+    if let Some(references) = record.pointer("/operation_requirement/selection_references") {
+        input["selection_references"] = references.clone();
+    }
     Some(input)
 }

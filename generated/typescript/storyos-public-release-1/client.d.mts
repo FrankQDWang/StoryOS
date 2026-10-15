@@ -450,9 +450,15 @@ export type ConversationSelection = { "kind": "new" } | { "kind": "existing", co
 
 export type AuthorMessage = { text: string, };
 
-export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "proposal_candidate", source_chapter_id: string, target: ProposalCandidateTarget, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, };
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "proposal_candidate", source_chapter_id: string, target: ProposalCandidateTarget, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, } | { "kind": "selection_references", source_chapter_id: string, references: Array<SelectionReference>, };
 
 export type PassageTarget = { chapter_id: string, base_authoritative_revision_id: string, manuscript_block_ids: Array<string>, };
+
+export type SelectionReference = { "kind": "chapter_text", chapter_id: string, base_authoritative_revision_id: string, coordinate_profile: SelectionCoordinateProfile, start: SelectionPoint, end: SelectionPoint, };
+
+export type SelectionCoordinateProfile = "storyos.editor.utf16-code-unit.v1";
+
+export type SelectionPoint = { manuscript_block_id: string, offset: number, };
 
 export type ProposalCandidateTarget = { proposal_id: string, operation_id: string, revision_id: string, };
 
@@ -502,7 +508,9 @@ export type HostControlInspect = { distinct_from_destination: boolean, destinati
 
 export type CurrentAvailabilityInspect = { working_target: SourceAvailability, };
 
-export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, candidate_target?: ProposalCandidateTarget, };
+export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, candidate_target?: ProposalCandidateTarget, selection_references?: Array<SelectionReferenceInspect>, };
+
+export type SelectionReferenceInspect = { reference: SelectionReference, manuscript_block_ids: Array<string>, availability: SourceAvailability, };
 
 export type EvidenceAvailability = "current" | "unknown";
 

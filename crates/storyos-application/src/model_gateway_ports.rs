@@ -96,6 +96,8 @@ pub struct CreateRequest {
     pub context: Vec<RequestContextItem>,
     pub declared_targets: Vec<DeclaredTarget>,
     pub candidate_revision: Option<String>,
+    /// The exact text ranges that the author added to the message, in order.
+    pub selection_references: Vec<storyos_core::AdmittedSelection>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.

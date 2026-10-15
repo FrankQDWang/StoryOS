@@ -4,6 +4,9 @@ use ts_rs::TS;
 
 use crate::release1::{ControlledProject, QueryOperation};
 use crate::release1_readable_export::ExportAcknowledgement;
+pub use crate::release1_selection_reference::{
+    SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
+};
 
 pub const CREATE_AGENT_RUN_REQUEST_SCHEMA_ID: &str = "storyos.command.create-agent-run.request.v2";
 pub const CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID: &str =
@@ -99,6 +102,11 @@ pub enum AssistanceWorkingTarget {
         source_chapter_id: String,
         #[schemars(length(min = 1, max = 10_001))]
         targets: Vec<PassageTarget>,
+    },
+    SelectionReferences {
+        source_chapter_id: String,
+        #[schemars(length(min = 1, max = 8))]
+        references: Vec<SelectionReference>,
     },
 }
 
@@ -339,6 +347,9 @@ pub struct AgentRunContextInspect {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub candidate_target: Option<ProposalCandidateTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selection_references: Option<Vec<SelectionReferenceInspect>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

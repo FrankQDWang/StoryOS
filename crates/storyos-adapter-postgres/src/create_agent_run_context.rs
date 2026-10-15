@@ -17,6 +17,7 @@ pub(crate) struct PassageContextInput<'a> {
     pub decision_position: &'a str,
     pub passage_targets: Option<&'a [storyos_core::PassageContextTarget]>,
     pub candidate_target: Option<&'a storyos_core::ProposalCandidateTarget>,
+    pub selection_references: Option<&'a [storyos_core::SelectionReference]>,
 }
 
 pub(crate) async fn persist_current_passage_assembly(
@@ -84,6 +85,8 @@ pub(crate) async fn persist_current_passage_assembly(
             target,
             &candidate.text,
         )
+    } else if let Some(references) = command.selection_references {
+        crate::selection_references::assemble(client, command, &source, references).await?
     } else {
         match &command.passage_targets {
             Some(targets) => {
@@ -178,7 +181,6 @@ pub(crate) async fn persist_current_passage_assembly(
         .await
         .map_err(agent_run_database_error)?;
     Ok(AgentRunContext {
-        record,
         assembly_manifest_id,
         destination_context_manifest_id: None,
         outbound_disclosure_manifest_id: None,
@@ -186,6 +188,17 @@ pub(crate) async fn persist_current_passage_assembly(
             Some(_) => WorkingTargetAvailability::Current,
             None => WorkingTargetAvailability::Unavailable,
         },
+        reference_availability: record
+            .operation_requirement
+            .selection_references
+            .iter()
+            .flatten()
+            .map(|reference| match reference.selected_text {
+                Some(_) => WorkingTargetAvailability::Current,
+                None => WorkingTargetAvailability::Unavailable,
+            })
+            .collect(),
+        record,
     })
 }
 
@@ -248,8 +261,19 @@ pub(super) async fn load_assembled_context(
             current_revision_id: current.to_owned(),
         },
     };
+    let reference_availability = crate::selection_references::availability(
+        client,
+        scope,
+        record
+            .operation_requirement
+            .selection_references
+            .as_deref()
+            .unwrap_or_default(),
+    )
+    .await?;
     Ok(AgentRunContext {
         record,
+        reference_availability,
         assembly_manifest_id: row.get(1),
         destination_context_manifest_id: row.get(2),
         outbound_disclosure_manifest_id: row.get(3),
@@ -282,7 +306,7 @@ pub(crate) async fn load_working_target(
     ))
 }
 
-async fn current_chapter_payload(
+pub(crate) async fn current_chapter_payload(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     chapter_id: &str,
