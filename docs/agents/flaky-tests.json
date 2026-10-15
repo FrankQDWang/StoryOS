@@ -47,5 +47,12 @@
     "test": "rebuilds Chapter and manuscript statistics after edit, switch, and deletion",
     "main": {"passed": 10, "runs": 10, "commit": "4fa01d21", "date": "2026-10-06"},
     "symptom": "The journey waited for the transient saving state and saw the saved state first. PR #986 replaced the wait."
+  },
+  {
+    "issue": 1163,
+    "file": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+    "test": "a rate-limited cancellation Challenge completes before a Worker is held",
+    "main": {"passed": 10, "runs": 10, "commit": "e5a58b17", "date": "2026-10-15"},
+    "symptom": "The setup moved two rate window rows on two sides of a minute boundary to one minute, and the primary key refused the second row. The pull request that closes #1163 repaired the cause."
   }
 ]

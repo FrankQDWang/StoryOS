@@ -89,7 +89,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
       await page.locator('[data-assistant-availability="available"]').waitFor();
       await page.locator('[name="assistant-message"]').fill(message);
-      await page.locator('.composer button').click();
+      await page.locator('.composer button.send-button').click();
       await expect.poll(() => admitted?.effect.kind).toBe('admitted');
       const result = admitted as CreateAgentRunResponse | undefined;
       assert.ok(result?.effect.kind === 'admitted');
@@ -237,8 +237,14 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.reload();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
-    await candidate().locator('.block-proposal-text').click();
-    await page.keyboard.press('End');
+    // The author selects all of the candidate text and adds it to the message (ADR 0062).
+    await candidate().locator('.block-proposal-text').evaluate((element) => {
+      element.closest<HTMLElement>('[data-manuscript-editor]')!.focus();
+      const text = element.firstChild!;
+      document.getSelection()!.setBaseAndExtent(text, 0, text, text.textContent!.length);
+    });
+    await page.locator('[data-add-selection-reference]').click();
+    await expect(page.locator('[data-selection-reference-label$="的修改建议）"]')).toHaveCount(1);
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, restored);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const manual = (await getProposal({ ...options, proposalId })).proposal;
@@ -247,8 +253,12 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       before.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.candidate_text);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const revised = await completeRun('Make the selected candidate calmer and preserve its meaning');
-    assert.deepEqual(requestTarget, { kind: 'proposal_candidate', source_chapter_id: secondary.chapter_id,
-      target: { proposal_id: proposalId, operation_id: secondaryOutcome.operation_id, revision_id: manual.revision_id } });
+    assert.deepEqual(requestTarget, { kind: 'selection_references', source_chapter_id: secondary.chapter_id, references: [{
+      kind: 'proposal_candidate_text', chapter_id: secondary.chapter_id, proposal_id: proposalId,
+      operation_id: secondaryOutcome.operation_id, revision_id: manual.revision_id,
+      coordinate_profile: 'storyos.editor.utf16-code-unit.v1', start_offset: 0,
+      end_offset: manual.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)!
+        .candidate_text.length }] });
     assert.ok(revised.decision.kind === 'prose_change');
     assert.ok(revised.decision.locations?.[0]?.outcome.kind === 'revised');
     const ai = (await getProposal({ ...options, proposalId })).proposal;

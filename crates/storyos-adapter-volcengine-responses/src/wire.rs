@@ -1,7 +1,7 @@
 //! The exact request body of one Agent Plan Responses Create request.
 
 use storyos_application::{CreateRequest, RequestBounds};
-use storyos_core::ContextSourceClass;
+use storyos_core::{ContextSourceClass, DeclaredTargetKind, SelectionReference};
 
 /// The Host instructions and the reply contract that `decision::map_output` reads.
 pub(crate) const HOST_INSTRUCTIONS: &str = "\
@@ -16,8 +16,18 @@ Reply with exactly one JSON object and no other text. Use one of these forms:
 \"changes\":[{\"block_id\":\"<the id of one target block>\",\"candidate_text\":\"<the complete \
 new text of that block>\",\"explanation\":\"<one sentence that tells why>\"}]}
 
-Use \"prose_change\" only when the request has target blocks. Then give exactly one change for \
-each target block, with its exact block_id. Do not change text outside the target blocks.";
+Use \"prose_change\" only when the request has target blocks. Then give one change for each \
+target block that you change, with its exact block_id. Give at least one change. Do not include a \
+target block that you do not change, because it keeps its text. Do not change text outside the \
+target blocks.
+
+A target block that is marked as a pending Proposal candidate holds candidate text that the \
+author has not accepted, and its change replaces that candidate text. Change only Chapter target \
+blocks, or exactly one pending Proposal candidate block.
+
+Author references show the exact text that the author selected for this request. Use the author \
+request to decide if you change the referenced text or only use it. A change replaces all of a \
+block: keep the text outside the references unchanged unless the author request says otherwise.";
 
 /// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
 /// not carry forward with a prior response reference, so each request sends them.
@@ -86,17 +96,60 @@ fn request_text(request: &CreateRequest) -> String {
         };
         sections.push(format!("{heading}:\n{}", item.content));
     }
-    if let Some(candidate) = &request.candidate_revision {
-        sections.push(format!("Current candidate text:\n{candidate}"));
+    let references = request
+        .selection_references
+        .iter()
+        .filter_map(|admitted| Some((admitted, admitted.selected_text.as_ref()?)))
+        .enumerate()
+        .map(|(index, (admitted, text))| {
+            let position = index + 1;
+            let range = match &admitted.reference {
+                SelectionReference::ChapterText {
+                    chapter_id,
+                    start,
+                    end,
+                    ..
+                } => format!(
+                    "Chapter text of chapter_id {chapter_id}, from block_id {} character {} to \
+                     block_id {} character {}",
+                    start.manuscript_block_id, start.offset, end.manuscript_block_id, end.offset
+                ),
+                SelectionReference::ProposalCandidateText {
+                    start_offset,
+                    end_offset,
+                    ..
+                } => format!(
+                    "Pending Proposal candidate text of block_id {}, from character {start_offset} to \
+                     character {end_offset}",
+                    admitted.manuscript_block_ids.join(", ")
+                ),
+            };
+            format!("[reference {position}] {range} (UTF-16 code units):\n{text}")
+        })
+        .collect::<Vec<_>>();
+    if !references.is_empty() {
+        sections.push(format!("Author references:\n{}", references.join("\n\n")));
     }
     if !request.declared_targets.is_empty() {
         let targets = request
             .declared_targets
             .iter()
-            .map(|target| format!("[block_id: {}]\n{}", target.block_id, target.block_text))
+            .map(|target| match target.kind {
+                DeclaredTargetKind::ChapterBlock => {
+                    format!("[block_id: {}]\n{}", target.block_id, target.block_text)
+                }
+                DeclaredTargetKind::PendingCandidate => format!(
+                    "[block_id: {}] (pending Proposal candidate)\n{}",
+                    target.block_id, target.block_text
+                ),
+            })
             .collect::<Vec<_>>()
             .join("\n\n");
         sections.push(format!("Target blocks:\n{targets}"));
     }
     sections.join("\n\n")
 }
+
+#[cfg(test)]
+#[path = "wire_tests.rs"]
+mod tests;

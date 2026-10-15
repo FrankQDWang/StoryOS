@@ -27,6 +27,8 @@ pub enum AgentRunControlRefusal {
     MissingRun,
     /// The steering input makes the effective author input exceed the Context item bound.
     InputLimit,
+    /// The steering input makes the Run hold more references than one message can hold.
+    ReferenceLimit,
 }
 
 pub type PauseAgentRunSettlement = ProjectCommandSettlement<
@@ -66,6 +68,8 @@ pub struct SteerAgentRunInput {
     pub run_id: String,
     pub conversation_id: String,
     pub author_message: String,
+    /// The references that this input adds to the Run, after the shape checks.
+    pub selection_references: Option<Vec<storyos_core::SelectionReference>>,
 }
 
 /// The steering input that one steerAgentRun retains at its input position.

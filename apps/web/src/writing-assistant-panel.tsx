@@ -7,6 +7,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
+  SelectionReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -18,8 +19,10 @@ import {
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
-import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
+import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
+import { mergeReferences } from "./selection-reference.ts";
+import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,7 +36,12 @@ type TranscriptExchange = {
   status: GetAgentRunResponse["status"];
   result?: string;
   run?: GetAgentRunResponse;
+  referenceLabels?: string[];
+  guidance?: GuidanceReferences[];
 };
+
+/** The labels and the references that one retained steering input added (ADR 0062). */
+type GuidanceReferences = { steeringInputId: string; labels: string[]; references: SelectionReference[] };
 
 type RequestReference = {
   scope: ProjectScope;
@@ -46,6 +54,12 @@ type RequestReference = {
   conversationId?: string;
   conversationChoice?: "new";
   history?: TranscriptExchange[];
+  /** The references of the message, and their labels for the history. */
+  references?: SelectionReference[];
+  referenceLabels?: string[];
+  /** The draft keys of the references, which go from the composer when the Host admitted the Run. */
+  referenceKeys?: string[];
+  guidance?: GuidanceReferences[];
 };
 
 /** Calls `refresh` later, and returns a function that cancels the call. */
@@ -61,7 +75,6 @@ const scheduleRunRefresh: RefreshSchedule = (refresh) => {
 export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
-  candidateTarget?: ProposalFocus | undefined;
   tree?: GetManuscriptTreeResponse | undefined;
   canSubmit: boolean;
   baseUrl: string;
@@ -184,6 +197,30 @@ function resultText(run: GetAgentRunResponse): string | undefined {
   }
 }
 
+/** The labels of the references that went with one message. */
+function ReferenceLabels({ labels }: { labels: readonly string[] | undefined }) {
+  return labels === undefined || labels.length === 0 ? null : <ul className="assistant-reference-labels">
+    {labels.map((label, index) => <li key={index} data-sent-reference-label="">{label}</li>)}
+  </ul>;
+}
+
+/** The author messages of an exchange: the request, then each steering input, with their labels. */
+function AuthorMessages({ message, labels, run, guidance }: {
+  message: string;
+  labels: readonly string[] | undefined;
+  run: GetAgentRunResponse | undefined;
+  guidance: readonly GuidanceReferences[] | undefined;
+}) {
+  return <>
+    <p className="assistant-author-message">{message}</p>
+    <ReferenceLabels labels={labels} />
+    {run?.steering_inputs?.map((input) => <div key={input.steering_input_id}>
+      <p className="assistant-author-message">{input.author_message}</p>
+      <ReferenceLabels labels={guidance?.find((item) => item.steeringInputId === input.steering_input_id)?.labels} />
+    </div>)}
+  </>;
+}
+
 const runLabels: Record<GetAgentRunResponse["status"], string> = {
   queued: "等待开始",
   claimed: "正在处理",
@@ -273,6 +310,8 @@ export function WritingAssistantPanel({
     saveReference(current);
     setReference(current);
     setRun(result);
+    // The Run exists, so its references go from the composer also after a lost acknowledgement.
+    clearDraftReferences(current.scope, current.referenceKeys ?? []);
     if (result.decision.kind === "prose_change") {
       for (const location of result.decision.locations ?? []) {
         if (location.outcome.kind === "revised") {
@@ -323,6 +362,14 @@ export function WritingAssistantPanel({
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
   const terminal = run !== undefined && settledRun(run);
+
+  // The add control counts the references of the active AgentRun toward its limit.
+  useEffect(() => {
+    if (context === undefined) return;
+    setRunReferences(context.scope, reference?.runId === undefined || terminal ? []
+      : (reference.guidance ?? []).reduce((all, input) => mergeReferences(all, input.references),
+        reference.references ?? []));
+  }, [reference, terminal]);
 
   // A Run can wait in the queue of a separate Worker, so read it again until it settles. A failed
   // read schedules the next read too.
@@ -388,19 +435,7 @@ export function WritingAssistantPanel({
         || tree.snapshot.project_scope.project_id !== context.scope.project_id) {
         throw new Error("Working Target Scope mismatch");
       }
-      let selected = context.candidateTarget;
-      if (selected !== undefined) {
-        const observedTarget = selected;
-        const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
-          projectId: context.scope.project_id, proposalId: selected.proposalId });
-        if (response.project_scope.owner_user_id !== context.scope.owner_user_id
-          || response.project_scope.project_id !== context.scope.project_id
-          || response.proposal.chapter_id !== context.chapterId
-          || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
-            && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
-            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
-        selected = { ...selected, revisionId: response.proposal.revision_id };
-      }
+      const entries = draftEntries(context.scope);
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
@@ -413,20 +448,26 @@ export function WritingAssistantPanel({
             requestId: previous.correlationId, chapterId: previous.chapterId, conversationId: previousRun.conversation_id,
             runId: previousRun.run_id, run: previousRun,
             message: previous.message, status: previousRun.status,
+            ...(previous.referenceLabels === undefined ? {} : { referenceLabels: previous.referenceLabels }),
+            ...(previous.guidance === undefined ? {} : { guidance: previous.guidance }),
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
           },
         ],
       };
+      const references = entries.map((entry) => entry.reference);
+      if (references.length > 0) {
+        current.references = references;
+        current.referenceLabels = draftLabels(entries);
+        current.referenceKeys = entries.map((entry) => entry.key);
+      }
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
           conversation: current.conversationId === undefined ? { kind: "new" }
             : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
-          working_target: selected === undefined ? { kind: "current_chapter", chapter_id: current.chapterId }
-            : { kind: "proposal_candidate", source_chapter_id: current.chapterId, target: {
-              proposal_id: selected.proposalId, operation_id: selected.operationId, revision_id: selected.revisionId,
-            } },
+          working_target: references.length === 0 ? { kind: "current_chapter", chapter_id: current.chapterId }
+            : { kind: "selection_references", source_chapter_id: current.chapterId, references },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
@@ -481,6 +522,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
+      clearDraftReferences(context.scope, current.referenceKeys ?? []);
       onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
@@ -523,9 +565,8 @@ export function WritingAssistantPanel({
             <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <p className="assistant-author-message">{exchange.message}</p>
-              {exchange.run?.steering_inputs?.map(input => <p className="assistant-author-message"
-                key={input.steering_input_id}>{input.author_message}</p>)}
+              <AuthorMessages message={exchange.message} labels={exchange.referenceLabels} run={exchange.run}
+                guidance={exchange.guidance} />
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
               {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
                 sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
@@ -536,9 +577,8 @@ export function WritingAssistantPanel({
               {(reference.history?.length ?? 0) > 0
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <p className="assistant-author-message">{reference.message}</p>
-              {run?.steering_inputs?.map(input => <p className="assistant-author-message"
-                key={input.steering_input_id}>{input.author_message}</p>)}
+              <AuthorMessages message={reference.message} labels={reference.referenceLabels} run={run}
+                guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
                 <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
@@ -555,6 +595,13 @@ export function WritingAssistantPanel({
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={sending} current={reference} run={run}
           onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onGuidanceRetained={(steeringInputId, labels, references) => {
+            const latest = context === undefined ? undefined : readReference(context.scope);
+            if (latest === undefined || (labels.length === 0 && references.length === 0)) return;
+            const next = { ...latest, guidance: [...latest.guidance ?? [], { steeringInputId, labels, references }] };
+            saveReference(next);
+            setReference(next);
+          }}
           onStatus={setStatus} />
       </div>
     </aside>

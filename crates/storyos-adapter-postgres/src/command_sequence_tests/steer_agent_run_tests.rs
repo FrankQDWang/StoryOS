@@ -47,6 +47,7 @@ pub(super) async fn steering(
         run_id: run_id.to_owned(),
         conversation_id,
         author_message: "a".repeat(characters),
+        selection_references: None,
     }
 }
 
@@ -137,4 +138,87 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
             input_position: 4,
         })
     );
+}
+
+/// One Chapter text reference in the first block of a fixed Chapter.
+fn chapter_reference(start: u32) -> storyos_core::SelectionReference {
+    let point = |offset| storyos_core::TextPoint {
+        manuscript_block_id: "018f0000-0000-7001-8000-00000000c9b1".to_owned(),
+        offset,
+    };
+    storyos_core::SelectionReference::ChapterText {
+        chapter_id: "018f0000-0000-7001-8000-00000000c9c1".to_owned(),
+        base_authoritative_revision_id: "018f0000-0000-7001-8000-00000000c9d1".to_owned(),
+        start: point(start),
+        end: point(start + 1),
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn steering_inputs_add_distinct_references_up_to_eight_for_each_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let scope = seed_project(&store, "c900").await;
+    let run_id = Uuid::now_v7().to_string();
+    seed_run(&admin, &scope, &run_id, "waiting").await;
+    let with = |starts: &[u32], input: &SteerAgentRunInput| SteerAgentRunInput {
+        selection_references: Some(starts.iter().copied().map(chapter_reference).collect()),
+        ..input.clone()
+    };
+    let plain = steering(&admin, &run_id, /*characters*/ 4).await;
+    // The second input repeats one reference, so the third input fills the eighth place.
+    let inputs = [
+        (0xc901, with(&[0, 1, 2, 3, 4], &plain)),
+        (0xc902, with(&[4, 5, 6], &plain)),
+        (0xc903, plain.clone()),
+        (0xc904, with(&[7, 0], &plain)),
+        (0xc905, with(&[8], &plain)),
+        (0xc906, with(&[3], &plain)),
+    ];
+    let mut observed = Vec::new();
+    for (suffix, input) in inputs {
+        let call = issued(&store, &scope, suffix, &STEER_AGENT_RUN, input).await;
+        observed.push(
+            match store.steer_agent_run(&call.envelope, &call.input).await {
+                Ok(settled) => settled
+                    .zero_authority_effect
+                    .map(|effect| effect.input_position),
+                Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
+                    assert_eq!(refusal, AgentRunControlRefusal::ReferenceLimit);
+                    assert_eq!(
+                        request_rows(&admin, &call.envelope.challenge_binding.idempotency_key)
+                            .await,
+                        [0, 0, 0, 1]
+                    );
+                    None
+                }
+                Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
+            },
+        );
+    }
+    let stored: Vec<Option<usize>> = admin
+        .query(
+            "SELECT jsonb_array_length(payload->'selection_references')
+               FROM storyos.project_activity_event_payloads
+              WHERE event_kind = 'agent_run_steering_retained' AND payload->>'run_id' = $1
+              ORDER BY (payload->>'input_position')::numeric",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| {
+            row.get::<_, Option<i32>>(/*idx*/ 0)
+                .map(|length| length as usize)
+        })
+        .collect();
+
+    assert_eq!(
+        observed,
+        [Some(1), Some(2), Some(3), Some(4), None, Some(5)]
+    );
+    assert_eq!(stored, [Some(5), Some(3), None, Some(2), Some(1)]);
 }

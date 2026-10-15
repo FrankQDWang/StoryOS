@@ -68,7 +68,94 @@ pub(crate) async fn load(
     Ok(Some(loaded))
 }
 
+/// The pending candidate that a validated result revises. It is the candidate target of the Run,
+/// or the referenced candidate of the one change of the result (ADR 0062).
 pub(crate) async fn admitted(
+    client: &tokio_postgres::Client,
+    claim: &storyos_application::ClaimedAgentRun,
+    produced: Option<&[storyos_core::ProseChangeCandidate]>,
+) -> Result<
+    Option<(
+        storyos_core::CurrentPassageAssemblyRecord,
+        ProposalCandidateTarget,
+    )>,
+    storyos_application::CompleteAgentRunError,
+> {
+    let Some(record) = active_record(client, claim).await? else {
+        return Ok(None);
+    };
+    if let Some(target) = record.operation_requirement.candidate_target.clone() {
+        return Ok(Some((record, target)));
+    }
+    let Some([change]) = produced else {
+        return Ok(None);
+    };
+    let target = record
+        .operation_requirement
+        .selection_references
+        .iter()
+        .flatten()
+        .filter(|admitted| admitted.candidate().is_some())
+        .find(|admitted| {
+            admitted.reference.chapter_id() == change.chapter_id
+                && admitted.manuscript_block_ids == [change.manuscript_block_id.as_str()]
+        })
+        .and_then(|admitted| admitted.reference.candidate_target());
+    Ok(target.map(|target| (record, target)))
+}
+
+/// The referenced pending candidates as declared targets, with their candidate text.
+pub(crate) async fn declared(
+    client: &tokio_postgres::Client,
+    claim: &storyos_application::ClaimedAgentRun,
+) -> Result<Vec<storyos_application::DeclaredTarget>, storyos_application::CompleteAgentRunError> {
+    let Some(record) = active_record(client, claim).await? else {
+        return Ok(Vec::new());
+    };
+    let references = record
+        .operation_requirement
+        .selection_references
+        .as_deref()
+        .unwrap_or_default();
+    let mut declared = Vec::new();
+    for (chapter_id, target, text) in crate::selection_references::candidate_targets(references) {
+        let Some(row) = client
+            .query_opt(
+                "SELECT operation.manuscript_block_id::text,
+                        revision.base_authoritative_revision_id::text
+                   FROM storyos.proposal_revisions AS revision
+                   JOIN storyos.proposal_operations AS operation
+                     USING (owner_user_id, project_id, proposal_id)
+                  WHERE revision.owner_user_id=$1::text::uuid AND revision.project_id=$2::text::uuid
+                    AND revision.proposal_id=$3::text::uuid AND revision.revision_id=$4::text::uuid
+                    AND operation.operation_id=$5::text::uuid",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &target.proposal_id,
+                    &target.revision_id,
+                    &target.operation_id,
+                ],
+            )
+            .await
+            .map_err(super::agent_run_work::complete_database_error)?
+        else {
+            continue;
+        };
+        declared.push(storyos_application::DeclaredTarget {
+            chapter_id: chapter_id.to_owned(),
+            block_id: row.get(/*idx*/ 0),
+            base_revision_id: row.get(/*idx*/ 1),
+            collection: false,
+            kind: storyos_core::DeclaredTargetKind::PendingCandidate,
+            block_text: text.to_owned(),
+        });
+    }
+    Ok(declared)
+}
+
+/// The primary Context Assembly record of the active decision of the Run.
+async fn active_record(
     client: &tokio_postgres::Client,
     claim: &storyos_application::ClaimedAgentRun,
 ) -> Result<
@@ -94,6 +181,5 @@ pub(crate) async fn admitted(
         serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
             storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
         })?;
-    Ok(storyos_core::decode_assembly_record(&payload)
-        .filter(|record| record.operation_requirement.candidate_target.is_some()))
+    Ok(storyos_core::decode_assembly_record(&payload))
 }

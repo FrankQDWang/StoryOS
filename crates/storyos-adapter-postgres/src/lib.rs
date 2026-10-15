@@ -173,6 +173,7 @@ mod reject_proposal_operations;
 mod reopen_rejected_operations;
 mod reopen_withdrawn_proposal;
 mod replan_proposal;
+mod selection_references;
 mod set_current_chapter;
 mod snapshot;
 mod steer_agent_run;

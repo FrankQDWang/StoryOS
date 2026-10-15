@@ -146,6 +146,15 @@
           },
           "type": "array"
         },
+        "selection_references": {
+          "items": {
+            "$ref": "#/$defs/SelectionReferenceInspect"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "sufficiency": {
           "$ref": "#/$defs/ContextSufficiency"
         },
@@ -1904,6 +1913,145 @@
         "unknown_create"
       ],
       "type": "string"
+    },
+    "SelectionCoordinateProfile": {
+      "enum": [
+        "storyos.editor.utf16-code-unit.v1"
+      ],
+      "type": "string"
+    },
+    "SelectionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "manuscript_block_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "manuscript_block_id",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "SelectionReference": {
+      "description": "One exact text range that the author added to the message (ADR 0062).",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base_authoritative_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "coordinate_profile": {
+              "$ref": "#/$defs/SelectionCoordinateProfile"
+            },
+            "end": {
+              "$ref": "#/$defs/SelectionPoint"
+            },
+            "kind": {
+              "const": "chapter_text",
+              "type": "string"
+            },
+            "start": {
+              "$ref": "#/$defs/SelectionPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "base_authoritative_revision_id",
+            "coordinate_profile",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "coordinate_profile": {
+              "$ref": "#/$defs/SelectionCoordinateProfile"
+            },
+            "end_offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "proposal_candidate_text",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "start_offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "coordinate_profile",
+            "start_offset",
+            "end_offset"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SelectionReferenceInspect": {
+      "additionalProperties": false,
+      "description": "One selection reference of the Working Target, the blocks it covers, and its availability.",
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/SourceAvailability"
+        },
+        "manuscript_block_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reference": {
+          "$ref": "#/$defs/SelectionReference"
+        }
+      },
+      "required": [
+        "reference",
+        "manuscript_block_ids",
+        "availability"
+      ],
+      "type": "object"
     },
     "SourceAvailability": {
       "oneOf": [

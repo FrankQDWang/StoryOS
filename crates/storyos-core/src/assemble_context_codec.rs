@@ -48,6 +48,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(target) = &record.operation_requirement.candidate_target {
         payload["operation_requirement"]["candidate_target"] = serde_json::json!(target);
     }
+    if let Some(references) = &record.operation_requirement.selection_references {
+        payload["operation_requirement"]["selection_references"] = serde_json::json!(references);
+    }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
             "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
@@ -115,6 +118,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 Some(value) => Some(serde_json::from_value(value.clone()).ok()?),
                 None => None,
             },
+            selection_references: requirement
+                .get("selection_references")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
             passage_targets: requirement
                 .get("passage_targets")
                 .map(|value| serde_json::from_value(value.clone()))

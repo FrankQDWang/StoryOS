@@ -38,6 +38,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         proposal_target_block_ids: input.proposal_target_block_ids.clone(),
         passage_targets: None,
         candidate_target: None,
+        selection_references: None,
         ordinary_resolution: None,
         instruction: input.instruction.clone(),
         destination_identity: input.destination_identity.clone(),

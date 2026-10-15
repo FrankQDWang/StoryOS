@@ -103,7 +103,6 @@ export const inlineProposalDecoration = TiptapNode.create({
   parseHTML() { return [{ tag: "span[data-inline-proposal-id]" }]; },
   renderHTML({ node }) {
     return ["span", { class: "inline-proposal", "data-inline-proposal-id": node.attrs.proposalId,
-      "data-candidate-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,
       "data-proposal-target-id": node.attrs.blockId,

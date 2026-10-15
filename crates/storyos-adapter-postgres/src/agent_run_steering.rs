@@ -10,7 +10,8 @@ pub(crate) async fn advance(
     let Some(row) = client.query_opt(
         "SELECT run.author_message, run.chapter_id::text, input.receipt_id::text,
                 input.payload->>'input_position', COALESCE(requirement.payload, 'null'::jsonb)::text,
-                COALESCE(attempt.payload, 'null'::jsonb)::text
+                COALESCE(attempt.payload, 'null'::jsonb)::text,
+                COALESCE(input.payload->'selection_references', 'null'::jsonb)::text
            FROM storyos.agent_runs AS run
            LEFT JOIN storyos.operation_requirements AS requirement
              ON (requirement.owner_user_id,requirement.project_id,requirement.run_id)=
@@ -36,26 +37,39 @@ pub(crate) async fn advance(
             "The retained Operation Requirement is unavailable",
         )))
     })?;
-    if let Some(target) = retained.operation_requirement.candidate_target.as_mut() {
-        let attempt: serde_json::Value = serde_json::from_str(&row.get::<_, String>(5))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        for location in locations.unwrap_or_default() {
-            if let storyos_contracts::ProseChangeLocationOutcome::Revised {
+    let attempt: serde_json::Value = serde_json::from_str(&row.get::<_, String>(/*idx*/ 5))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    for location in locations.unwrap_or_default() {
+        if let storyos_contracts::ProseChangeLocationOutcome::Revised {
+            proposal_id,
+            operation_id,
+            revision_id,
+            prior_revision_id,
+            ..
+        } = location.outcome
+        {
+            let prior = storyos_core::ProposalCandidateTarget {
                 proposal_id,
                 operation_id,
-                revision_id,
-                prior_revision_id,
-                ..
-            } = location.outcome
-                && proposal_id == target.proposal_id
-                && operation_id == target.operation_id
-                && prior_revision_id == target.revision_id
+                revision_id: prior_revision_id,
+            };
+            if let Some(target) = retained.operation_requirement.candidate_target.as_mut()
+                && *target == prior
             {
-                target.revision_id = revision_id;
-                break;
+                target.revision_id = revision_id.clone();
             }
+            storyos_core::advance_candidate_references(
+                retained
+                    .operation_requirement
+                    .selection_references
+                    .iter_mut()
+                    .flatten(),
+                &prior,
+                &revision_id,
+                &location.candidate_text,
+            );
         }
     }
     let position: String = row.get(3);
@@ -80,6 +94,27 @@ pub(crate) async fn advance(
                     "Current guidance admission is unavailable",
                 )))
             })?;
+    // The references of this input join the Run references (ADR 0062).
+    let added: Option<Vec<storyos_core::SelectionReference>> =
+        serde_json::from_str(&row.get::<_, String>(/*idx*/ 6))
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let run_references =
+        retained
+            .operation_requirement
+            .selection_references
+            .map(|references| -> Vec<_> {
+                references
+                    .into_iter()
+                    .map(|admitted| admitted.reference)
+                    .collect()
+            });
+    let references = match (run_references, added) {
+        (None, None) => None,
+        (run, added) => Some(storyos_core::merge_steering_references(
+            run.into_iter().flatten(),
+            added.as_deref().unwrap_or_default(),
+        )),
+    };
     persist_current_passage_assembly(
         client,
         &PassageContextInput {
@@ -91,6 +126,7 @@ pub(crate) async fn advance(
             decision_position: &position,
             passage_targets: retained.operation_requirement.passage_targets.as_deref(),
             candidate_target: retained.operation_requirement.candidate_target.as_ref(),
+            selection_references: references.as_deref(),
         },
         &assistance.processing_destination_identity,
     )

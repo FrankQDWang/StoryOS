@@ -52,6 +52,10 @@ _Avoid_: Vague task label, destination identity, capability, post-hoc justificat
 The exact Project Scope-bound domain object, immutable input version, selection, question, or bounded object set on which one operation is allowed to work, together with any expected current Revisions needed to detect drift. It identifies the focus of work but grants no authority, permission, source eligibility, or right to expand to surrounding Project content. A legitimately untargeted noninteractive operation records an explicit not-applicable fact and remains bounded by its Purpose, typed cause, Project Scope, Operation Input Snapshot, and allowed source classes rather than inventing a target.
 _Avoid_: Working Target Context, whole Project, editor tab, inferred story scope, fabricated Job target
 
+**Selection Reference**:
+One exact text range that the author adds to one assistant message. It is a range of Chapter text bound to its base Revision, or a range of a pending Proposal candidate bound to its Proposal Revision. The references of a message are its Working Target, together with the Current Chapter. A reference has no mode: the author instruction tells if the model changes the text or only uses it. A reference grants no authority and no permission to change text outside the Working Target.
+_Avoid_: Caret target, focused candidate, attachment, quote mode
+
 **Operation Input Snapshot**:
 The immutable, Project Scope-bound Operational Record capturing the exact inputs and source versions from which one operation begins. For a RunStep, its Step Snapshot fulfills this boundary; a Service, Job, embedding, telemetry, or other non-Run operation records an equivalent typed snapshot without inventing an AgentRun or Step Snapshot. Later input changes create a new Snapshot and never mutate one already used by Context Assembly.
 _Avoid_: Live buffer, process memory, Step Snapshot for every operation, mutable request object

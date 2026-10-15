@@ -20,7 +20,8 @@ use crate::release1_agent_run::{
     OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
     OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
     ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
+    ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
+    SelectionReferenceInspect, SourceAvailability, TokenCountingProfileInspect,
     UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{
@@ -109,6 +110,14 @@ pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
 ];
 
+pub(super) const SELECTION_REFERENCE_UUID_FIELDS: &[&str] = &[
+    "chapter_id",
+    "base_authoritative_revision_id",
+    "proposal_id",
+    "operation_id",
+    "revision_id",
+];
+
 pub(super) fn create_request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CreateAgentRunRequest>(
         CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -131,8 +140,11 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
         target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
     }
-    if let Some(target) = schema["$defs"].get_mut("ProposalCandidateTarget") {
-        constrain_uuid_fields(target, &["proposal_id", "operation_id", "revision_id"]);
+    if let Some(reference) = schema["$defs"].get_mut("SelectionReference") {
+        constrain_uuid_fields(reference, SELECTION_REFERENCE_UUID_FIELDS);
+    }
+    if let Some(point) = schema["$defs"].get_mut("SelectionPoint") {
+        constrain_uuid_fields(point, &["manuscript_block_id"]);
     }
     json_bytes(&schema)
 }
@@ -258,6 +270,9 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "ProseChangeLocationInspect",
         "PassageTarget",
         "ProposalCandidateTarget",
+        "SelectionReference",
+        "SelectionPoint",
+        "SelectionReferenceInspect",
         "ProseChangeLocationOutcome",
         "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
@@ -314,6 +329,9 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
     }
     schema["$defs"]["PassageTarget"]["properties"]["manuscript_block_ids"]["items"]["format"] =
         json!("uuid");
+    if let Some(reference) = schema["$defs"].get_mut("SelectionReferenceInspect") {
+        reference["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
+    }
     json_bytes(&schema)
 }
 
@@ -368,11 +386,14 @@ pub(super) fn openapi() -> Vec<OpenApiMethod> {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
         PassageTarget::decl(&config),
+        SelectionReference::decl(&config),
+        SelectionCoordinateProfile::decl(&config),
+        SelectionPoint::decl(&config),
         ProposalCandidateTarget::decl(&config),
         InstructionBinding::decl(&config),
         AssistanceCause::decl(&config),
@@ -398,6 +419,7 @@ pub(super) fn typescript_type_declarations() -> String {
         HostControlInspect::decl(&config),
         CurrentAvailabilityInspect::decl(&config),
         AgentRunContextInspect::decl(&config),
+        SelectionReferenceInspect::decl(&config),
         EvidenceAvailability::decl(&config),
         AttemptEvidence::decl(&config),
         OptionalContinuationInspect::decl(&config),

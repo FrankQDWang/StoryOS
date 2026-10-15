@@ -181,7 +181,20 @@ impl CompactionTrigger {
                 .map(|bounds| u64::from(bounds.max_output_tokens)),
             prior_reported_tokens: facts.prior_reported_tokens,
             new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
-                record.selected.iter().map(|item| item.token_count).sum()
+                // The request sends the text of each selection reference again (ADR 0062).
+                let references = record
+                    .operation_requirement
+                    .selection_references
+                    .iter()
+                    .flatten()
+                    .filter_map(|admitted| admitted.selected_text.as_deref())
+                    .map(crate::assemble_context::count_context_item_tokens);
+                record
+                    .selected
+                    .iter()
+                    .map(|item| item.token_count)
+                    .chain(references)
+                    .sum()
             }),
         }
     }

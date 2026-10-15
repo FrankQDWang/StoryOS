@@ -100,27 +100,9 @@ fn create_agent_run_input(
             conversation_id.clone()
         }
     };
-    let mut candidate_target = None;
+    let mut selection_references = None;
     let (chapter_id, passage_targets) = match &input.working_target {
         contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } => (chapter_id, None),
-        contracts::AssistanceWorkingTarget::ProposalCandidate {
-            source_chapter_id,
-            target,
-        } => {
-            for value in [
-                &target.proposal_id,
-                &target.operation_id,
-                &target.revision_id,
-            ] {
-                valid_uuid(value)?;
-            }
-            candidate_target = Some(storyos_core::ProposalCandidateTarget {
-                proposal_id: target.proposal_id.clone(),
-                operation_id: target.operation_id.clone(),
-                revision_id: target.revision_id.clone(),
-            });
-            (source_chapter_id, None)
-        }
         contracts::AssistanceWorkingTarget::PassageCollection {
             source_chapter_id,
             targets,
@@ -128,6 +110,13 @@ fn create_agent_run_input(
             source_chapter_id,
             Some(super::passage_targets::resolve(targets)?),
         ),
+        contracts::AssistanceWorkingTarget::SelectionReferences {
+            source_chapter_id,
+            references,
+        } => {
+            selection_references = Some(super::selection_references::resolve(references)?);
+            (source_chapter_id, None)
+        }
     };
     valid_uuid(chapter_id)?;
     Ok(CreateAgentRunInput {
@@ -142,7 +131,7 @@ fn create_agent_run_input(
         author_message: input.author_message.text.clone(),
         chapter_id: chapter_id.clone(),
         passage_targets,
-        candidate_target,
+        selection_references,
         run_id: Uuid::now_v7().to_string(),
         conversation_id,
         project_agent_id: Uuid::now_v7().to_string(),
@@ -698,6 +687,23 @@ fn inspect_context(
             .clone(),
         input_snapshot_id: record.operation_requirement.input_snapshot_id.clone(),
         purpose: contracts::ContextPurpose::CurrentPassageAssistance,
+        selection_references: record
+            .operation_requirement
+            .selection_references
+            .as_ref()
+            .map(|references| {
+                references
+                    .iter()
+                    .zip(&context.reference_availability)
+                    .map(
+                        |(admitted, availability)| contracts::SelectionReferenceInspect {
+                            reference: super::selection_references::inspect(&admitted.reference),
+                            manuscript_block_ids: admitted.manuscript_block_ids.clone(),
+                            availability: source_availability(availability),
+                        },
+                    )
+                    .collect()
+            }),
         candidate_target: record
             .operation_requirement
             .candidate_target
@@ -816,19 +822,25 @@ fn inspect_context(
             }
         },
         current_availability: contracts::CurrentAvailabilityInspect {
-            working_target: match &context.working_target_availability {
-                storyos_application::WorkingTargetAvailability::Current => {
-                    contracts::SourceAvailability::Current
-                }
-                storyos_application::WorkingTargetAvailability::Unavailable => {
-                    contracts::SourceAvailability::Unavailable
-                }
-                storyos_application::WorkingTargetAvailability::Superseded {
-                    current_revision_id,
-                } => contracts::SourceAvailability::Superseded {
-                    current_revision_id: current_revision_id.clone(),
-                },
-            },
+            working_target: source_availability(&context.working_target_availability),
+        },
+    }
+}
+
+fn source_availability(
+    availability: &storyos_application::WorkingTargetAvailability,
+) -> contracts::SourceAvailability {
+    match availability {
+        storyos_application::WorkingTargetAvailability::Current => {
+            contracts::SourceAvailability::Current
+        }
+        storyos_application::WorkingTargetAvailability::Unavailable => {
+            contracts::SourceAvailability::Unavailable
+        }
+        storyos_application::WorkingTargetAvailability::Superseded {
+            current_revision_id,
+        } => contracts::SourceAvailability::Superseded {
+            current_revision_id: current_revision_id.clone(),
         },
     }
 }

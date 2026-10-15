@@ -370,3 +370,53 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         )
     );
 }
+
+#[test]
+fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
+    let chapter_body = "雨".repeat(/*n*/ 32_000);
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Help again.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: chapter_body.clone(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let due = |decision: &crate::CurrentPassageAssemblyRecord| {
+        super::compaction_requested(&super::CompactionRequestFacts {
+            model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+            budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            author_message: "Help again.",
+            decision: Some(decision),
+            prior_reported_tokens: Some(780_000),
+        })
+    };
+    let without_references = due(&decision);
+    let point = |offset| crate::TextPoint {
+        manuscript_block_id: "block-1".to_owned(),
+        offset,
+    };
+    decision.operation_requirement.selection_references = Some(
+        (0..8)
+            .map(|start| crate::AdmittedSelection {
+                reference: crate::SelectionReference::ChapterText {
+                    chapter_id: "chapter-1".to_owned(),
+                    base_authoritative_revision_id: "rev-1".to_owned(),
+                    start: point(start),
+                    end: point(/*offset*/ 32_000),
+                },
+                selected_text: Some(chapter_body.chars().skip(start as usize).collect()),
+                manuscript_block_ids: vec!["block-1".to_owned()],
+                candidate_text: None,
+            })
+            .collect(),
+    );
+
+    assert_eq!((without_references, due(&decision)), (false, true));
+}

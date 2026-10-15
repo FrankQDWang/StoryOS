@@ -30,6 +30,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       ), composer AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Composer %'
+      ), selection_reference AS (
+        SELECT owner_user_id, project_id FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Selection reference %'
       ), multi_location AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Multi-location %'
@@ -59,6 +62,15 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           ) AS receipts),
           'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
             JOIN inline_proposal USING (owner_user_id, project_id))
+        ),
+        'selection_reference', json_build_object(
+          'project_count', (SELECT count(*) FROM selection_reference),
+          'receipts', (SELECT json_object_agg(command_kind, count) FROM (
+            SELECT command_kind, count(*) FROM storyos.domain_receipts
+            JOIN selection_reference USING (owner_user_id, project_id) GROUP BY command_kind
+          ) AS receipts),
+          'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
+            JOIN selection_reference USING (owner_user_id, project_id))
         ),
         'captured_memory', json_build_object(
           'project_count', (SELECT count(*) FROM captured_memory),
@@ -181,6 +193,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id NOT IN (SELECT project_id FROM captured_memory)
             AND project_id NOT IN (SELECT project_id FROM run_evidence)
             AND project_id NOT IN (SELECT project_id FROM composer)
+            AND project_id NOT IN (SELECT project_id FROM selection_reference)
             AND NOT (project_id IN (SELECT project_id FROM takeover_export)
               AND command_kind = 'takeOverProjectWriter')
             AND NOT (project_id IN (SELECT project_id FROM takeover_activity)
@@ -220,11 +233,17 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       },
       inline_proposal: {
         project_count: 1,
-        receipts: { createProject: 1, createVolume: 1, createChapter: 5,
-          updateProjectAssistance: 1, setCurrentChapter: 4, createAgentRun: 6,
-          applyAuthorEdit: 17, acceptProposal: 1, rejectProposalOperations: 1,
+        receipts: { createProject: 1, createVolume: 1, createChapter: 6,
+          updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
+          applyAuthorEdit: 18, acceptProposal: 2, rejectProposalOperations: 1,
           takeOverProjectWriter: 1 },
-        author_action_count: 27,
+        author_action_count: 31,
+      },
+      selection_reference: {
+        project_count: 1,
+        receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+          updateProjectAssistance: 1, applyAuthorEdit: 6, createAgentRun: 1, steerAgentRun: 1 },
+        author_action_count: 8,
       },
       captured_memory: {
         project_count: 1,

@@ -362,7 +362,7 @@ pub(crate) async fn admit_run_in(
         RUN_BYTES,
         CreateAgentRunInput {
             passage_targets: None,
-            candidate_target: None,
+            selection_references: None,
             conversation,
             author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),

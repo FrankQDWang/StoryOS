@@ -96,7 +96,7 @@ fn run_command(
         RUN_BYTES,
         CreateAgentRunInput {
             passage_targets: None,
-            candidate_target: None,
+            selection_references: None,
             conversation,
             author_message: "Help with this passage.".to_owned(),
             chapter_id: chapter_id.to_owned(),

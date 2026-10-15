@@ -97,7 +97,6 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 function ProjectReadyView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
-  const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const structureInFlightRef = useRef(false);
@@ -364,7 +363,7 @@ function ProjectReadyView({
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
         navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
-          setCandidateTarget(focus); setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
+          setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
         }, onFailure: setSwitchRecovery,
         onLocator: (locator) => setProposalLocators(rememberProposalLocator(state.project.project_scope, locator)),
       })}
@@ -374,7 +373,7 @@ function ProjectReadyView({
       }}
       assistant={{
         scope: state.project.project_scope,
-        chapterId: currentChapterId, candidateTarget, tree,
+        chapterId: currentChapterId, tree,
         canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
           && saveState === "saved" && !readOnly && !archived,
         baseUrl, fetchImpl, cryptoImpl,
@@ -442,7 +441,6 @@ function ProjectReadyView({
               && pending !== null ? pending.authoritative_revision_id
               : selectedChapter.chapter.current_revision.revision_id}
             focusProposal={proposalFocus}
-            onCandidateFocus={setCandidateTarget}
             locators={proposalLocators}
             refreshKey={proposalRefresh}
             safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
@@ -468,6 +466,15 @@ function ProjectReadyView({
                 .then(onReopened);
             }}
             blocks={editorBlocks}
+            referenceSource={{
+              scope: state.project.project_scope,
+              chapterId: selectedChapter.chapter.chapter_id,
+              revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+                ? pending.authoritative_revision_id : selectedChapter.chapter.current_revision.revision_id,
+              saved: selectedChapter.chapter.chapter_id !== currentChapterId || pending === null
+                || saveState === "saved",
+              tree,
+            }}
             editable={!readOnly && !archived}
             persistWorkspace={
               state.editor.kind === "editor-ready"

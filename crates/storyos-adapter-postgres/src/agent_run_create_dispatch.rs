@@ -125,21 +125,6 @@ pub(crate) async fn create_request(
         )))
     })?;
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
-    let candidate_revision = crate::candidate_revision_target::admitted(client, claim)
-        .await?
-        .map(|candidate| {
-            let target = candidate
-                .operation_requirement
-                .candidate_target
-                .as_ref()
-                .expect("candidate binding");
-            candidate
-                .selected
-                .iter()
-                .find(|source| source.source_version == target.revision_id)
-                .map(|source| source.content.clone())
-                .unwrap_or_default()
-        });
     Ok(CreateRequest {
         attempt,
         purpose: CreatePurpose::Decision,
@@ -157,7 +142,11 @@ pub(crate) async fn create_request(
             })
             .collect(),
         declared_targets,
-        candidate_revision,
+        selection_references: assembly
+            .operation_requirement
+            .selection_references
+            .clone()
+            .unwrap_or_default(),
         previous_response_reference: previous_response_reference(client, claim, run, prior_context)
             .await?,
         successor_of: None,
@@ -170,7 +159,7 @@ pub(crate) async fn declared_targets(
     claim: &ClaimedAgentRun,
     chapter_id: &str,
 ) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
-    Ok(
+    let mut declared: Vec<DeclaredTarget> =
         crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id)
             .await?
             .into_iter()
@@ -179,10 +168,12 @@ pub(crate) async fn declared_targets(
                 block_id: target.block_id,
                 base_revision_id: target.revision_id,
                 collection: target.collection,
+                kind: storyos_core::DeclaredTargetKind::ChapterBlock,
                 block_text: target.block_text,
             })
-            .collect(),
-    )
+            .collect();
+    declared.extend(crate::candidate_revision_target::declared(client, claim).await?);
+    Ok(declared)
 }
 
 /// The destination reference of the prior binding that an incremental continuation sends.

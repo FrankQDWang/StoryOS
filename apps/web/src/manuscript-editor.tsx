@@ -27,10 +27,13 @@ import {
 } from "./block-proposal-decoration.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
+import { AddReferenceControl, type EditorReferenceSource } from "./selection-reference-control.tsx";
+import {
+  rebaseDraftReferences, trackableDraftReferences, trackDraftReferences,
+} from "./selection-reference-draft.ts";
 
 export interface ManuscriptEditorProps {
   focusProposal?: ProposalFocus | undefined;
-  onCandidateFocus?: ((focus: ProposalFocus | undefined) => void) | undefined;
   blocks: readonly ManuscriptParagraph[];
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
@@ -66,6 +69,8 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
+  /** The source of the references that the author adds from a selection. */
+  referenceSource?: EditorReferenceSource | undefined;
 }
 
 const ignoreChanges = () => () => {};
@@ -93,12 +98,13 @@ export function ManuscriptEditor({
   proposals = [],
   editable,
   writing,
-  onCandidateSettled, onUndoCurrentChapter, focusProposal, onCandidateFocus,
+  onCandidateSettled, onUndoCurrentChapter, focusProposal,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
+  referenceSource,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const capturedInputRef = useRef(0);
@@ -113,8 +119,6 @@ export function ManuscriptEditor({
   writingRef.current = writing;
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onUndoCurrentChapterRef = useRef(onUndoCurrentChapter);
-  const onCandidateFocusRef = useRef(onCandidateFocus);
-  onCandidateFocusRef.current = onCandidateFocus;
   const proposalsRef = useRef(proposals);
   proposalsRef.current = proposals;
   const onAcceptProposalRef = useRef(onAcceptProposal);
@@ -123,6 +127,10 @@ export function ManuscriptEditor({
   const onWithdrawProposalRef = useRef(onWithdrawProposal);
   const onCopyProposalRef = useRef(onCopyProposal);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
+  const referenceSourceRef = useRef(referenceSource);
+  referenceSourceRef.current = referenceSource;
+  // The draft references of this Chapter that the editor moves with the author edits.
+  const trackedReferencesRef = useRef(new Set<string>());
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onCandidateSettledRef.current = onCandidateSettled;
   onUndoCurrentChapterRef.current = onUndoCurrentChapter;
@@ -159,6 +167,18 @@ export function ManuscriptEditor({
     onTransaction({ editor: current, transaction }) {
       const nextBlocks = readManuscriptParagraphs(current.state.doc);
       if (nextBlocks === undefined) return;
+      const source = referenceSourceRef.current;
+      if (source !== undefined && transaction.docChanged) {
+        trackDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, transaction, source.tree);
+        // A hydrate of a saved editor shows its Revision, so the kept references take it as their base.
+        // The editor also tracks the references at that Revision, for example of an accepted candidate.
+        if (source.saved && isStoryosHydrateTransaction(transaction)) {
+          rebaseDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, source.revisionId);
+          for (const key of trackableDraftReferences(source.scope, source.chapterId, source.revisionId)) {
+            trackedReferencesRef.current.add(key);
+          }
+        }
+      }
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
@@ -249,6 +269,19 @@ export function ManuscriptEditor({
   }, [editable, editor]);
 
   useEffect(() => {
+    if (referenceSource === undefined) return;
+    const tracked = trackedReferencesRef.current;
+    tracked.clear();
+    for (const key of trackableDraftReferences(referenceSource.scope, referenceSource.chapterId,
+      referenceSource.revisionId)) tracked.add(key);
+  }, [editor, referenceSource?.chapterId]);
+  useEffect(() => {
+    if (referenceSource?.saved !== true) return;
+    rebaseDraftReferences(referenceSource.scope, referenceSource.chapterId, trackedReferencesRef.current,
+      referenceSource.revisionId);
+  }, [referenceSource?.saved, referenceSource?.revisionId]);
+
+  useEffect(() => {
     // A projection during IME composition replaces the composed text. The capture at its end renders again.
     if (editor === null || editor.view.composing || composingRef.current) return;
     projectBlockProposals(editor, proposals);
@@ -263,7 +296,6 @@ export function ManuscriptEditor({
         editor.commands.setTextSelection(position + 1);
         editor.view.focus();
         focusedProposalRef.current = identity;
-        onCandidateFocusRef.current?.(focusProposal);
       }
       const candidate = editor.view.nodeDOM(position);
       if (candidate instanceof HTMLElement) {
@@ -277,11 +309,6 @@ export function ManuscriptEditor({
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const focused = target.closest<HTMLElement>("[data-candidate-proposal-id]");
-      onCandidateFocusRef.current?.(focused === null ? undefined : {
-        proposalId: focused.dataset.candidateProposalId!, operationId: focused.dataset.proposalOperationId!,
-        revisionId: focused.dataset.proposalRevisionId!, blockId: focused.dataset.proposalTargetId!,
-      });
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
       const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
       const replanButton = target.closest<HTMLButtonElement>("button[data-proposal-replan]");
@@ -422,5 +449,9 @@ export function ManuscriptEditor({
   }, [editor, writing]);
 
   if (editor === null) return null;
-  return <EditorContent editor={editor} />;
+  return <>
+    <EditorContent editor={editor} />
+    {referenceSource === undefined ? null
+      : <AddReferenceControl editor={editor} source={referenceSource} tracked={trackedReferencesRef.current} />}
+  </>;
 }

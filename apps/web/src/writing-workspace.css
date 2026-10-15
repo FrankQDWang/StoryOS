@@ -472,3 +472,13 @@ li[data-chapter-id] { position: relative; }
 [data-search-match] button { font-size: 12px; text-align: left; word-break: break-all; }
 [data-search-match-selected] { background: var(--hover); }
 .tree-footer [data-readable-export] pre { position: absolute; bottom: 75px; left: 12px; width: 236px; max-height: 300px; overflow: auto; white-space: pre-wrap; background: var(--tree-panel); border: 1px solid var(--line); padding: 12px; font: 13px/1.8 "Noto Serif SC", "Songti SC", serif; z-index: 5; }
+
+/* The references of the next message (ADR 0062). */
+.add-selection-reference { position: fixed; z-index: 20; margin: 0; padding: 3px 10px; border: 1px solid #dfdcd7; border-radius: 12px; background: white; box-shadow: 0 4px 14px rgba(54, 51, 46, 0.12); color: #3f3d38; font-size: 12px; }
+.composer-references { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 8px 10px 0; list-style: none; }
+.composer-references li { display: flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 4px 2px 8px; border-radius: 10px; background: #efede9; color: #3f3d38; font-size: 12px; }
+.composer-references .reference-label { min-width: 0; overflow: hidden; white-space: nowrap; }
+.composer-references .reference-heading { display: inline-block; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.composer-references button { margin: 0; padding: 0 4px; border: 0; background: transparent; color: #8a8780; font-size: 13px; }
+.assistant-reference-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.assistant-reference-labels li { overflow: hidden; max-width: 100%; padding: 1px 8px; border-radius: 10px; background: #efede9; color: #6f6c66; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

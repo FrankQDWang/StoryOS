@@ -12,6 +12,7 @@ import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
 import { readExpansionJournal, retryExpansion } from "./refused-edit-expansion.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
+import { acceptDraftCandidates } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
@@ -457,7 +458,12 @@ export function BlockProposalDisplay({
           refused: "此次接受已被拒绝，候选文字仍保留。",
         }[response.effect.kind];
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(target.proposalId);
-        if (response.effect.kind === "applied") refreshedAcceptance.current.add(target.proposalId);
+        if (response.effect.kind === "applied") {
+          refreshedAcceptance.current.add(target.proposalId);
+          // A reference to the accepted candidate text now refers to the same text in the Chapter (ADR 0062).
+          acceptDraftCandidates(scope, target.proposalId, response.receipt.selected_operation_ids,
+            response.effect.authoritative_revision.revision_id);
+        }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         setSettlementRefresh((value) => value + 1);
         try { if (refresh) await onAccepted(); } catch {
@@ -500,7 +506,11 @@ export function BlockProposalDisplay({
           throw new Error("Acceptance result identity changed");
         }
         const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
-        if (response.effect.kind === "applied") refreshedAcceptance.current.add(proposalId);
+        if (response.effect.kind === "applied") {
+          refreshedAcceptance.current.add(proposalId);
+          acceptDraftCandidates(scope, proposalId, response.receipt.selected_operation_ids,
+            response.effect.authoritative_revision.revision_id);
+        }
         if (refresh) await onAccepted();
         setSettlementRefresh((value) => value + 1);
       } catch {

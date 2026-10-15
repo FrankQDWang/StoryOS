@@ -318,7 +318,7 @@ impl RetrievedResult {
     /// Validates the original response against the targets that its Create declared.
     pub(crate) fn classify(
         observation: Observation,
-        declared: &[(String, String, String)],
+        declared: &[storyos_core::DeclaredLocation],
     ) -> Self {
         let Observation::Terminal(response) = observation else {
             return Self {
