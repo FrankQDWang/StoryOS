@@ -1,7 +1,8 @@
 use super::{ApiError, invalid_request_shape, valid_uuid};
 use storyos_contracts::{SelectionCoordinateProfile, SelectionPoint, SelectionReference};
 
-/// The core references of a request, after the shape checks that need no Project data.
+/// The core references of a request, after the shape checks that need no Project data. An
+/// empty or reversed range goes on to the Context Assembly, which blocks it (ADR 0062).
 pub(super) fn resolve(
     references: &[SelectionReference],
 ) -> Result<Vec<storyos_core::SelectionReference>, ApiError> {
@@ -25,11 +26,6 @@ pub(super) fn resolve(
                     &end.manuscript_block_id,
                 ] {
                     valid_uuid(id)?;
-                }
-                if start.manuscript_block_id == end.manuscript_block_id
-                    && start.offset >= end.offset
-                {
-                    return Err(invalid_request_shape());
                 }
                 storyos_core::SelectionReference::ChapterText {
                     chapter_id: chapter_id.clone(),

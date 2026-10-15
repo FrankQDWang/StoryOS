@@ -90,17 +90,13 @@ pub fn select_chapter_text(
         } else {
             u32::try_from(text.encode_utf16().count()).ok()?
         };
-        parts.push(utf16_range(text, from, to)?);
+        // A range that splits a surrogate pair or passes the end of the text has no text.
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let range = usize::try_from(from).ok()?..usize::try_from(to).ok()?;
+        parts.push(String::from_utf16(units.get(range)?).ok()?);
     }
     let text = parts.join("\n");
     (!text.is_empty()).then(|| (text, covered.iter().map(|(id, _)| id.clone()).collect()))
-}
-
-/// A range that splits a surrogate pair or passes the end of the text has no text.
-fn utf16_range(text: &str, start: u32, end: u32) -> Option<String> {
-    let units: Vec<u16> = text.encode_utf16().collect();
-    let range = usize::try_from(start).ok()?..usize::try_from(end).ok()?;
-    String::from_utf16(units.get(range)?).ok()
 }
 
 #[cfg(test)]

@@ -356,7 +356,7 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["current", "stale"])("selection references with a %s base declare the Current Chapter and the covered blocks", async (base) => {
+test.each(["current", "stale", "empty", "reversed"])("a %s selection reference declares its covered blocks or blocks the Context Assembly", async (base) => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
@@ -371,14 +371,15 @@ test.each(["current", "stale"])("selection references with a %s base declare the
       { kind: "chapter_text" as const, chapter_id: second!.chapter_id, base_authoritative_revision_id: base === "stale"
         ? first!.current_revision.revision_id : second!.current_revision.revision_id,
         coordinate_profile: "storyos.editor.utf16-code-unit.v1" as const,
-        start: point(second!.current_revision.blocks[0]!, 2), end: point(second!.current_revision.blocks[0]!, 9) },
+        start: point(second!.current_revision.blocks[0]!, base === "empty" ? 4 : base === "reversed" ? 9 : 2),
+        end: point(second!.current_revision.blocks[0]!, base === "empty" ? 4 : base === "reversed" ? 2 : 9) },
     ];
     const run = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
       "Revise these passages: keep the voice.", id(`${ns}91`), undefined, true,
       { kind: "selection_references", source_chapter_id: setup.chapterId, references });
     const covered = [first!.current_revision.blocks.map((block) => block.manuscript_block_id),
       [second!.current_revision.blocks[0]!.manuscript_block_id]];
-    if (base === "stale") {
+    if (base !== "current") {
       assert.deepEqual(run.context.selection_references, [
         { reference: references[0], manuscript_block_ids: covered[0], availability: { kind: "current" } },
         { reference: references[1], manuscript_block_ids: [], availability: { kind: "unavailable" } }]);
