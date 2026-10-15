@@ -7,6 +7,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
+  SelectionReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -20,6 +21,8 @@ import {
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
+import { mergeReferences } from "./selection-reference.ts";
+import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,7 +36,12 @@ type TranscriptExchange = {
   status: GetAgentRunResponse["status"];
   result?: string;
   run?: GetAgentRunResponse;
+  referenceLabels?: string[];
+  guidance?: GuidanceReferences[];
 };
+
+/** The labels and the references that one retained steering input added (ADR 0062). */
+type GuidanceReferences = { steeringInputId: string; labels: string[]; references: SelectionReference[] };
 
 type RequestReference = {
   scope: ProjectScope;
@@ -46,6 +54,10 @@ type RequestReference = {
   conversationId?: string;
   conversationChoice?: "new";
   history?: TranscriptExchange[];
+  /** The references of the message, and their labels for the history. */
+  references?: SelectionReference[];
+  referenceLabels?: string[];
+  guidance?: GuidanceReferences[];
 };
 
 /** Calls `refresh` later, and returns a function that cancels the call. */
@@ -182,6 +194,30 @@ function resultText(run: GetAgentRunResponse): string | undefined {
     case "absent":
       return undefined;
   }
+}
+
+/** The labels of the references that went with one message. */
+function ReferenceLabels({ labels }: { labels: readonly string[] | undefined }) {
+  return labels === undefined || labels.length === 0 ? null : <ul className="assistant-reference-labels">
+    {labels.map((label, index) => <li key={index} data-sent-reference-label="">{label}</li>)}
+  </ul>;
+}
+
+/** The author messages of an exchange: the request, then each steering input, with their labels. */
+function AuthorMessages({ message, labels, run, guidance }: {
+  message: string;
+  labels: readonly string[] | undefined;
+  run: GetAgentRunResponse | undefined;
+  guidance: readonly GuidanceReferences[] | undefined;
+}) {
+  return <>
+    <p className="assistant-author-message">{message}</p>
+    <ReferenceLabels labels={labels} />
+    {run?.steering_inputs?.map((input) => <div key={input.steering_input_id}>
+      <p className="assistant-author-message">{input.author_message}</p>
+      <ReferenceLabels labels={guidance?.find((item) => item.steeringInputId === input.steering_input_id)?.labels} />
+    </div>)}
+  </>;
 }
 
 const runLabels: Record<GetAgentRunResponse["status"], string> = {
@@ -324,6 +360,14 @@ export function WritingAssistantPanel({
 
   const terminal = run !== undefined && settledRun(run);
 
+  // The add control counts the references of the active AgentRun toward its limit.
+  useEffect(() => {
+    if (context === undefined) return;
+    setRunReferences(context.scope, reference?.runId === undefined || terminal ? []
+      : (reference.guidance ?? []).reduce((all, input) => mergeReferences(all, input.references),
+        reference.references ?? []));
+  }, [reference, terminal]);
+
   // A Run can wait in the queue of a separate Worker, so read it again until it settles. A failed
   // read schedules the next read too.
   useEffect(() => {
@@ -388,6 +432,7 @@ export function WritingAssistantPanel({
         || tree.snapshot.project_scope.project_id !== context.scope.project_id) {
         throw new Error("Working Target Scope mismatch");
       }
+      const entries = draftEntries(context.scope);
       let selected = context.candidateTarget;
       let candidateLength = 0;
       if (selected !== undefined) {
@@ -416,23 +461,30 @@ export function WritingAssistantPanel({
             requestId: previous.correlationId, chapterId: previous.chapterId, conversationId: previousRun.conversation_id,
             runId: previousRun.run_id, run: previousRun,
             message: previous.message, status: previousRun.status,
+            ...(previous.referenceLabels === undefined ? {} : { referenceLabels: previous.referenceLabels }),
+            ...(previous.guidance === undefined ? {} : { guidance: previous.guidance }),
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
           },
         ],
       };
+      // A transition until the candidate references of the composer: the caret candidate is one reference to all of its text.
+      const references = mergeReferences(entries.map((entry) => entry.reference), selected === undefined ? [] : [{
+        kind: "proposal_candidate_text", chapter_id: current.chapterId, proposal_id: selected.proposalId,
+        operation_id: selected.operationId, revision_id: selected.revisionId,
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: candidateLength,
+      }]);
+      if (references.length > 0) {
+        current.references = references;
+        current.referenceLabels = draftLabels(entries);
+      }
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
           conversation: current.conversationId === undefined ? { kind: "new" }
             : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
-          working_target: selected === undefined ? { kind: "current_chapter", chapter_id: current.chapterId }
-            // A transition until the selection composer: the caret candidate is one reference to all of its text.
-            : { kind: "selection_references", source_chapter_id: current.chapterId, references: [{
-              kind: "proposal_candidate_text", chapter_id: current.chapterId, proposal_id: selected.proposalId,
-              operation_id: selected.operationId, revision_id: selected.revisionId,
-              coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: candidateLength,
-            }] },
+          working_target: references.length === 0 ? { kind: "current_chapter", chapter_id: current.chapterId }
+            : { kind: "selection_references", source_chapter_id: current.chapterId, references },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
@@ -487,6 +539,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
+      clearDraftReferences(context.scope);
       onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
@@ -529,9 +582,8 @@ export function WritingAssistantPanel({
             <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <p className="assistant-author-message">{exchange.message}</p>
-              {exchange.run?.steering_inputs?.map(input => <p className="assistant-author-message"
-                key={input.steering_input_id}>{input.author_message}</p>)}
+              <AuthorMessages message={exchange.message} labels={exchange.referenceLabels} run={exchange.run}
+                guidance={exchange.guidance} />
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
               {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
                 sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
@@ -542,9 +594,8 @@ export function WritingAssistantPanel({
               {(reference.history?.length ?? 0) > 0
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <p className="assistant-author-message">{reference.message}</p>
-              {run?.steering_inputs?.map(input => <p className="assistant-author-message"
-                key={input.steering_input_id}>{input.author_message}</p>)}
+              <AuthorMessages message={reference.message} labels={reference.referenceLabels} run={run}
+                guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
                 <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
@@ -561,6 +612,13 @@ export function WritingAssistantPanel({
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={sending} current={reference} run={run}
           onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onGuidanceRetained={(steeringInputId, labels, references) => {
+            const latest = context === undefined ? undefined : readReference(context.scope);
+            if (latest === undefined || (labels.length === 0 && references.length === 0)) return;
+            const next = { ...latest, guidance: [...latest.guidance ?? [], { steeringInputId, labels, references }] };
+            saveReference(next);
+            setReference(next);
+          }}
           onStatus={setStatus} />
       </div>
     </aside>
