@@ -95,7 +95,7 @@ pub(crate) async fn admitted(
         .selection_references
         .iter()
         .flatten()
-        .filter(|admitted| admitted.selected_text.is_some())
+        .filter(|admitted| admitted.candidate().is_some())
         .find(|admitted| {
             admitted.reference.chapter_id() == change.chapter_id
                 && admitted.manuscript_block_ids == [change.manuscript_block_id.as_str()]
@@ -118,7 +118,7 @@ pub(crate) async fn declared(
         .as_deref()
         .unwrap_or_default();
     let mut declared = Vec::new();
-    for (chapter_id, target) in crate::selection_references::candidate_targets(references) {
+    for (chapter_id, target, text) in crate::selection_references::candidate_targets(references) {
         let Some(row) = client
             .query_opt(
                 "SELECT operation.manuscript_block_id::text,
@@ -142,20 +142,13 @@ pub(crate) async fn declared(
         else {
             continue;
         };
-        let Some(text) = record
-            .selected
-            .iter()
-            .find(|source| source.source_version == target.revision_id)
-        else {
-            continue;
-        };
         declared.push(storyos_application::DeclaredTarget {
-            chapter_id,
+            chapter_id: chapter_id.to_owned(),
             block_id: row.get(/*idx*/ 0),
             base_revision_id: row.get(/*idx*/ 1),
             collection: false,
             kind: storyos_core::DeclaredTargetKind::PendingCandidate,
-            block_text: text.content.clone(),
+            block_text: text.to_owned(),
         });
     }
     Ok(declared)

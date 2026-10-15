@@ -58,7 +58,7 @@ pub(crate) async fn assemble(
                         open,
                     );
                 }
-                selection.map(|(text, covered, _)| (text, covered))
+                selection.map(|(text, covered, _)| (text, covered, None))
             }
             SelectionReference::ProposalCandidateText {
                 chapter_id,
@@ -80,26 +80,27 @@ pub(crate) async fn assemble(
                         *start_offset,
                         *end_offset,
                     )?;
-                    if !candidate_texts
-                        .iter()
-                        .any(|(revision, _)| *revision == target.revision_id)
-                    {
-                        candidate_texts.push((target.revision_id.clone(), loaded.text));
+                    if !admitted.iter().any(|known: &AdmittedSelection| {
+                        known.candidate().is_some_and(|(known, _)| known == target)
+                    }) {
+                        candidate_texts.push((target.revision_id.clone(), loaded.text.clone()));
                     }
-                    Some((text, vec![loaded.block_id]))
+                    Some((text, vec![loaded.block_id], Some(loaded.text)))
                 })
             }
         };
         admitted.push(match selection {
-            Some((text, covered)) => AdmittedSelection {
+            Some((text, covered, candidate_text)) => AdmittedSelection {
                 reference: reference.clone(),
                 selected_text: Some(text),
                 manuscript_block_ids: covered,
+                candidate_text,
             },
             None => AdmittedSelection {
                 reference: reference.clone(),
                 selected_text: None,
                 manuscript_block_ids: Vec::new(),
+                candidate_text: None,
             },
         });
     }
@@ -165,17 +166,16 @@ pub(crate) async fn availability(
     Ok(current)
 }
 
-/// The pending candidates that the references name, once each, in reference order.
+/// The referenced available candidates with their Chapter and all of their text, once each.
 pub(crate) fn candidate_targets(
     references: &[AdmittedSelection],
-) -> Vec<(String, storyos_core::ProposalCandidateTarget)> {
-    let mut targets: Vec<(String, storyos_core::ProposalCandidateTarget)> = Vec::new();
+) -> Vec<(&str, storyos_core::ProposalCandidateTarget, &str)> {
+    let mut targets: Vec<(&str, storyos_core::ProposalCandidateTarget, &str)> = Vec::new();
     for admitted in references {
-        if let Some(target) = admitted.reference.candidate_target()
-            && admitted.selected_text.is_some()
-            && !targets.iter().any(|(_, known)| *known == target)
+        if let Some((target, text)) = admitted.candidate()
+            && !targets.iter().any(|(_, known, _)| *known == target)
         {
-            targets.push((admitted.reference.chapter_id().to_owned(), target));
+            targets.push((admitted.reference.chapter_id(), target, text));
         }
     }
     targets

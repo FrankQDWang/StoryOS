@@ -106,7 +106,8 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
     let candidate = request
         .declared_targets
         .iter()
-        .find(|target| target.kind == DeclaredTargetKind::PendingCandidate);
+        // The last referenced candidate, so that a test can revise a later Operation.
+        .rfind(|target| target.kind == DeclaredTargetKind::PendingCandidate);
     if candidate.is_some()
         && is_fake_candidate_revision_request(author_message)
         && let Some(output) = planned.output.as_mut()

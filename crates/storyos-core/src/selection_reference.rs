@@ -67,6 +67,20 @@ pub struct AdmittedSelection {
     pub reference: SelectionReference,
     pub selected_text: Option<String>,
     pub manuscript_block_ids: Vec<String>,
+    /// All of the candidate text of an available candidate reference. The Operations of one
+    /// Proposal share a revision, so this text identifies the candidate of one Operation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_text: Option<String>,
+}
+
+impl AdmittedSelection {
+    /// The pending candidate and all of its text, when this reference is an available candidate.
+    pub fn candidate(&self) -> Option<(super::ProposalCandidateTarget, &str)> {
+        Some((
+            self.reference.candidate_target()?,
+            self.candidate_text.as_deref()?,
+        ))
+    }
 }
 
 /// Complete a passage collection record with the referenced candidate texts and the admitted

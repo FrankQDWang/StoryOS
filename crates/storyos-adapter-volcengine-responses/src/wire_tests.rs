@@ -37,6 +37,7 @@ fn the_model_reads_the_exact_references_and_the_pending_suggestion_target() {
                 },
                 selected_text: Some("rain fell".to_owned()),
                 manuscript_block_ids: vec![chapter.block_id.clone()],
+                candidate_text: None,
             },
             AdmittedSelection {
                 reference: SelectionReference::ProposalCandidateText {
@@ -49,6 +50,7 @@ fn the_model_reads_the_exact_references_and_the_pending_suggestion_target() {
                 },
                 selected_text: Some("wind".to_owned()),
                 manuscript_block_ids: vec!["block-2".to_owned()],
+                candidate_text: Some("The wind rose.".to_owned()),
             },
         ],
         ..request

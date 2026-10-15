@@ -17,7 +17,7 @@ import {
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CompleteReadyPartialProposalRequest,
   CreateAgentRunRequest, CreateEditorSessionRequest, GetProposalResponse, ReopenRejectedOperationsRequest,
-  ReplanProposalRequest,
+  ReplanProposalRequest, SelectionReference,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
@@ -1226,6 +1226,39 @@ test("a candidate reference sends its exact range and a stale candidate referenc
     assert.equal(stale.context.sufficiency.kind, "blocked");
     assert.deepEqual(stale.model_attempt, { kind: "absent" });
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, after);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("each candidate reference keeps the text of its Operation and a Chapter reference does not hide it", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Two candidate references", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const proposalId = openedProposal(await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}41`)));
+    const chapter = (await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter;
+    const candidate = (proposal: GetProposalResponse["proposal"], index: number) => ({
+      kind: "proposal_candidate_text" as const, chapter_id: chapterId, proposal_id: proposalId,
+      operation_id: proposal.operations[index]!.operation_id, revision_id: proposal.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1" as const, start_offset: 0, end_offset: 5 });
+    const revise = async (key: string, references: SelectionReference[]) => {
+      const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+        "Revise this passage: keep the candidate consistent.", id(key), undefined, true,
+        { kind: "selection_references", source_chapter_id: chapterId, references });
+      assert.ok(run.decision.kind === "prose_change" && run.decision.locations?.[0]?.outcome.kind === "revised");
+      return (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
+    };
+    const opened = (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
+    const both = await revise(`${ns}51`, [candidate(opened, 0), candidate(opened, 1)]);
+    assert.deepEqual(both.operations.map((operation) => operation.candidate_text),
+      [opened.operations[0]!.candidate_text, `${opened.operations[1]!.candidate_text} Keep the voice consistent.`]);
+    const block = chapter.current_revision.blocks[1]!.manuscript_block_id;
+    const covered = await revise(`${ns}61`, [{ kind: "chapter_text", chapter_id: chapterId,
+      base_authoritative_revision_id: chapter.current_revision.revision_id, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      start: { manuscript_block_id: block, offset: 0 }, end: { manuscript_block_id: block, offset: 4 } }, candidate(both, 1)]);
+    assert.equal(covered.operations[1]!.candidate_text, `${both.operations[1]!.candidate_text} Keep the voice consistent.`);
   } finally { await stopRealServer(started.server); }
 });
 
