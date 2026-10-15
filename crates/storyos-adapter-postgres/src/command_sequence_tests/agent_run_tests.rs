@@ -54,7 +54,6 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         author_message: "Help with this passage.".to_owned(),
         chapter_id,
         passage_targets: None,
-        candidate_target: None,
         selection_references: None,
         run_id: Uuid::now_v7().to_string(),
         conversation_id: Uuid::now_v7().to_string(),

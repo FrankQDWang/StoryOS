@@ -450,11 +450,11 @@ export type ConversationSelection = { "kind": "new" } | { "kind": "existing", co
 
 export type AuthorMessage = { text: string, };
 
-export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "proposal_candidate", source_chapter_id: string, target: ProposalCandidateTarget, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, } | { "kind": "selection_references", source_chapter_id: string, references: Array<SelectionReference>, };
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, } | { "kind": "selection_references", source_chapter_id: string, references: Array<SelectionReference>, };
 
 export type PassageTarget = { chapter_id: string, base_authoritative_revision_id: string, manuscript_block_ids: Array<string>, };
 
-export type SelectionReference = { "kind": "chapter_text", chapter_id: string, base_authoritative_revision_id: string, coordinate_profile: SelectionCoordinateProfile, start: SelectionPoint, end: SelectionPoint, };
+export type SelectionReference = { "kind": "chapter_text", chapter_id: string, base_authoritative_revision_id: string, coordinate_profile: SelectionCoordinateProfile, start: SelectionPoint, end: SelectionPoint, } | { "kind": "proposal_candidate_text", chapter_id: string, proposal_id: string, operation_id: string, revision_id: string, coordinate_profile: SelectionCoordinateProfile, start_offset: number, end_offset: number, };
 
 export type SelectionCoordinateProfile = "storyos.editor.utf16-code-unit.v1";
 

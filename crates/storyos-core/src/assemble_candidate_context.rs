@@ -20,29 +20,45 @@ pub fn assemble_candidate_context(
     candidate_text: &str,
 ) -> CurrentPassageAssemblyRecord {
     let mut record = assemble_current_passage_context(source);
-    let candidate = assemble_current_passage_context(&CurrentPassageAssembly {
-        chapter_revision_id: Some(target.revision_id.clone()),
-        chapter_body: candidate_text.to_owned(),
-        ..source.clone()
-    });
-    record.considered.extend(
-        candidate
-            .considered
-            .into_iter()
-            .filter(|item| item.source_class == ContextSourceClass::WorkingTarget),
+    add_working_texts(
+        &mut record,
+        source,
+        &[(target.revision_id.clone(), candidate_text.to_owned())],
     );
-    record.rejected.extend(
-        candidate
-            .rejected
-            .into_iter()
-            .filter(|item| item.source_class == ContextSourceClass::WorkingTarget),
-    );
-    record.selected.extend(
-        candidate
-            .selected
-            .into_iter()
-            .filter(|item| item.source_class == ContextSourceClass::WorkingTarget),
-    );
+    record.operation_requirement.candidate_target = Some(target.clone());
+    record
+}
+
+/// Add each `(revision, text)` as a Working Target item. All Working Target items share one
+/// budget, and the assembly blocks when they pass it.
+pub(crate) fn add_working_texts(
+    record: &mut CurrentPassageAssemblyRecord,
+    source: &CurrentPassageAssembly,
+    texts: &[(String, String)],
+) {
+    for (revision_id, text) in texts {
+        let item = assemble_current_passage_context(&CurrentPassageAssembly {
+            chapter_revision_id: Some(revision_id.clone()),
+            chapter_body: text.clone(),
+            ..source.clone()
+        });
+        let target = |class: &ContextSourceClass| *class == ContextSourceClass::WorkingTarget;
+        record.considered.extend(
+            item.considered
+                .into_iter()
+                .filter(|item| target(&item.source_class)),
+        );
+        record.rejected.extend(
+            item.rejected
+                .into_iter()
+                .filter(|item| target(&item.source_class)),
+        );
+        record.selected.extend(
+            item.selected
+                .into_iter()
+                .filter(|item| target(&item.source_class)),
+        );
+    }
     if record
         .considered
         .iter()
@@ -54,15 +70,22 @@ pub fn assemble_candidate_context(
         record
             .selected
             .retain(|item| item.source_class != ContextSourceClass::WorkingTarget);
-        let mut reasons = match record.sufficiency {
-            ContextSufficiency::Complete => Vec::new(),
-            ContextSufficiency::Blocked { reasons } => reasons,
-        };
-        reasons.push(ContextBlockReason::ExactRequiredOverLimit {
-            source_class: ContextSourceClass::WorkingTarget,
-        });
-        record.sufficiency = ContextSufficiency::Blocked { reasons };
+        block(
+            record,
+            ContextBlockReason::ExactRequiredOverLimit {
+                source_class: ContextSourceClass::WorkingTarget,
+            },
+        );
     }
-    record.operation_requirement.candidate_target = Some(target.clone());
-    record
+}
+
+/// Add a reason to the sufficiency of the record.
+pub(crate) fn block(record: &mut CurrentPassageAssemblyRecord, reason: ContextBlockReason) {
+    let mut reasons = match std::mem::replace(&mut record.sufficiency, ContextSufficiency::Complete)
+    {
+        ContextSufficiency::Complete => Vec::new(),
+        ContextSufficiency::Blocked { reasons } => reasons,
+    };
+    reasons.push(reason);
+    record.sufficiency = ContextSufficiency::Blocked { reasons };
 }

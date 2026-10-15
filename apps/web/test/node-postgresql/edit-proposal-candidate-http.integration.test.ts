@@ -48,7 +48,7 @@ import {
   withChallengeBudget,
 } from "../support/node-integration.ts";
 
-import { admitCandidateRevision } from "../support/candidate-revision.ts";
+import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -584,20 +584,29 @@ test("a fresh instruction revises the exact pending candidate through the real W
     const sent = run.evidence.find((item) => item.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent bytes");
     const wire = JSON.parse(sent.content);
-    assert.deepEqual(wire.candidate_target, run.context.candidate_target);
+    assert.deepEqual(wire.selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),
+      [before.proposal.candidate_text]);
     assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
     const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid`));
     assert.equal(retained.serialized_payload, sent.content);
     assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
-    for (const [index, invalid] of [{ ...revised.proposal, chapter_id: id("ca90") }, revised.proposal, before.proposal].entries()) {
-      await assert.rejects(() => admitCandidateRevision(started.baseUrl, fetchImpl, projectId, invalid,
-        index === 1 ? id("ca91") : invalid.operation_id, id(`ca9${index + 2}`)), { status: index === 0 ? 422 : 409 });
+    await assert.rejects(() => admitCandidateRevision(started.baseUrl, fetchImpl, projectId,
+      { ...revised.proposal, chapter_id: id("ca90") }, revised.proposal.operation_id, id("ca92")), { status: 422 });
+    for (const [index, invalid] of [revised.proposal, before.proposal].entries()) {
+      const { created: unavailable } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId, invalid,
+        index === 0 ? id("ca91") : invalid.operation_id, id(`ca9${index + 3}`));
+      if (unavailable.effect.kind !== "admitted") throw new Error("expected an admitted unavailable reference");
+      const blocked = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: unavailable.effect.run_id, fetchImpl });
+      assert.equal(blocked.context.sufficiency.kind, "blocked");
+      assert.deepEqual(blocked.model_attempt, { kind: "absent" });
     }
     await assert.rejects(() => admitCandidateRevision(started.baseUrl, browserFetch(started.baseUrl, "session-b"), projectId,
       revised.proposal, revised.proposal.operation_id, id("ca99")), { status: 404 });
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, revised.proposal);
-    assert.deepEqual(run.context.candidate_target, { proposal_id: proposalId,
-      operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id });
+    assert.deepEqual(candidateReference(run.context), { kind: "proposal_candidate_text", chapter_id: chapterId,
+      proposal_id: proposalId, operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0,
+      end_offset: before.proposal.candidate_text.length });
     assert.deepEqual(run.context.selected.filter((item) => item.source_class === "working_target")
       .map(({ source_version, content }) => ({ source_version, content })), [
       { source_version: chapter.chapter.current_revision.revision_id, content: chapter.chapter.current_revision.body },
@@ -652,8 +661,10 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
     const after = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
     assert.equal(current.status, "completed");
     assert.equal(current.conversation_id, created.conversation_id);
-    assert.deepEqual(current.context.candidate_target, { proposal_id: proposalId,
-      operation_id: before.proposal.operation_id, revision_id: revised.proposal.revision_id });
+    assert.deepEqual(candidateReference(current.context), { kind: "proposal_candidate_text", chapter_id: chapterId,
+      proposal_id: proposalId, operation_id: before.proposal.operation_id, revision_id: revised.proposal.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0,
+      end_offset: revised.proposal.candidate_text.length });
     assert.equal(after.proposal.operation_id, before.proposal.operation_id);
     assert.notEqual(after.proposal.revision_id, revised.proposal.revision_id);
     assert.equal(after.proposal.candidate_text, guidance.steer_agent_run_input.author_message.text);
@@ -664,7 +675,12 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
       prior_revision_id: revised.proposal.revision_id, validation_receipt_id: after.proposal.validation_receipt.validation_receipt_id });
     const historicalOptions = { ...options, modelAttemptId: held.model_attempt.model_attempt_id };
     const historical = await getAgentRun(historicalOptions);
-    assert.deepEqual(historical.context, held.context);
+    // The availability of a reference is current, so only the historical reference itself stays the same.
+    const recorded = ({ selection_references, ...context }: typeof held.context) => ({ ...context,
+      selection_references: selection_references?.map(({ reference, manuscript_block_ids }) => ({ reference, manuscript_block_ids })) });
+    assert.deepEqual(recorded(historical.context), recorded(held.context));
+    assert.deepEqual(historical.context.selection_references?.[0]?.availability,
+      { kind: "superseded", current_revision_id: after.proposal.revision_id });
     assert.deepEqual(historical.model_attempt, { ...held.model_attempt, dispatch_state: "settled" });
     if (held.decision.kind !== "prose_change" || historical.decision.kind !== "prose_change") throw new Error("expected historical revision");
     assert.deepEqual(historical.decision.locations?.map(({ current, ...location }) => location),

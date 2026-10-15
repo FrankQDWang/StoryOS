@@ -34,6 +34,27 @@ pub(super) fn resolve(
                     end: core_point(end),
                 }
             }
+            SelectionReference::ProposalCandidateText {
+                chapter_id,
+                proposal_id,
+                operation_id,
+                revision_id,
+                coordinate_profile: SelectionCoordinateProfile::Utf16CodeUnitV1,
+                start_offset,
+                end_offset,
+            } => {
+                for id in [chapter_id, proposal_id, operation_id, revision_id] {
+                    valid_uuid(id)?;
+                }
+                storyos_core::SelectionReference::ProposalCandidateText {
+                    chapter_id: chapter_id.clone(),
+                    proposal_id: proposal_id.clone(),
+                    operation_id: operation_id.clone(),
+                    revision_id: revision_id.clone(),
+                    start_offset: *start_offset,
+                    end_offset: *end_offset,
+                }
+            }
         };
         if resolved.contains(&core) {
             return Err(invalid_request_shape());
@@ -57,6 +78,22 @@ pub(super) fn inspect(reference: &storyos_core::SelectionReference) -> Selection
             coordinate_profile: SelectionCoordinateProfile::Utf16CodeUnitV1,
             start: public_point(start),
             end: public_point(end),
+        },
+        storyos_core::SelectionReference::ProposalCandidateText {
+            chapter_id,
+            proposal_id,
+            operation_id,
+            revision_id,
+            start_offset,
+            end_offset,
+        } => SelectionReference::ProposalCandidateText {
+            chapter_id: chapter_id.clone(),
+            proposal_id: proposal_id.clone(),
+            operation_id: operation_id.clone(),
+            revision_id: revision_id.clone(),
+            coordinate_profile: SelectionCoordinateProfile::Utf16CodeUnitV1,
+            start_offset: *start_offset,
+            end_offset: *end_offset,
         },
     }
 }

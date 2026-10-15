@@ -18,7 +18,6 @@ pub struct CreateAgentRunInput {
     pub author_message: String,
     pub chapter_id: String,
     pub passage_targets: Option<Vec<storyos_core::PassageContextTarget>>,
-    pub candidate_target: Option<storyos_core::ProposalCandidateTarget>,
     pub selection_references: Option<Vec<storyos_core::SelectionReference>>,
     pub run_id: String,
     pub conversation_id: String,

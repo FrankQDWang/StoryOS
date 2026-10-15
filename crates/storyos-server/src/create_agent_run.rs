@@ -100,28 +100,9 @@ fn create_agent_run_input(
             conversation_id.clone()
         }
     };
-    let mut candidate_target = None;
     let mut selection_references = None;
     let (chapter_id, passage_targets) = match &input.working_target {
         contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } => (chapter_id, None),
-        contracts::AssistanceWorkingTarget::ProposalCandidate {
-            source_chapter_id,
-            target,
-        } => {
-            for value in [
-                &target.proposal_id,
-                &target.operation_id,
-                &target.revision_id,
-            ] {
-                valid_uuid(value)?;
-            }
-            candidate_target = Some(storyos_core::ProposalCandidateTarget {
-                proposal_id: target.proposal_id.clone(),
-                operation_id: target.operation_id.clone(),
-                revision_id: target.revision_id.clone(),
-            });
-            (source_chapter_id, None)
-        }
         contracts::AssistanceWorkingTarget::PassageCollection {
             source_chapter_id,
             targets,
@@ -150,7 +131,6 @@ fn create_agent_run_input(
         author_message: input.author_message.text.clone(),
         chapter_id: chapter_id.clone(),
         passage_targets,
-        candidate_target,
         selection_references,
         run_id: Uuid::now_v7().to_string(),
         conversation_id,

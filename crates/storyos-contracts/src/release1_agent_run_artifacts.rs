@@ -110,6 +110,14 @@ pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
 ];
 
+const SELECTION_REFERENCE_UUID_FIELDS: &[&str] = &[
+    "chapter_id",
+    "base_authoritative_revision_id",
+    "proposal_id",
+    "operation_id",
+    "revision_id",
+];
+
 pub(super) fn create_request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CreateAgentRunRequest>(
         CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -133,13 +141,10 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
         target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
     }
     if let Some(reference) = schema["$defs"].get_mut("SelectionReference") {
-        constrain_uuid_fields(reference, &["chapter_id", "base_authoritative_revision_id"]);
+        constrain_uuid_fields(reference, SELECTION_REFERENCE_UUID_FIELDS);
     }
     if let Some(point) = schema["$defs"].get_mut("SelectionPoint") {
         constrain_uuid_fields(point, &["manuscript_block_id"]);
-    }
-    if let Some(target) = schema["$defs"].get_mut("ProposalCandidateTarget") {
-        constrain_uuid_fields(target, &["proposal_id", "operation_id", "revision_id"]);
     }
     json_bytes(&schema)
 }

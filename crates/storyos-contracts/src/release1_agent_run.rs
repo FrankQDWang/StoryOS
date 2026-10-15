@@ -94,10 +94,6 @@ pub enum AssistanceWorkingTarget {
     CurrentChapter {
         chapter_id: String,
     },
-    ProposalCandidate {
-        source_chapter_id: String,
-        target: ProposalCandidateTarget,
-    },
     PassageCollection {
         source_chapter_id: String,
         #[schemars(length(min = 1, max = 10_001))]

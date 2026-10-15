@@ -11,13 +11,9 @@ pub(crate) async fn apply(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     record: &CurrentPassageAssemblyRecord,
+    target: &storyos_core::ProposalCandidateTarget,
     candidates: &[ProseChangeCandidate],
 ) -> Result<super::open_block_proposal::ProseOpening, CompleteAgentRunError> {
-    let target = record
-        .operation_requirement
-        .candidate_target
-        .as_ref()
-        .expect("admitted candidate");
     let mut result = super::open_block_proposal::ProseOpening {
         proposal_id: None,
         locations: Some(Vec::new()),
@@ -34,11 +30,23 @@ pub(crate) async fn apply(
     .await
     .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let outcome = if let Some(loaded) = loaded {
+        // A referenced candidate keeps its own text. A legacy candidate target is the only
+        // candidate text of its record.
         let previous = record
-            .selected
+            .operation_requirement
+            .selection_references
             .iter()
-            .find(|source| source.source_version == target.revision_id)
-            .map(|source| source.content.as_str())
+            .flatten()
+            .filter_map(|admitted| admitted.candidate())
+            .find(|(candidate, _)| candidate == target)
+            .map(|(_, text)| text)
+            .or_else(|| {
+                record
+                    .selected
+                    .iter()
+                    .find(|source| source.source_version == target.revision_id)
+                    .map(|source| source.content.as_str())
+            })
             .unwrap_or_default();
         let generation_id = uuid::Uuid::now_v7().to_string();
         let owner = claim.project_scope.owner_user_id.as_ref();

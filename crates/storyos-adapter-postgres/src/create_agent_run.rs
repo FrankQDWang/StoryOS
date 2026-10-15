@@ -143,14 +143,6 @@ impl ProjectCommand for CreateAgentRunInput {
             },
         })
         .map_err(RefusableCommandError::RefusedBeforeAdmission)?;
-        if let Some(target) = &self.candidate_target
-            && crate::candidate_revision_target::load(client, scope, &self.chapter_id, target)
-                .await
-                .map_err(sequence_error)?
-                .is_none()
-        {
-            return Err(ProjectCommandError::BindingConflict.into());
-        }
         let destination =
             self.destination
                 .clone()
@@ -216,7 +208,7 @@ impl ProjectCommand for CreateAgentRunInput {
                 receipt_id: &envelope.ids.receipt_id,
                 decision_position: "0",
                 passage_targets: self.passage_targets.as_deref(),
-                candidate_target: self.candidate_target.as_ref(),
+                candidate_target: None,
                 selection_references: self.selection_references.as_deref(),
             },
             &assistance.processing_destination_identity,

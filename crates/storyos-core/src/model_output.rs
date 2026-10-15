@@ -82,7 +82,7 @@ pub enum AgentDecisionOutcome {
 /// Select an Agent Decision only from a valid final answer; only a selected non-question advances.
 pub fn validate_agent_decision(
     output: Option<&ModelOutput>,
-    declared_targets: &[(String, String, String)],
+    declared_targets: &[crate::DeclaredLocation],
 ) -> AgentDecisionOutcome {
     let Some(output) = output else {
         return AgentDecisionOutcome::NoDecision;

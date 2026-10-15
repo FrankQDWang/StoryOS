@@ -38,3 +38,70 @@ fn a_chapter_selection_keeps_the_exact_range_across_blocks() {
         ]
     );
 }
+
+#[test]
+fn a_candidate_selection_is_a_non_empty_utf16_range() {
+    assert_eq!(
+        [
+            select_candidate_text("风停了。", 0, 2),
+            select_candidate_text("风停了。", 2, 2),
+            select_candidate_text("风停了。", 3, 9),
+        ],
+        [Some("风停".to_owned()), None, None]
+    );
+}
+
+#[test]
+fn a_revised_candidate_moves_each_reference_of_its_proposal_to_the_new_revision() {
+    let candidate = |operation: &str, revision: &str, start_offset| AdmittedSelection {
+        reference: SelectionReference::ProposalCandidateText {
+            chapter_id: "chapter-1".to_owned(),
+            proposal_id: "proposal-1".to_owned(),
+            operation_id: operation.to_owned(),
+            revision_id: revision.to_owned(),
+            start_offset,
+            end_offset: start_offset + 2,
+        },
+        selected_text: Some("雨夜".to_owned()),
+        manuscript_block_ids: vec![format!("block-{operation}")],
+        candidate_text: Some("雨夜。渡口".to_owned()),
+    };
+    let mut references = [
+        candidate("operation-1", "revision-1", /*start_offset*/ 1),
+        candidate("operation-2", "revision-1", /*start_offset*/ 3),
+        candidate("operation-3", "revision-0", /*start_offset*/ 0),
+    ];
+
+    advance_candidate_references(
+        references.iter_mut(),
+        &crate::ProposalCandidateTarget {
+            proposal_id: "proposal-1".to_owned(),
+            operation_id: "operation-1".to_owned(),
+            revision_id: "revision-1".to_owned(),
+        },
+        "revision-2",
+        "风😀",
+    );
+
+    assert_eq!(
+        references
+            .iter()
+            .map(|admitted| admitted.reference.clone())
+            .collect::<Vec<_>>(),
+        [
+            ("operation-1", "revision-2", 0, 3),
+            ("operation-2", "revision-2", 3, 5),
+            ("operation-3", "revision-0", 0, 2),
+        ]
+        .map(|(operation, revision, start_offset, end_offset)| {
+            SelectionReference::ProposalCandidateText {
+                chapter_id: "chapter-1".to_owned(),
+                proposal_id: "proposal-1".to_owned(),
+                operation_id: operation.to_owned(),
+                revision_id: revision.to_owned(),
+                start_offset,
+                end_offset,
+            }
+        })
+    );
+}

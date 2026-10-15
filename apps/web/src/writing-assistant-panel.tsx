@@ -389,6 +389,7 @@ export function WritingAssistantPanel({
         throw new Error("Working Target Scope mismatch");
       }
       let selected = context.candidateTarget;
+      let candidateLength = 0;
       if (selected !== undefined) {
         const observedTarget = selected;
         const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
@@ -399,6 +400,8 @@ export function WritingAssistantPanel({
           || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
             && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
             && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
+        candidateLength = response.proposal.operations.find((operation) =>
+          operation.operation_id === observedTarget.operationId)!.candidate_text.length;
         selected = { ...selected, revisionId: response.proposal.revision_id };
       }
       const current: RequestReference = {
@@ -424,9 +427,12 @@ export function WritingAssistantPanel({
             : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
           working_target: selected === undefined ? { kind: "current_chapter", chapter_id: current.chapterId }
-            : { kind: "proposal_candidate", source_chapter_id: current.chapterId, target: {
-              proposal_id: selected.proposalId, operation_id: selected.operationId, revision_id: selected.revisionId,
-            } },
+            // A transition until the selection composer: the caret candidate is one reference to all of its text.
+            : { kind: "selection_references", source_chapter_id: current.chapterId, references: [{
+              kind: "proposal_candidate_text", chapter_id: current.chapterId, proposal_id: selected.proposalId,
+              operation_id: selected.operationId, revision_id: selected.revisionId,
+              coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: candidateLength,
+            }] },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,

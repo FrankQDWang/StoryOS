@@ -41,28 +41,6 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "proposal_candidate",
-              "type": "string"
-            },
-            "source_chapter_id": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "target": {
-              "$ref": "#/$defs/ProposalCandidateTarget"
-            }
-          },
-          "required": [
-            "kind",
-            "source_chapter_id",
-            "target"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
               "const": "passage_collection",
               "type": "string"
             },
@@ -250,29 +228,6 @@
       ],
       "type": "object"
     },
-    "ProposalCandidateTarget": {
-      "additionalProperties": false,
-      "properties": {
-        "operation_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "proposal_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "revision_id": {
-          "format": "uuid",
-          "type": "string"
-        }
-      },
-      "required": [
-        "proposal_id",
-        "operation_id",
-        "revision_id"
-      ],
-      "type": "object"
-    },
     "SelectionCoordinateProfile": {
       "enum": [
         "storyos.editor.utf16-code-unit.v1"
@@ -333,6 +288,55 @@
             "coordinate_profile",
             "start",
             "end"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "coordinate_profile": {
+              "$ref": "#/$defs/SelectionCoordinateProfile"
+            },
+            "end_offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "proposal_candidate_text",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "start_offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "coordinate_profile",
+            "start_offset",
+            "end_offset"
           ],
           "type": "object"
         }

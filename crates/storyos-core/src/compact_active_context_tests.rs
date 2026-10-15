@@ -413,6 +413,7 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
                 },
                 selected_text: Some(chapter_body.chars().skip(start as usize).collect()),
                 manuscript_block_ids: vec!["block-1".to_owned()],
+                candidate_text: None,
             })
             .collect(),
     );
