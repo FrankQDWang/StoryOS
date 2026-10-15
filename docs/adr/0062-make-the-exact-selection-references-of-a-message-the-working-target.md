@@ -53,5 +53,5 @@ Before this change, a request worked on the Current Chapter. When the author cli
 
 - The Host instructions changed, so the wire digest of an Agent Plan request changed. A Model Registration does not bind the instruction text, so no Registration drift occurs.
 - The Operation Requirement payload records the admitted references with their exact text. The Context Inspect response has the new optional field `selection_references`.
-- Five pull requests deliver the change. The first adds the Chapter text references. The second adds the candidate references and removes the public `proposal_candidate` kind. The third adds the references of a steering input. The fourth and the fifth change the web client.
+- Six pull requests deliver the change. The first adds the Chapter text references. The second adds the candidate references and removes the public `proposal_candidate` kind. The third adds the references of a steering input. The fourth, the fifth, and the sixth change the web client.
 - The activity payload of a retained steering input can have the key `selection_references` (migration 0093).

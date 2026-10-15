@@ -19,7 +19,7 @@ import {
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
-import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
+import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
 import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
@@ -75,7 +75,6 @@ const scheduleRunRefresh: RefreshSchedule = (refresh) => {
 export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
-  candidateTarget?: ProposalFocus | undefined;
   tree?: GetManuscriptTreeResponse | undefined;
   canSubmit: boolean;
   baseUrl: string;
@@ -437,22 +436,6 @@ export function WritingAssistantPanel({
         throw new Error("Working Target Scope mismatch");
       }
       const entries = draftEntries(context.scope);
-      let selected = context.candidateTarget;
-      let candidateLength = 0;
-      if (selected !== undefined) {
-        const observedTarget = selected;
-        const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
-          projectId: context.scope.project_id, proposalId: selected.proposalId });
-        if (response.project_scope.owner_user_id !== context.scope.owner_user_id
-          || response.project_scope.project_id !== context.scope.project_id
-          || response.proposal.chapter_id !== context.chapterId
-          || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
-            && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
-            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
-        candidateLength = response.proposal.operations.find((operation) =>
-          operation.operation_id === observedTarget.operationId)!.candidate_text.length;
-        selected = { ...selected, revisionId: response.proposal.revision_id };
-      }
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
@@ -471,14 +454,7 @@ export function WritingAssistantPanel({
           },
         ],
       };
-      // A transition until the candidate references of the composer: without a draft reference, the caret
-      // candidate is one reference to all of its text.
-      const references: SelectionReference[] = entries.length > 0 || selected === undefined
-        ? entries.map((entry) => entry.reference) : [{
-        kind: "proposal_candidate_text", chapter_id: current.chapterId, proposal_id: selected.proposalId,
-        operation_id: selected.operationId, revision_id: selected.revisionId,
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: candidateLength,
-      }];
+      const references = entries.map((entry) => entry.reference);
       if (references.length > 0) {
         current.references = references;
         current.referenceLabels = draftLabels(entries);

@@ -233,11 +233,11 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       },
       inline_proposal: {
         project_count: 1,
-        receipts: { createProject: 1, createVolume: 1, createChapter: 5,
-          updateProjectAssistance: 1, setCurrentChapter: 4, createAgentRun: 6,
-          applyAuthorEdit: 17, acceptProposal: 1, rejectProposalOperations: 1,
+        receipts: { createProject: 1, createVolume: 1, createChapter: 6,
+          updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
+          applyAuthorEdit: 18, acceptProposal: 2, rejectProposalOperations: 1,
           takeOverProjectWriter: 1 },
-        author_action_count: 27,
+        author_action_count: 31,
       },
       selection_reference: {
         project_count: 1,

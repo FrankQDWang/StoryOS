@@ -43,7 +43,7 @@ async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, 
   }
   await act(async () => { root.render(createElement(View)); });
   const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
-  await expect.poll(() => surface.querySelector(`[data-candidate-proposal-id="${proposal.proposal_id}"]`)).not.toBeNull();
+  await expect.poll(() => surface.querySelector(`.block-proposal[data-proposal-id="${proposal.proposal_id}"]`)).not.toBeNull();
   await expect.poll(() => surface.getAttribute("contenteditable")).toBe("true");
   const transitions: (string | null)[] = [];
   const observer = new MutationObserver((records) => {
@@ -116,7 +116,7 @@ it("keeps the editor editable and the caret in place while the Proposal checks r
       await act(async () => { releaseReread({ ...proposal, validation: "invalid" }); });
       await expect.poll(() => view.host.querySelector(`[data-proposal-decision="${proposal.proposal_id}"]`)?.textContent)
         .toBe("候选文字的验证已失效，请检查当前结果。");
-      expect(view.surface.querySelector(`[data-candidate-proposal-id="${proposal.proposal_id}"]`)
+      expect(view.surface.querySelector(`.block-proposal[data-proposal-id="${proposal.proposal_id}"]`)
         ?.getAttribute("contenteditable")).toBe("false");
       expect({ reads, transitions: view.transitions(), failures: view.failures })
         .toEqual({ reads: 2, transitions: [], failures: [] });
@@ -192,7 +192,7 @@ it("accepts input in a candidate during and after its own settlement and keeps t
   await withActEnvironment(async () => {
     const view = await renderCandidate(test.workspace, proposal, fetchImpl);
     try {
-      const candidate = () => view.surface.querySelector<HTMLElement>(`[data-candidate-proposal-id="${proposal.proposal_id}"]`)!;
+      const candidate = () => view.surface.querySelector<HTMLElement>(`.block-proposal[data-proposal-id="${proposal.proposal_id}"]`)!;
       const text = () => candidate().querySelector(".block-proposal-text")!;
       view.surface.focus();
       window.getSelection()!.setBaseAndExtent(text().firstChild!, proposal.candidate_text.length,
@@ -235,7 +235,7 @@ it("keeps an IME composition in a candidate while the controller publishes a sav
   await withActEnvironment(async () => {
     const view = await renderCandidate(test.workspace, proposal, fetchImpl);
     try {
-      const text = () => view.surface.querySelector(`[data-candidate-proposal-id="${proposal.proposal_id}"] .block-proposal-text`)!;
+      const text = () => view.surface.querySelector(`.block-proposal[data-proposal-id="${proposal.proposal_id}"] .block-proposal-text`)!;
       const end = () => {
         view.surface.focus();
         window.getSelection()!.setBaseAndExtent(text().firstChild!, text().textContent!.length,

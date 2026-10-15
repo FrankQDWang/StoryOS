@@ -7,8 +7,10 @@ import { clearRunControl, freezeRunControl, readRunControl, saveRunControl, subm
   type RunControlIntent } from "./run-control-intent.ts";
 import { historicalAcknowledgementUnavailable, HISTORICAL_ACKNOWLEDGEMENT_MESSAGE }
   from "./historical-acknowledgement.ts";
-import { clearDraftReferences, draftLabels, removeDraftReference, useReferenceDraft }
-  from "./selection-reference-draft.ts";
+import {
+  clearDraftReferences, draftLabels, pasteReferences, REFERENCE_CLIPBOARD_TYPE, removeDraftReference,
+  useReferenceDraft,
+} from "./selection-reference-draft.ts";
 import type { SelectionReference } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 export function AssistantComposer({ context, available, sending, current, run, onSend, onRefresh, onStatus,
@@ -113,7 +115,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
         {draft.entries.map((entry) => <li key={entry.key} data-selection-reference-label={draftLabels([entry])[0]}>
           {/* The text of a heading can be long, so only that part has an ellipsis. */}
           <span className="reference-label">{entry.label.part.kind === "heading"
-            ? <>{entry.label.chapter}（小标题「<span className="reference-heading">{entry.label.part.text}</span>」）</>
+            ? <>{entry.label.chapter}（小标题「<span className="reference-heading">{entry.label.part.text}</span>」
+              {entry.label.candidate === true ? "的修改建议" : ""}）</>
             : draftLabels([entry])[0]}</span>
           <button type="button" aria-label="移除引用" data-remove-selection-reference=""
             onClick={() => removeDraftReference(context.scope, entry.key)}>×</button>
@@ -121,6 +124,11 @@ export function AssistantComposer({ context, available, sending, current, run, o
       </ul>}
       <textarea name="assistant-message" aria-label="给写作助手的消息" rows={2} maxLength={4000}
         value={message} onChange={(event) => setMessage(event.currentTarget.value)}
+        // A paste of a copy from the editor adds its references. Other data pastes as text.
+        onPaste={(event) => {
+          const data = event.clipboardData.getData(REFERENCE_CLIPBOARD_TYPE);
+          if (context !== undefined && data.length > 0 && pasteReferences(context.scope, data)) event.preventDefault();
+        }}
         placeholder="描述想修改的当前章节文字" />
       <div className="composer-controls">
         <button className="send-button" type="submit" aria-label={pause ? "暂停" : "发送"}

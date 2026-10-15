@@ -7,15 +7,24 @@ import type { ManuscriptParagraph } from "./manuscript-doc.ts";
 export const SELECTION_REFERENCE_LIMIT = 8;
 
 export type ChapterTextReference = Extract<SelectionReference, { kind: "chapter_text" }>;
+export type CandidateTextReference = Extract<SelectionReference, { kind: "proposal_candidate_text" }>;
 export type EditorRange = { from: number; to: number };
+/** The Chapter block of a candidate, and the source offset of an inline candidate in that block. */
+export type CandidateTarget = { blockId: string; inlineFrom: number | null };
+/** One reference of a selection. A candidate reference also has the target of its candidate. */
+export type SelectedReference = { reference: SelectionReference; candidate?: CandidateTarget };
 /** The part of the manuscript tree that a label reads: the Chapters of each Volume in reading order. */
 export type ChapterOrder = { volumes: readonly { chapters: readonly { chapter_id: string; title: string }[] }[] };
 type TextPoint = ChapterTextReference["start"];
 
-/** The label part after the Chapter: a paragraph range, or one heading when no paragraph is selected. */
+/**
+ * The label part after the Chapter: a paragraph range, or one heading when no paragraph is selected. The
+ * label of a candidate reference names the block of its candidate.
+ */
 export type ReferenceLabel = {
   chapter: string;
   part: { kind: "paragraphs"; first: number; last: number } | { kind: "heading"; text: string };
+  candidate?: true;
 };
 
 /** One manuscript block of the editor document, with the document position of its content. */
@@ -69,6 +78,10 @@ function blockPosition(block: EditorBlock, offset: number): number | undefined {
   return result ?? (remaining === 0 ? block.end : undefined);
 }
 
+function isCandidate(node: ProseMirrorNode): boolean {
+  return node.type.name === "blockProposal" || node.type.name === "inlineProposal";
+}
+
 /**
  * The Chapter text reference of an editor selection at the Revision of the editor document. An empty
  * selection, or one that touches candidate text, has none.
@@ -79,11 +92,15 @@ export function chapterTextReference(doc: ProseMirrorNode, range: EditorRange, c
   // A range that touches the text of a pending candidate, in its own block or inline, has no reference.
   let touched = false;
   doc.nodesBetween(range.from, range.to, (node, position) => {
-    if ((node.type.name === "blockProposal" || node.type.name === "inlineProposal")
-      && position < range.to && position + node.nodeSize > range.from) touched = true;
+    if (isCandidate(node) && position < range.to && position + node.nodeSize > range.from) touched = true;
     return !touched;
   });
-  if (touched) return undefined;
+  return touched ? undefined : chapterRangeReference(doc, range, chapterId, revisionId);
+}
+
+function chapterRangeReference(doc: ProseMirrorNode, range: EditorRange, chapterId: string,
+  revisionId: string): ChapterTextReference | undefined {
+  if (range.to <= range.from) return undefined;
   const blocks = editorBlocks(doc);
   // A block that the range only touches at its end or at its start is not selected.
   const first = blocks.findIndex((block) => block.end > range.from);
@@ -96,6 +113,73 @@ export function chapterTextReference(doc: ProseMirrorNode, range: EditorRange, c
   return { kind: "chapter_text", chapter_id: chapterId, base_authoritative_revision_id: revisionId,
     coordinate_profile: "storyos.editor.utf16-code-unit.v1",
     start: point(blocks[first]!, start), end: point(blocks[last]!, end) };
+}
+
+/** One pending candidate of the editor document, with the document positions of its text. */
+type EditorCandidate = { node: ProseMirrorNode; position: number; start: number; end: number };
+
+function editorCandidates(doc: ProseMirrorNode, range: EditorRange): EditorCandidate[] {
+  const candidates: EditorCandidate[] = [];
+  doc.nodesBetween(range.from, range.to, (node, position) => {
+    if (!isCandidate(node)) return true;
+    candidates.push({ node, position, start: position + 1, end: position + node.nodeSize - 1 });
+    return false;
+  });
+  return candidates;
+}
+
+/** The reference of a range in the text of one candidate, at the Proposal Revision of the candidate. */
+function candidateReference(chapterId: string, candidate: EditorCandidate,
+  range: EditorRange): SelectedReference | undefined {
+  const from = Math.max(range.from, candidate.start);
+  const to = Math.min(range.to, candidate.end);
+  const attrs = candidate.node.attrs;
+  if (to <= from || typeof attrs.proposalId !== "string" || typeof attrs.operationId !== "string"
+    || typeof attrs.revisionId !== "string" || typeof attrs.blockId !== "string") return undefined;
+  return { reference: { kind: "proposal_candidate_text", chapter_id: chapterId, proposal_id: attrs.proposalId,
+    operation_id: attrs.operationId, revision_id: attrs.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+    start_offset: from - candidate.start, end_offset: to - candidate.start },
+  candidate: { blockId: attrs.blockId, inlineFrom: candidate.node.type.name === "inlineProposal"
+    ? attrs.inlineFrom as number : null } };
+}
+
+/**
+ * The references of an editor selection. A selection over Chapter text and candidate text gives one
+ * reference for each candidate part and one for each Chapter text part between them.
+ */
+export function selectionReferences(doc: ProseMirrorNode, range: EditorRange, chapterId: string,
+  revisionId: string): SelectedReference[] {
+  if (range.to <= range.from) return [];
+  const references: SelectedReference[] = [];
+  let from = range.from;
+  const chapter = (to: number) => {
+    const reference = chapterRangeReference(doc, { from, to }, chapterId, revisionId);
+    if (reference !== undefined) references.push({ reference });
+  };
+  for (const candidate of editorCandidates(doc, range)) {
+    chapter(Math.min(range.to, candidate.position));
+    const reference = candidateReference(chapterId, candidate, range);
+    if (reference !== undefined) references.push(reference);
+    from = Math.max(from, candidate.position + candidate.node.nodeSize);
+  }
+  chapter(range.to);
+  return references;
+}
+
+/** The editor range of a candidate reference while the editor shows the candidate. */
+export function candidateRange(doc: ProseMirrorNode, reference: CandidateTextReference): EditorRange | undefined {
+  const candidate = editorCandidates(doc, { from: 0, to: doc.content.size }).find(({ node }) =>
+    node.attrs.proposalId === reference.proposal_id && node.attrs.operationId === reference.operation_id);
+  if (candidate === undefined || candidate.start + reference.end_offset > candidate.end) return undefined;
+  return { from: candidate.start + reference.start_offset, to: candidate.start + reference.end_offset };
+}
+
+/** The reference of a range in one candidate text, at the newest Proposal Revision of the editor document. */
+export function candidateTextReference(doc: ProseMirrorNode, range: EditorRange,
+  chapterId: string): CandidateTextReference | undefined {
+  const candidate = editorCandidates(doc, range).find((item) => item.start <= range.from && range.to <= item.end);
+  const selected = candidate === undefined ? undefined : candidateReference(chapterId, candidate, range);
+  return selected?.reference.kind === "proposal_candidate_text" ? selected.reference : undefined;
 }
 
 /**
@@ -152,11 +236,23 @@ export function canAddReference(references: readonly SelectionReference[]): bool
  * order, from 1. The paragraph numbers count only the paragraphs of the Chapter, from 1.
  */
 export function referenceLabel(tree: ChapterOrder, blocks: readonly ManuscriptParagraph[],
-  reference: ChapterTextReference): ReferenceLabel | undefined {
+  selected: SelectedReference): ReferenceLabel | undefined {
+  const { reference, candidate } = selected;
+  if (reference.kind === "proposal_candidate_text") {
+    const label = candidate === undefined ? undefined
+      : blockLabel(tree, blocks, reference.chapter_id, candidate.blockId, candidate.blockId);
+    return label === undefined ? undefined : { ...label, candidate: true };
+  }
+  return blockLabel(tree, blocks, reference.chapter_id, reference.start.manuscript_block_id,
+    reference.end.manuscript_block_id);
+}
+
+function blockLabel(tree: ChapterOrder, blocks: readonly ManuscriptParagraph[], chapterId: string,
+  firstId: string, lastId: string): ReferenceLabel | undefined {
   const chapters = tree.volumes.flatMap((volume) => volume.chapters);
-  const index = chapters.findIndex((chapter) => chapter.chapter_id === reference.chapter_id);
-  const first = blocks.findIndex((block) => block.manuscript_block_id === reference.start.manuscript_block_id);
-  const last = blocks.findIndex((block) => block.manuscript_block_id === reference.end.manuscript_block_id);
+  const index = chapters.findIndex((chapter) => chapter.chapter_id === chapterId);
+  const first = blocks.findIndex((block) => block.manuscript_block_id === firstId);
+  const last = blocks.findIndex((block) => block.manuscript_block_id === lastId);
   if (index < 0 || first < 0 || last < first) return undefined;
   const title = chapters[index]!.title;
   const chapter = title.length > 0 ? `第 ${index + 1} 章 ${title}` : `第 ${index + 1} 章`;
@@ -171,10 +267,10 @@ export function referenceLabel(tree: ChapterOrder, blocks: readonly ManuscriptPa
   return { chapter, part: { kind: "heading", text: blocks[first]!.text } };
 }
 
-/** The plain text of a label, for example 「第 3 章 渡口（第 2–4 段）」. */
+/** The plain text of a label, for example 「第 3 章 渡口（第 2–4 段）」 or 「第 3 章 渡口（第 2 段的修改建议）」. */
 export function formatReferenceLabel(label: ReferenceLabel): string {
   const part = label.part.kind === "heading" ? `小标题「${label.part.text}」`
     : label.part.first === label.part.last ? `第 ${label.part.first} 段`
       : `第 ${label.part.first}–${label.part.last} 段`;
-  return `${label.chapter}（${part}）`;
+  return `${label.chapter}（${part}${label.candidate === true ? "的修改建议" : ""}）`;
 }

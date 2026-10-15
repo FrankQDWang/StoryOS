@@ -34,7 +34,6 @@ import {
 
 export interface ManuscriptEditorProps {
   focusProposal?: ProposalFocus | undefined;
-  onCandidateFocus?: ((focus: ProposalFocus | undefined) => void) | undefined;
   blocks: readonly ManuscriptParagraph[];
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
@@ -99,7 +98,7 @@ export function ManuscriptEditor({
   proposals = [],
   editable,
   writing,
-  onCandidateSettled, onUndoCurrentChapter, focusProposal, onCandidateFocus,
+  onCandidateSettled, onUndoCurrentChapter, focusProposal,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
@@ -120,8 +119,6 @@ export function ManuscriptEditor({
   writingRef.current = writing;
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onUndoCurrentChapterRef = useRef(onUndoCurrentChapter);
-  const onCandidateFocusRef = useRef(onCandidateFocus);
-  onCandidateFocusRef.current = onCandidateFocus;
   const proposalsRef = useRef(proposals);
   proposalsRef.current = proposals;
   const onAcceptProposalRef = useRef(onAcceptProposal);
@@ -174,8 +171,12 @@ export function ManuscriptEditor({
       if (source !== undefined && transaction.docChanged) {
         trackDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, transaction, source.tree);
         // A hydrate of a saved editor shows its Revision, so the kept references take it as their base.
+        // The editor also tracks the references at that Revision, for example of an accepted candidate.
         if (source.saved && isStoryosHydrateTransaction(transaction)) {
           rebaseDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, source.revisionId);
+          for (const key of trackableDraftReferences(source.scope, source.chapterId, source.revisionId)) {
+            trackedReferencesRef.current.add(key);
+          }
         }
       }
       syncManuscriptSurface(current.view.dom, nextBlocks);
@@ -295,7 +296,6 @@ export function ManuscriptEditor({
         editor.commands.setTextSelection(position + 1);
         editor.view.focus();
         focusedProposalRef.current = identity;
-        onCandidateFocusRef.current?.(focusProposal);
       }
       const candidate = editor.view.nodeDOM(position);
       if (candidate instanceof HTMLElement) {
@@ -309,11 +309,6 @@ export function ManuscriptEditor({
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const focused = target.closest<HTMLElement>("[data-candidate-proposal-id]");
-      onCandidateFocusRef.current?.(focused === null ? undefined : {
-        proposalId: focused.dataset.candidateProposalId!, operationId: focused.dataset.proposalOperationId!,
-        revisionId: focused.dataset.proposalRevisionId!, blockId: focused.dataset.proposalTargetId!,
-      });
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
       const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
       const replanButton = target.closest<HTMLButtonElement>("button[data-proposal-replan]");

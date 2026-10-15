@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
 import {
-  addDraftReference, clearDraftReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
+  acceptDraftCandidates, addDraftReferences, clearDraftReferences, copiedReferences, pasteReferences, draftCanAdd, draftEntries, rebaseDraftReferences, removeDraftReference, setRunReferences,
   trackableDraftReferences, trackDraftReferences, type DraftReference,
 } from "../../src/selection-reference-draft.ts";
 
@@ -38,30 +38,33 @@ function reference(block: string, start: number, end: number, revision = REVISIO
 
 const entry = (value: ChapterTextReference): Omit<DraftReference, "key"> =>
   ({ reference: value, label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 2, last: 2 } }, moved: false });
+/** Adds one reference and returns its key, or undefined when the draft has it or cannot hold it. */
+const add = (project: ReturnType<typeof scope>, value: ChapterTextReference) =>
+  addDraftReferences(project, [entry(value)])?.[0];
 
 test("a draft adds distinct references while the message and the active AgentRun hold fewer than eight", () => {
   const project = scope();
   const run = Array.from({ length: 6 }, (_, index) => reference(FIRST!, index, index + 1));
   setRunReferences(project, run);
-  const key = addDraftReference(project, entry(reference(SECOND!, 0, 2)));
+  const key = add(project, reference(SECOND!, 0, 2));
   assert.ok(key !== undefined);
-  assert.equal(addDraftReference(project, entry(reference(SECOND!, 0, 2))), undefined);
+  assert.equal(add(project, reference(SECOND!, 0, 2)), undefined);
   // A reference that the Run already has does not count again.
-  assert.ok(addDraftReference(project, entry(run[0]!)) !== undefined);
-  assert.equal(draftCanAdd({ entries: draftEntries(project), run }), true);
-  assert.ok(addDraftReference(project, entry(reference(SECOND!, 2, 4))) !== undefined);
-  assert.equal(addDraftReference(project, entry(reference(SECOND!, 4, 5))), undefined);
+  assert.ok(add(project, run[0]!) !== undefined);
+  assert.equal(draftCanAdd({ entries: draftEntries(project), run }, [reference(SECOND!, 2, 4)]), true);
+  assert.ok(add(project, reference(SECOND!, 2, 4)) !== undefined);
+  assert.equal(add(project, reference(SECOND!, 4, 5)), undefined);
   removeDraftReference(project, key);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [run[0], reference(SECOND!, 2, 4)]);
 });
 
 test("a send removes only its references, and a reference added while it waits stays", () => {
   const project = scope();
-  const sent = addDraftReference(project, entry(reference(SECOND!, 2, 4)));
+  const sent = add(project, reference(SECOND!, 2, 4));
   const tracked = new Set(trackableDraftReferences(project, CHAPTER, REVISION));
   // An edit while the send waits moves the sent reference, and the author adds one more.
   trackDraftReferences(project, CHAPTER, tracked, state("雨夜。", "船夫在等着。").tr.insertText("冬", 7), tree);
-  addDraftReference(project, entry(reference(FIRST!, 0, 2)));
+  add(project, reference(FIRST!, 0, 2));
   clearDraftReferences(project, [sent!]);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(FIRST!, 0, 2)]);
 });
@@ -69,7 +72,7 @@ test("a send removes only its references, and a reference added while it waits s
 test("an author edit moves a tracked reference, and the saved Revision becomes its base", () => {
   const project = scope();
   const before = state("雨夜。", "船夫在等着。");
-  addDraftReference(project, entry(reference(SECOND!, 2, 4)));
+  add(project, reference(SECOND!, 2, 4));
   const tracked = new Set(trackableDraftReferences(project, CHAPTER, REVISION));
   assert.equal(tracked.size, 1);
   trackDraftReferences(project, CHAPTER, tracked, before.tr.insertText("冬", 7), tree);
@@ -84,8 +87,8 @@ test("an author edit moves a tracked reference, and the saved Revision becomes i
 test("a reference disappears when its text is deleted, and a replaced block stops its tracking", () => {
   const project = scope();
   const before = state("雨夜。", "船夫在等着。");
-  addDraftReference(project, entry(reference(FIRST!, 0, 2)));
-  addDraftReference(project, entry(reference(SECOND!, 2, 4)));
+  add(project, reference(FIRST!, 0, 2));
+  add(project, reference(SECOND!, 2, 4));
   const tracked = new Set(trackableDraftReferences(project, CHAPTER, REVISION));
   trackDraftReferences(project, CHAPTER, tracked, before.tr.delete(1, 4), tree);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(SECOND!, 2, 4)]);
@@ -105,4 +108,127 @@ test("a reference disappears when its text is deleted, and a replaced block stop
   trackDraftReferences(project, CHAPTER, tracked, same.tr.insertText("冬", 4), tree);
   assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
     [[reference(SECOND!, 2, 4, NEXT), true]]);
+});
+
+const [PROPOSAL, OPERATION, CANDIDATE_REVISION, NEXT_CANDIDATE] = [id("b06"), id("b07"), id("b08"), id("b09")];
+
+/** 雨夜。 / [雨停了。], with a block candidate for the first block. */
+function withCandidate(candidate: string, revision = CANDIDATE_REVISION) {
+  return EditorState.create({ doc: schema.nodeFromJSON({ type: "doc", content: [
+    { type: "paragraph", attrs: { id: FIRST }, content: [{ type: "text", text: "雨夜。" }] },
+    { type: "blockProposal", attrs: { proposalId: PROPOSAL, operationId: OPERATION, revisionId: revision, blockId: FIRST },
+      content: [{ type: "text", text: candidate }] },
+  ] }) });
+}
+
+function candidateEntry(start: number, end: number): Omit<DraftReference, "key"> {
+  return { reference: { kind: "proposal_candidate_text", chapter_id: CHAPTER, proposal_id: PROPOSAL,
+    operation_id: OPERATION, revision_id: CANDIDATE_REVISION, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+    start_offset: start, end_offset: end }, candidate: { blockId: FIRST!, inlineFrom: null },
+  label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 }, candidate: true }, moved: false };
+}
+
+test("a candidate reference moves with candidate edits and becomes Chapter text when the author accepts it", () => {
+  const project = scope();
+  addDraftReferences(project, [candidateEntry(1, 3)]);
+  const tracked = new Set<string>();
+  // The candidate block starts at 5, so its text starts at 6.
+  const edited = withCandidate("雨停了。").tr.insertText("大", 6);
+  trackDraftReferences(project, CHAPTER, tracked, edited, tree);
+  // The saved candidate edit gives the newest Proposal Revision to the candidate.
+  const revised = EditorState.create({ doc: edited.doc }).tr.setNodeMarkup(5, undefined,
+    { ...edited.doc.child(1).attrs, revisionId: NEXT_CANDIDATE });
+  trackDraftReferences(project, CHAPTER, tracked, revised, tree);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference), [{ ...candidateEntry(2, 4).reference,
+    revision_id: NEXT_CANDIDATE }]);
+  acceptDraftCandidates(project, PROPOSAL, [OPERATION!], NEXT);
+  assert.deepEqual(draftEntries(project).map(({ reference: value, label, moved, candidate }) =>
+    ({ value, label, moved, candidate })), [{ value: reference(FIRST!, 2, 4, NEXT), moved: false, candidate: undefined,
+    label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } }]);
+});
+
+test("an accepted candidate reference keeps the accepted Revision when a hydrate of the older Revision comes first", () => {
+  const project = scope();
+  const tracked = new Set<string>();
+  const [key] = addDraftReferences(project, [candidateEntry(1, 3)], tracked)!;
+  assert.equal(tracked.size, 0);
+  acceptDraftCandidates(project, PROPOSAL, [OPERATION!], NEXT);
+  // The Proposals refresh removes the candidate while the editor still shows the Revision before the acceptance.
+  const before = withCandidate("雨停了。");
+  trackDraftReferences(project, CHAPTER, tracked,
+    before.tr.replaceWith(0, before.doc.content.size, state("雨夜。", "船夫在等着。").doc.content), tree);
+  rebaseDraftReferences(project, CHAPTER, tracked, REVISION);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(FIRST!, 1, 3, NEXT), false]]);
+  // The hydrate of the accepted Revision then starts the tracking.
+  assert.deepEqual(trackableDraftReferences(project, CHAPTER, NEXT), [key]);
+});
+
+test("a candidate reference stays while a replaced document keeps its text, and goes with its candidate", () => {
+  const project = scope();
+  addDraftReferences(project, [candidateEntry(1, 3)]);
+  const before = withCandidate("雨停了。");
+  const replace = (next: EditorState) => before.tr.replaceWith(0, before.doc.content.size, next.doc.content);
+  trackDraftReferences(project, CHAPTER, new Set(), replace(withCandidate("雨停了。", NEXT_CANDIDATE)), tree);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference),
+    [{ ...candidateEntry(1, 3).reference, revision_id: NEXT_CANDIDATE }]);
+  // A rejection or a withdrawal takes the candidate from the document.
+  trackDraftReferences(project, CHAPTER, new Set(), replace(state("雨夜。", "船夫在等着。")), tree);
+  assert.deepEqual(draftEntries(project), []);
+});
+
+test("a paste of a copy adds its references and tracks them in the editor of the copy", () => {
+  const project = scope();
+  const tracked = new Set<string>();
+  const doc = state("雨夜。", "船夫在等着。").doc;
+  const data = copiedReferences(project, tracked, [entry(reference(SECOND!, 0, 2)), candidateEntry(0, 1)], () => doc);
+  assert.equal(pasteReferences(scope(), data), false);
+  assert.equal(pasteReferences(project, "not data"), false);
+  assert.equal(pasteReferences(project, data), true);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference),
+    [reference(SECOND!, 0, 2), candidateEntry(0, 1).reference]);
+  // The editor tracks the Chapter text reference. A candidate reference moves with its candidate.
+  assert.deepEqual([...tracked], [draftEntries(project)[0]!.key]);
+  // A paste that the draft cannot hold adds nothing.
+  addDraftReferences(project, Array.from({ length: 6 }, (_, index) => entry(reference(FIRST!, index, index + 1))));
+  assert.equal(pasteReferences(project,
+    copiedReferences(project, tracked, [entry(reference(SECOND!, 2, 4))], () => doc)), false);
+  assert.equal(draftEntries(project).length, 8);
+});
+
+test("a paste of incomplete clipboard data adds nothing", () => {
+  const project = scope();
+  const doc = state("雨夜。", "船夫在等着。").doc;
+  const json = JSON.parse(copiedReferences(project, new Set(), [entry(reference(SECOND!, 0, 2))], () => doc)) as
+    { entries: Record<string, unknown>[] };
+  const bad = (change: (value: Record<string, unknown>) => Record<string, unknown>) =>
+    JSON.stringify({ ...json, entries: [change(json.entries[0]!)] });
+  const { start: _start, end: _end, ...pointless } = reference(SECOND!, 0, 2);
+  const { part: _part, ...partless } = candidateEntry(0, 1).label;
+  assert.equal(pasteReferences(project, bad((value) => ({ ...value, reference: pointless }))), false);
+  assert.equal(pasteReferences(project, bad(() => ({ ...candidateEntry(0, 1), label: partless }))), false);
+  assert.equal(pasteReferences(project, bad(({ candidate: _candidate, ...value }) =>
+    ({ ...value, reference: candidateEntry(0, 1).reference }))), false);
+  assert.deepEqual(draftEntries(project), []);
+});
+
+test("a paste after an edit of the copied document does not track the old range", () => {
+  const project = scope();
+  const tracked = new Set<string>();
+  let current = state("雨夜。", "ABC");
+  const copy = (value: Omit<DraftReference, "key">) => copiedReferences(project, tracked, [value], () => current.doc);
+  const moved = copy({ ...entry(reference(SECOND!, 0, 1)), moved: true });
+  const candidate = copy(candidateEntry(0, 1));
+  const chapter = copy(entry(reference(SECOND!, 1, 2)));
+  // The author inserts X before A after the copy, so the copied ranges can be old.
+  current = current.apply(current.tr.insertText("X", 6));
+  assert.equal(pasteReferences(project, moved), false);
+  assert.equal(pasteReferences(project, candidate), false);
+  // B at the base Revision is added without tracking, so a later edit and a save do not move it to A.
+  assert.equal(pasteReferences(project, chapter), true);
+  assert.equal(tracked.size, 0);
+  trackDraftReferences(project, CHAPTER, tracked, current.tr.insertText("Y", 10), tree);
+  rebaseDraftReferences(project, CHAPTER, tracked, NEXT);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(SECOND!, 1, 2), false]]);
 });

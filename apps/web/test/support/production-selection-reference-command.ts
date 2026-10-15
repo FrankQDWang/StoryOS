@@ -133,6 +133,18 @@ export async function verifyProductionSelectionReference(context: BrowserContext
     await expect.poll(() => steered?.steer_agent_run_input.selection_references).toEqual([reference([2, 0], [2, 2])]);
     await expect(page.locator("[data-sent-reference-label]"))
       .toHaveText(["第 1 章 渡口（第 1–2 段）", "第 1 章 渡口（第 3 段）"]);
+    // A copy from the editor and a paste in the composer add the same reference, with no pasted text.
+    await selectText(page, [1, 0], [1, 2]);
+    await page.evaluate(() => {
+      const data = new DataTransfer();
+      document.querySelector("[data-manuscript-editor]")!.dispatchEvent(new ClipboardEvent("copy",
+        { clipboardData: data, bubbles: true, cancelable: true }));
+      document.querySelector("textarea[name=assistant-message]")!.dispatchEvent(new ClipboardEvent("paste",
+        { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await expect(page.locator('[data-selection-reference-label="第 1 章 渡口（第 2 段）"]')).toHaveCount(1);
+    await expect(page.locator('[name="assistant-message"]')).toHaveValue("");
+    await page.locator("[data-remove-selection-reference]").click();
     assert.ok(admitted?.effect.kind === "admitted");
     const runId = admitted.effect.run_id;
     for (let attempt = 0; attempt < 8; attempt += 1) {

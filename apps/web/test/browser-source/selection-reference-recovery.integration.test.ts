@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import type { ChapterTextReference } from "../../src/selection-reference.ts";
-import { addDraftReference, draftEntries } from "../../src/selection-reference-draft.ts";
+import { addDraftReferences, draftEntries } from "../../src/selection-reference-draft.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { BLOCK, CHAPTER, OWNER, PROJECT, REVISION, jsonResponse } from "./scenario.ts";
 
@@ -20,9 +20,9 @@ function reference(start: number, end: number): ChapterTextReference {
 it("removes the sent references when a recovery finds the Run after a lost acknowledgement", async () => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   const label = { chapter: "第 1 章 渡口", part: { kind: "paragraphs" as const, first: 1, last: 1 } };
-  const sent = addDraftReference(scope, { reference: reference(0, 2), label, moved: false })!;
+  const [sent] = addDraftReferences(scope, [{ reference: reference(0, 2), label, moved: false }])!;
   // The author added this reference while the request waited for its acknowledgement.
-  const added = addDraftReference(scope, { reference: reference(3, 5), label, moved: false })!;
+  const [added] = addDraftReferences(scope, [{ reference: reference(3, 5), label, moved: false }])!;
   // The request went to the Host, and its acknowledgement did not come back, so the reference has no Run.
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Help with this passage.", chapterId: CHAPTER, correlationId: CORRELATION,
