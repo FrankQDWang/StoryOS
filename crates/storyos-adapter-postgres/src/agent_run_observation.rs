@@ -212,58 +212,60 @@ pub(crate) async fn open_selected_proposal(
 ) -> Result<OpenedProposal, CompleteAgentRunError> {
     let author_message = run.author_message.as_str();
     let chapter_id = run.chapter_id.as_str();
-    let opening =
-        if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
-            crate::revise_candidate_generation::apply(
-                client,
-                claim,
-                &record,
-                produced.unwrap_or_default(),
-            )
-            .await?
-        } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
-            ProseOpening {
-                proposal_id: crate::open_inline_proposal::open_selected_inline_change(
-                    client,
-                    claim,
-                    chapter_id,
-                    decision_id,
-                    text,
-                )
-                .await?,
-                locations: None,
-            }
-        } else if produced.is_none()
-            && matches!(stream, ProposalStream::Permitted)
-            && stream_batch_plan(author_message).is_some()
-        {
-            let (proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
-                client,
-                claim,
-                chapter_id,
-                decision_id,
-                author_message,
-            )
-            .await?;
-            return Ok(OpenedProposal {
-                opening: ProseOpening {
-                    proposal_id,
-                    locations: None,
-                },
-                stream_hold: matches!(work, crate::stream_proposal_generation::StreamWork::Hold),
-            });
-        } else {
-            crate::open_block_proposal::open_selected_prose_change(
+    let opening = if let Some((record, target)) =
+        crate::candidate_revision_target::admitted(client, claim, produced).await?
+    {
+        crate::revise_candidate_generation::apply(
+            client,
+            claim,
+            &record,
+            &target,
+            produced.unwrap_or_default(),
+        )
+        .await?
+    } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
+        ProseOpening {
+            proposal_id: crate::open_inline_proposal::open_selected_inline_change(
                 client,
                 claim,
                 chapter_id,
                 decision_id,
                 text,
-                author_message,
-                produced,
             )
-            .await?
-        };
+            .await?,
+            locations: None,
+        }
+    } else if produced.is_none()
+        && matches!(stream, ProposalStream::Permitted)
+        && stream_batch_plan(author_message).is_some()
+    {
+        let (proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
+            client,
+            claim,
+            chapter_id,
+            decision_id,
+            author_message,
+        )
+        .await?;
+        return Ok(OpenedProposal {
+            opening: ProseOpening {
+                proposal_id,
+                locations: None,
+            },
+            stream_hold: matches!(work, crate::stream_proposal_generation::StreamWork::Hold),
+        });
+    } else {
+        crate::open_block_proposal::open_selected_prose_change(
+            client,
+            claim,
+            chapter_id,
+            decision_id,
+            text,
+            author_message,
+            produced,
+        )
+        .await?
+    };
     Ok(OpenedProposal {
         opening,
         stream_hold: false,

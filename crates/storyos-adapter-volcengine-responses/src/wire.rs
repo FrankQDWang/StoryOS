@@ -1,7 +1,7 @@
 //! The exact request body of one Agent Plan Responses Create request.
 
 use storyos_application::{CreateRequest, RequestBounds};
-use storyos_core::{ContextSourceClass, SelectionReference};
+use storyos_core::{ContextSourceClass, DeclaredTargetKind, SelectionReference};
 
 /// The Host instructions and the reply contract that `decision::map_output` reads.
 pub(crate) const HOST_INSTRUCTIONS: &str = "\
@@ -21,8 +21,12 @@ target block that you change, with its exact block_id. Give at least one change.
 target block that you do not change, because it keeps its text. Do not change text outside the \
 target blocks.
 
+A target block that is marked as a pending suggestion holds the text of a suggestion that the \
+author has not accepted, and its change replaces that suggestion text. Change only Chapter target \
+blocks, or exactly one pending suggestion block.
+
 Author references show the exact text that the author selected for this request. Use the author \
-request to decide if you change the referenced text or only use it. A change replaces all of a \
+request to decide if you change the referenced text or only use it. A change replaces a whole \
 block: keep the text outside the references unchanged unless the author request says otherwise.";
 
 /// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
@@ -92,9 +96,6 @@ fn request_text(request: &CreateRequest) -> String {
         };
         sections.push(format!("{heading}:\n{}", item.content));
     }
-    if let Some(candidate) = &request.candidate_revision {
-        sections.push(format!("Current candidate text:\n{candidate}"));
-    }
     let references = request
         .selection_references
         .iter()
@@ -113,6 +114,15 @@ fn request_text(request: &CreateRequest) -> String {
                      block_id {} character {}",
                     start.manuscript_block_id, start.offset, end.manuscript_block_id, end.offset
                 ),
+                SelectionReference::ProposalCandidateText {
+                    start_offset,
+                    end_offset,
+                    ..
+                } => format!(
+                    "Pending suggestion text of block_id {}, from character {start_offset} to \
+                     character {end_offset}",
+                    admitted.manuscript_block_ids.join(", ")
+                ),
             };
             format!("[reference {position}] {range} (UTF-16 code units):\n{text}")
         })
@@ -124,7 +134,15 @@ fn request_text(request: &CreateRequest) -> String {
         let targets = request
             .declared_targets
             .iter()
-            .map(|target| format!("[block_id: {}]\n{}", target.block_id, target.block_text))
+            .map(|target| match target.kind {
+                DeclaredTargetKind::ChapterBlock => {
+                    format!("[block_id: {}]\n{}", target.block_id, target.block_text)
+                }
+                DeclaredTargetKind::PendingCandidate => format!(
+                    "[block_id: {}] (pending suggestion)\n{}",
+                    target.block_id, target.block_text
+                ),
+            })
             .collect::<Vec<_>>()
             .join("\n\n");
         sections.push(format!("Target blocks:\n{targets}"));

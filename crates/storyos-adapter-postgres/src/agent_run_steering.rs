@@ -36,25 +36,52 @@ pub(crate) async fn advance(
             "The retained Operation Requirement is unavailable",
         )))
     })?;
-    if let Some(target) = retained.operation_requirement.candidate_target.as_mut() {
-        let attempt: serde_json::Value = serde_json::from_str(&row.get::<_, String>(5))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        for location in locations.unwrap_or_default() {
-            if let storyos_contracts::ProseChangeLocationOutcome::Revised {
-                proposal_id,
-                operation_id,
-                revision_id,
-                prior_revision_id,
-                ..
-            } = location.outcome
-                && proposal_id == target.proposal_id
-                && operation_id == target.operation_id
-                && prior_revision_id == target.revision_id
+    let attempt: serde_json::Value = serde_json::from_str(&row.get::<_, String>(/*idx*/ 5))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    for location in locations.unwrap_or_default() {
+        if let storyos_contracts::ProseChangeLocationOutcome::Revised {
+            proposal_id,
+            operation_id,
+            revision_id,
+            prior_revision_id,
+            ..
+        } = location.outcome
+        {
+            let revised = |target: &storyos_core::ProposalCandidateTarget| {
+                target.proposal_id == proposal_id
+                    && target.operation_id == operation_id
+                    && target.revision_id == prior_revision_id
+            };
+            if let Some(target) = retained.operation_requirement.candidate_target.as_mut()
+                && revised(target)
             {
-                target.revision_id = revision_id;
-                break;
+                target.revision_id = revision_id.clone();
+            }
+            // A revised candidate gets a new text, so its reference covers all of that text.
+            for admitted in retained
+                .operation_requirement
+                .selection_references
+                .iter_mut()
+                .flatten()
+            {
+                if admitted
+                    .reference
+                    .candidate_target()
+                    .is_some_and(|target| revised(&target))
+                    && let storyos_core::SelectionReference::ProposalCandidateText {
+                        revision_id: reference_revision,
+                        start_offset,
+                        end_offset,
+                        ..
+                    } = &mut admitted.reference
+                {
+                    *reference_revision = revision_id.clone();
+                    *start_offset = 0;
+                    *end_offset = u32::try_from(location.candidate_text.encode_utf16().count())
+                        .unwrap_or(u32::MAX);
+                }
             }
         }
     }

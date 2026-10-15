@@ -26,7 +26,7 @@ import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
 
-import { admitCandidateRevision } from "../support/candidate-revision.ts";
+import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
 const SECOND_PROSE = "Keep the second block voice in this passage.";
 
@@ -488,7 +488,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
       projectId, fetchImpl, proposalId })).proposal));
     let priorProposals: Awaited<ReturnType<typeof readProposals>> | undefined;
     const candidateSnapshot = candidateMode ? (await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
-      proposalId: held.context.candidate_target!.proposal_id })).proposal : undefined;
+      proposalId: candidateReference(held.context).proposal_id })).proposal : undefined;
     if (scenario === "collection_rejected" && collection) {
       const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(held) });
       const request = { command_schema: "storyos.command.reject-proposal-operations.request.v1",
@@ -1186,6 +1186,46 @@ test.each(["pending", "rejected"])("AI revises only the secondary candidate with
     assert.equal(after.proposal.manuscript_block_id, before.proposal.manuscript_block_id);
     assert.deepEqual(after.proposal.source, before.proposal.source);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("a candidate reference sends its exact range and a stale candidate reference blocks the assembly", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Candidate references", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const proposalId = openedProposal(await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}41`)));
+    const before = (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
+    const operation = before.operations[1]!;
+    const admit = async (key: string) => {
+      const { created } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId, before,
+        operation.operation_id, id(key), "Revise this passage: keep the candidate consistent.", [2, 9]);
+      if (created.effect.kind !== "admitted") throw new Error("expected candidate reference admission");
+      await settleOnce();
+      return getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+    };
+    const reference = { kind: "proposal_candidate_text", chapter_id: chapterId, proposal_id: proposalId,
+      operation_id: operation.operation_id, revision_id: before.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 2, end_offset: 9 };
+    const revised = await admit(`${ns}51`);
+    const after = (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
+    assert.deepEqual(revised.context.selection_references, [{ reference, manuscript_block_ids: [operation.manuscript_block_id],
+      availability: { kind: "superseded", current_revision_id: after.revision_id } }]);
+    const sent = revised.evidence.find((evidence) => evidence.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
+    assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) =>
+      selected_text), [operation.candidate_text.slice(2, 9)]);
+    assert.ok(revised.decision.kind === "prose_change" && revised.decision.locations?.[0]?.outcome.kind === "revised");
+    assert.equal(after.operations[1]!.candidate_text, `${operation.candidate_text} Keep the voice consistent.`);
+    const stale = await admit(`${ns}61`);
+    assert.deepEqual(stale.context.selection_references, [{ reference, manuscript_block_ids: [],
+      availability: { kind: "unavailable" } }]);
+    assert.equal(stale.context.sufficiency.kind, "blocked");
+    assert.deepEqual(stale.model_attempt, { kind: "absent" });
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, after);
   } finally { await stopRealServer(started.server); }
 });
 

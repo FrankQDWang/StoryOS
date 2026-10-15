@@ -1,6 +1,7 @@
 //! Derive one scripted Create result from the exact request, with no process memory.
 
 use storyos_application::{CreateRequest, DeclaredTarget};
+use storyos_core::DeclaredTargetKind;
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, INLINE_PROSE_CHANGE_TEXT, ModelOutput, NativeStreamItem,
     OrdinaryPassageResolution, OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT,
@@ -102,7 +103,11 @@ fn resolved(resolution: OrdinaryPassageResolution) -> FakeCreate {
 
 fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
     let author_message = request.author_message.as_str();
-    if request.candidate_revision.is_some()
+    let candidate = request
+        .declared_targets
+        .iter()
+        .find(|target| target.kind == DeclaredTargetKind::PendingCandidate);
+    if candidate.is_some()
         && is_fake_candidate_revision_request(author_message)
         && let Some(output) = planned.output.as_mut()
         && let DecisionCandidate::Advisory { text } = &output.candidate
@@ -113,7 +118,7 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
         .output
         .as_ref()
         .is_some_and(|output| matches!(output.candidate, DecisionCandidate::ProseChange { .. }));
-    let produce = match request.candidate_revision {
+    let produce = match candidate {
         Some(_) => prose_change,
         None => {
             author_message.starts_with("Revise these passages")
@@ -127,14 +132,20 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
     if !produce {
         return;
     }
-    let declared: Vec<_> = request
-        .declared_targets
-        .iter()
-        .map(DeclaredTarget::location)
-        .collect();
-    let changes = match request.candidate_revision.as_deref() {
-        Some(candidate) => produce_fake_candidate_revision(&declared, author_message, candidate),
-        None => produce_fake_prose_changes(&declared, author_message),
+    let changes = match candidate {
+        Some(candidate) => produce_fake_candidate_revision(
+            &[candidate.location()],
+            author_message,
+            &candidate.block_text,
+        ),
+        None => produce_fake_prose_changes(
+            &request
+                .declared_targets
+                .iter()
+                .map(DeclaredTarget::location)
+                .collect::<Vec<_>>(),
+            author_message,
+        ),
     };
     if let Some(item) = planned.items.first_mut() {
         item.text = Some(storyos_core::canonical_json(&serde_json::json!(changes)));

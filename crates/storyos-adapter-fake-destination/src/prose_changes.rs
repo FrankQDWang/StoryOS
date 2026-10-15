@@ -1,36 +1,35 @@
 //! Fake-destination prose changes for the exact declared targets.
 
 use storyos_core::{
-    CONTEXT_ITEM_TOKEN_LIMIT, PROSE_CHANGE_TEXT, ProseChangeCandidate, SECOND_PROSE_CHANGE_TEXT,
+    CONTEXT_ITEM_TOKEN_LIMIT, DeclaredLocation, PROSE_CHANGE_TEXT, ProseChangeCandidate,
+    SECOND_PROSE_CHANGE_TEXT,
 };
 
 /// Produce complete fake-destination changes for the exact declared targets.
 pub(crate) fn produce_fake_prose_changes(
-    targets: &[(String, String, String)],
+    targets: &[DeclaredLocation],
     author_message: &str,
 ) -> Vec<ProseChangeCandidate> {
     let mut candidates: Vec<_> = targets
         .iter()
         .enumerate()
-        .map(
-            |(index, (chapter_id, block_id, revision_id))| ProseChangeCandidate {
-                chapter_id: chapter_id.to_owned(),
-                manuscript_block_id: block_id.clone(),
-                base_authoritative_revision_id: revision_id.clone(),
-                candidate_text: if index == 0 {
-                    PROSE_CHANGE_TEXT
-                } else {
-                    SECOND_PROSE_CHANGE_TEXT
-                }
-                .to_owned(),
-                explanation: if index == 0 {
-                    "Preserve the narrator voice in the first passage."
-                } else {
-                    "Keep the second passage consistent with the narrator voice."
-                }
-                .to_owned(),
-            },
-        )
+        .map(|(index, target)| ProseChangeCandidate {
+            chapter_id: target.chapter_id.clone(),
+            manuscript_block_id: target.block_id.clone(),
+            base_authoritative_revision_id: target.base_revision_id.clone(),
+            candidate_text: if index == 0 {
+                PROSE_CHANGE_TEXT
+            } else {
+                SECOND_PROSE_CHANGE_TEXT
+            }
+            .to_owned(),
+            explanation: if index == 0 {
+                "Preserve the narrator voice in the first passage."
+            } else {
+                "Keep the second passage consistent with the narrator voice."
+            }
+            .to_owned(),
+        })
         .collect();
     if let Some(first) = candidates.first_mut() {
         if author_message.ends_with("SCRIPT:malformed_locations") {
@@ -59,7 +58,7 @@ pub(crate) fn produce_fake_prose_changes(
 
 /// Revise the exact fresh candidate through the fake destination's bounded result contract.
 pub(crate) fn produce_fake_candidate_revision(
-    targets: &[(String, String, String)],
+    targets: &[DeclaredLocation],
     author_message: &str,
     candidate: &str,
 ) -> Vec<ProseChangeCandidate> {

@@ -138,6 +138,7 @@ fn target() -> DeclaredTarget {
         block_id: BLOCK.to_owned(),
         base_revision_id: "018f0000-0000-7001-8000-0000000000a1".to_owned(),
         collection: false,
+        kind: storyos_core::DeclaredTargetKind::ChapterBlock,
         block_text: "The rain fell hard on the old roof.".to_owned(),
     }
 }
@@ -179,7 +180,6 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
             item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
         ],
         declared_targets: vec![target()],
-        candidate_revision: None,
         selection_references: Vec::new(),
         previous_response_reference: None,
         successor_of: None,

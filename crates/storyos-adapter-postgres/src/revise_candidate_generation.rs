@@ -11,13 +11,9 @@ pub(crate) async fn apply(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     record: &CurrentPassageAssemblyRecord,
+    target: &storyos_core::ProposalCandidateTarget,
     candidates: &[ProseChangeCandidate],
 ) -> Result<super::open_block_proposal::ProseOpening, CompleteAgentRunError> {
-    let target = record
-        .operation_requirement
-        .candidate_target
-        .as_ref()
-        .expect("admitted candidate");
     let mut result = super::open_block_proposal::ProseOpening {
         proposal_id: None,
         locations: Some(Vec::new()),

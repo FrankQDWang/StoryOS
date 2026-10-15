@@ -38,3 +38,15 @@ fn a_chapter_selection_keeps_the_exact_range_across_blocks() {
         ]
     );
 }
+
+#[test]
+fn a_candidate_selection_is_a_non_empty_utf16_range() {
+    assert_eq!(
+        [
+            select_candidate_text("风停了。", 0, 2),
+            select_candidate_text("风停了。", 2, 2),
+            select_candidate_text("风停了。", 3, 9),
+        ],
+        [Some("风停".to_owned()), None, None]
+    );
+}

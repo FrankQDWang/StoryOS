@@ -17,6 +17,15 @@ pub enum SelectionReference {
         start: SelectionPoint,
         end: SelectionPoint,
     },
+    ProposalCandidateText {
+        chapter_id: String,
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        coordinate_profile: SelectionCoordinateProfile,
+        start_offset: u32,
+        end_offset: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

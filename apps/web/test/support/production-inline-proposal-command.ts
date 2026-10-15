@@ -165,9 +165,11 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.locator('[name="assistant-message"]').fill("Revise the selected candidate and preserve its meaning.");
     await page.locator(".composer button").click();
     await expect.poll(() => admitted?.effect.kind).toBe("admitted");
-    assert.deepEqual(requestTarget, { kind: "proposal_candidate", source_chapter_id: chapterId,
-      target: { proposal_id: proposalId, operation_id: edited.operations[0]!.operation_id,
-        revision_id: edited.revision_id } });
+    assert.deepEqual(requestTarget, { kind: "selection_references", source_chapter_id: chapterId, references: [{
+      kind: "proposal_candidate_text", chapter_id: chapterId, proposal_id: proposalId,
+      operation_id: edited.operations[0]!.operation_id, revision_id: edited.revision_id,
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0,
+      end_offset: edited.operations[0]!.candidate_text.length }] });
     const revisionAdmission = admitted as CreateAgentRunResponse | undefined;
     assert.ok(revisionAdmission?.effect.kind === "admitted");
     const revisionRunId = revisionAdmission.effect.run_id;

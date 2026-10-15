@@ -48,7 +48,10 @@ pub(crate) async fn hydrate_locations(
                   JOIN storyos.operation_requirements AS requirement USING (owner_user_id,project_id,run_id)
                   WHERE generation.proposal_id=proposal.proposal_id AND attempt.decision_id=$5::text::uuid
                     AND event.revision_id=(attempt.payload #>> '{decision,locations,0,outcome,revision_id}')::uuid
-                    AND requirement.payload #>> '{operation_requirement,candidate_target,operation_id}'=operation.operation_id::text
+                    AND (requirement.payload #>> '{operation_requirement,candidate_target,operation_id}'=operation.operation_id::text
+                      OR jsonb_path_exists(requirement.payload,
+                        '$.operation_requirement.selection_references[*].reference ? (@.operation_id == $id)',
+                        jsonb_build_object('id', operation.operation_id::text)))
                 )) AND proposal.chapter_id = $6::text::uuid
                 AND operation.manuscript_block_id = $7::text::uuid",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref(), &proposal_id, &operation_id,

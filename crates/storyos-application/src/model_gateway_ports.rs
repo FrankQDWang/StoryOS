@@ -95,7 +95,6 @@ pub struct CreateRequest {
     /// The selected items of the active decision Context Assembly, in order.
     pub context: Vec<RequestContextItem>,
     pub declared_targets: Vec<DeclaredTarget>,
-    pub candidate_revision: Option<String>,
     /// The exact text ranges that the author added to the message, in order.
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
     /// The destination reference of the prior response that an incremental continuation sends.
@@ -118,18 +117,20 @@ pub struct DeclaredTarget {
     pub block_id: String,
     pub base_revision_id: String,
     pub collection: bool,
-    /// The text of the block at its base revision.
+    pub kind: storyos_core::DeclaredTargetKind,
+    /// The text of the block at its base revision, or the text of the pending candidate.
     pub block_text: String,
 }
 
 impl DeclaredTarget {
-    /// The (Chapter, Block, base revision) key that prose changes must match.
-    pub fn location(&self) -> (String, String, String) {
-        (
-            self.chapter_id.clone(),
-            self.block_id.clone(),
-            self.base_revision_id.clone(),
-        )
+    /// The location that prose changes must match.
+    pub fn location(&self) -> storyos_core::DeclaredLocation {
+        storyos_core::DeclaredLocation {
+            chapter_id: self.chapter_id.clone(),
+            block_id: self.block_id.clone(),
+            base_revision_id: self.base_revision_id.clone(),
+            kind: self.kind,
+        }
     }
 }
 
