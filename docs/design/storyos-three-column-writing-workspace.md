@@ -32,7 +32,7 @@ The primary writing workspace is a fixed three-column shell:
 ## Agent panel behavior
 
 - Agent operations happen in the right conversation panel rather than in a separate workflow menu or editor-side control center.
-- Requests and results read like a normal Agent conversation. Each prose location shows its producer explanation and a link to the writable Chapter and candidate. A link in that exchange returns to the source Chapter. AI re-edit uses the focused candidate identity.
+- Requests and results read like a normal Agent conversation. Each prose location shows its producer explanation and a link to the writable Chapter and candidate. A link in that exchange returns to the source Chapter. To have the assistant work on text, the author selects Chapter text or candidate text and adds it to the message ([ADR 0062](../adr/0062-make-the-exact-selection-references-of-a-message-the-working-target.md)).
 - Tool and run activity may appear as compact, inspectable transcript rows without displacing the conversation.
 - A composer remains available at the bottom of the panel.
 - Collapsing the panel gives the editor more room without changing the active manuscript or proposal state.
