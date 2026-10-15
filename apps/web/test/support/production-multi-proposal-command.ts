@@ -62,9 +62,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await row.waitFor();
       const chapterId = await row.getAttribute('data-chapter-id');
       assert.ok(chapterId); chapters.push(chapterId);
-      await row.locator('[data-chapter-menu]').click();
-      if (await row.locator('[data-make-current-chapter]').count()) await row.locator('[data-make-current-chapter]').click();
-      else await page.locator('[data-add-chapter]').press('Escape');
+      await row.locator('button[data-chapter-id]').click();
       const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
       await editor.waitFor();
       await expect(page.locator('.editor-panel h2')).toHaveText(title);

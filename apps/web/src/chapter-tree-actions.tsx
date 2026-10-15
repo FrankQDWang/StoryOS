@@ -16,9 +16,6 @@ export function ChapterTreeActions({
   expectedTreeRevision,
   selectedChapterId,
   onSelectChapter,
-  currentChapterId,
-  makeCurrentEnabled,
-  onMakeCurrent,
   createEnabled,
   onRemoveChapter,
   baseUrl,
@@ -35,9 +32,6 @@ export function ChapterTreeActions({
   expectedTreeRevision: string;
   selectedChapterId?: string | undefined;
   onSelectChapter?: ((chapterId: string) => void) | undefined;
-  currentChapterId?: string | undefined;
-  makeCurrentEnabled?: boolean | undefined;
-  onMakeCurrent?: ((chapterId: string) => void) | undefined;
   createEnabled: boolean;
   onRemoveChapter?: ((chapterId: string) => void) | undefined;
   baseUrl: string;
@@ -113,10 +107,6 @@ export function ChapterTreeActions({
       {createEnabled ? <button type="button" data-chapter-menu={chapterId} aria-label="章菜单" onClick={openMenu}>⋯</button> : null}
       {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
         {creationActions}
-        {makeCurrentEnabled === true && onMakeCurrent !== undefined && chapterId !== currentChapterId ? (
-          <button type="button" data-make-current-chapter={chapterId}
-            onClick={() => { setMenu(undefined); onMakeCurrent(chapterId); }}>设为当前章节</button>
-        ) : null}
         <button type="button" data-begin-rename-chapter={chapterId}
           onClick={() => { setMenu(undefined); setEditing(true); }}>重命名</button>
           <button

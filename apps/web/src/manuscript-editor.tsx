@@ -37,6 +37,8 @@ export interface ManuscriptEditorProps {
   /** The writing controller of the current-writer Editor Session. */
   writing?: EditorSessionWritingController | undefined;
   onCandidateSettled?: (proposalId?: string) => void;
+  /** Receives the Current Chapter after an Author Undo compensation. */
+  onUndoCurrentChapter?: (chapterId: string) => void;
   onAcceptProposal?: (target: {
     proposalId: string;
     operationId: string;
@@ -91,7 +93,7 @@ export function ManuscriptEditor({
   proposals = [],
   editable,
   writing,
-  onCandidateSettled, focusProposal, onCandidateFocus,
+  onCandidateSettled, onUndoCurrentChapter, focusProposal, onCandidateFocus,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
@@ -110,6 +112,7 @@ export function ManuscriptEditor({
   const writingRef = useRef(writing);
   writingRef.current = writing;
   const onCandidateSettledRef = useRef(onCandidateSettled);
+  const onUndoCurrentChapterRef = useRef(onUndoCurrentChapter);
   const onCandidateFocusRef = useRef(onCandidateFocus);
   onCandidateFocusRef.current = onCandidateFocus;
   const proposalsRef = useRef(proposals);
@@ -122,6 +125,7 @@ export function ManuscriptEditor({
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onCandidateSettledRef.current = onCandidateSettled;
+  onUndoCurrentChapterRef.current = onUndoCurrentChapter;
   onAcceptProposalRef.current = onAcceptProposal;
   onRejectProposalRef.current = onRejectProposal;
   onReplanProposalRef.current = onReplanProposal;
@@ -235,6 +239,7 @@ export function ManuscriptEditor({
     if (editor === null || current === undefined) return true;
     void current.undo().then((outcome) => {
       if (outcome !== undefined) onCandidateSettledRef.current?.(outcome.proposalId);
+      if (outcome?.currentChapterId !== undefined) onUndoCurrentChapterRef.current?.(outcome.currentChapterId);
     });
     return true;
   };
