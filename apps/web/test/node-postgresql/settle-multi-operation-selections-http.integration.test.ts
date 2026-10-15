@@ -573,6 +573,53 @@ test.each(["malformed_locations", "undeclared_location", "stale_location_base", 
     } finally { await stopRealServer(started.server); }
   });
 
+// ADR 0061: a reply can change a subset of the declared target blocks.
+test.each(["chapter", "collection"])("a %s reply that changes only the last target opens a Proposal for that block only", async (scope) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const setup = scope === "collection" ? await collectionSetup(started.baseUrl, ns) : await (async () => {
+      const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Partial reply", `${ns}2`);
+      await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}3`);
+      return { ...prepared, target: undefined, chapters: [await getChapter({ baseUrl: started.baseUrl,
+        projectId: prepared.projectId, chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl })] };
+    })();
+    const { fetchImpl, projectId, chapterId, chapters } = setup;
+    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice. SCRIPT:partial_location", id(`${ns}41`), undefined, true, setup.target);
+    if (run.decision.kind !== "prose_change") throw new Error("expected prose change");
+    const last = chapters.at(-1)!.chapter;
+    const changed = last.current_revision.blocks.at(-1)!.manuscript_block_id;
+    assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
+      candidate_text, outcome }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text,
+      outcome: outcome.kind })), [{ chapter_id: last.chapter_id, manuscript_block_id: changed,
+      base_authoritative_revision_id: last.current_revision.revision_id, candidate_text: SECOND_PROSE, outcome: "opened" }]);
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "1");
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(run) }))
+      .proposal.operations.map(({ manuscript_block_id, candidate_text }) => ({ manuscript_block_id, candidate_text })),
+      [{ manuscript_block_id: changed, candidate_text: SECOND_PROSE }]);
+    for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
+      chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Proposal", async (script) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Refused reply", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      `Revise these passages SCRIPT:${script}`, id(`${ns}41`));
+    assert.deepEqual(run.decision, { kind: "absent" });
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
 test.each(["", " SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
   const started = await startRealServer();
   try {
