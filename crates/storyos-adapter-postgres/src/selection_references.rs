@@ -133,13 +133,15 @@ pub(crate) async fn availability(
                     .map(|(revision_id, _)| revision_id),
             ),
             SelectionReference::ProposalCandidateText {
+                chapter_id,
                 proposal_id,
                 operation_id,
                 revision_id,
                 ..
             } => (
                 revision_id,
-                // A rejected, withdrawn, or closed candidate is unavailable at each revision.
+                // A rejected, withdrawn, or closed candidate, or a candidate of a removed Chapter,
+                // is unavailable at each revision.
                 client
                     .query_opt(
                         "SELECT head.current_revision_id::text
@@ -153,12 +155,17 @@ pub(crate) async fn availability(
                           WHERE head.owner_user_id=$1::text::uuid AND head.project_id=$2::text::uuid
                             AND head.proposal_id=$3::text::uuid AND operation.operation_id=$4::text::uuid
                             AND revision.closure='open' AND operation.resolution='pending'
-                            AND operation.reservation_state='unresolved'",
+                            AND operation.reservation_state='unresolved'
+                            AND NOT EXISTS (SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                              WHERE removal.owner_user_id=head.owner_user_id
+                                AND removal.project_id=head.project_id
+                                AND removal.chapter_id=$5::text::uuid)",
                         &[
                             &scope.owner_user_id.as_ref(),
                             &scope.project_id.as_ref(),
                             proposal_id,
                             operation_id,
+                            chapter_id,
                         ],
                     )
                     .await

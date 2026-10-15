@@ -21,9 +21,9 @@ target block that you change, with its exact block_id. Give at least one change.
 target block that you do not change, because it keeps its text. Do not change text outside the \
 target blocks.
 
-A target block that is marked as a pending suggestion holds the text of a suggestion that the \
-author has not accepted, and its change replaces that suggestion text. Change only Chapter target \
-blocks, or exactly one pending suggestion block.
+A target block that is marked as a pending Proposal candidate holds candidate text that the \
+author has not accepted, and its change replaces that candidate text. Change only Chapter target \
+blocks, or exactly one pending Proposal candidate block.
 
 Author references show the exact text that the author selected for this request. Use the author \
 request to decide if you change the referenced text or only use it. A change replaces all of a \
@@ -119,7 +119,7 @@ fn request_text(request: &CreateRequest) -> String {
                     end_offset,
                     ..
                 } => format!(
-                    "Pending suggestion text of block_id {}, from character {start_offset} to \
+                    "Pending Proposal candidate text of block_id {}, from character {start_offset} to \
                      character {end_offset}",
                     admitted.manuscript_block_ids.join(", ")
                 ),
@@ -139,7 +139,7 @@ fn request_text(request: &CreateRequest) -> String {
                     format!("[block_id: {}]\n{}", target.block_id, target.block_text)
                 }
                 DeclaredTargetKind::PendingCandidate => format!(
-                    "[block_id: {}] (pending suggestion)\n{}",
+                    "[block_id: {}] (pending Proposal candidate)\n{}",
                     target.block_id, target.block_text
                 ),
             })

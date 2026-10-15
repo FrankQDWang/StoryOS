@@ -3,7 +3,7 @@ use storyos_application::{DestinationRequest, RequestAttempt};
 use storyos_core::{AdmittedSelection, DeclaredTargetKind, TextPoint};
 
 #[test]
-fn the_model_reads_the_exact_references_and_the_pending_suggestion_target() {
+fn the_model_reads_the_exact_references_and_the_pending_candidate_target() {
     let DestinationRequest::Create(request) = crate::tests::create(
         crate::tests::route("http://127.0.0.1:9"),
         RequestAttempt::New,
@@ -62,10 +62,10 @@ fn the_model_reads_the_exact_references_and_the_pending_suggestion_target() {
             "Author request:\nTighten this paragraph.\n\nWorking text:\nThe rain fell hard.\n\n\
              Author references:\n[reference 1] Chapter text of chapter_id {chapter_id}, from \
              block_id {block} character 4 to block_id {block} character 13 (UTF-16 code units):\n\
-             rain fell\n\n[reference 2] Pending suggestion text of block_id block-2, from \
+             rain fell\n\n[reference 2] Pending Proposal candidate text of block_id block-2, from \
              character 4 to character 8 (UTF-16 code units):\nwind\n\n\
              Target blocks:\n[block_id: {block}]\nThe rain fell hard on the old roof.\n\n\
-             [block_id: block-2] (pending suggestion)\nThe wind stopped.",
+             [block_id: block-2] (pending Proposal candidate)\nThe wind stopped.",
             chapter_id = chapter.chapter_id,
             block = chapter.block_id,
         )
