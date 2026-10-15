@@ -9,7 +9,7 @@ import type { AssistantContext } from "./writing-assistant-panel.tsx";
 type Target = { scope: ProjectScope; runId: string; conversationId: string; idempotencyKey: string };
 export type RunControlIntent = Target & (
   { kind: "pause"; request: PauseAgentRunRequest }
-  | { kind: "guidance"; request: SteerAgentRunRequest; labels?: string[] }
+  | { kind: "guidance"; request: SteerAgentRunRequest; labels?: string[]; referenceKeys?: string[] }
 );
 
 function storageKey(scope: ProjectScope) {
@@ -50,7 +50,8 @@ export function clearRunControl(intent: RunControlIntent) {
 
 export function freezeRunControl(context: AssistantContext, run: GetAgentRunResponse,
   action: { kind: "pause" }
-    | { kind: "guidance"; text: string; references: SelectionReference[]; labels: string[] }): RunControlIntent {
+    | { kind: "guidance"; text: string; references: SelectionReference[]; labels: string[]; keys: string[] },
+): RunControlIntent {
   const target = { scope: context.scope, runId: run.run_id, conversationId: run.conversation_id,
     idempotencyKey: uuidV7(context.cryptoImpl) };
   const binding = {
@@ -63,7 +64,7 @@ export function freezeRunControl(context: AssistantContext, run: GetAgentRunResp
       return { ...target, kind: "pause", request: { command_schema: "storyos.command.pause-agent-run.request.v1",
         pause_agent_run_input: binding } };
     case "guidance":
-      return { ...target, kind: "guidance", labels: action.labels,
+      return { ...target, kind: "guidance", labels: action.labels, referenceKeys: action.keys,
         request: { command_schema: "storyos.command.steer-agent-run.request.v1",
           steer_agent_run_input: { ...binding, conversation_id: run.conversation_id,
             author_message: { text: action.text },

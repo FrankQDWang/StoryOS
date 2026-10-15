@@ -3,7 +3,7 @@ import type { Transaction } from "@tiptap/pm/state";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { ProjectScope, SelectionReference }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { paragraphsEqual, readManuscriptParagraphs } from "./manuscript-doc.ts";
+import { readManuscriptParagraphs } from "./manuscript-doc.ts";
 import {
   canAddReference, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
   referenceLabel, referenceRange, type ChapterOrder, type ChapterTextReference, type ReferenceLabel,
@@ -92,12 +92,12 @@ export function removeDraftReference(scope: ProjectScope, key: string): void {
 }
 
 /**
- * Removes the sent references after the Host received them. The history keeps their labels. A reference
- * that the author added while the send waited stays for the next message.
+ * Removes the sent references by their keys after the Host received them. The history keeps their labels.
+ * A reference that the author added while the send waited stays for the next message.
  */
-export function clearDraftReferences(scope: ProjectScope, sent: readonly SelectionReference[]): void {
+export function clearDraftReferences(scope: ProjectScope, keys: readonly string[]): void {
   const draft = read(scope);
-  const entries = draft.entries.filter((entry) => mergeReferences(sent, [entry.reference]).length > sent.length);
+  const entries = draft.entries.filter((entry) => !keys.includes(entry.key));
   if (entries.length !== draft.entries.length) write(scope, { ...draft, entries });
 }
 
@@ -125,7 +125,6 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
   const blocks = readManuscriptParagraphs(transaction.doc);
   if (blocks === undefined) return;
   const before = readManuscriptParagraphs(transaction.before);
-  if (hydrate && before !== undefined && paragraphsEqual(before, blocks)) return;
   let changed = false;
   const entries: DraftReference[] = [];
   for (const entry of draft.entries) {
@@ -142,7 +141,9 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
       };
       const kept = before !== undefined && slice(before) !== undefined && slice(before) === slice(blocks);
       if (!kept) tracked.delete(entry.key);
-      entries.push(entry);
+      // The replaced document can be a new Revision, so a kept reference waits for its rebase.
+      changed ||= kept;
+      entries.push(kept ? { ...entry, moved: true } : entry);
       continue;
     }
     const range = referenceRange(transaction.before, entry.reference);

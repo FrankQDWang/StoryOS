@@ -173,6 +173,10 @@ export function ManuscriptEditor({
       const source = referenceSourceRef.current;
       if (source !== undefined && transaction.docChanged) {
         trackDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, transaction, source.tree);
+        // A hydrate of a saved editor shows its Revision, so the kept references take it as their base.
+        if (source.saved && isStoryosHydrateTransaction(transaction)) {
+          rebaseDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, source.revisionId);
+        }
       }
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {

@@ -52,9 +52,9 @@ export function AssistantComposer({ context, available, sending, current, run, o
       setPending(undefined);
       if (response.effect.kind === "retained" && intent.kind === "guidance") {
         setMessage("");
-        const sent = intent.request.steer_agent_run_input.selection_references ?? [];
-        clearDraftReferences(intent.scope, sent);
-        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [], sent);
+        clearDraftReferences(intent.scope, intent.referenceKeys ?? []);
+        onGuidanceRetained?.(response.effect.steering_input_id, intent.labels ?? [],
+          intent.request.steer_agent_run_input.selection_references ?? []);
       }
       try {
         await onRefresh();
@@ -105,7 +105,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
       if (active && context !== undefined) {
         if (pause || message.trim().length > 0) void submitControl(freezeRunControl(context, run,
           pause ? { kind: "pause" } : { kind: "guidance", text: message.trim(),
-            references: draft.entries.map((entry) => entry.reference), labels: draftLabels(draft.entries) }));
+            references: draft.entries.map((entry) => entry.reference), labels: draftLabels(draft.entries),
+            keys: draft.entries.map((entry) => entry.key) }));
       } else if (message.trim().length > 0) onSend(message.trim(), () => setMessage(""));
     }}>
       {draft.entries.length === 0 || context === undefined ? null : <ul className="composer-references">

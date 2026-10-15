@@ -57,11 +57,13 @@ test("a draft adds distinct references while the message and the active AgentRun
 
 test("a send removes only its references, and a reference added while it waits stays", () => {
   const project = scope();
+  const sent = addDraftReference(project, entry(reference(SECOND!, 2, 4)));
+  const tracked = new Set(trackableDraftReferences(project, CHAPTER, REVISION));
+  // An edit while the send waits moves the sent reference, and the author adds one more.
+  trackDraftReferences(project, CHAPTER, tracked, state("雨夜。", "船夫在等着。").tr.insertText("冬", 7), tree);
   addDraftReference(project, entry(reference(FIRST!, 0, 2)));
-  const sent = draftEntries(project).map((item) => item.reference);
-  addDraftReference(project, entry(reference(SECOND!, 2, 4)));
-  clearDraftReferences(project, sent);
-  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(SECOND!, 2, 4)]);
+  clearDraftReferences(project, [sent!]);
+  assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(FIRST!, 0, 2)]);
 });
 
 test("an author edit moves a tracked reference, and the saved Revision becomes its base", () => {
@@ -87,16 +89,20 @@ test("a reference disappears when its text is deleted, and a replaced block stop
   const tracked = new Set(trackableDraftReferences(project, CHAPTER, REVISION));
   trackDraftReferences(project, CHAPTER, tracked, before.tr.delete(1, 4), tree);
   assert.deepEqual(draftEntries(project).map((item) => item.reference), [reference(SECOND!, 2, 4)]);
-  // A replacement of all of the document with the same text keeps the tracking.
+  rebaseDraftReferences(project, CHAPTER, tracked, NEXT);
+  // A replacement of all of the document with the same text keeps the tracking. The new document can be
+  // a new Revision, so the reference waits for its rebase.
   const same = state("。", "船夫在等着。");
   trackDraftReferences(project, CHAPTER, tracked,
     same.tr.replaceWith(0, same.doc.content.size, state("。", "船夫在等着。").doc.content), tree);
   assert.equal(tracked.size, 1);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(SECOND!, 2, 4, NEXT), true]]);
   trackDraftReferences(project, CHAPTER, tracked,
     same.tr.replaceWith(0, same.doc.content.size, state("。", "渔夫在等着。").doc.content), tree);
   assert.equal(tracked.size, 0);
-  // The deletion in the first block moved the head, so the reference waits for the saved Revision.
-  // Without tracking, a later edit does not move it, and the Host blocks its stale base.
+  // Without tracking, a later edit does not move the reference, and the Host blocks its stale base.
   trackDraftReferences(project, CHAPTER, tracked, same.tr.insertText("冬", 4), tree);
-  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]), [[reference(SECOND!, 2, 4), true]]);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(SECOND!, 2, 4, NEXT), true]]);
 });

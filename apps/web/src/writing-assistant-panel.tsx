@@ -467,12 +467,14 @@ export function WritingAssistantPanel({
           },
         ],
       };
-      // A transition until the candidate references of the composer: the caret candidate is one reference to all of its text.
-      const references = mergeReferences(entries.map((entry) => entry.reference), selected === undefined ? [] : [{
+      // A transition until the candidate references of the composer: without a draft reference, the caret
+      // candidate is one reference to all of its text.
+      const references: SelectionReference[] = entries.length > 0 || selected === undefined
+        ? entries.map((entry) => entry.reference) : [{
         kind: "proposal_candidate_text", chapter_id: current.chapterId, proposal_id: selected.proposalId,
         operation_id: selected.operationId, revision_id: selected.revisionId,
         coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: candidateLength,
-      }]);
+      }];
       if (references.length > 0) {
         current.references = references;
         current.referenceLabels = draftLabels(entries);
@@ -539,7 +541,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
-      clearDraftReferences(context.scope, references);
+      clearDraftReferences(context.scope, entries.map((entry) => entry.key));
       onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
