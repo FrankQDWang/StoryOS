@@ -31,17 +31,6 @@ function editorBlocks(doc: ProseMirrorNode): EditorBlock[] {
   return blocks;
 }
 
-/** True when the range touches the text of a pending candidate, in its own block or inline. */
-function touchesCandidate(doc: ProseMirrorNode, range: EditorRange): boolean {
-  let touched = false;
-  doc.nodesBetween(range.from, range.to, (node, position) => {
-    if ((node.type.name === "blockProposal" || node.type.name === "inlineProposal")
-      && position < range.to && position + node.nodeSize > range.from) touched = true;
-    return !touched;
-  });
-  return touched;
-}
-
 /** The authoritative offset of a document position in a block. An inline candidate holds the length of its source text. */
 function blockOffset(block: EditorBlock, position: number): number | undefined {
   let offset = 0;
@@ -86,7 +75,15 @@ function blockPosition(block: EditorBlock, offset: number): number | undefined {
  */
 export function chapterTextReference(doc: ProseMirrorNode, range: EditorRange, chapterId: string,
   revisionId: string): ChapterTextReference | undefined {
-  if (range.to <= range.from || touchesCandidate(doc, range)) return undefined;
+  if (range.to <= range.from) return undefined;
+  // A range that touches the text of a pending candidate, in its own block or inline, has no reference.
+  let touched = false;
+  doc.nodesBetween(range.from, range.to, (node, position) => {
+    if ((node.type.name === "blockProposal" || node.type.name === "inlineProposal")
+      && position < range.to && position + node.nodeSize > range.from) touched = true;
+    return !touched;
+  });
+  if (touched) return undefined;
   const blocks = editorBlocks(doc);
   // A block that the range only touches at its end or at its start is not selected.
   const first = blocks.findIndex((block) => block.end > range.from);
