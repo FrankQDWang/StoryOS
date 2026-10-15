@@ -254,34 +254,93 @@ export function trackableDraftReferences(scope: ProjectScope, chapterId: string,
     && !entry.moved).map((entry) => entry.key);
 }
 
-/** The tracked references of the editor of the last copy, so that a paste of that copy is tracked too. */
-let lastCopy: { id: string; tracked: Set<string> } | undefined;
+/**
+ * The last copy from an editor: its tracked references, its document, and the current document of that
+ * editor. The editor tracks a paste of that copy only while its document did not change after the copy.
+ */
+let lastCopy: { id: string; tracked: Set<string>; doc: unknown; current: () => unknown } | undefined;
 
 /** The clipboard data of the references of an editor selection. */
 export function copiedReferences(scope: ProjectScope, tracked: Set<string>,
-  entries: readonly Omit<DraftReference, "key">[]): string {
-  lastCopy = { id: `${Date.now()}:${Math.random()}`, tracked };
+  entries: readonly Omit<DraftReference, "key">[], current: () => unknown): string {
+  lastCopy = { id: `${Date.now()}:${Math.random()}`, tracked, doc: current(), current };
   return JSON.stringify({ scope, copy: lastCopy.id, entries });
+}
+
+const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+const offset = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
+
+/** The reference, the candidate target, and the label of one clipboard entry, or undefined when one is not valid. */
+function clipboardEntry(value: unknown): Omit<DraftReference, "key"> | undefined {
+  const entry = value as { reference?: Record<string, unknown>; candidate?: Record<string, unknown>;
+    label?: Record<string, unknown>; moved?: unknown } | null;
+  if (entry === null || typeof entry !== "object" || typeof entry.moved !== "boolean") return undefined;
+  const { reference: ref, candidate, label } = entry;
+  const part = label?.part as Record<string, unknown> | undefined;
+  if (typeof ref !== "object" || ref === null || ref.coordinate_profile !== "storyos.editor.utf16-code-unit.v1"
+    || !text(ref.chapter_id) || typeof label !== "object" || label === null || !text(label.chapter)
+    || (label.candidate !== undefined && label.candidate !== true) || typeof part !== "object" || part === null
+    || !(part.kind === "heading" ? text(part.text)
+      : part.kind === "paragraphs" && offset(part.first) && offset(part.last) && part.first <= part.last)) {
+    return undefined;
+  }
+  const point = (value: unknown) => {
+    const item = value as Record<string, unknown> | null;
+    return typeof item === "object" && item !== null && text(item.manuscript_block_id) && offset(item.offset)
+      ? { manuscript_block_id: item.manuscript_block_id, offset: item.offset } : undefined;
+  };
+  let reference: SelectionReference;
+  let target: CandidateTarget | undefined;
+  if (ref.kind === "chapter_text") {
+    const start = point(ref.start);
+    const end = point(ref.end);
+    if (!text(ref.base_authoritative_revision_id) || start === undefined || end === undefined
+      || candidate !== undefined || label.candidate !== undefined) return undefined;
+    reference = { kind: "chapter_text", chapter_id: ref.chapter_id, coordinate_profile: ref.coordinate_profile,
+      base_authoritative_revision_id: ref.base_authoritative_revision_id, start, end };
+  } else if (ref.kind === "proposal_candidate_text") {
+    if (!text(ref.proposal_id) || !text(ref.operation_id) || !text(ref.revision_id) || !offset(ref.start_offset)
+      || !offset(ref.end_offset) || ref.start_offset >= ref.end_offset || typeof candidate !== "object"
+      || candidate === null || !text(candidate.blockId) || !(candidate.inlineFrom === null || offset(candidate.inlineFrom))
+      || label.candidate !== true) return undefined;
+    reference = { kind: "proposal_candidate_text", chapter_id: ref.chapter_id, proposal_id: ref.proposal_id,
+      operation_id: ref.operation_id, revision_id: ref.revision_id, coordinate_profile: ref.coordinate_profile,
+      start_offset: ref.start_offset, end_offset: ref.end_offset };
+    target = { blockId: candidate.blockId, inlineFrom: candidate.inlineFrom };
+  } else {
+    return undefined;
+  }
+  const labelPart: ReferenceLabel["part"] = part.kind === "heading" ? { kind: "heading", text: part.text as string }
+    : { kind: "paragraphs", first: part.first as number, last: part.last as number };
+  return { reference, ...(target === undefined ? {} : { candidate: target }), moved: entry.moved,
+    label: { chapter: label.chapter, part: labelPart, ...(label.candidate === true ? { candidate: true } : {}) } };
 }
 
 /**
  * Adds the references of a paste to the draft and returns true. Data of another Project, data that is
  * not valid, and references that the draft cannot hold add nothing, and the paste then gives plain text.
+ * - The editor tracks a paste of its last copy while its document did not change after the copy.
+ * - In other cases the ranges can be old. A Chapter text reference at its base Revision is then added
+ *   without tracking, and the Host blocks it when the head moved (ADR 0062). A moved reference and a
+ *   candidate reference have no exact source, so the paste gives plain text.
  */
 export function pasteReferences(scope: ProjectScope, data: string): boolean {
-  let value: { scope?: ProjectScope; copy?: unknown; entries?: unknown };
+  let value: { scope?: ProjectScope; copy?: unknown; entries?: unknown } | null;
   try {
     value = JSON.parse(data) as typeof value;
   } catch {
     return false;
   }
   if (value === null || typeof value !== "object" || value.scope?.owner_user_id !== scope.owner_user_id
-    || value.scope.project_id !== scope.project_id || !Array.isArray(value.entries) || value.entries.length === 0
-    || !value.entries.every((entry: Partial<DraftReference> | null) => entry !== null && typeof entry === "object"
-      && (entry.reference?.kind === "chapter_text" || entry.reference?.kind === "proposal_candidate_text")
-      && typeof entry.label?.chapter === "string" && typeof entry.moved === "boolean")) return false;
-  const keys = addDraftReferences(scope, value.entries as Omit<DraftReference, "key">[]);
+    || value.scope.project_id !== scope.project_id || !Array.isArray(value.entries)
+    || value.entries.length === 0) return false;
+  const entries = value.entries.map(clipboardEntry);
+  if (entries.some((entry) => entry === undefined)) return false;
+  const added = entries as Omit<DraftReference, "key">[];
+  const current = lastCopy !== undefined && value.copy === lastCopy.id && lastCopy.current() === lastCopy.doc;
+  if (!current && added.some((entry) => entry.moved || entry.reference.kind !== "chapter_text")) return false;
+  const keys = addDraftReferences(scope, added);
   if (keys === undefined) return false;
-  if (lastCopy !== undefined && value.copy === lastCopy.id) for (const key of keys) lastCopy.tracked.add(key);
+  if (current) for (const key of keys) lastCopy!.tracked.add(key);
   return true;
 }

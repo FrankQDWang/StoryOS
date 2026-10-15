@@ -32,7 +32,7 @@ it("adds the references of a paste from the editor, and pastes text when the mes
   const paste = async (values: Omit<DraftReference, "key">[]) => {
     const data = new DataTransfer();
     data.setData("text/plain", "渡口");
-    data.setData(REFERENCE_CLIPBOARD_TYPE, copiedReferences(scope, new Set(), values));
+    data.setData(REFERENCE_CLIPBOARD_TYPE, copiedReferences(scope, new Set(), values, () => undefined));
     const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
     await act(async () => { host.querySelector("textarea")!.dispatchEvent(event); });
     return event.defaultPrevented;

@@ -163,7 +163,8 @@ test("a candidate reference stays while a replaced document keeps its text, and 
 test("a paste of a copy adds its references and tracks them in the editor of the copy", () => {
   const project = scope();
   const tracked = new Set<string>();
-  const data = copiedReferences(project, tracked, [entry(reference(SECOND!, 0, 2)), candidateEntry(0, 1)]);
+  const doc = state("雨夜。", "船夫在等着。").doc;
+  const data = copiedReferences(project, tracked, [entry(reference(SECOND!, 0, 2)), candidateEntry(0, 1)], () => doc);
   assert.equal(pasteReferences(scope(), data), false);
   assert.equal(pasteReferences(project, "not data"), false);
   assert.equal(pasteReferences(project, data), true);
@@ -172,6 +173,44 @@ test("a paste of a copy adds its references and tracks them in the editor of the
   assert.deepEqual([...tracked], draftEntries(project).map((item) => item.key));
   // A paste that the draft cannot hold adds nothing.
   addDraftReferences(project, Array.from({ length: 6 }, (_, index) => entry(reference(FIRST!, index, index + 1))));
-  assert.equal(pasteReferences(project, copiedReferences(project, tracked, [entry(reference(SECOND!, 2, 4))])), false);
+  assert.equal(pasteReferences(project,
+    copiedReferences(project, tracked, [entry(reference(SECOND!, 2, 4))], () => doc)), false);
   assert.equal(draftEntries(project).length, 8);
+});
+
+test("a paste of incomplete clipboard data adds nothing", () => {
+  const project = scope();
+  const doc = state("雨夜。", "船夫在等着。").doc;
+  const json = JSON.parse(copiedReferences(project, new Set(), [entry(reference(SECOND!, 0, 2))], () => doc)) as
+    { entries: Record<string, unknown>[] };
+  const bad = (change: (value: Record<string, unknown>) => Record<string, unknown>) =>
+    JSON.stringify({ ...json, entries: [change(json.entries[0]!)] });
+  const { start: _start, end: _end, ...pointless } = reference(SECOND!, 0, 2);
+  const { part: _part, ...partless } = candidateEntry(0, 1).label;
+  assert.equal(pasteReferences(project, bad((value) => ({ ...value, reference: pointless }))), false);
+  assert.equal(pasteReferences(project, bad(() => ({ ...candidateEntry(0, 1), label: partless }))), false);
+  assert.equal(pasteReferences(project, bad(({ candidate: _candidate, ...value }) =>
+    ({ ...value, reference: candidateEntry(0, 1).reference }))), false);
+  assert.deepEqual(draftEntries(project), []);
+});
+
+test("a paste after an edit of the copied document does not track the old range", () => {
+  const project = scope();
+  const tracked = new Set<string>();
+  let current = state("雨夜。", "ABC");
+  const copy = (value: Omit<DraftReference, "key">) => copiedReferences(project, tracked, [value], () => current.doc);
+  const moved = copy({ ...entry(reference(SECOND!, 0, 1)), moved: true });
+  const candidate = copy(candidateEntry(0, 1));
+  const chapter = copy(entry(reference(SECOND!, 1, 2)));
+  // The author inserts X before A after the copy, so the copied ranges can be old.
+  current = current.apply(current.tr.insertText("X", 6));
+  assert.equal(pasteReferences(project, moved), false);
+  assert.equal(pasteReferences(project, candidate), false);
+  // B at the base Revision is added without tracking, so a later edit and a save do not move it to A.
+  assert.equal(pasteReferences(project, chapter), true);
+  assert.equal(tracked.size, 0);
+  trackDraftReferences(project, CHAPTER, tracked, current.tr.insertText("Y", 10), tree);
+  rebaseDraftReferences(project, CHAPTER, tracked, NEXT);
+  assert.deepEqual(draftEntries(project).map((item) => [item.reference, item.moved]),
+    [[reference(SECOND!, 1, 2), false]]);
 });

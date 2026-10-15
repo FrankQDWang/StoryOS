@@ -57,7 +57,8 @@ export function AddReferenceControl({ editor, source, tracked }: {
     const copy = (event: ClipboardEvent) => {
       const entries = selectedEntries(editor, source);
       if (entries.length > 0) {
-        event.clipboardData?.setData(REFERENCE_CLIPBOARD_TYPE, copiedReferences(source.scope, tracked, entries));
+        event.clipboardData?.setData(REFERENCE_CLIPBOARD_TYPE, copiedReferences(source.scope, tracked, entries,
+          () => editor.state.doc));
       }
     };
     editor.on("selectionUpdate", update);
