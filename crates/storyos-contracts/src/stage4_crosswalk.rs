@@ -42,6 +42,10 @@ const REQUIRED_IDS: &[&str] = &[
 const PROOF: &str = "docs/foundation/product-delivery-proof-selection.md";
 const ROUTE_DECISION: &str =
     "docs/adr/0033-use-volcengine-responses-for-the-first-real-model-path.md";
+const SUBSET_DECISION: &str =
+    "docs/adr/0061-accept-a-prose-reply-that-changes-a-subset-of-the-declared-target-blocks.md";
+const SELECTION_DECISION: &str =
+    "docs/adr/0062-make-the-exact-selection-references-of-a-message-the-working-target.md";
 const JOURNEY_RECORD: &str = "docs/research/stage4-real-author-journey-2026-10-14.md";
 const RUNTIME_RECORD: &str = "docs/research/agent-plan-runtime-qualification-2026-10-11.md";
 const PREFLIGHT_RECORD: &str = "docs/research/agent-plan-responses-capability-preflight.md";
@@ -62,6 +66,8 @@ const CORE_SUCCESSOR: &str = "crates/storyos-core/src/unknown_create_successor_t
 const CORE_COMPACTION: &str = "crates/storyos-core/src/compact_active_context_tests.rs";
 const CORE_ASSEMBLY: &str = "crates/storyos-core/src/assemble_context_tests.rs";
 const CORE_ADMISSION: &str = "crates/storyos-core/src/create_admission_tests.rs";
+const CORE_SELECTION: &str = "crates/storyos-core/src/selection_reference_tests.rs";
+const CORE_OUTPUT: &str = "crates/storyos-core/src/model_output_tests.rs";
 const PG_REGISTRATION: &str = "crates/storyos-adapter-postgres/src/model_registration_tests.rs";
 const PG_DESTINATION: &str =
     "crates/storyos-adapter-postgres/src/project_destination_binding_tests.rs";
@@ -81,6 +87,7 @@ const LEASE_RENEWAL: &str = "crates/storyos-application/src/model_lease_renewal_
 const STREAM_COMMIT: &str = "crates/storyos-application/src/model_stream_commit_tests.rs";
 const ROUTE_EXCHANGE: &str = "crates/storyos-adapter-volcengine-responses/src/exchange_tests.rs";
 const ROUTE_STREAM: &str = "crates/storyos-adapter-volcengine-responses/src/stream_tests.rs";
+const ROUTE_WIRE: &str = "crates/storyos-adapter-volcengine-responses/src/wire_tests.rs";
 const SETTINGS: &str = "crates/storyos-settings/src/settings_tests.rs";
 const WORKER_ADAPTERS: &str = "crates/storyos-worker-bin/src/registered_adapters_tests.rs";
 const CREATE_RUN: &str = "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts";
@@ -107,6 +114,14 @@ const ACCEPT_REFUSAL: &str =
 const ASSISTANCE: &str =
     "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts";
 const ARCHIVE: &str = "apps/web/test/node-postgresql/archive-project-http.integration.test.ts";
+const SUBSET_SELECTIONS: &str =
+    "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts";
+const SELECTION_CONTRACT: &str = "apps/web/test/node-contract/selection-reference.test.ts";
+const SELECTION_DRAFT: &str = "apps/web/test/node-contract/selection-reference-draft.test.ts";
+const SELECTION_PASTE: &str =
+    "apps/web/test/browser-source/selection-reference-paste.integration.test.ts";
+const SELECTION_RECOVERY: &str =
+    "apps/web/test/browser-source/selection-reference-recovery.integration.test.ts";
 const DISCLOSURE_REFUSAL: &str =
     "apps/web/test/browser-source/assistant-disclosure-refusal.integration.test.ts";
 const STOPPED_REQUEST: &str =
@@ -122,6 +137,8 @@ const INLINE_PRODUCTION: &str =
     "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts";
 const RUN_EVIDENCE: &str =
     "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts";
+const SELECTION_JOURNEY: &str =
+    "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts";
 const PHYSICAL_SCRIPT: &str = "scripts/verify-recovery-hold.sh";
 
 #[path = "stage4_crosswalk_bindings.rs"]

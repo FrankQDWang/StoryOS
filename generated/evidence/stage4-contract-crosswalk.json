@@ -46,14 +46,18 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/393",
           "https://github.com/FrankQDWang/StoryOS/issues/395",
-          "https://github.com/FrankQDWang/StoryOS/issues/695"
+          "https://github.com/FrankQDWang/StoryOS/issues/695",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165"
         ],
         "evidence": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
         "supporting_evidence": [
           "crates/storyos-adapter-postgres/src/agent_run_create_dispatch_tests.rs",
           "crates/storyos-adapter-postgres/src/model_gateway_tests.rs",
           "crates/storyos-adapter-volcengine-responses/src/exchange_tests.rs",
-          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "crates/storyos-core/src/selection_reference_tests.rs",
+          "crates/storyos-adapter-volcengine-responses/src/wire_tests.rs",
+          "docs/adr/0062-make-the-exact-selection-references-of-a-message-the-working-target.md"
         ],
         "evidence_class": "integration"
       },
@@ -114,6 +118,8 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/393",
+          "https://github.com/FrankQDWang/StoryOS/issues/1161",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165",
           "https://github.com/FrankQDWang/StoryOS/issues/396"
         ],
         "evidence": "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
@@ -122,7 +128,10 @@
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
-          "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts"
+          "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+          "docs/adr/0061-accept-a-prose-reply-that-changes-a-subset-of-the-declared-target-blocks.md"
         ],
         "evidence_class": "integration"
       },
@@ -136,13 +145,16 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/396",
-          "https://github.com/FrankQDWang/StoryOS/issues/1148"
+          "https://github.com/FrankQDWang/StoryOS/issues/1148",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165"
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
           "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts",
-          "apps/web/test/browser-source/assistant-run-refresh.integration.test.ts"
+          "apps/web/test/browser-source/assistant-run-refresh.integration.test.ts",
+          "apps/web/test/browser-source/selection-reference-paste.integration.test.ts",
+          "apps/web/test/browser-source/selection-reference-recovery.integration.test.ts"
         ],
         "evidence_class": "stage"
       },
@@ -244,6 +256,8 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/393",
+          "https://github.com/FrankQDWang/StoryOS/issues/1161",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165",
           "https://github.com/FrankQDWang/StoryOS/issues/396"
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
@@ -252,7 +266,9 @@
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
+          "crates/storyos-core/src/model_output_tests.rs"
         ],
         "evidence_class": "stage"
       },
@@ -328,7 +344,9 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/396",
           "https://github.com/FrankQDWang/StoryOS/issues/1148",
-          "https://github.com/FrankQDWang/StoryOS/issues/1151"
+          "https://github.com/FrankQDWang/StoryOS/issues/1151",
+          "https://github.com/FrankQDWang/StoryOS/issues/1161",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165"
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
@@ -360,12 +378,16 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/393",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165",
           "https://github.com/FrankQDWang/StoryOS/issues/396"
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
           "crates/storyos-core/src/assemble_context_tests.rs",
-          "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts"
+          "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+          "crates/storyos-core/src/selection_reference_tests.rs",
+          "apps/web/test/node-contract/selection-reference.test.ts",
+          "docs/adr/0062-make-the-exact-selection-references-of-a-message-the-working-target.md"
         ],
         "evidence_class": "stage"
       },
@@ -397,13 +419,17 @@
           "OWN-WEB"
         ],
         "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/1161",
+          "https://github.com/FrankQDWang/StoryOS/issues/1165",
           "https://github.com/FrankQDWang/StoryOS/issues/396"
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
-          "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts"
+          "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
+          "apps/web/test/node-contract/selection-reference-draft.test.ts"
         ],
         "evidence_class": "stage"
       },
