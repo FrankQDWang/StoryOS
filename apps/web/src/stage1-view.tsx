@@ -468,6 +468,15 @@ function ProjectReadyView({
                 .then(onReopened);
             }}
             blocks={editorBlocks}
+            referenceSource={{
+              scope: state.project.project_scope,
+              chapterId: selectedChapter.chapter.chapter_id,
+              revisionId: selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+                ? pending.authoritative_revision_id : selectedChapter.chapter.current_revision.revision_id,
+              saved: selectedChapter.chapter.chapter_id !== currentChapterId || pending === null
+                || saveState === "saved",
+              tree,
+            }}
             editable={!readOnly && !archived}
             persistWorkspace={
               state.editor.kind === "editor-ready"

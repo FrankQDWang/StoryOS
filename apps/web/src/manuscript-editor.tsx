@@ -27,6 +27,10 @@ import {
 } from "./block-proposal-decoration.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
+import { AddReferenceControl, type EditorReferenceSource } from "./selection-reference-control.tsx";
+import {
+  rebaseDraftReferences, trackableDraftReferences, trackDraftReferences,
+} from "./selection-reference-draft.ts";
 
 export interface ManuscriptEditorProps {
   focusProposal?: ProposalFocus | undefined;
@@ -66,6 +70,8 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
+  /** The source of the references that the author adds from a selection. */
+  referenceSource?: EditorReferenceSource | undefined;
 }
 
 const ignoreChanges = () => () => {};
@@ -99,6 +105,7 @@ export function ManuscriptEditor({
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
+  referenceSource,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const capturedInputRef = useRef(0);
@@ -123,6 +130,10 @@ export function ManuscriptEditor({
   const onWithdrawProposalRef = useRef(onWithdrawProposal);
   const onCopyProposalRef = useRef(onCopyProposal);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
+  const referenceSourceRef = useRef(referenceSource);
+  referenceSourceRef.current = referenceSource;
+  // The draft references of this Chapter that the editor moves with the author edits.
+  const trackedReferencesRef = useRef(new Set<string>());
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onCandidateSettledRef.current = onCandidateSettled;
   onUndoCurrentChapterRef.current = onUndoCurrentChapter;
@@ -159,6 +170,10 @@ export function ManuscriptEditor({
     onTransaction({ editor: current, transaction }) {
       const nextBlocks = readManuscriptParagraphs(current.state.doc);
       if (nextBlocks === undefined) return;
+      const source = referenceSourceRef.current;
+      if (source !== undefined && transaction.docChanged) {
+        trackDraftReferences(source.scope, source.chapterId, trackedReferencesRef.current, transaction, source.tree);
+      }
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
@@ -247,6 +262,19 @@ export function ManuscriptEditor({
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editable, editor]);
+
+  useEffect(() => {
+    if (referenceSource === undefined) return;
+    const tracked = trackedReferencesRef.current;
+    tracked.clear();
+    for (const key of trackableDraftReferences(referenceSource.scope, referenceSource.chapterId,
+      referenceSource.revisionId)) tracked.add(key);
+  }, [editor, referenceSource?.chapterId]);
+  useEffect(() => {
+    if (referenceSource?.saved !== true) return;
+    rebaseDraftReferences(referenceSource.scope, referenceSource.chapterId, trackedReferencesRef.current,
+      referenceSource.revisionId);
+  }, [referenceSource?.saved, referenceSource?.revisionId]);
 
   useEffect(() => {
     // A projection during IME composition replaces the composed text. The capture at its end renders again.
@@ -422,5 +450,9 @@ export function ManuscriptEditor({
   }, [editor, writing]);
 
   if (editor === null) return null;
-  return <EditorContent editor={editor} />;
+  return <>
+    <EditorContent editor={editor} />
+    {referenceSource === undefined ? null
+      : <AddReferenceControl editor={editor} source={referenceSource} tracked={trackedReferencesRef.current} />}
+  </>;
 }
