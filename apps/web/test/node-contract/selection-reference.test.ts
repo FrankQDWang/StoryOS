@@ -8,8 +8,8 @@ import type { SelectionReference } from "../../../../generated/typescript/storyo
 import { readManuscriptParagraphs } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import {
-  canAddReference, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
-  referenceLabel, referenceRange, SELECTION_REFERENCE_LIMIT, type ChapterTextReference,
+  canAddReference, candidateRange, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
+  referenceLabel, referenceRange, selectionReferences, SELECTION_REFERENCE_LIMIT, type ChapterTextReference,
 } from "../../src/selection-reference.ts";
 
 const id = (suffix: string) => `018f0000-0000-7001-8000-000000000${suffix}`;
@@ -124,14 +124,47 @@ test("a label numbers the Chapter in reading order and counts only the paragraph
   ] };
   const blocks = readManuscriptParagraphs(manuscript(true))!;
   const label = (start: [string, number], end: [string, number]) => {
-    const value = referenceLabel(tree, blocks, reference(start, end));
+    const value = referenceLabel(tree, blocks, { reference: reference(start, end) });
     return value === undefined ? undefined : formatReferenceLabel(value);
   };
   assert.equal(label([HEADING!, 0], [SECOND!, 1]), "第 3 章 渡口（第 1–2 段）");
   assert.equal(label([THIRD!, 1], [THIRD!, 2]), "第 3 章 渡口（第 3 段）");
   assert.equal(label([THIRD!, 0], [LATER!, 1]), "第 3 章 渡口（第 3 段）");
   assert.equal(label([LATER!, 0], [LATER!, 1]), "第 3 章 渡口（小标题「二」）");
-  assert.deepEqual(referenceLabel(tree, blocks, { ...reference([LATER!, 0], [LATER!, 1]), chapter_id: id("c02") }),
+  assert.deepEqual(referenceLabel(tree, blocks, { reference: { ...reference([LATER!, 0], [LATER!, 1]),
+    chapter_id: id("c02") } }),
     { chapter: "第 2 章", part: { kind: "heading", text: "二" } });
   assert.equal(label([SECOND!, 0], [FIRST!, 1]), undefined);
+});
+
+test("a selection over Chapter text and candidates gives one reference for each part", () => {
+  const candidateAttrs = (suffix: string, blockId: string) =>
+    ({ proposalId: id(`f${suffix}1`), operationId: id(`f${suffix}2`), revisionId: id(`f${suffix}3`), blockId });
+  // 雨夜。渡口 / [雨停了。] / 灯[亮起]。, with a block candidate for the first block and an inline one for 灭了.
+  const doc = schema.nodeFromJSON({ type: "doc", content: [
+    paragraph(FIRST!, ...text("雨夜。渡口")),
+    { type: "blockProposal", attrs: candidateAttrs("1", FIRST!), content: text("雨停了。") },
+    paragraph(THIRD!, ...text("灯"), { type: "inlineProposal",
+      attrs: { ...candidateAttrs("2", THIRD!), inlineFrom: 1, sourceText: "灭了" }, content: text("亮起") }, ...text("。")),
+  ] });
+  const candidate = (suffix: string, start: number, end: number) => ({ kind: "proposal_candidate_text",
+    chapter_id: CHAPTER, proposal_id: id(`f${suffix}1`), operation_id: id(`f${suffix}2`), revision_id: id(`f${suffix}3`),
+    coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: start, end_offset: end }) as const;
+  // From 渡口 in the first block to 亮 in the inline candidate.
+  const selected = selectionReferences(doc, { from: at(doc, FIRST!, 3), to: 17 }, CHAPTER, REVISION);
+  assert.deepEqual(selected, [
+    { reference: reference([FIRST!, 3], [FIRST!, 5]) },
+    { reference: candidate("1", 0, 4), candidate: { blockId: FIRST, inlineFrom: null } },
+    { reference: reference([THIRD!, 0], [THIRD!, 1]) },
+    { reference: candidate("2", 0, 1), candidate: { blockId: THIRD, inlineFrom: 1 } },
+  ]);
+  assert.deepEqual(candidateRange(doc, candidate("2", 0, 1)), { from: 16, to: 17 });
+  // A selection in candidate text alone gives only the candidate reference.
+  assert.deepEqual(selectionReferences(doc, { from: 9, to: 11 }, CHAPTER, REVISION).map((item) => item.reference),
+    [candidate("1", 1, 3)]);
+  const tree = { volumes: [{ chapters: [{ chapter_id: CHAPTER, title: "渡口" }] }] };
+  const blocks = readManuscriptParagraphs(doc)!;
+  assert.deepEqual(selected.map((item) => formatReferenceLabel(referenceLabel(tree, blocks, item)!)), [
+    "第 1 章 渡口（第 1 段）", "第 1 章 渡口（第 1 段的修改建议）", "第 1 章 渡口（第 2 段）", "第 1 章 渡口（第 2 段的修改建议）",
+  ]);
 });

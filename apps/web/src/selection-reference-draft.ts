@@ -5,18 +5,24 @@ import type { ProjectScope, SelectionReference }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { readManuscriptParagraphs } from "./manuscript-doc.ts";
 import {
-  canAddReference, chapterTextReference, formatReferenceLabel, mapReferenceRange, mergeReferences,
-  referenceLabel, referenceRange, type ChapterOrder, type ChapterTextReference, type ReferenceLabel,
+  candidateRange, candidateTextReference, chapterTextReference, formatReferenceLabel, mapReferenceRange,
+  mergeReferences, referenceLabel, referenceRange, SELECTION_REFERENCE_LIMIT, type CandidateTarget,
+  type CandidateTextReference, type ChapterOrder, type ChapterTextReference, type ReferenceLabel,
 } from "./selection-reference.ts";
 
 /** One reference that the author added to the next message, with its label. */
 export type DraftReference = {
   key: string;
-  reference: ChapterTextReference;
+  reference: SelectionReference;
+  /** The target of a candidate reference, which becomes a Chapter text reference when the author accepts it. */
+  candidate?: CandidateTarget;
   label: ReferenceLabel;
-  /** The range moved with author edits that the base Revision does not have yet. */
+  /** The range of a Chapter text reference moved with author edits that its base Revision does not have yet. */
   moved: boolean;
 };
+
+/** The clipboard type of the references that a copy from the editor gives to the composer. */
+export const REFERENCE_CLIPBOARD_TYPE = "application/x-storyos-selection-reference+json";
 
 type Draft = { entries: DraftReference[]; run: SelectionReference[] };
 
@@ -69,21 +75,34 @@ export function draftEntries(scope: ProjectScope): DraftReference[] {
   return read(scope).entries;
 }
 
-/** True when the next message can hold one more reference, with the references of the active AgentRun. */
-export function draftCanAdd(draft: Draft): boolean {
-  return canAddReference(mergeReferences(draft.run, draft.entries.map((entry) => entry.reference)));
+/**
+ * True when at least one added reference is not in the draft yet. The next message must also hold the
+ * added references with the references of the active AgentRun. A reference of the Run does not count again.
+ */
+export function draftCanAdd(draft: Draft, added: readonly SelectionReference[]): boolean {
+  const entries = draft.entries.map((entry) => entry.reference);
+  return mergeReferences(entries, added).length > entries.length
+    && mergeReferences(mergeReferences(draft.run, entries), added).length <= SELECTION_REFERENCE_LIMIT;
 }
 
-/** Adds one reference and returns its key. A full draft or a repeated reference adds nothing. */
-export function addDraftReference(scope: ProjectScope, entry: Omit<DraftReference, "key">): string | undefined {
+/**
+ * Adds the references that are not in the draft yet and returns their keys. When the draft cannot hold
+ * all of them, it adds nothing.
+ */
+export function addDraftReferences(scope: ProjectScope,
+  added: readonly Omit<DraftReference, "key">[]): string[] | undefined {
   const draft = read(scope);
-  if (!draftCanAdd(draft)
-    || mergeReferences(draft.entries.map((item) => item.reference), [entry.reference]).length === draft.entries.length) {
-    return undefined;
+  if (!draftCanAdd(draft, added.map((entry) => entry.reference))) return undefined;
+  const entries = [...draft.entries];
+  const keys: string[] = [];
+  for (const entry of added) {
+    if (mergeReferences(entries.map((item) => item.reference), [entry.reference]).length === entries.length) continue;
+    const key = `${Date.now()}:${Math.random()}`;
+    entries.push({ ...entry, key });
+    keys.push(key);
   }
-  const key = `${Date.now()}:${Math.random()}`;
-  write(scope, { ...draft, entries: [...draft.entries, { ...entry, key }] });
-  return key;
+  write(scope, { ...draft, entries });
+  return keys;
 }
 
 export function removeDraftReference(scope: ProjectScope, key: string): void {
@@ -112,9 +131,13 @@ export function draftLabels(entries: readonly DraftReference[]): string[] {
 }
 
 /**
- * Moves the tracked references of one Chapter with an editor change. A reference whose text is all
- * deleted disappears. A change that the editor cannot map keeps the reference and stops its tracking.
- * Its base Revision then stays, and the Host blocks it when the head moved (ADR 0062).
+ * Moves the references of one Chapter with an editor change.
+ * - A Chapter text reference moves only while the editor tracks it. A reference whose text is all deleted
+ *   disappears. A change that the editor cannot map keeps the reference and stops its tracking. Its base
+ *   Revision then stays, and the Host blocks it when the head moved (ADR 0062).
+ * - A candidate reference moves while the editor shows its candidate, and takes the newest Proposal
+ *   Revision. It disappears when its text is deleted or when its candidate goes from the document, for
+ *   example after a rejection or a withdrawal.
  */
 export function trackDraftReferences(scope: ProjectScope, chapterId: string, tracked: Set<string>,
   transaction: Transaction, tree: ChapterOrder | undefined): void {
@@ -125,62 +148,140 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
   const blocks = readManuscriptParagraphs(transaction.doc);
   if (blocks === undefined) return;
   const before = readManuscriptParagraphs(transaction.before);
-  let changed = false;
-  const entries: DraftReference[] = [];
-  for (const entry of draft.entries) {
-    if (entry.reference.chapter_id !== chapterId || !tracked.has(entry.key)) {
-      entries.push(entry);
-      continue;
-    }
+
+  const chapterEntry = (entry: DraftReference, reference: ChapterTextReference): DraftReference | undefined => {
+    if (!tracked.has(entry.key)) return entry;
     if (hydrate) {
       // A replaced document keeps the reference when each block of its range keeps its text and order.
       const slice = (list: typeof blocks) => {
-        const first = list.findIndex((block) => block.manuscript_block_id === entry.reference.start.manuscript_block_id);
-        const last = list.findIndex((block) => block.manuscript_block_id === entry.reference.end.manuscript_block_id);
+        const first = list.findIndex((block) => block.manuscript_block_id === reference.start.manuscript_block_id);
+        const last = list.findIndex((block) => block.manuscript_block_id === reference.end.manuscript_block_id);
         return first < 0 || last < first ? undefined : JSON.stringify(list.slice(first, last + 1));
       };
       const kept = before !== undefined && slice(before) !== undefined && slice(before) === slice(blocks);
       if (!kept) tracked.delete(entry.key);
       // The replaced document can be a new Revision, so a kept reference waits for its rebase.
-      changed ||= kept;
-      entries.push(kept ? { ...entry, moved: true } : entry);
-      continue;
+      return kept ? { ...entry, moved: true } : entry;
     }
-    const range = referenceRange(transaction.before, entry.reference);
+    const range = referenceRange(transaction.before, reference);
     const mapped = range === undefined ? undefined : mapReferenceRange(range, transaction.mapping);
     if (range !== undefined && mapped === undefined) {
       tracked.delete(entry.key);
-      changed = true;
-      continue;
+      return undefined;
     }
-    const reference = mapped === undefined ? undefined
-      : chapterTextReference(transaction.doc, mapped, chapterId, entry.reference.base_authoritative_revision_id);
-    if (reference === undefined) {
+    const next = mapped === undefined ? undefined
+      : chapterTextReference(transaction.doc, mapped, chapterId, reference.base_authoritative_revision_id);
+    if (next === undefined) {
       tracked.delete(entry.key);
-      entries.push(entry);
-      continue;
+      return entry;
     }
-    changed = true;
-    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, reference);
-    entries.push({ ...entry, reference, label: label ?? entry.label, moved: true });
+    const label = tree === undefined ? undefined : referenceLabel(tree, blocks, { reference: next });
+    return { ...entry, reference: next, label: label ?? entry.label, moved: true };
+  };
+
+  const candidateEntry = (entry: DraftReference, reference: CandidateTextReference): DraftReference | undefined => {
+    const range = candidateRange(transaction.before, reference);
+    // The editor did not show the candidate, for example before the Proposals of the Chapter load.
+    if (range === undefined) return entry;
+    let next: CandidateTextReference | undefined;
+    if (hydrate) {
+      // A replaced document keeps the reference while its candidate keeps the referenced text.
+      const after = candidateRange(transaction.doc, reference);
+      next = after === undefined || transaction.doc.textBetween(after.from, after.to)
+        !== transaction.before.textBetween(range.from, range.to) ? undefined
+        : candidateTextReference(transaction.doc, after, chapterId);
+    } else {
+      const mapped = mapReferenceRange(range, transaction.mapping);
+      next = mapped === undefined ? undefined : candidateTextReference(transaction.doc, mapped, chapterId);
+    }
+    if (next === undefined) return undefined;
+    return JSON.stringify(next) === JSON.stringify(reference) ? entry : { ...entry, reference: next };
+  };
+
+  let changed = false;
+  const entries: DraftReference[] = [];
+  for (const entry of draft.entries) {
+    const next = entry.reference.chapter_id !== chapterId ? entry
+      : entry.reference.kind === "chapter_text" ? chapterEntry(entry, entry.reference)
+        : candidateEntry(entry, entry.reference);
+    changed ||= next !== entry;
+    if (next !== undefined) entries.push(next);
   }
   if (changed) write(scope, { ...draft, entries });
+}
+
+/**
+ * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
+ * acceptance. The accepted text replaces the source of its candidate, so the offsets move by the source
+ * offset of an inline candidate.
+ */
+export function acceptDraftCandidates(scope: ProjectScope, proposalId: string, operationIds: readonly string[],
+  revisionId: string): void {
+  const draft = read(scope);
+  const accepted = (entry: DraftReference) => entry.reference.kind === "proposal_candidate_text"
+    && entry.reference.proposal_id === proposalId && operationIds.includes(entry.reference.operation_id)
+    && entry.candidate !== undefined;
+  if (!draft.entries.some(accepted)) return;
+  write(scope, { ...draft, entries: draft.entries.map((entry) => {
+    if (!accepted(entry) || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
+      return entry;
+    }
+    const { blockId, inlineFrom } = entry.candidate;
+    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: (inlineFrom ?? 0) + offset });
+    return { key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
+      reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
+        base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+        start: point(entry.reference.start_offset), end: point(entry.reference.end_offset) } };
+  }) });
 }
 
 /** Gives the moved references of one Chapter the saved Revision of the editor document. */
 export function rebaseDraftReferences(scope: ProjectScope, chapterId: string, tracked: Set<string>,
   revisionId: string): void {
   const draft = read(scope);
-  if (!draft.entries.some((entry) => entry.reference.chapter_id === chapterId && entry.moved
-    && tracked.has(entry.key))) return;
-  write(scope, { ...draft, entries: draft.entries.map((entry) =>
-    entry.reference.chapter_id === chapterId && entry.moved && tracked.has(entry.key)
-      ? { ...entry, moved: false, reference: { ...entry.reference, base_authoritative_revision_id: revisionId } }
-      : entry) });
+  const rebased = (entry: DraftReference) => entry.reference.chapter_id === chapterId && entry.moved
+    && tracked.has(entry.key);
+  if (!draft.entries.some(rebased)) return;
+  write(scope, { ...draft, entries: draft.entries.map((entry) => !rebased(entry)
+    || entry.reference.kind !== "chapter_text" ? entry
+    : { ...entry, moved: false, reference: { ...entry.reference, base_authoritative_revision_id: revisionId } }) });
 }
 
-/** The keys of the references of one Chapter that the editor can track from its Revision. */
+/** The keys of the Chapter text references of one Chapter that the editor can track from its Revision. */
 export function trackableDraftReferences(scope: ProjectScope, chapterId: string, revisionId: string): string[] {
-  return read(scope).entries.filter((entry) => entry.reference.chapter_id === chapterId
-    && entry.reference.base_authoritative_revision_id === revisionId && !entry.moved).map((entry) => entry.key);
+  return read(scope).entries.filter((entry) => entry.reference.kind === "chapter_text"
+    && entry.reference.chapter_id === chapterId && entry.reference.base_authoritative_revision_id === revisionId
+    && !entry.moved).map((entry) => entry.key);
+}
+
+/** The tracked references of the editor of the last copy, so that a paste of that copy is tracked too. */
+let lastCopy: { id: string; tracked: Set<string> } | undefined;
+
+/** The clipboard data of the references of an editor selection. */
+export function copiedReferences(scope: ProjectScope, tracked: Set<string>,
+  entries: readonly Omit<DraftReference, "key">[]): string {
+  lastCopy = { id: `${Date.now()}:${Math.random()}`, tracked };
+  return JSON.stringify({ scope, copy: lastCopy.id, entries });
+}
+
+/**
+ * Adds the references of a paste to the draft and returns true. Data of another Project, data that is
+ * not valid, and references that the draft cannot hold add nothing, and the paste then gives plain text.
+ */
+export function pasteReferences(scope: ProjectScope, data: string): boolean {
+  let value: { scope?: ProjectScope; copy?: unknown; entries?: unknown };
+  try {
+    value = JSON.parse(data) as typeof value;
+  } catch {
+    return false;
+  }
+  if (value === null || typeof value !== "object" || value.scope?.owner_user_id !== scope.owner_user_id
+    || value.scope.project_id !== scope.project_id || !Array.isArray(value.entries) || value.entries.length === 0
+    || !value.entries.every((entry: Partial<DraftReference> | null) => entry !== null && typeof entry === "object"
+      && (entry.reference?.kind === "chapter_text" || entry.reference?.kind === "proposal_candidate_text")
+      && typeof entry.label?.chapter === "string" && typeof entry.moved === "boolean")) return false;
+  const keys = addDraftReferences(scope, value.entries as Omit<DraftReference, "key">[]);
+  if (keys === undefined) return false;
+  if (lastCopy !== undefined && value.copy === lastCopy.id) for (const key of keys) lastCopy.tracked.add(key);
+  return true;
 }
