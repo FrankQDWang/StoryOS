@@ -26,7 +26,7 @@ author has not accepted, and its change replaces that suggestion text. Change on
 blocks, or exactly one pending suggestion block.
 
 Author references show the exact text that the author selected for this request. Use the author \
-request to decide if you change the referenced text or only use it. A change replaces a whole \
+request to decide if you change the referenced text or only use it. A change replaces all of a \
 block: keep the text outside the references unchanged unless the author request says otherwise.";
 
 /// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
