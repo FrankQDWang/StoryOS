@@ -1274,6 +1274,42 @@ test("each candidate reference keeps the text of its Operation and a Chapter ref
   } finally { await stopRealServer(started.server); }
 });
 
+test("a candidate reference of a removed Chapter becomes unavailable in Context Inspect", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const setup = await collectionSetup(started.baseUrl, ns);
+    const removed = setup.target.targets[1]!.chapter_id;
+    const collection = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}81`), undefined, true, setup.target);
+    const proposalId = await queryPostgres(`SELECT proposal_id::text FROM storyos.proposals
+      WHERE source_run_id='${collection.run_id}'::uuid AND chapter_id='${removed}'::uuid;`);
+    const proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: setup.projectId,
+      proposalId, fetchImpl: setup.fetchImpl })).proposal;
+    const run = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "Explain this passage.", id(`${ns}82`), undefined, true, { kind: "selection_references",
+        source_chapter_id: setup.chapterId, references: [{ kind: "proposal_candidate_text", chapter_id: removed,
+          proposal_id: proposal.proposal_id, operation_id: proposal.operations[0]!.operation_id,
+          revision_id: proposal.revision_id, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+          start_offset: 0, end_offset: 5 }] });
+    const availability = async () => (await getAgentRun({ baseUrl: started.baseUrl, projectId: setup.projectId,
+      runId: run.run_id, fetchImpl: setup.fetchImpl })).context.selection_references?.map((item) => item.availability);
+    assert.deepEqual(await availability(), [{ kind: "current" }]);
+    const tree = await getManuscriptTree({ baseUrl: started.baseUrl, ...setup });
+    const request = { command_schema: "storyos.command.delete-chapter.request.v1",
+      delete_chapter_input: { expected_tree_revision: tree.tree_revision, ...BINDING, correlation_id: id(`${ns}83`) } };
+    await challenged(started.baseUrl, setup.fetchImpl, setup.projectId, "DELETE",
+      "/api/v1/projects/{project_id}/chapters/{chapter_id}", request.command_schema,
+      await digestDeleteChapter(request), id(`${ns}84`), (antiForgery) => deleteChapter({
+        baseUrl: started.baseUrl, projectId: setup.projectId, chapterId: removed,
+        fetchImpl: setup.fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}84`) }));
+    assert.equal((await getProposal({ baseUrl: started.baseUrl, projectId: setup.projectId, proposalId,
+      fetchImpl: setup.fetchImpl })).proposal.revision_id, proposal.revision_id);
+    assert.deepEqual(await availability(), [{ kind: "unavailable" }]);
+  } finally { await stopRealServer(started.server); }
+});
+
 async function rejectFirstOperation(baseUrl: string, ns: string) {
   const { fetchImpl, projectId, chapterId } = await prepare(baseUrl, id(`${ns}11`), "Two Operation decisions", `${ns}2`);
   const seeded = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}3`);
