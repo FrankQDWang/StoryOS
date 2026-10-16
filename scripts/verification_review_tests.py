@@ -457,6 +457,16 @@ else:
         self.assertIn('Standards: PASS https://example.invalid/pull/745#comment-1\nSpec: PASS https://example.invalid/pull/745#comment-2\n',
                       result.stdout)
 
+    def test_accepted_comment_is_found_when_the_comment_lookup_fails_four_times(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, faults=(4, TLS, True))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(state['comments']), 2)
+        calls = self.gh_calls()
+        self.assertEqual(len([c for c in calls if c[:2] == ['pr', 'comment']]), 2)
+        # The first lookup fails four times and finds the comment on its fifth attempt; the second finds it at once.
+        self.assertEqual(calls.count(['pr', 'view', '745', '--json', 'comments']), 6)
+
     def test_permanent_gh_failure_stops_with_the_original_error(self):
         self.prepare_reviews()
         for error, attempts in (('HTTP 502: Bad Gateway (https://api.github.com/graphql)', 7), (TLS, 7),

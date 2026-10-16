@@ -63,7 +63,7 @@ def comment(pr, body):
     heading = Path(body).read_text().split('\n', 1)[0]
 
     def posted():
-        found = [c['url'] for c in json.loads(gh('pr', 'view', str(pr), '--json', 'comments'))['comments']
+        found = [c['url'] for c in json.loads(gh('pr', 'view', str(pr), '--json', 'comments', wait=ADMISSION_WAIT))['comments']
                  if c['body'].split('\n', 1)[0] == heading]
         return found[-1] if found else None
 
