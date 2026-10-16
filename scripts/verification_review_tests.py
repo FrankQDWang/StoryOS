@@ -224,10 +224,31 @@ sys.exit({error!r})
         (tools / 'gh').chmod(0o755)
         self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0'
 
+    def verify_sequence(self, *checks):
+        """Put a gh before the fake gh. Each first-page check-runs call shows the next list of verify runs; the last list stays."""
+        tools = self.root / 'target/tools'
+        if not (tools / 'gh-sequence').exists():
+            (tools / 'gh').rename(tools / 'gh-sequence')
+        (self.root / 'target/sequence.json').write_text(json.dumps([[{'name': 'verify', **c, 'head_sha': self.head} for c in runs]
+                                                                   for runs in checks]))
+        (tools / 'gh').write_text(f'''#!{sys.executable}
+import json, os, sys
+from pathlib import Path
+args, sequence, live = sys.argv[1:], Path("target/sequence.json"), Path("target/live.json")
+if args[:1] == ["api"] and "/check-runs?" in args[1] and args[1].endswith("&page=1"):
+    runs = json.loads(sequence.read_text())
+    live.write_text(json.dumps({{**json.loads(live.read_text()), "checks": runs[0]}}))
+    sequence.write_text(json.dumps(runs[1:] or runs))
+os.execv(str(Path(sys.argv[0]).with_name("gh-sequence")), sys.argv)
+''')
+        (tools / 'gh').chmod(0o755)
+        self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0'
+
     def gh_calls(self):
         return json.loads((self.root / 'target/gh-calls.json').read_text())
 
-    def review_round(self, verdicts, comments=(), checks=None, faults=None, job_status='completed', failing_ps=False):
+    def review_round(self, verdicts, comments=(), checks=None, faults=None, job_status='completed', failing_ps=False,
+                     sequence=(), args=()):
         """Run the review round command with a mocked gh and a mocked Codex plugin."""
         import os
         import subprocess
@@ -281,6 +302,8 @@ else:
             (tools / 'ps').chmod(0o755)
         if faults:
             self.fault_gh(*faults)
+        if sequence:
+            self.verify_sequence(*sequence)
         home = self.root / 'target/home'
         for version in ('1.0.9', '1.0.10'):
             plugin = home / f'.claude/plugins/cache/openai-codex/codex/{version}/scripts'
@@ -288,7 +311,7 @@ else:
             (plugin / 'codex-companion.mjs').touch()
         environment = {**self.repo.environment, 'HOME': str(home)}
         result = subprocess.run([sys.executable, str(verification_candidate_tests.verification_tests.COMMAND.with_name('verification_review_round.py')),
-                                 '--pr', '745', '--executor-context', 'executor'], cwd=self.root, env=environment, capture_output=True, text=True)
+                                 '--pr', '745', '--executor-context', 'executor', *args], cwd=self.root, env=environment, capture_output=True, text=True)
         return result, json.loads(state.read_text())
 
     def test_round_refuses_without_successful_verify(self):
@@ -298,6 +321,95 @@ else:
         self.assertEqual(result.stderr, 'Review round refused: Wait for a successful verify run on the head '
                                         f'{self.head}: https://example.invalid/runs/2\n')
         self.assertEqual((state['comments'], state['node']), ([], []))
+
+    def test_round_with_wait_zero_keeps_the_refusal(self):
+        pending = {'id': 2, 'status': 'in_progress', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
+        result, state = self.review_round({}, sequence=[[pending], [{**pending, 'status': 'completed', 'conclusion': 'success'}]],
+                                          args=('--wait', '0'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stderr, 'Review round refused: Wait for a successful verify run on the head '
+                                        f'{self.head}: https://example.invalid/runs/2\n')
+        self.assertEqual((state['comments'], state['node']), ([], []))
+
+    def test_round_waits_for_a_pending_verify_run_and_then_starts(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        pending = {'id': 2, 'status': 'queued', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, args=('--wait', '60'), sequence=[
+            [{'name': 'Sourcery review', 'id': 1, 'status': 'completed', 'conclusion': 'skipped'}], [pending],
+            [{**pending, 'status': 'in_progress'}], [{**pending, 'status': 'completed', 'conclusion': 'success'}]])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['body'].split('\n')[0] for c in state['comments']],
+                         ['## Standards review, round 1: PASS', '## Spec review, round 1: PASS'])
+        self.assertEqual([line for line in result.stderr.splitlines() if line.startswith('Waiting')], [
+            f'Waiting up to 60 s for the verify run on the head {self.head}: no verify run yet',
+            f'Waiting up to 60 s for the verify run on the head {self.head}: queued https://example.invalid/runs/2',
+            f'Waiting up to 60 s for the verify run on the head {self.head}: in_progress https://example.invalid/runs/2'])
+
+    def test_failed_verify_run_stops_the_wait_with_its_link(self):
+        pending = {'id': 2, 'status': 'in_progress', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
+        result, state = self.review_round({}, args=('--wait', '60'), sequence=[
+            [pending], [{**pending, 'status': 'completed', 'conclusion': 'failure'}]])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(result.stderr.endswith(
+            f'Review round refused: The verify run on the head {self.head} completed with the conclusion failure: '
+            'https://example.invalid/runs/2\n'), result.stderr)
+        self.assertEqual((state['comments'], state['node']), ([], []))
+
+    def test_wait_command_exits_with_the_verify_conclusion(self):
+        import subprocess
+        self.prepare_reviews()
+        command = verification_candidate_tests.verification_tests.COMMAND
+        # make runs scripts/verification_reviews.py from its working directory, so a shim there runs the real command.
+        shim = self.root / 'scripts/verification_reviews.py'
+        shim.write_text(f'import runpy, sys\nsys.path.insert(0, {str(command.parent)!r})\n'
+                        f"runpy.run_path({str(command.with_name('verification_reviews.py'))!r}, run_name='__main__')\n")
+        pending = {'id': 2, 'status': 'in_progress', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
+        for runs, wait, code, error in (
+                ([[pending], [{**pending, 'status': 'completed', 'conclusion': 'success'}]], '60', 0, ''),
+                ([[pending], [{**pending, 'status': 'completed', 'conclusion': 'cancelled'}]], '60', 1,
+                 f'The verify run on the head {self.head} completed with the conclusion cancelled: https://example.invalid/runs/2\n'),
+                ([[pending]], '1', 2, f'The verify run on the head {self.head} did not complete in 1 s: '
+                                      'https://example.invalid/runs/2. Run the command again to wait again\n'),
+                ([[pending]], '0', 2, f'Wait for a successful verify run on the head {self.head}: https://example.invalid/runs/2\n')):
+            with self.subTest(conclusion=runs[-1][0]['conclusion'], wait=wait):
+                self.verify_sequence(*runs)
+                self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0.01'
+                result = self.review_cli('wait', '--pr', '745', '--wait', wait)
+                self.assertEqual(result.returncode, code, result.stderr)
+                self.assertTrue(result.stderr.endswith(f'Verify wait: {error}' if error else ''), result.stderr)
+                # make stops with exit 2 for each failed recipe, so only the direct command tells a failure from a time-out.
+                self.verify_sequence(*runs)
+                result = subprocess.run(['make', '-s', '-f', str(command.parents[1] / 'Makefile'), 'wait-verify', 'PR=745', f'WAIT={wait}'],
+                                        cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2 if code else 0, result.stderr)
+                self.assertIn(f'Verify wait: {error}' if error else f'The verify run on the head {self.head} passed.\n',
+                              result.stderr if error else result.stdout)
+
+    def test_make_targets_give_wait_as_an_argument_and_remove_it_from_the_environment(self):
+        import os
+        import subprocess
+        makefile = verification_candidate_tests.verification_tests.COMMAND.parents[1] / 'Makefile'
+        tools = self.root / 'target/make-tools'
+        tools.mkdir(parents=True)
+        # The verification input fingerprint reads the environment, so WAIT must reach the scripts only as an argument.
+        (tools / 'python3').write_text(f'#!{sys.executable}\nimport json, os, sys\n'
+                                       'print(json.dumps([sys.argv[1:], "WAIT" in os.environ, "CONTEXT" in os.environ]))\n')
+        (tools / 'python3').chmod(0o755)
+        environment = {**os.environ, 'PATH': f"{tools}{os.pathsep}{os.environ['PATH']}"}
+        for target, extra, arguments in (
+                ('review-round', ['CONTEXT=executor'], ['scripts/verification_review_round.py', '--pr', '745', '--wait', '{wait}',
+                                                        '--executor-context', 'executor']),
+                ('wait-verify', [], ['scripts/verification_reviews.py', 'wait', '--pr', '745', '--wait', '{wait}']),
+                ('verify-local', ['BASE=main', "VERIFY_ARGS=--pr 745"],
+                 ['scripts/verification.py', 'run', '--base', 'main', '--wait-verify', '{wait}', '--pr', '745', '--',
+                  'make', 'verify-local-steps'])):
+            for wait in ([], ['WAIT=0']):
+                with self.subTest(target=target, wait=wait):
+                    result = subprocess.run(['make', '-s', '-f', str(makefile), target, 'PR=745', *extra, *wait], cwd=self.root / 'target',
+                                            env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    expected = [a.replace('{wait}', '0' if wait else '1200') for a in arguments]
+                    self.assertEqual(json.loads(result.stdout), [expected, False, False])
 
     def test_pass_pass_round_posts_comments_and_imports_records(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
@@ -446,6 +558,42 @@ else:
         calls = self.gh_calls()
         self.assertTrue(any(c[0] == 'api' and c[1].endswith('/logs') for c in calls))
         self.assertEqual(min(calls.count(c) for c in calls), 3)
+
+    def test_complete_admission_waits_for_a_pending_verify_run_before_the_admission_lock(self):
+        # The environment is a verification input, so the test scale is set before the targeted result.
+        self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0'
+        self.prepare_reviews()
+        pending = {'id': 2, 'status': 'in_progress', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
+        self.verify_sequence([pending], [{**pending, 'status': 'completed', 'conclusion': 'success'}])
+        tools = self.root / 'target/tools'
+        (tools / 'gh-sequence').rename(tools / 'gh-lock')
+        # The lock probe records for each check-runs read whether a process held the admission lock.
+        (tools / 'gh-sequence').write_text(f'''#!{sys.executable}
+import fcntl, json, os, sys
+from pathlib import Path
+if "/check-runs?" in sys.argv[2]:
+    log = Path("target/lock-states.json")
+    with open("target/verification/admission.lock", "a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            state = "free"
+        except BlockingIOError:
+            state = "held"
+    log.write_text(json.dumps((json.loads(log.read_text()) if log.exists() else []) + [state]))
+os.execv(str(Path(sys.argv[0]).with_name("gh-lock")), sys.argv)
+''')
+        (tools / 'gh-sequence').chmod(0o755)
+        result = self.fixture.run_complete('--pr', '745', '--executor-context', 'executor', '--review-request', self.request_path,
+                                           '--wait-verify', '60')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'target/heavy').exists())
+        self.assertIn(f'Waiting up to 60 s for the verify run on the head {self.head}: in_progress https://example.invalid/runs/2\n',
+                      result.stderr)
+        complete = [json.loads(r.read_text()) for r in self.root.glob('target/verification/*/report.json')]
+        self.assertEqual([('wait_verify' in r, r['status']) for r in complete if r['profile'] == 'complete'], [(False, 'passed')])
+        states = json.loads((self.root / 'target/lock-states.json').read_text())
+        self.assertEqual(states[:2], ['free', 'free'])
+        self.assertEqual(set(states[2:]), {'held'})
 
     def test_comment_that_the_server_accepted_before_a_transient_failure_posts_one_time(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
