@@ -3,8 +3,9 @@ use std::path::Path;
 
 use storyos_contracts::{
     check_crosswalk, check_release1_artifacts, check_stage2_crosswalk, check_stage3_crosswalk,
-    repository_root, write_crosswalk, write_release1_artifacts, write_stage2_crosswalk,
-    write_stage3_crosswalk, write_web_asset_manifest,
+    check_stage4_crosswalk, repository_root, write_crosswalk, write_release1_artifacts,
+    write_stage2_crosswalk, write_stage3_crosswalk, write_stage4_crosswalk,
+    write_web_asset_manifest,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,12 +16,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             write_crosswalk(repo_root)?;
             write_stage2_crosswalk(repo_root)?;
             write_stage3_crosswalk(repo_root)?;
+            write_stage4_crosswalk(repo_root)?;
             write_release1_artifacts(repo_root)?;
         }
         [command] if command == "check" => {
             check_crosswalk(repo_root)?;
             check_stage2_crosswalk(repo_root)?;
             check_stage3_crosswalk(repo_root)?;
+            check_stage4_crosswalk(repo_root)?;
             check_release1_artifacts(repo_root)?;
         }
         [command, root, commit, tree] if command == "web-manifest" => {

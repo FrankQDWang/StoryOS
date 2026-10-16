@@ -128,3 +128,42 @@ archived_export_facts() {
       WHERE project.title IN ('Recovery Readable Archived', 'Recovery Archive Archived')
       ORDER BY project.title"
 }
+
+# Stage 4 model records: the global capability profiles, the standing grants, the manifest
+# disclosure grants, and the Model Attempts with their disclosure grant. Each line is a count
+# and a digest of the ordered rows.
+stage4_model_facts() {
+  facts_container=$1
+  docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT 'model_capability_profiles|' || count(*) || '|' ||
+            md5(coalesce(string_agg(row_to_json(capability)::text, ';'
+              ORDER BY row_to_json(capability)::text), ''))
+       FROM storyos.model_capability_profiles AS capability
+     UNION ALL
+     SELECT 'project_destination_grants|' || count(*) || '|' ||
+            md5(coalesce(string_agg(grant_row.grant_id || ':' || grant_row.grant_scope, ';'
+              ORDER BY grant_row.grant_id), ''))
+       FROM storyos.project_destination_grants AS grant_row
+     UNION ALL
+     SELECT 'manifest_disclosure_grants|' || count(*) || '|' ||
+            md5(coalesce(string_agg(manifest.context_assembly_manifest_id || ':' ||
+              manifest.disclosure_grant_id || ':' || manifest.disclosure_grant_scope, ';'
+              ORDER BY manifest.context_assembly_manifest_id), ''))
+       FROM storyos.context_assembly_manifests AS manifest
+      WHERE manifest.disclosure_grant_id IS NOT NULL
+     UNION ALL
+     SELECT 'model_attempts|' || count(*) || '|' ||
+            md5(coalesce(string_agg(attempt.model_attempt_id || ':' || attempt.attempt_role ||
+              ':' || attempt.dispatch_state || ':' || (attempt.payload->'disclosure_grant')::text,
+              ';' ORDER BY attempt.model_attempt_id), ''))
+       FROM storyos.model_attempts AS attempt
+      WHERE attempt.payload ? 'disclosure_grant'"
+}
+
+assert_stage4_model_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -c '|0|')" != "0" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "4" ]; then
+    echo "The recovery seed did not create each Stage 4 model record family: $1" >&2
+    exit 1
+  fi
+}
