@@ -6,7 +6,7 @@ $(PUBLIC_CHECKS):
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check $@ $(VERIFY_ARGS)
 endif
 
-.PHONY: contracts generate-contracts project-scope release-package rust-literal-guard verify verify-local verify-local-steps verify-policy verify-policy-steps verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package rust-literal-guard verify verify-local verify-local-steps verify-policy verify-policy-checks verify-policy-guards verify-policy-steps verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
@@ -22,17 +22,24 @@ rust-literal-guard:
 	$(VERIFY_STEP) rust-literal-guard -- cargo run --quiet --locked --manifest-path "$(dir $(abspath $(firstword $(MAKEFILE_LIST))))Cargo.toml" -p storyos-literal-guard -- "$(BASE)"
 
 ifneq ($(STORYOS_VERIFICATION_RUN),)
-# The GitHub verify check runs these policy steps without a Rust toolchain.
-verify-policy-steps:
-	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
-	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
-	$(VERIFY_STEP) diff-whitespace -- scripts/verify-diff-whitespace.sh
-	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
+# The fast guards run first, so that a finding stops the run before the slow steps.
+verify-policy-guards:
 	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check runs only the file mode, from the base parent to the synthetic merge."; exec python3 scripts/ste_text_guard.py files --base HEAD^1 --head HEAD; fi; \
 		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --advisory --base origin/main && exit $$files'
+	$(VERIFY_STEP) diff-whitespace -- scripts/verify-diff-whitespace.sh
 
-verify-policy: verify-policy-steps
+verify-policy-checks:
+	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
+	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
+	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
+
+# The GitHub verify check runs these policy steps without a Rust toolchain.
+verify-policy-steps: verify-policy-guards verify-policy-checks
+
+# The recipe runs in sequence, so the order stays the same under make -j.
+verify-policy: verify-policy-guards
 	$(MAKE) rust-literal-guard
+	$(MAKE) verify-policy-checks
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs
