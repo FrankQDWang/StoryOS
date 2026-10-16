@@ -356,7 +356,13 @@ else:
         self.assertEqual((state['comments'], state['node']), ([], []))
 
     def test_wait_command_exits_with_the_verify_conclusion(self):
+        import subprocess
         self.prepare_reviews()
+        command = verification_candidate_tests.verification_tests.COMMAND
+        # make runs scripts/verification_reviews.py from its working directory, so a shim there runs the real command.
+        shim = self.root / 'scripts/verification_reviews.py'
+        shim.write_text(f'import runpy, sys\nsys.path.insert(0, {str(command.parent)!r})\n'
+                        f"runpy.run_path({str(command.with_name('verification_reviews.py'))!r}, run_name='__main__')\n")
         pending = {'id': 2, 'status': 'in_progress', 'conclusion': None, 'html_url': 'https://example.invalid/runs/2'}
         for runs, wait, code, error in (
                 ([[pending], [{**pending, 'status': 'completed', 'conclusion': 'success'}]], '60', 0, ''),
@@ -371,6 +377,13 @@ else:
                 result = self.review_cli('wait', '--pr', '745', '--wait', wait)
                 self.assertEqual(result.returncode, code, result.stderr)
                 self.assertTrue(result.stderr.endswith(f'Verify wait: {error}' if error else ''), result.stderr)
+                # make stops with exit 2 for each failed recipe, so only the direct command tells a failure from a time-out.
+                self.verify_sequence(*runs)
+                result = subprocess.run(['make', '-s', '-f', str(command.parents[1] / 'Makefile'), 'wait-verify', 'PR=745', f'WAIT={wait}'],
+                                        cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2 if code else 0, result.stderr)
+                self.assertIn(f'Verify wait: {error}' if error else f'The verify run on the head {self.head} passed.\n',
+                              result.stderr if error else result.stdout)
 
     def test_make_targets_give_wait_as_an_argument_and_remove_it_from_the_environment(self):
         import os

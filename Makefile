@@ -157,7 +157,8 @@ verify-targeted:
 review-round:
 	@env -u CONTEXT -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" --wait "$(WAIT)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
 
-# Exit 0 when a verify run of the PR head passed, 1 when it failed or was cancelled, and 2 on a time-out.
+# Exit 0 when a verify run of the PR head passed. make gives 2 for each failed recipe, so the direct script command
+# tells a failed or cancelled run (exit 1) from a time-out (exit 2).
 wait-verify:
 	@env -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_reviews.py wait --pr "$(PR)" --wait "$(WAIT)"
 

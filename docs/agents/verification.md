@@ -49,7 +49,7 @@ the PR with an ordinary merge commit.
 
 1. Open the PR. On the clean candidate, run `make review-round PR=<pr> [CONTEXT=<executor context>]`. After the current `verify` succeeds, it writes the request and starts one new read-only Codex plugin thread for each axis with the [review prompt](review-prompt.md). Then it posts the two verdict comments, imports the two records, and prints the next action. When Codex implements, a different agent tool or a separate Claude Code session reviews each axis with the same prompt. The executor posts and imports the same verdicts and records.
 
-   The command first waits up to 20 minutes for the `verify` run of the head. `WAIT=<seconds>` sets the wait, and `WAIT=0` refuses at once. A failed or cancelled run stops the wait and shows its link. For other commands, `make wait-verify PR=<pr>` waits in the same way. It exits 0 when the run passes, 1 when it fails or is cancelled, and 2 when the wait ends first.
+   The command first waits up to 20 minutes for the `verify` run of the head. `WAIT=<seconds>` sets the wait, and `WAIT=0` refuses at once. A failed or cancelled run stops the wait and shows its link. For other commands, `make wait-verify PR=<pr>` waits in the same way. It exits 0 when the run passes and 2 in the other cases. The direct command `python3 scripts/verification_reviews.py wait --pr <pr> --wait <seconds>` exits 1 when the run fails or is cancelled, and 2 when the wait ends first.
 
    After the two review jobs, the command stops each Codex broker of the worktree and its app server, also when a job fails.
 
