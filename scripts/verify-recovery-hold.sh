@@ -213,6 +213,8 @@ else
   acceptance_condition_count=6
 fi
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
+stage4_before=$(stage4_model_facts "$primary")
+assert_stage4_model_facts_present "$stage4_before"
 stop_recovery_drill_server
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
@@ -723,6 +725,10 @@ fi
 acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 if [ "$acceptance_before" != "$acceptance_after" ]; then
   echo "Restored Acceptance conditions or immutable evidence changed" >&2
+  exit 1
+fi
+if [ "$(stage4_model_facts "$hold")" != "$stage4_before" ]; then
+  echo "Restored Stage 4 model records changed" >&2
   exit 1
 fi
 export STORYOS_PHYSICAL_DRILL=1
