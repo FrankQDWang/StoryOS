@@ -164,9 +164,9 @@ export async function verifyProductionSelectionReference(context: BrowserContext
 }
 
 /**
- * A Chapter that the author creates after the first one gives a selection the add control and its label
- * with no reload, also after one lost outline response (#1175). The Project has no assistance, so it writes
- * only Receipts of the outline and the editor.
+ * A selection in a second new Chapter gets the add control and its label with no reload. This is also true
+ * after one lost outline response (#1175). The Project has no assistance, so it writes only Receipts of the
+ * outline and the editor.
  */
 async function verifyNewChapterSelection(context: BrowserContext, origin: string) {
   const page = await context.newPage();
