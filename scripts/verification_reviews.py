@@ -18,7 +18,7 @@ GUARDS = ('ste-text-guard', 'rust-literal-guard', 'diff-whitespace')
 
 
 def api(path):
-    return json.loads(verification_github.gh('api', path))
+    return json.loads(verification_github.gh('api', path, wait=verification_github.ADMISSION_WAIT))
 
 
 def binding(root, revision, base, head, pr, purpose):
@@ -38,7 +38,8 @@ def sentinel(route, head, base, tree):
     if not passed:
         raise ValueError('A successful synthetic-merge verify run on the head is required')
     for check in sorted(passed, key=lambda c: c['id'], reverse=True):
-        logs = verification_github.gh('api', f"{route}/actions/jobs/{check['id']}/logs", '--allow-escape-sequences')
+        logs = verification_github.gh('api', f"{route}/actions/jobs/{check['id']}/logs", '--allow-escape-sequences',
+                                       wait=verification_github.ADMISSION_WAIT)
         run_tree = tree
         if run_tree is None:
             trees = set(re.findall(r'Synthetic merge tree: ([0-9a-f]{40})(?:\r?\n|$)', logs))
@@ -54,11 +55,11 @@ def sentinel(route, head, base, tree):
 def current(root, pr, purpose):
     if not pr or purpose not in {'candidate', 'post-merge-different-tree', 'manual-linux'}:
         raise ValueError('Use a PR and an explicit candidate, post-merge-different-tree, or manual-linux purpose')
-    repository = json.loads(verification_github.gh('repo', 'view', '--json', 'nameWithOwner', cwd=root))['nameWithOwner']
+    repository = json.loads(verification_github.gh('repo', 'view', '--json', 'nameWithOwner', cwd=root, wait=verification_github.ADMISSION_WAIT))['nameWithOwner']
     route = f'repos/{repository}'
     pull = api(f'{route}/pulls/{pr}')
     ref = 'refs/storyos/review-candidate'
-    verification.git(root, 'fetch', '--no-tags', 'origin', f'+{pull["merge_commit_sha"] if pull.get("merged") else f"refs/pull/{pr}/merge"}:{ref}')
+    verification_github.fetch(root, '--no-tags', 'origin', f'+{pull["merge_commit_sha"] if pull.get("merged") else f"refs/pull/{pr}/merge"}:{ref}')
     head, base = pull['head']['sha'], pull['base']['sha']
     if verification.git(root, 'rev-list', '--parents', '-n', '1', ref).split()[1:] != [base, head]:
         raise ValueError('Review candidate must match the PR synthetic merge parents')

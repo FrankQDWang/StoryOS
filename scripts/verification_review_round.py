@@ -20,7 +20,10 @@ ROUNDS = 3
 BROKER_COMMAND = 'openai-codex/codex/.*/scripts/app-server-broker.mjs'
 WAIT_MS = 600000
 WAITS = 6
-gh = verification_github.gh
+
+
+def gh(*args):
+    return verification_github.gh(*args, wait=verification_github.ADMISSION_WAIT)
 
 
 def codex_scripts():
@@ -142,7 +145,7 @@ def run(root, pr, executor):
     if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
         # A passed round without a recorded tree, or with the tree of the current synthetic merge, stays final.
         ref = 'refs/storyos/review-candidate'
-        verification.git(root, 'fetch', '--no-tags', 'origin', f'+refs/pull/{pr}/merge:{ref}')
+        verification_github.fetch(root, '--no-tags', 'origin', f'+refs/pull/{pr}/merge:{ref}')
         tree = verification.git(root, 'rev-parse', f'{ref}^{{tree}}')
         if not trees[number - 1] or tree in trees[number - 1]:
             raise ValueError(f'Round {number - 1} passed on the two axes and the candidate tree {tree} did not change. '
