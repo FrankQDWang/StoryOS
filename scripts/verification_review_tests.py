@@ -8,6 +8,8 @@ import unittest
 
 import verification_candidate_tests
 
+TLS = 'Get "https://api.github.com/repos/fixture/repo": net/http: TLS handshake timeout'
+
 
 class ReviewAdmissionTests(unittest.TestCase):
     def setUp(self):
@@ -423,7 +425,27 @@ else:
                                                                  'https://example.invalid/pull/745#comment-2'])
         calls = self.gh_calls()
         self.assertEqual(({c[0] for c in calls}, min(calls.count(c) for c in calls)), ({'api', 'issue', 'pr', 'repo'}, 3))
-        self.assertIn('gh repo view: transient failure, retry 2 of 3 in 0 s: Post "https://api.github.com/graphql": EOF\n', result.stderr)
+        self.assertIn('gh repo view: transient failure, retry 2 of 6 in 0 s: Post "https://api.github.com/graphql": EOF\n', result.stderr)
+
+    def test_round_completes_when_each_gh_command_fails_two_times_on_a_tls_timeout(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, faults=(2, TLS))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(state['comments']), 2)
+        self.assertEqual(min(self.gh_calls().count(c) for c in self.gh_calls()), 3)
+        self.assertIn(f'gh repo view: transient failure, retry 2 of 6 in 0 s: {TLS}\n', result.stderr)
+
+    def test_complete_admission_completes_when_each_gh_command_fails_two_times_on_a_tls_timeout(self):
+        # The environment is a verification input, so the retry scale is set before the targeted result.
+        self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0'
+        self.prepare_reviews()
+        self.fault_gh(2, TLS)
+        result = self.complete()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'target/heavy').exists())
+        calls = self.gh_calls()
+        self.assertTrue(any(c[0] == 'api' and c[1].endswith('/logs') for c in calls))
+        self.assertEqual(min(calls.count(c) for c in calls), 3)
 
     def test_comment_that_the_server_accepted_before_a_transient_failure_posts_one_time(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
@@ -435,9 +457,21 @@ else:
         self.assertIn('Standards: PASS https://example.invalid/pull/745#comment-1\nSpec: PASS https://example.invalid/pull/745#comment-2\n',
                       result.stdout)
 
+    def test_accepted_comment_is_found_when_the_comment_lookup_fails_four_times(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, faults=(4, TLS, True))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(state['comments']), 2)
+        calls = self.gh_calls()
+        self.assertEqual(len([c for c in calls if c[:2] == ['pr', 'comment']]), 2)
+        # The first lookup fails four times and finds the comment on its fifth attempt; the second finds it at once.
+        self.assertEqual(calls.count(['pr', 'view', '745', '--json', 'comments']), 6)
+
     def test_permanent_gh_failure_stops_with_the_original_error(self):
         self.prepare_reviews()
-        for error, attempts in (('HTTP 502: Bad Gateway (https://api.github.com/graphql)', 4),
+        for error, attempts in (('HTTP 502: Bad Gateway (https://api.github.com/graphql)', 7), (TLS, 7),
+                                ('LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to api.github.com:443', 7),
+                                ('Get "https://api.github.com/graphql": proxyconnect tcp: dial tcp 127.0.0.1:7890: i/o timeout', 7),
                                 ('HTTP 404: Not Found (https://api.github.com/repos/fixture/repo/pulls/745)', 1),
                                 ('HTTP 401: Bad credentials (https://api.github.com/graphql)', 1)):
             self.fault_gh(99, error)
