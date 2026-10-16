@@ -15,6 +15,8 @@ every agent client. The main flow is in this guide. The reference sections are i
    [rejected-word list](ste-rejected-words.json). It also runs the whitespace check and the
    Rust literal guard on added Rust lines with the [exemption list](rust-literal-exemptions.json).
    The same guard refuses each `tracing` form in `crates/` that can record author text (ADR 0047).
+   `make verify-policy` runs `ste-text-guard`, `diff-whitespace`, and `rust-literal-guard` first and
+   stops at the first failure, so `make verify-changed` stops before its product checks.
 
    `make verify-status` shows the change size and the module size as advisory. It also
    shows two prerequisites. `cleanTree` needs a clean worktree for a check that requires

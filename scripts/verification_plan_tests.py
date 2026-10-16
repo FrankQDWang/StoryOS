@@ -3,12 +3,36 @@
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
 import unittest
 
 import verification_tests
+
+
+MAKEFILE = Path(__file__).resolve().parent.parent / "Makefile"
+
+
+class PolicyOrderTests(unittest.TestCase):
+    def steps(self, target, **environment):
+        names = ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
+        result = subprocess.run(["make", "--no-print-directory", "-n", "-f", str(MAKEFILE), target],
+                                cwd=MAKEFILE.parent, capture_output=True, text=True,
+                                env={**{k: v for k, v in os.environ.items() if k not in names},
+                                     "STORYOS_VERIFICATION_RUN": "dry-run", **environment})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return re.findall(r"verification\.py step ([a-z0-9-]+) --", result.stdout)
+
+    def test_fast_guards_run_before_the_slow_policy_steps(self):
+        self.assertEqual(self.steps("verify-policy"), [
+            "ste-text-guard", "diff-whitespace", "rust-literal-guard",
+            "input-ownership", "project-inputs", "verification-tests"])
+
+    def test_pull_request_check_keeps_its_steps_without_the_rust_guard(self):
+        self.assertEqual(self.steps("verify-pr", STORYOS_PR_BASE_SHA="dry-run"), [
+            "ste-text-guard", "diff-whitespace", "input-ownership", "project-inputs", "verification-tests"])
 
 
 class FilePlanTests(unittest.TestCase):
@@ -200,6 +224,37 @@ print('executed selected files')
             self.assertEqual(result.returncode, 0, result.stderr)
             launches.append((self.root / "target/launches").read_text())
         self.assertEqual(launches, ["x", "xx", "xxx", "xxx", "xxxx"])
+
+    def test_text_guard_finding_stops_the_daily_run_before_the_product_checks(self):
+        self.install_runner_fixture()
+        scripts = Path(__file__).resolve().parent
+        (self.root / "Makefile").write_text(MAKEFILE.read_text())
+        for name in ("verification.py", "ste_text_guard.py"):
+            (self.root / "scripts" / name).write_text(
+                f"import runpy,sys\nsys.path.insert(0, {str(scripts)!r})\n"
+                f"runpy.run_path({str(scripts / name)!r}, run_name='__main__')\n")
+        (self.root / "docs/agents/ste-rejected-words.json").write_text(
+            (scripts.parent / "docs/agents/ste-rejected-words.json").read_text())
+        (self.root / "GLOSSARY.md").write_text("# Glossary\n\nThe terms are in the area files.\n")
+        (self.root / "docs/glossary").mkdir()
+        (self.root / "docs/glossary/fixture.md").write_text("# Fixture\n\n**Fixture**:\nA test term.\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Use the repository Makefile and text guard.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        self.repo.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.add_test()
+        (self.root / "docs/notes.md").write_text("# Notes\n\n" + " ".join(["word"] * 30) + ".\n")
+        self.repo.git("add", "docs/notes.md")
+        result = self.cli("run")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("executed selected files", result.stdout)
+        lines = result.stdout.splitlines()
+        self.assertIn("The policy check failed at ste-text-guard. The product checks did not run.", lines[:4],
+                      result.stdout + result.stderr)
+        report = self.repo.report()
+        self.assertEqual([step["stage"] for step in report["steps"]], ["policy", "ste-text-guard"])
+        self.assertEqual(report["failed_steps"], ["ste-text-guard"])
 
     def test_dirty_package_obligation_refuses_before_any_step_record(self):
         self.install_runner_fixture()

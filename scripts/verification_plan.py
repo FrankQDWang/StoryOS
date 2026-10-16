@@ -126,6 +126,8 @@ def execute_plan(root, plan):
     directory = Path(os.environ["STORYOS_VERIFICATION_RUN"])
     cargo_done = package_done = database_done = False
     os.environ["CARGO_BUILD_JOBS"] = str(plan["workers"])
+    if not plan["checks"] or plan["checks"][0]["group"] != "policy":
+        raise ValueError("The policy check must run before the product checks")
     for check in plan["checks"]:
         group = check["group"]
         if check.get("status") == "pending":
@@ -180,6 +182,14 @@ def execute_plan(root, plan):
             raise ValueError(f"Unsupported execution group: {group}")
         code = verification.step(root, group.replace(":", "-").replace("_", "-").lower(), command,
                                  node_id="check:cargo" if group.startswith("cargo:") else "check:" + group)
+        if code and group == "policy":
+            steps = sorted((json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")),
+                           key=lambda step: step["started_monotonic"])
+            parents = {step.get("parent") for step in steps}
+            failed = [step["stage"] for step in steps
+                      if step["status"] not in {"passed", "cached"} and step["id"] not in parents]
+            print(f"The policy check failed at {', '.join(failed) or 'an unknown step'}. "
+                  "The product checks did not run.", flush=True)
         if code:
             return code
         if group in {"node-contract", "browser-source"}:
