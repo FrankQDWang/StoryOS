@@ -41,6 +41,8 @@ import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
+import { readManuscriptTree } from "./manuscript-tree-read.ts";
+import { relabelDraftReferences } from "./selection-reference-draft.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
@@ -155,12 +157,16 @@ function ProjectReadyView({
     }).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
   useEffect(() => {
-    void getManuscriptTree({
+    void readManuscriptTree({
       baseUrl,
       projectId: state.project.project.project_id,
       fetchImpl,
     }).then(setTree).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
+  // A Chapter that the author creates, moves, renames, or removes changes the Chapter part of the draft labels.
+  useEffect(() => {
+    if (tree !== undefined) relabelDraftReferences(state.project.project_scope, tree);
+  }, [tree, state.project.project_scope]);
 
   // A read-only editor has no writing controller and no input to wait for.
   const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
@@ -351,7 +357,7 @@ function ProjectReadyView({
   };
   onEditorFailureRef.current = onEditorFailure;
   const refreshTree = () => {
-    void getManuscriptTree({
+    void readManuscriptTree({
       baseUrl,
       projectId: state.project.project.project_id,
       fetchImpl,

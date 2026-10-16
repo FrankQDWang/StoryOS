@@ -160,4 +160,68 @@ export async function verifyProductionSelectionReference(context: BrowserContext
   } finally {
     await page.close();
   }
+  await verifyNewChapterSelection(context, origin);
+}
+
+/**
+ * A selection in a second new Chapter gets the add control and its label with no reload. This is also true
+ * after one lost outline response (#1175). The Project has no assistance, so it writes only Receipts of the
+ * outline and the editor.
+ */
+async function verifyNewChapterSelection(context: BrowserContext, origin: string) {
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1487, height: 1058 });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.setDefaultTimeout(10_000);
+  try {
+    assert.equal((await page.goto(origin))?.status(), 200);
+    await page.locator('#app[data-boot-state="protected-ready"]').waitFor();
+    await page.locator('input[name="title"]').fill(`New Chapter reference ${uuidV7()}`);
+    await page.locator('input[name="title"]').press("Enter");
+    await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
+    await page.locator("[data-add-chapter]").click();
+    await page.locator("[data-create-volume-action]").click();
+    await page.locator('input[name="volume-title"]').fill("渡口卷");
+    await page.locator('input[name="volume-title"]').press("Enter");
+    const createChapter = async (title: string) => {
+      await page.locator("[data-add-chapter]").click();
+      await page.locator('[data-chapter-placement="append"]').click();
+      await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill(title);
+      await page.locator('input[name="chapter-title"]').press("Enter");
+    };
+    const saved = page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+    const typeInEditor = async (text: string) => {
+      const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
+      await editor.click();
+      await page.keyboard.insertText(text);
+      await saved.waitFor();
+    };
+    await createChapter("渡口");
+    await expect(page.locator("h2")).toHaveText("渡口");
+    await typeInEditor(PARAGRAPHS[0]!);
+    await createChapter("灯塔");
+    const newChapter = page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]', { hasText: "灯塔" });
+    await newChapter.waitFor();
+    // The workspace of the new Chapter loses the response of its first outline read. Before #1175 the
+    // control then stayed absent until a reload.
+    let lostTreeRead = false;
+    await page.route((url) => url.pathname.endsWith("/manuscript/tree"), async (route) => {
+      if (lostTreeRead) return route.continue();
+      lostTreeRead = true;
+      return route.abort("failed");
+    });
+    await newChapter.click();
+    await expect(page.locator("h2")).toHaveText("灯塔");
+    await typeInEditor("海上起雾。");
+    await page.keyboard.press("Home");
+    for (let index = 0; index < 2; index += 1) await page.keyboard.press("Shift+ArrowRight");
+    await page.locator("[data-add-selection-reference]").click();
+    await expect(page.locator("[data-selection-reference-label]")).toHaveCount(1);
+    await expect(page.locator('[data-selection-reference-label="第 2 章 灯塔（第 1 段）"]')).toHaveCount(1);
+    assert.equal(lostTreeRead, true);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
 }
