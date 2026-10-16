@@ -193,7 +193,7 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 
 ## Observations of #396
 
-- In the rerun, the "添加到对话" control did not show for a selection in the Chapter that the author had just created and typed. After a page reload it showed. This was seen once and its cause was not examined. Reported to the coordinator.
+- In the rerun, the "添加到对话" control did not show for a selection in the Chapter that the author had just created and typed. After a page reload it showed. This was seen once and its cause was not examined. The coordinator opened [#1175](https://github.com/FrankQDWang/StoryOS/issues/1175); the author decided that it is fixed before Stage 4 closes.
 - A malformed JSON reply becomes an Advisory. This is contract behavior; the UX follow-up is #1145. Not blocking.
 - Outline selection was read-only by Stage 2 design; the UX follow-up #1146 was delivered on `main` `020e5575`. Since then, a click on a Chapter makes it current, and the "设为当前章节" menu item is removed. This journey ran before `020e5575` and used "设为当前章节". Steps 4 and 7 do not run again: #1146 changes only how the author changes the current Chapter. The Proposal flow and the editor flow with no model destination did not change.
 
