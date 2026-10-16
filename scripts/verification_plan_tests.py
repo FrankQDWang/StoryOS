@@ -20,7 +20,8 @@ class PolicyOrderTests(unittest.TestCase):
         names = ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
         result = subprocess.run(["make", "--no-print-directory", "-n", "-f", str(MAKEFILE), target],
                                 cwd=MAKEFILE.parent, capture_output=True, text=True,
-                                env={**{k: v for k, v in os.environ.items() if k not in names},
+                                env={**{k: v for k, v in os.environ.items()
+                                        if k not in names and not k.startswith("STORYOS_PR_")},
                                      "STORYOS_VERIFICATION_RUN": "dry-run", **environment})
         self.assertEqual(result.returncode, 0, result.stderr)
         return re.findall(r"verification\.py step ([a-z0-9-]+) --", result.stdout)
@@ -246,6 +247,8 @@ print('executed selected files')
         self.add_test()
         (self.root / "docs/notes.md").write_text("# Notes\n\n" + " ".join(["word"] * 30) + ".\n")
         self.repo.git("add", "docs/notes.md")
+        # The GitHub verify check sets the pull-request variables, and they select another text guard mode.
+        self.repo.environment = {k: v for k, v in self.repo.environment.items() if not k.startswith("STORYOS_PR_")}
         result = self.cli("run")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("executed selected files", result.stdout)
