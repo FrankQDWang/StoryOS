@@ -5,7 +5,7 @@ import type { ProjectScope, SelectionReference }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { readManuscriptParagraphs } from "./manuscript-doc.ts";
 import {
-  candidateRange, candidateTextReference, chapterTextReference, formatReferenceLabel, mapReferenceRange,
+  candidateRange, candidateTextReference, chapterLabel, chapterTextReference, formatReferenceLabel, mapReferenceRange,
   mergeReferences, referenceLabel, referenceRange, SELECTION_REFERENCE_LIMIT, type CandidateTarget,
   type CandidateTextReference, type ChapterOrder, type ChapterTextReference, type ReferenceLabel,
 } from "./selection-reference.ts";
@@ -126,6 +126,19 @@ export function clearDraftReferences(scope: ProjectScope, keys: readonly string[
 export function setRunReferences(scope: ProjectScope, run: SelectionReference[]): void {
   const draft = read(scope);
   if (JSON.stringify(draft.run) !== JSON.stringify(run)) write(scope, { ...draft, run });
+}
+
+/**
+ * Gives the draft labels the Chapter number and title of the tree. The references and their parts do not
+ * change. The label of a Chapter that is not in the tree stays.
+ */
+export function relabelDraftReferences(scope: ProjectScope, tree: ChapterOrder): void {
+  const draft = read(scope);
+  const entries = draft.entries.map((entry) => {
+    const chapter = chapterLabel(tree, entry.reference.chapter_id);
+    return chapter === undefined || chapter === entry.label.chapter ? entry : { ...entry, label: { ...entry.label, chapter } };
+  });
+  if (entries.some((entry, index) => entry !== draft.entries[index])) write(scope, { ...draft, entries });
 }
 
 export function draftLabels(entries: readonly DraftReference[]): string[] {

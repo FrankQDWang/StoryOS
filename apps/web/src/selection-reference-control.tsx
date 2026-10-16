@@ -63,6 +63,8 @@ export function AddReferenceControl({ editor, source, tracked }: {
     };
     editor.on("selectionUpdate", update);
     editor.on("focus", update);
+    // A new tree or Revision can give a label to the selection that is already there.
+    update();
     editor.on("blur", hide);
     editor.view.dom.addEventListener("copy", copy);
     globalThis.addEventListener("scroll", update, true);

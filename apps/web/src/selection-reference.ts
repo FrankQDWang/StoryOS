@@ -247,15 +247,21 @@ export function referenceLabel(tree: ChapterOrder, blocks: readonly ManuscriptPa
     reference.end.manuscript_block_id);
 }
 
-function blockLabel(tree: ChapterOrder, blocks: readonly ManuscriptParagraph[], chapterId: string,
-  firstId: string, lastId: string): ReferenceLabel | undefined {
+/** The Chapter part of a label, for example 「第 3 章 渡口」. A Chapter that is not in the tree has none. */
+export function chapterLabel(tree: ChapterOrder, chapterId: string): string | undefined {
   const chapters = tree.volumes.flatMap((volume) => volume.chapters);
   const index = chapters.findIndex((chapter) => chapter.chapter_id === chapterId);
+  if (index < 0) return undefined;
+  const title = chapters[index]!.title;
+  return title.length > 0 ? `第 ${index + 1} 章 ${title}` : `第 ${index + 1} 章`;
+}
+
+function blockLabel(tree: ChapterOrder, blocks: readonly ManuscriptParagraph[], chapterId: string,
+  firstId: string, lastId: string): ReferenceLabel | undefined {
+  const chapter = chapterLabel(tree, chapterId);
   const first = blocks.findIndex((block) => block.manuscript_block_id === firstId);
   const last = blocks.findIndex((block) => block.manuscript_block_id === lastId);
-  if (index < 0 || first < 0 || last < first) return undefined;
-  const title = chapters[index]!.title;
-  const chapter = title.length > 0 ? `第 ${index + 1} 章 ${title}` : `第 ${index + 1} 章`;
+  if (chapter === undefined || first < 0 || last < first) return undefined;
   const numbers: number[] = [];
   let paragraph = 0;
   blocks.forEach((block, position) => {
