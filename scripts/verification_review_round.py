@@ -11,6 +11,7 @@ import sys
 
 import verification
 import verification_github
+import verification_reviews
 
 SCRIPTS = Path(__file__).resolve().parent
 TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
@@ -75,17 +76,6 @@ def process_directory(pid):
         return next((os.path.realpath(line[1:]) for line in listed.stdout.splitlines() if line.startswith('n')), None)
 
 
-def verify_ready(route, head):
-    checks, page = [], 1
-    while len(checks) == 100 * (page - 1):
-        checks += json.loads(gh('api', f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page={page}'))['check_runs']
-        page += 1
-    runs = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head]
-    if not any(c.get('status') == 'completed' and c.get('conclusion') == 'success' for c in runs):
-        links = ', '.join(c.get('html_url') or str(c['id']) for c in runs) or 'no verify run yet'
-        raise ValueError(f'Wait for a successful verify run on the head {head}: {links}')
-
-
 def contract(pull, directory):
     parts = [f"# Pull request\n\n{pull['body']}"]
     for issue in pull['closingIssuesReferences']:
@@ -132,7 +122,7 @@ def comment(axis, number, verdict, context, request):
             f"### Evidence\n\n{listed(verdict['evidence'], numbered=False)}\n")
 
 
-def run(root, pr, executor):
+def run(root, pr, executor, wait):
     route = 'repos/' + json.loads(gh('repo', 'view', '--json', 'nameWithOwner'))['nameWithOwner']
     pull = json.loads(gh('pr', 'view', str(pr), '--json', 'body,closingIssuesReferences,comments,headRefOid'))
     rounds, trees = {}, {}
@@ -164,7 +154,7 @@ def run(root, pr, executor):
     if number > ROUNDS:
         raise ValueError(f'PR {pr} had {ROUNDS} review rounds. Send the open findings to the coordinator session; '
                          'it decides the next step')
-    verify_ready(route, pull['headRefOid'])
+    verification_reviews.wait_verify(route, pull['headRefOid'], wait)
     reviews = SCRIPTS / 'verification_reviews.py'
     path = Path(subprocess.check_output([sys.executable, str(reviews), 'request', '--pr', str(pr),
                                          '--executor-context', executor], text=True, cwd=root).strip())
@@ -205,10 +195,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pr', type=int, required=True)
     parser.add_argument('--executor-context')
+    parser.add_argument('--wait', type=int, default=0, help='the seconds to wait for the verify run of the head')
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), 'rev-parse', '--show-toplevel'))
-        run(root, args.pr, args.executor_context or f'claude-pr{args.pr}')
+        run(root, args.pr, args.executor_context or f'claude-pr{args.pr}', args.wait)
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Review round refused: {error}\n')
 

@@ -2,9 +2,11 @@
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 import verification
@@ -15,6 +17,12 @@ import verification_status
 
 POLICY = 'docs/agents/verification-policy.json'
 GUARDS = ('ste-text-guard', 'rust-literal-guard', 'diff-whitespace')
+# The pause in seconds between two reads of the verify runs of a head.
+POLL = 20
+
+
+class VerifyTimeout(ValueError):
+    """No verify run on the head completed in the wait."""
 
 
 def api(path):
@@ -28,16 +36,51 @@ def binding(root, revision, base, head, pr, purpose):
             'scope': verification.git(root, 'diff', '--name-status', base, revision, '--')}
 
 
-def sentinel(route, head, base, tree):
+def verify_runs(route, head):
+    """The verify check runs of the head, newest first."""
     checks, page = [], 1
     while len(checks) == 100 * (page - 1):
         checks += api(f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page={page}')['check_runs']
         page += 1
-    passed = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head
-              and c.get('status') == 'completed' and c.get('conclusion') == 'success']
-    if not passed:
+    return sorted((c for c in checks if c['name'] == 'verify' and c['head_sha'] == head), key=lambda c: c['id'], reverse=True)
+
+
+def passed(check):
+    return check.get('status') == 'completed' and check.get('conclusion') == 'success'
+
+
+def wait_verify(route, head, seconds):
+    """Return when a verify run on the head passed. Wait up to `seconds` while the newest run is queued or running.
+
+    A completed newest run without success stops the wait. Zero seconds reads the runs one time."""
+    deadline, shown = time.monotonic() + seconds, None
+    while True:
+        runs = verify_runs(route, head)
+        if any(passed(c) for c in runs):
+            return
+        completed = bool(runs) and runs[0].get('status') == 'completed'
+        link = runs[0].get('html_url') or str(runs[0]['id']) if runs else 'no verify run yet'
+        if not seconds:
+            links = ', '.join(c.get('html_url') or str(c['id']) for c in runs) or 'no verify run yet'
+            raise (ValueError if completed else VerifyTimeout)(f'Wait for a successful verify run on the head {head}: {links}')
+        if completed:
+            raise ValueError(f"The verify run on the head {head} completed with the conclusion {runs[0].get('conclusion')}: {link}")
+        if time.monotonic() >= deadline:
+            raise VerifyTimeout(f'The verify run on the head {head} did not complete in {seconds} s: {link}. '
+                                'Run the command again to wait again')
+        state = f"{runs[0].get('status')} {link}" if runs else link
+        if state != shown:
+            print(f'Waiting up to {seconds} s for the verify run on the head {head}: {state}', file=sys.stderr, flush=True)
+            shown = state
+        # The test scale of the retry helper also shortens the poll pause.
+        time.sleep(min(POLL * float(os.environ.get('STORYOS_GH_RETRY_SECONDS', '1')), max(0, deadline - time.monotonic())))
+
+
+def sentinel(route, head, base, tree):
+    runs = [c for c in verify_runs(route, head) if passed(c)]
+    if not runs:
         raise ValueError('A successful synthetic-merge verify run on the head is required')
-    for check in sorted(passed, key=lambda c: c['id'], reverse=True):
+    for check in runs:
         logs = verification_github.gh('api', f"{route}/actions/jobs/{check['id']}/logs", '--allow-escape-sequences',
                                        wait=verification_github.ADMISSION_WAIT)
         run_tree = tree
@@ -52,11 +95,23 @@ def sentinel(route, head, base, tree):
     raise ValueError('No successful verify run covers the current synthetic merge')
 
 
+def repository(root):
+    return 'repos/' + json.loads(verification_github.gh('repo', 'view', '--json', 'nameWithOwner', cwd=root,
+                                                         wait=verification_github.ADMISSION_WAIT))['nameWithOwner']
+
+
+def wait_for_pr(root, pr, seconds):
+    """Wait for a verify run of the current PR head, and return the head."""
+    route = repository(root)
+    head = api(f'{route}/pulls/{pr}')['head']['sha']
+    wait_verify(route, head, seconds)
+    return head
+
+
 def current(root, pr, purpose):
     if not pr or purpose not in {'candidate', 'post-merge-different-tree', 'manual-linux'}:
         raise ValueError('Use a PR and an explicit candidate, post-merge-different-tree, or manual-linux purpose')
-    repository = json.loads(verification_github.gh('repo', 'view', '--json', 'nameWithOwner', cwd=root, wait=verification_github.ADMISSION_WAIT))['nameWithOwner']
-    route = f'repos/{repository}'
+    route = repository(root)
     pull = api(f'{route}/pulls/{pr}')
     ref = 'refs/storyos/review-candidate'
     verification_github.fetch(root, '--no-tags', 'origin', f'+{pull["merge_commit_sha"] if pull.get("merged") else f"refs/pull/{pr}/merge"}:{ref}')
@@ -185,9 +240,15 @@ def main():
     entry = sub.add_parser('import')
     entry.add_argument('--request', type=Path, required=True)
     entry.add_argument('--record', type=Path, required=True)
+    waiting = sub.add_parser('wait', help='exit 0 when a verify run of the PR head passed, 1 when it failed, 2 on a time-out')
+    waiting.add_argument('--pr', type=int, required=True)
+    waiting.add_argument('--wait', type=int, required=True, help='the seconds to wait')
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), 'rev-parse', '--show-toplevel'))
+        if args.action == 'wait':
+            print(f'The verify run on the head {wait_for_pr(root, args.pr, args.wait)} passed.')
+            return
         if args.action == 'request':
             candidate, verify = current(root, args.pr, args.purpose)
             value = {'version': 1, 'candidate': candidate, 'verify': {k: v for k, v in verify.items() if k != 'check_id'},
@@ -205,7 +266,8 @@ def main():
         verification.write_json(path, value)
         print(path)
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
-        parser.exit(1, f'Review refused: {error}\n')
+        parser.exit(2 if isinstance(error, VerifyTimeout) else 1,
+                    f"{'Verify wait' if args.action == 'wait' else 'Review refused'}: {error}\n")
 
 
 if __name__ == '__main__':

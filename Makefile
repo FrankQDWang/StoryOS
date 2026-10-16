@@ -11,6 +11,9 @@ endif
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
 VERIFY_ARGS ?=
+# The seconds that review-round, wait-verify, and verify-local with a review request wait for the GitHub verify run.
+# The verification input fingerprint reads the environment, so the recipes remove WAIT and give it as an argument.
+WAIT ?= 1200
 verify-plan:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py summary --format text --base "$(BASE)" $(VERIFY_ARGS)
 
@@ -68,7 +71,7 @@ endif
 generate-contracts:
 	python3 scripts/verification_rust_cache.py run -- cargo run --quiet -p storyos-contracts -- generate
 verify-local:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run --base "$(BASE)" $(VERIFY_ARGS) -- make verify-local-steps
+	@env -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run --base "$(BASE)" --wait-verify "$(WAIT)" $(VERIFY_ARGS) -- make verify-local-steps
 
 ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-local-steps: contracts
@@ -149,10 +152,14 @@ verify-status:
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
-.PHONY: review-round
-# The verification input fingerprint reads the environment, so the recipe removes CONTEXT.
+.PHONY: review-round wait-verify
+# The verification input fingerprint reads the environment, so the recipes remove CONTEXT and WAIT.
 review-round:
-	@env -u CONTEXT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
+	@env -u CONTEXT -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" --wait "$(WAIT)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
+
+# Exit 0 when a verify run of the PR head passed, 1 when it failed or was cancelled, and 2 on a time-out.
+wait-verify:
+	@env -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_reviews.py wait --pr "$(PR)" --wait "$(WAIT)"
 
 .PHONY: verify-journey
 RUNS ?= 1

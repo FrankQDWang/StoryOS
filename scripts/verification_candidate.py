@@ -113,6 +113,11 @@ def run(root, command, context):
             observe(root, 'refused', issue=parent.get('issue'), requested_scope=parent.get('profile'),
                     complete_dispatch_attempt=True, reason='A complete verification run cannot be nested')
             return 1
+        if context.get('wait_verify') and context.get('review_request') and context.get('pr'):
+            # The wait comes before the admission lock and the host budget, so a running GitHub check holds neither.
+            import verification_reviews
+            verification_reviews.wait_for_pr(root, context['pr'], context['wait_verify'])
+        context = {key: value for key, value in context.items() if key != 'wait_verify'}
         with ExitStack() as resources:
             with (directory / 'admission.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)

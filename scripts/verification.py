@@ -588,6 +588,7 @@ def main():
             command_parser.add_argument("--executor-context")
             command_parser.add_argument("--purpose", default="candidate")
             command_parser.add_argument("--trigger", default="explicit-request")
+            command_parser.add_argument("--wait-verify", type=int, default=0)
         command_parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
     try:
@@ -620,7 +621,7 @@ def main():
             raise ValueError("A verification command is required")
         if arguments.action == "run":
             return run(root, command, context={key: getattr(arguments, key) for key in
-                       ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context")})
+                       ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context", "wait_verify")})
         return step(root, arguments.stage, command, node_id=arguments.node_id, node_only=arguments.node_only)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         if arguments.action == 'status' and not arguments.details:
