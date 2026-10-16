@@ -165,7 +165,8 @@ export async function verifyProductionSelectionReference(context: BrowserContext
 
 /**
  * A Chapter that the author creates after the first one gives a selection the add control and its label
- * with no reload (#1175). The Project has no assistance, so it writes only Receipts of the outline and the editor.
+ * with no reload, also after one lost outline response (#1175). The Project has no assistance, so it writes
+ * only Receipts of the outline and the editor.
  */
 async function verifyNewChapterSelection(context: BrowserContext, origin: string) {
   const page = await context.newPage();
@@ -200,6 +201,14 @@ async function verifyNewChapterSelection(context: BrowserContext, origin: string
     await expect(page.locator("h2")).toHaveText("渡口");
     await typeInEditor(PARAGRAPHS[0]!);
     await createChapter("灯塔");
+    // The workspace of the new Chapter loses the response of its first outline read. Before #1175 the
+    // control then stayed absent until a reload.
+    let lostTreeRead = false;
+    await page.route((url) => url.pathname.endsWith("/manuscript/tree"), async (route) => {
+      if (lostTreeRead) return route.continue();
+      lostTreeRead = true;
+      return route.abort("failed");
+    });
     await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]', { hasText: "灯塔" }).click();
     await expect(page.locator("h2")).toHaveText("灯塔");
     await typeInEditor("海上起雾。");
@@ -208,6 +217,7 @@ async function verifyNewChapterSelection(context: BrowserContext, origin: string
     await page.locator("[data-add-selection-reference]").click();
     await expect(page.locator("[data-selection-reference-label]")).toHaveCount(1);
     await expect(page.locator('[data-selection-reference-label="第 2 章 灯塔（第 1 段）"]')).toHaveCount(1);
+    assert.equal(lostTreeRead, true);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
