@@ -1161,7 +1161,9 @@ One Project can starve recovery or another User even without crossing data.
 external spend, and the bounded-context invariant.
 
 **Accepted controls.** Context Assembly is incrementally built, attributable,
-inspectable, and bounded; one Host-injected item may never exceed 10K tokens.
+inspectable, and bounded. One Host-injected item may never exceed 32,000 tokens
+under the admitted Token Counting Profile
+([ADR 0052](../adr/0052-set-the-context-item-limit-from-the-measured-model-input.md)).
 This is not a claim to count opaque Provider-internal items.
 
 **Required structural mitigation.** Every remaining crossing declares byte,
