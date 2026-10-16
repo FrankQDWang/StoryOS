@@ -201,6 +201,8 @@ async function verifyNewChapterSelection(context: BrowserContext, origin: string
     await expect(page.locator("h2")).toHaveText("渡口");
     await typeInEditor(PARAGRAPHS[0]!);
     await createChapter("灯塔");
+    const newChapter = page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]', { hasText: "灯塔" });
+    await newChapter.waitFor();
     // The workspace of the new Chapter loses the response of its first outline read. Before #1175 the
     // control then stayed absent until a reload.
     let lostTreeRead = false;
@@ -209,7 +211,7 @@ async function verifyNewChapterSelection(context: BrowserContext, origin: string
       lostTreeRead = true;
       return route.abort("failed");
     });
-    await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]', { hasText: "灯塔" }).click();
+    await newChapter.click();
     await expect(page.locator("h2")).toHaveText("灯塔");
     await typeInEditor("海上起雾。");
     await page.keyboard.press("Home");
