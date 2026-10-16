@@ -408,7 +408,10 @@ source cannot be hidden by a discovery cap; inability to resolve it follows the
 declared Degraded or Blocked behavior.
 
 Every StoryOS-injected context fragment is structured, attributable, inspectable,
-and hard-capped. No single injected item may exceed 10K tokens. Introducing a
+and hard-capped. No single injected item may exceed 32,000 tokens under the
+admitted Token Counting Profile
+([ADR 0052](../adr/0052-set-the-context-item-limit-from-the-measured-model-input.md)).
+Introducing a
 new item kind that can exceed 1K tokens requires explicit design review. These
 are repository invariants, not ranking-tuning defaults. Whole-project growth,
 pagination, cache warming, and provider continuity cannot expand the permitted
