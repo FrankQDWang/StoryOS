@@ -435,7 +435,7 @@ pub(crate) async fn record(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &dispatch.model_attempt_id,
-                &crate::agent_run_observation::merge_items(&stored, &items).to_string(),
+                &crate::agent_run_observation::merge_items(stored, &items).to_string(),
                 &crate::agent_run_observation::encode_usage(usage).to_string(),
                 &observation_kind(&observation),
                 &reference,
