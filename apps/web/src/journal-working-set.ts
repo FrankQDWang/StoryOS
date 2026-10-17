@@ -145,6 +145,20 @@ export async function retireCollectedJournalPrefix(
     fence !== null && typeof fence === "object" ? Reflect.get(fence, "collection_fence_id") : undefined,
     fence,
   ]));
+  // Index the snapshot one time, so each group visits only its own records and chains.
+  const chainsById = new Map<string, JournalPayloadChain[]>();
+  for (const chain of snapshot.payloadChains) {
+    const chains = chainsById.get(chain.payload_chain_id);
+    if (chains === undefined) chainsById.set(chain.payload_chain_id, [chain]);
+    else chains.push(chain);
+  }
+  const chainPositions = new Map<string, { first: number; last: number }>();
+  for (const [position, record] of snapshot.records.entries()) {
+    const positions = chainPositions.get(record.payload_chain_ref);
+    if (positions === undefined) {
+      chainPositions.set(record.payload_chain_ref, { first: position, last: position });
+    } else positions.last = position;
+  }
   let recordCount = 0;
   const chainIds = new Set<string>();
   for (const group of snapshot.groups) {
@@ -152,13 +166,15 @@ export async function retireCollectedJournalPrefix(
     if (!collectionProofMatches(group, fences.get(fenceId))) break;
     const records = snapshot.records.slice(recordCount, recordCount + group.ordered_coverage.length);
     const ids = new Set(records.map((record) => record.payload_chain_ref));
-    const chains = snapshot.payloadChains.filter((chain) => ids.has(chain.payload_chain_id));
+    const chains = [...ids].flatMap((id) => chainsById.get(id) ?? []);
     if (records.some((record) => record.author_edit_unit !== undefined)
       || chains.length !== ids.size
       || chains.some((chain) => chain.payload_collection?.collection_fence_id !== fenceId)
       || !equal(Reflect.get(fences.get(fenceId) as object, "collected_payload_chain_ids"), [...ids])
-      || snapshot.records.some((record) => ids.has(record.payload_chain_ref)
-        && !records.includes(record))) break;
+      || [...ids].some((id) => {
+        const { first, last } = chainPositions.get(id)!;
+        return first < recordCount || last >= recordCount + records.length;
+      })) break;
     prefix.push(group);
     recordCount += records.length;
     for (const id of ids) chainIds.add(id);
