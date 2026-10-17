@@ -1287,6 +1287,7 @@ test("edge input stays authoritative, reserved-block change conflicts, and Rejec
     const anchors = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_anchors.json")));
     assert.equal(anchors.length, 1);
     assert.equal(anchors[0].proposal_id, openedSecond.opened.proposal.proposal_id);
+    assert.equal(anchors[0].proposal_revision_id, openedSecond.opened.proposal.revision_id);
     assert.equal(anchors[0].owner_user_id, USER_A);
     assert.match(anchors[0].proposal_id, UUID_V7);
     assert.equal(anchors[0].range_from, 10);

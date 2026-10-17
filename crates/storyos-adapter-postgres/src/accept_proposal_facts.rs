@@ -205,6 +205,8 @@ pub(super) async fn load_proposal(
                      anchor.operation_id, anchor.anchor_order) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
                      primary_operation.operation_id, 1)
+                AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                      $1::text::uuid, $2::text::uuid, $3::text::uuid, revision.revision_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid",

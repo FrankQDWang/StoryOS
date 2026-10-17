@@ -199,7 +199,7 @@ pub(super) fn author_edit_response(
                 authoritative_revision: contract_chapter_revision(
                     ids.revision_id.clone(),
                     body,
-                    &blocks,
+                    blocks,
                 ),
                 authoritative_commit_id: ids.authoritative_commit_id,
                 author_action_sequence: author_action_sequence.to_string(),

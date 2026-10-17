@@ -9,6 +9,12 @@ pub(crate) struct AdmittedTarget {
     pub block_text: String,
 }
 
+struct TargetBinding<'a> {
+    chapter_id: &'a str,
+    revision_id: Option<&'a str>,
+    block_ids: Option<&'a [String]>,
+}
+
 pub(crate) struct CurrentTarget {
     pub revision_id: Option<String>,
     pub reserved: bool,
@@ -50,15 +56,13 @@ pub(crate) async fn load_admitted_targets(
         }
         let mut admitted = Vec::new();
         for target in collection {
-            let mut chapter_record = record.clone();
-            chapter_record.operation_requirement.chapter_id = target.chapter_id.clone();
-            chapter_record.operation_requirement.chapter_revision_id =
-                Some(target.base_authoritative_revision_id.clone());
-            chapter_record
-                .operation_requirement
-                .proposal_target_block_ids = Some(target.manuscript_block_ids.clone());
+            let binding = TargetBinding {
+                chapter_id: &target.chapter_id,
+                revision_id: Some(&target.base_authoritative_revision_id),
+                block_ids: Some(&target.manuscript_block_ids),
+            };
             let members =
-                load_record_targets(client, claim, &target.chapter_id, &chapter_record).await?;
+                load_record_targets(client, claim, &target.chapter_id, &record, binding).await?;
             if members.len() != target.manuscript_block_ids.len() {
                 return Ok(Vec::new());
             }
@@ -69,7 +73,13 @@ pub(crate) async fn load_admitted_targets(
         }
         return Ok(admitted);
     }
-    load_record_targets(client, claim, chapter_id, &record).await
+    let requirement = &record.operation_requirement;
+    let binding = TargetBinding {
+        chapter_id: &requirement.chapter_id,
+        revision_id: requirement.chapter_revision_id.as_deref(),
+        block_ids: requirement.proposal_target_block_ids.as_deref(),
+    };
+    load_record_targets(client, claim, chapter_id, &record, binding).await
 }
 
 async fn load_record_targets(
@@ -77,15 +87,16 @@ async fn load_record_targets(
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     record: &storyos_core::CurrentPassageAssemblyRecord,
+    binding: TargetBinding<'_>,
 ) -> Result<Vec<AdmittedTarget>, CompleteAgentRunError> {
     let requirement = &record.operation_requirement;
-    let Some(revision_id) = requirement.chapter_revision_id.as_deref() else {
+    let Some(revision_id) = binding.revision_id else {
         return Ok(Vec::new());
     };
     if requirement.run_id != claim.run_id
         || requirement.owner_user_id != claim.project_scope.owner_user_id.as_ref()
         || requirement.project_id != claim.project_scope.project_id.as_ref()
-        || requirement.chapter_id != chapter_id
+        || binding.chapter_id != chapter_id
         || !matches!(record.sufficiency, ContextSufficiency::Complete)
         || !record.selected.iter().any(|source| {
             source.source_class == ContextSourceClass::WorkingTarget
@@ -141,7 +152,7 @@ async fn load_record_targets(
             block_text: block.text,
         })
         .collect();
-    let Some(selected_ids) = requirement.proposal_target_block_ids.as_ref() else {
+    let Some(selected_ids) = binding.block_ids else {
         return Ok(if all.len() == 1 { all } else { Vec::new() });
     };
     let mut by_id: std::collections::BTreeMap<_, _> = all
