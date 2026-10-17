@@ -65,6 +65,7 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   proposalNavigation: ProposalNavigation;
   proposalFocus: ProposalFocus | undefined;
   proposalNotice: string | undefined;
+  proposalLocatorStore: Map<string, ProposalLocator[]>;
   onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
   onLocalRecoveryContinued: (state: ControlledProjectState) => void;
@@ -98,6 +99,7 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 
 function ProjectReadyView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
+  proposalLocatorStore,
 }: ProjectReadyViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -123,9 +125,17 @@ function ProjectReadyView({
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
   // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
-  const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>([]);
-  const rememberLocator = (locator: ProposalLocator) => setProposalLocators((current) =>
-    [...current.filter((item) => item.proposalId !== locator.proposalId), locator]);
+  // A Chapter change remounts this view, so the store of the Project keeps the locators for the next view.
+  const projectId = state.project.project.project_id;
+  const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>(
+    () => proposalLocatorStore.get(projectId) ?? [],
+  );
+  const rememberLocator = (locator: ProposalLocator) => {
+    const next = [...(proposalLocatorStore.get(projectId) ?? [])
+      .filter((item) => item.proposalId !== locator.proposalId), locator];
+    proposalLocatorStore.set(projectId, next);
+    setProposalLocators(next);
+  };
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
   const editorState = state.editor;
@@ -908,6 +918,7 @@ function Stage1View({
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
   const [proposalNotice, setProposalNotice] = useState<string>();
   const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
+  const proposalLocatorStore = useRef(new Map<string, ProposalLocator[]>());
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
     // Volume removal keeps the current Chapter, so chapter and writer keys
@@ -935,6 +946,7 @@ function Stage1View({
         proposalNavigation={proposalNavigation.current}
         proposalFocus={proposalFocus}
         proposalNotice={proposalNotice}
+        proposalLocatorStore={proposalLocatorStore.current}
         onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
         onReopened={setCurrent}
         onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
