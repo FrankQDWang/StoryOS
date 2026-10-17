@@ -32,7 +32,7 @@ import type {
 } from "./editor-types.ts";
 import { createEditorSessionWritingController } from "./editor-session-writing.ts";
 import {
-  BlockProposalDisplay, readProposalLocators, rememberProposalLocator,
+  BlockProposalDisplay,
 } from "./block-proposal-display.tsx";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
@@ -122,9 +122,10 @@ function ProjectReadyView({
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
-  const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>(
-    () => readProposalLocators(state.project.project_scope),
-  );
+  // A locator of the current AgentRun or of a navigation stays in memory and only causes an earlier list read.
+  const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>([]);
+  const rememberLocator = (locator: ProposalLocator) => setProposalLocators((current) =>
+    [...current.filter((item) => item.proposalId !== locator.proposalId), locator]);
   const [proposalRefresh, setProposalRefresh] = useState(0);
   const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
   const editorState = state.editor;
@@ -371,10 +372,10 @@ function ProjectReadyView({
         onOpened: (next, focus, notice) => {
           setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
         }, onFailure: setSwitchRecovery,
-        onLocator: (locator) => setProposalLocators(rememberProposalLocator(state.project.project_scope, locator)),
+        onLocator: (locator) => { rememberLocator(locator); setProposalRefresh((current) => current + 1); },
       })}
       onOpenedProposal={(locator) => {
-        setProposalLocators(rememberProposalLocator(state.project.project_scope, locator));
+        rememberLocator(locator);
         setProposalRefresh((current) => current + 1);
       }}
       assistant={{
