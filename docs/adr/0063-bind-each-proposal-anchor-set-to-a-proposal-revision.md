@@ -25,7 +25,9 @@ Before this change, a Proposal Anchor row belonged to a Proposal and its Operati
   - Inline creation writes the set of the opening Revision.
   - Refused Edit Draft expansion writes the set of the opening Revision.
   - The Derived mode of Author Undo of an Acceptance copies the set of the accepted Revision to the opening Revision of the derived Proposal. The reader rule selects that set.
+  - The Reopen mode of Author Undo of an Acceptance copies the set of the accepted Revision to the reopened Revision. Each copy is on the restored Authoritative Revision. Reopen occurs only without lineage drift, so each range and each digest stay exact.
   - An applied Replan of an Inline Proposal writes the proven set of the new Revision on the expected Authoritative Revision.
+  - Author Undo of a Replan copies the set of the source Revision to the restored Revision. Author Undo of other Proposal decisions keeps the base, so the parent chain gives the correct set.
 - **Inline creation checks.** Inline creation reads no Anchor row. Its reservation check uses `storyos.proposal_operations`, so the reader rule does not apply to it.
 - **Archive.** The Project archive export writes each row of `canonical/proposal_anchors.json` with its `proposal_revision_id`. Thus the archive keeps the Anchor set of each Proposal Revision.
 
@@ -63,6 +65,6 @@ An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of
 
 ## Consequences
 
-- The Undo paths of the specification write their own Anchor sets. Until then, a read of an Inline Proposal fails closed after Author Undo of an Acceptance in Reopen mode. Before this change, the same read gave a stale Anchor. The aggregate pull request of the specification delivers these paths together.
+- Each Author Undo path that changes the base writes its own Anchor set. Thus a read of an Inline Proposal after that Undo gives the Anchor on the base of the restored Revision.
 - A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal.
-- Author Undo of a Replan selects the set of the restored Revision through the parent chain. A later Anchor set on the replanned Revision needs a copy at that Undo.
+- After Author Undo of a Replan, the restored Revision is on the old base. Thus the editor does not show it inline until a new Replan.

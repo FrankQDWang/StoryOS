@@ -161,6 +161,17 @@ export async function readUnsettledAcceptanceJournal(workspace: EditorWorkspace,
     { records: records as JournalRow[], groups: groups as JournalRow[] });
 }
 
+/** Returns the row that `rows.find` returns. A key that is not a string keeps the strict scan. */
+function firstRowLookup(rows: JournalRow[], key: (row: JournalRow) => unknown) {
+  const index = new Map<string, JournalRow>();
+  for (const row of rows) {
+    const value = key(row);
+    if (typeof value === "string" && !index.has(value)) index.set(value, row);
+  }
+  return (value: unknown) => typeof value === "string" ? index.get(value)
+    : rows.find((row) => key(row) === value);
+}
+
 async function validateAcceptanceJournal(workspace: EditorWorkspace, transaction: IDBTransaction,
   { records, groups }: AcceptanceJournal): Promise<AcceptanceJournal> {
   const partitionId = workspace.partition.journal_partition_id;
@@ -175,12 +186,12 @@ async function validateAcceptanceJournal(workspace: EditorWorkspace, transaction
   const transports = await Promise.all(groups.map((group) => Promise.all([
     transport("transport_capsules", group), transport("transport_attempts", group),
   ])));
+  const recordById = firstRowLookup(records, (item) => item.explicit_command_record_id);
   for (const [index, group] of groups.entries()) {
     const [capsule, groupAttempts] = transports[index]!;
     const coverage = group.ordered_coverage as { local_intent_sequence?: number;
       intent_record_ref?: string; payload_digest?: DigestValue }[] | undefined;
-    const record = records.find((item) => item.explicit_command_record_id
-      === coverage?.[0]?.intent_record_ref);
+    const record = recordById(coverage?.[0]?.intent_record_ref);
     const kind = record?.command_kind;
     const request = group.frozen_request_body as DecisionFlight["request"] | undefined;
     const flight = request === undefined || (kind !== "acceptProposal"
@@ -361,12 +372,12 @@ export async function acceptanceJournalProposals(workspace: EditorWorkspace): Pr
   const journal = await readAcceptanceJournal(workspace);
   const proposalIds = new Set<string>();
   const unresolvedIds = new Set<string>();
+  const groupByRecordId = firstRowLookup(journal.groups, (item) =>
+    (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref);
   for (const record of journal.records) {
     if (record.command_kind !== "acceptProposal") continue;
     const proposalId = (record.author_visible_decision_ref as { proposal_id: string }).proposal_id;
-    const group = journal.groups.find((item) =>
-      (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
-        === record.explicit_command_record_id);
+    const group = groupByRecordId(record.explicit_command_record_id);
     proposalIds.add(proposalId);
     if ((group?.settlement as { kind?: string } | undefined)?.kind === "unsettled") {
       unresolvedIds.add(proposalId);

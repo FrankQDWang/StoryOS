@@ -2476,3 +2476,143 @@ test("an Inline Replan refuses a changed range, changed slice text, or removed B
     }
   } finally { await stopRealServer(started.server); }
 });
+
+function undoRequestFor(writer: Awaited<ReturnType<typeof writePassage>>, headRevisionId: string,
+  sequence: string, ns: string) {
+  return { command_schema: "storyos.command.undo-latest-author-action.request.v1" as const,
+    undo_latest_author_action_input: { ...BINDING, correlation_id: id(`${ns}71`),
+      editor_session_id: writer.session.editor_session.editor_session_id,
+      expected_authoritative_revision_id: headRevisionId,
+      expected_author_undo_frontier_sequence: sequence } };
+}
+
+test("Undo of an Inline Replan restores the Anchor set of the old base, and the candidate stays editable", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    for (const [index, path] of ["explicit", "replan"].entries()) {
+      const ns = `dc1dc${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Inline Replan Undo", `${ns}02`);
+      const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, ns);
+      const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+      const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+        options.baseUrl, options.fetchImpl, options.projectId, "POST",
+        "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+        await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+          ...options, request: input, idempotencyKey: key, antiForgery }));
+      const edge = replaceUnit(24, 24, "!", writer, `${ns}4`, opened.proposal.revision_id);
+      edge.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_block_selection",
+        manuscript_block_id: opened.proposal.manuscript_block_id, from: 24, to: 24, text: "!" }];
+      const inserted = await send(edge, id(`${ns}46`));
+      if (inserted.effect.kind !== "authoritative_applied") throw new Error("expected edge insertion");
+      const head = inserted.effect.authoritative_revision.revision_id;
+      writer.authoritativeRevisionId = head;
+      writer.nextSequence = "3";
+      const { afterConflict, rows: conflictRows, replanned } = await conflictAndReplan(
+        options, opened, writer, head, `${ns}8`);
+      if (replanned.effect.kind !== "resolved") throw new Error("expected resolved Replan");
+      const beforeUndo = await bindingRows(opened.proposal.proposal_id);
+      const undo = undoRequestFor(writer, head, replanned.effect.author_action_sequence, ns);
+      const sendUndo = async (key: string) => challenged(options.baseUrl, options.fetchImpl, options.projectId,
+        "POST", "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema,
+        await digestUndoLatestAuthorAction(undo), key, (antiForgery) => undoLatestAuthorAction({
+          ...options, request: undo, antiForgery, idempotencyKey: key }));
+      const undone = await sendUndo(id(`${ns}72`));
+      assert.equal(undone.effect.kind, "compensated");
+      assert.deepEqual(await sendUndo(id(`${ns}72`)), undone);
+      const restored = await getProposal({ ...options, proposalId: opened.proposal.proposal_id });
+      assert.equal(restored.proposal.revision_id, undone.proposal_revision_id);
+      assert.equal(restored.proposal.operation_id, afterConflict.proposal.operation_id);
+      assert.equal(restored.proposal.base_authoritative_revision_id,
+        opened.proposal.base_authoritative_revision_id);
+      assert.equal(restored.proposal.validation, "valid");
+      assert.deepEqual(restored.proposal.anchors, afterConflict.proposal.anchors);
+      // The Undo adds one copy of the restored Anchor set, and the earlier rows stay unchanged.
+      const bound = await bindingRows(opened.proposal.proposal_id);
+      const restoredId = restored.proposal.revision_id;
+      assert.deepEqual(bound.proposal_anchors.filter((row) => row.proposal_revision_id !== restoredId),
+        beforeUndo.proposal_anchors);
+      assert.deepEqual(bound.proposal_anchors.filter((row) => row.proposal_revision_id === restoredId),
+        conflictRows.proposal_anchors.map((row) => ({ ...row, proposal_revision_id: restoredId })));
+      if (path === "explicit") {
+        // The explicit candidate edit succeeds. Its validation is conflicted because the head moved.
+        const explicit = replaceUnit(5, 5, "xx", writer, `${ns}5`, restoredId);
+        explicit.proposal_target = { proposal_id: restored.proposal.proposal_id,
+          operation_id: restored.proposal.operation_id, revision_id: restoredId,
+          manuscript_block_id: restored.proposal.manuscript_block_id };
+        assert.equal((await send(explicit, id(`${ns}56`))).effect.kind, "proposal_revised");
+        const targeted = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+        assert.equal(targeted.candidate_text, "narraxxtor tone");
+        assert.equal(targeted.validation, "conflicted");
+        assert.deepEqual(targeted.anchors, afterConflict.proposal.anchors);
+        continue;
+      }
+      const again = await conflictAndReplan(options, restored, writer, head, `${ns}9`);
+      if (again.replanned.effect.kind !== "resolved") throw new Error("expected a second resolved Replan");
+      const interior = replaceUnit(14, 17, "yy", writer, `${ns}6`,
+        again.replanned.effect.resulting_proposal_revision_id);
+      assert.equal((await send(interior, id(`${ns}66`))).effect.kind, "proposal_revised");
+      const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+      assert.equal(revised.candidate_text, "narryyr tone");
+      assert.equal(revised.validation, "valid");
+      assert.deepEqual(revised.anchors.map((anchor) => [anchor.base_authoritative_revision_id, anchor.from, anchor.to]),
+        [[head, 10, 24]]);
+    }
+  } finally { await stopRealServer(started.server); }
+});
+
+test("Undo of an Inline Acceptance in Reopen mode gives an editable Inline Proposal on the restored base", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = "dc2db0";
+    const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Inline Reopen Undo", `${ns}02`);
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, ns);
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+    const accept = async (proposal: typeof opened.proposal, expected: string, key: string) => {
+      if (proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
+      const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+        accept_proposal_input: { ...BINDING, correlation_id: id(`${key}1`), proposal_revision_id: proposal.revision_id,
+          validation_receipt_id: proposal.validation_receipt.validation_receipt_id,
+          selected_operation_ids: [proposal.operation_id], expected_authoritative_revision_id: expected,
+          editor_session_id: writer.session.editor_session.editor_session_id } };
+      return challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+        "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
+        await digestAcceptProposal(acceptance), id(`${key}2`), (antiForgery) => acceptProposal({
+          ...options, proposalId: proposal.proposal_id, request: acceptance, antiForgery, idempotencyKey: id(`${key}2`) }));
+    };
+    const accepted = await accept(opened.proposal, writer.authoritativeRevisionId, `${ns}8`);
+    if (accepted.effect.kind !== "applied") throw new Error("expected applied Acceptance");
+    const head = accepted.effect.authoritative_revision.revision_id;
+    const undo = undoRequestFor(writer, head, accepted.effect.author_action_sequence, ns);
+    const sendUndo = async (key: string) => challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema, await digestUndoLatestAuthorAction(undo),
+      key, (antiForgery) => undoLatestAuthorAction({ ...options, request: undo, antiForgery, idempotencyKey: key }));
+    const undone = await sendUndo(id(`${ns}72`));
+    assert.equal(undone.effect.kind, "compensated");
+    assert.deepEqual(await sendUndo(id(`${ns}72`)), undone);
+    const restoredChapter = (await getChapter({ ...options, chapterId: prepared.chapterId })).chapter;
+    assert.equal(restoredChapter.current_revision.body, PROSE);
+    const restoredHead = restoredChapter.current_revision.revision_id;
+    assert.notEqual(restoredHead, head);
+    const reopened = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+    assert.equal(reopened.operation_id, opened.proposal.operation_id);
+    assert.equal(reopened.base_authoritative_revision_id, restoredHead);
+    assert.equal(reopened.validation, "valid");
+    assert.deepEqual(reopened.anchors, [{ ...opened.proposal.anchors[0]!, base_authoritative_revision_id: restoredHead }]);
+    writer.authoritativeRevisionId = restoredHead;
+    const interior = replaceUnit(14, 17, "xx", writer, `${ns}5`, reopened.revision_id);
+    assert.equal((await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", interior.command_schema,
+      await digestApplyAuthorEdit(interior), id(`${ns}56`), (antiForgery) => applyAuthorEdit({
+        ...options, request: interior, idempotencyKey: id(`${ns}56`), antiForgery }))).effect.kind, "proposal_revised");
+    const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+    assert.equal(revised.candidate_text, "narrxxr tone");
+    assert.equal(revised.validation, "valid");
+    assert.equal((await accept(revised, restoredHead, `${ns}9`)).effect.kind, "applied");
+    assert.equal((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter.current_revision.body,
+      "Guard the narrxxr tone in this passage.");
+  } finally { await stopRealServer(started.server); }
+});
