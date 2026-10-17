@@ -29,6 +29,10 @@ mod create_project_tests;
 mod recovery_visibility_proof_tests;
 
 #[cfg(test)]
+#[path = "proposal_anchor_binding_tests.rs"]
+mod proposal_anchor_binding_tests;
+
+#[cfg(test)]
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
 

@@ -33,7 +33,7 @@ struct HoldObservation {
     proof_written: bool,
 }
 
-struct IsolatedProofDatabase {
+pub(crate) struct IsolatedProofDatabase {
     cluster_admin_url: String,
     database_name: String,
 }
@@ -79,14 +79,14 @@ fn with_database_name(url: &str, database_name: &str) -> String {
     format!("{prefix}/{database_name}")
 }
 
-fn repo_root() -> PathBuf {
+pub(crate) fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .expect("adapter crate lives under the repository root")
 }
 
-fn catalogued_schema_sql() -> String {
+fn catalogued_schema_sql(stop_before: Option<&str>) -> String {
     let root = repo_root();
     let catalog: serde_json::Value = serde_json::from_slice(
         &std::fs::read(root.join("docs/foundation/postgresql-release-1-persistence-catalog.json"))
@@ -99,6 +99,9 @@ fn catalogued_schema_sql() -> String {
         .expect("catalogued bootstrap sources")
     {
         let path = source["path"].as_str().expect("bootstrap source path");
+        if stop_before.is_some_and(|stop| path.ends_with(stop)) {
+            break;
+        }
         if path.ends_with("/0000_roles.sql") {
             continue;
         }
@@ -113,8 +116,9 @@ fn catalogued_schema_sql() -> String {
     sql
 }
 
-async fn open_isolated_proof(
+pub(crate) async fn open_isolated_proof(
     database_name: &str,
+    stop_before: Option<&str>,
 ) -> (IsolatedProofDatabase, PostgresProjectReader, Client) {
     assert!(
         database_name
@@ -141,7 +145,10 @@ async fn open_isolated_proof(
     let isolated_admin_url = with_database_name(&cluster_admin_url, database_name);
     let isolated_runtime_url = with_database_name(&cluster_runtime_url, database_name);
     let admin = connect_admin(&isolated_admin_url).await;
-    admin.batch_execute(&catalogued_schema_sql()).await.unwrap();
+    admin
+        .batch_execute(&catalogued_schema_sql(stop_before))
+        .await
+        .unwrap();
     admin
         .batch_execute(
             &std::fs::read_to_string(
@@ -364,7 +371,8 @@ async fn recovery_visibility_proof_accepts_lawful_null_current_chapter() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (_isolated, store, admin) = open_isolated_proof("storyos_rvp_null").await;
+    let (_isolated, store, admin) =
+        open_isolated_proof("storyos_rvp_null", /*stop_before*/ None).await;
     let project_id = create_empty_project(&store, "f801").await;
     assert_eq!(
         empty_project_facts(&admin, &project_id).await,
@@ -424,7 +432,8 @@ async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let (_isolated, store, admin) = open_isolated_proof("storyos_rvp_hold").await;
+    let (_isolated, store, admin) =
+        open_isolated_proof("storyos_rvp_hold", /*stop_before*/ None).await;
     let project_id = create_empty_project(&store, "f811").await;
     admin
         .batch_execute("ALTER ROLE storyos_runtime NOLOGIN")

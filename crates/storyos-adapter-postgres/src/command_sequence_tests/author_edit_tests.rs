@@ -275,13 +275,15 @@ async fn refused_to_draft_command(
             "INSERT INTO storyos.proposal_anchors
                (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
                 manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
-                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest)
+                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                proposal_revision_id)
              VALUES ('{owner}', '{project}', '{proposal}', '{operation}', 1, '{block}',
                      '{revision}', 1, 'prosemirror-token-utf16.v1', 0, {anchor_to},
-                     'exclusive-authoritative-edges.v1', '{digest}')",
+                     'exclusive-authoritative-edges.v1', '{digest}', '{proposal_revision}')",
             owner = scope.owner_user_id.as_ref(),
             project = scope.project_id.as_ref(),
             proposal = input.proposal_id,
+            proposal_revision = input.proposal_revision_id,
             operation = input.selected_operation_ids[0],
             block = block_id,
             revision = revision_b,
