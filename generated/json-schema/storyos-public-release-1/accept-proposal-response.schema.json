@@ -26,6 +26,9 @@
             },
             "project_activity_position": {
               "type": "string"
+            },
+            "target_resolution": {
+              "$ref": "#/$defs/AcceptanceTargetResolution"
             }
           },
           "required": [
@@ -33,7 +36,8 @@
             "author_action_sequence",
             "authoritative_commit_id",
             "authoritative_revision",
-            "project_activity_position"
+            "project_activity_position",
+            "target_resolution"
           ],
           "type": "object"
         },
@@ -106,7 +110,8 @@
         "operation_not_pending",
         "duplicate_identities",
         "missing_required_dependencies",
-        "incomplete_bundle_closure"
+        "incomplete_bundle_closure",
+        "missing_target"
       ],
       "type": "string"
     },
@@ -199,6 +204,16 @@
         "invalid",
         "conflicted",
         "refused"
+      ],
+      "type": "string"
+    },
+    "AcceptanceTargetResolution": {
+      "description": "How an applied Acceptance found its target on the Chapter Head.",
+      "enum": [
+        "exact_base",
+        "block_replacement",
+        "proven_range",
+        "base_block_replacement"
       ],
       "type": "string"
     },

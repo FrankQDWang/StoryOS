@@ -1,4 +1,5 @@
 use storyos_application::ProjectScope;
+use storyos_core::AcceptanceTargetResolution;
 
 pub(super) async fn unavailable_revisions(
     client: &impl tokio_postgres::GenericClient,
@@ -23,8 +24,10 @@ pub(super) async fn unavailable_revisions(
                 AND acceptance.project_id = $2::text::uuid AND acceptance.result = 'authoritative_applied'
                 AND (revision.revision_id IS NULL OR validation.validation_receipt_id IS NULL
                   OR validation.reservation_state <> 'unresolved'
-                  OR domain.prior_heads <> ARRAY[revision.base_authoritative_revision_id]
-                  OR domain.prior_heads <> ARRAY[validation.base_authoritative_revision_id])",
+                  OR domain.prior_heads <> ARRAY[acceptance.applied_authoritative_revision_id]
+                  OR (acceptance.target_resolution = 'exact_base') <>
+                     (acceptance.applied_authoritative_revision_id = revision.base_authoritative_revision_id)
+                  OR validation.base_authoritative_revision_id <> revision.base_authoritative_revision_id)",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await?;
@@ -61,7 +64,14 @@ pub(super) fn archive_history_available(
             let validation = validations.get(&key(&acceptance, "validation_receipt_id")?)?;
             let domain = domains.get(&key(&acceptance, "acceptance_receipt_id")?)?;
             let base = revision.get("base_authoritative_revision_id")?.as_str()?;
-            if domain.get("prior_heads")? != &serde_json::json!([base])
+            let applied = acceptance
+                .get("applied_authoritative_revision_id")?
+                .as_str()?;
+            let resolution = AcceptanceTargetResolution::from_code(
+                acceptance.get("target_resolution")?.as_str()?,
+            )?;
+            if domain.get("prior_heads")? != &serde_json::json!([applied])
+                || (resolution == AcceptanceTargetResolution::ExactBase) != (applied == base)
                 || validation.get("base_authoritative_revision_id")?.as_str()? != base
                 || validation.get("reservation_state")?.as_str()? != "unresolved"
                 || validation.get("proposal_revision_id")?

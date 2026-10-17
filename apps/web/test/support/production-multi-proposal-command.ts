@@ -286,26 +286,20 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect.poll(async () => (await getChapter({ ...options, chapterId: first.chapter_id })).chapter.current_revision.blocks
       .find(block => block.manuscript_block_id === first.manuscript_block_id)?.text)
       .toContain('Author continues writing.');
-    const conflicted = (await getProposal({ ...options, proposalId })).proposal;
-    assert.equal(conflicted.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution, 'pending');
-    await candidate().locator('[data-proposal-accept]').click();
-    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.source_condition.kind).toBe('proposal_conflict');
-    await candidate().locator('[data-proposal-replan]').click();
-    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.revision_id).not.toBe(conflicted.revision_id);
-    await expect(candidate()).not.toHaveAttribute('contenteditable', 'false');
-    const replanned = (await getProposal({ ...options, proposalId })).proposal;
-    assert.notEqual(replanned.revision_id, conflicted.revision_id);
-    assert.equal(replanned.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution, 'applied');
-    await candidate().locator('.block-proposal-text').click();
-    await page.keyboard.press('End');
-    await page.keyboard.insertText(' Edit after Replan.');
-    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
-      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text).toContain('Edit after Replan.');
-    assert.deepEqual(await retainedHistory(), originalHistory);
+    // The Chapter Head moved after the Proposal opened, so the Acceptance replaces the secondary Block text (ADR 0064).
+    const pending = (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)!;
+    assert.equal(pending.resolution, 'pending');
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-    await candidate().locator('[data-proposal-reject]').click();
+    await candidate().locator('[data-proposal-accept]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
-      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('rejected');
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('applied');
+    await expect(candidate()).toHaveCount(0);
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await expect(page.locator(`[data-manuscript-editor] > p[data-id="${secondary.manuscript_block_id}"]`))
+      .toHaveText(pending.candidate_text);
+    await expect(authorBlock).toContainText('Author continues writing.');
+    assert.deepEqual(await retainedHistory(), originalHistory);
     await page.locator(`[data-assistant-history-run="${run.run_id}"]`).waitFor();
     const third = locations[2]!;
     assert.ok(third.outcome.kind !== 'refused');

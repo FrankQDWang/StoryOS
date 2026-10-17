@@ -66,8 +66,10 @@ mod withdraw_proposal;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
-    AcceptProposalRefusal, ProposalBundlePolicy, ProposalOperationSelection,
-    ProposalSelectionFacts, ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
+    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
+    ProposalOperationSelection, ProposalSelectionFacts, ProposalSelectionIntent, accept_proposal,
+    classify_proposal_selection,
 };
 pub use agent_run_control::{
     AgentRunLifecycle, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,

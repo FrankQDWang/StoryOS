@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  acceptProposal,
   createChapter,
   createEditorSession,
   createProject,
@@ -13,7 +12,6 @@ import {
   createProjectCommandChallenge,
   createVolume,
   deleteChapter,
-  digestAcceptProposal,
   digestCreateChapter,
   digestCreateEditorSession,
   digestCreateVolume,
@@ -39,7 +37,6 @@ import {
   withdrawProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  AcceptProposalRequest,
   CreateChapterRequest,
   CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
@@ -72,6 +69,7 @@ import {
   id,
   prepare,
   reviseCandidate,
+  seedAcceptanceCondition,
   startRealServer as startProposalServer,
 } from "../support/acceptance.ts";
 
@@ -1013,7 +1011,7 @@ async function rejectAndReopen(proposal: OpenedProposal, session: EditorSession,
   return { beforeReopen, sequence: reopened.effect.author_action_sequence };
 }
 
-// A Replan needs a conflicted Proposal: an Acceptance after the Chapter head moved.
+// A Replan needs a Proposal Conflict condition after the Chapter head moved.
 async function conflictAndReplan(proposal: OpenedProposal, ns: string) {
   const { session, revised } = await reviseCandidate(proposal.baseUrl, proposal.fetchImpl, proposal.projectId, proposal.opened, `${ns}5`);
   if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected a validation receipt");
@@ -1027,28 +1025,8 @@ async function conflictAndReplan(proposal: OpenedProposal, ns: string) {
     FROM storyos.manuscript_revision_members WHERE project_id = '${proposal.projectId}'::uuid AND revision_id = '${head}'::uuid;
     UPDATE storyos.authoritative_heads SET current_revision_id = '${moved}'::uuid
     WHERE project_id = '${proposal.projectId}'::uuid AND manuscript_object_id = '${proposal.chapterId}'::uuid`);
-  const acceptRequest: AcceptProposalRequest = {
-    command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: {
-      proposal_revision_id: revised.proposal.revision_id,
-      validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-      selected_operation_ids: [revised.proposal.operation_id],
-      expected_authoritative_revision_id: moved,
-      editor_session_id: session.editor_session.editor_session_id,
-      ...BINDING,
-      correlation_id: id(`${ns}61`),
-    },
-  };
-  const conflicted = await challenged(
-    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-    acceptRequest.command_schema, await digestAcceptProposal(acceptRequest), id(`${ns}62`),
-    (antiForgery) => acceptProposal({
-      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
-      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}62`), antiForgery, request: acceptRequest,
-    }),
-  );
-  const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
+  const { conflictRef } = await seedAcceptanceCondition(proposal.baseUrl, proposal.fetchImpl, proposal.projectId,
+    revised.proposal, session.editor_session.editor_session_id, moved, "proposal_conflict", `${ns}7`);
   const beforeReplan = await inspect(proposal);
   const replanRequest: ReplanProposalRequest = {
     command_schema: "storyos.command.replan-proposal.request.v1",

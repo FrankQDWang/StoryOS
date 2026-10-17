@@ -1,7 +1,9 @@
 use super::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
-    AcceptProposalRefusal, ProposalBundlePolicy, ProposalOperationSelection,
-    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
+    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
+    ProposalOperationSelection, ProposalSelectionIntent, accept_proposal,
+    classify_proposal_selection,
 };
 use crate::TransitionOutcome;
 
@@ -13,15 +15,27 @@ fn exact_eligible() -> AcceptProposal {
         retention_retained: true,
         generation_ready: true,
         closure_open: true,
-        validation_current: true,
-        validation_receipt_valid: true,
+        validation: AcceptanceValidation::Valid,
+        condition: AcceptanceCondition::Absent,
+        validation_receipt: AcceptanceValidation::Valid,
         validation_receipt_matches_revision: true,
         selected_operation_pending: true,
         selection_duplicate_free: true,
         required_dependencies_met: true,
         bundle_closure_complete: true,
-        expected_target_matches_head: true,
+        target_kind: AcceptanceTargetKind::Block,
+        base: AcceptanceBase::ExactHead,
         candidate_unaltered: true,
+    }
+}
+
+fn earlier_base(kind: AcceptanceTargetKind) -> AcceptProposal {
+    AcceptProposal {
+        target_kind: kind,
+        base: AcceptanceBase::EarlierHead {
+            target_blocks_present: true,
+        },
+        ..exact_eligible()
     }
 }
 
@@ -29,7 +43,7 @@ fn exact_eligible() -> AcceptProposal {
 fn applies_one_pending_operation_for_an_exact_eligible_revision() {
     assert_eq!(
         accept_proposal(&exact_eligible()),
-        TransitionOutcome::Applied(())
+        TransitionOutcome::Applied(AcceptanceTargetResolution::ExactBase)
     );
 }
 
@@ -92,7 +106,7 @@ fn refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closu
 #[test]
 fn invalidates_bad_validation_and_altered_candidates() {
     let mut invalid = exact_eligible();
-    invalid.validation_receipt_valid = false;
+    invalid.validation_receipt = AcceptanceValidation::Other;
     assert_eq!(
         accept_proposal(&invalid),
         TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation)
@@ -189,12 +203,86 @@ fn classifies_duplicate_dependency_and_bundle_selection_sets() {
 }
 
 #[test]
-fn conflicts_a_changed_target_head() {
-    let mut changed = exact_eligible();
-    changed.expected_target_matches_head = false;
+fn replaces_the_block_text_of_a_block_proposal_on_an_earlier_base() {
     assert_eq!(
-        accept_proposal(&changed),
+        accept_proposal(&earlier_base(AcceptanceTargetKind::Block)),
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BlockReplacement)
+    );
+}
+
+#[test]
+fn refuses_a_block_proposal_whose_target_block_is_missing() {
+    let missing = AcceptProposal {
+        base: AcceptanceBase::EarlierHead {
+            target_blocks_present: false,
+        },
+        ..earlier_base(AcceptanceTargetKind::Block)
+    };
+    assert_eq!(
+        accept_proposal(&missing),
+        TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget)
+    );
+}
+
+#[test]
+fn accepts_a_conflicted_block_revision_and_a_proposal_conflict_condition() {
+    let conflicted = AcceptProposal {
+        validation: AcceptanceValidation::Conflicted,
+        validation_receipt: AcceptanceValidation::Conflicted,
+        ..earlier_base(AcceptanceTargetKind::Block)
+    };
+    assert_eq!(
+        accept_proposal(&conflicted),
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BlockReplacement)
+    );
+    let with_condition = AcceptProposal {
+        condition: AcceptanceCondition::ProposalConflict,
+        ..earlier_base(AcceptanceTargetKind::Block)
+    };
+    assert_eq!(
+        accept_proposal(&with_condition),
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BlockReplacement)
+    );
+}
+
+#[test]
+fn a_recovery_conflict_or_an_invalid_condition_keeps_acceptance_unavailable() {
+    for condition in [
+        AcceptanceCondition::RecoveryConflict,
+        AcceptanceCondition::Invalid,
+    ] {
+        let blocked = AcceptProposal {
+            condition,
+            ..earlier_base(AcceptanceTargetKind::Block)
+        };
+        assert_eq!(
+            accept_proposal(&blocked),
+            TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
+        );
+    }
+}
+
+#[test]
+fn an_inline_proposal_keeps_the_exact_head_rule() {
+    assert_eq!(
+        accept_proposal(&earlier_base(AcceptanceTargetKind::Inline)),
         TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead)
+    );
+    let conflicted = AcceptProposal {
+        validation: AcceptanceValidation::Conflicted,
+        ..earlier_base(AcceptanceTargetKind::Inline)
+    };
+    assert_eq!(
+        accept_proposal(&conflicted),
+        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
+    );
+    let with_condition = AcceptProposal {
+        condition: AcceptanceCondition::ProposalConflict,
+        ..earlier_base(AcceptanceTargetKind::Inline)
+    };
+    assert_eq!(
+        accept_proposal(&with_condition),
+        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
     );
 }
 
@@ -212,6 +300,7 @@ fn every_acceptance_outcome_round_trips_through_its_receipt_codes() {
         TransitionOutcome::Refused(AcceptProposalRefusal::DuplicateIdentities),
         TransitionOutcome::Refused(AcceptProposalRefusal::MissingRequiredDependencies),
         TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure),
+        TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget),
     ];
     for outcome in outcomes {
         let reason = outcome.reason_code();
@@ -221,9 +310,12 @@ fn every_acceptance_outcome_round_trips_through_its_receipt_codes() {
         );
     }
     assert_eq!(
-        TransitionOutcome::<(), _, AcceptProposalConflict, AcceptProposalRefusal>::NoEffect(
-            AcceptProposalInvalid::InvalidValidation
-        )
+        TransitionOutcome::<
+            AcceptanceTargetResolution,
+            _,
+            AcceptProposalConflict,
+            AcceptProposalRefusal,
+        >::NoEffect(AcceptProposalInvalid::InvalidValidation)
         .receipt_result_kind(),
         "invalid"
     );

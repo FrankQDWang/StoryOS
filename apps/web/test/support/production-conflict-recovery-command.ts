@@ -5,6 +5,7 @@ import type { BrowserContext, Page } from "playwright";
 import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, BlockProposalInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { alignWriterBase } from "./acceptance.ts";
 import { queryStoryOSPostgres, sessionFetch } from "./node-integration";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -20,45 +21,6 @@ function uuidV7(): string {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-async function alignCurrentWriterBase(projectId: string, chapterId: string,
-  nextRevision: string): Promise<void> {
-  const snapshotId = uuidV7();
-  const updated = await queryStoryOSPostgres(`WITH advanced AS (
-      UPDATE storyos.scope_counters
-      SET project_activity_position = project_activity_position + 1
-      WHERE project_id = '${projectId}'::uuid
-      RETURNING project_activity_position
-    ), moved AS (
-      UPDATE storyos.editor_session_base_snapshots AS snapshot
-      SET snapshot_id = '${snapshotId}'::uuid,
-          authoritative_revision_id = '${nextRevision}'::uuid,
-          project_activity_position = (SELECT project_activity_position FROM advanced),
-          created_at = clock_timestamp()
-      FROM storyos.project_writer_generations AS writer
-      WHERE snapshot.owner_user_id = writer.owner_user_id
-        AND snapshot.project_id = writer.project_id
-        AND snapshot.editor_session_id = writer.current_editor_session_id
-        AND snapshot.project_id = '${projectId}'::uuid
-        AND snapshot.chapter_object_id = '${chapterId}'::uuid
-        AND writer.writer_generation = (
-          SELECT max(latest.writer_generation) FROM storyos.project_writer_generations AS latest
-          WHERE latest.project_id = '${projectId}'::uuid
-        )
-      RETURNING snapshot.snapshot_id
-    )
-    UPDATE storyos.project_snapshots AS canonical
-    SET project_activity_position = (SELECT project_activity_position FROM advanced)
-    WHERE canonical.project_id = '${projectId}'::uuid
-      AND canonical.snapshot_kind = 'canonical'
-      AND canonical.project_activity_position = (
-        SELECT max(current.project_activity_position) FROM storyos.project_snapshots AS current
-        WHERE current.project_id = '${projectId}'::uuid AND current.snapshot_kind = 'canonical'
-      )
-      AND EXISTS (SELECT 1 FROM moved)
-    RETURNING canonical.project_activity_position::text`);
-  assert.match(updated.split("\n")[0] ?? "", /^[0-9]+$/);
 }
 
 function watchAcceptances(page: Page): { key: string; correlation: string }[] {
@@ -173,80 +135,23 @@ export async function verifyConflictedProposalRecovery(input: {
       WHERE project_id = '${projectId}'::uuid AND revision_id = '${input.chapterRevisionId}'::uuid;
       UPDATE storyos.authoritative_heads SET current_revision_id = '${nextRevision}'::uuid
       WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid`);
-    await alignCurrentWriterBase(projectId, chapterId, nextRevision);
+    await alignWriterBase(projectId, chapterId, nextRevision, uuidV7());
+    // The observer reads the moved Chapter Head, so its Acceptance expects that Head.
+    await observer.reload();
+    await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
+    await restored.locator("button[data-proposal-accept]").waitFor();
+    // The Chapter Head moved after the Proposal opened, so the Acceptance replaces the Block text (ADR 0064).
+    const expectedProse = (await getChapter(read)).chapter.current_revision.blocks
+      .map((block) => block.manuscript_block_id === proposal.manuscript_block_id ? proposal.candidate_text : block.text)
+      .join("\n");
     await restored.locator("button[data-proposal-accept]").click();
-    await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_conflict"]`).waitFor();
-    assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).count(), 0);
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-replan]`).waitFor();
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-reject]`).waitFor();
-    await observer.getByText("正文已变化，候选文字尚未接受。").waitFor();
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-copy]`).click();
-    await observer.getByText("已复制候选文字。").waitFor();
-    assert.equal(await observer.evaluate(() => navigator.clipboard.readText()), proposal.candidate_text);
+    await observer.locator(`[data-proposal-id="${proposalId}"]`).waitFor({ state: "detached" });
+    await observer.locator(`[data-manuscript-editor] p[data-id="${proposal.manuscript_block_id}"]`)
+      .filter({ hasText: proposal.candidate_text }).waitFor();
+    assert.equal(await prose(), expectedProse);
     assert.equal(observerAcceptances.length, 1);
     assert.notEqual(observerAcceptances[0]?.key, writerAcceptances[0]?.key);
     assert.notEqual(observerAcceptances[0]?.correlation, writerAcceptances[0]?.correlation);
-    const conflicted = (await getProposal(read)).proposal;
-    assert.equal(conflicted.validation, "conflicted");
-    assert.equal(conflicted.source_condition.kind, "proposal_conflict");
-    assert.equal(conflicted.candidate_text, proposal.candidate_text);
-    if (conflicted.source_condition.kind !== "proposal_conflict") throw new Error("missing conflict");
-    const conflictRef = conflicted.source_condition.proposal_conflict_ref;
-    await observer.reload();
-    await observer.evaluate(({ userId, id }) => {
-      sessionStorage.setItem(`block_proposal_acceptance_eligible:${userId}:${id}`, "eligible");
-    }, { userId: USER, id: projectId });
-    await observer.reload();
-    await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_conflict"]`).waitFor();
-    assert.equal(await observer.locator(`button[data-proposal-accept="${proposalId}"]`).count(), 0);
-
-    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
-      SET condition_kind = 'proposal_recovery_conflict' WHERE conflict_id = '${conflictRef}'::uuid`);
-    await observer.reload();
-    await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_recovery_conflict"]`).waitFor();
-    await observer.getByText("候选文字的恢复材料冲突，正文保持不变。").waitFor();
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-copy]`).click();
-    await observer.getByText("已复制候选文字。").waitFor();
-    assert.equal(await observer.evaluate(() => navigator.clipboard.readText()), proposal.candidate_text);
-    assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-reject]`).count(), 0);
-    assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-withdraw]`).count(), 1);
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-replan]`).waitFor();
-    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
-      SET condition_kind = 'proposal_conflict' WHERE conflict_id = '${conflictRef}'::uuid`);
-    await observer.reload();
-    await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_conflict"]`).waitFor();
-    assert.equal(await observer.locator("[data-proposal-withdraw]").count(), 0);
-
-    let replanPosts = 0;
-    let replanKey = "";
-    await observer.route((url) => url.pathname.endsWith("/replans"), async (route) => {
-      if (route.request().method() !== "POST") { await route.continue(); return; }
-      replanPosts += 1;
-      const headers = await route.request().allHeaders();
-      if (replanKey === "") replanKey = headers["idempotency-key"] ?? "";
-      else assert.equal(headers["idempotency-key"], replanKey);
-      if (replanPosts === 1) {
-        await route.abort("failed");
-        return;
-      }
-      await route.fulfill({ response: await route.fetch() });
-    });
-    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows
-      SET issued_count = 0 WHERE owner_user_id = '${USER}'::uuid AND project_id = '${projectId}'::uuid`);
-    await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-replan]`).click();
-    await observer.getByText("重新规划结果尚未确认。请重试同一操作。").waitFor();
-    assert.equal(replanPosts, 1);
-    await observer.reload();
-    await observer.locator(`button[data-proposal-replan="${proposalId}"]`).click();
-    await observer.getByText("候选文字正在等待当前版本验证，尚不能接受。").waitFor();
-    assert.equal(replanPosts, 2);
-    const replanned = (await getProposal(read)).proposal;
-    assert.equal(replanned.validation, "pending");
-    assert.equal(replanned.validation_receipt.kind, "absent");
-    assert.equal(replanned.candidate_text, proposal.candidate_text);
-    assert.equal(replanned.source_condition.kind, "absent");
-    assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).count(), 0);
-    await observer.unrouteAll();
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
     const paragraph = observer.locator(
       `[data-manuscript-editor] p:not([data-id="${proposal.manuscript_block_id}"])`,
@@ -256,7 +161,7 @@ export async function verifyConflictedProposalRecovery(input: {
     await observer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const written = await prose();
     assert.equal(written.includes("Still writing."), true);
-    assert.equal(written.includes("The lantern went dark."), true);
+    assert.equal(written.includes(proposal.candidate_text), true);
     assert.equal((await getProposal(read)).proposal.candidate_text, proposal.candidate_text);
   } finally {
     releaseStaleAccept();

@@ -17,7 +17,8 @@
       "revision_id": "018f0000-0000-7001-8000-000000000c15"
     },
     "kind": "applied",
-    "project_activity_position": "3"
+    "project_activity_position": "3",
+    "target_resolution": "exact_base"
   },
   "project_scope": {
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",

@@ -131,7 +131,7 @@ pub use release1_accept_proposal::{
     ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID, ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
     AcceptProposalConflictReason, AcceptProposalEffect, AcceptProposalInput,
     AcceptProposalInvalidReason, AcceptProposalRefusalReason, AcceptProposalRequest,
-    AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
+    AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult, AcceptanceTargetResolution,
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,

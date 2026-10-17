@@ -8,9 +8,10 @@ use storyos_application::{
 };
 use storyos_core::{
     AcceptProposal as CoreAccept, AcceptProposalConflict, AcceptProposalInvalid,
-    AcceptProposalRefusal, ProposalBundlePolicy, ProposalOperationSelection,
-    ProposalSelectionIntent, TransitionOutcome, accept_proposal as classify_acceptance,
-    classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
+    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
+    ProposalOperationSelection, ProposalSelectionIntent, TransitionOutcome,
+    accept_proposal as classify_acceptance, classify_proposal_selection,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -79,10 +80,11 @@ impl AcceptProposal {
     }
 }
 
-/// The new Revision text of an applied Acceptance.
+/// The new Revision text of an applied Acceptance and how it found its target.
 pub(crate) struct AcceptedRevision {
     chapter_id: String,
     payload: String,
+    resolution: AcceptanceTargetResolution,
 }
 
 impl ProjectCommand for AcceptProposal {
@@ -94,7 +96,12 @@ impl ProjectCommand for AcceptProposal {
         rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The AuthoritativeRevision profile writes its own Activity record.
         activity_kind: "",
-        replay_effect: ReplayEffect::NoQuery,
+        replay_effect: ReplayEffect::Query(
+            "SELECT jsonb_build_object('target_resolution', target_resolution)::text
+               FROM storyos.acceptance_receipts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND acceptance_receipt_id = $3::text::uuid",
+        ),
     };
     type Error = RefusableCommandError<AcceptanceRefusalReason>;
     type Profile = AuthoritativeRevision;
@@ -103,7 +110,7 @@ impl ProjectCommand for AcceptProposal {
     type ZeroEffect = Vec<String>;
     type Applied = ();
     type Plan = AcceptedRevision;
-    type Effect = ();
+    type Effect = AcceptanceTargetResolution;
     type NoEffect = AcceptProposalInvalid;
     type Conflict = AcceptProposalConflict;
     type Refusal = AcceptProposalRefusal;
@@ -135,6 +142,18 @@ impl ProjectCommand for AcceptProposal {
             ProposalBundlePolicy::from_stored(&loaded.bundle_policy),
             ProposalSelectionIntent::Accept,
         );
+        let validation = |value: Option<&str>| match value {
+            Some("valid") => AcceptanceValidation::Valid,
+            Some("conflicted") => AcceptanceValidation::Conflicted,
+            _ => AcceptanceValidation::Other,
+        };
+        let receipt_named =
+            loaded.receipt_id.as_deref() == Some(input.validation_receipt_id.as_str());
+        let target_kind = if loaded.kind == "inline_edit" {
+            AcceptanceTargetKind::Inline
+        } else {
+            AcceptanceTargetKind::Block
+        };
         let outcome = classify_acceptance(&CoreAccept {
             scope_matches: true,
             admission_valid: true,
@@ -142,33 +161,53 @@ impl ProjectCommand for AcceptProposal {
             retention_retained: true,
             generation_ready: loaded.generation == "ready",
             closure_open: loaded.closure == "open",
-            validation_current: loaded.validation_current,
-            validation_receipt_valid: loaded.receipt_result.as_deref() == Some("valid")
-                && loaded.receipt_id.as_deref() == Some(input.validation_receipt_id.as_str()),
+            validation: validation(Some(loaded.validation.as_str())),
+            condition: match &loaded.condition {
+                None => AcceptanceCondition::Absent,
+                Some((_, Some(kind))) if kind == "proposal_recovery_conflict" => {
+                    AcceptanceCondition::RecoveryConflict
+                }
+                Some((validation, _)) if validation == "conflicted" => {
+                    AcceptanceCondition::ProposalConflict
+                }
+                Some(_) => AcceptanceCondition::Invalid,
+            },
+            validation_receipt: if receipt_named {
+                validation(loaded.receipt_result.as_deref())
+            } else {
+                AcceptanceValidation::Other
+            },
             validation_receipt_matches_revision: loaded.receipt_revision_id.as_deref()
-                == Some(input.proposal_revision_id.as_str()),
+                == Some(input.proposal_revision_id.as_str())
+                && loaded.receipt_base_matches_revision,
             selected_operation_pending: selection.all_selected_pending,
             selection_duplicate_free: selection.duplicate_free,
             required_dependencies_met: selection.required_dependencies_met,
             bundle_closure_complete: selection.bundle_closure_complete,
-            expected_target_matches_head: loaded.validated_target_matches_head
-                && loaded.inline_base_slice_matches
-                && loaded.current_head_revision_id.as_deref()
-                    == Some(input.expected_authoritative_revision_id.as_str()),
+            target_kind,
+            base: if loaded.base_is_head && loaded.inline_base_slice_matches {
+                AcceptanceBase::ExactHead
+            } else {
+                AcceptanceBase::EarlierHead {
+                    target_blocks_present: loaded
+                        .target_blocks_present(&input.selected_operation_ids),
+                }
+            },
             candidate_unaltered: loaded.candidate_unaltered(),
         });
         let condition_refs = match &outcome {
             TransitionOutcome::Conflicted(_) => vec![self.condition_id.clone()],
-            TransitionOutcome::Applied(())
+            TransitionOutcome::Applied(_)
             | TransitionOutcome::NoEffect(_)
             | TransitionOutcome::Refused(_) => Vec::new(),
         };
         let outcome = match outcome {
-            TransitionOutcome::Applied(()) => TransitionOutcome::Applied((
+            TransitionOutcome::Applied(resolution) => TransitionOutcome::Applied((
                 (),
                 AcceptedRevision {
                     payload: loaded.accepted_body(&input.selected_operation_ids)?,
                     chapter_id: loaded.chapter_id.clone(),
+                    resolution,
                 },
             )),
             TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
@@ -247,6 +286,10 @@ impl ProjectCommand for AcceptProposal {
         envelope: &ProjectCommandEnvelope,
         result_kind: &'static str,
     ) -> Result<(), ProjectCommandError> {
+        // `apply` writes the applied row, because only the plan holds its target resolution.
+        if result_kind == "authoritative_applied" {
+            return Ok(());
+        }
         client
             .execute(
                 "INSERT INTO storyos.acceptance_receipts
@@ -278,8 +321,31 @@ impl ProjectCommand for AcceptProposal {
         _sequences: &ProfileSequences<Self>,
         plan: AcceptedRevision,
         (): (),
-    ) -> Result<RevisionWrite<()>, ProjectCommandError> {
+    ) -> Result<RevisionWrite<AcceptanceTargetResolution>, ProjectCommandError> {
         let input = &self.input;
+        client
+            .execute(
+                "INSERT INTO storyos.acceptance_receipts
+                   (owner_user_id, project_id, acceptance_receipt_id, proposal_id,
+                    proposal_revision_id, validation_receipt_id, selected_operation_ids, result,
+                    applied_authoritative_revision_id, target_resolution)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::uuid, $7::text[]::uuid[],
+                         'authoritative_applied', $8::text::uuid, $9)",
+                &[
+                    &envelope.project_scope.owner_user_id.as_ref(),
+                    &envelope.project_scope.project_id.as_ref(),
+                    &envelope.ids.receipt_id,
+                    &input.proposal_id,
+                    &input.proposal_revision_id,
+                    &input.validation_receipt_id,
+                    &input.selected_operation_ids,
+                    &input.expected_authoritative_revision_id,
+                    &plan.resolution.code(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
         let updated = client
             .execute(
                 "UPDATE storyos.proposal_operations
@@ -303,7 +369,7 @@ impl ProjectCommand for AcceptProposal {
             return Err(ProjectCommandError::BindingConflict);
         }
         Ok(RevisionWrite {
-            effect: (),
+            effect: plan.resolution,
             chapter_id: plan.chapter_id,
             prior_revision_id: input.expected_authoritative_revision_id.clone(),
             payload: plan.payload,
@@ -314,13 +380,19 @@ impl ProjectCommand for AcceptProposal {
         })
     }
 
-    fn decode(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
-        match replay.author_action_disposition.as_deref() {
-            Some("forward") => Ok(()),
-            _ => Err(ReplayFault::Unavailable(
+    fn decode(&self, replay: &CommandReplay) -> Result<AcceptanceTargetResolution, ReplayFault> {
+        if replay.author_action_disposition.as_deref() != Some("forward") {
+            return Err(ReplayFault::Unavailable(
                 "the applied Acceptance has no Forward Author Action".into(),
-            )),
+            ));
         }
+        replay
+            .effect_text("target_resolution")?
+            .as_deref()
+            .and_then(AcceptanceTargetResolution::from_code)
+            .ok_or_else(|| {
+                ReplayFault::Unavailable("the applied Acceptance has no target resolution".into())
+            })
     }
 
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
