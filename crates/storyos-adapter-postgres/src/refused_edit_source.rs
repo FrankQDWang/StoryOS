@@ -153,6 +153,8 @@ pub(super) async fn load_sources(
            LEFT JOIN storyos.proposal_anchors AS anchor
              ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id, anchor.operation_id) =
                 (operation.owner_user_id, operation.project_id, operation.proposal_id, operation.operation_id)
+            AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                  revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
           WHERE proposal.owner_user_id = $1::text::uuid AND proposal.project_id = $2::text::uuid
             AND proposal.chapter_id = $3::text::uuid AND operation.resolution = 'pending'
             AND operation.reservation_state = 'unresolved' AND revision.closure = 'open'
@@ -161,13 +163,19 @@ pub(super) async fn load_sources(
               (operation.manuscript_block_id::text <> $7::text OR proposal.kind <> 'inline_edit'
                OR anchor.range_to > COALESCE($9::bigint, (
                  SELECT min(bound.range_from) FROM storyos.proposal_anchors AS bound
+                   JOIN storyos.proposal_heads AS bound_head USING (owner_user_id, project_id, proposal_id)
                   WHERE bound.owner_user_id = proposal.owner_user_id AND bound.project_id = proposal.project_id
-                    AND bound.proposal_id = $14::text::uuid AND bound.operation_id = $11::text::uuid)))
+                    AND bound.proposal_id = $14::text::uuid AND bound.operation_id = $11::text::uuid
+                    AND bound.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                          bound.owner_user_id, bound.project_id, bound.proposal_id, bound_head.current_revision_id))))
               AND (operation.manuscript_block_id::text <> $8::text OR proposal.kind <> 'inline_edit'
                OR anchor.range_from < COALESCE($10::bigint, (
                  SELECT max(bound.range_to) FROM storyos.proposal_anchors AS bound
+                   JOIN storyos.proposal_heads AS bound_head USING (owner_user_id, project_id, proposal_id)
                   WHERE bound.owner_user_id = proposal.owner_user_id AND bound.project_id = proposal.project_id
-                    AND bound.proposal_id = $15::text::uuid AND bound.operation_id = $12::text::uuid)))
+                    AND bound.proposal_id = $15::text::uuid AND bound.operation_id = $12::text::uuid
+                    AND bound.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                          bound.owner_user_id, bound.project_id, bound.proposal_id, bound_head.current_revision_id))))
             ))
           ORDER BY proposal.proposal_id, operation.operation_id, anchor.anchor_order LIMIT $5",
         &[&owner, &project, &command.chapter_id, &covered_ids, &row_limit, &inline_bound, &first, &last, &first_offset, &last_offset, &first_operation, &last_operation, &selected_operations, &first_proposal, &last_proposal, &source_byte_limits],

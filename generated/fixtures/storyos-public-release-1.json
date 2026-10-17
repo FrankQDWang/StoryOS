@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:9e7beccfba1e78babe5fecff388d0823b0a3d9a0ad3316b79c0d8d77f950602c",
+  "corpus_digest": "sha256:4f730fb816902f4f36895e9030361a33ffd1138db92e5449b9050a532356d5d6",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -136,6 +136,9 @@
       "generated/golden-wire/storyos-public-release-1/get-proposal.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json",
+      "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json",
       "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json",
@@ -959,6 +962,24 @@
       "fixture_id": "storyos.golden.getProposal.boundary.v1",
       "operation_id": "getProposal",
       "path": "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.listChapterOpenProposals.positive.v1",
+      "operation_id": "listChapterOpenProposals",
+      "path": "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.listChapterOpenProposals.invalid.v1",
+      "operation_id": "listChapterOpenProposals",
+      "path": "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.listChapterOpenProposals.boundary.v1",
+      "operation_id": "listChapterOpenProposals",
+      "path": "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.boundary.json"
     },
     {
       "classification": "positive",

@@ -670,6 +670,14 @@ export type BlockProposalInspect = { proposal_id: string, kind: string, revision
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
+export type OpenProposalSource = { "kind": "agent_run_decision", run_id: string, decision_id: string, } | { "kind": "refused_edit_draft", draft_id: string, draft_revision_id: string, };
+
+export type OpenProposalEntry = { proposal_id: string, revision_id: string, kind: string, source: OpenProposalSource, };
+
+export type OpenProposalListCompleteness = "complete" | "truncated";
+
+export type ListChapterOpenProposalsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, chapter_id: string, completeness: OpenProposalListCompleteness, proposals: Array<OpenProposalEntry>, };
+
 export type RefusedEditDraftSource = { command_id: string, author_command_admission_id: string, receipt_id: string, idempotency_key: string, command_digest: DigestValue, };
 export type RefusedEditDraftCreated = { event_kind: string, project_scope: ProjectScope, creator: RefusedEditDraftCreator, schema_id: string, creation_event_id: string, draft_id: string, draft_revision_id: string, created_at: string, source: RefusedEditDraftSource, };
 export type RefusedEditDraftCreator = { "kind": "core_transition", receipt_id: string, };
@@ -799,6 +807,7 @@ export declare function getManuscriptTree(options: StoryOSQueryOptions & { proje
 export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;
 export declare function getStatistics(options: StoryOSQueryOptions & { projectId: string; requiredWatermark?: string | null }): Promise<GetStatisticsResponse>;
 export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;
+export declare function listChapterOpenProposals(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<ListChapterOpenProposalsResponse>;
 export declare function getRefusedEditDraft(options: StoryOSQueryOptions & { projectId: string; draftId: string }): Promise<GetRefusedEditDraftResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;
 export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: string; snapshotId: string }): Promise<GetSnapshotResponse>;

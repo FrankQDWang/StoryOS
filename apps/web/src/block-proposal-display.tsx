@@ -1,7 +1,7 @@
 import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { getProposal, listChapterOpenProposals } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -30,37 +30,31 @@ import {
 
 const ignoreChanges = () => () => {};
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export type ProposalLocator = {
   proposalId: string;
   runId: string;
   decisionId: string;
 };
 
-function storageKey(scope: ProjectScope): string {
-  return `block_proposals:${scope.owner_user_id}:${scope.project_id}`;
-}
+// The Server list is the source of the open Proposals of a Chapter. A failed or truncated list leaves Proposal heads unknown.
+type OpenProposalList = { kind: "reading" } | { kind: "failed" }
+  | { kind: "listed"; complete: boolean; locators: ProposalLocator[] };
 
-export function readProposalLocators(scope: ProjectScope): ProposalLocator[] {
+async function readOpenProposalList(scope: ProjectScope, chapterId: string, baseUrl: string,
+  fetchImpl: typeof fetch): Promise<OpenProposalList> {
   try {
-    const raw = globalThis.sessionStorage?.getItem(storageKey(scope));
-    if (raw === null || raw === undefined) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is ProposalLocator => item !== null
-      && typeof item === "object" && UUID.test(item.proposalId)
-      && UUID.test(item.runId) && UUID.test(item.decisionId));
+    const response = await listChapterOpenProposals({ baseUrl, fetchImpl, projectId: scope.project_id, chapterId });
+    if (response.project_scope.owner_user_id !== scope.owner_user_id
+      || response.project_scope.project_id !== scope.project_id || response.chapter_id !== chapterId) {
+      return { kind: "failed" };
+    }
+    return { kind: "listed", complete: response.completeness === "complete",
+      locators: response.proposals.map(({ proposal_id, source }) => source.kind === "agent_run_decision"
+        ? { proposalId: proposal_id, runId: source.run_id, decisionId: source.decision_id }
+        : { proposalId: proposal_id, runId: "", decisionId: "" }) };
   } catch {
-    return [];
+    return { kind: "failed" };
   }
-}
-
-export function rememberProposalLocator(scope: ProjectScope, locator: ProposalLocator): ProposalLocator[] {
-  const next = [...readProposalLocators(scope).filter((item) =>
-    item.proposalId !== locator.proposalId), locator];
-  globalThis.sessionStorage?.setItem(storageKey(scope), JSON.stringify(next));
-  return next;
 }
 
 type ProposalRead = {
@@ -107,6 +101,7 @@ export function BlockProposalDisplay({
     workspace: EditorReadyState | undefined; proposalIds: string; generation: number;
   }>();
   const [recoveredProposalIds, setRecoveredProposalIds] = useState<string[]>([]);
+  const [openList, setOpenList] = useState<OpenProposalList>({ kind: "reading" });
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
   const [pendingRejections, setPendingRejections] = useState<string[]>([]);
   const [pendingReplans, setPendingReplans] = useState<string[]>([]);
@@ -118,8 +113,10 @@ export function BlockProposalDisplay({
   const [recoveryCheck, setRecoveryCheck] = useState<{ workspace: EditorReadyState; generation: number }>();
   const refreshedAcceptance = useRef(new Set<string>());
   const acceptingRef = useRef(false);
-  const effectiveLocators = [...locators, ...recoveredProposalIds.filter((id) =>
-    !locators.some((locator) => locator.proposalId === id)).map((proposalId) =>
+  const knownLocators = [...locators, ...(openList.kind === "listed" ? openList.locators : []).filter((item) =>
+    !locators.some((locator) => locator.proposalId === item.proposalId))];
+  const effectiveLocators = [...knownLocators, ...recoveredProposalIds.filter((id) =>
+    !knownLocators.some((locator) => locator.proposalId === id)).map((proposalId) =>
     ({ proposalId, runId: "", decisionId: "" }))];
   const locatorKey = effectiveLocators.map((item) =>
     `${item.proposalId}:${item.runId}:${item.decisionId}`).join("|");
@@ -133,6 +130,11 @@ export function BlockProposalDisplay({
     && acceptanceCheck.workspace === editorProps.persistWorkspace
     && acceptanceCheck.proposalIds === proposalIdsKey(effectiveLocators)
     && acceptanceCheck.generation === decisionGeneration;
+  // Only a Proposal that the Local Edit Journal knows can hold a local Acceptance. A Proposal that a later read adds does not stop text input.
+  const journalProposalsChecked = acceptanceCheck !== undefined
+    && acceptanceCheck.workspace === editorProps.persistWorkspace
+    && acceptanceCheck.generation === decisionGeneration
+    && recoveredProposalIds.every((id) => acceptanceCheck.proposalIds.split("|").includes(id));
   const finishDecision = () => {
     acceptingRef.current = false;
     setAccepting(undefined);
@@ -170,6 +172,16 @@ export function BlockProposalDisplay({
     });
     return () => { active = false; };
   }, [editorProps.persistWorkspace, settlementRefresh, settlements, decisionGeneration]);
+
+  useEffect(() => {
+    let active = true;
+    void readOpenProposalList(scope, chapterId, editorProps.baseUrl, editorProps.fetchImpl).then((next) => {
+      if (active) setOpenList((current) => canonical(current) === canonical(next) ? current : next);
+    });
+    return () => { active = false; };
+  }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
+    decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
+    editorProps.baseUrl, editorProps.fetchImpl]);
 
   useEffect(() => {
     let active = true;
@@ -281,7 +293,8 @@ export function BlockProposalDisplay({
   }
   const projections: BlockProposalProjection[] = [];
   const unavailable: ProposalRead[] = [];
-  const allHeadsKnown = recoveryChecked && reads.length === effectiveLocators.length
+  const allHeadsKnown = recoveryChecked && openList.kind === "listed" && openList.complete
+    && reads.length === effectiveLocators.length
     && reads.every((item) => item.proposal !== undefined);
   const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId && proposal.closure === "open"
       && proposal.operations.some((item) => item.resolution === "pending" && item.reservation_state === "unresolved")
@@ -290,8 +303,12 @@ export function BlockProposalDisplay({
     ? [{ locator, proposal, operation: undefined }]
     : proposal.operations.filter((item) => item.resolution === "pending")
       .map((operation) => ({ locator, proposal, operation })));
+  // The complete Server list decides which Proposals the editor shows. A locator only causes an earlier list read (ADR 0063).
+  const listedIds = openList.kind === "listed" && openList.complete
+    ? new Set(openList.locators.map((item) => item.proposalId)) : undefined;
   for (const { locator, proposal, operation } of pendingOperations) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
+    if (listedIds !== undefined && !listedIds.has(locator.proposalId)) continue;
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
       && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
@@ -776,8 +793,8 @@ export function BlockProposalDisplay({
       <ManuscriptEditor {...editorProps}
         editable={editorProps.editable && !discardHold && !recoveryUnavailable
           && journalPendingIds.length === 0
-          && (acceptanceChecked || (effectiveLocators.length === 0
-            && writing?.projection.unsettled_intent_count === 0))
+          && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
+            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))
           && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}

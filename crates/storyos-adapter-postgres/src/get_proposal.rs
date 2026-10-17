@@ -98,7 +98,13 @@ impl ProposalReader for PostgresProjectReader {
         let operations = read_operations(&transaction, scope, proposal_id).await?;
         let anchors = match row.as_ref() {
             Some(row) if row.get::<_, String>(1) == "inline_edit" => {
-                read_inline_anchors(&transaction, scope, proposal_id).await?
+                read_inline_anchors(
+                    &transaction,
+                    scope,
+                    proposal_id,
+                    &row.get::<_, String>(/*idx*/ 2),
+                )
+                .await?
             }
             _ => Vec::new(),
         };
@@ -228,6 +234,7 @@ async fn read_inline_anchors(
     client: &impl tokio_postgres::GenericClient,
     scope: &ProjectScope,
     proposal_id: &str,
+    revision_id: &str,
 ) -> Result<Vec<storyos_application::ProposalAnchorRecord>, ProjectReadError> {
     let rows = client
         .query(
@@ -238,11 +245,14 @@ async fn read_inline_anchors(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND proposal_id = $3::text::uuid
+                AND proposal_revision_id = storyos.proposal_anchor_set_revision(
+                      $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)
               ORDER BY anchor_order",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &proposal_id,
+                &revision_id,
             ],
         )
         .await

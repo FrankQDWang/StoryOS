@@ -601,6 +601,12 @@ export async function getProposal({ projectId, proposalId, ...options } = {}) {
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(proposalId)}` });
 }
 
+export async function listChapterOpenProposals({ projectId, chapterId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listChapterOpenProposals requires projectId");
+  if (typeof chapterId !== "string" || chapterId.length === 0) throw new TypeError("listChapterOpenProposals requires chapterId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/open-proposals` });
+}
+
 export async function getRefusedEditDraft({ projectId, draftId, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getRefusedEditDraft requires projectId");
   if (typeof draftId !== "string" || draftId.length === 0) throw new TypeError("getRefusedEditDraft requires draftId");

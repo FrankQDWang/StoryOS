@@ -192,6 +192,7 @@
           "applyAuthorEdit",
           "createReplacementProposal",
           "getProposal",
+          "listChapterOpenProposals",
           "acceptProposal",
           "rejectProposalOperations",
           "withdrawProposal",
@@ -4734,6 +4735,81 @@
         "json_schema_ids": [
           "storyos.query.proposal.request.v1",
           "storyos.query.proposal.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      }
+    },
+    {
+      "operation_id": "listChapterOpenProposals",
+      "kind": "query",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}/open-proposals",
+      "shape": "proposal:chapter-open-list",
+      "semantic_owner": "core",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.query.chapter-open-proposals.request.v1",
+        "response": "storyos.query.chapter-open-proposals.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "action_class": "none",
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "writer_generation": "not-applicable",
+        "takeover": "no"
+      },
+      "idempotency": "none",
+      "preconditions": [
+        "server_derived_project_scope",
+        "chapter_scope_join",
+        "bounded_open_proposal_list"
+      ],
+      "settlement": {
+        "mode": "read",
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "query_canonical",
+      "activity": {
+        "success": [],
+        "no_effect": [],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.listChapterOpenProposals.positive.v1",
+        "negative": [
+          "storyos.golden.listChapterOpenProposals.invalid.v1",
+          "storyos.golden.listChapterOpenProposals.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "listChapterOpenProposals",
+        "typescript_operation": "listChapterOpenProposals",
+        "json_schema_ids": [
+          "storyos.query.chapter-open-proposals.request.v1",
+          "storyos.query.chapter-open-proposals.response.v1"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,

@@ -629,13 +629,6 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         body.proposal.base_authoritative_revision_id = uuidV7();
         await route.fulfill({ response, body: JSON.stringify(body) });
       });
-    const locatorCache = await page.evaluate(({ userId, id }) => {
-      const key = `block_proposals:${userId}:${id}`;
-      const value = sessionStorage.getItem(key);
-      sessionStorage.removeItem(key);
-      return value;
-    }, { userId: USER, id: projectId });
-    assert.ok(locatorCache);
     await page.reload();
     await page.locator('[data-unsettled-intent-count="1"]').waitFor();
     const retry = page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByRole("button", { name: "重试接受", exact: true });

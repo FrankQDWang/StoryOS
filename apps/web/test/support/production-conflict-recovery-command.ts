@@ -137,13 +137,8 @@ export async function verifyConflictedProposalRecovery(input: {
   observer.setDefaultTimeout(10_000);
   try {
     assert.equal((await observer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    // The observer tab has no locator of its own. It gets the Proposal from the open Proposal list.
     await observer.locator("[data-manuscript-editor][contenteditable='false']").waitFor();
-    const locatorKey = `block_proposals:${USER}:${projectId}`;
-    const stored = await page.evaluate((key) => sessionStorage.getItem(key), locatorKey);
-    if (typeof stored !== "string") throw new Error("missing proposal locator");
-    await observer.evaluate(({ key, value }) => sessionStorage.setItem(key, value),
-      { key: locatorKey, value: stored });
-    await observer.reload();
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
     releaseStaleAccept();

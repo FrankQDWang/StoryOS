@@ -22,6 +22,7 @@ use crate::command_sequence::{
 use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
+mod inline_proof;
 pub(crate) use compensation::ReplanCompensation;
 
 impl PostgresProjectReader {
@@ -42,6 +43,8 @@ pub(crate) struct ConflictedRevision {
     closure: String,
     candidate_text: String,
     candidate_blocks: Option<String>,
+    /// The proven Anchor set of an Inline Proposal on the expected Authoritative Revision.
+    anchors: Vec<inline_proof::ProvenAnchor>,
 }
 
 fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &str) {
@@ -123,7 +126,8 @@ impl ProjectCommand for ReplanProposalInput {
                                  (proposal.owner_user_id, proposal.project_id,
                                   proposal.proposal_id)
                              AND operation.operation_id = $6::text::uuid
-                        )
+                        ),
+                        proposal.kind
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -154,6 +158,25 @@ impl ProjectCommand for ReplanProposalInput {
             .ok_or(ProjectCommandError::MissingProject)?;
         let current_revision_id = row.get::<_, String>(/*idx*/ 0);
         let closure = row.get::<_, String>(/*idx*/ 2);
+        let chapter_id = row.get::<_, String>(/*idx*/ 3);
+        let chapter_head = row.get::<_, Option<String>>(/*idx*/ 6);
+        let expected_target_matches_head =
+            chapter_head.as_deref() == Some(self.expected_authoritative_revision_id.as_str());
+        let proven = if row.get::<_, String>(/*idx*/ 9) != "inline_edit" {
+            Some(Vec::new())
+        } else if expected_target_matches_head {
+            inline_proof::prove_inline_anchors(
+                client,
+                scope,
+                &self.proposal_id,
+                &current_revision_id,
+                &chapter_id,
+                &self.expected_authoritative_revision_id,
+            )
+            .await?
+        } else {
+            None
+        };
         let outcome = replan_proposal(&CoreReplan {
             scope_matches: true,
             admission_valid: true,
@@ -162,8 +185,8 @@ impl ProjectCommand for ReplanProposalInput {
             closure_open: closure == "open",
             source_condition_matches: row.get(/*idx*/ 7),
             replacement_operations_preserve_identity: row.get(/*idx*/ 8),
-            expected_target_matches_head: row.get::<_, Option<String>>(/*idx*/ 6).as_deref()
-                == Some(self.expected_authoritative_revision_id.as_str()),
+            expected_target_matches_head,
+            inline_anchors_proven: proven.is_some(),
         });
         let conflicted = ConflictedRevision {
             revision_id: current_revision_id,
@@ -171,13 +194,14 @@ impl ProjectCommand for ReplanProposalInput {
             closure,
             candidate_text: row.get(/*idx*/ 4),
             candidate_blocks: row.get(/*idx*/ 5),
+            anchors: proven.unwrap_or_default(),
         };
         let head = vec![self.expected_authoritative_revision_id.clone()];
         Ok(Classification {
             outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), conflicted)),
             admission: Admission::ExplicitEditorCommand(EditorAdmission {
                 editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(row.get(/*idx*/ 3)),
+                chapter_object_id: Some(chapter_id),
                 expected_authoritative_revision_id: Some(
                     self.expected_authoritative_revision_id.clone(),
                 ),
@@ -238,6 +262,14 @@ impl ProjectCommand for ReplanProposalInput {
             )
             .await
             .map_err(unavailable)?;
+        inline_proof::write_anchor_set(
+            client,
+            scope,
+            &self.proposal_id,
+            &resulting_proposal_revision_id,
+            &conflicted.anchors,
+        )
+        .await?;
         let head_updates = client
             .execute(
                 "UPDATE storyos.proposal_heads

@@ -138,6 +138,49 @@ pub(crate) async fn compensate_proposal_decision(
     if inserted != 1 {
         return Err(ProjectCommandError::BindingConflict);
     }
+    // A Replan changes the base. The parent chain of the restored Revision then gives the set of
+    // the other base. Thus the restored Revision gets a copy of the source set (ADR 0063).
+    client
+        .execute(
+            "INSERT INTO storyos.proposal_anchors
+               (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
+                manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
+                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                proposal_revision_id)
+             SELECT anchor.owner_user_id, anchor.project_id, anchor.proposal_id,
+                    anchor.operation_id, anchor.anchor_order, anchor.manuscript_block_id,
+                    anchor.base_authoritative_revision_id, anchor.manuscript_schema_version,
+                    anchor.coordinate_profile, anchor.range_from, anchor.range_to,
+                    anchor.boundary_profile, anchor.base_slice_digest, $4::text::uuid
+               FROM storyos.proposal_anchors AS anchor
+              WHERE anchor.owner_user_id = $1::text::uuid AND anchor.project_id = $2::text::uuid
+                AND anchor.proposal_id = $3::text::uuid
+                AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                      $1::text::uuid, $2::text::uuid, $3::text::uuid, $6::text::uuid)
+                AND EXISTS (
+                  SELECT 1
+                    FROM storyos.proposal_revisions AS source
+                    JOIN storyos.proposal_revisions AS resulting
+                      USING (owner_user_id, project_id, proposal_id)
+                   WHERE source.owner_user_id = $1::text::uuid
+                     AND source.project_id = $2::text::uuid
+                     AND source.proposal_id = $3::text::uuid
+                     AND source.revision_id = $6::text::uuid
+                     AND resulting.revision_id = $5::text::uuid
+                     AND source.base_authoritative_revision_id
+                         <> resulting.base_authoritative_revision_id
+                )",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &decision.proposal_id,
+                &revision_id,
+                &decision.resulting_revision_id,
+                &decision.source_revision_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
     client
         .execute(
             "INSERT INTO storyos.validation_receipts

@@ -13,6 +13,7 @@ fn exact_conflict() -> ReplanProposal {
         source_condition_matches: true,
         replacement_operations_preserve_identity: true,
         expected_target_matches_head: true,
+        inline_anchors_proven: true,
     }
 }
 
@@ -62,6 +63,12 @@ fn refuses_stale_ineligible_and_unproven_sources() {
         replan_proposal(&missing_condition),
         TransitionOutcome::Refused(ReplanProposalRefusal::UnavailableProof)
     );
+    let mut unproven = exact_conflict();
+    unproven.inline_anchors_proven = false;
+    assert_eq!(
+        replan_proposal(&unproven),
+        TransitionOutcome::Refused(ReplanProposalRefusal::UnavailableProof)
+    );
     let mut replaced = exact_conflict();
     replaced.replacement_operations_preserve_identity = false;
     assert_eq!(
@@ -74,6 +81,11 @@ fn refuses_stale_ineligible_and_unproven_sources() {
 fn conflicts_a_changed_target_head() {
     let mut changed = exact_conflict();
     changed.expected_target_matches_head = false;
+    assert_eq!(
+        replan_proposal(&changed),
+        TransitionOutcome::Conflicted(ReplanProposalConflict::ChangedHead)
+    );
+    changed.inline_anchors_proven = false;
     assert_eq!(
         replan_proposal(&changed),
         TransitionOutcome::Conflicted(ReplanProposalConflict::ChangedHead)

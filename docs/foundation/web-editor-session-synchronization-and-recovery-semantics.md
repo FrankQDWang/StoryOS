@@ -1547,6 +1547,22 @@ Snapshot, takeover, or resync. In particular, a Proposal Recovery Conflict
 retains `withdraw`, while a Proposal Conflict does not acquire it unless the
 current Core state independently permits withdrawal.
 
+The Server list is the source of the open Proposals that this matrix consumes
+(author decision of 2026-10-17). The Proposal display reads
+`listChapterOpenProposals` for its Chapter when it mounts and at each Proposal
+change point, and then reads each Proposal with `getProposal`. Thus each tab and
+each browser of the author shows the same open Proposals. A locator that the
+current AgentRun or a navigation gives stays in memory and only causes an
+earlier read of the list. The Web Client keeps no Proposal locator in browser
+storage. When the list read fails or the list is `truncated`, the client does
+not know all Proposal heads, and the Proposal decision controls stay
+unavailable.
+
+Text input does not wait for the list read. Only the Proposal decision
+controls wait for a complete list. Only a Proposal that the Local Edit Journal
+records can hold a local Acceptance. Thus a Proposal that a later list read
+adds does not stop text input.
+
 ### 8.4 Undo and reversal
 
 The browser submits only the exact current `AuthorUndoFrontier` through

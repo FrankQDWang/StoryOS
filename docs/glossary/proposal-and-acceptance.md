@@ -33,7 +33,7 @@ One exhaustive StoryOS Core command-and-event change to a Proposal State Axis un
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
-The durable, versioned, block-relative address by which an InlineEditProposal Operation binds a stable Manuscript Block, exact base Authoritative Revision, coordinate and boundary contract, range, and canonical base-slice digest. A multi-block Operation carries ordered Anchors, while document-wide positions, DOM state, and editor decorations remain reconstructible projections.
+The durable, versioned, block-relative address of an InlineEditProposal Operation. It binds a stable Manuscript Block, an exact base Authoritative Revision, a coordinate and boundary contract, a range, and a canonical base-slice digest. A multi-block Operation has ordered Anchors, and document-wide positions, DOM state, and editor decorations are only projections. Each Anchor belongs to the set of the Revision that wrote it, and a later Revision uses the nearest set in its parent chain. A Replan writes a new set only with an exact proof, and a read of a set on a different base fails closed ([ADR 0063](../adr/0063-bind-each-proposal-anchor-set-to-a-proposal-revision.md)).
 _Avoid_: Absolute editor position, DOM range, Decoration identity, visible-text match
 
 **Proposal Boundary Ownership**:
