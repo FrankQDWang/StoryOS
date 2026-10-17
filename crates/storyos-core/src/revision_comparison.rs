@@ -89,8 +89,13 @@ impl Edit {
 const TRACE_BYTE_CEILING: usize = 1024 * 1024;
 
 fn myers_edits(base: &[char], candidate: &[char]) -> Vec<Edit> {
+    exact_edits(base, candidate).unwrap_or_else(|| coarse_replacement(base, candidate))
+}
+
+/// The exact Myers edits, or `None` when the trace limit forces one coarse replacement.
+fn exact_edits(base: &[char], candidate: &[char]) -> Option<Vec<Edit>> {
     if base.is_empty() && candidate.is_empty() {
-        return Vec::new();
+        return Some(Vec::new());
     }
     let max = base.len() + candidate.len();
     let mut trace = Vec::new();
@@ -99,7 +104,7 @@ fn myers_edits(base: &[char], candidate: &[char]) -> Vec<Edit> {
         let width = 2 * distance + 1;
         let row_bytes = width.saturating_mul(size_of::<usize>());
         if used.saturating_add(row_bytes) > TRACE_BYTE_CEILING {
-            return coarse_replacement(base, candidate);
+            return None;
         }
         used += row_bytes;
         let mut row = vec![0_usize; width];
@@ -109,7 +114,7 @@ fn myers_edits(base: &[char], candidate: &[char]) -> Vec<Edit> {
             let mut x = next_x(&trace, distance, diagonal);
             let y_signed = (x as isize) - diagonal;
             if y_signed < 0 {
-                return coarse_replacement(base, candidate);
+                return None;
             }
             let mut y = y_signed as usize;
             while x < base.len() && y < candidate.len() && base[x] == candidate[y] {
@@ -128,7 +133,7 @@ fn myers_edits(base: &[char], candidate: &[char]) -> Vec<Edit> {
             return backtrack(base, candidate, &trace);
         }
     }
-    coarse_replacement(base, candidate)
+    None
 }
 
 fn next_x(trace: &[Vec<usize>], distance: usize, diagonal: isize) -> usize {
@@ -150,7 +155,7 @@ fn followed_insert(distance: usize, diagonal: isize, read: &impl Fn(isize) -> us
         || (diagonal != distance as isize && read(diagonal - 1) < read(diagonal + 1))
 }
 
-fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Vec<Edit> {
+fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Option<Vec<Edit>> {
     let mut x = base.len();
     let mut y = candidate.len();
     let mut edits = Vec::new();
@@ -167,7 +172,7 @@ fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Vec<Edi
         let previous_x = read(previous_diagonal);
         let previous_y_signed = previous_x as isize - previous_diagonal;
         if previous_y_signed < 0 {
-            return coarse_replacement(base, candidate);
+            return None;
         }
         let previous_y = previous_y_signed as usize;
         let snake = x
@@ -183,7 +188,7 @@ fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Vec<Edi
         x -= snake;
         y -= snake;
         if x == previous_x && y == 0 || x != previous_x && x == 0 {
-            return coarse_replacement(base, candidate);
+            return None;
         }
         if x == previous_x {
             y -= 1;
@@ -204,7 +209,7 @@ fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Vec<Edi
     prepend_step(&mut edits, Edit::Delete(0..x - snake));
     prepend_step(&mut edits, Edit::Insert(0..y - snake));
     edits.reverse();
-    edits
+    Some(edits)
 }
 
 /// Record a step that ends where the last recorded step starts, because backtracking walks backward.
@@ -441,6 +446,10 @@ fn utf16_len(scalars: &[char]) -> u32 {
     )
     .unwrap_or(u32::MAX)
 }
+
+#[path = "revision_range_mapping.rs"]
+mod range_mapping;
+pub use range_mapping::{RangeMapping, map_unchanged_range};
 
 #[cfg(test)]
 #[path = "revision_comparison_tests.rs"]

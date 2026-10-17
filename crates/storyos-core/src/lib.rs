@@ -39,6 +39,7 @@ pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
+mod inline_anchor_proof;
 mod open_block_proposal;
 mod open_inline_proposal;
 mod pause_proposal_generation;
@@ -146,6 +147,9 @@ pub use host_fake_profile::{
     INLINE_PROSE_CHANGE_TEXT, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
     STREAM_SECOND_TEXT, requested_execution_capability, stream_batch_plan,
 };
+pub use inline_anchor_proof::{
+    InlineAnchorProofFailure, ReplanAnchorFacts, prove_replanned_inline_anchors,
+};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
@@ -243,8 +247,8 @@ pub use retrieve_original_result::{
     decide_original_result_retrieval,
 };
 pub use revision_comparison::{
-    ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,
-    inspect_revision_comparison, utf16_slice,
+    ExactRevisionTexts, RangeMapping, ReplacementSpan, RevisionComparison,
+    RevisionComparisonAccess, inspect_revision_comparison, map_unchanged_range, utf16_slice,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
