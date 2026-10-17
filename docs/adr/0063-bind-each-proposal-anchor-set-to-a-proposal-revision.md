@@ -28,10 +28,20 @@ Before this change, a Proposal Anchor row belonged to a Proposal and its Operati
 - **Inline creation checks.** Inline creation reads no Anchor row. Its reservation check uses `storyos.proposal_operations`, so the reader rule does not apply to it.
 - **Archive.** The Project archive export writes each row of `canonical/proposal_anchors.json` with its `proposal_revision_id`. Thus the archive keeps the Anchor set of each Proposal Revision.
 
+## Open Proposal list
+
+- **Source.** The Server list is the source of the open Proposal list. The `listChapterOpenProposals` query gives the open Proposals of one Chapter in one Project Scope.
+- **Open.** An open Proposal has the closure `open` and at least one pending Operation.
+- **Order.** The list order is the Proposal identity order. Each producer makes the Proposal identity with UUIDv7, so this order is the open order.
+- **Length.** The list has a maximum of 64 entries. The author approved this number on 2026-10-17. A longer set gives the completeness value `truncated`.
+- **Client.** The Protected Web Client reads this list when the workspace loads and at each Proposal change. Then it reads each Proposal with `getProposal`. A locator that the current AgentRun gives only causes an earlier read of the list. The client keeps no Proposal locator in browser storage.
+- **Unknown heads.** When the list read fails or the list is truncated, the client does not know all Proposal heads. Then it keeps the Proposal decision controls unavailable.
+
 ## Considered options
 
 - Keep the Anchor on the Operation and change its base at Replan. Rejected: an Anchor row is historical target evidence, and a change of it removes the evidence of the earlier Revision.
 - Ignore the base difference in the web client. Rejected: this weakens the exact target authority.
+- Keep the Proposal locators in the storage of each browser tab, or copy them to a shared browser store. Rejected by the author on 2026-10-17: a new tab or a different browser does not show the pending Proposals.
 - Give the reader rule to each reader as its own query. Rejected: five SQL readers include Anchor rows in larger joins. One function gives the rule one owner.
 
 ## Consequences
