@@ -136,6 +136,10 @@ export async function verifyConflictedProposalRecovery(input: {
       UPDATE storyos.authoritative_heads SET current_revision_id = '${nextRevision}'::uuid
       WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid`);
     await alignWriterBase(projectId, chapterId, nextRevision, uuidV7());
+    // The observer reads the moved Chapter Head, so its Acceptance expects that Head.
+    await observer.reload();
+    await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
+    await restored.locator("button[data-proposal-accept]").waitFor();
     // The Chapter Head moved after the Proposal opened, so the Acceptance replaces the Block text (ADR 0064).
     const expectedProse = (await getChapter(read)).chapter.current_revision.blocks
       .map((block) => block.manuscript_block_id === proposal.manuscript_block_id ? proposal.candidate_text : block.text)
@@ -157,7 +161,7 @@ export async function verifyConflictedProposalRecovery(input: {
     await observer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const written = await prose();
     assert.equal(written.includes("Still writing."), true);
-    assert.equal(written.includes("The lantern went dark."), true);
+    assert.equal(written.includes(proposal.candidate_text), true);
     assert.equal((await getProposal(read)).proposal.candidate_text, proposal.candidate_text);
   } finally {
     releaseStaleAccept();
