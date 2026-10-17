@@ -60,7 +60,7 @@ the PR with an ordinary merge commit.
    When only `main` moved after a passed round, run `make review-round PR=<pr> KIND=sync`. It is not a round. It passes when each file has the same change in two diffs: round head to new head, and old base to new base. The comparison ignores the `index` lines and the hunk line numbers. It posts a record comment with the new tree and prints `make verify-changed BASE=<round head>` and `make verify-targeted CHECK=project-scope`.
 
    After three complete rounds, a coordinator can review a small fix in a PR comment that names the head. Then run `make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>` to record the comment and the tree.
-   The two record kinds do not make a review request or import records, so `make verify-local` refuses the new tree. The merge evidence is the two `PASS` verdicts of the round, the record comment, and the GitHub `verify` run.
+   The two record kinds do not make a review request or import records, so `make verify-local` refuses the new tree. After a sync, the merge evidence is the passed round or record that the sync names, the sync comment, and the GitHub `verify` run. After a coordinator fix, the coordinator review comment replaces the verdicts of round 3. The merge evidence is that comment, the record comment, and the GitHub `verify` run.
 3. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports. With a review request, it first waits for `verify` in the same way.
 
    `make verify-local` is the pre-merge evidence command. Start it after the Standards
