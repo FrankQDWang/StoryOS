@@ -37,7 +37,7 @@ pub(super) async fn get_chapter(
                 current_revision: contract_chapter_revision(
                     facts.chapter.revision_id.as_ref().to_owned(),
                     facts.chapter.body,
-                    &facts.chapter.blocks,
+                    facts.chapter.blocks,
                 ),
             },
         })),

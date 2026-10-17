@@ -249,12 +249,7 @@ async fn classify_author_edit(
             )
         })
     });
-    let loaded = super::author_edit_proposal::load_chapter_proposal_heads(
-        client,
-        command,
-        current_body.clone(),
-    )
-    .await?;
+    let loaded = super::author_edit_proposal::load_chapter_proposal_heads(client, command).await?;
     let current_ownership = loaded.ownership.clone();
     if command
         .author_edit_units
@@ -311,7 +306,7 @@ async fn classify_author_edit(
     }
     if !uses_versioned_payload {
         let routed = match super::author_edit_proposal::route_inline_author_edit(
-            &loaded,
+            loaded,
             current_body,
             command.author_edit_units.clone(),
         ) {
