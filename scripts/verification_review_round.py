@@ -21,11 +21,19 @@ RECORD = re.compile(r'## (Sync|Coordinator fix) after round (\d+), tree `[0-9a-f
 CANDIDATE = re.compile(r'^Candidate: head `([0-9a-f]+)`, base `([0-9a-f]+)`, tree `([0-9a-f]{40})`\.$', re.M)
 ROUNDS = 3
 PASSED = {'Standards': 'PASS', 'Spec': 'PASS'}
-LAST_ROUND = ('PR {pr} had {rounds} review rounds. Send the open findings to the coordinator session; it decides the next step. '
-              'After a coordinator review of a small fix, record it with KIND=coordinator-fix COMMENT=<comment URL>')
+GUIDE = SCRIPTS.parent / 'docs/agents/verification.md'
+LAST_ROUND = ('PR {pr} had {rounds} review rounds. Send the open findings to the coordinator session. The coordinator '
+              'decides the next step with this procedure from docs/agents/verification.md#after-the-review-rounds:')
+PROCEDURE = re.compile(r'^### After the review rounds\n(.*?)(?=^#)', re.M | re.S)
 BROKER_COMMAND = 'openai-codex/codex/.*/scripts/app-server-broker.mjs'
 WAIT_MS = 600000
 WAITS = 6
+
+
+def last_round(pr, guide=GUIDE):
+    """The fourth-round refusal with the post-round procedures of the guide, or with only its link."""
+    procedure = PROCEDURE.search(guide.read_text()) if guide.is_file() else None
+    return LAST_ROUND.format(pr=pr, rounds=ROUNDS) + (f'\n\n{procedure[1].strip()}' if procedure else '')
 
 
 def gh(*args):
@@ -240,7 +248,7 @@ def run(root, pr, executor, wait, kind='review', review_comment=None):
               verification_github.comment(pr, max(stored, key=lambda b: b.stat().st_mtime)).strip())
         return
     if number > ROUNDS:
-        raise ValueError(LAST_ROUND.format(pr=pr, rounds=ROUNDS))
+        raise ValueError(last_round(pr))
     verification_reviews.wait_verify(route, pull['headRefOid'], wait)
     reviews = SCRIPTS / 'verification_reviews.py'
     path = Path(subprocess.check_output([sys.executable, str(reviews), 'request', '--pr', str(pr),

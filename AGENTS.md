@@ -23,6 +23,7 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **Ownership:** one ticket has one implementation owner and an isolated worktree. One coordinator owns the specification and the shared tracker state. One merger owns integration.
 - **Branches:** use one integration branch for each specification and a separate branch and worktree for each implementation ticket. Run independent dependency-ready tickets in parallel. Keep real product release gates.
 - **Pull request:** push the integration branch for one aggregate pull request. Implementation commits go to `main` only through that pull request.
+- **Executor:** an implementation session follows the [executor protocol](docs/agents/executor-protocol.md) from the refresh gate to the final report and cleanup.
 - **Merge:** the implementation session opens the PR. Only a coordinator session merges it, after it examines the evidence. Use an ordinary merge commit unless the specification requires another method.
 - **Merge gate:** merge only after the current required `verify` check and independent read-only Standards and Spec reviews pass. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for reviewers, targeted checks, and fresh evidence after a change.
 - **Complete run:** run `make verify-local` only when the ticket contract or an explicit request requires a complete local run. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for its order and its recovery.

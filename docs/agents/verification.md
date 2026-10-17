@@ -54,13 +54,9 @@ the PR with an ordinary merge commit.
    After the two review jobs, the command stops each Codex broker of the worktree and its app server, also when a job fails.
 
    The command and `verification_reviews.py` retry a transient GitHub API failure. A retry does not post a verdict comment two times. Do not put a `gh` wrapper on `PATH`, because `PATH` is a verification input. For `git fetch`, `git pull --ff-only`, or `git push`, use `scripts/git-retry.sh <git arguments>`. It retries a TLS, proxy, or EOF failure for at most 60 s and stops a rejected push at once.
-2. If a verdict is `FAIL`, fix the blocking findings, commit, push, and run the command again. A PR gets at most three rounds. The command refuses a fourth round: send the open findings to the coordinator.
-   After a round with `PASS` on the two axes, the command refuses a new round while the candidate tree does not change. The verdict comments of the round record its tree. A source fix after that round, for example after a failed `make verify-local`, changes the tree and starts the next round.
+2. If a verdict is `FAIL`, fix the blocking findings, commit, push, and run the command again. A PR gets at most three rounds. The command refuses a fourth round and prints [After the review rounds](#after-the-review-rounds).
 
-   When only `main` moved after a passed round, run `make review-round PR=<pr> KIND=sync`. It is not a round. It passes when each file has the same change in two diffs: round head to new head, and old base to new base. The comparison ignores the `index` lines and the hunk line numbers. It posts a record comment with the new tree and prints `make verify-changed BASE=<round head>` and `make verify-targeted CHECK=project-scope`.
-
-   After three complete rounds, a coordinator can review a small fix in a PR comment that names the head. Then run `make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>` to record the comment and the tree.
-   The two record kinds do not make a review request or import records, so `make verify-local` refuses the new tree. After a sync, the merge evidence is the passed round or record that the sync names, the sync comment, and the GitHub `verify` run. After a coordinator fix, the coordinator review comment replaces the verdicts of round 3. The merge evidence is that comment, the record comment, and the GitHub `verify` run.
+   After a round with `PASS` on the two axes, the command refuses a new round while the candidate tree does not change. The verdict comments of the round record its tree. A source fix after that round, for example after a failed `make verify-local`, changes the tree and starts the next round. When only `main` moved after a passed round, or a small fix follows round 3, use [After the review rounds](#after-the-review-rounds).
 3. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports. With a review request, it first waits for `verify` in the same way.
 
    `make verify-local` is the pre-merge evidence command. Start it after the Standards
@@ -75,6 +71,26 @@ After merge, synchronize `main` and run `make verify-tracker`. A ticket that req
 Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
 JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
 It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
+
+### After the review rounds
+
+These two procedures replace a new review round. `make review-round` prints this subsection when it refuses a fourth round.
+
+When only `main` moved after a passed round, the executor runs the sync without a coordinator decision:
+
+1. Merge the current `main` into the PR branch: `scripts/git-retry.sh fetch origin main`, `git merge origin/main`, and `scripts/git-retry.sh push`. Do not change a file in the merge.
+2. Run `make review-round PR=<pr> KIND=sync`. It is not a round. It passes when each file has the same change in two diffs: round head to new head, and old base to new base. The comparison ignores the `index` lines and the hunk line numbers. It posts a record comment with the new tree.
+3. Run `make verify-changed BASE=<round head>` and `make verify-targeted CHECK=project-scope`. Do not start a new round, and do not run `make verify-local`.
+4. When the sync refuses, stop and send the paths that it lists to the coordinator.
+
+When round 3 has open blocking findings, send them to the coordinator. The coordinator can accept a small fix:
+
+1. The coordinator reviews the fix in a PR comment that names the head.
+2. Add a test that fails before the fix.
+3. Run `make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>` to record the comment and the tree. It needs three complete rounds.
+4. Run `make verify-changed BASE=<round 3 head>`, `make verify-targeted CHECK=project-scope`, and `make verify-policy`. Do not start a fourth round, and do not run `make verify-local`.
+
+The two record kinds do not make a review request or import records, so `make verify-local` refuses the new tree. After a sync, the merge evidence is the passed round or record that the sync names, the sync comment, and the GitHub `verify` run. After a coordinator fix, the coordinator review comment replaces the verdicts of round 3. The merge evidence is that comment, the record comment, and the GitHub `verify` run.
 
 ## PR verification and optional complete run
 
