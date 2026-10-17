@@ -276,3 +276,44 @@ async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the
         )
     );
 }
+
+/// The data of each complete event when the stream arrives in `chunks`.
+fn event_data_of(chunks: &[&[u8]]) -> Vec<Option<String>> {
+    let mut buffer = super::EventBuffer::default();
+    let mut data = Vec::new();
+    for chunk in chunks {
+        buffer.push(chunk);
+        while let Some(event) = buffer.next_event() {
+            data.push(super::event_data(event).map(std::borrow::Cow::into_owned));
+        }
+    }
+    data
+}
+
+#[test]
+fn each_chunking_of_a_stream_gives_the_same_ordered_event_data() {
+    let stream: &[u8] = b"event: a\ndata: {\"n\":1}\n\n\
+        data: {\"n\":2}\r\n\r\n\
+        data: first\ndata:second\n\n\
+        event: ping\n\n\
+        data: [DONE]\n\n\
+        data: mixed\r\n\n\
+        data: crlf\n\r\n\r\n\
+        data: {\"n\":9}";
+    let expected = vec![
+        Some(r#"{"n":1}"#.to_owned()),
+        Some(r#"{"n":2}"#.to_owned()),
+        Some("first\nsecond".to_owned()),
+        None,
+        None,
+        Some("mixed\r".to_owned()),
+        Some("crlf".to_owned()),
+    ];
+
+    let bytes: Vec<&[u8]> = stream.chunks(/*chunk_size*/ 1).collect();
+    assert_eq!(event_data_of(&bytes), expected);
+    for split in 0..=stream.len() {
+        let (head, tail) = stream.split_at(split);
+        assert_eq!(event_data_of(&[head, tail]), expected, "split at {split}");
+    }
+}
