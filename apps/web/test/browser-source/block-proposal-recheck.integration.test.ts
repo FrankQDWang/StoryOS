@@ -12,7 +12,8 @@ import { manuscriptJson } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
-import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse } from "./scenario.ts";
+import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse, withOpenProposalList,
+} from "./scenario.ts";
 
 type Proposal = typeof proposalFixture.proposal;
 
@@ -23,7 +24,8 @@ function candidateFor(workspace: EditorReadyState): Proposal {
     operations: proposalFixture.proposal.operations.map((operation) => ({ ...operation, manuscript_block_id: blockId })) };
 }
 
-async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, fetchImpl: typeof fetch) {
+async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, transport: typeof fetch) {
+  const fetchImpl = withOpenProposalList(transport, workspace, { proposals: [proposal], completeness: "complete" });
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
   const locator: ProposalLocator = { proposalId: proposal.proposal_id, runId: proposal.source.run_id,

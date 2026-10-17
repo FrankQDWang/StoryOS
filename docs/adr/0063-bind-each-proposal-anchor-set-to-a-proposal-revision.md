@@ -4,7 +4,7 @@ status: accepted
 
 # Bind Each Proposal Anchor Set to a Proposal Revision
 
-The specification [Keep an Inline Proposal Editable After Replan and List the Open Proposals of a Chapter](https://github.com/FrankQDWang/StoryOS/issues/1198) owns this ADR. The architecture finding [Bind Inline Anchors to Proposal Revisions](https://github.com/FrankQDWang/StoryOS/issues/882) gives the cause. This ADR records the Anchor set binding, the reader rule, and the Replan proof rule. A later ticket of the specification adds the source of the open Proposal list.
+The specification [Keep an Inline Proposal Editable After Replan and List the Open Proposals of a Chapter](https://github.com/FrankQDWang/StoryOS/issues/1198) owns this ADR. The architecture finding [Bind Inline Anchors to Proposal Revisions](https://github.com/FrankQDWang/StoryOS/issues/882) gives the cause. This ADR records the Anchor set binding, the reader rule, the Replan proof rule, and the source of the open Proposal list.
 
 ## Context
 
@@ -39,12 +39,22 @@ Before this change, a Proposal Anchor row belonged to a Proposal and its Operati
 - **Replan result.** When each Anchor has a proof, one transaction writes the new Revision, its Anchor set on the expected Authoritative Revision, and the Receipt. The Operation keeps its identity. When one proof fails, the Replan is refused with `unavailable_proof`. It writes no Revision, and the conflict stays. The proof comes after the head check, so a changed head stays a conflict.
 - **Archive.** The Project archive export writes each row of `canonical/proposal_anchors.json` with its `proposal_revision_id`. Thus the archive keeps the Anchor set of each Proposal Revision.
 
+## Open Proposal list
+
+- **Source.** The Server list is the source of the open Proposal list. The `listChapterOpenProposals` query gives the open Proposals of one Chapter in one Project Scope.
+- **Open.** An open Proposal has the closure `open` and at least one pending Operation.
+- **Order.** The list order is the Proposal identity order. Each producer makes the Proposal identity with UUIDv7, so this order is the open order.
+- **Length.** The list has a maximum of 64 entries. The author approved this number on 2026-10-17. A longer set gives the completeness value `truncated`.
+- **Client.** The Protected Web Client reads this list when the workspace loads and at each Proposal change. Then it reads each Proposal with `getProposal`. A locator that the current AgentRun gives only causes an earlier read of the list. The client keeps no Proposal locator in browser storage.
+- **Unknown heads.** When the list read fails or the list is truncated, the client does not know all Proposal heads. Then it keeps the Proposal decision controls unavailable.
+
 ## Considered options
 
 - Keep the Anchor on the Operation and change its base at Replan. Rejected: an Anchor row is historical target evidence, and a change of it removes the evidence of the earlier Revision.
 - Ignore the base difference in the web client. Rejected: this weakens the exact target authority.
 - Prove the Replan Anchor also against the neighbor Blocks. Rejected: an author edit in a neighbor Block then refuses a Replan, and the author loses the edit path of the Inline candidate. The ownership rule already prevents the structural changes.
 - Map the old offsets without an exact comparison. Rejected: an equal slice at a different place can hide a changed range.
+- Keep the Proposal locators in the storage of each browser tab, or copy them to a shared browser store. Rejected by the author on 2026-10-17: a new tab or a different browser does not show the pending Proposals.
 - Give the reader rule to each reader as its own query. Rejected: five SQL readers include Anchor rows in larger joins. One function gives the rule one owner.
 
 ## Consequences

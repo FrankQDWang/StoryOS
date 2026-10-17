@@ -128,6 +128,28 @@ export function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+export type OpenProposalListAnswer = "failed" | {
+  proposals: readonly { proposal_id: string; revision_id: string; kind: string;
+    source: { run_id: string; decision_id: string } }[];
+  completeness: "complete" | "truncated";
+};
+
+/** Answers the open Proposal list query of the workspace Chapter with Agent Proposals and sends each other request to `next`. */
+export function withOpenProposalList(next: typeof fetch, workspace: EditorReadyState,
+  answer: OpenProposalListAnswer): typeof fetch {
+  return async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (!path.endsWith("/open-proposals")) return next(input, init);
+    if (answer === "failed") return jsonResponse({ code: "service_unavailable" }, 503);
+    return jsonResponse({ schema_id: "storyos.query.chapter-open-proposals.response.v1",
+      correlation_id: "018f0000-0000-7001-8000-000000000c71", project_scope: workspace.partition.project_scope,
+      chapter_id: workspace.session.base_snapshot.chapter_id, completeness: answer.completeness,
+      proposals: answer.proposals.map(({ proposal_id, revision_id, kind, source }) =>
+        ({ proposal_id, revision_id, kind,
+          source: { kind: "agent_run_decision", run_id: source.run_id, decision_id: source.decision_id } })) });
+  };
+}
+
 export function emptyActivityStream(): Response {
   return new Response("", {
     status: 200,
