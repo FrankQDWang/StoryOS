@@ -19,9 +19,12 @@ impl OpenProposalListReader for PostgresProjectReader {
         // Each producer makes the Proposal identity with UUIDv7, so the identity order is the open order.
         let rows = transaction
             .query(
-                "SELECT proposal.proposal_id::text, revision.revision_id::text, proposal.kind,
-                        proposal.source_run_id::text, proposal.source_decision_id::text,
-                        proposal.source_draft_id::text, proposal.source_draft_revision_id::text
+                "SELECT proposal.proposal_id::text AS proposal_id,
+                        revision.revision_id::text AS revision_id, proposal.kind,
+                        proposal.source_run_id::text AS run_id,
+                        proposal.source_decision_id::text AS decision_id,
+                        proposal.source_draft_id::text AS draft_id,
+                        proposal.source_draft_revision_id::text AS draft_revision_id
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -60,10 +63,10 @@ impl OpenProposalListReader for PostgresProjectReader {
         rows.iter()
             .map(|row| {
                 let source = match (
-                    row.get::<_, Option<String>>(3),
-                    row.get::<_, Option<String>>(4),
-                    row.get::<_, Option<String>>(5),
-                    row.get::<_, Option<String>>(6),
+                    row.get::<_, Option<String>>("run_id"),
+                    row.get::<_, Option<String>>("decision_id"),
+                    row.get::<_, Option<String>>("draft_id"),
+                    row.get::<_, Option<String>>("draft_revision_id"),
                 ) {
                     (Some(run_id), Some(decision_id), None, None) => {
                         OpenProposalSource::AgentRunDecision {
@@ -84,9 +87,9 @@ impl OpenProposalListReader for PostgresProjectReader {
                     }
                 };
                 Ok(OpenProposalListItem {
-                    proposal_id: row.get(0),
-                    revision_id: row.get(1),
-                    kind: row.get(2),
+                    proposal_id: row.get("proposal_id"),
+                    revision_id: row.get("revision_id"),
+                    kind: row.get("kind"),
                     source,
                 })
             })
