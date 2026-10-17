@@ -508,7 +508,19 @@ else:
         self.assertEqual(len(state['comments']), 2)
 
     def test_round_four_is_refused_with_the_coordinator(self):
-        self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
+        refusal = self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
+        # The refusal prints the post-round procedures of the verification guide.
+        for text in ('PR 745 had 3 review rounds', 'docs/agents/verification.md#after-the-review-rounds',
+                     'make review-round PR=<pr> KIND=sync', 'make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>',
+                     'a test that fails before the fix', 'make verify-targeted CHECK=project-scope'):
+            self.assertIn(text, refusal)
+
+    def test_round_four_refusal_without_the_procedure_names_the_guide(self):
+        import verification_review_round
+        refusal = verification_review_round.last_round(745, self.root / 'docs/agents/missing.md')
+        self.assertIn('PR 745 had 3 review rounds', refusal)
+        self.assertIn('docs/agents/verification.md#after-the-review-rounds', refusal)
+        self.assertNotIn('KIND=sync', refusal)
 
     def passed(self, number, tree):
         return [f'## {axis} review, round {number}: PASS\n\nCandidate: head `{"1" * 40}`, base `{"2" * 40}`, tree `{tree}`.\n'
