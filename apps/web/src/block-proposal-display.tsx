@@ -781,7 +781,7 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && !discardHold && !recoveryUnavailable && openList.kind !== "reading"
+        editable={editorProps.editable && !discardHold && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || (effectiveLocators.length === 0
             && writing?.projection.unsettled_intent_count === 0))

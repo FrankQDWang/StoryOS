@@ -1558,6 +1558,9 @@ storage. When the list read fails or the list is `truncated`, the client does
 not know all Proposal heads, and the Proposal decision controls stay
 unavailable.
 
+Text input does not wait for the list read. Only the Proposal decision
+controls wait for a complete list.
+
 ### 8.4 Undo and reversal
 
 The browser submits only the exact current `AuthorUndoFrontier` through
