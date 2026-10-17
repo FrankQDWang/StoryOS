@@ -649,6 +649,27 @@ else:
         self.assertIn('is not a comment of PR 745', result.stderr)
         self.assertEqual(len(state['comments']), 7)
 
+    def test_coordinator_fix_refuses_a_round_verdict_as_the_review(self):
+        head = self.repo.git('rev-parse', 'HEAD')
+        verdicts = [f'## {axis} review, round {n}: FAIL\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"0" * 40}`.\n'
+                    for n in (1, 2, 3) for axis in ('Standards', 'Spec')]
+        record = f'## Coordinator fix after round 3, tree `{"5" * 12}`: PASS\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"5" * 40}`.\n'
+        result, state = self.review_round({}, comments=[*verdicts, record], args=(
+            '--kind', 'coordinator-fix', '--comment', 'https://example.invalid/pull/745#comment-6'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not a coordinator review', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
+
+    def test_coordinator_fix_refuses_an_earlier_record_as_the_review(self):
+        head = self.repo.git('rev-parse', 'HEAD')
+        verdicts = [f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')]
+        record = f'## Coordinator fix after round 3, tree `{"5" * 12}`: PASS\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"5" * 40}`.\n'
+        result, state = self.review_round({}, comments=[*verdicts, record], args=(
+            '--kind', 'coordinator-fix', '--comment', 'https://example.invalid/pull/745#comment-7'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not a coordinator review', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
+
     def test_round_and_request_complete_when_each_gh_command_fails_two_times(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
         result, state = self.review_round({'standards': clean, 'spec': clean},

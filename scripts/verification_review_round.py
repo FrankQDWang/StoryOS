@@ -187,7 +187,9 @@ def coordinator_fix(root, pr, route, pull, wait, last, trees, review_comment, en
     found = [n for n, c in enumerate(pull['comments']) if c.get('url') == review_comment]
     if not found:
         raise ValueError(f'{review_comment} is not a comment of PR {pr}')
-    if found[0] < end:
+    if VERDICT.match(pull['comments'][found[0]]['body']) or RECORD.match(pull['comments'][found[0]]['body']):
+        raise ValueError(f'{review_comment} is not a coordinator review: it is a verdict or a record comment')
+    if found[0] <= end:
         raise ValueError(f'The coordinator review {review_comment} is older than the round {last} verdicts')
     if not any(pull['headRefOid'].startswith(s) for s in re.findall(r'[0-9a-f]{7,40}', pull['comments'][found[0]]['body'])):
         raise ValueError(f"The coordinator review {review_comment} does not name the head {pull['headRefOid']}")
