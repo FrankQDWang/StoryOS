@@ -937,15 +937,15 @@ fn problem(status: StatusCode, code: &str, message: &str) -> ApiError {
 fn contract_chapter_revision(
     revision_id: String,
     body: String,
-    blocks: &[storyos_application::ManuscriptBlock],
+    blocks: Vec<storyos_application::ManuscriptBlock>,
 ) -> contracts::AuthoritativeChapterRevision {
     contracts::AuthoritativeChapterRevision {
         revision_id,
         body,
         blocks: blocks
-            .iter()
+            .into_iter()
             .map(|block| contracts::ManuscriptBlock {
-                manuscript_block_id: block.manuscript_block_id.clone(),
+                manuscript_block_id: block.manuscript_block_id,
                 block_kind: match block.block_kind {
                     storyos_application::ManuscriptBlockKind::Paragraph => {
                         contracts::ManuscriptBlockKind::Paragraph
@@ -954,7 +954,7 @@ fn contract_chapter_revision(
                         contracts::ManuscriptBlockKind::Heading
                     }
                 },
-                text: block.text.clone(),
+                text: block.text,
             })
             .collect(),
     }

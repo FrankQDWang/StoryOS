@@ -121,7 +121,7 @@ fn undo_response(
                         contracts::DomainReceiptResult::AuthoritativeApplied,
                         compensated(
                             Some(authoritative_commit_id),
-                            Some(contract_chapter_revision(revision_id, body, &blocks)),
+                            Some(contract_chapter_revision(revision_id, body, blocks)),
                             project_activity_position,
                         ),
                     )

@@ -88,7 +88,7 @@ fn accept_response(
                 authoritative_revision: contract_chapter_revision(
                     applied.ids.revision_id.clone(),
                     applied.body,
-                    &applied.blocks,
+                    applied.blocks,
                 ),
                 project_activity_position: applied.project_activity_position.to_string(),
             },
