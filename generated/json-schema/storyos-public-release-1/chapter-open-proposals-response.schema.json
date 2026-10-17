@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "OpenProposalEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "block_edit",
+            "inline_edit",
+            "reversal"
+          ],
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/OpenProposalSource"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "revision_id",
+        "kind",
+        "source"
+      ],
+      "type": "object"
+    },
+    "OpenProposalListCompleteness": {
+      "enum": [
+        "complete",
+        "truncated"
+      ],
+      "type": "string"
+    },
+    "OpenProposalSource": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "agent_run_decision",
+              "type": "string"
+            },
+            "run_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "run_id",
+            "decision_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "draft_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "draft_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "refused_edit_draft",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "draft_id",
+            "draft_revision_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.chapter-open-proposals.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "chapter_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "completeness": {
+      "$ref": "#/$defs/OpenProposalListCompleteness"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "proposals": {
+      "items": {
+        "$ref": "#/$defs/OpenProposalEntry"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "schema_id": {
+      "const": "storyos.query.chapter-open-proposals.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "chapter_id",
+    "completeness",
+    "proposals"
+  ],
+  "title": "StoryOS Chapter Open Proposals Response",
+  "type": "object"
+}

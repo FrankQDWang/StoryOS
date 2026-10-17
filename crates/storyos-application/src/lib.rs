@@ -65,6 +65,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_structure;
 mod manuscript_tree;
+mod open_proposal_list;
 mod pinned_export_source;
 mod project_activity;
 mod project_command;
@@ -169,6 +170,9 @@ pub use model_gateway_ports::{
     PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds,
     RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose,
     RetrieveRequest, StreamControl, StreamStop, WirePayloadProjection,
+};
+pub use open_proposal_list::{
+    OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

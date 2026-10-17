@@ -43,6 +43,7 @@
     "getChapter",
     "getStatistics",
     "getProposal",
+    "listChapterOpenProposals",
     "getRefusedEditDraft",
     "getApplyAuthorEditOutcome",
     "getSnapshot",
@@ -493,6 +494,16 @@
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
       "sha256": "sha256:e8d650c384db895461679e7fbca802342542d907897467d9a136d6a88a005d00"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/chapter-open-proposals-request.schema.json",
+      "schema_id": "storyos.query.chapter-open-proposals.request.v1",
+      "sha256": "sha256:f61d352a3f6e99feab2043103a48126a59268da9b0a59d9e9e51d5bdc77617df"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/chapter-open-proposals-response.schema.json",
+      "schema_id": "storyos.query.chapter-open-proposals.response.v1",
+      "sha256": "sha256:9c1559bd0f8cee7cca6ad836642bed94fd8178affac0640119159cf48c3bbacc"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-request.schema.json",

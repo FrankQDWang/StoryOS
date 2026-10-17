@@ -150,6 +150,7 @@ mod manuscript_tree;
 mod model_registration;
 mod open_block_proposal;
 mod open_inline_proposal;
+mod open_proposal_list;
 mod ordinary_passage_targets;
 mod passage_collection;
 mod pause_agent_run;
