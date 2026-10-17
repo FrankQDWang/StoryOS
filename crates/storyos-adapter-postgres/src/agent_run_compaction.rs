@@ -45,9 +45,10 @@ pub(crate) async fn advance_active_compaction(
         CompactionRecordState::Absent => summary::prior_chain(client, claim, run).await?,
         _ => None,
     };
+    let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
     let requested = chain
         .as_ref()
-        .is_some_and(|chain| compaction_requested(&request_facts(run, chain)));
+        .is_some_and(|chain| compaction_requested(&request_facts(run, chain, &target_texts)));
     let ordinary = CompactionAdvance::Decide {
         later_request: false,
     };
@@ -112,13 +113,14 @@ pub(crate) async fn advance_active_compaction(
     } else {
         summary::prior_chain(client, claim, run).await?
     };
+    let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
     Ok(
         match decision_request_kind(
             later_request,
             started,
             chain
                 .as_ref()
-                .map(|chain| request_facts(run, chain))
+                .map(|chain| request_facts(run, chain, &target_texts))
                 .as_ref(),
         ) {
             DecisionRequestKind::Later => CompactionAdvance::Decide {
@@ -132,16 +134,38 @@ pub(crate) async fn advance_active_compaction(
     )
 }
 
+/// The text of each declared target that the decision request of `run` sends. With no `chain`,
+/// no compaction facts are necessary, so nothing loads.
+async fn declared_target_texts(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    chain: Option<&summary::PriorChain>,
+) -> Result<Vec<String>, CompleteAgentRunError> {
+    if chain.is_none() {
+        return Ok(Vec::new());
+    }
+    Ok(
+        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+            .await?
+            .into_iter()
+            .map(|target| target.block_text)
+            .collect(),
+    )
+}
+
 /// The loaded facts of the decision request of `run` that continues `chain`.
 fn request_facts<'a>(
     run: &'a RunPhaseRow,
     chain: &summary::PriorChain,
+    declared_target_texts: &'a [String],
 ) -> CompactionRequestFacts<'a> {
     CompactionRequestFacts {
         model_registration_revision: &run.model_registration_revision,
         budget_bounds: &run.budget_bounds,
         author_message: &run.author_message,
         decision: run.disclosure_request.as_ref(),
+        declared_target_texts,
         prior_reported_tokens: chain.reported_tokens,
     }
 }

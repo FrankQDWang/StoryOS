@@ -327,6 +327,7 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
         author_message: message,
         decision: None,
+        declared_target_texts: &[],
         prior_reported_tokens: prior,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
@@ -394,6 +395,7 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
             budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
             author_message: "Help again.",
             decision: Some(decision),
+            declared_target_texts: &[],
             prior_reported_tokens: Some(780_000),
         })
     };

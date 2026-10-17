@@ -31,6 +31,7 @@ On 2026-10-12 and 2026-10-13, the author selected the rule that starts Host-mana
 
 - The live qualification sent 6 requests. The automatic trigger started a compaction, and its summary request had 190,516 input tokens. The route accepted it. The window stays a documented value, because no request examined the full window ([evidence record](../research/agent-plan-compaction-threshold-qualification-2026-10-13.md)).
 - The expected input counts the new turn with the Token Counting Profile of StoryOS, which counts Unicode scalars. The provider can count more tokens for the same text. In the measured run, the margin of 20 percent covered this difference.
+- The new turn counts each text that the request sends: each selected Context item, each selection reference text, and each declared target text. The fixed headings of the request text are not counted. The margin of 20 percent covers them. [Count Each Sent Selection Reference Text in the Compaction Estimate](https://github.com/FrankQDWang/StoryOS/issues/1193) added this statement.
 
 ## Destination rejection of an input that is too long
 
