@@ -531,6 +531,71 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
 });
 
 
+test("a long shared prefix keeps an exact comparison after a candidate edit and a restart", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("cc11"), "Long prefix comparison", "cc2");
+    const prefix = "a".repeat(9_000);
+    const [baseTail, candidateTail] = ["b".repeat(400), "c".repeat(400)];
+    const sessionRequest: CreateEditorSessionRequest = {
+      command_schema: "storyos.command.create-editor-session.request.v1", ...BINDING, correlation_id: id("cc31"),
+    };
+    const session = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/editor-sessions", sessionRequest.command_schema,
+      await digestCreateEditorSession(sessionRequest), id("cc32"), (antiForgery) => createEditorSession({
+        baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id("cc32"), antiForgery, request: sessionRequest }));
+    if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
+    const writer = session.writer;
+    async function authorEdit(ns: string, fields: Partial<ApplyAuthorEditRequest>, from: number, to: number, text: string) {
+      const request: ApplyAuthorEditRequest = {
+        command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: id(`${ns}1`),
+        editor_session_id: session.editor_session.editor_session_id, writer_generation: writer.writer_generation,
+        chapter_id: chapterId, expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
+        expected_proposal_head_revision_ids: [], target_refs: session.base_snapshot.target_refs,
+        observed_ownership_partition: "authoritative", editor_contract_revision: "storyos.editor-contract.release-1.v3",
+        undo_group_id: id(`${ns}2`), completed_intent_record_id: id(`${ns}3`), local_intent_sequence: "1",
+        author_edit_units: [{ normalized_primitives: [{ kind: "replace_selection", from, to, text }],
+          selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to } }],
+        ...fields,
+      };
+      return challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
+        request.command_schema, await digestApplyAuthorEdit(request), id(`${ns}4`), (antiForgery) => applyAuthorEdit({
+          baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request }));
+    }
+    const based = await authorEdit("cc4", {}, 0, 0, prefix + baseTail);
+    if (based.effect.kind !== "authoritative_applied") throw new Error("expected an applied base edit");
+    const queried = await admitProse(started.baseUrl, fetchImpl, projectId, chapterId, id("cc51"));
+    if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") throw new Error("expected candidate");
+    const proposalId = queried.decision.opened_proposal.proposal_id;
+    const opened = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const edited = await authorEdit("cc6", {
+      expected_authoritative_revision_id: based.effect.authoritative_revision.revision_id,
+      expected_proposal_head_revision_ids: [opened.proposal.revision_id],
+      proposal_target: { proposal_id: proposalId, operation_id: opened.proposal.operation_id,
+        revision_id: opened.proposal.revision_id, manuscript_block_id: opened.proposal.manuscript_block_id },
+      observed_ownership_partition: "mixed", local_intent_sequence: "2",
+    }, 0, opened.proposal.candidate_text.length, prefix + candidateTail);
+    if (edited.effect.kind !== "proposal_revised") throw new Error("expected ProposalRevised");
+    const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    assert.deepEqual(revised.proposal.revision_comparison, {
+      kind: "present",
+      base_authoritative_revision_id: based.effect.authoritative_revision.revision_id,
+      candidate_revision_id: edited.effect.proposal_revision_id,
+      operation_id: opened.proposal.operation_id,
+      spans: [{ base_from: 9_000, base_to: 9_400, candidate_from: 9_000, candidate_to: 9_400,
+        base_text: baseTail, candidate_text: candidateTail }],
+    });
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl: reloadedFetch })).proposal, revised.proposal);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl: reloadedFetch })).chapter, chapter.chapter);
+  } finally { await stopRealServer(started.server); }
+}, 120_000);
+
 test("a fresh instruction revises the exact pending candidate through the real Worker", async () => {
   let started = await startRealServer();
   try {
