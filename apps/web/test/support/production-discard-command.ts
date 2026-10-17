@@ -220,7 +220,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     journal.metadata = journal.metadata!.filter((record) => !String(record.key).startsWith("acceptance:")
       && !String(record.key).startsWith("rejection:"));
     const sessionStorage = await page.evaluate((projectId) => Object.fromEntries(Object.entries(window.sessionStorage)
-      .filter(([key]) => key.endsWith(`:${projectId}`) && (key.startsWith("active_session:") || key.startsWith("block_proposals:")))), projectId);
+      .filter(([key]) => key.endsWith(`:${projectId}`) && key.startsWith("active_session:"))), projectId);
     await writeFile(file, JSON.stringify({ projectId, chapterId, proposalId, draft: reopened, objects: before, journal, sessionStorage, archive }));
   }
 }

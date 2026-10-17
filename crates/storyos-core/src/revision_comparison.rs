@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RevisionComparisonAccess {
     SameScope,
@@ -55,20 +57,33 @@ pub fn inspect_revision_comparison(
     }
     let base: Vec<char> = source.base_text.chars().collect();
     let candidate: Vec<char> = source.candidate_text.chars().collect();
-    let edits = normalize_fragmented_matches(&coalesce(&myers_edits(&base, &candidate)));
+    let edits = normalize_fragmented_matches(&base, &candidate, myers_edits(&base, &candidate));
     Some(RevisionComparison {
         base_revision_id: source.base_revision_id.clone(),
         candidate_revision_id: source.candidate_revision_id.clone(),
         operation_id: source.operation_id.clone(),
-        spans: replacement_spans(&edits),
+        spans: replacement_spans(&base, &candidate, &edits),
     })
 }
 
+/// One run of scalars, given as index ranges into the base and candidate scalars.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Edit {
-    Equal(String),
-    Delete(String),
-    Insert(String),
+    Equal {
+        base: Range<usize>,
+        candidate: Range<usize>,
+    },
+    Delete(Range<usize>),
+    Insert(Range<usize>),
+}
+
+impl Edit {
+    fn is_empty(&self) -> bool {
+        match self {
+            Edit::Equal { base, .. } => base.is_empty(),
+            Edit::Delete(run) | Edit::Insert(run) => run.is_empty(),
+        }
+    }
 }
 
 const TRACE_BYTE_CEILING: usize = 1024 * 1024;
@@ -155,93 +170,118 @@ fn backtrack(base: &[char], candidate: &[char], trace: &[Vec<usize>]) -> Vec<Edi
             return coarse_replacement(base, candidate);
         }
         let previous_y = previous_y_signed as usize;
-        while x > previous_x && y > previous_y {
-            x -= 1;
-            y -= 1;
-            edits.push(Edit::Equal(base[x].to_string()));
-        }
+        let snake = x
+            .saturating_sub(previous_x)
+            .min(y.saturating_sub(previous_y));
+        prepend_step(
+            &mut edits,
+            Edit::Equal {
+                base: x - snake..x,
+                candidate: y - snake..y,
+            },
+        );
+        x -= snake;
+        y -= snake;
         if x == previous_x && y == 0 || x != previous_x && x == 0 {
             return coarse_replacement(base, candidate);
         }
         if x == previous_x {
             y -= 1;
-            edits.push(Edit::Insert(candidate[y].to_string()));
+            prepend_step(&mut edits, Edit::Insert(y..y + 1));
         } else {
             x -= 1;
-            edits.push(Edit::Delete(base[x].to_string()));
+            prepend_step(&mut edits, Edit::Delete(x..x + 1));
         }
     }
-    while x > 0 && y > 0 {
-        x -= 1;
-        y -= 1;
-        edits.push(Edit::Equal(base[x].to_string()));
-    }
-    while x > 0 {
-        x -= 1;
-        edits.push(Edit::Delete(base[x].to_string()));
-    }
-    while y > 0 {
-        y -= 1;
-        edits.push(Edit::Insert(candidate[y].to_string()));
-    }
+    let snake = x.min(y);
+    prepend_step(
+        &mut edits,
+        Edit::Equal {
+            base: x - snake..x,
+            candidate: y - snake..y,
+        },
+    );
+    prepend_step(&mut edits, Edit::Delete(0..x - snake));
+    prepend_step(&mut edits, Edit::Insert(0..y - snake));
     edits.reverse();
     edits
 }
 
-fn coarse_replacement(base: &[char], candidate: &[char]) -> Vec<Edit> {
-    let mut edits = Vec::new();
-    if !base.is_empty() {
-        edits.push(Edit::Delete(base.iter().collect()));
+/// Record a step that ends where the last recorded step starts, because backtracking walks backward.
+fn prepend_step(edits: &mut Vec<Edit>, step: Edit) {
+    if step.is_empty() {
+        return;
     }
-    if !candidate.is_empty() {
-        edits.push(Edit::Insert(candidate.iter().collect()));
+    match (edits.last_mut(), &step) {
+        (
+            Some(Edit::Equal { base, candidate }),
+            Edit::Equal {
+                base: step_base,
+                candidate: step_candidate,
+            },
+        ) => {
+            base.start = step_base.start;
+            candidate.start = step_candidate.start;
+        }
+        (Some(Edit::Delete(run)), Edit::Delete(step_run))
+        | (Some(Edit::Insert(run)), Edit::Insert(step_run)) => run.start = step_run.start,
+        _ => edits.push(step),
     }
-    edits
 }
 
-fn normalize_fragmented_matches(edits: &[Edit]) -> Vec<Edit> {
+fn coarse_replacement(base: &[char], candidate: &[char]) -> Vec<Edit> {
+    vec![
+        Edit::Delete(0..base.len()),
+        Edit::Insert(0..candidate.len()),
+    ]
+}
+
+fn normalize_fragmented_matches(base: &[char], candidate: &[char], edits: Vec<Edit>) -> Vec<Edit> {
     let mut edits = coalesce(edits);
     let mut guard = edits.len().saturating_add(1);
     while guard > 0 {
         guard -= 1;
-        if !absorb_one_fragment(&mut edits) {
+        if !absorb_one_fragment(base, candidate, &mut edits) {
             break;
         }
-        edits = coalesce(&edits);
+        edits = coalesce(edits);
     }
-    merge_change_groups(&edits)
+    merge_change_groups(base, candidate, edits)
 }
 
-fn absorb_one_fragment(edits: &mut Vec<Edit>) -> bool {
-    let mut equality_index = None;
-    let mut equality = String::new();
+fn absorb_one_fragment(base: &[char], candidate: &[char], edits: &mut Vec<Edit>) -> bool {
+    let mut equality = None;
+    let mut equality_len = 0_u32;
     let mut insertions_before = 0_u32;
     let mut deletions_before = 0_u32;
     let mut insertions_after = 0_u32;
     let mut deletions_after = 0_u32;
     for (index, edit) in edits.iter().enumerate() {
         match edit {
-            Edit::Equal(text) => {
-                equality_index = Some(index);
-                equality = text.clone();
+            Edit::Equal {
+                base: base_run,
+                candidate: candidate_run,
+            } => {
+                equality = Some((index, base_run.clone(), candidate_run.clone()));
+                equality_len = utf16_len(&base[base_run.clone()]);
                 insertions_before = insertions_after;
                 deletions_before = deletions_after;
                 insertions_after = 0;
                 deletions_after = 0;
             }
-            Edit::Insert(text) => insertions_after += utf16_len(text),
-            Edit::Delete(text) => deletions_after += utf16_len(text),
+            Edit::Insert(run) => insertions_after += utf16_len(&candidate[run.clone()]),
+            Edit::Delete(run) => deletions_after += utf16_len(&base[run.clone()]),
         }
-        let fragmented = equality_index.is_some()
-            && utf16_len(&equality) <= insertions_before.max(deletions_before)
-            && utf16_len(&equality) <= insertions_after.max(deletions_after);
+        let fragmented = equality.is_some()
+            && equality_len <= insertions_before.max(deletions_before)
+            && equality_len <= insertions_after.max(deletions_after);
         if fragmented {
-            let Some(index) = equality_index else {
+            let Some((index, base_run, candidate_run)) = equality else {
                 return false;
             };
             edits.splice(
                 index..=index,
-                [Edit::Delete(equality.clone()), Edit::Insert(equality)],
+                [Edit::Delete(base_run), Edit::Insert(candidate_run)],
             );
             return true;
         }
@@ -249,93 +289,109 @@ fn absorb_one_fragment(edits: &mut Vec<Edit>) -> bool {
     false
 }
 
-fn merge_change_groups(edits: &[Edit]) -> Vec<Edit> {
-    let edits = coalesce(edits);
+fn merge_change_groups(base: &[char], candidate: &[char], edits: Vec<Edit>) -> Vec<Edit> {
+    let mut edits = coalesce(edits).into_iter().peekable();
     let mut merged = Vec::new();
-    let mut index = 0;
-    while index < edits.len() {
-        if matches!(edits[index], Edit::Equal(_)) {
-            merged.push(edits[index].clone());
-            index += 1;
-            continue;
-        }
-        let mut deleted = String::new();
-        let mut inserted = String::new();
-        while index < edits.len() && !matches!(edits[index], Edit::Equal(_)) {
-            match &edits[index] {
-                Edit::Delete(text) => deleted.push_str(text),
-                Edit::Insert(text) => inserted.push_str(text),
-                Edit::Equal(_) => {}
+    let mut base_at = 0;
+    let mut candidate_at = 0;
+    while let Some(edit) = edits.next() {
+        let (mut deleted, mut inserted) = match edit {
+            Edit::Equal {
+                base: base_run,
+                candidate: candidate_run,
+            } => {
+                base_at = base_run.end;
+                candidate_at = candidate_run.end;
+                merged.push(Edit::Equal {
+                    base: base_run,
+                    candidate: candidate_run,
+                });
+                continue;
             }
-            index += 1;
-        }
-        let (prefix, deleted, inserted, suffix) = split_shared_edges(&deleted, &inserted);
-        if !prefix.is_empty() {
-            merged.push(Edit::Equal(prefix));
-        }
-        if !deleted.is_empty() {
-            merged.push(Edit::Delete(deleted));
-        }
-        if !inserted.is_empty() {
-            merged.push(Edit::Insert(inserted));
-        }
-        if !suffix.is_empty() {
-            merged.push(Edit::Equal(suffix));
-        }
-    }
-    coalesce(&merged)
-}
-
-fn split_shared_edges(deleted: &str, inserted: &str) -> (String, String, String, String) {
-    let mut deleted: Vec<char> = deleted.chars().collect();
-    let mut inserted: Vec<char> = inserted.chars().collect();
-    let mut prefix = String::new();
-    while !deleted.is_empty() && deleted.first() == inserted.first() {
-        prefix.push(deleted.remove(0));
-        inserted.remove(0);
-    }
-    let mut suffix = Vec::new();
-    while !deleted.is_empty() && deleted.last() == inserted.last() {
-        suffix.push(deleted.pop().expect("suffix char"));
-        inserted.pop();
-    }
-    suffix.reverse();
-    (
-        prefix,
-        deleted.into_iter().collect(),
-        inserted.into_iter().collect(),
-        suffix.into_iter().collect(),
-    )
-}
-
-fn coalesce(edits: &[Edit]) -> Vec<Edit> {
-    let mut coalesced = Vec::new();
-    for edit in edits {
-        let text = match edit {
-            Edit::Equal(text) | Edit::Delete(text) | Edit::Insert(text) => text,
+            Edit::Delete(run) => (run, candidate_at..candidate_at),
+            Edit::Insert(run) => (base_at..base_at, run),
         };
-        if text.is_empty() {
-            continue;
+        while let Some(next) = edits.next_if(|next| !matches!(next, Edit::Equal { .. })) {
+            match next {
+                Edit::Delete(run) => deleted.end = run.end,
+                Edit::Insert(run) => inserted.end = run.end,
+                Edit::Equal { .. } => {}
+            }
         }
-        match (coalesced.last_mut(), edit) {
-            (Some(Edit::Equal(current)), Edit::Equal(text))
-            | (Some(Edit::Delete(current)), Edit::Delete(text))
-            | (Some(Edit::Insert(current)), Edit::Insert(text)) => current.push_str(text),
-            _ => coalesced.push(edit.clone()),
-        }
+        base_at = deleted.end;
+        candidate_at = inserted.end;
+        merged.extend(split_shared_edges(base, candidate, deleted, inserted));
     }
-    coalesced
+    coalesce(merged)
 }
 
-fn replacement_spans(edits: &[Edit]) -> Vec<ReplacementSpan> {
+fn split_shared_edges(
+    base: &[char],
+    candidate: &[char],
+    deleted: Range<usize>,
+    inserted: Range<usize>,
+) -> [Edit; 4] {
+    let deleted_scalars = &base[deleted.clone()];
+    let inserted_scalars = &candidate[inserted.clone()];
+    let prefix = deleted_scalars
+        .iter()
+        .zip(inserted_scalars)
+        .take_while(|(deleted, inserted)| deleted == inserted)
+        .count();
+    let suffix = deleted_scalars[prefix..]
+        .iter()
+        .rev()
+        .zip(inserted_scalars[prefix..].iter().rev())
+        .take_while(|(deleted, inserted)| deleted == inserted)
+        .count();
+    [
+        Edit::Equal {
+            base: deleted.start..deleted.start + prefix,
+            candidate: inserted.start..inserted.start + prefix,
+        },
+        Edit::Delete(deleted.start + prefix..deleted.end - suffix),
+        Edit::Insert(inserted.start + prefix..inserted.end - suffix),
+        Edit::Equal {
+            base: deleted.end - suffix..deleted.end,
+            candidate: inserted.end - suffix..inserted.end,
+        },
+    ]
+}
+
+/// Drop empty runs and join adjacent runs of one kind. Adjacent runs of one kind are contiguous.
+fn coalesce(mut edits: Vec<Edit>) -> Vec<Edit> {
+    edits.retain(|edit| !edit.is_empty());
+    edits.dedup_by(|next, current| match (current, next) {
+        (
+            Edit::Equal { base, candidate },
+            Edit::Equal {
+                base: next_base,
+                candidate: next_candidate,
+            },
+        ) => {
+            base.end = next_base.end;
+            candidate.end = next_candidate.end;
+            true
+        }
+        (Edit::Delete(run), Edit::Delete(next_run))
+        | (Edit::Insert(run), Edit::Insert(next_run)) => {
+            run.end = next_run.end;
+            true
+        }
+        _ => false,
+    });
+    edits
+}
+
+fn replacement_spans(base: &[char], candidate: &[char], edits: &[Edit]) -> Vec<ReplacementSpan> {
     let mut spans = Vec::new();
     let mut base_at = 0_u32;
     let mut candidate_at = 0_u32;
     let mut index = 0;
     while index < edits.len() {
         match &edits[index] {
-            Edit::Equal(text) => {
-                let len = utf16_len(text);
+            Edit::Equal { base: run, .. } => {
+                let len = utf16_len(&base[run.clone()]);
                 base_at += len;
                 candidate_at += len;
                 index += 1;
@@ -347,17 +403,19 @@ fn replacement_spans(edits: &[Edit]) -> Vec<ReplacementSpan> {
                 let mut candidate_text = String::new();
                 while index < edits.len() {
                     match &edits[index] {
-                        Edit::Delete(text) => {
-                            base_text.push_str(text);
-                            base_at += utf16_len(text);
+                        Edit::Delete(run) => {
+                            let scalars = &base[run.clone()];
+                            base_text.extend(scalars);
+                            base_at += utf16_len(scalars);
                             index += 1;
                         }
-                        Edit::Insert(text) => {
-                            candidate_text.push_str(text);
-                            candidate_at += utf16_len(text);
+                        Edit::Insert(run) => {
+                            let scalars = &candidate[run.clone()];
+                            candidate_text.extend(scalars);
+                            candidate_at += utf16_len(scalars);
                             index += 1;
                         }
-                        Edit::Equal(_) => break,
+                        Edit::Equal { .. } => break,
                     }
                 }
                 spans.push(ReplacementSpan {
@@ -374,8 +432,14 @@ fn replacement_spans(edits: &[Edit]) -> Vec<ReplacementSpan> {
     spans
 }
 
-fn utf16_len(text: &str) -> u32 {
-    u32::try_from(text.encode_utf16().count()).unwrap_or(u32::MAX)
+fn utf16_len(scalars: &[char]) -> u32 {
+    u32::try_from(
+        scalars
+            .iter()
+            .map(|scalar| scalar.len_utf16())
+            .sum::<usize>(),
+    )
+    .unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]

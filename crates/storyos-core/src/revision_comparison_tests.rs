@@ -84,3 +84,43 @@ fn comparison_binds_exact_revisions_and_normalizes_adjacent_fragments() {
         expect(vec![span(3, 4, 3, 4, "b", "c")])
     );
 }
+
+fn replace_scalar(text: &str, index: usize) -> String {
+    let mut scalars: Vec<char> = text.chars().collect();
+    scalars[index] = 'X';
+    scalars.into_iter().collect()
+}
+
+#[test]
+fn comparison_keeps_spans_for_long_texts_and_the_trace_limit_fallback() {
+    let long: String = "abcdefghij".chars().cycle().take(/*n*/ 32_000).collect();
+    assert_eq!(inspect(&long, &long), expect(Vec::new()));
+
+    assert_eq!(
+        inspect(&long, &replace_scalar(&long, 16_000)),
+        expect(vec![span(16_000, 16_001, 16_000, 16_001, "a", "X")])
+    );
+
+    let astral = "😀a".repeat(/*n*/ 16_000);
+    assert_eq!(
+        inspect(&astral, &replace_scalar(&astral, 16_001)),
+        expect(vec![span(24_002, 24_003, 24_002, 24_003, "a", "X")])
+    );
+
+    let deleted = "b".repeat(/*n*/ 400);
+    let inserted = "c".repeat(/*n*/ 400);
+    assert_eq!(
+        inspect(
+            &format!("{}{deleted}", "a".repeat(9_000)),
+            &format!("{}{inserted}", "a".repeat(9_000))
+        ),
+        expect(vec![span(9_000, 9_400, 9_000, 9_400, &deleted, &inserted)])
+    );
+    assert_eq!(
+        inspect(
+            &format!("{}{deleted}", "😀".repeat(4_000)),
+            &format!("{}{inserted}", "😀".repeat(4_000))
+        ),
+        expect(vec![span(8_000, 8_400, 8_000, 8_400, &deleted, &inserted)])
+    );
+}
