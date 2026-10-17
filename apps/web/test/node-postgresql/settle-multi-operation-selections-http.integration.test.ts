@@ -11,13 +11,13 @@ import {
   acceptProposal, applyAuthorEdit, cancelAgentRun, completeReadyPartialProposal, createAgentRun, createChapter,
   createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
   digestCompleteReadyPartialProposal, digestCreateAgentRun, digestCreateChapter,
-  digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations, digestReplanProposal,
-  reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
+  digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations,
+  reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CompleteReadyPartialProposalRequest,
   CreateAgentRunRequest, CreateEditorSessionRequest, GetProposalResponse, ReopenRejectedOperationsRequest,
-  ReplanProposalRequest, SelectionReference, SteerAgentRunRequest,
+  SelectionReference, SteerAgentRunRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
@@ -858,7 +858,7 @@ test("acceptProposal applies a reversed multi-operation set without using array 
 });
 
 for (const history of ["retained", "legacy_overwritten", "collection"]) {
-test(`partial Acceptance preserves ${history} evidence and conflicts the remaining Operation`, async () => {
+test(`partial Acceptance preserves ${history} evidence and replaces the remaining Operation text`, async () => {
   const ns = randomBytes(3).toString("hex");
   let started = await startRealServer();
   try {
@@ -981,81 +981,45 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       const fault = `validation_fault_${ns}`;
       await queryPostgres(`CREATE FUNCTION storyos.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN IF NEW.project_id='${prepared.projectId}'::uuid THEN RAISE EXCEPTION 'controlled condition fault'; END IF;
-        RETURN NEW; END $$; CREATE TRIGGER ${fault} BEFORE INSERT ON storyos.proposal_validation_conditions
+        RETURN NEW; END $$; CREATE TRIGGER ${fault} BEFORE INSERT ON storyos.acceptance_receipts
         FOR EACH ROW EXECUTE FUNCTION storyos.${fault}();`);
       try {
         await assert.rejects(acceptRemaining, (error) => requireStoryOSProtocolError(error).status === 503);
         assert.deepEqual(await settlementState(), beforeFault);
       } finally {
-        await queryPostgres(`DROP TRIGGER ${fault} ON storyos.proposal_validation_conditions; DROP FUNCTION storyos.${fault}()`);
+        await queryPostgres(`DROP TRIGGER ${fault} ON storyos.acceptance_receipts; DROP FUNCTION storyos.${fault}()`);
       }
     }
-    const secondAccepted = await acceptRemaining();
-    assert.deepEqual(secondAccepted.effect, { kind: "conflicted", reason: "changed_head" });
-    assert.deepEqual(await retainedHistory(), unchangedHistory);
     assert.deepEqual(await acceptProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl,
       idempotencyKey: id(`${ns}0352`), antiForgery: nonce, request: firstRequest,
     }), firstAccepted);
-    const conflictRef = secondAccepted.receipt.condition_refs[0]!;
-    if (history !== "legacy_overwritten") {
-      const afterConflict = await getProposal({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: opened.proposal.proposal_id, fetchImpl,
-    });
-    assert.deepEqual(afterConflict.proposal, {
-      ...afterFirst.proposal, validation: "conflicted",
-      condition_refs: secondAccepted.receipt.condition_refs,
-      source_condition: { kind: "proposal_conflict", proposal_conflict_ref: secondAccepted.receipt.condition_refs[0]! },
-    });
+    if (history === "legacy_overwritten") {
+      await assert.rejects(acceptRemaining, (error) => requireStoryOSProtocolError(error).status === 503);
+    } else {
+      const secondAccepted = await acceptRemaining();
+      if (secondAccepted.effect.kind !== "applied") throw new Error("expected applied");
+      assert.equal(secondAccepted.effect.target_resolution, "block_replacement");
+      const blocks = firstAccepted.effect.authoritative_revision.blocks.map((block) =>
+        block.manuscript_block_id === secondOperation.manuscript_block_id
+          ? { ...block, text: secondOperation.candidate_text } : block);
+      assert.deepEqual(secondAccepted.effect.authoritative_revision, {
+        ...firstAccepted.effect.authoritative_revision,
+        revision_id: secondAccepted.effect.authoritative_revision.revision_id,
+        body: blocks.map((block) => block.text).join("\n"), blocks,
+      });
+      assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        proposalId: opened.proposal.proposal_id, fetchImpl })).proposal, { ...afterFirst.proposal,
+        operations: afterFirst.proposal.operations.map((operation) => operation.operation_id === secondOperation.operation_id
+          ? { ...operation, resolution: "applied", reservation_state: "resolved" } : operation),
+      });
     }
+    assert.deepEqual(await retainedHistory(), unchangedHistory);
     const chapter = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl,
     });
-    assert.deepEqual(chapter.chapter.current_revision, firstAccepted.effect.authoritative_revision);
-    const replanRequest: ReplanProposalRequest = {
-      command_schema: "storyos.command.replan-proposal.request.v1",
-      replan_proposal_input: {
-        ...BINDING, correlation_id: id(`${ns}0361`),
-        conflicted_proposal_revision_id: opened.proposal.revision_id,
-        expected_current_proposal_head: opened.proposal.revision_id,
-        expected_current_target_revisions: [chapter.chapter.current_revision.revision_id],
-        replacement_operations: [secondOperation.operation_id],
-        source_condition: { kind: "proposal_conflict", proposal_conflict_ref: conflictRef },
-        editor_session_id: seeded.session.editor_session.editor_session_id,
-      },
-    };
-    const replanned = await challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans", replanRequest.command_schema,
-      await digestReplanProposal(replanRequest), id(`${ns}0362`), (antiForgery) => replanProposal({
-        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
-        fetchImpl, idempotencyKey: id(`${ns}0362`), antiForgery, request: replanRequest,
-      }));
-    assert.equal(replanned.effect.kind, "resolved");
-    const afterReplan = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: opened.proposal.proposal_id, fetchImpl });
-    assert.notEqual(afterReplan.proposal.revision_id, opened.proposal.revision_id);
-    assert.deepEqual(afterReplan.proposal, { ...afterFirst.proposal,
-      revision_id: afterReplan.proposal.revision_id, validation: "pending",
-      validation_receipt: { kind: "absent" },
-      base_authoritative_revision_id: chapter.chapter.current_revision.revision_id,
-      revision_comparison: afterReplan.proposal.revision_comparison,
-    });
-    const pendingRequest: AcceptProposalRequest = { ...secondRequest,
-      accept_proposal_input: { ...secondRequest.accept_proposal_input,
-        proposal_revision_id: afterReplan.proposal.revision_id, correlation_id: id(`${ns}0363`) } };
-    const pendingAcceptance = await challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", pendingRequest.command_schema,
-      await digestAcceptProposal(pendingRequest), id(`${ns}0364`), (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
-        fetchImpl, idempotencyKey: id(`${ns}0364`), antiForgery, request: pendingRequest,
-      }));
-    assert.deepEqual(pendingAcceptance.effect, { kind: "refused", reason: "not_eligible" });
-    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: opened.proposal.proposal_id, fetchImpl })).proposal, afterReplan.proposal);
-    assert.deepEqual(await retainedHistory(), unchangedHistory);
     const foreign = browserFetch(started.baseUrl, "session-b");
     await assert.rejects(getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl: foreign }),
@@ -1104,10 +1068,7 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
         assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, ...prepared,
           chapterId: collection.chapters[1]!.chapter.chapter_id, fetchImpl })).chapter, collection.chapters[1]!.chapter);
       }
-      const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
-      assert.equal(conditions.length, 1);
-      assert.deepEqual(conditions, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text
-        FROM storyos.proposal_validation_conditions AS record WHERE project_id='${prepared.projectId}'::uuid`)));
+      assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json"))), []);
       const historical = await archive(id(`${ns}0374`));
       if (historical.effect.kind !== "admitted") throw new Error("expected historical archive Admission");
       const exportId = historical.effect.export_id;

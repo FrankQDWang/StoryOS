@@ -1,16 +1,16 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { acceptProposal, digestAcceptProposal, digestExportProjectArchive, digestReplanProposal,
+import { digestExportProjectArchive, digestReplanProposal,
   exportProjectArchive, getChapter, getExportOperation, getProposal, replanProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest, ReplanProposalRequest
+import type { ReplanProposalRequest
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, requireStoryOSProtocolError,
   sessionFetch as browserFetch, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { USER_A, UUID_V7, BINDING, id, startRealServer, settleOnce,
-  drainLeftoverWork, challenged, prepare, admitProse, reviseCandidate } from "../support/acceptance.ts";
+  drainLeftoverWork, challenged, prepare, admitProse, reviseCandidate, seedAcceptanceCondition } from "../support/acceptance.ts";
 
 test("replanProposal appends a pending Revision bound to the current Head", async () => {
   let started = await startRealServer();
@@ -63,40 +63,9 @@ test("replanProposal appends a pending Revision bound to the current Head", asyn
       chapterId: prepared.chapterId,
       fetchImpl: prepared.fetchImpl,
     });
-    const acceptRequest: AcceptProposalRequest = {
-      command_schema: "storyos.command.accept-proposal.request.v1",
-      accept_proposal_input: {
-        proposal_revision_id: revised.proposal.revision_id,
-        validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_ids: [revised.proposal.operation_id],
-        expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
-        editor_session_id: session.editor_session.editor_session_id,
-        ...BINDING,
-        correlation_id: id("e3860151"),
-      },
-    };
-    const conflicted = await challenged(
-      started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      acceptRequest.command_schema,
-      await digestAcceptProposal(acceptRequest),
-      id("e3860152"),
-      (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl,
-        projectId: prepared.projectId,
-        proposalId: revised.proposal.proposal_id,
-        fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e3860152"),
-        antiForgery,
-        request: acceptRequest,
-      }),
-    );
-    assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
-    const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
-    assert.match(conflictRef, UUID_V7);
+    const { conflictRef, receiptId } = await seedAcceptanceCondition(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, revised.proposal, session.editor_session.editor_session_id,
+      before.chapter.current_revision.revision_id, "proposal_conflict", "e38615");
     const afterConflict = await getProposal({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
@@ -361,7 +330,7 @@ test("replanProposal appends a pending Revision bound to the current Head", asyn
       project_id: prepared.projectId,
       proposal_id: afterConflict.proposal.proposal_id,
       proposal_revision_id: afterConflict.proposal.revision_id,
-      acceptance_receipt_id: conflicted.receipt.receipt_id,
+      acceptance_receipt_id: receiptId,
       validation: "conflicted",
       conflict_id: conflictRef,
       condition_kind: "proposal_conflict",

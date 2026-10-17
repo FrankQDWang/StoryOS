@@ -1,11 +1,12 @@
+import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyAuthorEdit, createAgentRun, createChapter, createEditorSession, createProject,
-  createProjectChallenge, createProjectCommandChallenge, createVolume, digestApplyAuthorEdit,
+import { acceptProposal, applyAuthorEdit, createAgentRun, createChapter, createEditorSession, createProject,
+  createProjectChallenge, createProjectCommandChallenge, createVolume, digestAcceptProposal, digestApplyAuthorEdit,
   digestCreateAgentRun, digestCreateChapter, digestCreateEditorSession, digestCreateVolume,
   digestUpdateProjectAssistance, getAgentRun, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest
+import type { AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
@@ -236,4 +237,102 @@ export async function reviseCandidate(
   );
   const revised = await getProposal({ baseUrl, projectId, proposalId: opened.proposal.proposal_id, fetchImpl });
   return { session, revised };
+}
+
+/** Moves the Chapter Head to a new Revision with these Blocks, as an author change outside the editor. */
+export async function advanceChapterHead(projectId: string, chapterId: string, fromRevisionId: string,
+  revisionId: string, blocks: { manuscript_block_id: string; text: string }[]) {
+  const payload = blocks.length === 1 ? blocks[0]!.text : JSON.stringify({
+    format: "storyos.manuscript-payload.v1", schema_version: 1, coordinate_version: 1,
+    blocks: blocks.map((block) => ({ ...block, block_kind: "paragraph" })) });
+  const from = `FROM storyos.authoritative_revisions WHERE project_id = '${projectId}'::uuid
+    AND revision_id = '${fromRevisionId}'::uuid`;
+  await queryPostgres([
+    ...blocks.map((block) => `INSERT INTO storyos.manuscript_blocks SELECT owner_user_id, project_id,
+      '${block.manuscript_block_id}'::uuid, manuscript_object_id, 'paragraph' ${from} ON CONFLICT DO NOTHING;`),
+    `INSERT INTO storyos.authoritative_payloads SELECT owner_user_id, project_id, '${revisionId}'::uuid,
+      convert_to('${payload.replaceAll("'", "''")}', 'UTF8') ${from};`,
+    `INSERT INTO storyos.authoritative_revisions SELECT owner_user_id, project_id, manuscript_object_id,
+      '${revisionId}'::uuid, '${revisionId}'::uuid ${from};`,
+    ...blocks.map((block, index) => `INSERT INTO storyos.manuscript_revision_members SELECT owner_user_id,
+      project_id, manuscript_object_id, '${revisionId}'::uuid, '${block.manuscript_block_id}'::uuid, ${index + 1} ${from};`),
+    `UPDATE storyos.authoritative_heads SET current_revision_id = '${revisionId}'::uuid
+      WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid;`,
+  ].join("\n"));
+  await alignWriterBase(projectId, chapterId, revisionId, revisionId);
+}
+
+/** Moves the editor session base of the current writer to the Chapter Head, as an Author Edit does. */
+export async function alignWriterBase(projectId: string, chapterId: string,
+  nextRevision: string, snapshotId: string): Promise<void> {
+  const updated = await queryPostgres(`WITH advanced AS (
+      UPDATE storyos.scope_counters
+      SET project_activity_position = project_activity_position + 1
+      WHERE project_id = '${projectId}'::uuid
+      RETURNING project_activity_position
+    ), moved AS (
+      UPDATE storyos.editor_session_base_snapshots AS snapshot
+      SET snapshot_id = '${snapshotId}'::uuid,
+          authoritative_revision_id = '${nextRevision}'::uuid,
+          project_activity_position = (SELECT project_activity_position FROM advanced),
+          created_at = clock_timestamp()
+      FROM storyos.project_writer_generations AS writer
+      WHERE snapshot.owner_user_id = writer.owner_user_id
+        AND snapshot.project_id = writer.project_id
+        AND snapshot.editor_session_id = writer.current_editor_session_id
+        AND snapshot.project_id = '${projectId}'::uuid
+        AND snapshot.chapter_object_id = '${chapterId}'::uuid
+        AND writer.writer_generation = (
+          SELECT max(latest.writer_generation) FROM storyos.project_writer_generations AS latest
+          WHERE latest.project_id = '${projectId}'::uuid
+        )
+      RETURNING snapshot.snapshot_id
+    )
+    UPDATE storyos.project_snapshots AS canonical
+    SET project_activity_position = (SELECT project_activity_position FROM advanced)
+    WHERE canonical.project_id = '${projectId}'::uuid
+      AND canonical.snapshot_kind = 'canonical'
+      AND canonical.project_activity_position = (
+        SELECT max(current.project_activity_position) FROM storyos.project_snapshots AS current
+        WHERE current.project_id = '${projectId}'::uuid AND current.snapshot_kind = 'canonical'
+      )
+      AND EXISTS (SELECT 1 FROM moved)
+    RETURNING canonical.project_activity_position::text`);
+  assert.match(updated.split("\n")[0] ?? "", /^[0-9]+$/);
+}
+
+/**
+ * Gives the current Proposal Revision an Acceptance condition of this kind. A real Acceptance
+ * with an unknown Validation Receipt writes the condition row and its Receipts. Then the row and
+ * its Receipts become the records that a conflicted Acceptance on a changed Chapter Head wrote
+ * before ADR 0064.
+ */
+export async function seedAcceptanceCondition(baseUrl: string, fetchImpl: typeof fetch, projectId: string,
+  proposal: Awaited<ReturnType<typeof getProposal>>["proposal"], editorSessionId: string,
+  expectedRevisionId: string, kind: "proposal_conflict" | "proposal_recovery_conflict", ns: string) {
+  const request: AcceptProposalRequest = {
+    command_schema: "storyos.command.accept-proposal.request.v1",
+    accept_proposal_input: {
+      proposal_revision_id: proposal.revision_id, validation_receipt_id: id(`${ns}01`),
+      selected_operation_ids: [proposal.operation_id], expected_authoritative_revision_id: expectedRevisionId,
+      editor_session_id: editorSessionId, ...BINDING, correlation_id: id(`${ns}02`),
+    },
+  };
+  const invalid = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", request.command_schema,
+    await digestAcceptProposal(request), id(`${ns}03`), (antiForgery) => acceptProposal({
+      baseUrl, projectId, proposalId: proposal.proposal_id, fetchImpl, idempotencyKey: id(`${ns}03`),
+      antiForgery, request }));
+  if (invalid.effect.kind !== "invalid") throw new Error("expected the condition Acceptance to be invalid");
+  const conflictRef = id(`${ns}04`);
+  const receipt = `project_id = '${projectId}'::uuid AND acceptance_receipt_id = '${invalid.receipt.receipt_id}'::uuid`;
+  // The condition row and the Acceptance Receipt change together, so the foreign key check waits.
+  await queryPostgres(`SET session_replication_role = replica;
+    UPDATE storyos.proposal_validation_conditions
+    SET validation = 'conflicted', conflict_id = '${conflictRef}'::uuid, condition_kind = '${kind}' WHERE ${receipt};
+    UPDATE storyos.acceptance_receipts SET result = 'conflicted' WHERE ${receipt};
+    UPDATE storyos.domain_receipts SET result_kind = 'conflicted', condition_refs = ARRAY['${conflictRef}'],
+      result_payload = '{"reason":"changed_head"}'::jsonb
+    WHERE project_id = '${projectId}'::uuid AND receipt_id = '${invalid.receipt.receipt_id}'::uuid;`);
+  return { conflictRef, receiptId: invalid.receipt.receipt_id };
 }
