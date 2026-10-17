@@ -153,9 +153,10 @@ verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
 .PHONY: review-round wait-verify
-# The verification input fingerprint reads the environment, so the recipes remove CONTEXT and WAIT.
+# The verification input fingerprint reads the environment, so the recipes remove CONTEXT, WAIT, KIND, and COMMENT.
+# KIND=sync records a moved main after a passed round. KIND=coordinator-fix COMMENT=<URL> records a coordinator review.
 review-round:
-	@env -u CONTEXT -u WAIT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" --wait "$(WAIT)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
+	@env -u CONTEXT -u WAIT -u KIND -u COMMENT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" --wait "$(WAIT)" $(if $(CONTEXT),--executor-context "$(CONTEXT)") $(if $(KIND),--kind "$(KIND)") $(if $(COMMENT),--comment "$(COMMENT)")
 
 # Exit 0 when a verify run of the PR head passed. make gives 2 for each failed recipe, so the direct script command
 # tells a failed or cancelled run (exit 1) from a time-out (exit 2).

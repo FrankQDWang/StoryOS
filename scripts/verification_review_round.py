@@ -16,8 +16,13 @@ import verification_reviews
 SCRIPTS = Path(__file__).resolve().parent
 TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
-TREE = re.compile(r'^Candidate: head `[0-9a-f]+`, base `[0-9a-f]+`, tree `([0-9a-f]{40})`\.$', re.M)
+# A sync or coordinator fix record is not a review round. It adds its tree to the round that it follows.
+RECORD = re.compile(r'## (Sync|Coordinator fix) after round (\d+), tree `[0-9a-f]+`: PASS')
+CANDIDATE = re.compile(r'^Candidate: head `([0-9a-f]+)`, base `([0-9a-f]+)`, tree `([0-9a-f]{40})`\.$', re.M)
 ROUNDS = 3
+PASSED = {'Standards': 'PASS', 'Spec': 'PASS'}
+LAST_ROUND = ('PR {pr} had {rounds} review rounds. Send the open findings to the coordinator session; it decides the next step. '
+              'After a coordinator review of a small fix, record it with KIND=coordinator-fix COMMENT=<comment URL>')
 BROKER_COMMAND = 'openai-codex/codex/.*/scripts/app-server-broker.mjs'
 WAIT_MS = 600000
 WAITS = 6
@@ -122,23 +127,104 @@ def comment(axis, number, verdict, context, request):
             f"### Evidence\n\n{listed(verdict['evidence'], numbered=False)}\n")
 
 
-def run(root, pr, executor, wait):
+def candidate_tree(root, pr):
+    """Fetch the synthetic merge of the PR and return its parents and tree."""
+    ref = 'refs/storyos/review-candidate'
+    verification_github.fetch(root, '--no-tags', 'origin', f'+refs/pull/{pr}/merge:{ref}')
+    return verification.git(root, 'rev-list', '--parents', '-n', '1', ref).split()[1:], verification.git(root, 'rev-parse', f'{ref}^{{tree}}')
+
+
+def file_patches(root, old, new):
+    """The patch of each file from `old` to `new` without the `index` lines and the hunk line numbers.
+
+    Two equal patches apply the same change. The context lines of each hunk stay, so a change near a hunk makes it different."""
+    output = verification.git(root, 'diff', '--no-renames', '--no-color', '--no-ext-diff', '--binary', old, new, '--')
+    patches = {}
+    for patch in re.split(r'^(?=diff --git )', output, flags=re.M)[1:]:
+        lines = [re.sub(r'^@@ .*', '@@', line) for line in patch.splitlines() if not line.startswith('index ')]
+        patches[lines[0]] = lines
+    return patches
+
+
+def post_record(root, pr, route, pull, wait, kind, last, trees, heading, lines):
+    """Check the synthetic merge and its verify run, then post one record comment for the current tree."""
+    head, base = pull['headRefOid'], pull['baseRefOid']
+    parents, tree = candidate_tree(root, pr)
+    if parents != [base, head]:
+        raise ValueError('The synthetic merge of the PR does not have the current base and head as parents; run the command again')
+    if tree in trees.get(last, ()):
+        raise ValueError(f'Round {last} already records the candidate tree {tree}; send the record links to the coordinator session')
+    verification_reviews.wait_verify(route, head, wait)
+    verify = verification_reviews.sentinel(route, head, base, tree)
+    body = root / 'target/verification/reviews' / f'{kind}-{tree}' / 'comment.md'
+    body.parent.mkdir(parents=True, exist_ok=True)
+    body.write_text(f'## {heading} after round {last}, tree `{tree[:12]}`: PASS\n\n' + '\n'.join([
+        *lines, f'Candidate: head `{head}`, base `{base}`, tree `{tree}`.', f"Verify check run: `{verify['check_id']}`."]) + '\n')
+    return verification_github.comment(pr, body).strip()
+
+
+def sync(root, pr, route, pull, wait, last, trees, anchor):
+    """Record a moved main after a passed round when each file has the same change on the branch and on main."""
+    if not anchor:
+        raise ValueError('Sync needs a passed round or a coordinator fix record with a candidate head and base')
+    (old_head, old_base), _ = anchor[0], candidate_tree(root, pr)
+    branch, main = file_patches(root, old_head, pull['headRefOid']), file_patches(root, old_base, pull['baseRefOid'])
+    if changed := sorted({*branch, *main} - {k for k in branch if branch[k] == main.get(k)}):
+        raise ValueError('The change from the round head to the new head is not the same as the change from the old base '
+                         f"to the new base in: {', '.join(name.split(' b/', 1)[-1] for name in changed)}. Run a new review round")
+    url = post_record(root, pr, route, pull, wait, 'sync', last, trees, 'Sync', [
+        f'Round head `{old_head}`, base `{old_base}`.',
+        f'The change from the round head to the new head is the same as the change from the old base to the new base. '
+        f'Compared files: {len(main)}. The comparison ignores the `index` lines and the hunk line numbers.'])
+    print(f'Sync after round {last} for PR {pr}: PASS {url}')
+    print(f'Next: run make verify-changed BASE={old_head} and make verify-targeted CHECK=project-scope.')
+
+
+def coordinator_fix(root, pr, route, pull, wait, last, trees, review_comment, end, candidate):
+    """Record a coordinator review comment that names the head as the verdict for a small fix after the last round."""
+    if last < ROUNDS:
+        raise ValueError(f'A coordinator fix record is only for a fix after {ROUNDS} complete rounds; run a review round')
+    found = [n for n, c in enumerate(pull['comments']) if c.get('url') == review_comment]
+    if not found:
+        raise ValueError(f'{review_comment} is not a comment of PR {pr}')
+    if found[0] < end:
+        raise ValueError(f'The coordinator review {review_comment} is older than the round {last} verdicts')
+    if not any(pull['headRefOid'].startswith(s) for s in re.findall(r'[0-9a-f]{7,40}', pull['comments'][found[0]]['body'])):
+        raise ValueError(f"The coordinator review {review_comment} does not name the head {pull['headRefOid']}")
+    url = post_record(root, pr, route, pull, wait, 'coordinator-fix', last, trees, 'Coordinator fix',
+                      [f'Coordinator review: {review_comment}.'])
+    print(f'Coordinator fix after round {last} for PR {pr}: PASS {url}')
+    print(f"Next: run make verify-changed BASE={candidate[0] if candidate else f'<round {last} head>'}, "
+          'make verify-targeted CHECK=project-scope, and make verify-policy.')
+
+
+def run(root, pr, executor, wait, kind='review', review_comment=None):
     route = 'repos/' + json.loads(gh('repo', 'view', '--json', 'nameWithOwner'))['nameWithOwner']
-    pull = json.loads(gh('pr', 'view', str(pr), '--json', 'body,closingIssuesReferences,comments,headRefOid'))
-    rounds, trees = {}, {}
-    for body in (c['body'] for c in pull['comments']):
+    pull = json.loads(gh('pr', 'view', str(pr), '--json', 'body,closingIssuesReferences,comments,headRefOid,baseRefOid'))
+    rounds, trees, candidates, records, ends = {}, {}, {}, {}, {}
+    for position, body in enumerate(c['body'] for c in pull['comments']):
         if match := VERDICT.match(body):
             rounds.setdefault(int(match[2]), {})[match[1]] = match[3]
-            trees.setdefault(int(match[2]), set()).update(TREE.findall(body))
+            trees.setdefault(int(match[2]), set()).update(c[2] for c in CANDIDATE.findall(body))
+            candidates.update({int(match[2]): c[:2] for c in CANDIDATE.findall(body)})
+            ends[int(match[2])] = position
+        elif match := RECORD.match(body):
+            trees.setdefault(int(match[2]), set()).update(c[2] for c in CANDIDATE.findall(body))
+            records.setdefault(int(match[2]), []).extend(c[:2] for c in CANDIDATE.findall(body))
     # A round counts only when it has a verdict comment for each axis; a retry resumes an incomplete round.
     number = 1 + max((n for n, verdicts in rounds.items() if len(verdicts) == 2), default=0)
-    if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
+    last = number - 1
+    if kind == 'sync':
+        # The newest passed record of the last round is the anchor: a sync or coordinator fix, else the passed round.
+        passed = rounds.get(last) == PASSED and last in candidates
+        return sync(root, pr, route, pull, wait, last, trees, (records.get(last) or [candidates.get(last)] * passed)[-1:])
+    if kind == 'coordinator-fix':
+        return coordinator_fix(root, pr, route, pull, wait, last, trees, review_comment, ends.get(last, 0), candidates.get(last))
+    if rounds.get(last) == PASSED:
         # A passed round without a recorded tree, or with the tree of the current synthetic merge, stays final.
-        ref = 'refs/storyos/review-candidate'
-        verification_github.fetch(root, '--no-tags', 'origin', f'+refs/pull/{pr}/merge:{ref}')
-        tree = verification.git(root, 'rev-parse', f'{ref}^{{tree}}')
-        if not trees[number - 1] or tree in trees[number - 1]:
-            raise ValueError(f'Round {number - 1} passed on the two axes and the candidate tree {tree} did not change. '
+        _, tree = candidate_tree(root, pr)
+        if not trees[last] or tree in trees[last]:
+            raise ValueError(f'Round {last} passed on the two axes and the candidate tree {tree} did not change. '
                              'Only a blocking finding or a changed tree starts a new round; '
                              'send the PR link and the verdict comment links to the coordinator session')
     missing = [axis for axis in ('Standards', 'Spec') if rounds.get(number) and axis not in rounds[number]]
@@ -152,8 +238,7 @@ def run(root, pr, executor, wait):
               verification_github.comment(pr, max(stored, key=lambda b: b.stat().st_mtime)).strip())
         return
     if number > ROUNDS:
-        raise ValueError(f'PR {pr} had {ROUNDS} review rounds. Send the open findings to the coordinator session; '
-                         'it decides the next step')
+        raise ValueError(LAST_ROUND.format(pr=pr, rounds=ROUNDS))
     verification_reviews.wait_verify(route, pull['headRefOid'], wait)
     reviews = SCRIPTS / 'verification_reviews.py'
     path = Path(subprocess.check_output([sys.executable, str(reviews), 'request', '--pr', str(pr),
@@ -196,10 +281,15 @@ def main():
     parser.add_argument('--pr', type=int, required=True)
     parser.add_argument('--executor-context')
     parser.add_argument('--wait', type=int, default=0, help='the seconds to wait for the verify run of the head')
+    parser.add_argument('--kind', choices=('review', 'sync', 'coordinator-fix'), default='review',
+                        help='sync records a moved main after a passed round; coordinator-fix records a coordinator review comment')
+    parser.add_argument('--comment', help='the URL of the coordinator review comment for coordinator-fix')
     args = parser.parse_args()
+    if (args.kind == 'coordinator-fix') != bool(args.comment):
+        parser.error('--comment goes with --kind coordinator-fix only, and coordinator-fix needs it')
     try:
         root = Path(verification.git(Path.cwd(), 'rev-parse', '--show-toplevel'))
-        run(root, args.pr, args.executor_context or f'claude-pr{args.pr}', args.wait)
+        run(root, args.pr, args.executor_context or f'claude-pr{args.pr}', args.wait, args.kind, args.comment)
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Review round refused: {error}\n')
 

@@ -27,13 +27,26 @@ Do not change files. Write the answer in English that obeys ASD-STE100.
 - A pull request gets at most three review rounds. Only a blocking finding starts a new round.
 - Review the candidate in the request. The executor posts the verdict comments and imports
   the records after your answer, so their absence is not a finding.
-- A finding for a guard-owned rule is non-blocking: ASD-STE100 words and sentence length,
-  positional-literal comments, whitespace, and size. The request `guards` field gives the
+- A blocking finding is one of these:
+  - A behavior defect.
+  - A broken contract, ADR, repository rule, or acceptance criterion.
+  - A risk of data loss or a security risk.
+  - A missing required test or missing required evidence.
+  - A change that the contract does not ask for.
+- A finding in one of these classes is non-blocking. This list is closed:
+  - Formatting and whitespace.
+  - Names.
+  - Comment style.
+  - ASD-STE100 words and sentence length.
+  - Positional-literal comments and size.
+  - Small duplication.
+  - A helper that has only one caller.
+  - An optional refactor.
+- The guards own some of these classes. The request `guards` field gives the
   `ste-text-guard`, `rust-literal-guard`, and `diff-whitespace` results. The guards use
   [docs/agents/ste-rejected-words.json](ste-rejected-words.json) and
   [docs/agents/rust-literal-exemptions.json](rust-literal-exemptions.json).
-- A blocking finding is a defect, a broken repository rule that no guard owns, or an
-  acceptance criterion that is not met.
+- Sweep the full scoped diff and report every blocking finding in this answer.
 - Report blocking and non-blocking findings in two separate lists. Give `file:line`
   evidence for each finding.
 
