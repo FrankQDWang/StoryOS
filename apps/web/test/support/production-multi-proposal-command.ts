@@ -237,6 +237,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.reload();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
+    // After a reload the open Proposal list gives the Proposals, so the candidate settles after the editor opens.
+    await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
     // The author selects all of the candidate text and adds it to the message (ADR 0062).
     await candidate().locator('.block-proposal-text').evaluate((element) => {
       element.closest<HTMLElement>('[data-manuscript-editor]')!.focus();
