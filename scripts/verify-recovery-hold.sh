@@ -207,8 +207,9 @@ STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
 # Both modes retain three single-Operation conditions and three partial-Acceptance histories.
 # Mixed also retains the production Conflict and cross-Chapter pending-Operation Conflict.
+# Mixed also retains the five Inline Replan conditions of the Inline Proposal HTTP test.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=8
+  acceptance_condition_count=13
 else
   acceptance_condition_count=6
 fi
