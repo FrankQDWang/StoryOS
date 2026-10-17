@@ -37,7 +37,7 @@ pub(crate) async fn persist_create_result(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     result: CreateResult<'_>,
-    retained_payload: &serde_json::Value,
+    retained_payload: serde_json::Value,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let (decision_id, hold) = match &result.outcome {
         AgentDecisionOutcome::NoDecision => (None, None),
@@ -82,8 +82,8 @@ pub(crate) async fn persist_create_result(
         }
         _ => (None, None, false),
     };
-    let mut payload = retained_payload.clone();
-    payload["items"] = merge_items(&retained_payload["items"], result.items);
+    let mut payload = retained_payload;
+    payload["items"] = merge_items(payload["items"].take(), result.items);
     payload["decision"] = match (&result.outcome, decision_id.as_deref()) {
         (
             AgentDecisionOutcome::Decision {
@@ -274,52 +274,58 @@ pub(crate) async fn open_selected_proposal(
 
 /// Keeps the committed stream items in order. An item with a known item ID replaces that item.
 pub(crate) fn merge_items(
-    committed: &serde_json::Value,
+    committed: serde_json::Value,
     events: &[NativeStreamItem],
 ) -> serde_json::Value {
-    let mut items = committed.as_array().cloned().unwrap_or_default();
-    for event in encode_items(events).as_array().into_iter().flatten() {
+    let mut items = match committed {
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_)
+        | serde_json::Value::Object(_) => Vec::new(),
+    };
+    for event in events.iter().map(encode_item) {
         match items
             .iter_mut()
             .find(|item| item["item_id"] == event["item_id"])
         {
-            Some(item) => *item = event.clone(),
-            None => items.push(event.clone()),
+            Some(item) => *item = event,
+            None => items.push(event),
         }
     }
     serde_json::Value::Array(items)
 }
 
 pub(crate) fn encode_items(items: &[NativeStreamItem]) -> serde_json::Value {
-    items
-        .iter()
-        .map(|item| {
-            let phase = match item.state {
-                StreamItemState::Provisional => "provisional",
-                StreamItemState::Complete => "complete",
-                StreamItemState::Incomplete => "incomplete",
-                StreamItemState::Failed => "failed",
-                StreamItemState::Cancelled => "cancelled",
-                StreamItemState::Unknown => "unknown",
-            };
-            serde_json::json!({
-                "item_id": item.item_id,
-                "role": match item.role {
-                    StreamItemRole::Assistant => "assistant",
-                    StreamItemRole::Tool => "tool",
-                    StreamItemRole::Hosted => "hosted",
-                },
-                "state": phase,
-                "phase": phase,
-                "text": item.text,
-                "summary": item.summary,
-                "call_id": item.call_id,
-                "arguments": item.arguments,
-                "refusal": item.refusal,
-                "hosted_report": item.hosted_report
-            })
-        })
-        .collect()
+    items.iter().map(encode_item).collect()
+}
+
+fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
+    let phase = match item.state {
+        StreamItemState::Provisional => "provisional",
+        StreamItemState::Complete => "complete",
+        StreamItemState::Incomplete => "incomplete",
+        StreamItemState::Failed => "failed",
+        StreamItemState::Cancelled => "cancelled",
+        StreamItemState::Unknown => "unknown",
+    };
+    serde_json::json!({
+        "item_id": item.item_id,
+        "role": match item.role {
+            StreamItemRole::Assistant => "assistant",
+            StreamItemRole::Tool => "tool",
+            StreamItemRole::Hosted => "hosted",
+        },
+        "state": phase,
+        "phase": phase,
+        "text": item.text,
+        "summary": item.summary,
+        "call_id": item.call_id,
+        "arguments": item.arguments,
+        "refusal": item.refusal,
+        "hosted_report": item.hosted_report
+    })
 }
 
 pub(crate) fn encode_decision(
