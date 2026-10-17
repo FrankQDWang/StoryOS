@@ -6,6 +6,8 @@ import type { BlockProposalInspect, SelectedEditSource } from "../../../generate
 import { isUtf16Boundary, type ManuscriptParagraph } from "./manuscript-doc.ts";
 import { PROPOSAL_ATTRIBUTES, type BlockProposalProjection } from "./block-proposal-decoration.ts";
 
+type InlineAnchor = NonNullable<BlockProposalProjection["inlineAnchor"]>;
+
 export function inlineProjectionAnchor(proposal: BlockProposalInspect,
   blocks: readonly ManuscriptParagraph[], revisionId: string) {
   if (proposal.kind !== "inline_edit" || proposal.anchors.length !== 1) return undefined;
@@ -22,11 +24,16 @@ export function inlineProjectionAnchor(proposal: BlockProposalInspect,
   return { from: anchor.from, to: anchor.to, sourceText: block.text.slice(anchor.from, anchor.to) };
 }
 
-export function projectInlineCandidate(node: ProseMirrorNode, proposal: BlockProposalProjection,
+/** True when the anchor offsets are in the Block text and the text between them is the anchor source text. */
+export function inlineAnchorAgrees(text: string, anchor: InlineAnchor): boolean {
+  return isUtf16Boundary(text, anchor.from) && isUtf16Boundary(text, anchor.to)
+    && text.slice(anchor.from, anchor.to) === anchor.sourceText;
+}
+
+export function projectInlineCandidate(node: ProseMirrorNode, anchor: InlineAnchor,
   attrs: Record<string, unknown>, text: string): ProseMirrorNode {
-  const anchor = proposal.inlineAnchor;
   const candidateType = node.type.schema.nodes.inlineProposal;
-  if (anchor === undefined || candidateType === undefined) return node;
+  if (candidateType === undefined) return node;
   const children: ProseMirrorNode[] = [];
   if (anchor.from > 0) children.push(node.type.schema.text(node.textContent.slice(0, anchor.from)));
   children.push(candidateType.create({ ...attrs, inlineFrom: anchor.from,

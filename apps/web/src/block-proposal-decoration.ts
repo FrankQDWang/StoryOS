@@ -2,7 +2,7 @@ import { Node as TiptapNode, type Editor } from "@tiptap/core";
 import { Fragment, Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
-import { projectInlineCandidate, restoreInlineSource } from "./inline-proposal-decoration.ts";
+import { inlineAnchorAgrees, projectInlineCandidate, restoreInlineSource } from "./inline-proposal-decoration.ts";
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
 
 export type BlockProposalProjection = {
@@ -132,6 +132,10 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
       const current = existing.get(`${proposal.proposalId}:${proposal.operationId}`);
       const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
         ? current.textContent : proposal.text;
+      const anchor = proposal.inlineAnchor !== undefined && inlineAnchorAgrees(node.textContent, proposal.inlineAnchor)
+        ? proposal.inlineAnchor : undefined;
+      // A Block text that does not agree shows no Accept control. The projection after the hydrate shows it.
+      const shown = anchor !== undefined || proposal.inlineAnchor === undefined;
       const attrs = {
         proposalId: proposal.proposalId,
         operationId: proposal.operationId,
@@ -139,9 +143,9 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         blockId: proposal.blockId,
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
-        eligible: proposal.eligible,
-        candidateEditable: proposal.candidateEditable ?? proposal.eligible,
-        retryPending: proposal.retryPending ?? false,
+        eligible: shown && proposal.eligible,
+        candidateEditable: shown && (proposal.candidateEditable ?? proposal.eligible),
+        retryPending: shown && (proposal.retryPending ?? false),
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
         replanEligible: proposal.replanEligible ?? false,
@@ -154,14 +158,12 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         pendingOperationIds: proposal.pendingOperationIds ?? [],
         focused: proposal.focused ?? false,
         inlineProposal: proposal.inlineProposal ?? false,
-        inlineFrom: proposal.inlineAnchor?.from ?? null,
-        inlineTo: proposal.inlineAnchor?.to ?? null,
-        sourceText: proposal.inlineAnchor?.sourceText ?? null,
+        inlineFrom: anchor?.from ?? null,
+        inlineTo: anchor?.to ?? null,
+        sourceText: anchor?.sourceText ?? null,
       };
-      if (proposal.inlineAnchor !== undefined) {
-        next[next.length - 1] = projectInlineCandidate(node, proposal, attrs, text);
-      }
-      next.push(candidateType.create(attrs, proposal.inlineAnchor === undefined && text.length
+      if (anchor !== undefined) next[next.length - 1] = projectInlineCandidate(node, anchor, attrs, text);
+      next.push(candidateType.create(attrs, anchor === undefined && text.length
         ? schema.text(text) : undefined));
     }
   });
