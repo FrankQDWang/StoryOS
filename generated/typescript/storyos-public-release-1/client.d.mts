@@ -277,13 +277,15 @@ export type AcceptanceReceiptResult = "applied" | "invalid" | "conflicted" | "re
 
 export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_ids: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, condition_refs: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
 
-export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending" | "duplicate_identities" | "missing_required_dependencies" | "incomplete_bundle_closure";
+export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending" | "duplicate_identities" | "missing_required_dependencies" | "incomplete_bundle_closure" | "missing_target";
 
 export type AcceptProposalInvalidReason = "invalid_validation" | "altered_candidate";
 
 export type AcceptProposalConflictReason = "changed_head";
 
-export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
+export type AcceptanceTargetResolution = "exact_base" | "block_replacement" | "proven_range" | "base_block_replacement";
+
+export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, target_resolution: AcceptanceTargetResolution, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
 
 export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, };
 

@@ -11,21 +11,94 @@ pub struct AcceptProposal {
     pub retention_retained: bool,
     pub generation_ready: bool,
     pub closure_open: bool,
-    pub validation_current: bool,
-    pub validation_receipt_valid: bool,
+    /// The validation of the Proposal Revision.
+    pub validation: AcceptanceValidation,
+    /// The Acceptance condition of the Proposal Revision.
+    pub condition: AcceptanceCondition,
+    /// The result of the Validation Receipt that the Acceptance names.
+    pub validation_receipt: AcceptanceValidation,
     pub validation_receipt_matches_revision: bool,
     pub selected_operation_pending: bool,
     pub selection_duplicate_free: bool,
     pub required_dependencies_met: bool,
     pub bundle_closure_complete: bool,
-    pub expected_target_matches_head: bool,
+    pub target_kind: AcceptanceTargetKind,
+    pub base: AcceptanceBase,
     pub candidate_unaltered: bool,
+}
+
+/// The validation of a Proposal Revision or the result of its Validation Receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcceptanceValidation {
+    Valid,
+    Conflicted,
+    /// `pending` or `invalid`.
+    Other,
+}
+
+/// The Acceptance condition that a Proposal Revision has.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcceptanceCondition {
+    Absent,
+    ProposalConflict,
+    RecoveryConflict,
+    Invalid,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcceptanceTargetKind {
+    Block,
+    Inline,
+}
+
+/// The Proposal Revision base compared with the current Chapter Head.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcceptanceBase {
+    /// The base is the Chapter Head, and an Inline base slice is exact on it.
+    ExactHead,
+    /// The base is behind the Chapter Head.
+    EarlierHead { target_blocks_present: bool },
+}
+
+/// How an applied Acceptance found its target on the Chapter Head (ADR 0064).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcceptanceTargetResolution {
+    ExactBase,
+    BlockReplacement,
+    ProvenRange,
+    BaseBlockReplacement,
+}
+
+impl AcceptanceTargetResolution {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::ExactBase => "exact_base",
+            Self::BlockReplacement => "block_replacement",
+            Self::ProvenRange => "proven_range",
+            Self::BaseBlockReplacement => "base_block_replacement",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        [
+            Self::ExactBase,
+            Self::BlockReplacement,
+            Self::ProvenRange,
+            Self::BaseBlockReplacement,
+        ]
+        .into_iter()
+        .find(|resolution| resolution.code() == code)
+    }
 }
 
 /// The Core Transition Outcome of one Acceptance. An invalid Acceptance has no effect, and its
 /// reason records the Receipt result kind `invalid`.
-pub type AcceptProposalOutcome =
-    TransitionOutcome<(), AcceptProposalInvalid, AcceptProposalConflict, AcceptProposalRefusal>;
+pub type AcceptProposalOutcome = TransitionOutcome<
+    AcceptanceTargetResolution,
+    AcceptProposalInvalid,
+    AcceptProposalConflict,
+    AcceptProposalRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AcceptProposalRefusal {
@@ -37,6 +110,7 @@ pub enum AcceptProposalRefusal {
     DuplicateIdentities,
     MissingRequiredDependencies,
     IncompleteBundleClosure,
+    MissingTarget,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,6 +133,7 @@ reason_codes!(AcceptProposalRefusal {
     DuplicateIdentities => "duplicate_identities",
     MissingRequiredDependencies => "missing_required_dependencies",
     IncompleteBundleClosure => "incomplete_bundle_closure",
+    MissingTarget => "missing_target",
 });
 reason_codes!(AcceptProposalInvalid, result "invalid" {
     InvalidValidation => "invalid_validation",
@@ -161,8 +236,21 @@ pub fn classify_proposal_selection(
     }
 }
 
-/// Classify one exact Operation Acceptance against Scope, Admission, eligibility, and current Head.
+/// Classify one Operation Acceptance against Scope, Admission, eligibility, and its target on the
+/// current Chapter Head. An Inline Proposal keeps the exact-head rule until its target resolution
+/// exists (ADR 0064).
 pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
+    let block = command.target_kind == AcceptanceTargetKind::Block;
+    let acceptable = |validation: AcceptanceValidation| match validation {
+        AcceptanceValidation::Valid => true,
+        AcceptanceValidation::Conflicted => block,
+        AcceptanceValidation::Other => false,
+    };
+    let condition_allows = match command.condition {
+        AcceptanceCondition::Absent => true,
+        AcceptanceCondition::ProposalConflict => block,
+        AcceptanceCondition::RecoveryConflict | AcceptanceCondition::Invalid => false,
+    };
     if !command.scope_matches {
         return TransitionOutcome::Refused(AcceptProposalRefusal::WrongScope);
     }
@@ -175,11 +263,12 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
     if !command.retention_retained
         || !command.generation_ready
         || !command.closure_open
-        || !command.validation_current
+        || !acceptable(command.validation)
+        || !condition_allows
     {
         return TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible);
     }
-    if !command.validation_receipt_valid || !command.validation_receipt_matches_revision {
+    if !acceptable(command.validation_receipt) || !command.validation_receipt_matches_revision {
         return TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation);
     }
     if !command.selection_duplicate_free {
@@ -194,13 +283,28 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
     if !command.bundle_closure_complete {
         return TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure);
     }
-    if !command.expected_target_matches_head {
-        return TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead);
-    }
+    let resolution = match (command.target_kind, command.base) {
+        (_, AcceptanceBase::ExactHead) => AcceptanceTargetResolution::ExactBase,
+        (
+            AcceptanceTargetKind::Block,
+            AcceptanceBase::EarlierHead {
+                target_blocks_present: true,
+            },
+        ) => AcceptanceTargetResolution::BlockReplacement,
+        (
+            AcceptanceTargetKind::Block,
+            AcceptanceBase::EarlierHead {
+                target_blocks_present: false,
+            },
+        ) => return TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget),
+        (AcceptanceTargetKind::Inline, AcceptanceBase::EarlierHead { .. }) => {
+            return TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead);
+        }
+    };
     if !command.candidate_unaltered {
         return TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate);
     }
-    TransitionOutcome::Applied(())
+    TransitionOutcome::Applied(resolution)
 }
 
 #[cfg(test)]

@@ -8,7 +8,9 @@ pub(super) struct LoadedProposal {
     pub(super) current_revision_id: String,
     pub(super) generation: String,
     pub(super) closure: String,
-    pub(super) validation_current: bool,
+    pub(super) validation: String,
+    /// The validation and the kind of the Acceptance condition of the current Revision.
+    pub(super) condition: Option<(String, Option<String>)>,
     pub(super) candidate_text: String,
     pub(super) chapter_id: String,
     pub(super) operations: Vec<LoadedOperation>,
@@ -18,9 +20,11 @@ pub(super) struct LoadedProposal {
     pub(super) receipt_revision_id: Option<String>,
     receipt_block_id: Option<String>,
     receipt_candidate_text: Option<String>,
-    pub(super) current_head_revision_id: Option<String>,
-    pub(super) validated_target_matches_head: bool,
-    kind: String,
+    /// The Revision base and the Validation Receipt base are the Chapter Head.
+    pub(super) base_is_head: bool,
+    /// The Validation Receipt base is the Revision base.
+    pub(super) receipt_base_matches_revision: bool,
+    pub(super) kind: String,
     chapter_blocks: Vec<storyos_core::ManuscriptBlock>,
     manuscript_block_id: String,
     inline_from: Option<u32>,
@@ -38,6 +42,18 @@ pub(super) struct LoadedOperation {
 }
 
 impl LoadedProposal {
+    /// Each selected Operation targets a Block of the current Chapter Head.
+    pub(super) fn target_blocks_present(&self, selected_ids: &[String]) -> bool {
+        self.operations
+            .iter()
+            .filter(|operation| selected_ids.contains(&operation.operation_id))
+            .all(|operation| {
+                self.chapter_blocks
+                    .iter()
+                    .any(|block| block.manuscript_block_id == operation.manuscript_block_id)
+            })
+    }
+
     /// The Validation Receipt identifies the current candidate of its Block, and the candidate
     /// of the Revision is the candidate of the primary Operation. The current candidate of a
     /// Block is the candidate of its Operation, or else the candidate of the Revision.
@@ -156,17 +172,16 @@ pub(super) async fn load_proposal(
                     revision.candidate_text, proposal.chapter_id::text,
                     receipt.validation_receipt_id::text, receipt.result,
                     receipt.proposal_revision_id::text, receipt.candidate_text,
-                    chapter_head.current_revision_id::text,
-                    revision.validation = 'valid' AND NOT EXISTS (SELECT 1 FROM storyos.proposal_validation_conditions AS condition
-                      WHERE (condition.owner_user_id, condition.project_id, condition.proposal_id,
-                             condition.proposal_revision_id) =
-                            (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)),
+                    chapter_head.current_revision_id::text, revision.validation,
                     COALESCE(receipt.base_authoritative_revision_id = chapter_head.current_revision_id
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
                     proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
                     proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
                     anchor.base_slice_digest, proposal.bundle_policy,
-                    receipt.manuscript_block_id::text
+                    receipt.manuscript_block_id::text,
+                    COALESCE(receipt.base_authoritative_revision_id =
+                      revision.base_authoritative_revision_id, false),
+                    condition.validation, condition.condition_kind
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -184,6 +199,11 @@ pub(super) async fn load_proposal(
                   ORDER BY operation.operation_id
                   LIMIT 1
                ) AS primary_operation ON true
+               LEFT JOIN storyos.proposal_validation_conditions AS condition
+                 ON (condition.owner_user_id, condition.project_id, condition.proposal_id,
+                     condition.proposal_revision_id) =
+                    (revision.owner_user_id, revision.project_id, revision.proposal_id,
+                     revision.revision_id)
                LEFT JOIN storyos.validation_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.validation_receipt_id) =
                     (proposal.owner_user_id, proposal.project_id, $4::text::uuid)
@@ -258,9 +278,12 @@ pub(super) async fn load_proposal(
         receipt_revision_id: row.get(/*idx*/ 7),
         receipt_block_id: row.get(/*idx*/ 19),
         receipt_candidate_text: row.get(/*idx*/ 8),
-        current_head_revision_id,
-        validation_current: row.get(/*idx*/ 10),
-        validated_target_matches_head: row.get(/*idx*/ 11),
+        validation: row.get(/*idx*/ 10),
+        condition: row
+            .get::<_, Option<String>>(/*idx*/ 21)
+            .map(|validation| (validation, row.get(/*idx*/ 22))),
+        base_is_head: row.get(/*idx*/ 11),
+        receipt_base_matches_revision: row.get(/*idx*/ 20),
         kind: row.get(/*idx*/ 12),
         chapter_blocks,
         manuscript_block_id: row.get::<_, Option<String>>(/*idx*/ 14).unwrap_or_default(),
@@ -273,11 +296,15 @@ pub(super) async fn load_proposal(
         inline_digest: row.get(/*idx*/ 17),
         inline_base_slice_matches: true,
     };
-    loaded.validated_target_matches_head &=
-        !crate::validation_history::unavailable_revisions(client, scope)
-            .await
-            .map_err(unavailable)?
-            .contains(&loaded.current_revision_id);
+    if crate::validation_history::unavailable_revisions(client, scope)
+        .await
+        .map_err(unavailable)?
+        .contains(&loaded.current_revision_id)
+    {
+        return Err(unavailable(
+            "the validation history of the Proposal Revision is unavailable",
+        ));
+    }
     loaded.inline_base_slice_matches = loaded.inline_slice_matches();
     Ok(Some(loaded))
 }

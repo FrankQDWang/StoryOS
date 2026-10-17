@@ -91,6 +91,7 @@ fn accept_response(
                     applied.blocks,
                 ),
                 project_activity_position: applied.project_activity_position.to_string(),
+                target_resolution: contract_target_resolution(applied.effect),
             },
             vec![applied.ids.revision_id],
             vec![applied.ids.authoritative_commit_id],
@@ -151,6 +152,25 @@ fn accept_response(
         project: controlled_project(settlement.response),
         effect,
     }))
+}
+
+fn contract_target_resolution(
+    resolution: storyos_core::AcceptanceTargetResolution,
+) -> contracts::AcceptanceTargetResolution {
+    match resolution {
+        storyos_core::AcceptanceTargetResolution::ExactBase => {
+            contracts::AcceptanceTargetResolution::ExactBase
+        }
+        storyos_core::AcceptanceTargetResolution::BlockReplacement => {
+            contracts::AcceptanceTargetResolution::BlockReplacement
+        }
+        storyos_core::AcceptanceTargetResolution::ProvenRange => {
+            contracts::AcceptanceTargetResolution::ProvenRange
+        }
+        storyos_core::AcceptanceTargetResolution::BaseBlockReplacement => {
+            contracts::AcceptanceTargetResolution::BaseBlockReplacement
+        }
+    }
 }
 
 fn accept_problem(error: RefusableCommandError<AcceptanceRefusalReason>) -> ApiError {

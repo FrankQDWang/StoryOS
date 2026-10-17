@@ -273,7 +273,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-response.schema.json",
       "schema_id": "storyos.command.accept-proposal.response.v1",
-      "sha256": "sha256:303b87487d9f33bd3230b79e35290cb3b1fb4bdc13781230e8f03b0d66c048ef"
+      "sha256": "sha256:0ac9fb4914c03da8425ed500491339709d85935ec0e3cc1d1ba8fb7a981123c2"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/reject-proposal-operations-request.schema.json",
