@@ -268,7 +268,8 @@ from pathlib import Path
 state, args = Path("target/round.json"), sys.argv[1:]
 s = json.loads(state.read_text())
 if args[:2] == ["pr", "view"]:
-    print(json.dumps({{"body": "Closes #1008", "closingIssuesReferences": [{{"number": 1008}}], "comments": s["comments"], "headRefOid": "{self.head}"}}))
+    print(json.dumps({{"body": "Closes #1008", "closingIssuesReferences": [{{"number": 1008}}], "comments": s["comments"], "headRefOid": "{self.head}",
+                      "baseRefOid": "{self.base}"}}))
 elif args[:2] == ["issue", "view"]:
     print(json.dumps({{"number": 1008, "title": "Ticket", "body": "- [ ] Criterion"}}))
 elif args[:2] == ["pr", "comment"]:
@@ -391,14 +392,18 @@ else:
         makefile = verification_candidate_tests.verification_tests.COMMAND.parents[1] / 'Makefile'
         tools = self.root / 'target/make-tools'
         tools.mkdir(parents=True)
-        # The verification input fingerprint reads the environment, so WAIT must reach the scripts only as an argument.
-        (tools / 'python3').write_text(f'#!{sys.executable}\nimport json, os, sys\n'
-                                       'print(json.dumps([sys.argv[1:], "WAIT" in os.environ, "CONTEXT" in os.environ]))\n')
+        # The verification input fingerprint reads the environment, so WAIT, CONTEXT, KIND, and COMMENT must reach the scripts
+        # only as arguments.
+        (tools / 'python3').write_text(f'#!{sys.executable}\nimport json, os, sys\nprint(json.dumps([sys.argv[1:], '
+                                       '*(name in os.environ for name in ("WAIT", "CONTEXT", "KIND", "COMMENT"))]))\n')
         (tools / 'python3').chmod(0o755)
         environment = {**os.environ, 'PATH': f"{tools}{os.pathsep}{os.environ['PATH']}"}
         for target, extra, arguments in (
                 ('review-round', ['CONTEXT=executor'], ['scripts/verification_review_round.py', '--pr', '745', '--wait', '{wait}',
                                                         '--executor-context', 'executor']),
+                ('review-round', ['KIND=coordinator-fix', 'COMMENT=https://example.invalid/c'],
+                 ['scripts/verification_review_round.py', '--pr', '745', '--wait', '{wait}', '--kind', 'coordinator-fix',
+                  '--comment', 'https://example.invalid/c']),
                 ('wait-verify', [], ['scripts/verification_reviews.py', 'wait', '--pr', '745', '--wait', '{wait}']),
                 ('verify-local', ['BASE=main', "VERIFY_ARGS=--pr 745"],
                  ['scripts/verification.py', 'run', '--base', 'main', '--wait-verify', '{wait}', '--pr', '745', '--',
@@ -409,7 +414,7 @@ else:
                                             env=environment, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     expected = [a.replace('{wait}', '0' if wait else '1200') for a in arguments]
-                    self.assertEqual(json.loads(result.stdout), [expected, False, False])
+                    self.assertEqual(json.loads(result.stdout), [expected, False, False, False, False])
 
     def test_pass_pass_round_posts_comments_and_imports_records(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
@@ -527,6 +532,143 @@ else:
     def test_round_four_after_pass_pass_on_a_changed_tree_is_refused_with_the_coordinator(self):
         failed = [f'## {axis} review, round {n}: FAIL\n' for n in (1, 2) for axis in ('Standards', 'Spec')]
         self.assertIn('PR 745 had 3 review rounds', self.refused_round(failed + self.passed(3, '0' * 40)))
+
+    def moved_main(self, pr_line, main_line):
+        """Change line `pr_line` of docs/sync.md in the PR and line `main_line` on main, then merge the moved main.
+
+        Return the round head and the old base."""
+        def git(*args):
+            return self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args)
+
+        def edit(line, text):
+            lines = doc.read_text().splitlines()
+            lines[line - 1] = text
+            doc.write_text('\n'.join(lines) + '\n')
+            git('commit', '-q', '-am', text)
+            return git('rev-parse', 'HEAD')
+
+        branch, doc = git('symbolic-ref', '--short', 'HEAD'), self.root / 'docs/sync.md'
+        git('checkout', '-q', '--detach', 'origin/main')
+        doc.parent.mkdir(exist_ok=True)
+        doc.write_text(''.join(f'line {n}\n' for n in range(1, 31)))
+        git('add', 'docs/sync.md')
+        git('commit', '-q', '-m', 'Old main')
+        old_base = git('rev-parse', 'HEAD')
+        git('checkout', '-q', branch)
+        git('merge', '-q', '--no-edit', old_base)
+        round_head = edit(pr_line, f'pull request {pr_line}')
+        git('checkout', '-q', '--detach', old_base)
+        git('update-ref', 'refs/remotes/origin/main', edit(main_line, f'main {main_line}'))
+        git('checkout', '-q', branch)
+        git('merge', '-q', '--no-edit', 'origin/main')
+        return round_head, old_base
+
+    def passed_on(self, number, head, base, tree):
+        return [f'## {axis} review, round {number}: PASS\n\nCandidate: head `{head}`, base `{base}`, tree `{tree}`.\n'
+                for axis in ('Standards', 'Spec')]
+
+    def test_sync_passes_a_moved_main_that_changed_another_part_of_the_same_file(self):
+        round_head, old_base = self.moved_main(3, 25)
+        result, state = self.review_round({}, comments=self.passed_on(1, round_head, old_base, '0' * 40), args=('--kind', 'sync'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['node'], [])
+        body = state['comments'][2]['body']
+        self.assertEqual(body.splitlines()[0], f'## Sync after round 1, tree `{self.tree[:12]}`: PASS')
+        self.assertIn(f'Round head `{round_head}`, base `{old_base}`.\n', body)
+        self.assertIn(f'Candidate: head `{self.head}`, base `{self.base}`, tree `{self.tree}`.\n', body)
+        self.assertEqual(result.stdout.splitlines(), [
+            'Sync after round 1 for PR 745: PASS https://example.invalid/pull/745#comment-3',
+            f'Next: run make verify-changed BASE={round_head} and make verify-targeted CHECK=project-scope.'])
+
+    def test_sync_refuses_a_moved_main_that_changed_lines_near_the_pull_request_change(self):
+        round_head, old_base = self.moved_main(22, 25)
+        result, state = self.review_round({}, comments=self.passed_on(1, round_head, old_base, '0' * 40), args=('--kind', 'sync'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('docs/sync.md', result.stderr)
+        self.assertEqual((len(state['comments']), state['node']), (2, []))
+
+    def test_sync_refuses_without_a_passed_round(self):
+        result, state = self.review_round({}, comments=['## Standards review, round 1: FAIL\n', '## Spec review, round 1: PASS\n'],
+                                          args=('--kind', 'sync'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Sync needs a passed round', result.stderr)
+        self.assertEqual(len(state['comments']), 2)
+
+    def sync_record(self, tree):
+        return (f'## Sync after round 1, tree `{tree[:12]}`: PASS\n\nRound head `{"1" * 40}`, base `{"2" * 40}`.\n'
+                f'Candidate: head `{"3" * 40}`, base `{"4" * 40}`, tree `{tree}`.\n')
+
+    def test_round_after_a_sync_on_the_same_tree_is_refused_with_the_coordinator(self):
+        tree = self.repo.git('rev-parse', 'HEAD^{tree}')
+        self.assertIn(f'the candidate tree {tree} did not change',
+                      self.refused_round(self.passed(1, '0' * 40) + [self.sync_record(tree)]))
+
+    def test_sync_does_not_count_as_a_round(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean},
+                                          comments=self.passed(1, '0' * 40) + [self.sync_record('5' * 40)])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['body'].splitlines()[0] for c in state['comments'][3:]],
+                         ['## Standards review, round 2: PASS', '## Spec review, round 2: PASS'])
+
+    def coordinator_fix(self, rounds=3, review='Reviewed the fix at head `{head}`: PASS.', url=None):
+        head = self.repo.git('rev-parse', 'HEAD')
+        comments = [f'## {axis} review, round {n}: FAIL\n\nCandidate: head `{n * 111:040d}`, base `{"2" * 40}`, tree `{"0" * 40}`.\n'
+                    for n in range(1, rounds + 1) for axis in ('Standards', 'Spec')]
+        comments.append(review.format(head=head[:8]))
+        url = url or f'https://example.invalid/pull/745#comment-{len(comments)}'
+        return self.review_round({}, comments=comments, args=('--kind', 'coordinator-fix', '--comment', url))
+
+    def test_coordinator_fix_records_the_comment_and_the_tree(self):
+        result, state = self.coordinator_fix()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['node'], [])
+        body = state['comments'][7]['body']
+        self.assertEqual(body.splitlines()[0], f'## Coordinator fix after round 3, tree `{self.tree[:12]}`: PASS')
+        self.assertIn('Coordinator review: https://example.invalid/pull/745#comment-7.\n', body)
+        self.assertIn(f'Candidate: head `{self.head}`, base `{self.base}`, tree `{self.tree}`.\n', body)
+        self.assertEqual(result.stdout.splitlines(), [
+            'Coordinator fix after round 3 for PR 745: PASS https://example.invalid/pull/745#comment-8',
+            f'Next: run make verify-changed BASE={333:040d}, make verify-targeted CHECK=project-scope, and make verify-policy.'])
+
+    def test_coordinator_fix_refuses_before_three_rounds(self):
+        result, state = self.coordinator_fix(rounds=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('after 3 complete rounds', result.stderr)
+        self.assertEqual(len(state['comments']), 5)
+
+    def test_coordinator_fix_refuses_a_comment_without_the_head(self):
+        result, state = self.coordinator_fix(review='Reviewed the fix: PASS.')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('does not name the head', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
+
+    def test_coordinator_fix_refuses_a_comment_of_another_pull_request(self):
+        result, state = self.coordinator_fix(url='https://example.invalid/pull/746#comment-7')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not a comment of PR 745', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
+
+    def test_coordinator_fix_refuses_a_round_verdict_as_the_review(self):
+        head = self.repo.git('rev-parse', 'HEAD')
+        verdicts = [f'## {axis} review, round {n}: FAIL\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"0" * 40}`.\n'
+                    for n in (1, 2, 3) for axis in ('Standards', 'Spec')]
+        record = f'## Coordinator fix after round 3, tree `{"5" * 12}`: PASS\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"5" * 40}`.\n'
+        result, state = self.review_round({}, comments=[*verdicts, record], args=(
+            '--kind', 'coordinator-fix', '--comment', 'https://example.invalid/pull/745#comment-6'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not a coordinator review', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
+
+    def test_coordinator_fix_refuses_an_earlier_record_as_the_review(self):
+        head = self.repo.git('rev-parse', 'HEAD')
+        verdicts = [f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')]
+        record = f'## Coordinator fix after round 3, tree `{"5" * 12}`: PASS\n\nCandidate: head `{head}`, base `{"2" * 40}`, tree `{"5" * 40}`.\n'
+        result, state = self.review_round({}, comments=[*verdicts, record], args=(
+            '--kind', 'coordinator-fix', '--comment', 'https://example.invalid/pull/745#comment-7'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not a coordinator review', result.stderr)
+        self.assertEqual(len(state['comments']), 7)
 
     def test_round_and_request_complete_when_each_gh_command_fails_two_times(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
