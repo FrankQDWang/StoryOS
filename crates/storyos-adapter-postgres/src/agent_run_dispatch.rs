@@ -246,9 +246,14 @@ impl ModelDispatchStore for PostgresProjectReader {
             if run.settled() {
                 return Ok(Some(StreamStop::StaleFence));
             }
-            let committed = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
-                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-            let items = merge_items(&committed["items"], events);
+            let mut committed =
+                serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(/*idx*/ 0))
+                    .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+            let committed_items = committed
+                .get_mut("items")
+                .map(serde_json::Value::take)
+                .unwrap_or_default();
+            let items = merge_items(committed_items, events);
             let retained = reference.map(crate::agent_run_recovery::encode_retained_reference);
             transaction
                 .client

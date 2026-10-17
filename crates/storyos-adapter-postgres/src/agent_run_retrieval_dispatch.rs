@@ -235,7 +235,7 @@ pub(crate) async fn record_original_result(
             response_reference: response.response_reference.as_deref(),
             settlement: CreateSettlement::Response,
         },
-        &sealed,
+        sealed,
     )
     .await
 }
