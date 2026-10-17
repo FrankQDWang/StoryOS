@@ -1559,7 +1559,9 @@ not know all Proposal heads, and the Proposal decision controls stay
 unavailable.
 
 Text input does not wait for the list read. Only the Proposal decision
-controls wait for a complete list.
+controls wait for a complete list. Only a Proposal that the Local Edit Journal
+records can hold a local Acceptance. Thus a Proposal that a later list read
+adds does not stop text input.
 
 ### 8.4 Undo and reversal
 

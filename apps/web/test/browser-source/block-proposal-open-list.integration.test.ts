@@ -129,3 +129,35 @@ it("keeps the editor available for text input while the open Proposal list is st
     }
   });
 });
+
+it("keeps text input available when the open Proposal list adds a Proposal after the editor is editable", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const proposal = candidateFor(test.workspace);
+  const answered = proposalTransport(test.workspace, proposal, { proposals: [proposal], completeness: "complete" });
+  let releaseList = (): void => undefined;
+  const listReleased = new Promise<void>((resolve) => { releaseList = resolve; });
+  const fetchImpl: typeof fetch = async (input, init) => {
+    if (new URL(input instanceof Request ? input.url : input).pathname.endsWith("/open-proposals")) await listReleased;
+    return answered.fetchImpl(input, init);
+  };
+  await withActEnvironment(async () => {
+    const tab = await renderTab(test.workspace, [], fetchImpl);
+    const editable: (string | null)[] = [];
+    const observer = new MutationObserver(() => {
+      editable.push(tab.host.querySelector("[data-manuscript-editor]")?.getAttribute("contenteditable") ?? null);
+    });
+    try {
+      await expect.poll(() => tab.host.querySelector("[data-manuscript-editor]")?.getAttribute("contenteditable"))
+        .toBe("true");
+      observer.observe(tab.host, { attributes: true, attributeFilter: ["contenteditable"], subtree: true });
+      releaseList();
+      await expect.poll(() => tab.host.querySelector(`.block-proposal[data-proposal-id="${proposal.proposal_id}"]`)
+        ?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+      expect({ editable: editable.filter((value) => value !== "true"), failures: tab.failures })
+        .toEqual({ editable: [], failures: [] });
+    } finally {
+      observer.disconnect(); releaseList();
+      await tab.unmount(); await test.close();
+    }
+  });
+});

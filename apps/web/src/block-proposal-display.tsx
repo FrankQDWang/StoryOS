@@ -130,6 +130,11 @@ export function BlockProposalDisplay({
     && acceptanceCheck.workspace === editorProps.persistWorkspace
     && acceptanceCheck.proposalIds === proposalIdsKey(effectiveLocators)
     && acceptanceCheck.generation === decisionGeneration;
+  // Only a Proposal that the Local Edit Journal knows can hold a local Acceptance. A Proposal that a later read adds does not stop text input.
+  const journalProposalsChecked = acceptanceCheck !== undefined
+    && acceptanceCheck.workspace === editorProps.persistWorkspace
+    && acceptanceCheck.generation === decisionGeneration
+    && recoveredProposalIds.every((id) => acceptanceCheck.proposalIds.split("|").includes(id));
   const finishDecision = () => {
     acceptingRef.current = false;
     setAccepting(undefined);
@@ -783,8 +788,8 @@ export function BlockProposalDisplay({
       <ManuscriptEditor {...editorProps}
         editable={editorProps.editable && !discardHold && !recoveryUnavailable
           && journalPendingIds.length === 0
-          && (acceptanceChecked || (effectiveLocators.length === 0
-            && writing?.projection.unsettled_intent_count === 0))
+          && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
+            && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))
           && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}
