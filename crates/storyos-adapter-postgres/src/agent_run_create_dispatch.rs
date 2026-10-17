@@ -49,7 +49,7 @@ pub(crate) async fn record_create(
                 claim,
                 run,
                 no_response(dispatch, CreateSettlement::NotSubmitted),
-                &retained,
+                retained,
             )
             .await;
         }
@@ -59,7 +59,7 @@ pub(crate) async fn record_create(
                 claim,
                 run,
                 no_response(dispatch, CreateSettlement::Rejected(&reason)),
-                &retained,
+                retained,
             )
             .await;
         }
@@ -82,7 +82,7 @@ pub(crate) async fn record_create(
         response_reference: response.response_reference.as_deref(),
         settlement: CreateSettlement::Response,
     };
-    persist_create_result(client, claim, run, result, &retained).await
+    persist_create_result(client, claim, run, result, retained).await
 }
 
 fn no_response<'a>(
