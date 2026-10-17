@@ -249,7 +249,7 @@ fn create_response(
             materialized_revision: contract_chapter_revision(
                 session.base_snapshot.authoritative_revision_id.clone(),
                 session.base_snapshot.body,
-                &session.base_snapshot.blocks,
+                session.base_snapshot.blocks,
             ),
             materialized_payload_digest: contracts::DigestValue {
                 algorithm: contracts::DigestAlgorithm::Sha256,
