@@ -62,6 +62,9 @@ type RequestReference = {
   guidance?: GuidanceReferences[];
 };
 
+/** The references of a message, their labels for the history, and their draft keys. */
+export type SentReferences = { references: SelectionReference[]; labels: string[]; keys: string[] };
+
 /** Calls `refresh` later, and returns a function that cancels the call. */
 export type RefreshSchedule = (refresh: () => void) => () => void;
 
@@ -384,7 +387,7 @@ export function WritingAssistantPanel({
   }, [reference?.runId, run, terminal, failedReads]);
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
-  const submit = (message: string, onAdmitted: () => void) => {
+  const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences) => {
     if (availability === "unavailable") {
       setRefused(true);
       return;
@@ -436,6 +439,8 @@ export function WritingAssistantPanel({
         throw new Error("Working Target Scope mismatch");
       }
       const entries = draftEntries(context.scope);
+      const sent = frozen ?? { references: entries.map((entry) => entry.reference), labels: draftLabels(entries),
+        keys: entries.map((entry) => entry.key) };
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
@@ -454,11 +459,11 @@ export function WritingAssistantPanel({
           },
         ],
       };
-      const references = entries.map((entry) => entry.reference);
+      const { references } = sent;
       if (references.length > 0) {
         current.references = references;
-        current.referenceLabels = draftLabels(entries);
-        current.referenceKeys = entries.map((entry) => entry.key);
+        current.referenceLabels = sent.labels;
+        current.referenceKeys = sent.keys;
       }
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
