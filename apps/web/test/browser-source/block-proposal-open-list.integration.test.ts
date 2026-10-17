@@ -161,3 +161,43 @@ it("keeps text input available when the open Proposal list adds a Proposal after
     }
   });
 });
+
+it("shows a withdrawn Proposal in no tab after the complete open Proposal list excludes it", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const open = candidateFor(test.workspace);
+  const server: { proposal: Proposal; list: OpenProposalListAnswer } = {
+    proposal: open, list: { proposals: [open], completeness: "complete" } };
+  let listReads = 0;
+  let proposalReads = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith("/open-proposals")) listReads += 1;
+    else proposalReads += 1;
+    return proposalTransport(test.workspace, server.proposal, server.list).fetchImpl(input, init);
+  };
+  const locator = { proposalId: open.proposal_id, runId: open.source.run_id, decisionId: open.source.decision_id };
+  const decoration = (host: HTMLElement) =>
+    host.querySelector(`.block-proposal[data-proposal-id="${open.proposal_id}"]`);
+  await withActEnvironment(async () => {
+    const before = await renderTab(test.workspace, [locator], fetchImpl);
+    try {
+      await expect.poll(() => decoration(before.host)?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+    } finally { await before.unmount(); }
+    // Another tab withdraws the Proposal. Its Operation stays pending, and the open Proposal list excludes it.
+    server.proposal = { ...open, closure: "withdrawn" };
+    server.list = { proposals: [], completeness: "complete" };
+    for (const locators of [[locator], []]) {
+      listReads = 0;
+      proposalReads = 0;
+      const tab = await renderTab(test.workspace, locators, fetchImpl);
+      try {
+        await expect.poll(() => listReads).toBeGreaterThan(0);
+        await expect.poll(() => proposalReads).toBeGreaterThanOrEqual(locators.length);
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+        expect({ locators: locators.length, shown: decoration(tab.host) !== null, failures: tab.failures })
+          .toEqual({ locators: locators.length, shown: false, failures: [] });
+      } finally { await tab.unmount(); }
+    }
+  });
+  await test.close();
+});

@@ -180,7 +180,8 @@ export function BlockProposalDisplay({
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, refreshKey, settlementRefresh, settlements,
-    decisionGeneration, editorProps.baseUrl, editorProps.fetchImpl]);
+    decisionGeneration, locators.map((locator) => locator.proposalId).join("|"),
+    editorProps.baseUrl, editorProps.fetchImpl]);
 
   useEffect(() => {
     let active = true;
@@ -302,8 +303,12 @@ export function BlockProposalDisplay({
     ? [{ locator, proposal, operation: undefined }]
     : proposal.operations.filter((item) => item.resolution === "pending")
       .map((operation) => ({ locator, proposal, operation })));
+  // The complete Server list decides which Proposals the editor shows. A locator only causes an earlier list read (ADR 0063).
+  const listedIds = openList.kind === "listed" && openList.complete
+    ? new Set(openList.locators.map((item) => item.proposalId)) : undefined;
   for (const { locator, proposal, operation } of pendingOperations) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
+    if (listedIds !== undefined && !listedIds.has(locator.proposalId)) continue;
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
       && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
