@@ -402,10 +402,10 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
                    (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
                     manuscript_block_id, base_authoritative_revision_id,
                     manuscript_schema_version, coordinate_profile, range_from, range_to,
-                    boundary_profile, base_slice_digest)
+                    boundary_profile, base_slice_digest, proposal_revision_id)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $5::text::uuid, 1,
                          $14::text::uuid, $15::text::uuid, $16::text::integer, $17,
-                         $18::text::integer, $19::text::integer, $20, $21)",
+                         $18::text::integer, $19::text::integer, $20, $21, $4::text::uuid)",
                 &[
                     &owner_user_id,
                     &project_id,

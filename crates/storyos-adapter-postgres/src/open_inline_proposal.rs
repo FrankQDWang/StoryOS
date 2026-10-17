@@ -173,9 +173,10 @@ async fn persist_applied_inline(
             "INSERT INTO storyos.proposal_anchors
                (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
                 manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
-                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest)
+                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                proposal_revision_id)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 1,
-                     $5::text::uuid, $6::text::uuid, 1, $7, $8, $9, $10, $11)",
+                     $5::text::uuid, $6::text::uuid, 1, $7, $8, $9, $10, $11, $12::text::uuid)",
             &[
                 &owner,
                 &project,
@@ -188,6 +189,7 @@ async fn persist_applied_inline(
                 &to_i32,
                 &EXCLUSIVE_AUTHORITATIVE_EDGES_V1,
                 &digest,
+                &proposal_revision_id,
             ],
         )
         .await

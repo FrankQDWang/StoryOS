@@ -306,15 +306,19 @@ pub(super) async fn place_proposal(
                     "INSERT INTO storyos.proposal_anchors
                        (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
                         manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
-                        coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest)
+                        coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                        proposal_revision_id)
                      SELECT owner_user_id, project_id, $4::text::uuid, operation_id, anchor_order,
                             manuscript_block_id, $5::text::uuid, manuscript_schema_version,
-                            coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest
+                            coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                            $7::text::uuid
                        FROM storyos.proposal_anchors
                       WHERE owner_user_id = $1::text::uuid
                         AND project_id = $2::text::uuid
                         AND proposal_id = $3::text::uuid
-                        AND operation_id = ANY($6::text[]::uuid[])",
+                        AND operation_id = ANY($6::text[]::uuid[])
+                        AND proposal_revision_id = storyos.proposal_anchor_set_revision(
+                              $1::text::uuid, $2::text::uuid, $3::text::uuid, $8::text::uuid)",
                     &[
                         &owner,
                         &project,
@@ -322,6 +326,8 @@ pub(super) async fn place_proposal(
                         &proposal_id,
                         &base_revision_id,
                         &facts.selected_operation_ids,
+                        &revision_id,
+                        &facts.proposal_revision_id,
                     ],
                 )
                 .await

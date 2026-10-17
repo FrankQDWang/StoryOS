@@ -198,7 +198,13 @@ pub(super) async fn load_chapter_proposal_heads(
     if let Some(selected) = context.as_mut()
         && selected.kind == "inline_edit"
     {
-        selected.ranges = load_inline_ranges(client, command, &selected.proposal_id).await?;
+        selected.ranges = load_inline_ranges(
+            client,
+            command,
+            &selected.proposal_id,
+            &selected.prior_revision_id,
+        )
+        .await?;
     }
     Ok(LoadedProposalHeads {
         ownership: CurrentOwnershipFacts {
@@ -224,6 +230,7 @@ async fn load_inline_ranges(
     client: &Client,
     command: &ApplyAuthorEditCommand,
     proposal_id: &str,
+    revision_id: &str,
 ) -> Result<Vec<(u32, u32)>, AuthorEditError> {
     let rows = client
         .query(
@@ -232,11 +239,14 @@ async fn load_inline_ranges(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND proposal_id = $3::text::uuid
+                AND proposal_revision_id = storyos.proposal_anchor_set_revision(
+                      $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)
               ORDER BY anchor_order",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &proposal_id,
+                &revision_id,
             ],
         )
         .await

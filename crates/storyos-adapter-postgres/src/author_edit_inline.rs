@@ -48,6 +48,8 @@ pub(super) async fn load_inline_target_ownership(
            JOIN storyos.proposal_anchors AS anchor
              ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id, anchor.operation_id) =
                 (operation.owner_user_id, operation.project_id, operation.proposal_id, operation.operation_id)
+            AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                  $1::text::uuid, $2::text::uuid, $4::text::uuid, $5::text::uuid)
           WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
             AND proposal.chapter_id=$3::text::uuid AND proposal.proposal_id=$4::text::uuid
             AND head.current_revision_id=$5::text::uuid AND proposal.kind='inline_edit'
