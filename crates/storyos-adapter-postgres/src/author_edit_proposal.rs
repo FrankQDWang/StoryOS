@@ -37,14 +37,13 @@ pub(super) struct RoutedInlineAuthorEdit {
 
 pub(super) struct LoadedProposalHeads {
     pub ownership: CurrentOwnershipFacts,
-    pub edit_body: String,
+    pub candidate_body: Option<String>,
     pub context: Option<ProposalEditContext>,
 }
 
 pub(super) async fn load_chapter_proposal_heads(
     client: &Client,
     command: &ApplyAuthorEditCommand,
-    manuscript_body: String,
 ) -> Result<LoadedProposalHeads, AuthorEditError> {
     let structured = command
         .author_edit_units
@@ -192,7 +191,7 @@ pub(super) async fn load_chapter_proposal_heads(
     }
     heads.sort();
     heads.dedup();
-    let (mut context, edit_body) = match selected {
+    let (mut context, candidate_body) = match selected {
         Some((context, candidate)) => (Some(context), Some(candidate)),
         None => (None, None),
     };
@@ -216,7 +215,7 @@ pub(super) async fn load_chapter_proposal_heads(
                 .unwrap_or_default(),
             unresolved_reservation_refs: Vec::new(),
         },
-        edit_body: edit_body.unwrap_or(manuscript_body),
+        candidate_body,
         context,
     })
 }
@@ -254,13 +253,18 @@ async fn load_inline_ranges(
 }
 
 pub(super) fn route_inline_author_edit(
-    loaded: &LoadedProposalHeads,
+    loaded: LoadedProposalHeads,
     manuscript_body: String,
     author_edit_units: Vec<AuthorEditUnit>,
 ) -> Result<RoutedInlineAuthorEdit, AuthorEditRefusal> {
-    let Some(context) = loaded.context.clone() else {
+    let LoadedProposalHeads {
+        candidate_body,
+        context,
+        ..
+    } = loaded;
+    let Some(context) = context else {
         return Ok(RoutedInlineAuthorEdit {
-            current_body: loaded.edit_body.clone(),
+            current_body: candidate_body.unwrap_or(manuscript_body),
             author_edit_units,
             disposition: InlineEditDisposition::Unspecified,
             proposal_context: None,
@@ -268,7 +272,7 @@ pub(super) fn route_inline_author_edit(
     };
     if context.kind != "inline_edit" || context.ranges.is_empty() {
         return Ok(RoutedInlineAuthorEdit {
-            current_body: loaded.edit_body.clone(),
+            current_body: candidate_body.unwrap_or(manuscript_body),
             author_edit_units,
             disposition: InlineEditDisposition::Unspecified,
             proposal_context: Some(context),
@@ -288,7 +292,7 @@ pub(super) fn route_inline_author_edit(
             return Err(AuthorEditRefusal::InvalidSelection);
         }
         return Ok(RoutedInlineAuthorEdit {
-            current_body: loaded.edit_body.clone(),
+            current_body: candidate_body.unwrap_or(manuscript_body),
             author_edit_units,
             disposition: InlineEditDisposition::Unspecified,
             proposal_context: Some(context),
@@ -303,7 +307,7 @@ pub(super) fn route_inline_author_edit(
                 return Err(AuthorEditRefusal::UnsupportedIntentShape);
             };
             Ok(RoutedInlineAuthorEdit {
-                current_body: loaded.edit_body.clone(),
+                current_body: candidate_body.unwrap_or(manuscript_body),
                 author_edit_units: remap_units(&author_edit_units, anchor_from)?,
                 disposition: InlineEditDisposition::Unspecified,
                 proposal_context: Some(context),
