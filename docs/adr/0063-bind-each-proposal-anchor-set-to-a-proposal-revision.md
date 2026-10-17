@@ -27,17 +27,21 @@ Before this change, a Proposal Anchor row belonged to a Proposal and its Operati
   - The Derived mode of Author Undo of an Acceptance copies the set of the accepted Revision to the opening Revision of the derived Proposal. The reader rule selects that set.
   - An applied Replan of an Inline Proposal writes the proven set of the new Revision on the expected Authoritative Revision.
 - **Inline creation checks.** Inline creation reads no Anchor row. Its reservation check uses `storyos.proposal_operations`, so the reader rule does not apply to it.
-- **Replan proof.** An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of the conflicted Revision on the expected Authoritative Revision. Each condition is necessary:
+- **Archive.** The Project archive export writes each row of `canonical/proposal_anchors.json` with its `proposal_revision_id`. Thus the archive keeps the Anchor set of each Proposal Revision.
+
+## Replan proof
+
+An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of the conflicted Revision on the expected Authoritative Revision. Each condition is necessary:
   - The Block has the same identity and the paragraph kind on the base and on the current Revision.
   - The Anchor has the current schema version, coordinate profile, and boundary profile.
   - The base slice matches the stored base-slice digest.
   - An exact comparison of the base and current Block text puts the complete range inside one unchanged run.
   - The slice text at the new range is equal to the base slice.
   - No other unresolved reservation is on the Block.
+
 - **Comparison for the proof.** The comparison takes the common prefix and the common suffix as unchanged runs, and Myers compares only the middle. Thus a long insertion at an edge stays exact. An insertion inside the range slides out to the nearest edge when the slide moves it only over equal characters. Thus a space typed next to a space at an edge keeps the proof. When the comparison reaches its trace limit, it has no exact runs, and the proof fails.
 - **Structural premise.** The proof does not examine the neighbor Blocks. While the reservation exists, Author Edit accepts in the reserved Block only a collapsed insertion at an Anchor edge. Thus a split, a join, a move, or a deletion of the Block cannot occur before the Replan.
 - **Replan result.** When each Anchor has a proof, one transaction writes the new Revision, its Anchor set on the expected Authoritative Revision, and the Receipt. The Operation keeps its identity. When one proof fails, the Replan is refused with `unavailable_proof`. It writes no Revision, and the conflict stays. The proof comes after the head check, so a changed head stays a conflict.
-- **Archive.** The Project archive export writes each row of `canonical/proposal_anchors.json` with its `proposal_revision_id`. Thus the archive keeps the Anchor set of each Proposal Revision.
 
 ## Open Proposal list
 
