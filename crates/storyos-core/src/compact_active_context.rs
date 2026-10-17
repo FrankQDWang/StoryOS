@@ -164,6 +164,8 @@ pub struct CompactionRequestFacts<'a> {
     pub author_message: &'a str,
     /// The decision Context Assembly of the request, or `None` when it does not decode.
     pub decision: Option<&'a crate::CurrentPassageAssemblyRecord>,
+    /// The text of each declared target that the request sends.
+    pub declared_target_texts: &'a [String],
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub prior_reported_tokens: Option<u64>,
 }
@@ -180,20 +182,23 @@ impl CompactionTrigger {
                 .and_then(crate::BudgetBounds::request_bounds)
                 .map(|bounds| u64::from(bounds.max_output_tokens)),
             prior_reported_tokens: facts.prior_reported_tokens,
+            // The request sends each selected item, each selection reference text, and each
+            // declared target text (ADR 0056).
             new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
-                // The request sends the text of each selection reference again (ADR 0062).
                 let references = record
                     .operation_requirement
                     .selection_references
                     .iter()
                     .flatten()
-                    .filter_map(|admitted| admitted.selected_text.as_deref())
+                    .filter_map(|admitted| admitted.selected_text.as_deref());
+                let sent_texts = references
+                    .chain(facts.declared_target_texts.iter().map(String::as_str))
                     .map(crate::assemble_context::count_context_item_tokens);
                 record
                     .selected
                     .iter()
                     .map(|item| item.token_count)
-                    .chain(references)
+                    .chain(sent_texts)
                     .sum()
             }),
         }
