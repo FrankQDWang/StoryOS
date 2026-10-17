@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
 import type { BrowserContext, Locator } from "playwright";
 import {
-  createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
+  acceptProposal, createProjectCommandChallenge, digestAcceptProposal, digestUpdateProjectAssistance, getAgentRun,
   getChapter, getEditorSession, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, ApplyAuthorEditRequest, AssistanceWorkingTarget, CreateAgentRunResponse, UpdateProjectAssistanceRequest }
@@ -422,6 +422,53 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect(page.locator(`[data-proposal-id="${opened.proposalId}"] .block-proposal-text`)).toHaveText("narrator tone");
       await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
+      if (edge === "end") {
+        // An Acceptance on the moved head makes the conflict. The Replan proves the Anchor on the
+        // current head, so the candidate is editable again after a reload.
+        const head = (await getChapter({ ...options, chapterId })).chapter.current_revision.revision_id;
+        if (afterEdge.validation_receipt.kind !== "present") throw new Error("expected a validation receipt");
+        const writerSession = (await queryStoryOSPostgres(`SELECT current_editor_session_id::text
+          FROM storyos.project_writer_generations WHERE project_id = '${projectId}'::uuid
+          ORDER BY writer_generation DESC LIMIT 1`)).trim();
+        await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+          WHERE project_id = '${projectId}'::uuid`);
+        const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+          accept_proposal_input: { proposal_revision_id: afterEdge.revision_id,
+            validation_receipt_id: afterEdge.validation_receipt.validation_receipt_id,
+            selected_operation_ids: [afterEdge.operation_id], expected_authoritative_revision_id: head,
+            editor_session_id: writerSession,
+            client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+            security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: uuidV7() } };
+        const acceptanceKey = uuidV7();
+        const acceptanceChallenge = await createProjectCommandChallenge({ ...options, request: {
+          method: "POST", route_template: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+          command_schema: acceptance.command_schema, canonical_command_digest: await digestAcceptProposal(acceptance),
+          idempotency_key: acceptanceKey } });
+        const conflicted = await acceptProposal({ ...options, proposalId: opened.proposalId, request: acceptance,
+          idempotencyKey: acceptanceKey, antiForgery: acceptanceChallenge.nonce });
+        assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
+        await page.reload();
+        await page.locator(`[data-proposal-replan="${opened.proposalId}"]`).click();
+        await expect.poll(async () => (await getProposal({ ...options, proposalId: opened.proposalId }))
+          .proposal.base_authoritative_revision_id).toBe(head);
+        const replanned = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
+        assert.equal(replanned.operation_id, afterEdge.operation_id);
+        assert.deepEqual(replanned.anchors.map((anchor) => [anchor.base_authoritative_revision_id, anchor.from, anchor.to]),
+          [[head, 10, 24]]);
+        await page.reload();
+        await expect(edgeCandidate).toHaveText("narrator tone");
+        await editor.focus();
+        await edgeCandidate.evaluate((element) => {
+          window.getSelection()?.setBaseAndExtent(element.firstChild!, 5, element.firstChild!, 5);
+          document.dispatchEvent(new Event("selectionchange"));
+        });
+        await page.keyboard.insertText("xx");
+        await expect.poll(async () => (await getProposal({ ...options, proposalId: opened.proposalId }))
+          .proposal.candidate_text).toBe("narraxxtor tone");
+        await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(["Guard the narraxxtor tone! in this passage.", SIBLING]);
+        assert.equal((await getChapter({ ...options, chapterId })).chapter.current_revision.revision_id, head);
+        await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-replanned-edited.png") });
+      }
     }
     // A reference to part of an inline candidate becomes a reference to the same Chapter text when the
     // author accepts the candidate. The candidate starts at offset 10 of its block (ADR 0062).

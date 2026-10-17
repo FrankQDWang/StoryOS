@@ -223,7 +223,7 @@ pub(crate) async fn record(
     let (dispatch_state, decision_id, binding_id) = match observation {
         Observation::Terminal(response) => {
             payload["items"] =
-                crate::agent_run_observation::merge_items(&payload["items"], &response.items);
+                crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
             payload["usage"] = crate::agent_run_observation::encode_usage(response.usage);
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);

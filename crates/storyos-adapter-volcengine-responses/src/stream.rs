@@ -1,5 +1,6 @@
 //! Read the typed server-sent events of one streamed Responses request (ADR 0033, ADR 0039).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -43,7 +44,7 @@ pub(crate) async fn observe(
         items: BTreeMap::new(),
         pending: Vec::new(),
     };
-    let mut buffer = Vec::new();
+    let mut buffer = EventBuffer::default();
     let mut deadline = Instant::now() + policy.interval;
     loop {
         let chunk = match tokio::time::timeout_at(deadline, response.chunk()).await {
@@ -57,11 +58,10 @@ pub(crate) async fn observe(
                 continue;
             }
         };
-        buffer.extend_from_slice(&chunk);
-        while let Some((event, rest)) = split_event(&buffer) {
-            let data = event_data(&event);
-            buffer = rest;
-            let Some(event) = data.and_then(|data| serde_json::from_str::<Value>(&data).ok())
+        buffer.push(&chunk);
+        while let Some(event) = buffer.next_event() {
+            let Some(event) =
+                event_data(event).and_then(|data| serde_json::from_str::<Value>(&data).ok())
             else {
                 continue;
             };
@@ -231,32 +231,54 @@ impl StreamState {
     }
 }
 
-/// The first complete event of `buffer` and the bytes after it. Events end with a blank line.
-fn split_event(buffer: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
-    let end = buffer
-        .windows(/*size*/ 2)
-        .position(|window| window == b"\n\n")
-        .map(|position| (position, 2))
-        .into_iter()
-        .chain(
-            buffer
-                .windows(/*size*/ 4)
-                .position(|window| window == b"\r\n\r\n")
-                .map(|position| (position, 4)),
-        )
-        .min_by_key(|(position, _)| *position)?;
-    Some((buffer[..end.0].to_vec(), buffer[end.0 + end.1..].to_vec()))
+/// The received bytes of one stream. Events end with a blank line.
+#[derive(Default)]
+struct EventBuffer {
+    bytes: Vec<u8>,
+    /// The start of the first event that `next_event` did not return.
+    start: usize,
+}
+
+impl EventBuffer {
+    /// Moves the unfinished tail to the front one time, and then appends `chunk`.
+    fn push(&mut self, chunk: &[u8]) {
+        self.bytes.drain(..self.start);
+        self.start = 0;
+        self.bytes.extend_from_slice(chunk);
+    }
+
+    /// The next complete event, without its blank line.
+    fn next_event(&mut self) -> Option<&[u8]> {
+        let rest = &self.bytes[self.start..];
+        let (end, separator) = (0..rest.len()).find_map(|position| {
+            let tail = &rest[position..];
+            if tail.starts_with(b"\n\n") {
+                Some((position, 2))
+            } else if tail.starts_with(b"\r\n\r\n") {
+                Some((position, 4))
+            } else {
+                None
+            }
+        })?;
+        let event = self.start..self.start + end;
+        self.start += end + separator;
+        Some(&self.bytes[event])
+    }
 }
 
 /// The joined `data` lines of one event, or `None` for an event without data.
-fn event_data(event: &[u8]) -> Option<String> {
+fn event_data(event: &[u8]) -> Option<Cow<'_, str>> {
     let text = std::str::from_utf8(event).ok()?;
     let lines: Vec<_> = text
         .lines()
         .filter_map(|line| line.strip_prefix("data:"))
         .map(|line| line.strip_prefix(' ').unwrap_or(line))
         .collect();
-    (!lines.is_empty() && lines != ["[DONE]"]).then(|| lines.join("\n"))
+    match lines.as_slice() {
+        [] | ["[DONE]"] => None,
+        [line] => Some(Cow::Borrowed(line)),
+        _ => Some(Cow::Owned(lines.join("\n"))),
+    }
 }
 
 #[cfg(test)]
