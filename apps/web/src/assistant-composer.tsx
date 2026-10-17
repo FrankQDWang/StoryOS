@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetAgentRunResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AssistantContext } from "./writing-assistant-panel.tsx";
+import type { AssistantContext, SentReferences } from "./writing-assistant-panel.tsx";
 import { settledRun } from "./assistant-run-outcome.ts";
 import { clearRunControl, freezeRunControl, readRunControl, saveRunControl, submitRunControl,
   type RunControlIntent } from "./run-control-intent.ts";
@@ -20,7 +20,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
   sending: boolean;
   current?: { runId?: string; conversationId?: string } | undefined;
   run?: GetAgentRunResponse | undefined;
-  onSend: (message: string, acknowledged: () => void) => void;
+  onSend: (message: string, acknowledged: () => void, frozen?: SentReferences) => void;
   onRefresh: () => Promise<unknown>;
   onStatus: (status: string) => void;
   /** Keeps the labels and the references of a retained steering input for the history. */
@@ -32,6 +32,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
     () => context === undefined ? undefined : readRunControl(context.scope),
   );
   const [busy, setBusy] = useState(false);
+  // A guidance that arrived after its Run settled. It goes as the next AgentRun.
+  const [resend, setResend] = useState<Extract<RunControlIntent, { kind: "guidance" }>>();
   const alive = useRef(true);
   const recovered = useRef(false);
   const known = run !== undefined && run.run_id === current?.runId
@@ -65,6 +67,10 @@ export function AssistantComposer({ context, available, sending, current, run, o
         return;
       }
       if (!alive.current) return;
+      if (response.effect.kind === "conflicted" && intent.kind === "guidance") {
+        setResend(intent);
+        return;
+      }
       onStatus(response.effect.kind === "conflicted" ? "任务已结束，这次操作未执行。"
         : intent.kind === "pause" ? "任务已暂停，候选文字保持原样。" : "要求已收到，将用于当前任务。");
     } catch (error) {
@@ -88,6 +94,14 @@ export function AssistantComposer({ context, available, sending, current, run, o
     alive.current = true;
     return () => { alive.current = false; };
   }, []);
+  // A later render sends it, because the send of this render still sees the Run as active.
+  useEffect(() => {
+    if (resend === undefined || !known || active) return;
+    setResend(undefined);
+    const input = resend.request.steer_agent_run_input;
+    onSend(input.author_message.text, () => setMessage(""), { references: input.selection_references ?? [],
+      labels: resend.labels ?? [], keys: resend.referenceKeys ?? [] });
+  }, [resend, known, active]);
   useEffect(() => {
     if (context === undefined || recovered.current || !available) return;
     recovered.current = true;
