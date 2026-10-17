@@ -511,7 +511,7 @@ else:
         refusal = self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
         # The refusal prints the post-round procedures of the verification guide.
         for text in ('PR 745 had 3 review rounds', 'docs/agents/verification.md#after-the-review-rounds',
-                     'make review-round PR=<pr> KIND=sync', 'make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>',
+                     'git merge origin/main', 'make review-round PR=<pr> KIND=sync', 'make review-round PR=<pr> KIND=coordinator-fix COMMENT=<comment URL>',
                      'a test that fails before the fix', 'make verify-targeted CHECK=project-scope'):
             self.assertIn(text, refusal)
 

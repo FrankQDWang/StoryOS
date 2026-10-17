@@ -78,9 +78,10 @@ These two procedures replace a new review round. `make review-round` prints this
 
 When only `main` moved after a passed round, the executor runs the sync without a coordinator decision:
 
-1. Run `make review-round PR=<pr> KIND=sync`. It is not a round. It passes when each file has the same change in two diffs: round head to new head, and old base to new base. The comparison ignores the `index` lines and the hunk line numbers. It posts a record comment with the new tree.
-2. Run `make verify-changed BASE=<round head>` and `make verify-targeted CHECK=project-scope`. Do not start a new round, and do not run `make verify-local`.
-3. When the sync refuses, stop and send the paths that it lists to the coordinator.
+1. Merge the current `main` into the PR branch: `scripts/git-retry.sh fetch origin main`, `git merge origin/main`, and `scripts/git-retry.sh push`. Do not change a file in the merge.
+2. Run `make review-round PR=<pr> KIND=sync`. It is not a round. It passes when each file has the same change in two diffs: round head to new head, and old base to new base. The comparison ignores the `index` lines and the hunk line numbers. It posts a record comment with the new tree.
+3. Run `make verify-changed BASE=<round head>` and `make verify-targeted CHECK=project-scope`. Do not start a new round, and do not run `make verify-local`.
+4. When the sync refuses, stop and send the paths that it lists to the coordinator.
 
 When round 3 has open blocking findings, send them to the coordinator. The coordinator can accept a small fix:
 
