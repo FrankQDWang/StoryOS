@@ -43,7 +43,7 @@ An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of
 
 - **Comparison for the proof.** The comparison takes the common prefix and the common suffix as unchanged runs, and Myers compares only the middle. Thus a long insertion at an edge stays exact. An insertion inside the range slides out to the nearest edge when the slide moves it only over equal characters. Thus a space typed next to a space at an edge keeps the proof. When the comparison reaches its trace limit, it has no exact runs, and the proof fails.
 - **Structural premise.** The proof does not examine the neighbor Blocks. While the reservation exists, Author Edit accepts in the reserved Block only a collapsed insertion at an Anchor edge. Thus a split, a join, a move, or a deletion of the Block cannot occur before the Replan.
-- **Replan result.** When each Anchor has a proof, one transaction writes the new Revision, its Anchor set on the expected Authoritative Revision, and the Receipt. The Operation keeps its identity. When one proof fails, the Replan is refused with `unavailable_proof`. It writes no Revision, and the conflict stays. The proof comes after the head check, so a changed head stays a conflict.
+- **Replan result.** When each Anchor has a proof, one transaction writes the new Revision, its Anchor set on the expected Authoritative Revision, and the Receipt. The Operation keeps its identity. When one proof fails, the Replan is refused with `unavailable_proof`. It writes no Revision, and the conflict stays. The proof comes after the head check, so a changed head stays a conflict of the Replan. A changed head does not make Acceptance a conflict ([ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 
 ## Open Proposal list
 
@@ -66,5 +66,5 @@ An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of
 ## Consequences
 
 - Each Author Undo path that changes the base writes its own Anchor set. Thus a read of an Inline Proposal after that Undo gives the Anchor on the base of the restored Revision.
-- A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal.
+- A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal. ADR 0064 also lets the author accept it when its Inline part is delivered.
 - After Author Undo of a Replan, the restored Revision is on the old base. Thus the editor does not show it inline until a new Replan.
