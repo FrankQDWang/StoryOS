@@ -15,6 +15,9 @@ pub struct ReplanProposal {
     pub source_condition_matches: bool,
     pub replacement_operations_preserve_identity: bool,
     pub expected_target_matches_head: bool,
+    /// Each Inline Anchor has a proof on the current Authoritative Revision. A Block Proposal has
+    /// no Inline Anchor, so this is true for it.
+    pub inline_anchors_proven: bool,
 }
 
 pub type ReplanProposalResult =
@@ -62,6 +65,9 @@ pub fn replan_proposal(command: &ReplanProposal) -> ReplanProposalResult {
     }
     if !command.expected_target_matches_head {
         return TransitionOutcome::Conflicted(ReplanProposalConflict::ChangedHead);
+    }
+    if !command.inline_anchors_proven {
+        return TransitionOutcome::Refused(ReplanProposalRefusal::UnavailableProof);
     }
     TransitionOutcome::Applied(())
 }

@@ -296,6 +296,9 @@ hash. Both Proposal edges belong to adjacent Authoritative State, and only
 input strictly inside the range edits the Proposal. Multi-block Operations use
 ordered block-relative anchors, never one document-wide range.
 
+Each Anchor set belongs to the Proposal Revision that wrote it. A later Revision
+on the same base uses the nearest set in its parent chain (ADR 0063).
+
 ### 6.3 Four orthogonal state axes
 
 ```text
@@ -362,6 +365,21 @@ Core never silently maps, rebases, merges, or revalidates the old Revision
 against a changed Head. `ReplanProposal` appends a new Revision with current
 base Revisions, Anchors, digests, and preconditions, retaining an Operation ID
 only when semantic identity is proven unchanged.
+
+For an Inline Proposal, the Replan proves each Anchor on the expected
+Authoritative Revision. The Block keeps its identity, kind, schema, and
+coordinate profile. The base slice matches its digest. An exact comparison
+puts the complete range inside one unchanged run, and the slice text is equal.
+No other reservation is on the Block.
+
+The comparison takes the common prefix and suffix as unchanged runs, and an
+insertion inside the range slides out to an edge over equal characters. A
+coarse comparison gives no proof. With a proof, one transaction writes the new
+Revision, its Anchor set, and the Receipt. Without a proof, the Replan is
+refused with `unavailable_proof`, and the conflict stays.
+
+The ownership rule prevents a split, join, move, or deletion of a reserved
+Block, so the proof does not examine the neighbor Blocks (ADR 0063).
 
 ## 7. Command contracts
 

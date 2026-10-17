@@ -10,12 +10,12 @@ import {
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
   exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, getRefusedEditDraft, getApplyAuthorEditOutcome,
-  rejectProposalOperations,
+  rejectProposalOperations, replanProposal, digestReplanProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CloseEditorFlowDraftRequest, CloseEditorFlowDraftResponse, AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
-  ExpandRefusedEditDraftRequest, ReplacementBlock,
+  ExpandRefusedEditDraftRequest, ReplacementBlock, ReplanProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
@@ -2269,6 +2269,210 @@ test("canonical Inline boundary input preserves exact target and refuses wrong, 
         assert.deepEqual(result.receipt.resulting_authoritative_revision_ids, [after.chapter.current_revision.revision_id]);
         assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, after.chapter);
       }
+    }
+  } finally { await stopRealServer(started.server); }
+});
+
+function movedDigest(manuscriptBlockId: string, from: number, to: number): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify({
+    base_slice: SOURCE_SLICE, block_kind: "paragraph",
+    coordinate_profile: "prosemirror-token-utf16.v1", from, manuscript_block_id: manuscriptBlockId,
+    manuscript_schema_version: 1, to,
+  })).digest("hex")}`;
+}
+
+async function bindingRows(proposalId: string) {
+  return JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${["proposal_revisions", "proposal_anchors"]
+    .map((table) => `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text),
+      '[]'::jsonb) FROM storyos.${table} AS record WHERE record.proposal_id = '${proposalId}'::uuid)`)
+    .join(",")})::text`)) as Record<"proposal_revisions" | "proposal_anchors", Record<string, unknown>[]>;
+}
+
+async function conflictAndReplan(
+  options: { baseUrl: string; projectId: string; fetchImpl: typeof fetch },
+  opened: Awaited<ReturnType<typeof getProposal>>,
+  writer: Awaited<ReturnType<typeof writePassage>>,
+  headRevisionId: string,
+  ns: string,
+) {
+  if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
+  const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+    accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}1`),
+      proposal_revision_id: opened.proposal.revision_id,
+      validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
+      selected_operation_ids: [opened.proposal.operation_id],
+      expected_authoritative_revision_id: headRevisionId,
+      editor_session_id: writer.session.editor_session.editor_session_id } };
+  const conflicted = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
+    await digestAcceptProposal(acceptance), id(`${ns}2`), (antiForgery) => acceptProposal({
+      ...options, proposalId: opened.proposal.proposal_id, request: acceptance, antiForgery,
+      idempotencyKey: id(`${ns}2`) }));
+  assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
+  const afterConflict = await getProposal({ ...options, proposalId: opened.proposal.proposal_id });
+  const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
+  assert.deepEqual(afterConflict.proposal.source_condition,
+    { kind: "proposal_conflict", proposal_conflict_ref: conflictRef });
+  const rows = await bindingRows(opened.proposal.proposal_id);
+  const request: ReplanProposalRequest = { command_schema: "storyos.command.replan-proposal.request.v1",
+    replan_proposal_input: { ...BINDING, correlation_id: id(`${ns}3`),
+      conflicted_proposal_revision_id: afterConflict.proposal.revision_id,
+      expected_current_proposal_head: afterConflict.proposal.revision_id,
+      expected_current_target_revisions: [headRevisionId],
+      replacement_operations: [afterConflict.proposal.operation_id],
+      source_condition: { kind: "proposal_conflict", proposal_conflict_ref: conflictRef },
+      editor_session_id: writer.session.editor_session.editor_session_id } };
+  const replanned = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans", request.command_schema,
+    await digestReplanProposal(request), id(`${ns}4`), (antiForgery) => replanProposal({
+      ...options, proposalId: opened.proposal.proposal_id, request, antiForgery,
+      idempotencyKey: id(`${ns}4`) }));
+  return { afterConflict, rows, replanned };
+}
+
+test("an Inline Replan proves the moved Anchor, survives restart, and Accepts an edited candidate", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    // An insertion at the right edge keeps the range, and one at the left edge moves it.
+    for (const [index, offset] of [24, 10].entries()) {
+      const ns = `cd1cd${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Inline Replan Novel", `${ns}02`);
+      const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, ns);
+      let options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+      const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+        options.baseUrl, options.fetchImpl, options.projectId, "POST",
+        "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+        await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+          ...options, request: input, idempotencyKey: key, antiForgery }));
+      const edge = replaceUnit(offset, offset, "!", writer, `${ns}4`, opened.proposal.revision_id);
+      edge.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_block_selection",
+        manuscript_block_id: opened.proposal.manuscript_block_id, from: offset, to: offset, text: "!" }];
+      const inserted = await send(edge, id(`${ns}46`));
+      if (inserted.effect.kind !== "authoritative_applied") throw new Error("expected edge insertion");
+      const head = inserted.effect.authoritative_revision.revision_id;
+      writer.authoritativeRevisionId = head;
+      writer.nextSequence = "3";
+      const { afterConflict, rows, replanned } = await conflictAndReplan(
+        options, opened, writer, head, `${ns}8`);
+      if (replanned.effect.kind !== "resolved") throw new Error("expected resolved Replan");
+      const replannedId = replanned.effect.resulting_proposal_revision_id;
+      const from = offset === 10 ? 11 : 10;
+      const movedAnchor = { ...opened.proposal.anchors[0]!, base_authoritative_revision_id: head,
+        from, to: from + SOURCE_SLICE.length,
+        base_slice_digest: movedDigest(opened.proposal.manuscript_block_id, from, from + SOURCE_SLICE.length) };
+      const inspected = await getProposal({ ...options, proposalId: opened.proposal.proposal_id });
+      assert.equal(inspected.proposal.revision_id, replannedId);
+      assert.equal(inspected.proposal.operation_id, afterConflict.proposal.operation_id);
+      assert.equal(inspected.proposal.base_authoritative_revision_id, head);
+      assert.equal(inspected.proposal.validation, "pending");
+      assert.deepEqual(inspected.proposal.anchors, [movedAnchor]);
+      // The earlier Revision and its Anchor set stay unchanged, and the Replan adds one of each.
+      const bound = await bindingRows(opened.proposal.proposal_id);
+      const [oldAnchor] = rows.proposal_anchors;
+      assert.equal(rows.proposal_anchors.length, 1);
+      assert.deepEqual(bound.proposal_revisions.filter((row) => row.revision_id !== replannedId),
+        rows.proposal_revisions);
+      assert.deepEqual(bound.proposal_revisions.filter((row) => row.revision_id === replannedId)
+        .map((row) => [row.parent_revision_id, row.base_authoritative_revision_id, row.candidate_text]),
+      [[afterConflict.proposal.revision_id, head, INLINE_CANDIDATE]]);
+      assert.deepEqual(bound.proposal_anchors, [oldAnchor, { ...oldAnchor, proposal_revision_id: replannedId,
+        base_authoritative_revision_id: head, range_from: from, range_to: from + SOURCE_SLICE.length,
+        base_slice_digest: movedAnchor.base_slice_digest }].sort((left, right) =>
+        JSON.stringify(left).localeCompare(JSON.stringify(right))));
+      await stopRealServer(started.server);
+      const origin = new URL(started.baseUrl);
+      started = await startRealServer(`${origin.hostname}:${origin.port}`);
+      options = { ...options, baseUrl: started.baseUrl };
+      assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
+        inspected.proposal);
+      const interior = replaceUnit(from + 4, from + 7, "xx", writer, `${ns}5`, replannedId);
+      const edited = await send(interior, id(`${ns}56`));
+      assert.equal(edited.effect.kind, "proposal_revised");
+      const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+      assert.equal(revised.candidate_text, "narrxxr tone");
+      assert.equal(revised.validation, "valid");
+      assert.deepEqual(revised.anchors, [movedAnchor]);
+      if (revised.validation_receipt.kind !== "present") throw new Error("expected receipt");
+      const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+        accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}61`),
+          proposal_revision_id: revised.revision_id,
+          validation_receipt_id: revised.validation_receipt.validation_receipt_id,
+          selected_operation_ids: [revised.operation_id], expected_authoritative_revision_id: head,
+          editor_session_id: writer.session.editor_session.editor_session_id } };
+      const accepted = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+        "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
+        await digestAcceptProposal(acceptance), id(`${ns}62`), (antiForgery) => acceptProposal({
+          ...options, proposalId: revised.proposal_id, request: acceptance, antiForgery,
+          idempotencyKey: id(`${ns}62`) }));
+      assert.equal(accepted.effect.kind, "applied");
+      const edged = PROSE.slice(0, offset) + "!" + PROSE.slice(offset);
+      assert.equal((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter.current_revision.body,
+        edged.slice(0, from) + "narrxxr tone" + edged.slice(from + SOURCE_SLICE.length));
+    }
+  } finally { await stopRealServer(started.server); }
+});
+
+/** Make a new Chapter head with database writes. While the Inline reservation exists, ApplyAuthorEdit
+ * accepts in the Anchor Block only a collapsed insertion at an Anchor edge. Thus the public path
+ * cannot change the range text or remove the Block identity. */
+async function driftHead(projectId: string, chapterId: string, revisionId: string, ns: string,
+  change: { text: [string, string] } | { blockId: string }) {
+  const next = id(`${ns}71`);
+  const payload = id(`${ns}72`);
+  const block = id(`${ns}73`);
+  const scope = `project_id = '${projectId}'::uuid`;
+  const member = "blockId" in change
+    ? `CASE WHEN manuscript_block_id = '${change.blockId}'::uuid THEN '${block}'::uuid ELSE manuscript_block_id END`
+    : "manuscript_block_id";
+  const bytes = "text" in change ? `convert_to(replace(convert_from(canonical_bytes, 'UTF8'),
+    '${change.text[0]}', '${change.text[1]}'), 'UTF8')` : "canonical_bytes";
+  await queryPostgres(`${"blockId" in change ? `INSERT INTO storyos.manuscript_blocks
+      (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+    SELECT owner_user_id, project_id, '${block}'::uuid, manuscript_object_id, block_kind
+      FROM storyos.manuscript_blocks WHERE ${scope} AND manuscript_block_id = '${change.blockId}'::uuid;` : ""}
+    INSERT INTO storyos.authoritative_payloads (owner_user_id, project_id, payload_id, canonical_bytes)
+    SELECT payload.owner_user_id, payload.project_id, '${payload}'::uuid, ${bytes}
+      FROM storyos.authoritative_payloads AS payload JOIN storyos.authoritative_revisions AS revision
+        USING (owner_user_id, project_id, payload_id)
+     WHERE revision.${scope} AND revision.revision_id = '${revisionId}'::uuid;
+    INSERT INTO storyos.authoritative_revisions
+      (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
+    SELECT owner_user_id, project_id, manuscript_object_id, '${next}'::uuid, '${payload}'::uuid
+      FROM storyos.authoritative_revisions WHERE ${scope} AND revision_id = '${revisionId}'::uuid;
+    INSERT INTO storyos.manuscript_revision_members
+      (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id, block_order)
+    SELECT owner_user_id, project_id, manuscript_object_id, '${next}'::uuid, ${member}, block_order
+      FROM storyos.manuscript_revision_members WHERE ${scope} AND revision_id = '${revisionId}'::uuid;
+    UPDATE storyos.authoritative_heads SET current_revision_id = '${next}'::uuid
+     WHERE ${scope} AND manuscript_object_id = '${chapterId}'::uuid`);
+  return next;
+}
+
+test("an Inline Replan refuses a changed range, changed slice text, or removed Block and keeps the conflict", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    for (const [index, shape] of ["inside", "slice", "block"].entries()) {
+      const ns = `cd2ce${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Inline Replan Refusal", `${ns}02`);
+      const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, ns);
+      const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+      const head = await driftHead(prepared.projectId, prepared.chapterId, writer.authoritativeRevisionId, ns,
+        shape === "inside" ? { text: ["narrator voice", "narrator  voice"] }
+          : shape === "slice" ? { text: ["narrator voice", "narrator voicE"] }
+            : { blockId: opened.proposal.manuscript_block_id });
+      const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+      assert.equal(before.chapter.current_revision.revision_id, head);
+      const { afterConflict, rows, replanned } = await conflictAndReplan(
+        options, opened, writer, head, `${ns}8`);
+      assert.deepEqual(replanned.effect, { kind: "refused", reason: "unavailable_proof" });
+      assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
+        afterConflict.proposal);
+      assert.deepEqual(await bindingRows(opened.proposal.proposal_id), rows);
+      assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
     }
   } finally { await stopRealServer(started.server); }
 });

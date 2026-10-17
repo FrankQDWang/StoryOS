@@ -107,6 +107,6 @@ export const inlineProposalDecoration = TiptapNode.create({
       "data-proposal-revision-id": node.attrs.revisionId,
       "data-proposal-target-id": node.attrs.blockId,
       "aria-label": "候选文字，尚未成为正文",
-      ...(node.attrs.eligible === true ? {} : { contenteditable: "false" }) }, 0];
+      ...((node.attrs.candidateEditable ?? node.attrs.eligible) === true ? {} : { contenteditable: "false" }) }, 0];
   },
 });
