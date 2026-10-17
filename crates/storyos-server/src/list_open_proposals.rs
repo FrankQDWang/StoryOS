@@ -15,9 +15,12 @@ pub(super) async fn list_chapter_open_proposals(
     )?;
     valid_uuid(&chapter_id)?;
     let reader = project_reader(&state).await?;
-    let list = list_open_proposals(&reader, &scope, &chapter_id)
+    let Some(list) = list_open_proposals(&reader, &scope, &chapter_id)
         .await
-        .map_err(service_unavailable)?;
+        .map_err(service_unavailable)?
+    else {
+        return Err(resource_unavailable());
+    };
     Ok(Json(contracts::ListChapterOpenProposalsResponse {
         schema_id: contracts::LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),

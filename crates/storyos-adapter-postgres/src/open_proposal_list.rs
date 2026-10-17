@@ -11,11 +11,31 @@ impl OpenProposalListReader for PostgresProjectReader {
         scope: &ProjectScope,
         chapter_id: &str,
         limit: usize,
-    ) -> Result<Vec<OpenProposalListItem>, ProjectReadError> {
+    ) -> Result<Option<Vec<OpenProposalListItem>>, ProjectReadError> {
         let limit = i64::try_from(limit).map_err(ProjectReadError::unavailable)?;
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
+        let chapter = transaction
+            .query_opt(
+                "SELECT 1 FROM storyos.manuscript_objects AS object
+                  WHERE object.owner_user_id = $1::text::uuid AND object.project_id = $2::text::uuid
+                    AND object.manuscript_object_id = $3::text::uuid AND object.object_kind = 'chapter'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                       WHERE (removal.owner_user_id, removal.project_id, removal.chapter_id) =
+                             (object.owner_user_id, object.project_id, object.manuscript_object_id))",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &chapter_id,
+                ],
+            )
+            .await
+            .map_err(read_error)?;
+        if chapter.is_none() {
+            return Ok(None);
+        }
         // Each producer makes the Proposal identity with UUIDv7, so the identity order is the open order.
         let rows = transaction
             .query(
@@ -93,6 +113,7 @@ impl OpenProposalListReader for PostgresProjectReader {
                     source,
                 })
             })
-            .collect()
+            .collect::<Result<_, _>>()
+            .map(Some)
     }
 }

@@ -109,6 +109,9 @@ test("listChapterOpenProposals gives the open Proposals of one Chapter in identi
         return protocol.status === 404 && !body.includes(USER_A) && !body.includes(opened.proposal_id);
       },
     );
+    await assert.rejects(() => listChapterOpenProposals({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: id("c7f1"), fetchImpl: prepared.fetchImpl }),
+    (error) => requireStoryOSProtocolError(error).status === 404);
   } finally {
     await stopRealServer(started.server);
   }
