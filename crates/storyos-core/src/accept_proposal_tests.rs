@@ -34,6 +34,7 @@ fn earlier_base(kind: AcceptanceTargetKind) -> AcceptProposal {
         target_kind: kind,
         base: AcceptanceBase::EarlierHead {
             target_blocks_present: true,
+            inline_range_proven: false,
         },
         ..exact_eligible()
     }
@@ -215,6 +216,7 @@ fn refuses_a_block_proposal_whose_target_block_is_missing() {
     let missing = AcceptProposal {
         base: AcceptanceBase::EarlierHead {
             target_blocks_present: false,
+            inline_range_proven: false,
         },
         ..earlier_base(AcceptanceTargetKind::Block)
     };
@@ -263,18 +265,45 @@ fn a_recovery_conflict_or_an_invalid_condition_keeps_acceptance_unavailable() {
 }
 
 #[test]
-fn an_inline_proposal_keeps_the_exact_head_rule() {
+fn resolves_an_inline_proposal_on_an_earlier_base_by_its_proven_range_or_base_block() {
+    let proven = AcceptProposal {
+        base: AcceptanceBase::EarlierHead {
+            target_blocks_present: true,
+            inline_range_proven: true,
+        },
+        ..earlier_base(AcceptanceTargetKind::Inline)
+    };
+    assert_eq!(
+        accept_proposal(&proven),
+        TransitionOutcome::Applied(AcceptanceTargetResolution::ProvenRange)
+    );
     assert_eq!(
         accept_proposal(&earlier_base(AcceptanceTargetKind::Inline)),
-        TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead)
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
     );
+    let missing = AcceptProposal {
+        base: AcceptanceBase::EarlierHead {
+            target_blocks_present: false,
+            inline_range_proven: false,
+        },
+        ..earlier_base(AcceptanceTargetKind::Inline)
+    };
+    assert_eq!(
+        accept_proposal(&missing),
+        TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget)
+    );
+}
+
+#[test]
+fn accepts_a_conflicted_inline_revision_and_a_proposal_conflict_condition() {
     let conflicted = AcceptProposal {
         validation: AcceptanceValidation::Conflicted,
+        validation_receipt: AcceptanceValidation::Conflicted,
         ..earlier_base(AcceptanceTargetKind::Inline)
     };
     assert_eq!(
         accept_proposal(&conflicted),
-        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
     );
     let with_condition = AcceptProposal {
         condition: AcceptanceCondition::ProposalConflict,
@@ -282,7 +311,7 @@ fn an_inline_proposal_keeps_the_exact_head_rule() {
     };
     assert_eq!(
         accept_proposal(&with_condition),
-        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
+        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
     );
 }
 
