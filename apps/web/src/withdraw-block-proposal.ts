@@ -246,7 +246,6 @@ export function authorWithdrawControlReady(input: {
   resolution: string;
   pendingAcceptance: boolean;
   pendingRejection: boolean;
-  pendingReplan: boolean;
   pendingWithdraw: boolean;
 }): boolean {
   return input.controlsReady
@@ -255,7 +254,6 @@ export function authorWithdrawControlReady(input: {
     && input.resolution === "pending"
     && !input.pendingAcceptance
     && !input.pendingRejection
-    && !input.pendingReplan
     && !input.pendingWithdraw;
 }
 

@@ -290,7 +290,7 @@ challenge, Command, or Admission. The journal cannot choose authoritative
 versus Proposal routing.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
-rejection, withdrawal, replan, reopen, supersede, continuation, completion,
+rejection, withdrawal, reopen, supersede, continuation, completion,
 Draft closure, Author Undo, or another explicit editor command before network
 submission. It is never coalesced. Before Admission, its protected transport
 attempts may only finish that same already-confirmed submission; after
@@ -1512,11 +1512,12 @@ label.
 | --- | --- |
 | ordinary Proposal Revision, `open`, `ready`, exact valid Validation Receipt, selected pending Operations | accept selected Operations; reject selected Operations; copy |
 | ordinary Proposal without current Acceptance Eligibility | reject only currently pending Operations when allowed; copy; no accept |
-| `ProposalConflict` on a preserved Proposal | replan, copy, reject pending Operations; no accept |
-| `ProposalRecoveryConflict` on a preserved Proposal | replan, copy, withdraw; no accept |
+| Proposal whose base is not the Chapter Head of the editor, `open`, `ready`, validation `valid` or `conflicted` | accept; reject; candidate edit; copy; a short note that Acceptance replaces the current text of its target; no confirmation dialog (ADR 0064) |
+| `ProposalConflict` on a preserved Proposal | accept, reject pending Operations, candidate edit, copy, and the same note (ADR 0064) |
+| `ProposalRecoveryConflict` on a preserved Proposal | reject pending Operations, withdraw, copy; no accept and no candidate edit |
 | open `RefusedEditDraft` | narrow/retry through `DraftRetry`, copy, expand only with `WholeDraftPayload`, discard |
 | open `RecoveryDraft` | retry through `DraftRetry`, copy, discard; no expansion |
-| closed Draft or `superseded` Proposal | immutable history/copy only; no retry, expand, accept, reject, replan, withdraw, or discard |
+| closed Draft or `superseded` Proposal | immutable history/copy only; no retry, expand, accept, reject, withdraw, or discard |
 
 All state-changing controls create one durable
 `ExplicitEditorCommandRecord`/group except narrow/retry, which creates the
@@ -1528,11 +1529,11 @@ The result consumer is likewise closed:
 | --- | --- |
 | `AcceptProposal.Applied` | project the exact Commit, applied Operation resolutions, Heads, and remaining Proposal axes; remove controls for applied Operations and derive any remaining controls only from the returned current state |
 | `AcceptProposal.Invalid` | project current Proposal with validation `invalid`; remove accept until a new current Revision validates |
-| `AcceptProposal.Conflicted` | project its exact `ProposalConflict`; expose replan/copy/reject and remove accept |
+| `AcceptProposal.Conflicted` | project its exact `ProposalConflict`; expose accept/reject/copy as the `ProposalConflict` row above |
 | `AcceptProposal.Refused` or `.NoEffect` | project the exact returned current target; expose only controls permitted by that current state and never imply Acceptance |
 | `RejectProposalOperations` applied | selected Operations become `rejected`; remove their accept/reject controls and expose reopen only against the exact rejection events |
-| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/replan/continue/complete and expose only exact reopen or supersede when current state permits |
-| `ReplanProposal` applied | project the new pending Revision and remove controls bound to the consumed Conflict condition; Acceptance waits for a new valid Validation Receipt |
+| `WithdrawProposal` applied | closure becomes `withdrawn`; remove accept/reject/continue/complete and expose only exact reopen or supersede when current state permits |
+| `ReplanProposal` applied | the editor has no Replan control and sends no Replan (ADR 0064); it projects a new pending Revision from another client as any current Proposal Revision |
 | `ReopenWithdrawnProposal` applied | project the new open, validation-pending Revision; remove the stale reopen control |
 | `SupersedeProposal` applied | project terminal `superseded`; remove every active Proposal control |
 | `ReopenRejectedOperations` applied | selected Operations become pending in the new validation-pending Revision; remove stale rejection-event controls |

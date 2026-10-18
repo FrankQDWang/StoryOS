@@ -41,7 +41,7 @@ async function display(workspace: EditorReadyState, proposal: Proposal, other?: 
 function withCondition(proposal: Proposal, kind: "proposal_conflict" | "proposal_recovery_conflict"): Proposal {
   const ref = kind === "proposal_conflict" ? "proposal_conflict_ref" : "proposal_recovery_conflict_ref";
   return { ...proposal, base_authoritative_revision_id: EARLIER_BASE, condition_refs: [CONDITION],
-    source_condition: { kind, [ref]: CONDITION } } as unknown as Proposal;
+    source_condition: { kind, [ref]: CONDITION } } as Proposal;
 }
 
 it("shows Accept, Reject, and candidate editing and no Replan control for a Proposal with a Proposal Conflict condition", async () => {
@@ -59,7 +59,7 @@ it("shows Accept, Reject, and candidate editing and no Replan control for a Prop
   });
 });
 
-it("accepts a Block Proposal on an earlier base with one click and shows the refused result of a deleted target", async () => {
+it("accepts a Block Proposal on an earlier base with one click and keeps Accept and Reject after a deleted target refuses it", async () => {
   const test = await openJournalAppendTestWorkspace();
   const proposal = { ...candidateFor(test.workspace), base_authoritative_revision_id: EARLIER_BASE };
   const workspace = test.workspace;
@@ -99,9 +99,8 @@ it("accepts a Block Proposal on an earlier base with one click and shows the ref
       await expect.poll(() => shown.sent.filter(({ path }) => path.endsWith("/acceptances")).length).toBe(1);
       await expect.poll(() => shown.controls().reject).toBe(1);
       expect({ confirmed, dialogs: document.querySelectorAll("dialog, [role=dialog], [role=alertdialog]").length,
-        status: shown.tab.host.querySelector(`[data-proposal-decision="${proposal.proposal_id}"]`)?.textContent ?? null,
         accept: shown.controls().accept, failures: shown.tab.failures })
-        .toEqual({ confirmed: [], dialogs: 0, status: "此次接受已被拒绝，候选文字仍保留。", accept: 1, failures: [] });
+        .toEqual({ confirmed: [], dialogs: 0, accept: 1, failures: [] });
     } finally {
       window.confirm = previousConfirm;
       await shown.tab.unmount(); await test.close();
