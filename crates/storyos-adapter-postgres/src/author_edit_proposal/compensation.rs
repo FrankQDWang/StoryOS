@@ -74,7 +74,6 @@ impl CompensationAdapter for ProposalEditCompensation {
             client,
             &command.project_scope,
             &context,
-            &command.expected_authoritative_revision_id,
             &frontier.restored_candidate_text,
             frontier.compensation_revision_id.clone(),
         )

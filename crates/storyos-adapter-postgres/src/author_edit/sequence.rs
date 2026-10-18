@@ -553,7 +553,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                     client,
                     &envelope.project_scope,
                     &context,
-                    &plan.current_revision_id,
                     &candidate_text,
                     self.proposal_revision_id.clone(),
                 )

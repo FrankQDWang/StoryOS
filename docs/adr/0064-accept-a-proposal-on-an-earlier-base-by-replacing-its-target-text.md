@@ -44,6 +44,7 @@ The tickets of the specification deliver this decision in parts:
 - Until the Inline ticket of the specification is delivered, an Inline Proposal keeps the earlier rule. Its Acceptance on an earlier base gives the conflict `changed_head` and records a Proposal Conflict condition. The validation `conflicted` and a Proposal Conflict condition block its Acceptance. The `Conflicted` variant of the Acceptance contract and the Inline tests of that rule stay until that ticket removes them.
 - The record type and migration 0095 already permit `proven_range` and `base_block_replacement`, so the Inline ticket adds no migration.
 - The candidate edit writers and the editor change come in their own tickets of the specification.
+- [Validate a Candidate Edit Against Its Own Base So the Proposal Stays Acceptable](https://github.com/FrankQDWang/StoryOS/issues/1220) delivers the candidate edit rule. A candidate edit and its Compensation at Author Undo validate against their own base. The same rule applies to the Proposal Revision of a flat edit at an Inline Anchor edge.
 
 ## Replaced rules
 
