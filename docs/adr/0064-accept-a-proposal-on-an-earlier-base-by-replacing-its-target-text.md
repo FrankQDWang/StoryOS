@@ -19,7 +19,7 @@ Before this change, Acceptance needed the base of the Proposal Revision to be th
 - **Target resolution.** Acceptance resolves the target of each selected Operation on the current Chapter Head, in this order:
   1. `exact_base`: the Revision base is the Chapter Head. Acceptance applies as before.
   2. `block_replacement`: the Proposal is a Block Proposal, and its target Block is on the Chapter Head. The candidate text replaces all text of that Block.
-  3. `proven_range`: the Proposal is an Inline Proposal, and the exact Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head. The candidate replaces only that range. Reservations of other Proposals do not stop the proof at Acceptance.
+  3. `proven_range`: the Proposal is an Inline Proposal, and the exact Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head. The candidate replaces only that range. Reservations of other Proposals do not stop the proof at Acceptance. The unique index `proposal_operations_one_unresolved_block` of migration 0049 prevents a second reservation on the Block, so the proof at Acceptance has no other reservations.
   4. `base_block_replacement`: the Proposal is an Inline Proposal without that proof, and its target Block is on the Chapter Head. The Block text becomes the Anchor base Block text with the candidate at the stored range.
   5. Missing target: a target Block is not on the Chapter Head. Acceptance is refused with the reason `missing_target`, and nothing changes. The Proposal stays open, and the author can reject it.
 - **Other Proposals.** Other open Proposals on the same Block stay open. Their bases are then behind the Chapter Head, and the same rule applies to their Acceptance.
