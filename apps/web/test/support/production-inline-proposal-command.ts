@@ -448,7 +448,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
           idempotencyKey: acceptanceKey, antiForgery: acceptanceChallenge.nonce });
         if (accepted.effect.kind !== "applied") throw new Error(`expected applied, got ${JSON.stringify(accepted.effect)}`);
         assert.equal(accepted.effect.target_resolution, "proven_range");
-        assert.equal(accepted.effect.authoritative_revision.body, "Guard the narrator tone! in this passage.");
+        assert.equal(accepted.effect.authoritative_revision.body, `Guard the narrator tone! in this passage.\n${SIBLING}`);
         await page.reload();
         await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(["Guard the narrator tone! in this passage.", SIBLING]);
         await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-accepted-moved-head.png") });
