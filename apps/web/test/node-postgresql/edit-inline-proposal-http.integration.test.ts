@@ -22,7 +22,7 @@ import { requireStoryOSProtocolError, sessionFetch as browserFetch,
 import { retainRefusedEditRecoveryExpectation } from "../support/refused-edit-recovery.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
-  prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
+  prepare, seedAcceptanceCondition, settleOnce, startRealServer } from "../support/acceptance.ts";
 
 import { admitCandidateRevision } from "../support/candidate-revision.ts";
 import { INLINE_CANDIDATE, SOURCE_SLICE, admitPhrase, openInline, phraseRequest, replaceUnit, sliceDigest,
@@ -2112,22 +2112,10 @@ async function conflictAndReplan(
   headRevisionId: string,
   ns: string,
 ) {
-  if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
-  const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}1`),
-      proposal_revision_id: opened.proposal.revision_id,
-      validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
-      selected_operation_ids: [opened.proposal.operation_id],
-      expected_authoritative_revision_id: headRevisionId,
-      editor_session_id: writer.session.editor_session.editor_session_id } };
-  const conflicted = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
-    await digestAcceptProposal(acceptance), id(`${ns}2`), (antiForgery) => acceptProposal({
-      ...options, proposalId: opened.proposal.proposal_id, request: acceptance, antiForgery,
-      idempotencyKey: id(`${ns}2`) }));
-  assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
+  // An Acceptance on the moved head applies (ADR 0064), so a fixture makes the Proposal Conflict.
+  const { conflictRef } = await seedAcceptanceCondition(options.baseUrl, options.fetchImpl, options.projectId,
+    opened.proposal, writer.session.editor_session.editor_session_id, headRevisionId, "proposal_conflict", ns);
   const afterConflict = await getProposal({ ...options, proposalId: opened.proposal.proposal_id });
-  const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
   assert.deepEqual(afterConflict.proposal.source_condition,
     { kind: "proposal_conflict", proposal_conflict_ref: conflictRef });
   const rows = await bindingRows(opened.proposal.proposal_id);
