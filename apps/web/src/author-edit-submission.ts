@@ -215,7 +215,7 @@ export async function freezeOneIntentSubmission(
     const existingRecords = existing.ordered_coverage.map((coverage) => {
       const record = snapshot.records.find((item) =>
         item.local_intent_sequence === coverage.local_intent_sequence);
-      return record && (boundJournalRecord(record, snapshot) ?? record);
+      return record && (boundJournalRecord(record, snapshot, workspace.session.base_snapshot) ?? record);
     });
     await validateFrozenGroup(
       existing, workspace, existingRecords as JournalIntentRecord[], cryptoImpl,
@@ -227,7 +227,7 @@ export async function freezeOneIntentSubmission(
   const firstUncovered = snapshot.records.find((record) =>
     !coveredSequences.has(record.local_intent_sequence));
   // A record that follows a group submits only on the installed base that it binds (ADR 0065).
-  const boundFirst = firstUncovered && boundJournalRecord(firstUncovered, snapshot);
+  const boundFirst = firstUncovered && boundJournalRecord(firstUncovered, snapshot, workspace.session.base_snapshot);
   if (firstUncovered && (boundFirst === undefined
     || !recordTargetsCurrentBase(boundFirst, workspace.session.base_snapshot))) {
     throw new Error(firstUncovered.follows_submission_group === undefined
@@ -235,7 +235,7 @@ export async function freezeOneIntentSubmission(
   }
   const candidates = snapshot.records.filter((record) =>
     !coveredSequences.has(record.local_intent_sequence)).flatMap((record) => {
-    const bound = boundJournalRecord(record, snapshot);
+    const bound = boundJournalRecord(record, snapshot, workspace.session.base_snapshot);
     return bound !== undefined && recordTargetsCurrentBase(bound, workspace.session.base_snapshot)
       && bound.payload_chain_ref === (boundFirst!.follows_submission_group === undefined
         ? bound.payload_chain_ref : boundFirst!.payload_chain_ref) ? [bound] : [];

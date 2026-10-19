@@ -299,15 +299,19 @@ it follows the unsettled group G. Its base fields then record the projection bas
 at append time, and they are not its submission binding. Its submission binds the
 installed base Snapshot and the authoritative heads of G when G applies.
 
-The editor writes such a record for authoritative input during a Challenge wait
-(ADR 0065). The binding names the latest group. Take the group that covers the
+The editor writes such a record for input during a Challenge wait or an unknown
+outcome (ADR 0065). The binding names the latest group.
+
+Take the group that covers the
 record just before a run of these records. The run binds the installed base of
-that group after that group applies. The checkpoint of the run must also be equal
-to the installed text.
+that group after that group applies. The checkpoint of an authoritative run must
+also be equal to the installed text. After a `proposal_revised` group, the run
+binds the session base. A candidate run binds the latest Proposal Revision that
+the settlements before the run give.
 
 When that group ends in another way, the run has no binding. No request sends it,
 and the editor enters read-only local recovery with `needs_attention`. A reader
-that finds a binding that names no earlier authoritative group also enters local
+that finds a binding that names no earlier group also enters local
 recovery. The records stay immutable in each case.
 
 The version 5 upgrade runs in one version-change transaction. It keeps each
@@ -358,6 +362,8 @@ JournalPayloadChain {
 An authoritative chain uses the materialized Chapter checkpoint and has no
 Proposal target. A candidate chain uses the candidate text checkpoint, binds
 the exact Proposal target, and retains the complete observed Proposal Head set.
+The checkpoint of a candidate run that follows a group is the candidate text
+before the run.
 Its patches contain one `ReplaceSelection` primitive per intent. Candidate
 patches never change the authoritative Chapter projection.
 
@@ -1316,13 +1322,8 @@ and the Journal refuses appends. The controller then keeps the held input in
 memory and does not submit it. A crash or a reload can lose held input of at
 most one candidate round trip. ADR 0046 gives the complete rule.
 
-The controller holds candidate input during a Challenge wait in the same way.
-This is the current rule until the ticket
-[Save Candidate Input of a Challenge Wait in the Local Edit Journal at Once](https://github.com/FrankQDWang/StoryOS/issues/1232)
-changes it.
-
-During a Challenge wait, authoritative input enters the Journal at once as
-records that follow the frozen group (section 3.2). The wait does not hold the
+During a Challenge wait or an unknown outcome, input enters the Journal at once
+as records that follow the frozen group (section 3.2). The wait does not hold the
 queue. Each later run freezes only after the group before it applies, so the
 groups submit in strict intent order. ADR 0065 gives the complete rule.
 

@@ -213,7 +213,7 @@ it("keeps held candidate input visible and outside the Journal after a conflicte
   }
 });
 
-it("holds candidate input outside the Journal while the outcome of its earlier edit is unknown", async () => {
+it("journals candidate input while the outcome of its earlier edit is unknown, as a record that follows that edit", async () => {
   const session = await openWriting();
   try {
     session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate", "!"), "typing");
@@ -228,8 +228,9 @@ it("holds candidate input outside the Journal while the outcome of its earlier e
     session.tick(10);
     session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate!", "?"), "typing");
     await session.writing.whenIdle();
+    // The input enters the Journal at once and follows the unsettled group (ADR 0065).
     expect({ held: session.writing.hasIncompleteInput(), records: (await readJournalSnapshot(session.workspace)).records.length,
-      saveState: session.writing.snapshot().projection.save_state }).toEqual({ held: true, records: 1, saveState: "saving" });
+      saveState: session.writing.snapshot().projection.save_state }).toEqual({ held: false, records: 2, saveState: "saving" });
 
     const first = session.sent[0]!;
     session.outcomes.push(async () => ({ outcome_kind: "committed",
