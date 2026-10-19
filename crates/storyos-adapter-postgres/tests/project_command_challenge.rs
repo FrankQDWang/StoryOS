@@ -48,6 +48,7 @@ fn challenge_request(digest_byte: char) -> IssueProjectCommandChallenge {
         },
         nonce: format!("opaque-nonce-{digest_byte}"),
         nonce_digest: format!("sha256:nonce-{digest_byte}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

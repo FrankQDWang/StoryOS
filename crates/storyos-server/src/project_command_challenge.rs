@@ -121,6 +121,7 @@ pub(super) async fn create_project_command_challenge(
             binding: challenge_binding,
             nonce,
             nonce_digest,
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

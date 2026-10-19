@@ -111,6 +111,7 @@ fn command_issue(
         },
         nonce: format!("opaque-nonce-{suffix}"),
         nonce_digest: format!("sha256:nonce-{suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

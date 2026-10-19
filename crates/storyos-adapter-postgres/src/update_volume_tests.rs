@@ -119,6 +119,7 @@ fn volume_issue(
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -166,6 +167,7 @@ pub(crate) fn update_issue(
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -586,6 +588,7 @@ pub(crate) fn named_issue(
         },
         nonce: format!("opaque-nonce-{suffix}"),
         nonce_digest: format!("sha256:nonce-{suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
