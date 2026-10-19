@@ -6,6 +6,7 @@ import type { EditorFlowDraftClosed, EditorFlowDraftReopened, UndoLatestAuthorAc
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { freezeDraftUndo, observeDraftUndo, readDraftUndoJournal } from "../../src/draft-undo-journal.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
+import { restoreJournalVersion } from "./journal-version-fixture.ts";
 
 const HEAD = "018f0000-0000-7001-8000-000000000e01";
 const PROPOSAL_REVISION = "018f0000-0000-7001-8000-000000000e02";
@@ -63,7 +64,7 @@ async function coupledUndo(compensation: "proposal" | "prose") {
       ...compensation === "prose" ? { authoritative_commit_id: COMMIT,
         authoritative_revision: { revision_id: REVISION, body: "Base", blocks: [] } } : {} },
   } as UndoLatestAuthorActionResponse;
-  return { workspace: test.workspace, record, response };
+  return { workspace: test.workspace, reopen: test.reopen, record, response };
 }
 
 it("a Proposal Compensation effect that omits the Authoritative Revision and Commit is valid Undo evidence", async () => {
@@ -90,4 +91,15 @@ it("a prose Compensation effect requires the Authoritative Revision and Commit",
       .rejects.toThrow("Undo evidence unavailable");
   }
   await observeDraftUndo(workspace, record, { response });
+});
+
+it("the Undo Journal reads its records after a version 4 Journal opens as version 5", async () => {
+  const { workspace, reopen, record, response } = await coupledUndo("proposal");
+  await observeDraftUndo(workspace, record, { response });
+  const versionFour = await readDraftUndoJournal(workspace);
+  expect(versionFour.map(({ record }) => record)).toEqual([record]);
+  await restoreJournalVersion(workspace.database, 4);
+  const reopened = await reopen();
+  expect(reopened.database.version).toBe(5);
+  expect(await readDraftUndoJournal(reopened)).toEqual(versionFour);
 });

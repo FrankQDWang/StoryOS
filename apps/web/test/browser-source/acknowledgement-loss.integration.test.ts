@@ -264,7 +264,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(4);
+    expect(workspace.database.version).toBe(5);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",

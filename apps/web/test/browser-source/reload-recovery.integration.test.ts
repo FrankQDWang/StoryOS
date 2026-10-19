@@ -1,4 +1,4 @@
-import { restoreVersionThreeJournal } from "./journal-version-three.ts";
+import { restoreJournalVersion } from "./journal-version-fixture.ts";
 import { expect, it } from "vitest";
 
 import type {
@@ -21,6 +21,7 @@ import type {
 } from "../../src/editor-types.ts";
 import {
   readJournalSnapshot,
+  rebuildPendingProjection,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
 import {
@@ -182,7 +183,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(4);
+    expect(workspace.database.version).toBe(5);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",
@@ -333,7 +334,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       unresolved.groupId,
     );
     expect(unavailableAttempts).toEqual([expectedUnavailable]);
-    await restoreVersionThreeJournal(unresolved.workspace.database);
+    await restoreJournalVersion(unresolved.workspace.database, 3);
 
     canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
     outcomeMode = "committed";
@@ -508,6 +509,36 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     })).toMatchObject({ save_state: "saving", unsettled_intent_count: 1 });
     expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
       .toEqual({ authorEdits: 1, outcomes: 2 });
+    await closeScenario(reopened);
+
+    // A version 4 Journal with one unsettled group opens as version 5 with no change of meaning.
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    unresolved = await loseAcknowledgement();
+    const versionFour = await journalSnapshot(unresolved.workspace);
+    const versionFourProjection = await rebuildPendingProjection(unresolved.workspace);
+    await restoreJournalVersion(unresolved.workspace.database, 4);
+    canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+    outcomeMode = "committed";
+    reopened = await openReady();
+    expect(await requestResult(reopened.database.transaction("metadata").objectStore("metadata").get("schema")))
+      .toEqual({ key: "schema", version: 5 });
+    expect(await journalSnapshot(reopened)).toEqual(versionFour);
+    expect(await rebuildPendingProjection(reopened)).toEqual(versionFourProjection);
+    expect(await submitOnePendingAuthorEdit({
+      workspace: reopened,
+      baseUrl: location.origin,
+      fetchImpl,
+      cryptoImpl: crypto,
+    })).toMatchObject({
+      body: "Base!?",
+      save_state: "saved",
+      unsettled_intent_count: 0,
+      authoritative_revision_id: NEXT_REVISION,
+    });
+    expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
+      .toEqual({ authorEdits: 1, outcomes: 2 });
+    expect(requireGroup(await journalSnapshot(reopened)).settlement.kind).toBe("applied_receipt_settled");
     await closeScenario(reopened);
   } finally {
     closeTrackedDatabases(openDatabases);

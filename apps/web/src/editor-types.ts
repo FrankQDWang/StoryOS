@@ -80,6 +80,8 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   payload_chain_ref: string;
   payload_digest: DigestValue;
   projection_dependency: { snapshot_id: string; prior_sequence: number };
+  /** Version 5: the record follows an unsettled group and binds the base that the group installs. */
+  follows_submission_group?: { journal_submission_group_id: string };
   created_at: string;
 }
 

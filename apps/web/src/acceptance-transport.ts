@@ -1,6 +1,7 @@
 import type { EditorReadyState, TransportCapsule } from "./editor-types.ts";
 import { decisionDigestProfile, decisionRoute, uuidV7,
   type DecisionFlight } from "./acceptance-journal.ts";
+import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 
 export async function beginAcceptanceAttempt(workspace: EditorReadyState,
   flight: DecisionFlight): Promise<{ id: string; ordinal: number }> {
@@ -26,7 +27,7 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
     exact_transport_retry_capsule_id: string; outcome: { kind: string } }[])
     .sort((left, right) => left.attempt_ordinal - right.attempt_ordinal);
   const capsule = capsules[0];
-  if ((schema as { version?: number } | undefined)?.version !== 4
+  if ((schema as { version?: number } | undefined)?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(stored) !== JSON.stringify(flight)
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || workspace.partition.disposition !== "current_writer_open"
