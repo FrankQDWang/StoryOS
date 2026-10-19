@@ -358,6 +358,29 @@ pub struct IssueProjectCommandChallenge {
     pub binding: ProjectCommandChallengeBinding,
     pub nonce: String,
     pub nonce_digest: String,
+    /// The nonce of the same binding under each earlier revision that the command kind accepts.
+    pub earlier_revision_nonces: Vec<RevisionNonce>,
+}
+
+/// The nonce of one Challenge binding under one accepted rate policy revision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionNonce {
+    pub challenge_rate_policy_revision: String,
+    pub nonce: String,
+    pub nonce_digest: String,
+}
+
+impl IssueProjectCommandChallenge {
+    /// Returns the nonce and its digest for a Challenge stored under this revision.
+    pub fn nonce_for_revision(&self, revision: &str) -> Option<(&str, &str)> {
+        if revision == self.binding.challenge_rate_policy_revision {
+            return Some((&self.nonce, &self.nonce_digest));
+        }
+        self.earlier_revision_nonces
+            .iter()
+            .find(|earlier| earlier.challenge_rate_policy_revision == revision)
+            .map(|earlier| (earlier.nonce.as_str(), earlier.nonce_digest.as_str()))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

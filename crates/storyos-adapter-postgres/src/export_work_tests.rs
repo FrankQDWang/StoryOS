@@ -419,6 +419,7 @@ pub(crate) async fn admit_readable_export(
                 .trim_start_matches("sha256:")
                 .to_owned(),
             nonce_digest: envelope.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -441,6 +442,7 @@ async fn admit_archive_export(store: &PostgresProjectReader, scope: &ProjectScop
                 .trim_start_matches("sha256:")
                 .to_owned(),
             nonce_digest: envelope.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

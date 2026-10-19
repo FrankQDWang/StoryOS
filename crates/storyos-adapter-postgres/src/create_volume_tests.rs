@@ -101,6 +101,7 @@ fn issue_request(scope: &ProjectScope, idempotency_suffix: &str) -> IssueProject
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

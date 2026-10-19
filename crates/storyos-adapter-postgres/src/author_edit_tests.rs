@@ -201,6 +201,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             binding: session_binding.clone(),
             nonce: "session-nonce".to_owned(),
             nonce_digest: session_nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -254,6 +255,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
                 binding: command.challenge_binding.clone(),
                 nonce: format!("nonce-{suffix}"),
                 nonce_digest: nonce_digest.to_owned(),
+                earlier_revision_nonces: Vec::new(),
             },
         )
         .await
@@ -405,6 +407,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
                 binding: outcome_command.challenge_binding.clone(),
                 nonce: format!("outcome-nonce-{suffix}"),
                 nonce_digest: nonce_digest.to_owned(),
+                earlier_revision_nonces: Vec::new(),
             },
         )
         .await
@@ -1366,6 +1369,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             binding: recovery_command.challenge_binding.clone(),
             nonce: "nonce-77".to_owned(),
             nonce_digest: recovery_command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -1596,6 +1600,7 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
             binding: session_binding.clone(),
             nonce: "session-nonce-reconfirm".to_owned(),
             nonce_digest: session_nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -1633,6 +1638,7 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
             binding: command.challenge_binding.clone(),
             nonce: "nonce-96".to_owned(),
             nonce_digest: command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

@@ -18,21 +18,23 @@ impl ChallengeRateClass {
         }
     }
 
-    /// Returns the class whose policy issues a Challenge with this revision for the command kind.
+    /// Returns each class whose revision a Challenge of the command kind can have, the issuing class first.
     ///
     /// The `author_edit` class also accepts the shared revision, so a Challenge issued before
     /// the command kind moved to that class stays usable until it expires.
+    pub fn accepted_for(command_kind: &str) -> &'static [Self] {
+        match Self::for_command_kind(command_kind) {
+            Self::AuthorEdit => &[Self::AuthorEdit, Self::Shared],
+            Self::Shared => &[Self::Shared],
+        }
+    }
+
+    /// Returns the class whose policy issues a Challenge with this revision for the command kind.
     pub fn accepting(command_kind: &str, policy_revision: &str) -> Option<Self> {
-        let class = Self::for_command_kind(command_kind);
-        if policy_revision == class.policy_revision() {
-            return Some(class);
-        }
-        match class {
-            Self::AuthorEdit => {
-                (policy_revision == Self::Shared.policy_revision()).then_some(Self::Shared)
-            }
-            Self::Shared => None,
-        }
+        Self::accepted_for(command_kind)
+            .iter()
+            .copied()
+            .find(|class| class.policy_revision() == policy_revision)
     }
 
     pub fn policy_revision(self) -> &'static str {

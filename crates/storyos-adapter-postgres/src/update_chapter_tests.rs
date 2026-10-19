@@ -112,6 +112,7 @@ fn volume_issue(scope: &ProjectScope, idempotency_suffix: &str) -> IssueProjectC
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -156,6 +157,7 @@ fn chapter_issue(
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -206,6 +208,7 @@ pub(super) fn update_issue(
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -697,6 +700,7 @@ pub(super) fn named_issue(
         },
         nonce: format!("opaque-nonce-{suffix}"),
         nonce_digest: format!("sha256:nonce-{suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

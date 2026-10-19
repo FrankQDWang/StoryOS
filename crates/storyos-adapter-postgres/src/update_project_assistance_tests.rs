@@ -54,6 +54,7 @@ fn issue_request(idempotency_suffix: &str, bytes: &[u8]) -> IssueProjectCommandC
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

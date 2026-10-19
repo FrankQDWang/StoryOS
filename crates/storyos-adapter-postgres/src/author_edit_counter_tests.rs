@@ -186,6 +186,7 @@ async fn issue_command_challenge(
             binding: command.challenge_binding.clone(),
             nonce: nonce.to_owned(),
             nonce_digest: command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -298,6 +299,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
             binding: session_binding.clone(),
             nonce: "counter-session-nonce".to_owned(),
             nonce_digest: session_nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

@@ -41,6 +41,9 @@ function childEnv(overrides: Readonly<Record<string, string>>): NodeJS.ProcessEn
   return env;
 }
 
+/** The Command Challenge secret of a test Server that sets no secret of its own. */
+export const TEST_CHALLENGE_SECRET = "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
+
 export async function startStoryOSServer(options: {
   readonly bind?: string;
   readonly repositoryRoot: string;
@@ -64,8 +67,7 @@ export async function startStoryOSServer(options: {
   if (databaseUrl !== undefined) {
     env.STORYOS_DATABASE_URL = databaseUrl;
   }
-  env.STORYOS_CHALLENGE_SECRET = options.extraEnv?.STORYOS_CHALLENGE_SECRET
-    ?? "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
+  env.STORYOS_CHALLENGE_SECRET = options.extraEnv?.STORYOS_CHALLENGE_SECRET ?? TEST_CHALLENGE_SECRET;
   if (sessions !== undefined) {
     env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify(sessions);
     if (Object.keys(sessions).length !== 1) {

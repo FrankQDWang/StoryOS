@@ -121,6 +121,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
             binding: session_binding.clone(),
             nonce: "session-nonce-export-reconfirm".to_owned(),
             nonce_digest: session_nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -158,6 +159,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
             binding: command.challenge_binding.clone(),
             nonce: "nonce-88".to_owned(),
             nonce_digest: command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -211,6 +213,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
             binding: export.challenge_binding.clone(),
             nonce: "nonce-export-reconfirm".to_owned(),
             nonce_digest: export.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

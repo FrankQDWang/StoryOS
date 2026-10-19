@@ -94,6 +94,7 @@ async fn open_session(
             binding: binding.clone(),
             nonce: format!("nonce-{key}"),
             nonce_digest: nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -146,6 +147,7 @@ async fn execute_counter_takeover(
             binding: binding.clone(),
             nonce: format!("nonce:{}", case.idempotency_key),
             nonce_digest: case.nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -279,6 +281,7 @@ async fn observer_takeover_settles_no_effect_activity_without_manuscript_authori
             binding: binding.clone(),
             nonce: "takeover-nonce".to_owned(),
             nonce_digest: "sha256:takeover-nonce".to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

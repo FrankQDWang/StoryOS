@@ -40,6 +40,7 @@ fn numbered_request(index: u64, generation: u64) -> IssueProjectCommandChallenge
         },
         nonce: format!("opaque-numbered-nonce-{index}"),
         nonce_digest: format!("sha256:numbered-nonce-{index}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

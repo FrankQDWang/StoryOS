@@ -17,7 +17,7 @@ The opaque server-held request-authentication binding established by a trusted l
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
 **Command Challenge**:
-The single-use anti-forgery nonce that the Server issues for one exact project command and its pre-domain idempotency record. It binds the Client Session Binding generation, Project Scope, command kind, canonical command digest, and the Challenge Rate Class policy revision. An exact retry returns the same Challenge; a Challenge grants no authority after consumption or expiry.
+The single-use anti-forgery nonce that the Server issues for one exact project command and its pre-domain idempotency record. It binds the Client Session Binding generation, Project Scope, command kind, canonical command digest, and the Challenge Rate Class policy revision. An exact retry returns the same Challenge while the command kind accepts its stored revision, also after a rate policy revision. A Challenge grants no authority after consumption or expiry.
 _Avoid_: Reusable token, author confirmation step, CSRF cookie
 
 **Challenge Rate Class**:
