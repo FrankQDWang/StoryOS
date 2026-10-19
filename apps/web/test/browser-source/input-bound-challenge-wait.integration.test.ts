@@ -28,14 +28,14 @@ import {
   emptyActivityStream,
   jsonResponse,
   requestHeaders,
+  requestResult,
   requireDigestValue,
   requireRequestBody,
   trackDatabase,
 } from "./scenario.ts";
 
-const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000034";
 const AUTHOR_EDIT_SCHEMA = "storyos.command.apply-author-edit.request.v1";
-const INPUT_BOUND_MESSAGE = "等待保存时输入过多，编辑器已停止输入。等待期间的输入没有保存，请先复制需要保留的文字，再刷新页面恢复其余内容。";
+const INPUT_BOUND_MESSAGE = "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
 
 type Timer = { callback: () => void; timeout: number; cleared: boolean };
 
@@ -46,26 +46,28 @@ function injectedTimers(timers: Timer[]): ChallengeAdmissionTimers {
   };
 }
 
-/** The Server refuses the first Author Edit Challenge with a rate limit, and then admits the same group. */
+async function sha256Hex(body: string) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body)));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function journalIntentCount(name: string): Promise<number> {
+  const database = await requestResult(indexedDB.open(name));
+  try {
+    return await requestResult(database.transaction("intents").objectStore("intents").count());
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * The Server refuses the first Author Edit Challenge with a rate limit, and then admits each group.
+ * Each Author Edit applies on the current head.
+ */
 function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
   let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
-  const appliedSession: GetEditorSessionResponse = {
-    ...session,
-    correlation_id: "018f0000-0000-7001-8000-000000000037",
-    base_snapshot: {
-      ...session.base_snapshot,
-      snapshot_id: "018f0000-0000-7001-8000-000000000038",
-      project_activity_position: "1",
-      authoritative_head_revision_id: APPLIED_REVISION,
-      materialized_revision: chapterRevision(APPLIED_REVISION, "Base!?"),
-      materialized_payload_digest: {
-        algorithm: "sha256",
-        profile: "storyos.canonical-payload.sha256.v1",
-        value_hex_lowercase: "d069d6b9c6ce7a4d9e97bb9d91c7096917777a2e31377dd589ba5720eb8a319c",
-      },
-      created_at: "2026-08-15T08:00:00.000Z",
-    },
-  };
+  let head = session.base_snapshot.authoritative_head_revision_id;
+  let body = session.base_snapshot.materialized_revision.body;
   const challengeKeys: string[] = [];
   const authorEdits: string[] = [];
   let digest: DigestValue | undefined;
@@ -113,17 +115,30 @@ function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
     if (path.endsWith("/activity")) return emptyActivityStream();
     if (path.endsWith("/manuscript/author-edits") && digest !== undefined) {
       const idempotencyKey = requestHeaders(init).get("idempotency-key") ?? "";
+      const request = requireRequestBody(init);
       authorEdits.push(idempotencyKey);
-      session = appliedSession;
-      return jsonResponse(createAppliedAuthorEditResponse({ request: requireRequestBody(init), commandDigest: digest,
-        idempotencyKey, authoritativeRevisionId: APPLIED_REVISION }));
+      const units = request.author_edit_units as Array<{ normalized_primitives: Array<{ text: string }> }>;
+      for (const unit of units) body = `${body}${unit.normalized_primitives[0]!.text}`;
+      const index = authorEdits.length;
+      const id = (lead: string) => `018f0000-0000-7001-8000-00000000${lead}${String(index).padStart(2, "0")}`;
+      const prior = head;
+      head = id("a1");
+      session = { ...session, correlation_id: id("a5"), base_snapshot: { ...session.base_snapshot,
+        snapshot_id: id("a6"), project_activity_position: String(index), authoritative_head_revision_id: head,
+        materialized_revision: chapterRevision(head, body),
+        materialized_payload_digest: { algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
+          value_hex_lowercase: await sha256Hex(body) },
+        created_at: "2026-08-15T08:00:00.000Z" } };
+      return jsonResponse(createAppliedAuthorEditResponse({ request, commandDigest: digest, idempotencyKey,
+        commandId: id("a2"), authorCommandAdmissionId: id("a3"), receiptId: id("a4"), authoritativeRevisionId: head,
+        authoritativeCommitId: id("a7"), projectActivityPosition: String(index), priorRevisionId: prior, body }));
     }
     throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
   };
   return { fetchImpl, challengeKeys, authorEdits };
 }
 
-it("stops the Challenge wait when the input bound stops input, and recovers the frozen group after a reload", async () => {
+it("stops the Challenge wait when the input bound stops input, and recovers the input of the wait after a reload", async () => {
   const scenario = createBrowserScenario();
   const server = rateLimitedServer(scenario);
   const openDatabases = new Set<IDBDatabase>();
@@ -158,7 +173,7 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
     fireIdle(timers);
     await expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true);
 
-    // Each input during the wait queues behind the frozen group until the input bound stops input.
+    // Each input during the wait enters the Journal. The bound counts the frozen group and the wait (ADR 0065).
     let inputs = 0;
     while (manuscriptIsEditable(editor()) && inputs < 300) {
       await applyTrustedInput({ operation: "insert_text", text: "x" });
@@ -176,19 +191,28 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
       .toEqual({ inputs: 240, retryCleared: true, challenges: 1, authorEdits: [], alert: INPUT_BOUND_MESSAGE,
         saveState: "needs_attention", editable: false });
 
+    // Input that was queued before the stop still enters the Journal.
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(240);
     view?.unmount();
     closeTrackedDatabases(openDatabases);
     const reloadTimers: Timer[] = [];
     root = await mount(reloadTimers);
+    // The last input passed the bound, so it is not in the Journal.
+    const recovered = `Base!?${"x".repeat(239)}`;
     expect({ body: manuscriptBody(editor()),
       saveState: root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
       unsettled: root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count") })
-      .toEqual({ body: "Base!?", saveState: "saving", unsettled: "1" });
-    fireIdle(reloadTimers);
-    await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-save-state")).toBe("saved");
-    expect({ body: manuscriptBody(editor()), challengeKeys: server.challengeKeys, authorEdits: server.authorEdits })
-      .toEqual({ body: "Base!?", challengeKeys: [server.challengeKeys[0], server.challengeKeys[0]],
-        authorEdits: [server.challengeKeys[0]] });
+      .toEqual({ body: recovered, saveState: "saving", unsettled: "240" });
+    await expect.poll(() => {
+      fireIdle(reloadTimers);
+      return root.querySelector("[data-save-state]")?.getAttribute("data-save-state");
+    }, { timeout: 5_000 }).toBe("saved");
+    // The frozen group goes first with its original key. The groups of the wait follow it in intent order.
+    expect({ body: manuscriptBody(editor()), challengeKeys: server.challengeKeys.slice(0, 2),
+      first: server.authorEdits[0], distinct: new Set(server.authorEdits).size === server.authorEdits.length })
+      .toEqual({ body: recovered, challengeKeys: [server.challengeKeys[0], server.challengeKeys[0]],
+        first: server.challengeKeys[0], distinct: true });
+    expect(server.authorEdits.length).toBeGreaterThan(1);
   } finally {
     view?.unmount();
     closeTrackedDatabases(openDatabases);

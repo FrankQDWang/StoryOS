@@ -33,6 +33,7 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
   JOURNAL_DATABASE_VERSION,
+  boundJournalRecord,
   journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   recordTargetsCurrentBase,
@@ -211,9 +212,11 @@ export async function freezeOneIntentSubmission(
   const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   if (existing) {
     if (existing.reconciliation?.kind === "outcome_query_unresolved") return existing;
-    const existingRecords = existing.ordered_coverage.map((coverage) =>
-      snapshot.records.find((record) =>
-        record.local_intent_sequence === coverage.local_intent_sequence));
+    const existingRecords = existing.ordered_coverage.map((coverage) => {
+      const record = snapshot.records.find((item) =>
+        item.local_intent_sequence === coverage.local_intent_sequence);
+      return record && (boundJournalRecord(record, snapshot) ?? record);
+    });
     await validateFrozenGroup(
       existing, workspace, existingRecords as JournalIntentRecord[], cryptoImpl,
     );
@@ -223,13 +226,20 @@ export async function freezeOneIntentSubmission(
     group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
   const firstUncovered = snapshot.records.find((record) =>
     !coveredSequences.has(record.local_intent_sequence));
-  if (firstUncovered
-    && !recordTargetsCurrentBase(firstUncovered, workspace.session.base_snapshot)) {
-    throw new Error("Local Edit Journal is corrupt");
+  // A record that follows a group submits only on the installed base that it binds (ADR 0065).
+  const boundFirst = firstUncovered && boundJournalRecord(firstUncovered, snapshot);
+  if (firstUncovered && (boundFirst === undefined
+    || !recordTargetsCurrentBase(boundFirst, workspace.session.base_snapshot))) {
+    throw new Error(firstUncovered.follows_submission_group === undefined
+      ? "Local Edit Journal is corrupt" : "Local Edit Journal requires attention");
   }
   const candidates = snapshot.records.filter((record) =>
-    !coveredSequences.has(record.local_intent_sequence)
-    && recordTargetsCurrentBase(record, workspace.session.base_snapshot));
+    !coveredSequences.has(record.local_intent_sequence)).flatMap((record) => {
+    const bound = boundJournalRecord(record, snapshot);
+    return bound !== undefined && recordTargetsCurrentBase(bound, workspace.session.base_snapshot)
+      && bound.payload_chain_ref === (boundFirst!.follows_submission_group === undefined
+        ? bound.payload_chain_ref : boundFirst!.payload_chain_ref) ? [bound] : [];
+  });
   if (candidates.length === 0) {
     throw new Error("One pending Author Edit is required");
   }
@@ -463,8 +473,13 @@ async function settleAuthorEditResponse({
     else await commitStrongerGroup(workspace, next);
     return;
   }
+  // Records that follow this group are not in its text (ADR 0065).
+  const last = group.covered_sequence_range.last;
+  const groupBody = pending.unsettled_intent_count > group.ordered_coverage.length
+    ? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).bodyBySequence.get(last)
+    : pending.body;
   if (receipt.result !== "authoritative_applied"
-    || effect.authoritative_revision?.body !== pending.body
+    || effect.authoritative_revision?.body !== groupBody
     || JSON.stringify(receipt.prior_heads)
       !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
     || JSON.stringify(receipt.resulting_heads)
@@ -601,7 +616,8 @@ export async function submitOnePendingAuthorEdit({
       group = await freezeOneIntentSubmission(workspace, cryptoImpl);
     } catch (error) {
       if (error instanceof Error
-        && error.message === "Local Edit Journal requires Block reconfirmation") {
+        && (error.message === "Local Edit Journal requires Block reconfirmation"
+          || error.message === "Local Edit Journal requires attention")) {
         const pending = await rebuildPendingProjection(workspace);
         return { ...pending, save_state: "needs_attention" };
       }

@@ -140,6 +140,60 @@ export function recordTargetsCurrentBase(
         === JSON.stringify([base.authoritative_head_revision_id]));
 }
 
+/**
+ * Gives the base that a record that follows a group binds (ADR 0065). This is the installed base of the group
+ * that covers the record before the run of the record. A record that follows no group binds its own fields.
+ */
+function followedBase(
+  record: JournalIntentRecord,
+  snapshot: Pick<JournalSnapshot, "records" | "groups" | "workingBoundary">,
+): EditorBaseSnapshot | "own" | "waiting" | "unbound" | "retired" {
+  if (record.follows_submission_group === undefined) return "own";
+  const runFirst = snapshot.records.find((item) => item.payload_chain_ref === record.payload_chain_ref)!;
+  const prior = snapshot.records.filter((item) =>
+    item.local_intent_sequence < runFirst.local_intent_sequence).at(-1);
+  if (prior === undefined) return snapshot.workingBoundary === undefined ? "unbound" : "retired";
+  const group = snapshot.groups.find((item) => item.ordered_coverage?.some((coverage) =>
+    coverage.local_intent_sequence === prior.local_intent_sequence));
+  if (group === undefined || group.settlement.kind === "unsettled") return "waiting";
+  return group.settlement.kind === "applied_receipt_settled" ? group.settlement.installed_base_snapshot : "unbound";
+}
+
+function recordOnBase(record: JournalIntentRecord, base: EditorBaseSnapshot): JournalIntentRecord {
+  return { ...record, base_snapshot_id: base.snapshot_id, base_activity_position: base.project_activity_position,
+    target_refs: base.target_refs, expected_authoritative_heads: [base.authoritative_head_revision_id],
+    expected_proposal_heads: base.proposal_head_revision_ids, observed_ownership_partition: base.observed_ownership_partition };
+}
+
+/**
+ * Gives the record with its submission binding, or `undefined` while it has none. A record that follows a group
+ * binds the installed base only when the checkpoint of its run is equal to the installed text. Thus StoryOS never
+ * submits it on a base that it did not bind.
+ */
+export function boundJournalRecord(
+  record: JournalIntentRecord,
+  snapshot: Pick<JournalSnapshot, "records" | "groups" | "payloadChains" | "workingBoundary">,
+): JournalIntentRecord | undefined {
+  const base = followedBase(record, snapshot);
+  if (base === "own") return record;
+  if (typeof base === "string") return undefined;
+  const chain = snapshot.payloadChains.find((item) => item.payload_chain_id === record.payload_chain_ref);
+  return chain?.checkpoint_ref.materialized_payload === checkpointMaterialization(base)
+    ? recordOnBase(record, base) : undefined;
+}
+
+/** True when a record follows a group that ended other than applied. Such a record stays in local recovery. */
+function followerIsUnbound(
+  record: JournalIntentRecord,
+  snapshot: Pick<JournalSnapshot, "records" | "groups" | "payloadChains" | "workingBoundary">,
+  base: EditorBaseSnapshot,
+) {
+  const state = followedBase(record, snapshot);
+  if (state === "own" || state === "waiting") return false;
+  const bound = boundJournalRecord(record, snapshot);
+  return bound === undefined || !recordTargetsCurrentBase(bound, base);
+}
+
 function isOpenPayloadChainForBase(
   chain: JournalPayloadChain, snapshotId: string,
   target?: AuthorEditProposalTarget,
@@ -150,7 +204,10 @@ function isOpenPayloadChainForBase(
 }
 
 function checkpointMaterialization(base: EditorBaseSnapshot): string {
-  const { blocks, body } = base.materialized_revision;
+  return blocksMaterialization(base.materialized_revision);
+}
+
+function blocksMaterialization({ blocks, body }: { blocks: readonly ManuscriptBlock[]; body: string }): string {
   if (blocks.length <= 1 && blocks.every((block) => block.block_kind === "paragraph")) {
     return body;
   }
@@ -408,7 +465,10 @@ async function validatePayloadChains(
   if (flattenChapterBody(baseBlocks) !== workspace.session.base_snapshot.materialized_revision.body) {
     throw new Error("Local Edit Journal is corrupt");
   }
-  for (const chain of payloadChains) {
+  // Replay each chain in intent order, so the checkpoint of a follower run can use the text before it.
+  const order = new Map([...recordsByChain.keys()].map((id, index) => [id, index]));
+  for (const chain of [...payloadChains].sort((left, right) =>
+    (order.get(left.payload_chain_id) ?? -1) - (order.get(right.payload_chain_id) ?? -1))) {
     const chainRecords = recordsByChain.get(chain.payload_chain_id) ?? [];
     const patches = chain.ordered_patch_refs ?? [];
     if (chain.payload_collection?.kind === "collected") {
@@ -452,6 +512,16 @@ async function validatePayloadChains(
         throw new Error("Local Edit Journal is corrupt");
       }
       blocks = checkpointBlocks;
+    } else if (chainRecords[0]!.follows_submission_group !== undefined) {
+      // The checkpoint of a run that follows a group is the text before the run (ADR 0065).
+      const runFirst = chainRecords[0]!.local_intent_sequence;
+      const prior = records.filter((record) => record.local_intent_sequence < runFirst).at(-1);
+      const before = prior === undefined ? undefined : blocksBySequence.get(prior.local_intent_sequence);
+      if (before !== undefined && !manuscriptBlocksEqual(before, checkpointBlocks)
+        && flattenChapterBody(before) !== checkpoint) {
+        throw new Error("Local Edit Journal is corrupt");
+      }
+      blocks = checkpointBlocks;
     } else if (chain.checkpoint_ref.source_snapshot_id
       === workspace.session.base_snapshot.snapshot_id) {
       if (!manuscriptBlocksEqual(baseBlocks, checkpointBlocks)
@@ -468,6 +538,7 @@ async function validatePayloadChains(
       const authorEditUnit = record.author_edit_unit!;
       const expectedDigest = await digestJournalValue(authorEditUnit, workspace.cryptoImpl);
       if (record.base_snapshot_id !== chain.checkpoint_ref.source_snapshot_id
+        || (record.follows_submission_group === undefined) !== (chainRecords[0]!.follows_submission_group === undefined)
         || record.chapter_object_id !== chain.checkpoint_ref.chapter_object_id
         || JSON.stringify(record.expected_authoritative_heads)
           !== JSON.stringify(chain.checkpoint_ref.source_heads)
@@ -510,6 +581,7 @@ async function validateCoverage(
   workspace: EditorWorkspace,
   records: JournalIntentRecord[],
   groups: JournalSubmissionGroup[],
+  workingBoundary: JournalSnapshot["workingBoundary"],
 ) {
   const covered = new Set<number>();
   let coveredRecordCount = 0;
@@ -533,8 +605,16 @@ async function validateCoverage(
       || coverage.length > AUTHOR_EDIT_MAX_UNITS) {
       throw new Error("Journal Submission Group is corrupt");
     }
-    const firstRecord = coveredRecords[0];
     const request = group.frozen_request_body;
+    // A group of records that follow a group binds the installed base of the group before it (ADR 0065).
+    const followed = coveredRecords[0] && followedBase(coveredRecords[0],
+      { records, groups, ...(workingBoundary === undefined ? {} : { workingBoundary }) });
+    if (followed === "waiting" || followed === "unbound") throw new Error("Journal Submission Group is corrupt");
+    const firstRecord = followed === "retired" ? recordOnBase(coveredRecords[0]!, {
+      ...workspace.session.base_snapshot, authoritative_head_revision_id: request.expected_authoritative_revision_id,
+      proposal_head_revision_ids: request.expected_proposal_head_revision_ids, target_refs: request.target_refs,
+      observed_ownership_partition: request.observed_ownership_partition })
+      : followed !== undefined && followed !== "own" ? recordOnBase(coveredRecords[0]!, followed) : coveredRecords[0];
     const collected = group.payload_collection?.kind === "collected";
     const [requestDigest, coverageDigest] = await Promise.all([
       collected
@@ -602,7 +682,7 @@ async function validateCoverage(
         || item.intent_record_ref !== record?.completed_intent_record_id
         || JSON.stringify(item.payload_digest) !== JSON.stringify(record?.payload_digest)
         || (index > 0 && !mayAppendJournalSubmissionRecord(
-          firstRecord!, coveredRecords[index - 1]!, record!,
+          coveredRecords[0]!, coveredRecords[index - 1]!, record!,
         ))) {
         throw new Error("Journal Submission Group is corrupt");
       }
@@ -629,8 +709,7 @@ export async function validateJournalSnapshot(
       || record.local_intent_sequence <= priorSequence
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
-      // This client writes no record that follows an unsettled group.
-      || Object.hasOwn(record, "follows_submission_group")
+      || !validFollowsBinding(record, groups, snapshot.workingBoundary)
       || (record.retry_source?.kind !== "fresh_editor_intent" && !validDraftRetry(record.retry_source))
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
@@ -656,19 +735,47 @@ export async function validateJournalSnapshot(
   const { bodyBySequence, blocksBySequence } = await validatePayloadChains(
     workspace, records, payloadChains,
   );
-  const covered = await validateCoverage(workspace, records, groups);
-  const pendingRecords = records.filter((record) => !covered.has(record.local_intent_sequence));
+  const covered = await validateCoverage(workspace, records, groups, snapshot.workingBoundary);
+  const pendingRecords = records.filter((record) => !covered.has(record.local_intent_sequence)
+    && record.follows_submission_group === undefined);
+  // Each run of records that follow a group is one later group (ADR 0065).
+  const followers = records.filter((record) => !covered.has(record.local_intent_sequence)
+    && record.follows_submission_group !== undefined);
   if (pendingRecords.some((record) =>
     !recordTargetsCurrentBase(record, workspace.session.base_snapshot))
     || pendingRecords.some((record, index) => index > 0
       && !mayAppendJournalSubmissionRecord(
         pendingRecords[0]!, pendingRecords[index - 1]!, record,
-      ))) {
+      ))
+    || followers.some((record, index) => {
+      const runFirst = followers.find((item) => item.payload_chain_ref === record.payload_chain_ref)!;
+      return index > 0 && runFirst !== record
+        && !mayAppendJournalSubmissionRecord(runFirst, followers[index - 1]!, record);
+    })) {
     throw new Error("Local Edit Journal is corrupt");
   }
   const validated = { ...snapshot, bodyBySequence, blocksBySequence, covered };
   validateRecoveryDispositions(validated);
   return validated;
+}
+
+/** A record that follows a group names an earlier authoritative group (ADR 0065). */
+function validFollowsBinding(
+  record: JournalIntentRecord,
+  groups: JournalSubmissionGroup[],
+  workingBoundary: JournalSnapshot["workingBoundary"],
+) {
+  if (!Object.hasOwn(record, "follows_submission_group")) return true;
+  const binding: unknown = record.follows_submission_group;
+  const groupId: unknown = binding !== null && typeof binding === "object"
+    ? Reflect.get(binding, "journal_submission_group_id") : undefined;
+  if (typeof groupId !== "string" || !UUID.test(groupId) || Object.keys(binding as object).length !== 1
+    || record.proposal_target !== undefined || record.retry_source?.kind !== "fresh_editor_intent") return false;
+  const group = groups.find((item) => item.journal_submission_group_id === groupId);
+  // The group can leave the working set before the record does.
+  if (group === undefined) return workingBoundary !== undefined;
+  return group.frozen_request_body?.proposal_target === undefined
+    && group.covered_sequence_range?.last < record.local_intent_sequence;
 }
 
 function provenNoEffectAgainstDurableBase(
@@ -773,9 +880,12 @@ function pendingProjectionFromSnapshot(
       }
     }
   }
+  // A record that follows a group stays active until its own group settles (ADR 0065).
   const activeRecords = snapshot.records.filter((record) =>
-    recordTargetsCurrentBase(record, base)
+    (record.follows_submission_group !== undefined || recordTargetsCurrentBase(record, base))
     && !resolvedSequences.has(record.local_intent_sequence));
+  const unboundFollower = activeRecords.some((record) => !snapshot.covered.has(record.local_intent_sequence)
+    && followerIsUnbound(record, snapshot, base));
   const recoveredRetrySequences = new Set(snapshot.groups.filter((group) =>
     group.settlement.kind === "unsettled" && group.frozen_request_body.retry_source !== undefined
     && group.frozen_request_body.chapter_id === base.chapter_id).flatMap((group) =>
@@ -802,7 +912,7 @@ function pendingProjectionFromSnapshot(
       && !group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence)))
       ? { requires_local_reconfirmation: true } : {}),
     blocks: cloneBlocks(blocks),
-    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection
+    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection || unboundFollower
       ? "needs_attention"
       : pendingRecordCount
         ? "saving"
@@ -1342,6 +1452,23 @@ async function persistAuthorEditUnit(
     edit.candidate === undefined ? Promise.resolve(undefined)
       : digestJournalValue(edit.candidate.checkpointText, cryptoImpl),
   ]);
+  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
+    (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
+  const frozenGroup = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
+  const lastRecord = snapshot.records.at(-1);
+  // Input while a group is unsettled, or after records that follow it, follows the latest group (ADR 0065).
+  const followsGroup = frozenGroup !== undefined || snapshot.records.some((record) =>
+    record.follows_submission_group !== undefined && !coveredSequences.has(record.local_intent_sequence));
+  const latestGroup = [...snapshot.groups].sort((left, right) =>
+    right.covered_sequence_range.first - left.covered_sequence_range.first)[0];
+  // Candidate input keeps the in-memory hold of ADR 0046 until #1232 changes it.
+  if (followsGroup && (edit.candidate !== undefined || edit.expectedProposalHeads !== undefined
+    || edit.retrySource !== undefined || latestGroup?.frozen_request_body.proposal_target !== undefined)) {
+    throw new Error("Local Edit Journal requires prior group settlement");
+  }
+  const followerCheckpoint = followsGroup ? blocksMaterialization(projection) : undefined;
+  const followerCheckpointDigest = followerCheckpoint === undefined ? undefined
+    : await digestJournalValue(followerCheckpoint, cryptoImpl);
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "payload_chains", "intents", "submission_groups"],
     "readwrite",
@@ -1412,10 +1539,7 @@ async function persistAuthorEditUnit(
     transaction.abort();
     throw new Error("Local Edit Journal changed before append");
   }
-  const hasUnsettledGroup = snapshot.groups.some((group) => group.settlement?.kind === "unsettled");
-  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
-  const priorRecord = snapshot.records.filter((record) =>
+  const priorRecord = followsGroup ? undefined : snapshot.records.filter((record) =>
     record.base_snapshot_id === base.snapshot_id
       && !coveredSequences.has(record.local_intent_sequence))
     .sort((left, right) => left.local_intent_sequence - right.local_intent_sequence).at(-1);
@@ -1437,18 +1561,29 @@ async function persistAuthorEditUnit(
     || recordKeys.length >= MAX_WORKING_JOURNAL_ITEMS
     || chainKeys.length >= MAX_WORKING_JOURNAL_ITEMS
     || groupKeys.length > MAX_WORKING_JOURNAL_ITEMS
-    || hasUnsettledGroup
     || !Number.isSafeInteger(sequence)) {
     transaction.abort();
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const retainedChains = new Set((snapshot.localRecovery ?? []).flatMap((item) => item.chains.map((chain) => chain.payload_chain_id)));
   const activeChains = chains.filter((chain) => !retainedChains.has(chain.payload_chain_id));
-  const existingPayloadChain = activeChains.find((chain) =>
-    isOpenPayloadChainForBase(chain, base.snapshot_id, edit.candidate?.target));
-  if (activeChains.filter((chain) => isOpenPayloadChainForBase(
+  // Each run of records that follow a group has its own chain, so each later group collects alone (ADR 0065).
+  const followerChain = followsGroup && lastRecord?.follows_submission_group !== undefined
+    && !coveredSequences.has(lastRecord.local_intent_sequence)
+    ? activeChains.find((chain) => chain.payload_chain_id === lastRecord.payload_chain_ref) : undefined;
+  const runFirst = followerChain && snapshot.records.find((item) =>
+    item.payload_chain_ref === followerChain.payload_chain_id);
+  const existingPayloadChain = followsGroup
+    ? followerChain !== undefined && mayAppendJournalSubmissionRecord(runFirst!, lastRecord!, {
+      ...lastRecord!, input_origin: inputOrigin, created_at: createdAt,
+      undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
+      base_snapshot_id: base.snapshot_id, base_activity_position: base.project_activity_position,
+      proposal_anchors: workspace.inlineProposalAnchors ?? [] })
+      ? followerChain : undefined
+    : activeChains.find((chain) => isOpenPayloadChainForBase(chain, base.snapshot_id, edit.candidate?.target));
+  if ((!followsGroup && activeChains.filter((chain) => isOpenPayloadChainForBase(
     chain, base.snapshot_id, edit.candidate?.target,
-  )).length > 1
+  )).length > 1)
     || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
     transaction.abort();
     throw new Error("Local Edit Journal limit failed");
@@ -1460,8 +1595,10 @@ async function persistAuthorEditUnit(
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
-        materialized_payload: edit.candidate?.checkpointText ?? checkpointMaterialization(base),
-        materialized_payload_digest: edit.candidate === undefined
+        materialized_payload: followerCheckpoint ?? edit.candidate?.checkpointText ?? checkpointMaterialization(base),
+        materialized_payload_digest: followerCheckpoint !== undefined
+          ? followerCheckpointDigest!
+          : edit.candidate === undefined
           ? base.materialized_payload_digest
           : candidateCheckpointDigest!,
         source_snapshot_id: base.snapshot_id,
@@ -1503,6 +1640,8 @@ async function persistAuthorEditUnit(
     observed_ownership_partition: edit.expectedProposalHeads !== undefined
       ? edit.expectedProposalHeads.length === 0 ? "authoritative" : "mixed" : edit.candidate === undefined
       ? base.observed_ownership_partition : "mixed",
+    ...(followsGroup ? { follows_submission_group: {
+      journal_submission_group_id: latestGroup!.journal_submission_group_id } } : {}),
     author_edit_unit: authorEditUnit,
     retry_source: edit.retrySource ?? { kind: "fresh_editor_intent" },
     editor_contract_revision: EDITOR_CONTRACT_REVISION,

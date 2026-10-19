@@ -76,7 +76,7 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const INPUT_BOUND_STOP_MESSAGE =
-  "等待保存时输入过多，编辑器已停止输入。等待期间的输入没有保存，请先复制需要保留的文字，再刷新页面恢复其余内容。";
+  "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
 
 function editorParagraphs(
   blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
