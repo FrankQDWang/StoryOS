@@ -164,8 +164,6 @@ export function createEditorSessionWritingController({
   let inputStopped = false;
   let queuedOperations = 0;
   let queue: Promise<void> = Promise.resolve();
-  // The candidate whose latest group has an unknown outcome. Input waits in `held` until it settles.
-  let unknownCandidate: string | undefined;
   let openCandidate: string | undefined;
   // The candidate of the latest captured input. It continues before its Journal append completes.
   let capturedCandidate: string | undefined;
@@ -255,7 +253,6 @@ export function createEditorSessionWritingController({
   const enterAttention = (): void => {
     if (attention) return;
     attention = true;
-    unknownCandidate = undefined;
     submissionClosed = true;
     // A fenced writer already reported its failure.
     if (!failed) onFailure(new Error("Author Edit requires attention"));
@@ -300,10 +297,11 @@ export function createEditorSessionWritingController({
       followers = false;
     }
     if (projection.save_state === "saved" && pendingIntentCount === 0) submissionClosed = false;
-    undoGroupId = undefined;
+    // Records that follow the settled group keep their undo group, so later input can continue their run.
+    if (pendingIntentCount === 0) undoGroupId = undefined;
     if (submittedCandidate !== undefined) {
+      // Input during an unknown outcome enters the Journal and follows the group (ADR 0065).
       const outcome = await candidateOutcome(workspace, submittedCandidate);
-      unknownCandidate = outcome.kind === "unknown" ? submittedCandidate : undefined;
       if (outcome.kind === "revised") {
         successors.set(`${submittedCandidate}:${outcome.from}`, outcome.to);
         const shown = state.candidates.get(submittedCandidate);
@@ -347,13 +345,13 @@ export function createEditorSessionWritingController({
     const hardBoundary = HARD_INPUT.includes(origin) || STRUCTURAL_INPUT.includes(origin)
       || ("kind" in capturedEdit && capturedEdit.kind === "structured_selection");
     const completedAt = Date.parse(createdAt);
-    const targetOf = (edit: CapturedEdit) => "kind" in edit && edit.kind === "candidate_selection"
-      ? JSON.stringify(edit.target) : "authoritative";
+    // A new Revision of the same Proposal operation continues the run. The Journal binds it (ADR 0065).
+    const targetOf = (edit: CapturedEdit) => candidateKey(edit) ?? "authoritative";
     const idleBoundary = lastCompletedAt !== undefined && completedAt - lastCompletedAt > AUTHOR_EDIT_BATCH_IDLE_MS;
     if (hardBoundary || idleBoundary || pendingTarget !== undefined && pendingTarget !== targetOf(rebind(capturedEdit))) {
       await submitPending();
     }
-    if (unknownCandidate !== undefined || attention) return false;
+    if (attention) return false;
     // A settlement above can give the candidate a new Proposal Revision.
     const edit = rebind(capturedEdit);
     const target = targetOf(edit);
@@ -362,7 +360,7 @@ export function createEditorSessionWritingController({
     try {
       projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
     } catch (error) {
-      // Candidate input waits in memory behind an unsettled group (ADR 0046). #1232 owns its change.
+      // A Draft retry and a structured edit with Proposal Heads wait in memory for the earlier group (ADR 0046).
       if (error instanceof Error && error.message === "Local Edit Journal requires prior group settlement") return false;
       throw error;
     }
@@ -381,7 +379,7 @@ export function createEditorSessionWritingController({
   };
 
   const releaseHeld = async (): Promise<void> => {
-    while (held.length > 0 && unknownCandidate === undefined && !attention && !stopped && !failed) {
+    while (held.length > 0 && !attention && !stopped && !failed) {
       if (!await append(held[0]!)) return;
       held.shift();
     }
