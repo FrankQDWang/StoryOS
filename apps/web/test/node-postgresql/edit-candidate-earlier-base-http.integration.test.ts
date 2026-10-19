@@ -1,14 +1,12 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-earlier-base-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { applyAuthorEdit, digestApplyAuthorEdit, digestUndoLatestAuthorAction, getChapter, getEditorSession,
-  getProposal, undoLatestAuthorAction,
+import { digestUndoLatestAuthorAction, getChapter, getProposal, undoLatestAuthorAction,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { ApplyAuthorEditRequest, AuthorEditPrimitive, UndoLatestAuthorActionRequest,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { UndoLatestAuthorActionRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { BINDING, REVISED, accept, acceptRequest, advanceChapterHead, challenged, drainLeftoverWork, id,
-  openedBlockProposal, reject, seedAcceptanceCondition, startRealServer } from "../support/acceptance.ts";
+  openedBlockProposal, reject, seedAcceptanceCondition, sendAuthorEdit, startRealServer } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
 
 const AUTHOR_TEXT = "The author rewrote this paragraph after the Proposal opened.";
@@ -17,41 +15,13 @@ const EDITED = "Hold the narrator voice in this passage.";
 type Opened = Awaited<ReturnType<typeof openedBlockProposal>>;
 type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];
 
-/** Sends one author edit from the current editor session base of the writer. */
-async function sendEdit(started: Started, opened: Opened, primitive: AuthorEditPrimitive,
-  proposal: Proposal | undefined, sequence: string, ns: string) {
-  const { projectId, fetchImpl } = opened.prepared;
-  const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
-    editorSessionId: opened.session.editor_session.editor_session_id });
-  if (session.writer.kind !== "current_writer") throw new Error("expected the current writer");
-  const request: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: id(`${ns}1`),
-    editor_session_id: session.editor_session.editor_session_id, writer_generation: session.writer.writer_generation,
-    chapter_id: session.base_snapshot.chapter_id,
-    expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
-    expected_proposal_head_revision_ids: proposal ? [proposal.revision_id] : [],
-    ...(proposal ? { proposal_target: { proposal_id: proposal.proposal_id, operation_id: proposal.operation_id,
-      revision_id: proposal.revision_id, manuscript_block_id: proposal.manuscript_block_id } } : {}),
-    target_refs: session.base_snapshot.target_refs,
-    observed_ownership_partition: proposal ? "mixed" : "authoritative",
-    editor_contract_revision: "storyos.editor-contract.release-1.v3",
-    undo_group_id: id(`${ns}2`), completed_intent_record_id: id(`${ns}3`), local_intent_sequence: sequence,
-    author_edit_units: [{ normalized_primitives: [primitive], selection_snapshot: {
-      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-      from: "from" in primitive ? primitive.from : 0, to: "to" in primitive ? primitive.to : 0 } }],
-  };
-  return challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
-    request.command_schema, await digestApplyAuthorEdit(request), id(`${ns}4`), (antiForgery) => applyAuthorEdit({
-      baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request }));
-}
-
 /** Replaces "Keep" with "Hold" in the candidate of the current Proposal Revision. */
 async function editCandidate(started: Started, opened: Opened, sequence: string, ns: string) {
   const { projectId, fetchImpl } = opened.prepared;
   const current = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
     proposalId: opened.revised.proposal_id });
-  const edited = await sendEdit(started, opened, { kind: "replace_selection", from: 0, to: 4, text: "Hold" },
-    current.proposal, sequence, ns);
+  const edited = await sendAuthorEdit(started, opened, { kind: "replace_selection", from: 0, to: 4, text: "Hold" },
+    { kind: "targeted", proposal: current.proposal }, sequence, ns);
   if (edited.effect.kind !== "proposal_revised") throw new Error(`expected proposal_revised, got ${JSON.stringify(edited.effect)}`);
   const revised = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
     proposalId: opened.revised.proposal_id });
@@ -127,8 +97,8 @@ test("a versioned edit of a different Block, then a candidate edit, and Acceptan
     const other = id("f4a30052");
     await advanceChapterHead(projectId, chapterId, h0, id("f4a30051"),
       [block, { manuscript_block_id: other, text: AUTHOR_TEXT }]);
-    const versioned = await sendEdit(started, opened, { kind: "replace_block_selection", manuscript_block_id: other,
-      from: AUTHOR_TEXT.length, to: AUTHOR_TEXT.length, text: " More." }, undefined, "2", "f4a3006");
+    const versioned = await sendAuthorEdit(started, opened, { kind: "replace_block_selection", manuscript_block_id: other,
+      from: AUTHOR_TEXT.length, to: AUTHOR_TEXT.length, text: " More." }, { kind: "authoritative" }, "2", "f4a3006");
     if (versioned.effect.kind !== "authoritative_applied") {
       throw new Error(`expected authoritative_applied, got ${JSON.stringify(versioned.effect)}`);
     }

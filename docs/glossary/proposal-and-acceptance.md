@@ -45,7 +45,7 @@ A stable top-level manuscript block may contain at most one unresolved InlineEdi
 _Avoid_: Same-block Proposal concurrency, interval sharing, implicit Proposal merge
 
 **Proposal Structural Reshaping**:
-An author edit inside a pending Proposal Operation that splits, joins, moves, retypes, or changes the block span of its candidate content. StoryOS preserves the edit in a new Proposal Revision but projects a conflict until explicit replanning either proves unchanged semantic identity and retains the Operation ID or replaces it.
+An author edit inside a pending Proposal Operation that splits, joins, moves, retypes, or changes the block span of its candidate content. StoryOS keeps the edit in a new Proposal Revision and shows a conflict. An explicit Replan can prove the same semantic identity and keep the Operation ID, or it can replace the Operation. A later candidate edit validates against its own base, and the conflict does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
@@ -97,7 +97,7 @@ The Core-produced `conflicted` condition on the validation axis of a well-formed
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
-An author's non-destructive decision not to apply selected pending Proposal Operations. Reopen creates a new pending Proposal Revision, which cannot regain Acceptance Eligibility until current targets and preconditions validate successfully.
+An author's non-destructive decision not to apply selected pending Proposal Operations. Reopen creates a new pending Proposal Revision. Its Acceptance Eligibility follows the current rules, and a base behind the Chapter Head does not stop it ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Withdrawal, deletion
 
 **Proposal Withdrawal**:
@@ -177,5 +177,5 @@ The immutable, idempotent typed Receipt produced by an Undo Acceptance attempt, 
 _Avoid_: Compensation Receipt, undo message
 
 **Validation Receipt**:
-The immutable result of StoryOS Core validating an exact Proposal Revision against exact target versions, domain invariants, and preconditions. It remains true for those historical inputs but ceases to be current or applicable after any relevant Proposal or target change.
+The immutable result of StoryOS Core validating an exact Proposal Revision against its own base, domain invariants, and preconditions. It stays true for those historical inputs. A new Proposal Revision needs a new Validation Receipt. A target change after the base does not make the Receipt inapplicable: Acceptance resolves the current target separately ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Model confidence, creator-approved flag

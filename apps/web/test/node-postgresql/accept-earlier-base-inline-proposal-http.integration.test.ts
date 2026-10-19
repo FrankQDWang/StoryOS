@@ -11,7 +11,7 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch,
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, advanceChapterHead, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
-import { openInline, replaceUnit } from "../support/inline-proposal.ts";
+import { admitPhrase, openInline, replaceUnit } from "../support/inline-proposal.ts";
 
 type Started = Awaited<ReturnType<typeof startRealServer>>;
 type Context = { started: Started; projectId: string; chapterId: string; fetchImpl: typeof fetch; sessionId: string };
@@ -181,6 +181,36 @@ test("Acceptance refuses an Inline Proposal whose target Block was deleted and c
     assert.deepEqual(response.effect, { kind: "refused", reason: "missing_target" });
     assert.deepEqual(await chapterOf(context), chapter);
     assert.deepEqual(await read(context, opened.proposal_id), opened);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("a second Proposal request on the Block of an open Inline Proposal opens no Proposal, and the database refuses a second reservation", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const { context, opened } = await openedInline(started, "f5c1");
+    const chapter = await chapterOf(context);
+    const second = await admitPhrase(started.baseUrl, context.fetchImpl, context.projectId, context.chapterId,
+      id("f5c10061"));
+    if (second.decision.kind !== "prose_change") throw new Error(`expected prose_change, got ${second.decision.kind}`);
+    assert.equal(second.status, "completed");
+    assert.deepEqual([second.decision.opened_proposal, second.decision.locations], [{ kind: "absent" }, undefined]);
+    const reservations = `SELECT count(*)::text FROM storyos.proposal_operations
+      WHERE project_id = '${context.projectId}'::uuid AND manuscript_block_id = '${opened.manuscript_block_id}'::uuid
+        AND reservation_state = 'unresolved'`;
+    assert.equal(await queryPostgres(reservations), "1");
+    // The foreign keys wait, so that only the unique index can refuse the copy of the reservation.
+    await assert.rejects(queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
+      INSERT INTO storyos.proposal_operations SELECT (jsonb_populate_record(operation, jsonb_build_object(
+        'proposal_id', '${id("f5c10071")}', 'operation_id', '${id("f5c10072")}'))).*
+        FROM storyos.proposal_operations AS operation
+       WHERE operation.project_id = '${context.projectId}'::uuid AND operation.proposal_id = '${opened.proposal_id}'::uuid;
+      COMMIT;`), /duplicate key value violates unique constraint "proposal_operations_one_unresolved_block"/);
+    assert.equal(await queryPostgres(reservations), "1");
+    assert.deepEqual(await read(context, opened.proposal_id), opened);
+    assert.deepEqual(await chapterOf(context), chapter);
   } finally {
     await stopRealServer(started.server);
   }
