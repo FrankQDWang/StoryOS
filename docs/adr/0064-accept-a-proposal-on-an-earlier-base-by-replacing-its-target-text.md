@@ -19,19 +19,20 @@ Before this change, Acceptance needed the base of the Proposal Revision to be th
 - **Target resolution.** Acceptance resolves the target of each selected Operation on the current Chapter Head, in this order:
   1. `exact_base`: the Revision base is the Chapter Head. Acceptance applies as before.
   2. `block_replacement`: the Proposal is a Block Proposal, and its target Block is on the Chapter Head. The candidate text replaces all text of that Block.
-  3. `proven_range`: the Proposal is an Inline Proposal, and the exact Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head. The candidate replaces only that range. Reservations of other Proposals do not stop the proof at Acceptance.
+  3. `proven_range`: the Proposal is an Inline Proposal, and the exact Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head. The candidate replaces only that range. Reservations of other Proposals do not stop the proof at Acceptance. The unique index `proposal_operations_one_unresolved_block` of migration 0049 prevents a second reservation on the Block, so the proof at Acceptance has no other reservations.
   4. `base_block_replacement`: the Proposal is an Inline Proposal without that proof, and its target Block is on the Chapter Head. The Block text becomes the Anchor base Block text with the candidate at the stored range.
   5. Missing target: a target Block is not on the Chapter Head. Acceptance is refused with the reason `missing_target`, and nothing changes. The Proposal stays open, and the author can reject it.
 - **Other Proposals.** Other open Proposals on the same Block stay open. Their bases are then behind the Chapter Head, and the same rule applies to their Acceptance.
 - **Concurrency.** The Chapter Head compare-and-set of the Authoritative Revision profile does not change. When the expected Authoritative Revision of the request is not the Chapter Head, Acceptance gives the existing binding conflict.
 - **Records.** Migration 0095 adds two columns to `storyos.acceptance_receipts`. `applied_authoritative_revision_id` is the Chapter Head that an applied Acceptance applied to. `target_resolution` has one of the four resolution values. A CHECK constraint requires both facts on each applied row and on no other row. The migration gives each earlier applied row the prior head of its Domain Receipt and `exact_base`. The earlier rule applied only on the exact base.
-- **Response.** The applied effect of `acceptProposal` gives `target_resolution`. An exact retry reads the value from the Acceptance Receipt row, so it gives the same effect. The refusal reasons add `missing_target`.
+- **Response.** The applied effect of `acceptProposal` gives `target_resolution`. An exact retry reads the value from the Acceptance Receipt row, so it gives the same effect. The refusal reasons add `missing_target`. No new Acceptance gives `conflicted`. The contract keeps the `Conflicted` effect only because an exact retry of an Acceptance Receipt from before this decision gives its recorded effect.
 - **Readers.** The validation history reader accepts an applied Acceptance as valid history when all of these are true:
   - The prior head of its Domain Receipt is its recorded Chapter Head.
   - Its resolution is `exact_base` exactly when that Chapter Head is the Revision base.
   - Its Validation Receipt has the Revision base.
   getProposal, the Acceptance facts, the Project archive export, and the pinned export sources use this reader. The Project archive exports the two facts with each Acceptance Receipt row. Earlier Proposal Revisions, Validation Receipts, and Receipts do not change.
-- **Damaged history.** When the validation history of the current Proposal Revision is not valid, Acceptance gives `503 project_store_unavailable`, as getProposal does.
+- **Damaged history.** When the validation history of the current Proposal Revision is not valid, Acceptance gives `503 project_store_unavailable`, as getProposal does. When the stored Anchor of an Inline Proposal does not match its Block on the Anchor base, Acceptance also gives `503 project_store_unavailable` (ADR 0063).
+- **Author Undo of an Inline replacement.** After `proven_range` or `base_block_replacement`, the Anchor set is exact only on the base of the accepted Revision. Thus the Reopen and Derived modes of Author Undo put the Proposal on that base, and they copy the Anchor set unchanged. The Proposal is then again a Proposal on an earlier base, and the same rule accepts it. Author Undo of a Block Proposal and of `exact_base` does not change.
 - **Candidate edits.** A candidate edit validates the new Revision against its own base. A base behind the Chapter Head does not make the Revision `conflicted`. No new writer writes `conflicted` for a changed Chapter Head. Existing `conflicted` Revisions and Proposal Conflict conditions stay readable and acceptable.
 - **Editor.** The editor does not show Replan. A Proposal on an earlier base shows Accept, Reject, and candidate editing. It also shows a short note: Acceptance replaces the current text of its target. When the open Proposal list is truncated or its read failed, the decision controls stay unavailable (ADR 0063).
 - **Server.** The `replanProposal` command, its route, its contracts, and the Author Undo of a Replan stay. No editor path calls the command. The Author Undo Disposition of Acceptance does not change (ADR 0044).
@@ -41,8 +42,7 @@ Before this change, Acceptance needed the base of the Proposal Revision to be th
 The tickets of the specification deliver this decision in parts:
 
 - [Accept a Block Proposal on an Earlier Base by Replacing Its Block Text](https://github.com/FrankQDWang/StoryOS/issues/1218) delivers the rule for a Block Proposal. This is steps 1, 2, and 5, the records, the readers, and the response.
-- Until the Inline ticket of the specification is delivered, an Inline Proposal keeps the earlier rule. Its Acceptance on an earlier base gives the conflict `changed_head` and records a Proposal Conflict condition. The validation `conflicted` and a Proposal Conflict condition block its Acceptance. The `Conflicted` variant of the Acceptance contract and the Inline tests of that rule stay until that ticket removes them.
-- The record type and migration 0095 already permit `proven_range` and `base_block_replacement`, so the Inline ticket adds no migration.
+- [Accept an Inline Proposal on an Earlier Base by Its Proven Range or Base Block Text](https://github.com/FrankQDWang/StoryOS/issues/1219) delivers the rule for an Inline Proposal. This is steps 3 and 4 and the Author Undo rule of an Inline replacement. The record type and migration 0095 already permit `proven_range` and `base_block_replacement`, so it adds no migration.
 - The candidate edit writers and the editor change come in their own tickets of the specification.
 
 ## Replaced rules
@@ -51,7 +51,8 @@ This decision replaces these earlier rules:
 
 - ADR 0003 said that Acceptance stays unavailable until a new current Proposal Revision validates, and that target drift needs an explicit Replan. Acceptance now replaces the target text on the current Chapter Head. It does not map or revalidate the old Revision.
 - ADR 0063 said that a changed head stays a conflict. This stays true for a Replan. A changed head does not make Acceptance a conflict.
-- ADR 0044 said that the `conflicted` outcome of Acceptance writes its validation condition row. Only an Inline Proposal gives that outcome until the Inline ticket is delivered. After that ticket, Acceptance has no `conflicted` outcome.
+- ADR 0063 said that the Reopen mode of Author Undo puts the copied Anchor set on the restored Authoritative Revision. After an Inline replacement, Reopen and Derived put the Proposal on the base of the accepted Revision.
+- ADR 0044 said that the `conflicted` outcome of Acceptance writes its validation condition row. Acceptance now has no `conflicted` outcome, so no Acceptance writes that row.
 
 ## Considered options
 

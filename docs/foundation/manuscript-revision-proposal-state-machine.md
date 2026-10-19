@@ -337,9 +337,8 @@ Unlisted transitions are invalid.
 | resolution | `rejected` | `pending` | explicit reopen in a new Revision |
 | resolution | `applied` | `pending` | successful Undo Acceptance in a new Revision |
 
-The validation `conflicted` does not block Acceptance. Until the Inline part
-of [ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md) is delivered, it blocks Acceptance of an Inline
-Proposal.
+The validation `conflicted` does not block Acceptance
+([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 
 `superseded` is terminal. Content correction, replan, rejected-operation
 reopen, and Undo Acceptance append new Proposal Revisions. A content Revision
@@ -954,7 +953,8 @@ After current access validation, Acceptance executes in this order:
    - `block_replacement`: a Block Proposal whose target Block is on the
      Chapter Head. The candidate replaces all text of that Block.
    - `proven_range`: an Inline Proposal whose Anchor range has the exact proof
-     of section 6.5 on the Chapter Head. The candidate replaces only that range.
+     of section 6.5 on the Chapter Head. The proof ignores reservations of
+     other Proposals. The candidate replaces only that range.
    - `base_block_replacement`: an Inline Proposal without that proof whose
      target Block is on the Chapter Head. The Block text becomes the Anchor
      base Block text with the candidate at the stored range.
@@ -967,10 +967,7 @@ After current access validation, Acceptance executes in this order:
 
 Acceptance never automatically replans or replaces a Validation Receipt. An
 applied Acceptance records the Chapter Head that it applied to and its target
-resolution. An Inline Proposal keeps the exact-head rule until the Inline part
-of [ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md) is delivered. Until then, a base behind the Chapter Head
-gives `Conflicted`. The validation `conflicted` or a Proposal Conflict then
-blocks its Acceptance.
+resolution. A base behind the Chapter Head does not give `Conflicted`.
 
 ### 7.6 Other Proposal decisions
 
@@ -1310,8 +1307,8 @@ AcceptanceResult =
 
 Only `Applied` changes Authoritative State and resolves the selected Operations
 as applied. `Invalid` projects validation invalid; `Conflicted` projects it
-conflicted. Only an Inline Proposal on an earlier base gives `Conflicted`,
-until the Inline part of ADR 0064 is delivered. `Refused` covers state or
+conflicted. Only an Acceptance Receipt from before ADR 0064 records
+`Conflicted`. `Refused` covers state or
 selection ineligibility and a missing target Block without changing content
 validity. `NoEffect` creates no Commit and leaves Operations pending.
 All reasons are versioned exhaustive types; free text is presentation only.
@@ -1399,7 +1396,7 @@ empty. The closed allocation matrix is:
 | validation attempt | `ValidationReceipt` | 0 | 0 | 0 | N/A | `ProposalConflict` exactly when result is `conflicted` |
 | `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | N/A | 0 |
 | `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | validation becomes `invalid` |
-| `AcceptProposal.Conflicted` (an Inline Proposal, until the Inline part of ADR 0064) | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
+| `AcceptProposal.Conflicted` (only an Acceptance Receipt from before ADR 0064) | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
 | `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | 0 |
 
 Bundle Acceptance retains its declared atomic or ordered-independent policy:

@@ -54,10 +54,14 @@ pub enum AcceptanceTargetKind {
 /// The Proposal Revision base compared with the current Chapter Head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AcceptanceBase {
-    /// The base is the Chapter Head, and an Inline base slice is exact on it.
+    /// The base is the Chapter Head.
     ExactHead,
     /// The base is behind the Chapter Head.
-    EarlierHead { target_blocks_present: bool },
+    EarlierHead {
+        target_blocks_present: bool,
+        /// The exact Inline Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head.
+        inline_range_proven: bool,
+    },
 }
 
 /// How an applied Acceptance found its target on the Chapter Head (ADR 0064).
@@ -119,6 +123,7 @@ pub enum AcceptProposalInvalid {
     AlteredCandidate,
 }
 
+/// Only an Acceptance Receipt from before ADR 0064 records this conflict.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AcceptProposalConflict {
     ChangedHead,
@@ -237,18 +242,14 @@ pub fn classify_proposal_selection(
 }
 
 /// Classify one Operation Acceptance against Scope, Admission, eligibility, and its target on the
-/// current Chapter Head. An Inline Proposal keeps the exact-head rule until its target resolution
-/// exists (ADR 0064).
+/// current Chapter Head (ADR 0064).
 pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
-    let block = command.target_kind == AcceptanceTargetKind::Block;
     let acceptable = |validation: AcceptanceValidation| match validation {
-        AcceptanceValidation::Valid => true,
-        AcceptanceValidation::Conflicted => block,
+        AcceptanceValidation::Valid | AcceptanceValidation::Conflicted => true,
         AcceptanceValidation::Other => false,
     };
     let condition_allows = match command.condition {
-        AcceptanceCondition::Absent => true,
-        AcceptanceCondition::ProposalConflict => block,
+        AcceptanceCondition::Absent | AcceptanceCondition::ProposalConflict => true,
         AcceptanceCondition::RecoveryConflict | AcceptanceCondition::Invalid => false,
     };
     if !command.scope_matches {
@@ -286,20 +287,29 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
     let resolution = match (command.target_kind, command.base) {
         (_, AcceptanceBase::ExactHead) => AcceptanceTargetResolution::ExactBase,
         (
-            AcceptanceTargetKind::Block,
-            AcceptanceBase::EarlierHead {
-                target_blocks_present: true,
-            },
-        ) => AcceptanceTargetResolution::BlockReplacement,
-        (
-            AcceptanceTargetKind::Block,
+            _,
             AcceptanceBase::EarlierHead {
                 target_blocks_present: false,
+                ..
             },
         ) => return TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget),
-        (AcceptanceTargetKind::Inline, AcceptanceBase::EarlierHead { .. }) => {
-            return TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead);
+        (AcceptanceTargetKind::Block, AcceptanceBase::EarlierHead { .. }) => {
+            AcceptanceTargetResolution::BlockReplacement
         }
+        (
+            AcceptanceTargetKind::Inline,
+            AcceptanceBase::EarlierHead {
+                inline_range_proven: true,
+                ..
+            },
+        ) => AcceptanceTargetResolution::ProvenRange,
+        (
+            AcceptanceTargetKind::Inline,
+            AcceptanceBase::EarlierHead {
+                inline_range_proven: false,
+                ..
+            },
+        ) => AcceptanceTargetResolution::BaseBlockReplacement,
     };
     if !command.candidate_unaltered {
         return TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate);
