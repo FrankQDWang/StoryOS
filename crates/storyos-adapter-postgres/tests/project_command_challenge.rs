@@ -2,7 +2,7 @@ use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
     IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandChallengeError,
     ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectId, ProjectScope,
-    UserId, issue_project_command_challenge,
+    RevisionNonce, UserId, issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -527,4 +527,160 @@ async fn an_author_undo_challenge_issued_under_the_shared_revision_stays_consuma
         ProjectCommandChallengeUse::FirstUse,
     );
     transaction.rollback().await.unwrap();
+}
+
+const SHARED_REVISION: &str = "storyos.project-command-challenge-rate.fixed-window.v1";
+const AUTHOR_EDIT_REVISION: &str =
+    "storyos.project-command-challenge-rate.author-edit.fixed-window.v1";
+
+/// A Challenge of an `author_edit` class command kind that a Server issued under the shared revision.
+fn shared_revision_challenge(
+    command_kind: &str,
+    route_template: &str,
+    command_schema: &str,
+    lead: u64,
+) -> IssueProjectCommandChallenge {
+    let mut request = challenge_request('b');
+    let binding = &mut request.binding;
+    binding.client_session_generation = 0xb6_0000 + lead;
+    binding.method = "POST".to_owned();
+    binding.route_template = route_template.to_owned();
+    binding.command_schema = command_schema.to_owned();
+    binding.command_kind = command_kind.to_owned();
+    binding.canonical_command_digest = binding
+        .canonical_command_digest
+        .replace("updateProject", command_kind);
+    binding.idempotency_key = format!("018f0000-0000-7001-8000-0000b6{lead:06}");
+    request.nonce = format!("opaque-shared-nonce-{lead}");
+    request.nonce_digest = format!("sha256:shared-nonce-{lead}");
+    request
+}
+
+/// The same request that a Server sends after the command kind moved to the `author_edit` class.
+fn repeated_under_author_edit_revision(
+    original: &IssueProjectCommandChallenge,
+) -> IssueProjectCommandChallenge {
+    let mut repeated = original.clone();
+    repeated.binding.challenge_rate_policy_revision = AUTHOR_EDIT_REVISION.to_owned();
+    repeated.nonce = "opaque-author-edit-nonce".to_owned();
+    repeated.nonce_digest = "sha256:author-edit-nonce".to_owned();
+    repeated.earlier_revision_nonces = vec![RevisionNonce {
+        challenge_rate_policy_revision: SHARED_REVISION.to_owned(),
+        nonce: original.nonce.clone(),
+        nonce_digest: original.nonce_digest.clone(),
+    }];
+    repeated
+}
+
+async fn issued_counts(generation: u64) -> Vec<(String, i16)> {
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    admin
+        .query(
+            "SELECT policy_revision, issued_count FROM storyos.project_command_challenge_rate_windows
+             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+               AND client_session_generation = $3::text::numeric
+             ORDER BY policy_revision",
+            &[&USER_A, &PROJECT_A, &generation.to_string()],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
+        .collect()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_repeated_request_across_the_rate_policy_revision_returns_the_original_challenge() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    for (lead, command_kind, route_template, command_schema) in [
+        (
+            1,
+            "applyAuthorEdit",
+            "/api/v1/projects/{project_id}/manuscript/author-edits",
+            "storyos.command.apply-author-edit.request.v1",
+        ),
+        (
+            2,
+            "undoLatestAuthorAction",
+            "/api/v1/projects/{project_id}/author-actions/undo",
+            "storyos.command.undo-latest-author-action.request.v1",
+        ),
+    ] {
+        let original =
+            shared_revision_challenge(command_kind, route_template, command_schema, lead);
+        let issued = issue_project_command_challenge(&store, &original)
+            .await
+            .unwrap();
+        let repeated = issue_project_command_challenge(
+            &store,
+            &repeated_under_author_edit_revision(&original),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (
+                repeated,
+                issued_counts(original.binding.client_session_generation).await
+            ),
+            (issued, vec![(SHARED_REVISION.to_owned(), 1)]),
+            "{command_kind}"
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_changed_binding_still_conflicts_across_the_rate_policy_revision() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let original = shared_revision_challenge(
+        "applyAuthorEdit",
+        "/api/v1/projects/{project_id}/manuscript/author-edits",
+        "storyos.command.apply-author-edit.request.v1",
+        /*lead*/ 3,
+    );
+    issue_project_command_challenge(&store, &original)
+        .await
+        .unwrap();
+    let repeated = repeated_under_author_edit_revision(&original);
+    let mut changed_requests = Vec::new();
+    for mutate in [
+        |value: &mut IssueProjectCommandChallenge| {
+            value.binding.canonical_command_digest = format!(
+                "sha256:storyos.command.applyAuthorEdit.jcs.v1:{}",
+                "f".repeat(64)
+            )
+        },
+        |value: &mut IssueProjectCommandChallenge| {
+            value.binding.client_session_binding_digest = "sha256:session-stolen".to_owned()
+        },
+        |value: &mut IssueProjectCommandChallenge| value.binding.client_session_generation += 1,
+        |value: &mut IssueProjectCommandChallenge| {
+            value.binding.client_contract_revision = "storyos.web-client.release-0.v1".to_owned()
+        },
+        |value: &mut IssueProjectCommandChallenge| {
+            value.earlier_revision_nonces[0].nonce_digest = "sha256:another-secret".to_owned()
+        },
+    ] {
+        let mut changed = repeated.clone();
+        mutate(&mut changed);
+        changed_requests.push(changed);
+    }
+    for changed in changed_requests {
+        assert!(matches!(
+            issue_project_command_challenge(&store, &changed).await,
+            Err(ProjectCommandChallengeError::BindingConflict)
+        ));
+    }
+    assert_eq!(
+        issued_counts(original.binding.client_session_generation).await,
+        vec![(SHARED_REVISION.to_owned(), 1)]
+    );
 }
