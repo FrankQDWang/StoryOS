@@ -14,7 +14,6 @@ use storyos_core::{
     accept_proposal as classify_acceptance, classify_proposal_selection,
 };
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -64,19 +63,15 @@ impl PostgresProjectReader {
     }
 }
 
-/// One Acceptance and the condition identity that its conflicted outcome records.
+/// One Acceptance.
 #[derive(Clone)]
 pub(crate) struct AcceptProposal {
     input: AcceptProposalInput,
-    condition_id: String,
 }
 
 impl AcceptProposal {
     pub(crate) fn new(input: AcceptProposalInput) -> Self {
-        Self {
-            input,
-            condition_id: Uuid::now_v7().to_string(),
-        }
+        Self { input }
     }
 }
 
@@ -185,27 +180,22 @@ impl ProjectCommand for AcceptProposal {
             required_dependencies_met: selection.required_dependencies_met,
             bundle_closure_complete: selection.bundle_closure_complete,
             target_kind,
-            base: if loaded.base_is_head && loaded.inline_base_slice_matches {
+            base: if loaded.base_is_head {
                 AcceptanceBase::ExactHead
             } else {
                 AcceptanceBase::EarlierHead {
                     target_blocks_present: loaded
                         .target_blocks_present(&input.selected_operation_ids),
+                    inline_range_proven: loaded.proven_range.is_some(),
                 }
             },
             candidate_unaltered: loaded.candidate_unaltered(),
         });
-        let condition_refs = match &outcome {
-            TransitionOutcome::Conflicted(_) => vec![self.condition_id.clone()],
-            TransitionOutcome::Applied(_)
-            | TransitionOutcome::NoEffect(_)
-            | TransitionOutcome::Refused(_) => Vec::new(),
-        };
         let outcome = match outcome {
             TransitionOutcome::Applied(resolution) => TransitionOutcome::Applied((
                 (),
                 AcceptedRevision {
-                    payload: loaded.accepted_body(&input.selected_operation_ids)?,
+                    payload: loaded.accepted_body(&input.selected_operation_ids, resolution)?,
                     chapter_id: loaded.chapter_id.clone(),
                     resolution,
                 },
@@ -233,11 +223,8 @@ impl ProjectCommand for AcceptProposal {
             },
             zero_receipt: ZeroReceipt::Observed {
                 fields: serde_json::Map::new(),
-                refs: ReceiptRefs {
-                    condition_refs: condition_refs.clone(),
-                    ..ReceiptRefs::default()
-                },
-                effect: condition_refs,
+                refs: ReceiptRefs::default(),
+                effect: Vec::new(),
             },
         })
     }
@@ -408,38 +395,31 @@ impl ProjectCommand for AcceptProposal {
         envelope: &ProjectCommandEnvelope,
         outcome: &ZeroOutcome<'_, Self>,
     ) -> Result<Vec<String>, ProjectCommandError> {
-        let (validation, conflict_id, condition_kind) = match outcome {
-            ZeroOutcome::NoEffect(_) => ("invalid", None, None),
-            ZeroOutcome::Conflicted(_) => (
-                "conflicted",
-                Some(self.condition_id.as_str()),
-                Some("proposal_conflict"),
-            ),
-            ZeroOutcome::Refused(_) => {
-                return Err(unavailable("a refused Acceptance writes no condition"));
+        match outcome {
+            ZeroOutcome::NoEffect(_) => {}
+            // Since ADR 0064 no Acceptance gives a conflict. Only earlier Receipts record one.
+            ZeroOutcome::Conflicted(_) | ZeroOutcome::Refused(_) => {
+                return Err(unavailable("only an invalid Acceptance writes a condition"));
             }
-        };
+        }
         client
             .execute(
                 "INSERT INTO storyos.proposal_validation_conditions
                    (owner_user_id, project_id, proposal_id, proposal_revision_id,
-                    acceptance_receipt_id, validation, conflict_id, condition_kind)
+                    acceptance_receipt_id, validation)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, $6, $7::text::uuid, $8)",
+                         $5::text::uuid, 'invalid')",
                 &[
                     &envelope.project_scope.owner_user_id.as_ref(),
                     &envelope.project_scope.project_id.as_ref(),
                     &self.input.proposal_id,
                     &self.input.proposal_revision_id,
                     &envelope.ids.receipt_id,
-                    &validation,
-                    &conflict_id,
-                    &condition_kind,
                 ],
             )
             .await
             .map_err(unavailable)?;
-        Ok(conflict_id.map(str::to_owned).into_iter().collect())
+        Ok(Vec::new())
     }
 
     fn decode_zero_authority_effect(

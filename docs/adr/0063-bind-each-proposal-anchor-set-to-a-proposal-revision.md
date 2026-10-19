@@ -25,7 +25,7 @@ Before this change, a Proposal Anchor row belonged to a Proposal and its Operati
   - Inline creation writes the set of the opening Revision.
   - Refused Edit Draft expansion writes the set of the opening Revision.
   - The Derived mode of Author Undo of an Acceptance copies the set of the accepted Revision to the opening Revision of the derived Proposal. The reader rule selects that set.
-  - The Reopen mode of Author Undo of an Acceptance copies the set of the accepted Revision to the reopened Revision. Each copy is on the restored Authoritative Revision. Reopen occurs only without lineage drift, so each range and each digest stay exact.
+  - The Reopen mode of Author Undo of an Acceptance copies the set of the accepted Revision to the reopened Revision. After an `exact_base` Acceptance, each copy is on the restored Authoritative Revision. Reopen occurs only without lineage drift, so each range and each digest stay exact. An Inline Acceptance with `proven_range` or `base_block_replacement` is different. Then Reopen and Derived put the Proposal and each copy on the base of the accepted Revision, where the set is exact ([ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
   - An applied Replan of an Inline Proposal writes the proven set of the new Revision on the expected Authoritative Revision.
   - Author Undo of a Replan copies the set of the source Revision to the restored Revision. Author Undo of other Proposal decisions keeps the base, so the parent chain gives the correct set.
 - **Inline creation checks.** Inline creation reads no Anchor row. Its reservation check uses `storyos.proposal_operations`, so the reader rule does not apply to it.
@@ -66,5 +66,5 @@ An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of
 ## Consequences
 
 - Each Author Undo path that changes the base writes its own Anchor set. Thus a read of an Inline Proposal after that Undo gives the Anchor on the base of the restored Revision.
-- A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal. ADR 0064 also lets the author accept it when its Inline part is delivered.
+- A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal. ADR 0064 also lets the author accept it.
 - After Author Undo of a Replan, the restored Revision is on the old base. Thus the editor does not show it inline until a new Replan.

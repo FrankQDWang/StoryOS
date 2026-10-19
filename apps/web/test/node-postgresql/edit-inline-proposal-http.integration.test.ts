@@ -22,203 +22,20 @@ import { requireStoryOSProtocolError, sessionFetch as browserFetch,
 import { retainRefusedEditRecoveryExpectation } from "../support/refused-edit-recovery.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
-  prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
+  prepare, seedAcceptanceCondition, settleOnce, startRealServer } from "../support/acceptance.ts";
 
 import { admitCandidateRevision } from "../support/candidate-revision.ts";
-
-const INLINE_CANDIDATE = "narrator tone";
-const SOURCE_SLICE = "narrator voice";
-const GOLDEN_DIGEST =
-  "sha256:bc395ed925fa201c3c0ecd550ed362f89e6069001d6c23af2ce214b107d9ce40";
+import { INLINE_CANDIDATE, SOURCE_SLICE, admitPhrase, openInline, phraseRequest, replaceUnit, sliceDigest,
+  writePassage } from "../support/inline-proposal.ts";
 
 function problemOf(error: unknown): { status: number | undefined; code: unknown } {
   const protocol = requireStoryOSProtocolError(error);
   return { status: protocol.status, code: JSON.parse(String(protocol.responseBody)).code };
 }
 
-function sliceDigest(manuscriptBlockId: string): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify({
-    base_slice: SOURCE_SLICE,
-    block_kind: "paragraph",
-    coordinate_profile: "prosemirror-token-utf16.v1",
-    from: 10,
-    manuscript_block_id: manuscriptBlockId,
-    manuscript_schema_version: 1,
-    to: 24,
-  })).digest("hex")}`;
-}
-
 const INTERIOR_CANDIDATE = "narrxxr tone";
 const ACCEPTED_BODY = "Guard the narrxxr tone in this passage.";
 const EDGE_BODY = "Keep the narrator voice in this passage.";
-
-function phraseRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text: "Revise this phrase: keep the voice." },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
-
-async function writePassage(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  ns: string,
-  text = PROSE,
-) {
-  const sessionRequest: CreateEditorSessionRequest = {
-    command_schema: "storyos.command.create-editor-session.request.v1",
-    ...BINDING,
-    correlation_id: id(`${ns}1`),
-  };
-  const session = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/editor-sessions",
-    sessionRequest.command_schema, await digestCreateEditorSession(sessionRequest),
-    id(`${ns}2`),
-    (antiForgery) => createEditorSession({
-      baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}2`), antiForgery,
-      request: sessionRequest,
-    }),
-  );
-  if (session.writer.kind !== "current_writer") throw new Error("expected current writer");
-  const editRequest: ApplyAuthorEditRequest = {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
-    ...BINDING,
-    correlation_id: id(`${ns}3`),
-    editor_session_id: session.editor_session.editor_session_id,
-    writer_generation: session.writer.writer_generation,
-    chapter_id: session.base_snapshot.chapter_id,
-    expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
-    expected_proposal_head_revision_ids: [],
-    target_refs: session.base_snapshot.target_refs,
-    observed_ownership_partition: "authoritative",
-    editor_contract_revision: "storyos.editor-contract.release-1.v3",
-    undo_group_id: id(`${ns}4`),
-    completed_intent_record_id: id(`${ns}5`),
-    local_intent_sequence: "1",
-    author_edit_units: [{
-      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0,
-      },
-    }],
-  };
-  const written = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/manuscript/author-edits",
-    editRequest.command_schema, await digestApplyAuthorEdit(editRequest), id(`${ns}6`),
-    (antiForgery) => applyAuthorEdit({
-      baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery,
-      request: editRequest,
-    }),
-  );
-  if (written.effect.kind !== "authoritative_applied") {
-    throw new Error("expected written prose");
-  }
-  return {
-    session,
-    writerGeneration: session.writer.writer_generation,
-    authoritativeRevisionId: written.effect.authoritative_revision.revision_id,
-    nextSequence: "2",
-  };
-}
-
-async function admitPhrase(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  chapterId: string,
-  key: string,
-) {
-  const request = phraseRequest(chapterId, id(key.slice(-4)));
-  const created = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
-    }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  await settleOnce();
-  return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-}
-
-async function openInline(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  chapterId: string,
-  ns: string,
-) {
-  const writer = await writePassage(baseUrl, fetchImpl, projectId, `${ns}0`);
-  const queried = await admitPhrase(baseUrl, fetchImpl, projectId, chapterId, id(`${ns}1`));
-  assert.equal(queried.status, "completed");
-  assert.equal(queried.decision.kind, "prose_change");
-  if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
-    throw new Error("expected opened inline");
-  }
-  const opened = await getProposal({
-    baseUrl, projectId, proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl,
-  });
-  assert.equal(opened.proposal.kind, "inline_edit");
-  assert.equal(opened.proposal.candidate_text, INLINE_CANDIDATE);
-  assert.equal(opened.proposal.validation, "valid");
-  assert.equal(opened.proposal.validation_receipt.kind, "present");
-  assert.equal(opened.proposal.anchors.length, 1);
-  const anchor = opened.proposal.anchors[0];
-  if (anchor === undefined) throw new Error("expected one Anchor");
-  assert.equal(anchor.manuscript_block_id, opened.proposal.manuscript_block_id);
-  assert.equal(anchor.coordinate_profile, "prosemirror-token-utf16.v1");
-  assert.equal(anchor.boundary_profile, "exclusive-authoritative-edges.v1");
-  assert.equal(anchor.from, 10);
-  assert.equal(anchor.to, 24);
-  assert.equal(PROSE.slice(anchor.from, anchor.to), SOURCE_SLICE);
-  assert.equal(sliceDigest("block-a"), GOLDEN_DIGEST);
-  assert.equal(anchor.base_slice_digest, sliceDigest(anchor.manuscript_block_id));
-  return { queried, opened, writer };
-}
-
-function replaceUnit(
-  from: number,
-  to: number,
-  text: string,
-  writer: Awaited<ReturnType<typeof writePassage>>,
-  ns: string,
-  proposalRevisionId: string,
-): ApplyAuthorEditRequest {
-  return {
-    command_schema: "storyos.command.apply-author-edit.request.v1",
-    ...BINDING,
-    correlation_id: id(`${ns}3`),
-    editor_session_id: writer.session.editor_session.editor_session_id,
-    writer_generation: writer.writerGeneration,
-    chapter_id: writer.session.base_snapshot.chapter_id,
-    expected_authoritative_revision_id: writer.authoritativeRevisionId,
-    expected_proposal_head_revision_ids: [proposalRevisionId],
-    target_refs: writer.session.base_snapshot.target_refs,
-    observed_ownership_partition: "mixed",
-    editor_contract_revision: "storyos.editor-contract.release-1.v3",
-    undo_group_id: id(`${ns}4`),
-    completed_intent_record_id: id(`${ns}5`),
-    local_intent_sequence: writer.nextSequence,
-    author_edit_units: [{
-      normalized_primitives: [{ kind: "replace_selection", from, to, text }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to,
-      },
-    }],
-  };
-}
 
 function mixedRequest(
   opened: Awaited<ReturnType<typeof getProposal>>,
@@ -1187,7 +1004,7 @@ test.each(["paragraph", "heading"] as const)("inline Acceptance preserves comple
   }
 });
 
-test("edge input stays authoritative, reserved-block change conflicts, and Reject leaves prose", async () => {
+test("edge input stays authoritative, the Proposal Revision stays valid on its base, and Reject leaves prose", async () => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
@@ -1212,12 +1029,15 @@ test("edge input stays authoritative, reserved-block change conflicts, and Rejec
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
     });
     assert.equal(chapter.chapter.current_revision.body, EDGE_BODY);
-    const conflicted = await getProposal({
+    const edged = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
     });
-    assert.equal(conflicted.proposal.validation, "conflicted");
-    assert.equal(conflicted.proposal.candidate_text, INLINE_CANDIDATE);
+    assert.notEqual(edged.proposal.revision_id, opened.proposal.revision_id);
+    assert.deepEqual([edged.proposal.validation, edged.proposal.validation_receipt.kind === "present"
+      && edged.proposal.validation_receipt.result, edged.proposal.base_authoritative_revision_id],
+    ["valid", "valid", opened.proposal.base_authoritative_revision_id]);
+    assert.equal(edged.proposal.candidate_text, INLINE_CANDIDATE);
     const second = await prepare(started.baseUrl, id("e08a11"), "Inline Reject Novel", "e08b");
     const openedSecond = await openInline(
       started.baseUrl, second.fetchImpl, second.projectId, second.chapterId, "e08c",
@@ -2295,22 +2115,10 @@ async function conflictAndReplan(
   headRevisionId: string,
   ns: string,
 ) {
-  if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
-  const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}1`),
-      proposal_revision_id: opened.proposal.revision_id,
-      validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
-      selected_operation_ids: [opened.proposal.operation_id],
-      expected_authoritative_revision_id: headRevisionId,
-      editor_session_id: writer.session.editor_session.editor_session_id } };
-  const conflicted = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
-    await digestAcceptProposal(acceptance), id(`${ns}2`), (antiForgery) => acceptProposal({
-      ...options, proposalId: opened.proposal.proposal_id, request: acceptance, antiForgery,
-      idempotencyKey: id(`${ns}2`) }));
-  assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
+  // An Acceptance on the moved head applies (ADR 0064), so a fixture makes the Proposal Conflict.
+  const { conflictRef } = await seedAcceptanceCondition(options.baseUrl, options.fetchImpl, options.projectId,
+    opened.proposal, writer.session.editor_session.editor_session_id, headRevisionId, "proposal_conflict", ns);
   const afterConflict = await getProposal({ ...options, proposalId: opened.proposal.proposal_id });
-  const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
   assert.deepEqual(afterConflict.proposal.source_condition,
     { kind: "proposal_conflict", proposal_conflict_ref: conflictRef });
   const rows = await bindingRows(opened.proposal.proposal_id);
@@ -2536,16 +2344,27 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
       assert.deepEqual(bound.proposal_anchors.filter((row) => row.proposal_revision_id === restoredId),
         conflictRows.proposal_anchors.map((row) => ({ ...row, proposal_revision_id: restoredId })));
       if (path === "explicit") {
-        // The explicit candidate edit succeeds. Its validation is conflicted because the head moved.
+        // The explicit candidate edit and its Undo validate against the old base, so both stay valid.
         const explicit = replaceUnit(5, 5, "xx", writer, `${ns}5`, restoredId);
         explicit.proposal_target = { proposal_id: restored.proposal.proposal_id,
           operation_id: restored.proposal.operation_id, revision_id: restoredId,
           manuscript_block_id: restored.proposal.manuscript_block_id };
-        assert.equal((await send(explicit, id(`${ns}56`))).effect.kind, "proposal_revised");
+        const edited = await send(explicit, id(`${ns}56`));
+        if (edited.effect.kind !== "proposal_revised") throw new Error("expected proposal_revised");
         const targeted = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
         assert.equal(targeted.candidate_text, "narraxxtor tone");
-        assert.equal(targeted.validation, "conflicted");
+        assert.equal(targeted.validation, "valid");
         assert.deepEqual(targeted.anchors, afterConflict.proposal.anchors);
+        const editUndo = undoRequestFor(writer, head, edited.effect.author_action_sequence, `${ns}6`);
+        const editUndone = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+          "/api/v1/projects/{project_id}/author-actions/undo", editUndo.command_schema,
+          await digestUndoLatestAuthorAction(editUndo), id(`${ns}672`), (antiForgery) => undoLatestAuthorAction({
+            ...options, request: editUndo, antiForgery, idempotencyKey: id(`${ns}672`) }));
+        assert.equal(editUndone.effect.kind, "compensated");
+        const reverted = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+        assert.equal(reverted.revision_id, editUndone.proposal_revision_id);
+        assert.deepEqual([reverted.candidate_text, reverted.validation, reverted.base_authoritative_revision_id],
+          [restored.proposal.candidate_text, "valid", opened.proposal.base_authoritative_revision_id]);
         continue;
       }
       const again = await conflictAndReplan(options, restored, writer, head, `${ns}9`);

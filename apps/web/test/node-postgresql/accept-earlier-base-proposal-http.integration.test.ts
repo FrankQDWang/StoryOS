@@ -1,87 +1,17 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { acceptProposal, digestAcceptProposal, digestExportProjectArchive, digestRejectProposalOperations,
-  digestUndoLatestAuthorAction, exportProjectArchive, getChapter, getExportOperation, getProposal,
-  rejectProposalOperations, undoLatestAuthorAction,
+import { digestExportProjectArchive, digestUndoLatestAuthorAction, exportProjectArchive, getChapter,
+  getExportOperation, getProposal, undoLatestAuthorAction,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest, RejectProposalOperationsRequest, UndoLatestAuthorActionRequest,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { UndoLatestAuthorActionRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { zipStoreFiles } from "../support/archive.ts";
-import { BINDING, REVISED, admitProse, advanceChapterHead, challenged, drainLeftoverWork, id,
-  prepare, reviseCandidate, seedAcceptanceCondition, settleOnce, startRealServer } from "../support/acceptance.ts";
+import { BINDING, REVISED, accept, acceptRequest, advanceChapterHead, challenged, drainLeftoverWork, id,
+  openedBlockProposal, reject, seedAcceptanceCondition, settleOnce, startRealServer } from "../support/acceptance.ts";
 
 const AUTHOR_TEXT = "The author rewrote this paragraph after the Proposal opened.";
-
-type Started = Awaited<ReturnType<typeof startRealServer>>;
-
-/** A valid Block Proposal Revision on the Chapter Head H0. */
-async function openedBlockProposal(started: Started, ns: string) {
-  const prepared = await prepare(started.baseUrl, id(`${ns}0011`), "Earlier Base Novel", `${ns}02`);
-  const queried = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId,
-    prepared.chapterId, id(`${ns}0031`));
-  if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
-    throw new Error("expected opened prose");
-  }
-  const opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-    proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
-  const { session, revised } = await reviseCandidate(started.baseUrl, prepared.fetchImpl,
-    prepared.projectId, opened, `${ns}04`);
-  if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected validation");
-  const base = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-    chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
-  assert.equal(revised.proposal.base_authoritative_revision_id, base.chapter.current_revision.revision_id);
-  const history = async () => queryPostgres(`SELECT jsonb_build_object(
-    'revisions', (SELECT jsonb_agg(to_jsonb(record) ORDER BY record.revision_id) FROM storyos.proposal_revisions AS record
-      WHERE project_id = '${prepared.projectId}'::uuid),
-    'validations', (SELECT jsonb_agg(to_jsonb(record) ORDER BY record.validation_receipt_id)
-      FROM storyos.validation_receipts AS record WHERE project_id = '${prepared.projectId}'::uuid))::text`);
-  return { prepared, session, revised: revised.proposal, base: base.chapter, history,
-    validationReceiptId: revised.proposal.validation_receipt.validation_receipt_id };
-}
-
-function acceptRequest(opened: Awaited<ReturnType<typeof openedBlockProposal>>, expectedRevisionId: string,
-  correlation: string): AcceptProposalRequest {
-  return {
-    command_schema: "storyos.command.accept-proposal.request.v1",
-    accept_proposal_input: {
-      proposal_revision_id: opened.revised.revision_id, validation_receipt_id: opened.validationReceiptId,
-      selected_operation_ids: [opened.revised.operation_id], expected_authoritative_revision_id: expectedRevisionId,
-      editor_session_id: opened.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(correlation),
-    },
-  };
-}
-
-async function accept(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  request: AcceptProposalRequest, key: string) {
-  const options = { baseUrl: started.baseUrl, projectId: opened.prepared.projectId,
-    proposalId: opened.revised.proposal_id, fetchImpl: opened.prepared.fetchImpl, idempotencyKey: id(key), request };
-  let nonce = "";
-  const accepted = await challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", request.command_schema,
-    await digestAcceptProposal(request), id(key), (antiForgery) => acceptProposal({ ...options, antiForgery: (nonce = antiForgery) }));
-  return { accepted, replay: () => acceptProposal({ ...options, antiForgery: nonce }) };
-}
-
-async function reject(started: Started, opened: Awaited<ReturnType<typeof openedBlockProposal>>,
-  headRevisionId: string, key: string) {
-  const request: RejectProposalOperationsRequest = {
-    command_schema: "storyos.command.reject-proposal-operations.request.v1",
-    reject_proposal_operations_input: { ...BINDING, correlation_id: id(`${key}1`),
-      editor_session_id: opened.session.editor_session.editor_session_id,
-      proposal_revision_id: opened.revised.revision_id,
-      selected_pending_operation_ids: [opened.revised.operation_id],
-      expected_target_revisions: [headRevisionId],
-      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } } },
-  };
-  return challenged(started.baseUrl, opened.prepared.fetchImpl, opened.prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", request.command_schema,
-    await digestRejectProposalOperations(request), id(`${key}2`), (antiForgery) => rejectProposalOperations({
-      baseUrl: started.baseUrl, projectId: opened.prepared.projectId, proposalId: opened.revised.proposal_id,
-      request, fetchImpl: opened.prepared.fetchImpl, antiForgery, idempotencyKey: id(`${key}2`) }));
-}
 
 test("Acceptance on an earlier base replaces the Block text, survives a restart, and Author Undo restores the author text", async () => {
   let started = await startRealServer();
