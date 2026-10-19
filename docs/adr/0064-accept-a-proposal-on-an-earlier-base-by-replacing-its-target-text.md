@@ -43,7 +43,8 @@ The tickets of the specification deliver this decision in parts:
 
 - [Accept a Block Proposal on an Earlier Base by Replacing Its Block Text](https://github.com/FrankQDWang/StoryOS/issues/1218) delivers the rule for a Block Proposal. This is steps 1, 2, and 5, the records, the readers, and the response.
 - [Accept an Inline Proposal on an Earlier Base by Its Proven Range or Base Block Text](https://github.com/FrankQDWang/StoryOS/issues/1219) delivers the rule for an Inline Proposal. This is steps 3 and 4 and the Author Undo rule of an Inline replacement. The record type and migration 0095 already permit `proven_range` and `base_block_replacement`, so it adds no migration.
-- The candidate edit writers and the editor change come in their own tickets of the specification.
+- The editor change comes in its own ticket of the specification.
+- [Validate a Candidate Edit Against Its Own Base So the Proposal Stays Acceptable](https://github.com/FrankQDWang/StoryOS/issues/1220) delivers the candidate edit rule. A candidate edit and its Compensation at Author Undo validate against their own base. The same rule applies to the Proposal Revision of a flat edit at an Inline Anchor edge.
 
 ## Replaced rules
 

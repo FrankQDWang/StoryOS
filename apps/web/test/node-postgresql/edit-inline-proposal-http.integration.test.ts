@@ -1004,7 +1004,7 @@ test.each(["paragraph", "heading"] as const)("inline Acceptance preserves comple
   }
 });
 
-test("edge input stays authoritative, reserved-block change conflicts, and Reject leaves prose", async () => {
+test("edge input stays authoritative, the Proposal Revision stays valid on its base, and Reject leaves prose", async () => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
@@ -1029,12 +1029,15 @@ test("edge input stays authoritative, reserved-block change conflicts, and Rejec
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
     });
     assert.equal(chapter.chapter.current_revision.body, EDGE_BODY);
-    const conflicted = await getProposal({
+    const edged = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
     });
-    assert.equal(conflicted.proposal.validation, "conflicted");
-    assert.equal(conflicted.proposal.candidate_text, INLINE_CANDIDATE);
+    assert.notEqual(edged.proposal.revision_id, opened.proposal.revision_id);
+    assert.deepEqual([edged.proposal.validation, edged.proposal.validation_receipt.kind === "present"
+      && edged.proposal.validation_receipt.result, edged.proposal.base_authoritative_revision_id],
+    ["valid", "valid", opened.proposal.base_authoritative_revision_id]);
+    assert.equal(edged.proposal.candidate_text, INLINE_CANDIDATE);
     const second = await prepare(started.baseUrl, id("e08a11"), "Inline Reject Novel", "e08b");
     const openedSecond = await openInline(
       started.baseUrl, second.fetchImpl, second.projectId, second.chapterId, "e08c",
@@ -2341,16 +2344,27 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
       assert.deepEqual(bound.proposal_anchors.filter((row) => row.proposal_revision_id === restoredId),
         conflictRows.proposal_anchors.map((row) => ({ ...row, proposal_revision_id: restoredId })));
       if (path === "explicit") {
-        // The explicit candidate edit succeeds. Its validation is conflicted because the head moved.
+        // The explicit candidate edit and its Undo validate against the old base, so both stay valid.
         const explicit = replaceUnit(5, 5, "xx", writer, `${ns}5`, restoredId);
         explicit.proposal_target = { proposal_id: restored.proposal.proposal_id,
           operation_id: restored.proposal.operation_id, revision_id: restoredId,
           manuscript_block_id: restored.proposal.manuscript_block_id };
-        assert.equal((await send(explicit, id(`${ns}56`))).effect.kind, "proposal_revised");
+        const edited = await send(explicit, id(`${ns}56`));
+        if (edited.effect.kind !== "proposal_revised") throw new Error("expected proposal_revised");
         const targeted = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
         assert.equal(targeted.candidate_text, "narraxxtor tone");
-        assert.equal(targeted.validation, "conflicted");
+        assert.equal(targeted.validation, "valid");
         assert.deepEqual(targeted.anchors, afterConflict.proposal.anchors);
+        const editUndo = undoRequestFor(writer, head, edited.effect.author_action_sequence, `${ns}6`);
+        const editUndone = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+          "/api/v1/projects/{project_id}/author-actions/undo", editUndo.command_schema,
+          await digestUndoLatestAuthorAction(editUndo), id(`${ns}672`), (antiForgery) => undoLatestAuthorAction({
+            ...options, request: editUndo, antiForgery, idempotencyKey: id(`${ns}672`) }));
+        assert.equal(editUndone.effect.kind, "compensated");
+        const reverted = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+        assert.equal(reverted.revision_id, editUndone.proposal_revision_id);
+        assert.deepEqual([reverted.candidate_text, reverted.validation, reverted.base_authoritative_revision_id],
+          [restored.proposal.candidate_text, "valid", opened.proposal.base_authoritative_revision_id]);
         continue;
       }
       const again = await conflictAndReplan(options, restored, writer, head, `${ns}9`);

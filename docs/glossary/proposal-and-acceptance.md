@@ -93,7 +93,7 @@ The condition in which an exact Proposal Revision violates its own schema, Opera
 _Avoid_: Proposal Conflict, creator error message, low confidence
 
 **Proposal Conflict**:
-The Core-produced `conflicted` condition on the validation axis of a well-formed Proposal Revision, separate from the Receipt or Event that finds it. It occurs when StoryOS cannot prove the exact target, base Revision, Anchor, or preconditions against current Authoritative State. Any change of a referenced target Revision causes it, also outside the proposed range. StoryOS never changes the old Revision or rebases it in place. It does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+The Core-produced `conflicted` condition on the validation axis of a well-formed Proposal Revision, separate from the Receipt or Event that finds it. It occurs when StoryOS cannot prove the exact target, base Revision, Anchor, or preconditions against current Authoritative State. Any change of a referenced target Revision causes it, also outside the proposed range, but a candidate edit validates against its own base. StoryOS never changes the old Revision or rebases it in place. It does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:

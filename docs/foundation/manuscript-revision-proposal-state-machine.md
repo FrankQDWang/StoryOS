@@ -346,6 +346,11 @@ starts validation at `pending`; Core may record an immediately proven
 structural conflict in the same Transition. Closure never rewrites Operation
 resolution, and resolution never rewrites Retention.
 
+A candidate edit and its Compensation at Author Undo validate against their own
+base. The same rule applies to the Proposal Revision of a flat edit at an Inline
+Anchor edge. A Chapter Head that moved after that base does not make these
+Revisions `conflicted` (ADR 0064).
+
 ### 6.5 Validation and conflict
 
 Proposal Invalidity means an exact Proposal Revision violates its own schema,
@@ -536,8 +541,9 @@ Operation can be the primary or a secondary Operation
 The `expected_proposal_heads` of the edit contains the complete observed chapter Head set,
 including the selected Revision. Each unit has one `ReplaceSelection` with
 candidate-relative UTF-16 coordinates. Core revises only that Proposal and
-Operation; the Authoritative Head does not advance. A stale or mismatched
-target cannot fall back to Authoritative input.
+Operation. The Authoritative Head does not advance. The new Proposal Revision
+keeps the base of its parent and validates against that base. A stale or
+mismatched target cannot fall back to Authoritative input.
 
 Ordinary Block input leaves
 `proposal_target` absent and uses the versioned Block primitives. The same
