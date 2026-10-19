@@ -35,7 +35,7 @@ import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
 } from "./journal-working-set.ts";
 
-export const JOURNAL_DATABASE_VERSION = 4;
+export const JOURNAL_DATABASE_VERSION = 5;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -629,6 +629,8 @@ export async function validateJournalSnapshot(
       || record.local_intent_sequence <= priorSequence
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
+      // This client writes no record that follows an unsettled group.
+      || Object.hasOwn(record, "follows_submission_group")
       || (record.retry_source?.kind !== "fresh_editor_intent" && !validDraftRetry(record.retry_source))
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION

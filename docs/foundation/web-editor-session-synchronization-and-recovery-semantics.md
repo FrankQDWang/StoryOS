@@ -262,6 +262,10 @@ CompletedIntentRecord {
 
   payload_chain_ref
   payload_digest
+  projection_dependency { snapshot_id, prior_sequence }
+  follows_submission_group (optional, version 5) {
+    journal_submission_group_id
+  }
   created_at
 }
 
@@ -288,6 +292,26 @@ ExplicitEditorCommandRecord {
 selection list. It contains no action class, request contract, idempotency key,
 challenge, Command, or Admission. The journal cannot choose authoritative
 versus Proposal routing.
+
+IndexedDB version 5 adds only the optional `follows_submission_group` binding.
+A record without it binds its stored base fields, as in version 4. A record with
+it follows the unsettled group G. Its base fields then record the projection base
+at append time, and they are not its submission binding. Its submission binds the
+installed base Snapshot and the authoritative heads of G when G applies.
+
+The editor of this version writes no such record. A reader that finds one stops input
+and enters read-only local recovery.
+
+The version 5 upgrade runs in one version-change transaction. It keeps each
+version 4 row under its primary key with its bytes, and it writes only the schema
+version. Thus a version 4 Journal with one unsettled group has the same meaning
+at version 5. A version 3 Journal first gets the version 4 working index in the
+same transaction.
+
+A Journal that cannot upgrade keeps its earlier version and each
+row, and the editor enters read-only local recovery with `needs_attention`. The
+readable export of the Server text stays available. The local text stays in the
+earlier Journal, so a later reader can open it.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,
@@ -329,7 +353,7 @@ the exact Proposal target, and retains the complete observed Proposal Head set.
 Its patches contain one `ReplaceSelection` primitive per intent. Candidate
 patches never change the authoritative Chapter projection.
 
-These optional fields extend the existing IndexedDB version 4 record shape.
+These optional fields extend the IndexedDB version 4 record shape, and version 5 keeps them.
 Existing records without them retain their authoritative checkpoint behavior;
 they are not assigned a candidate target during recovery. A candidate record
 with a missing target, missing head set, or inconsistent checkpoint fails

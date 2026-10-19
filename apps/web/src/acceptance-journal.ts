@@ -1,6 +1,7 @@
 import { digestAcceptProposal, digestRejectProposalOperations } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, AcceptProposalResponse, BlockProposalInspect, DigestValue, ProjectScope, RejectProposalOperationsRequest, RejectProposalOperationsResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
+import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 
 export function decisionMembers(decision: { operation_id: string; operation_ids?: string[] }): string[] {
   return decision.operation_ids ?? [decision.operation_id];
@@ -567,7 +568,7 @@ async function commitFlight(workspace: EditorReadyState,
     transaction.abort();
     throw new Error("Acceptance session is closed");
   }
-  if (schema?.version !== 4
+  if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || flight.journal_partition_id !== workspace.partition.journal_partition_id
     || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
