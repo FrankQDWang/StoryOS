@@ -18,7 +18,6 @@ export function recoveryStatus(proposal: BlockProposalInspect,
   const refused = posture === "blocked" || (refusal.kind === "present"
     && (refusal.reason === "stale_writer" || refusal.reason === "session_changed"));
   const sessionNote = posture === "current" ? "" : SESSION_NOTE;
-  if (condition === "proposal_conflict") return `正文已变化，候选文字尚未接受。${sessionNote}`;
   if (condition === "proposal_recovery_conflict") {
     return `候选文字的恢复材料冲突，正文保持不变。${sessionNote}`;
   }
