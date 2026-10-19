@@ -60,7 +60,7 @@ interface Stage1ViewProps {
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   /** The timers of the Editor Session writing controller. The default is the global timers. */
-  writingTimers?: ChallengeAdmissionTimers;
+  writingTimers?: ChallengeAdmissionTimers | undefined;
 }
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
