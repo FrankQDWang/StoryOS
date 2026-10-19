@@ -22,7 +22,7 @@ import { proposalConditionKind } from "./proposal-recovery-surface.ts";
 import { dropStoredReplans } from "./stored-replan-records.ts";
 import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
   pendingWithdrawIds } from "./withdraw-block-proposal.ts";
-import { ProposalDecisionStatus } from "./proposal-decision-status.tsx";
+import { ProposalDecisionStatus, type AcceptanceRefusalStatus } from "./proposal-decision-status.tsx";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
@@ -90,6 +90,8 @@ export function BlockProposalDisplay({
   const [discardHold, setDiscardHold] = useState(false);
   const [settlementRefresh, setSettlementRefresh] = useState(0);
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
+  // null: a later decision replaced the refusal, so the journal read does not bring it back.
+  const [acceptanceRefusals, setAcceptanceRefusals] = useState<Record<string, AcceptanceRefusalStatus | null>>({});
   const [knownProblems, setKnownProblems] = useState<Record<string, {
     status: number; code: string; message: string; terminal: boolean;
   }>>({});
@@ -133,6 +135,16 @@ export function BlockProposalDisplay({
     && acceptanceCheck.workspace === editorProps.persistWorkspace
     && acceptanceCheck.generation === decisionGeneration
     && recoveredProposalIds.every((id) => acceptanceCheck.proposalIds.split("|").includes(id));
+  const startDecision = (proposalId: string) => {
+    acceptingRef.current = true;
+    setAccepting(proposalId);
+    setAcceptanceRefusals((current) => ({ ...current, [proposalId]: null }));
+  };
+  // A refusal shows only for the Proposal Revision that it refused.
+  const currentRefusal = (proposalId: string, proposal: BlockProposalInspect | undefined) => {
+    const refusal = acceptanceRefusals[proposalId];
+    return refusal != null && refusal.revisionId === proposal?.revision_id ? refusal : undefined;
+  };
   const finishDecision = () => {
     acceptingRef.current = false;
     setAccepting(undefined);
@@ -258,6 +270,11 @@ export function BlockProposalDisplay({
             refused: "上次接受已被拒绝，候选文字仍保留。",
           }[settled.response.effect.kind];
         setDecisionMessages((current) => ({ [locator.proposalId]: message, ...current }));
+        if (settled.kind === "settled" && settled.response.effect.kind === "refused") {
+          const refusal = { revisionId: settled.response.receipt.proposal_revision_id,
+            reason: settled.response.effect.reason, earlier: true };
+          setAcceptanceRefusals((current) => ({ [locator.proposalId]: refusal, ...current }));
+        }
       }
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
@@ -416,8 +433,7 @@ export function BlockProposalDisplay({
       setSettlementRefresh((value) => value + 1);
       return;
     }
-    acceptingRef.current = true;
-    setAccepting(target.proposalId);
+    startDecision(target.proposalId);
     void (async () => {
       try {
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
@@ -473,6 +489,10 @@ export function BlockProposalDisplay({
             response.effect.authoritative_revision.revision_id);
         }
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
+        if (response.effect.kind === "refused") {
+          const refusal = { revisionId: target.revisionId, reason: response.effect.reason, earlier: false };
+          setAcceptanceRefusals((current) => ({ ...current, [target.proposalId]: refusal }));
+        }
         setSettlementRefresh((value) => value + 1);
         try { if (refresh) await onAccepted(); } catch {
           setDecisionMessages((current) => ({ ...current,
@@ -497,8 +517,7 @@ export function BlockProposalDisplay({
   const retryPending = (proposalId: string) => {
     const workspace = editorProps.persistWorkspace;
     if (acceptingRef.current || workspace === undefined) return;
-    acceptingRef.current = true;
-    setAccepting(proposalId);
+    startDecision(proposalId);
     void (async () => {
       try {
         const response = await retryPendingDisplayedAcceptance({
@@ -518,6 +537,11 @@ export function BlockProposalDisplay({
           refreshedAcceptance.current.add(proposalId);
           acceptDraftCandidates(scope, proposalId, response.receipt.selected_operation_ids,
             response.effect.authoritative_revision.revision_id);
+        }
+        if (response.effect.kind === "refused") {
+          const refusal = { revisionId: response.receipt.proposal_revision_id,
+            reason: response.effect.reason, earlier: false };
+          setAcceptanceRefusals((current) => ({ ...current, [proposalId]: refusal }));
         }
         if (refresh) await onAccepted();
         setSettlementRefresh((value) => value + 1);
@@ -555,8 +579,7 @@ export function BlockProposalDisplay({
       setSettlementRefresh((value) => value + 1);
       return;
     }
-    acceptingRef.current = true;
-    setAccepting(target.proposalId);
+    startDecision(target.proposalId);
     void (async () => {
       try {
         if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
@@ -612,8 +635,7 @@ export function BlockProposalDisplay({
   const retryRejection = (proposalId: string) => {
     const workspace = editorProps.persistWorkspace;
     if (acceptingRef.current || workspace === undefined) return;
-    acceptingRef.current = true;
-    setAccepting(proposalId);
+    startDecision(proposalId);
     void (async () => {
       try {
         const response = await retryPendingDisplayedRejection({
@@ -649,7 +671,7 @@ export function BlockProposalDisplay({
     baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
     cryptoImpl: editorProps.cryptoImpl, workspace: editorProps.persistWorkspace,
     authoritativeRevisionId,
-    markBusy: (proposalId: string) => { acceptingRef.current = true; setAccepting(proposalId); },
+    markBusy: startDecision,
     markIdle: finishDecision,
     report: (proposalId: string, message: string) => setDecisionMessages((current) =>
       ({ ...current, [proposalId]: message })),
@@ -743,6 +765,7 @@ export function BlockProposalDisplay({
           pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}
           pendingAcceptance={pendingAcceptances.includes(locator.proposalId)}
           decisionMessage={decisionMessages[locator.proposalId]}
+          acceptanceRefusal={currentRefusal(locator.proposalId, proposal)}
           acceptanceChecked={acceptanceChecked} retryDisabled={accepting !== undefined}
           onRetryPending={() => retryPending(locator.proposalId)}
           onRetryRejection={() => retryRejection(locator.proposalId)}

@@ -1,9 +1,18 @@
-import type { BlockProposalInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AcceptProposalRefusalReason, BlockProposalInspect }
+  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { recoveryStatus, type SessionPosture } from "./proposal-recovery-surface.ts";
+
+/** The Core refusal of the latest Acceptance of a Proposal Revision. `earlier` marks a refusal that the Local Edit Journal kept from an earlier page. */
+export type AcceptanceRefusalStatus = { revisionId: string; reason: AcceptProposalRefusalReason; earlier: boolean };
+
+function refusalText(refusal: AcceptanceRefusalStatus): string {
+  return refusal.reason === "missing_target" ? "目标段落已不在本章中，接受未生效。拒绝会关闭此候选。"
+    : `${refusal.earlier ? "上次" : "此次"}接受已被拒绝，候选文字仍保留。`;
+}
 
 export function ProposalDecisionStatus({
   proposalId, proposal, problem, rejectionResult, writerOpen, sessionBlocked,
-  pendingRejection, pendingWithdraw, pendingAcceptance, decisionMessage,
+  pendingRejection, pendingWithdraw, pendingAcceptance, decisionMessage, acceptanceRefusal,
   acceptanceChecked, retryDisabled, onRetryPending, onRetryRejection, onRetryWithdraw,
 }: {
   proposalId: string;
@@ -16,6 +25,8 @@ export function ProposalDecisionStatus({
   pendingWithdraw: boolean;
   pendingAcceptance: boolean;
   decisionMessage: string | undefined;
+  /** Only a refusal of the current Proposal Revision. */
+  acceptanceRefusal: AcceptanceRefusalStatus | undefined;
   acceptanceChecked: boolean;
   retryDisabled: boolean;
   onRetryPending: () => void;
@@ -39,7 +50,8 @@ export function ProposalDecisionStatus({
                 ? !acceptanceChecked ? "正在同步正文。"
                   : decisionMessage?.includes("请刷新") ? decisionMessage : undefined
                 : proposal === undefined ? decisionMessage
-                  : recoveryStatus(proposal, posture);
+                  : recoveryStatus(proposal, posture)
+                    ?? (acceptanceRefusal === undefined ? undefined : refusalText(acceptanceRefusal));
   if (message === undefined) return null;
   return (
     <p data-proposal-decision={proposalId} role="status">
