@@ -25,8 +25,8 @@ import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, seedAcceptanceCondition, settleOnce, startRealServer } from "../support/acceptance.ts";
 
 import { admitCandidateRevision } from "../support/candidate-revision.ts";
-import { INLINE_CANDIDATE, SOURCE_SLICE, admitPhrase, openInline, phraseRequest, replaceUnit, sliceDigest,
-  writePassage } from "../support/inline-proposal.ts";
+import { INLINE_CANDIDATE, SOURCE_SLICE, acceptInline, admitPhrase, openInline, phraseRequest, replaceUnit,
+  sliceDigest, writePassage } from "../support/inline-proposal.ts";
 
 function problemOf(error: unknown): { status: number | undefined; code: unknown } {
   const protocol = requireStoryOSProtocolError(error);
@@ -1038,6 +1038,11 @@ test("edge input stays authoritative, the Proposal Revision stays valid on its b
       && edged.proposal.validation_receipt.result, edged.proposal.base_authoritative_revision_id],
     ["valid", "valid", opened.proposal.base_authoritative_revision_id]);
     assert.equal(edged.proposal.candidate_text, INLINE_CANDIDATE);
+    const accepted = await acceptInline({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      fetchImpl: prepared.fetchImpl }, writer, edged.proposal, chapter.chapter.current_revision.revision_id, "e08f");
+    if (accepted.effect.kind !== "applied") throw new Error(`expected applied, got ${JSON.stringify(accepted.effect)}`);
+    assert.deepEqual([accepted.effect.target_resolution, accepted.effect.authoritative_revision.body],
+      ["proven_range", EDGE_BODY.replace(SOURCE_SLICE, INLINE_CANDIDATE)]);
     const second = await prepare(started.baseUrl, id("e08a11"), "Inline Reject Novel", "e08b");
     const openedSecond = await openInline(
       started.baseUrl, second.fetchImpl, second.projectId, second.chapterId, "e08c",
@@ -2298,7 +2303,7 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    for (const [index, path] of ["explicit", "replan"].entries()) {
+    for (const [index, path] of ["explicit", "replan", "explicit_undo"].entries()) {
       const ns = `dc1dc${index}`;
       const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Inline Replan Undo", `${ns}02`);
       const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
@@ -2343,8 +2348,8 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
         beforeUndo.proposal_anchors);
       assert.deepEqual(bound.proposal_anchors.filter((row) => row.proposal_revision_id === restoredId),
         conflictRows.proposal_anchors.map((row) => ({ ...row, proposal_revision_id: restoredId })));
-      if (path === "explicit") {
-        // The explicit candidate edit and its Undo validate against the old base, so both stay valid.
+      if (path !== "replan") {
+        // The explicit candidate edit and its Undo validate against the old base, and Acceptance applies.
         const explicit = replaceUnit(5, 5, "xx", writer, `${ns}5`, restoredId);
         explicit.proposal_target = { proposal_id: restored.proposal.proposal_id,
           operation_id: restored.proposal.operation_id, revision_id: restoredId,
@@ -2355,6 +2360,16 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
         assert.equal(targeted.candidate_text, "narraxxtor tone");
         assert.equal(targeted.validation, "valid");
         assert.deepEqual(targeted.anchors, afterConflict.proposal.anchors);
+        const acceptApplied = async (proposal: typeof targeted, candidate: string) => {
+          const accepted = await acceptInline(options, writer, proposal, head, `${ns}e`);
+          if (accepted.effect.kind !== "applied") throw new Error(`expected applied, got ${JSON.stringify(accepted.effect)}`);
+          assert.deepEqual([accepted.effect.target_resolution, accepted.effect.authoritative_revision.body],
+            ["proven_range", `${PROSE.slice(0, 10)}${candidate}!${PROSE.slice(24)}`]);
+        };
+        if (path === "explicit") {
+          await acceptApplied(targeted, "narraxxtor tone");
+          continue;
+        }
         const editUndo = undoRequestFor(writer, head, edited.effect.author_action_sequence, `${ns}6`);
         const editUndone = await challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
           "/api/v1/projects/{project_id}/author-actions/undo", editUndo.command_schema,
@@ -2365,6 +2380,7 @@ test("Undo of an Inline Replan restores the Anchor set of the old base, and the 
         assert.equal(reverted.revision_id, editUndone.proposal_revision_id);
         assert.deepEqual([reverted.candidate_text, reverted.validation, reverted.base_authoritative_revision_id],
           [restored.proposal.candidate_text, "valid", opened.proposal.base_authoritative_revision_id]);
+        await acceptApplied(reverted, restored.proposal.candidate_text);
         continue;
       }
       const again = await conflictAndReplan(options, restored, writer, head, `${ns}9`);
