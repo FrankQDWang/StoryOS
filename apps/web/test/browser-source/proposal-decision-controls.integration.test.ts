@@ -1,7 +1,10 @@
 import { act } from "react";
 import { expect, it } from "vitest";
-import { digestAcceptProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { digestAcceptProposal, digestRejectProposalOperations }
+  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AcceptProposalEffect, AcceptProposalRequest, RejectProposalOperationsRequest }
+  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import rejectionFixture from "../../../../generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json";
 import type { EditorReadyState } from "../../src/editor-types.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { candidateFor, proposalTransport, renderTab, withActEnvironment, type Proposal }
@@ -11,6 +14,7 @@ import { jsonResponse, requestResult } from "./scenario.ts";
 const EARLIER_BASE = "018f0000-0000-7001-8000-000000000e01";
 const CONDITION = "018f0000-0000-7001-8000-000000000e02";
 const NOTE = "正文已变化。接受会用候选文字替换目标的当前文字。";
+const MISSING_TARGET = "目标段落已不在本章中，接受未生效。拒绝会关闭此候选。";
 
 type Sent = { path: string; body: string };
 
@@ -35,7 +39,60 @@ async function display(workspace: EditorReadyState, proposal: Proposal, other?: 
     editable: card()?.getAttribute("contenteditable") !== "false",
     note: card()?.querySelector("[data-proposal-earlier-base]")?.textContent ?? null,
   });
-  return { tab, sent, card, controls };
+  const status = () => tab.host.querySelector(`[data-proposal-decision="${proposal.proposal_id}"]`)?.textContent ?? null;
+  return { tab, sent, card, controls, status };
+}
+
+// Answers each Acceptance with the next effect of the list.
+function answerAcceptance(workspace: EditorReadyState, proposal: Proposal, effects: AcceptProposalEffect[]): typeof fetch {
+  const next = [...effects];
+  return async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith("/anti-forgery-challenges")) {
+      return jsonResponse({ nonce: "b".repeat(64), expires_at: "2026-12-13T08:05:00.000Z" });
+    }
+    const effect = next.shift();
+    if (!path.endsWith("/acceptances") || effect === undefined) return jsonResponse({ code: "service_unavailable" }, 503);
+    const request = JSON.parse(String(init?.body)) as AcceptProposalRequest;
+    const input_ = request.accept_proposal_input;
+    return jsonResponse({ schema_id: "storyos.command.accept-proposal.response.v1",
+      correlation_id: input_.correlation_id, project_scope: workspace.partition.project_scope,
+      command_id: "018f0000-0000-7001-8000-000000000e05", author_command_admission_id: "018f0000-0000-7001-8000-000000000e06",
+      receipt: { receipt_id: "018f0000-0000-7001-8000-000000000e07", project_scope: workspace.partition.project_scope,
+        command_digest: await digestAcceptProposal(request, crypto),
+        idempotency_key: new Headers(init?.headers).get("idempotency-key") ?? "",
+        author_command_admission_id: "018f0000-0000-7001-8000-000000000e06", proposal_id: proposal.proposal_id,
+        proposal_revision_id: input_.proposal_revision_id, validation_receipt_id: input_.validation_receipt_id,
+        selected_operation_ids: input_.selected_operation_ids,
+        prior_authoritative_revision_ids: [input_.expected_authoritative_revision_id],
+        resulting_authoritative_revision_ids: [input_.expected_authoritative_revision_id],
+        authoritative_commit_ids: [], condition_refs: [], result: effect.kind, created_at: "2026-10-18T08:00:00.000Z" },
+      project: { project_id: workspace.partition.project_scope.project_id, title: "Project A",
+        open: { kind: "current_chapter", current_chapter_id: workspace.session.base_snapshot.chapter_id } },
+      effect });
+  };
+}
+
+// Answers one Rejection that rejects the selected Operations and keeps the Proposal open.
+function answerRejection(workspace: EditorReadyState, proposal: Proposal): typeof fetch {
+  return async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith("/anti-forgery-challenges")) {
+      return jsonResponse({ nonce: "b".repeat(64), expires_at: "2026-12-13T08:05:00.000Z" });
+    }
+    if (!path.endsWith("/rejections")) return jsonResponse({ code: "service_unavailable" }, 503);
+    const request = JSON.parse(String(init?.body)) as RejectProposalOperationsRequest;
+    const input_ = request.reject_proposal_operations_input;
+    return jsonResponse({ ...rejectionFixture, correlation_id: input_.correlation_id,
+      project_scope: workspace.partition.project_scope,
+      effect: { ...rejectionFixture.effect, operation_ids: input_.selected_pending_operation_ids },
+      receipt: { ...rejectionFixture.receipt, project_scope: workspace.partition.project_scope,
+        command_digest: await digestRejectProposalOperations(request, crypto),
+        idempotency_key: new Headers(init?.headers).get("idempotency-key") ?? "", proposal_id: proposal.proposal_id,
+        proposal_revision_id: input_.proposal_revision_id,
+        selected_pending_operation_ids: input_.selected_pending_operation_ids,
+        expected_target_revisions: input_.expected_target_revisions } });
+  };
 }
 
 function withCondition(proposal: Proposal, kind: "proposal_conflict" | "proposal_recovery_conflict"): Proposal {
@@ -63,30 +120,7 @@ it("accepts a Block Proposal on an earlier base with one click and keeps Accept 
   const test = await openJournalAppendTestWorkspace();
   const proposal = { ...candidateFor(test.workspace), base_authoritative_revision_id: EARLIER_BASE };
   const workspace = test.workspace;
-  const accept: typeof fetch = async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith("/anti-forgery-challenges")) {
-      return jsonResponse({ nonce: "b".repeat(64), expires_at: "2026-12-13T08:05:00.000Z" });
-    }
-    if (!path.endsWith("/acceptances")) return jsonResponse({ code: "service_unavailable" }, 503);
-    const request = JSON.parse(String(init?.body)) as AcceptProposalRequest;
-    const input_ = request.accept_proposal_input;
-    return jsonResponse({ schema_id: "storyos.command.accept-proposal.response.v1",
-      correlation_id: input_.correlation_id, project_scope: workspace.partition.project_scope,
-      command_id: "018f0000-0000-7001-8000-000000000e05", author_command_admission_id: "018f0000-0000-7001-8000-000000000e06",
-      receipt: { receipt_id: "018f0000-0000-7001-8000-000000000e07", project_scope: workspace.partition.project_scope,
-        command_digest: await digestAcceptProposal(request, crypto),
-        idempotency_key: new Headers(init?.headers).get("idempotency-key") ?? "",
-        author_command_admission_id: "018f0000-0000-7001-8000-000000000e06", proposal_id: proposal.proposal_id,
-        proposal_revision_id: input_.proposal_revision_id, validation_receipt_id: input_.validation_receipt_id,
-        selected_operation_ids: input_.selected_operation_ids,
-        prior_authoritative_revision_ids: [input_.expected_authoritative_revision_id],
-        resulting_authoritative_revision_ids: [input_.expected_authoritative_revision_id],
-        authoritative_commit_ids: [], condition_refs: [], result: "refused", created_at: "2026-10-18T08:00:00.000Z" },
-      project: { project_id: workspace.partition.project_scope.project_id, title: "Project A",
-        open: { kind: "current_chapter", current_chapter_id: workspace.session.base_snapshot.chapter_id } },
-      effect: { kind: "refused", reason: "missing_target" } });
-  };
+  const accept = answerAcceptance(workspace, proposal, [{ kind: "refused", reason: "missing_target" }]);
   const confirmed: string[] = [];
   const previousConfirm = window.confirm;
   window.confirm = (message) => { confirmed.push(String(message)); return true; };
@@ -106,6 +140,95 @@ it("accepts a Block Proposal on an earlier base with one click and keeps Accept 
       await shown.tab.unmount(); await test.close();
     }
   });
+});
+
+it("shows the missing target text after a refused Acceptance and keeps Accept and Reject", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const proposal = { ...candidateFor(test.workspace), base_authoritative_revision_id: EARLIER_BASE };
+  await withActEnvironment(async () => {
+    const shown = await display(test.workspace, proposal,
+      answerAcceptance(test.workspace, proposal, [{ kind: "refused", reason: "missing_target" }]));
+    try {
+      await expect.poll(() => shown.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+      expect(shown.status()).toBeNull();
+      await act(async () => { shown.card()?.querySelector<HTMLButtonElement>("button[data-proposal-accept]")?.click(); });
+      await expect.poll(() => shown.status()).toBe(MISSING_TARGET);
+      expect({ accept: shown.controls().accept, reject: shown.controls().reject, failures: shown.tab.failures })
+        .toEqual({ accept: 1, reject: 1, failures: [] });
+    } finally {
+      await shown.tab.unmount(); await test.close();
+    }
+  });
+});
+
+it("keeps the refusal text of a refused Acceptance through a reload until the next decision", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const workspace = test.workspace;
+  const proposal = { ...candidateFor(workspace), base_authoritative_revision_id: EARLIER_BASE };
+  try {
+    await withActEnvironment(async () => {
+      const first = await display(workspace, proposal,
+        answerAcceptance(workspace, proposal, [{ kind: "refused", reason: "not_eligible" }]));
+      try {
+        await expect.poll(() => first.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+        await act(async () => { first.card()?.querySelector<HTMLButtonElement>("button[data-proposal-accept]")?.click(); });
+        await expect.poll(() => first.status()).toBe("此次接受已被拒绝，候选文字仍保留。");
+        expect({ accept: first.controls().accept, reject: first.controls().reject })
+          .toEqual({ accept: 1, reject: 1 });
+      } finally {
+        await first.tab.unmount();
+      }
+      // A reload: the Local Edit Journal keeps the refused Acceptance, getProposal does not.
+      const reloaded = await display(workspace, proposal, answerRejection(workspace, proposal));
+      try {
+        await expect.poll(() => reloaded.status()).toBe("上次接受已被拒绝，候选文字仍保留。");
+        expect({ accept: reloaded.controls().accept, reject: reloaded.controls().reject })
+          .toEqual({ accept: 1, reject: 1 });
+        // The next decision: a Rejection that keeps the Proposal open, as a Rejection of some Operations does.
+        await act(async () => { reloaded.card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]")?.click(); });
+        await expect.poll(() => reloaded.sent.filter(({ path }) => path.endsWith("/rejections")).length).toBe(1);
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+        expect({ status: reloaded.status(), failures: [...first.tab.failures, ...reloaded.tab.failures] })
+          .toEqual({ status: null, failures: [] });
+      } finally {
+        await reloaded.tab.unmount();
+      }
+    });
+  } finally {
+    await test.close();
+  }
+});
+
+it("does not show the refusal text of an earlier Proposal Revision", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const workspace = test.workspace;
+  const proposal = { ...candidateFor(workspace), base_authoritative_revision_id: EARLIER_BASE };
+  try {
+    await withActEnvironment(async () => {
+      const first = await display(workspace, proposal,
+        answerAcceptance(workspace, proposal, [{ kind: "refused", reason: "missing_target" }]));
+      try {
+        await expect.poll(() => first.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+        await act(async () => { first.card()?.querySelector<HTMLButtonElement>("button[data-proposal-accept]")?.click(); });
+        await expect.poll(() => first.status()).toBe(MISSING_TARGET);
+      } finally {
+        await first.tab.unmount();
+      }
+      // A reload after a candidate edit in another tab: getProposal gives a new Proposal Revision.
+      const revised = { ...proposal, revision_id: "018f0000-0000-7001-8000-000000000e08" };
+      const reloaded = await display(workspace, revised);
+      try {
+        await expect.poll(() => reloaded.card()?.getAttribute("data-proposal-revision-id")).toBe(revised.revision_id);
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+        expect({ status: reloaded.status(), failures: [...first.tab.failures, ...reloaded.tab.failures] })
+          .toEqual({ status: null, failures: [] });
+      } finally {
+        await reloaded.tab.unmount();
+      }
+    });
+  } finally {
+    await test.close();
+  }
 });
 
 it("shows an Inline Proposal on an earlier base in its candidate card with Accept, Reject, candidate editing, and the note", async () => {
