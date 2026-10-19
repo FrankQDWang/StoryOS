@@ -22,12 +22,12 @@ it("shows the Proposal of the open Proposal list in a second tab that has no loc
   });
 });
 
-it.each<[string, OpenProposalListAnswer, string]>([
-  ["failed", "failed", "the Chapter Head"],
-  ["truncated", { proposals: [], completeness: "truncated" }, "the Chapter Head"],
-  ["failed", "failed", "an earlier base"],
-  ["truncated", { proposals: [], completeness: "truncated" }, "an earlier base"],
-])("keeps the decision controls unavailable when the open Proposal list is %s for a Proposal on %s", async (_, list, base) => {
+it.each<[string, string, OpenProposalListAnswer]>([
+  ["failed", "the Chapter Head", "failed"],
+  ["truncated", "the Chapter Head", { proposals: [], completeness: "truncated" }],
+  ["failed", "an earlier base", "failed"],
+  ["truncated", "an earlier base", { proposals: [], completeness: "truncated" }],
+])("keeps the decision controls unavailable when the open Proposal list is %s for a Proposal on %s", async (_, base, list) => {
   const test = await openJournalAppendTestWorkspace();
   const proposal = { ...candidateFor(test.workspace), ...(base === "an earlier base"
     ? { base_authoritative_revision_id: "018f0000-0000-7001-8000-000000000e01" } : {}) };
