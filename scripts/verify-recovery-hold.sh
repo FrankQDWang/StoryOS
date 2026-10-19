@@ -209,9 +209,9 @@ start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$prima
 # A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so
 # they retain no condition (ADR 0064).
 # Mixed also retains the five Inline Replan conditions of the Inline Proposal HTTP test.
-# Mixed also retains the three conditions of its Inline Replan Undo cases.
+# Mixed also retains the four conditions of its Inline Replan Undo cases.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=10
+  acceptance_condition_count=11
 else
   acceptance_condition_count=2
 fi
