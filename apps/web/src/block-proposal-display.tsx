@@ -290,6 +290,9 @@ export function BlockProposalDisplay({
   }
   const projections: BlockProposalProjection[] = [];
   const unavailable: ProposalRead[] = [];
+  // A Proposal whose target Block is not in the Chapter Head has no candidate projection. The author can only reject it (ADR 0064).
+  const absentTargets: { proposalId: string; operationId: string; blockId: string; text: string;
+    rejectEligible: boolean; retryRejection: boolean }[] = [];
   const allHeadsKnown = recoveryChecked && openList.kind === "listed" && openList.complete
     && reads.length === effectiveLocators.length
     && reads.every((item) => item.proposal !== undefined);
@@ -316,18 +319,25 @@ export function BlockProposalDisplay({
     const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
     const inlineAnchor = proposal === undefined ? undefined
       : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
-    if (!anchored || proposal === undefined || operation === undefined) {
-      unavailable.push({ locator, proposal });
-      continue;
-    }
     const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
       && editorProps.persistWorkspace.session.writer.kind === "current_writer";
-    const sessionBlocked = sessionBlockedIds.includes(proposal.proposal_id);
-    const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
-    const localText = candidateText(proposal, operation.operation_id);
-    const controlsReady = allHeadsKnown && acceptanceChecked && !recoveryUnavailable
+    const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
+    const controlsReady = proposal !== undefined && allHeadsKnown && acceptanceChecked && !recoveryUnavailable
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id;
+    if (!anchored || proposal === undefined || operation === undefined) {
+      unavailable.push({ locator, proposal });
+      if (proposal !== undefined && operation !== undefined && safeToProject
+        && !blockCounts.has(operation.manuscript_block_id)) {
+        absentTargets.push({ proposalId: proposal.proposal_id, operationId: operation.operation_id,
+          blockId: operation.manuscript_block_id, text: operation.candidate_text,
+          rejectEligible: controlsReady && proposal.closure === "open",
+          retryRejection: pendingRejections.includes(proposal.proposal_id) && accepting !== proposal.proposal_id });
+      }
+      continue;
+    }
+    const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
+    const localText = candidateText(proposal, operation.operation_id);
     const problem = knownProblems[proposal.proposal_id];
     const eligible = controlsReady
       && proposal.generation === "ready" && acceptableValidation(proposal.validation)
@@ -541,7 +551,7 @@ export function BlockProposalDisplay({
       return;
     }
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId
+    const projection = [...projections, ...absentTargets].find((item) => item.proposalId === target.proposalId
       && item.operationId === target.operationId);
     const workspace = editorProps.persistWorkspace;
     if (displayed === undefined || workspace === undefined
@@ -762,6 +772,13 @@ export function BlockProposalDisplay({
               : pendingAcceptances.includes(locator.proposalId)
                 ? "正文已变化；此次接受结果尚未确认。" : "已接受，正文已更新。"
             : "候选文字暂不可用，请检查当前章节和正文。"}
+          {absentTargets.filter((item) => item.proposalId === locator.proposalId
+            && (item.rejectEligible || item.retryRejection)).map((item) => (
+            <button type="button" className="block-proposal-reject" data-proposal-reject={item.proposalId}
+              key={item.operationId} disabled={accepting !== undefined}
+              onClick={() => rejectDisplayed({ proposalId: item.proposalId, operationId: item.operationId,
+                revisionId: proposal?.revision_id ?? "", text: item.text })}>
+              {item.retryRejection ? "重试拒绝" : "× 拒绝"}</button>))}
         </p>
       ))}
     </>
