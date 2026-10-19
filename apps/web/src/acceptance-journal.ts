@@ -316,6 +316,16 @@ export async function settledDisplayedAcceptance(workspace: EditorWorkspace,
     ? settlement : undefined;
 }
 
+/** True when the latest local decision on the Proposal is an Acceptance, not a later Rejection. */
+export async function latestDisplayedDecisionIsAcceptance(workspace: EditorWorkspace,
+  proposalId: string): Promise<boolean> {
+  const journal = await readAcceptanceJournal(workspace);
+  const latest = journal.records.filter((record) =>
+    (record.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
+    .sort((left, right) => (right.local_intent_sequence as number) - (left.local_intent_sequence as number))[0];
+  return latest?.command_kind === "acceptProposal";
+}
+
 export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace,
   proposalId: string): Promise<(AcceptancePreAdmissionProblem & { terminal: boolean }) | undefined> {
   const journal = await readAcceptanceJournal(workspace);
