@@ -67,4 +67,4 @@ An explicit Replan of an Inline Proposal proves each Anchor of the Anchor set of
 
 - Each Author Undo path that changes the base writes its own Anchor set. Thus a read of an Inline Proposal after that Undo gives the Anchor on the base of the restored Revision.
 - A Replan with no proof keeps the conflict. The author can then reject or withdraw the Proposal, or ask for a new Proposal. ADR 0064 also lets the author accept it.
-- After Author Undo of a Replan, the restored Revision is on the old base. Thus the editor does not show it inline until a new Replan.
+- After Author Undo of a Replan, the restored Revision is on the old base. Thus the editor shows it as a card with the earlier-base note, and the author can accept, edit, or reject it ([ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
