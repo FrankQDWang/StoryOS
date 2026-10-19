@@ -181,7 +181,8 @@ test.each(["acknowledged", "authoritative"] as const)(
         manuscript_block_id: opened.revised.manuscript_block_id, from: 0, to: 0, text: "Edit " },
       ownership === "acknowledged" ? { kind: "acknowledged", proposal: opened.revised } : { kind: "authoritative" },
       "2", `${ns}006`);
-      assert.deepEqual(edited.effect, { kind: "conflicted", reason: "ownership_changed",
+      assert.deepEqual(edited.effect, { kind: "conflicted",
+        reason: ownership === "acknowledged" ? "ownership_changed" : "proposal_head_present",
         current_authoritative_revision_id: chapter.chapter.current_revision.revision_id });
       assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter,
         chapter.chapter);
