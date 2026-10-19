@@ -11,7 +11,7 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch,
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, advanceChapterHead, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
-import { openInline, replaceUnit } from "../support/inline-proposal.ts";
+import { admitPhrase, openInline, replaceUnit } from "../support/inline-proposal.ts";
 
 type Started = Awaited<ReturnType<typeof startRealServer>>;
 type Context = { started: Started; projectId: string; chapterId: string; fetchImpl: typeof fetch; sessionId: string };
@@ -181,6 +181,28 @@ test("Acceptance refuses an Inline Proposal whose target Block was deleted and c
     assert.deepEqual(response.effect, { kind: "refused", reason: "missing_target" });
     assert.deepEqual(await chapterOf(context), chapter);
     assert.deepEqual(await read(context, opened.proposal_id), opened);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("a second Proposal request on the Block of an open Inline Proposal opens no Proposal and keeps one reservation", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const { context, opened } = await openedInline(started, "f5c1");
+    const chapter = await chapterOf(context);
+    const second = await admitPhrase(started.baseUrl, context.fetchImpl, context.projectId, context.chapterId,
+      id("f5c10061"));
+    if (second.decision.kind !== "prose_change") throw new Error(`expected prose_change, got ${second.decision.kind}`);
+    assert.deepEqual(second.decision.opened_proposal, { kind: "absent" });
+    assert.deepEqual(second.decision.locations?.map((location) => location.outcome),
+      [{ kind: "refused", reason: "conflicting_reservation" }]);
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposal_operations
+      WHERE project_id = '${context.projectId}'::uuid AND manuscript_block_id = '${opened.manuscript_block_id}'::uuid
+        AND reservation_state = 'unresolved'`), "1");
+    assert.deepEqual(await read(context, opened.proposal_id), opened);
+    assert.deepEqual(await chapterOf(context), chapter);
   } finally {
     await stopRealServer(started.server);
   }

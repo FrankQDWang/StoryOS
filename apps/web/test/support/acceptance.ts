@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import { acceptProposal, applyAuthorEdit, createAgentRun, createChapter, createEditorSession, createProject,
   createProjectChallenge, createProjectCommandChallenge, createVolume, digestAcceptProposal, digestApplyAuthorEdit,
   digestCreateAgentRun, digestCreateChapter, digestCreateEditorSession, digestCreateVolume,
-  digestRejectProposalOperations, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal,
+  digestRejectProposalOperations, digestUpdateProjectAssistance, getAgentRun, getChapter, getEditorSession, getProposal,
   rejectProposalOperations, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest,
-  RejectProposalOperationsRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive, CreateAgentRunRequest,
+  CreateEditorSessionRequest, RejectProposalOperationsRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
   sessionFetch as browserFetch, startStoryOSServer, withChallengeBudget } from "./node-integration.ts";
@@ -404,4 +404,41 @@ export async function reject(started: Started, opened: Awaited<ReturnType<typeof
     await digestRejectProposalOperations(request), id(`${key}2`), (antiForgery) => rejectProposalOperations({
       baseUrl: started.baseUrl, projectId: opened.prepared.projectId, proposalId: opened.revised.proposal_id,
       request, fetchImpl: opened.prepared.fetchImpl, antiForgery, idempotencyKey: id(`${key}2`) }));
+}
+
+type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];
+
+/** The Proposal ownership that one author edit observes: none, an acknowledged head, or an explicit target. */
+export type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
+
+/** Sends one author edit from the current editor session base of the writer. */
+export async function sendAuthorEdit(started: Started,
+  context: { prepared: { projectId: string; fetchImpl: typeof fetch }; session: { editor_session: { editor_session_id: string } } },
+  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string) {
+  const { projectId, fetchImpl } = context.prepared;
+  const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
+    editorSessionId: context.session.editor_session.editor_session_id });
+  if (session.writer.kind !== "current_writer") throw new Error("expected the current writer");
+  const proposal = ownership.kind === "authoritative" ? undefined : ownership.proposal;
+  const request: ApplyAuthorEditRequest = {
+    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING, correlation_id: id(`${ns}1`),
+    editor_session_id: session.editor_session.editor_session_id, writer_generation: session.writer.writer_generation,
+    chapter_id: session.base_snapshot.chapter_id,
+    expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
+    expected_proposal_head_revision_ids: proposal ? [proposal.revision_id] : [],
+    ...(ownership.kind === "targeted" ? { proposal_target: { proposal_id: ownership.proposal.proposal_id,
+      operation_id: ownership.proposal.operation_id, revision_id: ownership.proposal.revision_id,
+      manuscript_block_id: ownership.proposal.manuscript_block_id } } : {}),
+    target_refs: session.base_snapshot.target_refs,
+    observed_ownership_partition: proposal ? "mixed" : "authoritative",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
+    undo_group_id: id(`${ns}2`), completed_intent_record_id: id(`${ns}3`), local_intent_sequence: sequence,
+    author_edit_units: [{ normalized_primitives: [primitive], selection_snapshot: {
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
+      to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } }],
+  };
+  return challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
+    request.command_schema, await digestApplyAuthorEdit(request), id(`${ns}4`), (antiForgery) => applyAuthorEdit({
+      baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request }));
 }
