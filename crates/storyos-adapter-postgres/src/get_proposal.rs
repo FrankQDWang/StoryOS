@@ -89,7 +89,7 @@ impl ProposalReader for PostgresProjectReader {
             .is_some_and(|row| unavailable.contains(&row.get::<_, String>(2)))
         {
             return Err(ProjectReadError::unavailable(std::io::Error::other(
-                "original validation history is unavailable; explicit replan is required",
+                "the validation history of the Proposal Revision is unavailable",
             )));
         }
         let latest_acceptance_refusal =

@@ -401,12 +401,13 @@ The single Acceptance-eligibility predicate for an exact Proposal Revision is:
 ```text
 retention == retained
 generation == ready
-validation == valid for this revision and current target versions
+validation in {valid, conflicted} for this revision on its own base
+no Proposal Recovery Conflict condition
 closure == open
 every selected operation == pending
 ```
 
-Creating a content revision resets validation to `pending`. Any change to a referenced target Authoritative Revision does not mutate the old Validation Receipt; it makes that Receipt non-current and projects the old Proposal Revision as `conflicted`. Regaining eligibility requires an explicitly replanned new Proposal Revision against current targets.
+Creating a content revision resets validation to `pending`. A change to a referenced target Authoritative Revision does not mutate the old Validation Receipt. It can project the old Proposal Revision as `conflicted`, but a `conflicted` validation does not block Acceptance. Acceptance resolves the target on the current Chapter Head and replaces its current text, and Author Undo restores that text ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 
 ### 6.5 Stable Proposal Operations
 
@@ -471,7 +472,7 @@ validated_at
 validator_version
 ```
 
-Changing Proposal content or a relevant target never mutates the historical Receipt. New Proposal content creates a new `pending` Revision; a changed referenced target projects the old Revision as `conflicted` until explicit replan creates another pending Revision. Acceptance rechecks the current Receipt, target versions, permission, Anchors, digests, and preconditions to prevent time-of-check/time-of-use gaps. Extension-provided checks are advisory only.
+Changing Proposal content or a relevant target never mutates the historical Receipt. New Proposal content creates a new `pending` Revision that validates against its own base. A changed referenced target can project the old Revision as `conflicted`. Acceptance rechecks the current Receipt, permission, Anchors, digests, and preconditions, and resolves the current target, to prevent time-of-check/time-of-use gaps ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)). Extension-provided checks are advisory only.
 
 ## 8. Authority-changing commands
 

@@ -56,12 +56,6 @@ export interface ManuscriptEditorProps {
     text: string;
     operationIds?: readonly string[] | undefined;
   }) => void;
-  onReplanProposal?: (target: {
-    proposalId: string;
-    operationId: string;
-    revisionId: string;
-    text: string;
-  }) => void;
   onWithdrawProposal?: (target: {
     proposalId: string;
     operationId: string;
@@ -101,7 +95,6 @@ export function ManuscriptEditor({
   onCandidateSettled, onUndoCurrentChapter, focusProposal,
   onAcceptProposal,
   onRejectProposal,
-  onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
   referenceSource,
@@ -123,7 +116,6 @@ export function ManuscriptEditor({
   proposalsRef.current = proposals;
   const onAcceptProposalRef = useRef(onAcceptProposal);
   const onRejectProposalRef = useRef(onRejectProposal);
-  const onReplanProposalRef = useRef(onReplanProposal);
   const onWithdrawProposalRef = useRef(onWithdrawProposal);
   const onCopyProposalRef = useRef(onCopyProposal);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
@@ -136,7 +128,6 @@ export function ManuscriptEditor({
   onUndoCurrentChapterRef.current = onUndoCurrentChapter;
   onAcceptProposalRef.current = onAcceptProposal;
   onRejectProposalRef.current = onRejectProposal;
-  onReplanProposalRef.current = onReplanProposal;
   onWithdrawProposalRef.current = onWithdrawProposal;
   onCopyProposalRef.current = onCopyProposal;
   const editor = useEditor({
@@ -311,10 +302,9 @@ export function ManuscriptEditor({
       if (!(target instanceof Element)) return;
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
       const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
-      const replanButton = target.closest<HTMLButtonElement>("button[data-proposal-replan]");
       const withdrawButton = target.closest<HTMLButtonElement>("button[data-proposal-withdraw]");
       const copyButton = target.closest<HTMLButtonElement>("button[data-proposal-copy]");
-      const button = acceptButton ?? rejectButton ?? replanButton ?? withdrawButton ?? copyButton;
+      const button = acceptButton ?? rejectButton ?? withdrawButton ?? copyButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
       const proposalId = proposal?.dataset.proposalId;
       const inline = proposalId === undefined ? null
@@ -331,7 +321,6 @@ export function ManuscriptEditor({
           item.proposalId === proposal.dataset.proposalId && item.operationId === proposal.dataset.proposalOperationId)?.pendingOperationIds } : {}),
       };
       if (copyButton !== null) onCopyProposalRef.current?.(decision.proposalId);
-      else if (replanButton !== null) onReplanProposalRef.current?.(decision);
       else if (withdrawButton !== null) onWithdrawProposalRef.current?.(decision);
       else if (acceptButton !== null) onAcceptProposalRef.current?.(decision);
       else onRejectProposalRef.current?.(decision);

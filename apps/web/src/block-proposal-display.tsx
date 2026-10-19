@@ -19,8 +19,7 @@ import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplay
   knownProblemDisplayedAcceptance, reconcileDisplayedAcceptance,
   settledDisplayedAcceptance } from "./acceptance-journal.ts";
 import { proposalConditionKind } from "./proposal-recovery-surface.ts";
-import { pendingReplanIds, replanDisplayedBlockProposal, retryPendingDisplayedReplan }
-  from "./replan-block-proposal.ts";
+import { dropStoredReplans } from "./stored-replan-records.ts";
 import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
   pendingWithdrawIds } from "./withdraw-block-proposal.ts";
 import { ProposalDecisionStatus } from "./proposal-decision-status.tsx";
@@ -104,7 +103,6 @@ export function BlockProposalDisplay({
   const [openList, setOpenList] = useState<OpenProposalList>({ kind: "reading" });
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
   const [pendingRejections, setPendingRejections] = useState<string[]>([]);
-  const [pendingReplans, setPendingReplans] = useState<string[]>([]);
   const [pendingWithdrawals, setPendingWithdrawals] = useState<string[]>([]);
   const [sessionBlockedIds, setSessionBlockedIds] = useState<string[]>([]);
   const [settledRejections, setSettledRejections] = useState<Record<string,
@@ -147,8 +145,8 @@ export function BlockProposalDisplay({
     if (workspace === undefined) return () => { active = false; };
     const generation = decisionGeneration;
     void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace),
-      readExpansionJournal(workspace), pendingReplanIds(workspace), pendingWithdrawIds(workspace)])
-      .then(async ([acceptance, rejection, expansions, replans, withdrawals]) => {
+      readExpansionJournal(workspace), pendingWithdrawIds(workspace), dropStoredReplans(workspace)])
+      .then(async ([acceptance, rejection, expansions, withdrawals]) => {
       for (const entry of expansions) if (entry.observation === undefined) {
         const response = await retryExpansion(workspace, entry.record, editorProps.baseUrl, editorProps.fetchImpl, () => active);
         entry.observation = { key: `expansion-observation:${entry.record.key}`, record_key: entry.record.key, response };
@@ -161,7 +159,6 @@ export function BlockProposalDisplay({
       setJournalPendingIds([...new Set([...acceptance.unresolvedIds,
         ...rejection.pendingIds])]);
       setPendingRejections(rejection.pendingIds);
-      setPendingReplans(replans);
       setPendingWithdrawals(withdrawals);
       setSettledRejections(rejection.settledResults);
       setRecoveryUnavailable(false);
@@ -293,6 +290,9 @@ export function BlockProposalDisplay({
   }
   const projections: BlockProposalProjection[] = [];
   const unavailable: ProposalRead[] = [];
+  // A Proposal whose target Block is not in the Chapter Head has no candidate projection. The author can only reject it (ADR 0064).
+  const absentTargets: { proposalId: string; operationId: string; blockId: string; text: string;
+    rejectEligible: boolean; retryRejection: boolean }[] = [];
   const allHeadsKnown = recoveryChecked && openList.kind === "listed" && openList.complete
     && reads.length === effectiveLocators.length
     && reads.every((item) => item.proposal !== undefined);
@@ -315,43 +315,44 @@ export function BlockProposalDisplay({
       && operation !== undefined
       && blockCounts.get(operation?.manuscript_block_id ?? "") === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
+    // Acceptance of a Proposal on an earlier base replaces the current text of its target (ADR 0064).
+    const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
     const inlineAnchor = proposal === undefined ? undefined
       : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
-    if (!anchored || proposal === undefined || operation === undefined) {
-      unavailable.push({ locator, proposal });
-      continue;
-    }
     const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
       && editorProps.persistWorkspace.session.writer.kind === "current_writer";
-    const sessionBlocked = sessionBlockedIds.includes(proposal.proposal_id);
-    const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
-    const localText = candidateText(proposal, operation.operation_id);
-    const controlsReady = allHeadsKnown && acceptanceChecked && !recoveryUnavailable
+    const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
+    const controlsReady = proposal !== undefined && allHeadsKnown && acceptanceChecked && !recoveryUnavailable
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id;
+    if (!anchored || proposal === undefined || operation === undefined) {
+      unavailable.push({ locator, proposal });
+      if (proposal !== undefined && operation !== undefined && safeToProject
+        && !blockCounts.has(operation.manuscript_block_id)) {
+        absentTargets.push({ proposalId: proposal.proposal_id, operationId: operation.operation_id,
+          blockId: operation.manuscript_block_id, text: operation.candidate_text,
+          rejectEligible: controlsReady && proposal.closure === "open",
+          retryRejection: pendingRejections.includes(proposal.proposal_id) && accepting !== proposal.proposal_id });
+      }
+      continue;
+    }
+    const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
+    const localText = candidateText(proposal, operation.operation_id);
     const problem = knownProblems[proposal.proposal_id];
     const eligible = controlsReady
-      && proposal.generation === "ready" && proposal.validation === "valid"
-      && condition === "absent"
-      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined)
+      && proposal.generation === "ready" && acceptableValidation(proposal.validation)
+      && condition !== "proposal_recovery_conflict"
+      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined || !baseMatches)
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
-      && proposal.validation_receipt.result === "valid"
+      && acceptableValidation(proposal.validation_receipt.result)
       && (problem === undefined || problem.code === "acceptance_session_ineligible")
       && !pendingAcceptance;
-    const rejectEligible = controlsReady && condition !== "proposal_recovery_conflict"
-      && proposal.closure === "open" && operation.resolution === "pending"
-      && !pendingReplans.includes(proposal.proposal_id);
-    const replanEligible = controlsReady
-      && (condition === "proposal_conflict" || condition === "proposal_recovery_conflict")
-      && proposal.closure === "open" && operation.resolution === "pending"
-      && !pendingAcceptance && !pendingRejections.includes(proposal.proposal_id)
-      && !pendingReplans.includes(proposal.proposal_id);
+    const rejectEligible = controlsReady && proposal.closure === "open" && operation.resolution === "pending";
     const withdrawEligible = authorWithdrawControlReady({
       controlsReady, condition, closure: proposal.closure, resolution: operation.resolution,
       pendingAcceptance, pendingRejection: pendingRejections.includes(proposal.proposal_id),
-      pendingReplan: pendingReplans.includes(proposal.proposal_id),
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
@@ -369,15 +370,15 @@ export function BlockProposalDisplay({
       sourceDecisionId: proposal.source.kind === "agent_run_decision" ? proposal.source.decision_id : "",
       text: localText ?? operation.candidate_text,
       eligible,
-      candidateEditable: rejectEligible && baseMatches && condition === "absent"
+      candidateEditable: rejectEligible && condition !== "proposal_recovery_conflict"
         && proposal.generation === "ready" && proposal.validation !== "invalid"
-        && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined) && !pendingAcceptance,
+        && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined || !baseMatches) && !pendingAcceptance,
       retryPending: pendingAcceptance && knownProblems[proposal.proposal_id] === undefined
         && accepting !== proposal.proposal_id,
       rejectEligible,
       retryRejection: pendingRejections.includes(proposal.proposal_id)
         && accepting !== proposal.proposal_id,
-      replanEligible,
+      earlierBase: eligible && !baseMatches,
       withdrawEligible,
       copyEligible: operation.candidate_text.length > 0
         && (condition !== "absent" || proposal.validation === "invalid" || !writerOpen || sessionBlocked),
@@ -416,7 +417,7 @@ export function BlockProposalDisplay({
       || displayed.revision_id !== target.revisionId
       || projection.text !== target.text
       || receipt?.kind !== "present"
-      || receipt.result !== "valid"
+      || (receipt.result !== "valid" && receipt.result !== "conflicted")
       || displayed.operations.find((item) => item.operation_id === target.operationId
         && item.manuscript_block_id === projection.blockId) === undefined
       || workspace === undefined) {
@@ -550,7 +551,7 @@ export function BlockProposalDisplay({
       return;
     }
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId
+    const projection = [...projections, ...absentTargets].find((item) => item.proposalId === target.proposalId
       && item.operationId === target.operationId);
     const workspace = editorProps.persistWorkspace;
     if (displayed === undefined || workspace === undefined
@@ -654,95 +655,6 @@ export function BlockProposalDisplay({
   const writerReady = () => editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
     && editorProps.persistWorkspace.session.writer.kind === "current_writer";
 
-  const replanDisplayed = (target: {
-    proposalId: string; operationId: string; revisionId: string; text: string;
-  }) => {
-    if (acceptingRef.current) return;
-    if (pendingReplans.includes(target.proposalId)) {
-      retryReplan(target.proposalId);
-      return;
-    }
-    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId
-      && item.operationId === target.operationId);
-    const workspace = editorProps.persistWorkspace;
-    const condition = displayed === undefined ? undefined : displayed.source_condition;
-    if (displayed === undefined || workspace === undefined || projection?.replanEligible !== true
-      || !writerReady() || displayed.revision_id !== target.revisionId
-      || condition === undefined || condition.kind === "absent") {
-      setDecisionMessages((current) => ({ ...current,
-        [target.proposalId]: "候选文字已变化。请检查当前版本。" }));
-      setSettlementRefresh((value) => value + 1);
-      return;
-    }
-    acceptingRef.current = true;
-    setAccepting(target.proposalId);
-    void (async () => {
-      try {
-        const current = await getProposal({ baseUrl: editorProps.baseUrl,
-          fetchImpl: editorProps.fetchImpl, projectId: scope.project_id,
-          proposalId: target.proposalId });
-        if (current.project_scope.owner_user_id !== scope.owner_user_id
-          || current.proposal.revision_id !== displayed.revision_id
-          || current.proposal.source_condition.kind !== condition.kind) {
-          throw new Error("候选文字的身份已变化。");
-        }
-        const response = await replanDisplayedBlockProposal({
-          baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
-          cryptoImpl: editorProps.cryptoImpl, workspace, proposalId: target.proposalId,
-          operationId: target.operationId, proposalRevisionId: target.revisionId,
-          targetRevisionId: authoritativeRevisionId, sourceCondition: condition,
-        });
-        if (response.receipt.proposal_id !== target.proposalId) {
-          throw new Error("重新规划结果的身份不匹配。");
-        }
-        setDecisionMessages((current) => ({ ...current, [target.proposalId]:
-          response.effect.kind === "resolved"
-            ? "已按当前正文重新规划。接受需要当前版本通过验证。"
-            : response.effect.kind === "conflicted"
-              ? "正文已变化，重新规划未完成。"
-              : "重新规划未生效，请检查当前候选文字。" }));
-        setSettlementRefresh((value) => value + 1);
-        await onAccepted();
-      } catch (error) {
-        setDecisionMessages((current) => ({ ...current, [target.proposalId]:
-          error instanceof Error && error.message.startsWith("请先")
-            ? error.message : "重新规划结果尚未确认。请重试同一操作。" }));
-        setSettlementRefresh((value) => value + 1);
-      } finally {
-        finishDecision();
-      }
-    })();
-  };
-
-  const retryReplan = (proposalId: string) => {
-    const workspace = editorProps.persistWorkspace;
-    if (acceptingRef.current || workspace === undefined) return;
-    acceptingRef.current = true;
-    setAccepting(proposalId);
-    void (async () => {
-      try {
-        const response = await retryPendingDisplayedReplan({
-          baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
-          cryptoImpl: editorProps.cryptoImpl, workspace, proposalId,
-        });
-        setDecisionMessages((current) => ({ ...current, [proposalId]:
-          response.effect.kind === "resolved"
-            ? "已按当前正文重新规划。接受需要当前版本通过验证。"
-            : "重新规划结果尚未确认。请重试同一操作。" }));
-        setSettlementRefresh((value) => value + 1);
-        await onAccepted();
-      } catch (error) {
-        setDecisionMessages((current) => ({ ...current,
-          [proposalId]: error instanceof Error && error.message.startsWith("请先")
-            ? error.message : "重新规划结果尚未确认。请重试同一操作。" }));
-        setSettlementRefresh((value) => value + 1);
-      } finally {
-        finishDecision();
-      }
-    })();
-  };
-
   const withdrawControl = {
     baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
     cryptoImpl: editorProps.cryptoImpl, workspace: editorProps.persistWorkspace,
@@ -806,7 +718,7 @@ export function BlockProposalDisplay({
           setSettlementRefresh((value) => value + 1);
         }}
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed}
-        onReplanProposal={replanDisplayed} onWithdrawProposal={withdrawDisplayed}
+        onWithdrawProposal={withdrawDisplayed}
         onCopyProposal={copyDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
@@ -838,14 +750,12 @@ export function BlockProposalDisplay({
             && editorProps.persistWorkspace.session.writer.kind === "current_writer"}
           sessionBlocked={sessionBlockedIds.includes(locator.proposalId)}
           pendingRejection={pendingRejections.includes(locator.proposalId)}
-          pendingReplan={pendingReplans.includes(locator.proposalId)}
           pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}
           pendingAcceptance={pendingAcceptances.includes(locator.proposalId)}
           decisionMessage={decisionMessages[locator.proposalId]}
           acceptanceChecked={acceptanceChecked} retryDisabled={accepting !== undefined}
           onRetryPending={() => retryPending(locator.proposalId)}
           onRetryRejection={() => retryRejection(locator.proposalId)}
-          onRetryReplan={() => retryReplan(locator.proposalId)}
           onRetryWithdraw={() => retryWithdraw(locator.proposalId)} />
       ))}
       {unavailable.filter(({ locator, proposal }) => proposal?.operation_resolution !== "applied"
@@ -862,6 +772,13 @@ export function BlockProposalDisplay({
               : pendingAcceptances.includes(locator.proposalId)
                 ? "正文已变化；此次接受结果尚未确认。" : "已接受，正文已更新。"
             : "候选文字暂不可用，请检查当前章节和正文。"}
+          {absentTargets.filter((item) => item.proposalId === locator.proposalId
+            && (item.rejectEligible || item.retryRejection)).map((item) => (
+            <button type="button" className="block-proposal-reject" data-proposal-reject={item.proposalId}
+              key={item.operationId} disabled={accepting !== undefined}
+              onClick={() => rejectDisplayed({ proposalId: item.proposalId, operationId: item.operationId,
+                revisionId: proposal?.revision_id ?? "", text: item.text })}>
+              {item.retryRejection ? "重试拒绝" : "× 拒绝"}</button>))}
         </p>
       ))}
     </>

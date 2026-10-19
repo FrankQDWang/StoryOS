@@ -16,7 +16,7 @@ it("preserves and copies a complete mixed edit through response loss, reload and
   await expect(verifyProductionHost({ scenario: "refused_edit" })).resolves.toEqual({ kind: "production_host_verified" });
 });
 
-it("recovers a conflicted Proposal through reload, replan, and an explicit retry", async () => {
+it("accepts a Proposal on an earlier base through reload and an explicit retry", async () => {
   await expect(verifyProductionHost({ scenario: "conflicted_proposal" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 }, 240_000);

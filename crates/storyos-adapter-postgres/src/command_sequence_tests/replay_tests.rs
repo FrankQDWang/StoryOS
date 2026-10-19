@@ -625,20 +625,21 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((STEER_AGENT_RUN.kind, outcome));
     }
 
-    // An invalid or conflicted Acceptance makes its Proposal ineligible, so each one has its own
-    // Proposal.
+    // An invalid Acceptance makes its Proposal ineligible, and an applied Acceptance resolves it,
+    // so each case has its own Proposal. The 0xa810 Proposal has an earlier base, so its Acceptance
+    // replaces the Block text.
     let mut acceptance_records = Vec::new();
     for base in [0xa800, 0xa810, 0xa860] {
-        let (scope, acceptance, chapter_a_head) = acceptable_proposal(&store, &admin, base).await;
+        let (scope, acceptance, _chapter_a_head) = acceptable_proposal(&store, &admin, base).await;
         let inputs = match base {
             0xa800 => vec![AcceptProposalInput {
                 validation_receipt_id: Uuid::now_v7().to_string(),
                 ..acceptance
             }],
-            0xa810 => vec![AcceptProposalInput {
-                expected_authoritative_revision_id: chapter_a_head,
-                ..acceptance
-            }],
+            0xa810 => {
+                move_to_earlier_base(&admin, &acceptance).await;
+                vec![acceptance]
+            }
             _ => vec![
                 AcceptProposalInput {
                     proposal_revision_id: Uuid::now_v7().to_string(),
@@ -761,14 +762,39 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("steerAgentRun", steering_retained),
             ("steerAgentRun", conflicted),
             ("acceptProposal", invalid),
-            ("acceptProposal", conflicted),
+            ("acceptProposal", structural_applied),
             ("acceptProposal", refused),
             ("acceptProposal", structural_applied),
         ]
     );
     // The child Receipt and validation condition rows of each Acceptance outcome.
-    assert_eq!(acceptance_records, vec![[1, 1], [1, 1], [1, 0], [1, 0]]);
+    assert_eq!(acceptance_records, vec![[1, 1], [1, 0], [1, 0], [1, 0]]);
     assert_eq!(rejection_records, vec![1; 4]);
     assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
     assert_eq!(expansion_records, vec![[1, 1, 1], [0; 3], [0; 3], [0; 3]]);
+}
+
+/// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.
+/// Thus the Head is not the base.
+async fn move_to_earlier_base(admin: &tokio_postgres::Client, acceptance: &AcceptProposalInput) {
+    let earlier = Uuid::now_v7();
+    admin
+        .batch_execute(&format!(
+            "INSERT INTO storyos.authoritative_revisions
+             SELECT owner_user_id, project_id, manuscript_object_id, '{earlier}'::uuid, payload_id
+               FROM storyos.authoritative_revisions WHERE revision_id = '{head}'::uuid;
+             INSERT INTO storyos.manuscript_revision_members
+             SELECT owner_user_id, project_id, manuscript_object_id, '{earlier}'::uuid,
+                    manuscript_block_id, block_order
+               FROM storyos.manuscript_revision_members WHERE revision_id = '{head}'::uuid;
+             UPDATE storyos.proposal_revisions SET base_authoritative_revision_id = '{earlier}'::uuid
+              WHERE revision_id = '{revision}'::uuid;
+             UPDATE storyos.validation_receipts SET base_authoritative_revision_id = '{earlier}'::uuid
+              WHERE validation_receipt_id = '{validation}'::uuid;",
+            head = acceptance.expected_authoritative_revision_id,
+            revision = acceptance.proposal_revision_id,
+            validation = acceptance.validation_receipt_id,
+        ))
+        .await
+        .unwrap();
 }

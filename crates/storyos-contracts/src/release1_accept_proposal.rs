@@ -102,6 +102,17 @@ pub enum AcceptProposalRefusalReason {
     DuplicateIdentities,
     MissingRequiredDependencies,
     IncompleteBundleClosure,
+    MissingTarget,
+}
+
+/// How an applied Acceptance found its target on the Chapter Head.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptanceTargetResolution {
+    ExactBase,
+    BlockReplacement,
+    ProvenRange,
+    BaseBlockReplacement,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -125,6 +136,7 @@ pub enum AcceptProposalEffect {
         authoritative_commit_id: String,
         authoritative_revision: AuthoritativeChapterRevision,
         project_activity_position: String,
+        target_resolution: AcceptanceTargetResolution,
     },
     Invalid {
         reason: AcceptProposalInvalidReason,

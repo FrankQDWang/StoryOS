@@ -9,12 +9,12 @@ use super::ProposalEditContext;
 use crate::author_edit::author_edit_database_error;
 
 /// Appends `revision_id` with `candidate_text` for the Operation of `context` and gives it a new
-/// Validation Receipt. The Revision records that Operation and its candidate before the edit.
+/// Validation Receipt on its own base (ADR 0064). The Revision records that Operation and its
+/// candidate before the edit.
 pub(crate) async fn append_proposal_revision_as(
     client: &Client,
     scope: &ProjectScope,
     context: &ProposalEditContext,
-    current_authoritative_revision_id: &str,
     candidate_text: &str,
     revision_id: String,
 ) -> Result<String, AuthorEditError> {
@@ -24,14 +24,10 @@ pub(crate) async fn append_proposal_revision_as(
         .query_one(
             "SELECT EXISTS (
                     SELECT 1
-                      FROM storyos.authoritative_heads AS head
-                      JOIN storyos.manuscript_revision_members AS member
-                        ON (member.owner_user_id, member.project_id,
-                            member.manuscript_object_id, member.revision_id) =
-                           (head.owner_user_id, head.project_id,
-                            head.manuscript_object_id, head.current_revision_id)
-                     WHERE head.owner_user_id = $1::text::uuid
-                       AND head.project_id = $2::text::uuid
+                      FROM storyos.manuscript_revision_members AS member
+                     WHERE member.owner_user_id = $1::text::uuid
+                       AND member.project_id = $2::text::uuid
+                       AND member.revision_id = $5::text::uuid
                        AND member.manuscript_block_id = $3::text::uuid
                   ),
                   EXISTS (
@@ -48,6 +44,7 @@ pub(crate) async fn append_proposal_revision_as(
                 &project,
                 &context.manuscript_block_id,
                 &context.proposal_id,
+                &context.base_authoritative_revision_id,
             ],
         )
         .await
@@ -56,7 +53,8 @@ pub(crate) async fn append_proposal_revision_as(
         scope_matches: true,
         target_block_present: facts.get(/*idx*/ 0),
         expected_base_revision_id: context.base_authoritative_revision_id.clone(),
-        current_base_revision_id: Some(current_authoritative_revision_id.to_owned()),
+        // A Chapter Head that moved after the base does not make a candidate edit conflicted.
+        current_base_revision_id: Some(context.base_authoritative_revision_id.clone()),
         conflicting_reservation: facts.get(/*idx*/ 1),
     });
     let (validation, receipt_result) = match classification {

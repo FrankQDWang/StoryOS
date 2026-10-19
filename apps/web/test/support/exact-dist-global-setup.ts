@@ -228,16 +228,16 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
         receipts: { createProject: 2, createVolume: 2, createChapter: 2,
           applyAuthorEdit: 8, undoLatestAuthorAction: 1,
           updateProjectAssistance: 2, createAgentRun: 5, acceptProposal: 2,
-          rejectProposalOperations: 1, replanProposal: 1, takeOverProjectWriter: 1 },
+          rejectProposalOperations: 1, takeOverProjectWriter: 1 },
         author_action_count: 16,
       },
       inline_proposal: {
         project_count: 1,
         receipts: { createProject: 1, createVolume: 1, createChapter: 6,
           updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
-          applyAuthorEdit: 19, acceptProposal: 3, rejectProposalOperations: 1,
-          replanProposal: 1, takeOverProjectWriter: 1 },
-        author_action_count: 33,
+          applyAuthorEdit: 18, acceptProposal: 3, rejectProposalOperations: 1,
+          takeOverProjectWriter: 1 },
+        author_action_count: 32,
       },
       selection_reference: {
         project_count: 1,
@@ -268,7 +268,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       multi_location: {
         project_count: 1,
         receipts: { updateProjectAssistance: 1, createAgentRun: 3,
-          acceptProposal: 3, rejectProposalOperations: 2, replanProposal: 1 },
+          acceptProposal: 3, rejectProposalOperations: 1 },
       },
       takeover_export: {
         project_count: 1,

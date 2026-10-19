@@ -6,6 +6,7 @@ use crate::release1_accept_proposal::{
     ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID, AcceptProposalConflictReason, AcceptProposalEffect,
     AcceptProposalInput, AcceptProposalInvalidReason, AcceptProposalRefusalReason,
     AcceptProposalRequest, AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
+    AcceptanceTargetResolution,
 };
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
@@ -132,7 +133,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         AcceptProposalInput::decl(&config),
         AcceptProposalRequest::decl(&config),
         AcceptanceReceiptResult::decl(&config),
@@ -140,6 +141,7 @@ pub(super) fn typescript_type_declarations() -> String {
         AcceptProposalRefusalReason::decl(&config),
         AcceptProposalInvalidReason::decl(&config),
         AcceptProposalConflictReason::decl(&config),
+        AcceptanceTargetResolution::decl(&config),
         AcceptProposalEffect::decl(&config),
         AcceptProposalResponse::decl(&config),
     )
@@ -248,7 +250,8 @@ fn command_fixture(created_at: &str) -> Value {
                     "text": "Keep the narrator voice in this passage."
                 }]
             },
-            "project_activity_position": "3"
+            "project_activity_position": "3",
+            "target_resolution": "exact_base"
         }
     })
 }

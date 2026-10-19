@@ -129,7 +129,6 @@ impl SettlementProfile for AuthorEditProfile {
                         client,
                         scope,
                         &context,
-                        &applied.ids.revision_id,
                         &context.candidate_text,
                         Uuid::now_v7().to_string(),
                     )

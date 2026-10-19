@@ -66,16 +66,21 @@ async fn legacy_anchor_rows_bind_to_the_opening_revision_and_a_different_base_fa
         ))
         .await
         .unwrap();
-    let migration = std::fs::read_to_string(
-        repo_root()
-            .join("crates/storyos-adapter-postgres/migrations")
-            .join(BINDING_MIGRATION),
-    )
-    .expect("read the Anchor binding migration");
-    admin
-        .batch_execute(&format!("BEGIN;\n{migration}\nCOMMIT;"))
-        .await
-        .unwrap();
+    // The reader of this code needs the binding migration and each later migration.
+    let directory = repo_root().join("crates/storyos-adapter-postgres/migrations");
+    let mut names = std::fs::read_dir(&directory)
+        .expect("read the migration directory")
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".sql") && name.as_str() >= BINDING_MIGRATION)
+        .collect::<Vec<_>>();
+    names.sort();
+    for name in names {
+        let migration = std::fs::read_to_string(directory.join(&name)).expect("read a migration");
+        admin
+            .batch_execute(&format!("BEGIN;\n{migration}\nCOMMIT;"))
+            .await
+            .unwrap();
+    }
     let scope = ProjectScope::new(UserId::new(OWNER), ProjectId::new(PROJECT));
 
     let migrated = reader.read_proposal(&scope, PROPOSAL).await.unwrap();

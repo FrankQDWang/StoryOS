@@ -20,7 +20,7 @@ export type BlockProposalProjection = {
   retryPending?: boolean;
   rejectEligible?: boolean;
   retryRejection?: boolean;
-  replanEligible?: boolean;
+  earlierBase?: boolean;
   withdrawEligible?: boolean;
   copyEligible?: boolean;
   conditionKind?: string;
@@ -35,7 +35,7 @@ export type BlockProposalProjection = {
 export const PROPOSAL_ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
-  "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
+  "rejectEligible", "retryRejection", "earlierBase", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
   "candidateEditable", "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
@@ -95,7 +95,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
         retryPending: node.attrs.retryPending as boolean,
         rejectEligible: node.attrs.rejectEligible as boolean,
         retryRejection: node.attrs.retryRejection as boolean,
-        replanEligible: node.attrs.replanEligible as boolean,
+        earlierBase: node.attrs.earlierBase as boolean,
         withdrawEligible: node.attrs.withdrawEligible as boolean,
         copyEligible: node.attrs.copyEligible as boolean,
         conditionKind: node.attrs.conditionKind as string,
@@ -148,7 +148,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         retryPending: shown && (proposal.retryPending ?? false),
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
-        replanEligible: proposal.replanEligible ?? false,
+        earlierBase: shown && (proposal.earlierBase ?? false),
         withdrawEligible: proposal.withdrawEligible ?? false,
         copyEligible: proposal.copyEligible ?? false,
         conditionKind: proposal.conditionKind ?? "absent",
@@ -214,7 +214,6 @@ export const blockProposalDecoration = TiptapNode.create({
     const retryPending = node.attrs.retryPending === true;
     const rejectEligible = node.attrs.rejectEligible === true;
     const retryRejection = node.attrs.retryRejection === true;
-    const replanEligible = node.attrs.replanEligible === true;
     const withdrawEligible = node.attrs.withdrawEligible === true;
     const copyEligible = node.attrs.copyEligible === true;
     return ["div", {
@@ -236,6 +235,9 @@ export const blockProposalDecoration = TiptapNode.create({
         : "候选文字，暂不可操作",
       ...(node.attrs.candidateEditable === true ? {} : { contenteditable: "false" }),
     }, ["p", { class: "block-proposal-text" }, 0],
+    ...(node.attrs.earlierBase === true ? [["p", { class: "block-proposal-earlier-base",
+      "data-proposal-earlier-base": node.attrs.proposalId, contenteditable: "false" },
+    "正文已变化。接受会用候选文字替换目标的当前文字。"]] : []),
     ["div", { class: "proposal-actions", contenteditable: "false" },
     ...(eligible || retryPending ? [["button", {
       type: "button",
@@ -247,10 +249,6 @@ export const blockProposalDecoration = TiptapNode.create({
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
     }, retryRejection ? "重试拒绝" : "× 拒绝"]] : []),
-    ...(replanEligible ? [["button", {
-      type: "button", class: "block-proposal-replan",
-      "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
-    }, "重新规划"]] : []),
     ...(withdrawEligible ? [["button", {
       type: "button", class: "block-proposal-withdraw",
       "data-proposal-withdraw": node.attrs.proposalId, contenteditable: "false",

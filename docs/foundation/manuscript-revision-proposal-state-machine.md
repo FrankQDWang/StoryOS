@@ -328,7 +328,7 @@ Unlisted transitions are invalid.
 | validation | `pending`, `valid`, or `invalid` | `conflicted` | exact target proof no longer holds |
 | validation | `valid` | `pending` | author edits pending content in a new Proposal Revision |
 | validation | `invalid` | `pending` | corrected new Proposal Revision |
-| validation | `conflicted` | `pending` | explicitly replanned new Proposal Revision |
+| validation | `conflicted` | `pending` | author edits pending content, or an explicit Replan, in a new Proposal Revision |
 | closure | `open` | `withdrawn` | `WithdrawProposal` |
 | closure | `withdrawn` | `open` | explicit reopen with new Revision |
 | closure | `open` or `withdrawn` | `superseded` | `SupersedeProposal` |
@@ -337,11 +337,19 @@ Unlisted transitions are invalid.
 | resolution | `rejected` | `pending` | explicit reopen in a new Revision |
 | resolution | `applied` | `pending` | successful Undo Acceptance in a new Revision |
 
+The validation `conflicted` does not block Acceptance
+([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+
 `superseded` is terminal. Content correction, replan, rejected-operation
 reopen, and Undo Acceptance append new Proposal Revisions. A content Revision
 starts validation at `pending`; Core may record an immediately proven
 structural conflict in the same Transition. Closure never rewrites Operation
 resolution, and resolution never rewrites Retention.
+
+A candidate edit and its Compensation at Author Undo validate against their own
+base. The same rule applies to the Proposal Revision of a flat edit at an Inline
+Anchor edge. A Chapter Head that moved after that base does not make these
+Revisions `conflicted` (ADR 0064).
 
 ### 6.5 Validation and conflict
 
@@ -362,7 +370,9 @@ Any of the following conflicts:
 - another unresolved ownership reservation on the Block.
 
 Core never silently maps, rebases, merges, or revalidates the old Revision
-against a changed Head. `ReplanProposal` appends a new Revision with current
+against a changed Head. Acceptance does not map the old Revision either. It
+resolves each target on the current Chapter Head and replaces the target text
+(section 7.5). `ReplanProposal` appends a new Revision with current
 base Revisions, Anchors, digests, and preconditions, retaining an Operation ID
 only when semantic identity is proven unchanged.
 
@@ -531,8 +541,9 @@ Operation can be the primary or a secondary Operation
 The `expected_proposal_heads` of the edit contains the complete observed chapter Head set,
 including the selected Revision. Each unit has one `ReplaceSelection` with
 candidate-relative UTF-16 coordinates. Core revises only that Proposal and
-Operation; the Authoritative Head does not advance. A stale or mismatched
-target cannot fall back to Authoritative input.
+Operation. The Authoritative Head does not advance. The new Proposal Revision
+keeps the base of its parent and validates against that base. A stale or
+mismatched target cannot fall back to Authoritative input.
 
 Ordinary Block input leaves
 `proposal_target` absent and uses the versioned Block primitives. The same
@@ -777,9 +788,10 @@ creates Proposal Structural Reshaping. That result is
 `ProposalRevised.StructuralReshapeConflict`: the new Revision preserves the
 author edit and the same Transition deterministically records its
 `ProposalConflict`. This fact is caused by the new candidate shape and cannot
-be selected for a stale command. Once a Proposal is already conflicted, step 1
-returns `Conflicted`; direct Proposal editing cannot append another Revision
-until explicit replan.
+be selected for a stale command. A Proposal Revision that is already
+`conflicted` still accepts a direct Proposal edit without a Replan. The new
+Revision validates against its own base (section 6.4), and Acceptance can apply
+it (ADR 0064).
 
 The production editor-session evidence is authoritative for completed-intent
 segmentation, durability, acknowledgement ordering, and recovery mechanics, but
@@ -938,16 +950,31 @@ After current access validation, Acceptance executes in this order:
 2. Validate the exact Author Command Admission for a first attempt.
 3. Require the named Proposal Revision to be current, retained, `ready`, and
    `open`.
-4. Require the named Validation Receipt to be `valid` for that exact Revision
-   and exact target set.
+4. Require the Validation Receipt of the request to identify that exact
+   Revision and its base, with the result `valid` or `conflicted`. Require no invalid
+   condition and no Proposal Recovery Conflict on the Revision.
 5. Require every selected Operation to be pending and all dependencies met.
-6. Compare every expected target Head and revalidate Anchors, base-slice
-   digests, permissions, and preconditions.
+6. Compare every expected target Head. Resolve the target of each selected
+   Operation on the current Chapter Head, in this order:
+   - `exact_base`: the Revision base is the Chapter Head.
+   - `block_replacement`: a Block Proposal whose target Block is on the
+     Chapter Head. The candidate replaces all text of that Block.
+   - `proven_range`: an Inline Proposal whose Anchor range has the exact proof
+     of section 6.5 on the Chapter Head. The proof ignores reservations of
+     other Proposals. The candidate replaces only that range.
+   - `base_block_replacement`: an Inline Proposal without that proof whose
+     target Block is on the Chapter Head. The Block text becomes the Anchor
+     base Block text with the candidate at the stored range.
+   - Missing target: a target Block is not on the Chapter Head. Return
+     `Refused { missing_target }`, and change nothing.
+   Revalidate permissions and preconditions.
 7. Dry-run the entire selection through the closed StoryOS domain handler and
    validate resulting domain invariants.
 8. Commit all selected effects atomically.
 
-Acceptance never automatically replans or replaces a Validation Receipt.
+Acceptance never automatically replans or replaces a Validation Receipt. An
+applied Acceptance records the Chapter Head that it applied to and its target
+resolution. A base behind the Chapter Head does not give `Conflicted`.
 
 ### 7.6 Other Proposal decisions
 
@@ -1277,6 +1304,7 @@ AcceptanceResult =
     applied_operation_ids
     prior_authoritative_revision_ids
     resulting_authoritative_revision_ids
+    target_resolution
   }
   | Invalid { violations }
   | Conflicted { conflicts, current_target_revisions, replan_required }
@@ -1286,8 +1314,10 @@ AcceptanceResult =
 
 Only `Applied` changes Authoritative State and resolves the selected Operations
 as applied. `Invalid` projects validation invalid; `Conflicted` projects it
-conflicted. `Refused` covers state or selection ineligibility without changing
-content validity. `NoEffect` creates no Commit and leaves Operations pending.
+conflicted. Only an Acceptance Receipt from before ADR 0064 records
+`Conflicted`. `Refused` covers state or
+selection ineligibility and a missing target Block without changing content
+validity. `NoEffect` creates no Commit and leaves Operations pending.
 All reasons are versioned exhaustive types; free text is presentation only.
 
 Bundle Receipts compose exact child Receipts under the existing atomic or
@@ -1311,6 +1341,8 @@ AcceptanceReceipt {
   expected_target_revisions
   prior_authoritative_revisions
   resulting_authoritative_revisions
+  applied_authoritative_revision | None
+  target_resolution | None
   authoritative_commit_ids
   author_action_sequence | None
   child_receipts
@@ -1371,7 +1403,7 @@ empty. The closed allocation matrix is:
 | validation attempt | `ValidationReceipt` | 0 | 0 | 0 | N/A | `ProposalConflict` exactly when result is `conflicted` |
 | `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | N/A | 0 |
 | `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | validation becomes `invalid` |
-| `AcceptProposal.Conflicted` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
+| `AcceptProposal.Conflicted` (only an Acceptance Receipt from before ADR 0064) | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
 | `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | 0 |
 
 Bundle Acceptance retains its declared atomic or ordered-independent policy:
@@ -1702,7 +1734,9 @@ available.
    sequences, resolutions, and outbox intent.
 6. Proposal generation, validation, closure, and per-Operation resolution never
    collapse into one status.
-7. Any referenced target Revision change conflicts the old Proposal Revision.
+7. A referenced target Revision change never changes the old Proposal
+   Revision. Acceptance after such a change replaces the target text and
+   records the Chapter Head that it applied to and its target resolution.
 8. Tiptap state and document-wide positions are projections, never durable
    Proposal identity or authority.
 9. One Author Edit is classified and committed as a whole.

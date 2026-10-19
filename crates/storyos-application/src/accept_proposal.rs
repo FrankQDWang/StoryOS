@@ -1,4 +1,7 @@
-use storyos_core::{AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal};
+use storyos_core::{
+    AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
+    AcceptanceTargetResolution,
+};
 
 use crate::{EditorSessionId, Project, ProjectCommandSettlement, RevisionApplied};
 
@@ -16,7 +19,7 @@ pub struct AcceptProposalInput {
 /// The settled Acceptance. The zero-authority effect holds the condition references of the
 /// Receipt.
 pub type AcceptProposalSettlement = ProjectCommandSettlement<
-    RevisionApplied<()>,
+    RevisionApplied<AcceptanceTargetResolution>,
     AcceptProposalInvalid,
     AcceptProposalConflict,
     AcceptProposalRefusal,

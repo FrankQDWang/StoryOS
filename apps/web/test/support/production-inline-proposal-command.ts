@@ -420,11 +420,15 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await page.reload();
       await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([expectedText, SIBLING]);
       await expect(page.locator(`[data-proposal-id="${opened.proposalId}"] .block-proposal-text`)).toHaveText("narrator tone");
-      await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
+      // The edge edit moved the Chapter Head, so the Proposal is on an earlier base (ADR 0064).
+      await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(1);
+      await expect(page.locator(`[data-proposal-reject="${opened.proposalId}"]`)).toHaveCount(1);
+      await expect(page.locator(`[data-proposal-earlier-base="${opened.proposalId}"]`))
+        .toHaveText("正文已变化。接受会用候选文字替换目标的当前文字。");
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
       if (edge === "end") {
-        // An Acceptance on the moved head makes the conflict. The Replan proves the Anchor on the
-        // current head, so the candidate is editable again after a reload.
+        // An Acceptance on the moved head proves the Anchor range on the current head and applies the
+        // candidate there (ADR 0064).
         const head = (await getChapter({ ...options, chapterId })).chapter.current_revision.revision_id;
         if (afterEdge.validation_receipt.kind !== "present") throw new Error("expected a validation receipt");
         const writerSession = (await queryStoryOSPostgres(`SELECT current_editor_session_id::text
@@ -444,30 +448,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
           method: "POST", route_template: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
           command_schema: acceptance.command_schema, canonical_command_digest: await digestAcceptProposal(acceptance),
           idempotency_key: acceptanceKey } });
-        const conflicted = await acceptProposal({ ...options, proposalId: opened.proposalId, request: acceptance,
+        const accepted = await acceptProposal({ ...options, proposalId: opened.proposalId, request: acceptance,
           idempotencyKey: acceptanceKey, antiForgery: acceptanceChallenge.nonce });
-        assert.deepEqual(conflicted.effect, { kind: "conflicted", reason: "changed_head" });
+        if (accepted.effect.kind !== "applied") throw new Error(`expected applied, got ${JSON.stringify(accepted.effect)}`);
+        assert.equal(accepted.effect.target_resolution, "proven_range");
+        assert.equal(accepted.effect.authoritative_revision.body, `Guard the narrator tone! in this passage.\n${SIBLING}`);
         await page.reload();
-        await page.locator(`[data-proposal-replan="${opened.proposalId}"]`).click();
-        await expect.poll(async () => (await getProposal({ ...options, proposalId: opened.proposalId }))
-          .proposal.base_authoritative_revision_id).toBe(head);
-        const replanned = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
-        assert.equal(replanned.operation_id, afterEdge.operation_id);
-        assert.deepEqual(replanned.anchors.map((anchor) => [anchor.base_authoritative_revision_id, anchor.from, anchor.to]),
-          [[head, 10, 24]]);
-        await page.reload();
-        await expect(edgeCandidate).toHaveText("narrator tone");
-        await editor.focus();
-        await edgeCandidate.evaluate((element) => {
-          window.getSelection()?.setBaseAndExtent(element.firstChild!, 5, element.firstChild!, 5);
-          document.dispatchEvent(new Event("selectionchange"));
-        });
-        await page.keyboard.insertText("xx");
-        await expect.poll(async () => (await getProposal({ ...options, proposalId: opened.proposalId }))
-          .proposal.candidate_text).toBe("narraxxtor tone");
-        await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(["Guard the narraxxtor tone! in this passage.", SIBLING]);
-        assert.equal((await getChapter({ ...options, chapterId })).chapter.current_revision.revision_id, head);
-        await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-replanned-edited.png") });
+        await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(["Guard the narrator tone! in this passage.", SIBLING]);
+        await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-accepted-moved-head.png") });
       }
     }
     // A reference to part of an inline candidate becomes a reference to the same Chapter text when the

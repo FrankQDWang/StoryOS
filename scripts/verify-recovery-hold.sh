@@ -205,14 +205,15 @@ STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   python3 scripts/verification.py step recovery-seed -- sh "$repository_root/scripts/seed-recovery-acceptance.sh"
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
-# Both modes retain three single-Operation conditions and three partial-Acceptance histories.
-# Mixed also retains the production Conflict and cross-Chapter pending-Operation Conflict.
+# Both modes retain two single-Operation conditions and three partial-Acceptance histories.
+# A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so
+# they retain no condition (ADR 0064).
 # Mixed also retains the five Inline Replan conditions of the Inline Proposal HTTP test.
-# Mixed also retains the three conditions of its Inline Replan Undo cases.
+# Mixed also retains the four conditions of its Inline Replan Undo cases.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=16
+  acceptance_condition_count=11
 else
-  acceptance_condition_count=6
+  acceptance_condition_count=2
 fi
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stage4_before=$(stage4_model_facts "$primary")

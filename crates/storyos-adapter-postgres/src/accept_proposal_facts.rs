@@ -1,6 +1,10 @@
 //! The Proposal, Operation, and Chapter facts that one Acceptance classifies.
 
 use storyos_application::{AcceptProposalInput, ProjectCommandError, ProjectScope};
+use storyos_core::{
+    AcceptanceTargetResolution, ManuscriptBlock, OpenInlineProposalAnchor, ReplanAnchorFacts,
+    prove_replanned_inline_anchors,
+};
 
 use crate::command_sequence::unavailable;
 
@@ -8,7 +12,9 @@ pub(super) struct LoadedProposal {
     pub(super) current_revision_id: String,
     pub(super) generation: String,
     pub(super) closure: String,
-    pub(super) validation_current: bool,
+    pub(super) validation: String,
+    /// The validation and the kind of the Acceptance condition of the current Revision.
+    pub(super) condition: Option<(String, Option<String>)>,
     pub(super) candidate_text: String,
     pub(super) chapter_id: String,
     pub(super) operations: Vec<LoadedOperation>,
@@ -18,15 +24,19 @@ pub(super) struct LoadedProposal {
     pub(super) receipt_revision_id: Option<String>,
     receipt_block_id: Option<String>,
     receipt_candidate_text: Option<String>,
-    pub(super) current_head_revision_id: Option<String>,
-    pub(super) validated_target_matches_head: bool,
-    kind: String,
-    chapter_blocks: Vec<storyos_core::ManuscriptBlock>,
+    /// The Revision base and the Validation Receipt base are the Chapter Head.
+    pub(super) base_is_head: bool,
+    head_revision_id: Option<String>,
+    /// The Validation Receipt base is the Revision base.
+    pub(super) receipt_base_matches_revision: bool,
+    pub(super) kind: String,
+    chapter_blocks: Vec<ManuscriptBlock>,
     manuscript_block_id: String,
-    inline_from: Option<u32>,
-    inline_to: Option<u32>,
-    inline_digest: Option<String>,
-    pub(super) inline_base_slice_matches: bool,
+    /// The primary Anchor of an Inline Proposal and its Block on the Anchor base.
+    anchor: Option<OpenInlineProposalAnchor>,
+    base_block: Option<ManuscriptBlock>,
+    /// The Anchor range on the Chapter Head that the exact proof of ADR 0063 gives.
+    pub(super) proven_range: Option<(u32, u32)>,
 }
 
 pub(super) struct LoadedOperation {
@@ -38,6 +48,18 @@ pub(super) struct LoadedOperation {
 }
 
 impl LoadedProposal {
+    /// Each selected Operation targets a Block of the current Chapter Head.
+    pub(super) fn target_blocks_present(&self, selected_ids: &[String]) -> bool {
+        self.operations
+            .iter()
+            .filter(|operation| selected_ids.contains(&operation.operation_id))
+            .all(|operation| {
+                self.chapter_blocks
+                    .iter()
+                    .any(|block| block.manuscript_block_id == operation.manuscript_block_id)
+            })
+    }
+
     /// The Validation Receipt identifies the current candidate of its Block, and the candidate
     /// of the Revision is the candidate of the primary Operation. The current candidate of a
     /// Block is the candidate of its Operation, or else the candidate of the Revision.
@@ -60,11 +82,12 @@ impl LoadedProposal {
     pub(super) fn accepted_body(
         &self,
         selected_ids: &[String],
+        resolution: AcceptanceTargetResolution,
     ) -> Result<String, ProjectCommandError> {
         if self.kind != "inline_edit" {
             return Ok(self.composed_block_body(selected_ids));
         }
-        let (Some(from), Some(to)) = (self.inline_from, self.inline_to) else {
+        let Some(anchor) = &self.anchor else {
             return Err(unavailable("inline Acceptance needs exact Anchors"));
         };
         let mut blocks = self.chapter_blocks.clone();
@@ -74,7 +97,27 @@ impl LoadedProposal {
         else {
             return Err(unavailable("inline Acceptance needs its canonical Block"));
         };
-        block.text = storyos_core::splice_utf16_range(&block.text, from, to, &self.candidate_text)
+        let (text, from, to) = match (resolution, self.proven_range, &self.base_block) {
+            (AcceptanceTargetResolution::ExactBase, _, _) => (&block.text, anchor.from, anchor.to),
+            (AcceptanceTargetResolution::ProvenRange, Some((from, to)), _) => {
+                (&block.text, from, to)
+            }
+            (AcceptanceTargetResolution::BaseBlockReplacement, _, Some(base)) => {
+                (&base.text, anchor.from, anchor.to)
+            }
+            (
+                AcceptanceTargetResolution::BlockReplacement
+                | AcceptanceTargetResolution::ProvenRange
+                | AcceptanceTargetResolution::BaseBlockReplacement,
+                _,
+                _,
+            ) => {
+                return Err(unavailable(
+                    "inline Acceptance has no target for its resolution",
+                ));
+            }
+        };
+        block.text = storyos_core::splice_utf16_range(text, from, to, &self.candidate_text)
             .map_err(|error| unavailable(format!("{error:?}")))?;
         Ok(crate::manuscript_block::persist_canonical_bytes(&blocks))
     }
@@ -102,24 +145,12 @@ impl LoadedProposal {
         crate::manuscript_block::persist_canonical_bytes(&blocks)
     }
 
-    fn inline_slice_matches(&self) -> bool {
-        if self.kind != "inline_edit" {
-            return true;
-        }
-        let (Some(from), Some(to), Some(digest)) = (
-            self.inline_from,
-            self.inline_to,
-            self.inline_digest.as_deref(),
-        ) else {
+    /// The stored Anchor matches its Block on the Anchor base.
+    fn anchor_matches_base(&self) -> bool {
+        let (Some(anchor), Some(block)) = (&self.anchor, &self.base_block) else {
             return false;
         };
-        let Some(block) = self
-            .chapter_blocks
-            .iter()
-            .find(|block| block.manuscript_block_id == self.manuscript_block_id)
-        else {
-            return false;
-        };
+        let (from, to) = (anchor.from, anchor.to);
         let units: Vec<u16> = block.text.encode_utf16().collect();
         let (Ok(start), Ok(end)) = (usize::try_from(from), usize::try_from(to)) else {
             return false;
@@ -141,7 +172,45 @@ impl LoadedProposal {
             from,
             to,
             &slice,
-        ) == digest
+        ) == anchor.base_slice_digest
+    }
+
+    /// Prove the Anchor range of an Inline Proposal on the Chapter Head. Reservations of other
+    /// Proposals do not stop the proof at Acceptance (ADR 0064).
+    fn prove_inline_range(
+        &mut self,
+        base_blocks: &[ManuscriptBlock],
+    ) -> Result<(), ProjectCommandError> {
+        let Some(anchor) = self.anchor.clone() else {
+            return Ok(());
+        };
+        let block = |blocks: &[ManuscriptBlock]| {
+            blocks
+                .iter()
+                .find(|block| block.manuscript_block_id == anchor.manuscript_block_id)
+                .cloned()
+        };
+        self.base_block = block(base_blocks);
+        if !self.anchor_matches_base() {
+            return Err(unavailable(
+                "the Inline Anchor does not match its base Block",
+            ));
+        }
+        let Some(head_revision_id) = self.head_revision_id.as_deref() else {
+            return Ok(());
+        };
+        self.proven_range = prove_replanned_inline_anchors(
+            head_revision_id,
+            &[ReplanAnchorFacts {
+                current_block: block(&self.chapter_blocks),
+                base_block: self.base_block.clone(),
+                anchor,
+                other_reservations: Vec::new(),
+            }],
+        )
+        .ok()
+        .and_then(|proven| proven.first().map(|anchor| (anchor.from, anchor.to)));
+        Ok(())
     }
 }
 
@@ -156,17 +225,19 @@ pub(super) async fn load_proposal(
                     revision.candidate_text, proposal.chapter_id::text,
                     receipt.validation_receipt_id::text, receipt.result,
                     receipt.proposal_revision_id::text, receipt.candidate_text,
-                    chapter_head.current_revision_id::text,
-                    revision.validation = 'valid' AND NOT EXISTS (SELECT 1 FROM storyos.proposal_validation_conditions AS condition
-                      WHERE (condition.owner_user_id, condition.project_id, condition.proposal_id,
-                             condition.proposal_revision_id) =
-                            (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)),
+                    chapter_head.current_revision_id::text, revision.validation,
                     COALESCE(receipt.base_authoritative_revision_id = chapter_head.current_revision_id
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
                     proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
                     proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
                     anchor.base_slice_digest, proposal.bundle_policy,
-                    receipt.manuscript_block_id::text
+                    receipt.manuscript_block_id::text,
+                    COALESCE(receipt.base_authoritative_revision_id =
+                      revision.base_authoritative_revision_id, false),
+                    condition.validation, condition.condition_kind,
+                    anchor.manuscript_block_id::text, anchor.base_authoritative_revision_id::text,
+                    anchor.manuscript_schema_version, anchor.coordinate_profile,
+                    anchor.boundary_profile, convert_from(base_payload.canonical_bytes, 'UTF8')
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -184,6 +255,11 @@ pub(super) async fn load_proposal(
                   ORDER BY operation.operation_id
                   LIMIT 1
                ) AS primary_operation ON true
+               LEFT JOIN storyos.proposal_validation_conditions AS condition
+                 ON (condition.owner_user_id, condition.project_id, condition.proposal_id,
+                     condition.proposal_revision_id) =
+                    (revision.owner_user_id, revision.project_id, revision.proposal_id,
+                     revision.revision_id)
                LEFT JOIN storyos.validation_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.validation_receipt_id) =
                     (proposal.owner_user_id, proposal.project_id, $4::text::uuid)
@@ -207,6 +283,14 @@ pub(super) async fn load_proposal(
                      primary_operation.operation_id, 1)
                 AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
                       $1::text::uuid, $2::text::uuid, $3::text::uuid, revision.revision_id)
+               LEFT JOIN storyos.authoritative_revisions AS base_revision
+                 ON (base_revision.owner_user_id, base_revision.project_id,
+                     base_revision.manuscript_object_id, base_revision.revision_id) =
+                    (anchor.owner_user_id, anchor.project_id, proposal.chapter_id,
+                     anchor.base_authoritative_revision_id)
+               LEFT JOIN storyos.authoritative_payloads AS base_payload
+                 ON (base_payload.owner_user_id, base_payload.project_id, base_payload.payload_id) =
+                    (base_revision.owner_user_id, base_revision.project_id, base_revision.payload_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid",
@@ -258,28 +342,71 @@ pub(super) async fn load_proposal(
         receipt_revision_id: row.get(/*idx*/ 7),
         receipt_block_id: row.get(/*idx*/ 19),
         receipt_candidate_text: row.get(/*idx*/ 8),
-        current_head_revision_id,
-        validation_current: row.get(/*idx*/ 10),
-        validated_target_matches_head: row.get(/*idx*/ 11),
+        validation: row.get(/*idx*/ 10),
+        condition: row
+            .get::<_, Option<String>>(/*idx*/ 21)
+            .map(|validation| (validation, row.get(/*idx*/ 22))),
+        base_is_head: row.get(/*idx*/ 11),
+        head_revision_id: current_head_revision_id,
+        receipt_base_matches_revision: row.get(/*idx*/ 20),
         kind: row.get(/*idx*/ 12),
         chapter_blocks,
         manuscript_block_id: row.get::<_, Option<String>>(/*idx*/ 14).unwrap_or_default(),
-        inline_from: row
-            .get::<_, Option<i32>>(/*idx*/ 15)
-            .and_then(|value| u32::try_from(value).ok()),
-        inline_to: row
-            .get::<_, Option<i32>>(/*idx*/ 16)
-            .and_then(|value| u32::try_from(value).ok()),
-        inline_digest: row.get(/*idx*/ 17),
-        inline_base_slice_matches: true,
+        anchor: stored_anchor(&row)?,
+        base_block: None,
+        proven_range: None,
     };
-    loaded.validated_target_matches_head &=
-        !crate::validation_history::unavailable_revisions(client, scope)
+    if crate::validation_history::unavailable_revisions(client, scope)
+        .await
+        .map_err(unavailable)?
+        .contains(&loaded.current_revision_id)
+    {
+        return Err(unavailable(
+            "the validation history of the Proposal Revision is unavailable",
+        ));
+    }
+    if loaded.kind == "inline_edit" {
+        let base_body = row.get::<_, Option<String>>(/*idx*/ 28);
+        let base_blocks = match (&loaded.anchor, base_body) {
+            _ if loaded.base_is_head => loaded.chapter_blocks.clone(),
+            (Some(anchor), Some(base_body)) => crate::manuscript_block::load_revision_blocks(
+                client,
+                scope.owner_user_id.as_ref(),
+                scope.project_id.as_ref(),
+                &loaded.chapter_id,
+                &anchor.base_authoritative_revision_id,
+                &base_body,
+            )
             .await
-            .map_err(unavailable)?
-            .contains(&loaded.current_revision_id);
-    loaded.inline_base_slice_matches = loaded.inline_slice_matches();
+            .map_err(unavailable)?,
+            (None, _) | (Some(_), None) => Vec::new(),
+        };
+        loaded.prove_inline_range(&base_blocks)?;
+    }
     Ok(Some(loaded))
+}
+
+/// The primary Anchor of the Proposal Revision, when the Proposal has one.
+fn stored_anchor(
+    row: &tokio_postgres::Row,
+) -> Result<Option<OpenInlineProposalAnchor>, ProjectCommandError> {
+    let (Some(manuscript_block_id), Some(base_authoritative_revision_id)) = (
+        row.get::<_, Option<String>>(/*idx*/ 23),
+        row.get::<_, Option<String>>(/*idx*/ 24),
+    ) else {
+        return Ok(None);
+    };
+    let unsigned = |idx: usize| u32::try_from(row.get::<_, i32>(idx)).map_err(unavailable);
+    Ok(Some(OpenInlineProposalAnchor {
+        manuscript_block_id,
+        base_authoritative_revision_id,
+        manuscript_schema_version: unsigned(/*idx*/ 25)?,
+        coordinate_profile: row.get(/*idx*/ 26),
+        from: unsigned(/*idx*/ 15)?,
+        to: unsigned(/*idx*/ 16)?,
+        boundary_profile: row.get(/*idx*/ 27),
+        base_slice_digest: row.get(/*idx*/ 17),
+    }))
 }
 
 async fn load_operations(
