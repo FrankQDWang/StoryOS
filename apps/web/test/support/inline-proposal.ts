@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { applyAuthorEdit, createAgentRun, createEditorSession, digestApplyAuthorEdit, digestCreateAgentRun,
-  digestCreateEditorSession, getAgentRun, getProposal,
+import { acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession, digestAcceptProposal,
+  digestApplyAuthorEdit, digestCreateAgentRun, digestCreateEditorSession, getAgentRun, getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AcceptProposalRequest, ApplyAuthorEditRequest, BlockProposalInspect, CreateAgentRunRequest,
+  CreateEditorSessionRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, PROSE, challenged, id, settleOnce } from "./acceptance.ts";
 
 export const INLINE_CANDIDATE = "narrator tone";
@@ -190,4 +190,24 @@ export function replaceUnit(
       },
     }],
   };
+}
+
+/** Accepts the current Operation of `proposal` with its Validation Receipt on the expected Chapter Head. */
+export async function acceptInline(
+  options: { baseUrl: string; projectId: string; fetchImpl: typeof fetch },
+  writer: Awaited<ReturnType<typeof writePassage>>,
+  proposal: BlockProposalInspect,
+  expectedRevisionId: string,
+  ns: string,
+) {
+  if (proposal.validation_receipt.kind !== "present") throw new Error("expected a Validation Receipt");
+  const request: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+    accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}1`), proposal_revision_id: proposal.revision_id,
+      validation_receipt_id: proposal.validation_receipt.validation_receipt_id,
+      selected_operation_ids: [proposal.operation_id], expected_authoritative_revision_id: expectedRevisionId,
+      editor_session_id: writer.session.editor_session.editor_session_id } };
+  return challenged(options.baseUrl, options.fetchImpl, options.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", request.command_schema,
+    await digestAcceptProposal(request), id(`${ns}2`), (antiForgery) => acceptProposal({
+      ...options, proposalId: proposal.proposal_id, request, antiForgery, idempotencyKey: id(`${ns}2`) }));
 }
