@@ -87,6 +87,11 @@ export interface EditorSessionWritingController {
 
 type Captured = { edit: CapturedEdit; origin: InputOrigin; createdAt: string };
 
+/** The input bound stopped input. A Challenge wait stopped with it, and the frozen group stays in the Journal. */
+export class InputBoundStopError extends Error {
+  constructor() { super("Manual input queue limit failed"); }
+}
+
 const HARD_INPUT: readonly InputOrigin[] = ["composition_confirmation", "paste", "cut", "drop"];
 const STRUCTURAL_INPUT: readonly InputOrigin[] = ["split_block", "join_blocks", "move_block", "retype_block"];
 
@@ -208,7 +213,10 @@ export function createEditorSessionWritingController({
     queuedOperations += 1;
     if (queuedOperations + held.length > AUTHOR_EDIT_MAX_UNITS) {
       queuedOperations -= 1;
-      fail(new Error("Manual input queue limit failed"));
+      // Otherwise the wait saves the frozen group after input stopped (ADR 0036).
+      clearIdle();
+      challengeAdmission.cancel();
+      fail(new InputBoundStopError());
       return queue;
     }
     queue = queue.then(async () => {
