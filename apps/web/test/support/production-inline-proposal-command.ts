@@ -420,7 +420,11 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await page.reload();
       await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([expectedText, SIBLING]);
       await expect(page.locator(`[data-proposal-id="${opened.proposalId}"] .block-proposal-text`)).toHaveText("narrator tone");
-      await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
+      // The edge edit moved the Chapter Head, so the Proposal is on an earlier base (ADR 0064).
+      await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(1);
+      await expect(page.locator(`[data-proposal-reject="${opened.proposalId}"]`)).toHaveCount(1);
+      await expect(page.locator(`[data-proposal-earlier-base="${opened.proposalId}"]`))
+        .toHaveText("正文已变化。接受会用候选文字替换目标的当前文字。");
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
       if (edge === "end") {
         // An Acceptance on the moved head proves the Anchor range on the current head and applies the
