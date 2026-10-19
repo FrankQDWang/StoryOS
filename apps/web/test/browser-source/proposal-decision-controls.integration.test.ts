@@ -187,12 +187,22 @@ it("keeps the refusal text of a refused Acceptance through a reload until the ne
           .toEqual({ accept: 1, reject: 1 });
         // The next decision: a Rejection that keeps the Proposal open, as a Rejection of some Operations does.
         await act(async () => { reloaded.card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]")?.click(); });
-        await expect.poll(() => reloaded.sent.filter(({ path }) => path.endsWith("/rejections")).length).toBe(1);
-        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
-        expect({ status: reloaded.status(), failures: [...first.tab.failures, ...reloaded.tab.failures] })
-          .toEqual({ status: null, failures: [] });
+        // Reject comes back only after the journal check of the next decision generation.
+        await expect.poll(() => ({ rejections: reloaded.sent.filter(({ path }) => path.endsWith("/rejections")).length,
+          reject: reloaded.controls().reject, status: reloaded.status() }))
+          .toEqual({ rejections: 1, reject: 1, status: null });
       } finally {
         await reloaded.tab.unmount();
+      }
+      // A second reload: the later Rejection replaces the refused Acceptance in the Local Edit Journal.
+      const again = await display(workspace, proposal);
+      try {
+        await expect.poll(() => again.controls().reject).toBe(1);
+        expect({ status: again.status(), sent: again.sent,
+          failures: [...first.tab.failures, ...reloaded.tab.failures, ...again.tab.failures] })
+          .toEqual({ status: null, sent: [], failures: [] });
+      } finally {
+        await again.tab.unmount();
       }
     });
   } finally {
@@ -219,8 +229,9 @@ it("does not show the refusal text of an earlier Proposal Revision", async () =>
       const revised = { ...proposal, revision_id: "018f0000-0000-7001-8000-000000000e08" };
       const reloaded = await display(workspace, revised);
       try {
-        await expect.poll(() => reloaded.card()?.getAttribute("data-proposal-revision-id")).toBe(revised.revision_id);
-        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+        // Reject needs the journal check, which also restores a refusal.
+        await expect.poll(() => ({ revision: reloaded.card()?.getAttribute("data-proposal-revision-id"),
+          reject: reloaded.controls().reject })).toEqual({ revision: revised.revision_id, reject: 1 });
         expect({ status: reloaded.status(), failures: [...first.tab.failures, ...reloaded.tab.failures] })
           .toEqual({ status: null, failures: [] });
       } finally {

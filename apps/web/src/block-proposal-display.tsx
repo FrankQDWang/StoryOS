@@ -16,7 +16,7 @@ import { acceptDraftCandidates } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
-  knownProblemDisplayedAcceptance, reconcileDisplayedAcceptance,
+  knownProblemDisplayedAcceptance, latestDisplayedDecisionIsAcceptance, reconcileDisplayedAcceptance,
   settledDisplayedAcceptance } from "./acceptance-journal.ts";
 import { proposalConditionKind } from "./proposal-recovery-surface.ts";
 import { dropStoredReplans } from "./stored-replan-records.ts";
@@ -270,7 +270,8 @@ export function BlockProposalDisplay({
             refused: "上次接受已被拒绝，候选文字仍保留。",
           }[settled.response.effect.kind];
         setDecisionMessages((current) => ({ [locator.proposalId]: message, ...current }));
-        if (settled.kind === "settled" && settled.response.effect.kind === "refused") {
+        if (settled.kind === "settled" && settled.response.effect.kind === "refused"
+          && await latestDisplayedDecisionIsAcceptance(workspace, locator.proposalId) && active) {
           const refusal = { revisionId: settled.response.receipt.proposal_revision_id,
             reason: settled.response.effect.reason, earlier: true };
           setAcceptanceRefusals((current) => ({ [locator.proposalId]: refusal, ...current }));
