@@ -177,5 +177,5 @@ The immutable, idempotent typed Receipt produced by an Undo Acceptance attempt, 
 _Avoid_: Compensation Receipt, undo message
 
 **Validation Receipt**:
-The immutable result of StoryOS Core validating an exact Proposal Revision against exact target versions, domain invariants, and preconditions. It remains true for those historical inputs but ceases to be current or applicable after any relevant Proposal or target change.
+The immutable result of StoryOS Core validating an exact Proposal Revision against its own base, domain invariants, and preconditions. It stays true for those historical inputs. A new Proposal Revision needs a new Validation Receipt. A target change after the base does not make the Receipt inapplicable: Acceptance resolves the current target separately ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Model confidence, creator-approved flag
