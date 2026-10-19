@@ -328,7 +328,7 @@ Unlisted transitions are invalid.
 | validation | `pending`, `valid`, or `invalid` | `conflicted` | exact target proof no longer holds |
 | validation | `valid` | `pending` | author edits pending content in a new Proposal Revision |
 | validation | `invalid` | `pending` | corrected new Proposal Revision |
-| validation | `conflicted` | `pending` | explicitly replanned new Proposal Revision |
+| validation | `conflicted` | `pending` | author edits pending content, or an explicit Replan, in a new Proposal Revision |
 | closure | `open` | `withdrawn` | `WithdrawProposal` |
 | closure | `withdrawn` | `open` | explicit reopen with new Revision |
 | closure | `open` or `withdrawn` | `superseded` | `SupersedeProposal` |
@@ -788,9 +788,10 @@ creates Proposal Structural Reshaping. That result is
 `ProposalRevised.StructuralReshapeConflict`: the new Revision preserves the
 author edit and the same Transition deterministically records its
 `ProposalConflict`. This fact is caused by the new candidate shape and cannot
-be selected for a stale command. Once a Proposal is already conflicted, step 1
-returns `Conflicted`; direct Proposal editing cannot append another Revision
-until explicit replan.
+be selected for a stale command. A Proposal Revision that is already
+`conflicted` still accepts a direct Proposal edit without a Replan. The new
+Revision validates against its own base (section 6.4), and Acceptance can apply
+it (ADR 0064).
 
 The production editor-session evidence is authoritative for completed-intent
 segmentation, durability, acknowledgement ordering, and recovery mechanics, but
