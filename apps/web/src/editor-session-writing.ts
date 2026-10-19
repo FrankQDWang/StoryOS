@@ -156,6 +156,12 @@ export function createEditorSessionWritingController({
   let attention = false;
   let composing = false;
   let abandonUndo: (() => void) | undefined;
+  // A Challenge wait does not hold the queue, so input of the wait enters the Journal at once (ADR 0065).
+  let waitEnded: Promise<void> | undefined;
+  let endWait: (() => void) | undefined;
+  // The Journal has records that follow an unsettled group, so the bound counts the Journal records too.
+  let followers = false;
+  let inputStopped = false;
   let queuedOperations = 0;
   let queue: Promise<void> = Promise.resolve();
   // The candidate whose latest group has an unknown outcome. Input waits in `held` until it settles.
@@ -209,14 +215,29 @@ export function createEditorSessionWritingController({
     submissionClosed = true;
   };
 
+  const cancelWait = (): void => {
+    challengeAdmission.cancel();
+    waitEnded = undefined;
+    endWait?.();
+  };
+
+  const stopInput = (): void => {
+    if (inputStopped || failed) return;
+    inputStopped = true;
+    // Otherwise the wait saves the frozen group after input stopped (ADR 0036).
+    clearIdle();
+    cancelWait();
+    onFailure(new InputBoundStopError());
+    submissionClosed = true;
+    // Queued input still enters the Journal, so only input after the bound is lost (ADR 0065).
+    void queue.then(() => { failed = true; });
+  };
+
   const enqueue = (operation: () => Promise<void>): Promise<void> => {
     queuedOperations += 1;
     if (queuedOperations + held.length > AUTHOR_EDIT_MAX_UNITS) {
       queuedOperations -= 1;
-      // Otherwise the wait saves the frozen group after input stopped (ADR 0036).
-      clearIdle();
-      challengeAdmission.cancel();
-      fail(new InputBoundStopError());
+      stopInput();
       return queue;
     }
     queue = queue.then(async () => {
@@ -242,17 +263,42 @@ export function createEditorSessionWritingController({
 
   const submitPending = async (): Promise<void> => {
     clearIdle();
+    if (inputStopped) return;
+    if (waitEnded !== undefined) {
+      // A boundary during the wait starts a new later group.
+      undoGroupId = undefined;
+      return;
+    }
     if (pendingIntentCount === 0 || composing || attention || journal.save_state === "needs_attention") return;
     submissionClosed = true;
     const submittedCandidate = openCandidate;
-    // The same frozen group retries after a Challenge rate limit.
-    const projection = await challengeAdmission.retry(() => submitGroup({
+    // The same frozen group retries after a Challenge rate limit. The retry is a queued operation.
+    const attempt = await challengeAdmission.attempt(() => submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,
       onWriterFenced: () => fail(new Error("Editor Session is read only")),
-    }));
-    if (projection === undefined) return;
+    }), () => {
+      void enqueue(async () => {
+        const ended = endWait;
+        waitEnded = undefined;
+        try {
+          await settle();
+        } finally {
+          ended?.();
+        }
+      });
+    });
+    if (attempt.kind === "cancelled") return;
+    if (attempt.kind === "waiting") {
+      waitEnded = new Promise((resolve) => { endWait = resolve; });
+      undoGroupId = undefined;
+      return;
+    }
+    const projection = attempt.result;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
-    if (pendingIntentCount === 0) pendingTarget = undefined;
+    if (pendingIntentCount === 0) {
+      pendingTarget = undefined;
+      followers = false;
+    }
     if (projection.save_state === "saved" && pendingIntentCount === 0) submissionClosed = false;
     undoGroupId = undefined;
     if (submittedCandidate !== undefined) {
@@ -312,8 +358,18 @@ export function createEditorSessionWritingController({
     const edit = rebind(capturedEdit);
     const target = targetOf(edit);
     undoGroupId ??= createJournalUuid(cryptoImpl);
-    const projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
+    let projection: PendingEditProjection;
+    try {
+      projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
+    } catch (error) {
+      // Candidate input waits in memory behind an unsettled group (ADR 0046). #1232 owns its change.
+      if (error instanceof Error && error.message === "Local Edit Journal requires prior group settlement") return false;
+      throw error;
+    }
     unjournaled -= 1;
+    // Input can stop during the append. The Journal keeps the record, and the editor stays stopped.
+    if (failed || stopped || inputStopped) return true;
+    if (waitEnded !== undefined) followers = true;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
     pendingTarget = target;
     openCandidate = candidateKey(edit);
@@ -369,10 +425,12 @@ export function createEditorSessionWritingController({
     return state.projection;
   };
 
-  const flush = (): Promise<void> => {
+  const flush = async (): Promise<void> => {
     clearIdle();
     if (pendingIntentCount > 0 || unjournaled > 0) submissionClosed = true;
-    return enqueue(settle);
+    await enqueue(settle);
+    // A flush resolves after the Challenge wait and its retry end.
+    while (waitEnded !== undefined && !stopped && !failed) await waitEnded;
   };
 
   const whenIdle = async (): Promise<void> => {
@@ -386,8 +444,14 @@ export function createEditorSessionWritingController({
     capture(edit, origin, blocks) {
       // New input changes the Author Undo Frontier, so an Undo in progress can only conflict (ADR 0038).
       abandonUndo?.();
+      if (inputStopped) return;
       captured += 1;
       unjournaled += 1;
+      // During a wait the bound counts the Journal records of all unsettled groups too (ADR 0065).
+      if ((waitEnded !== undefined || followers) && pendingIntentCount + unjournaled > AUTHOR_EDIT_MAX_UNITS) {
+        stopInput();
+        return;
+      }
       if (HARD_INPUT.includes(origin)) submissionClosed = true;
       const key = candidateKey(edit);
       capturedCandidate = key;
@@ -509,7 +573,7 @@ export function createEditorSessionWritingController({
       stopped = true;
       abandonUndo?.();
       clearIdle();
-      challengeAdmission.cancel();
+      cancelWait();
       listeners.clear();
     },
   };

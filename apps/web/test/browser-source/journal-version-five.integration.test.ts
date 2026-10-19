@@ -143,7 +143,8 @@ it("keeps a version 4 Journal that cannot upgrade, shows local recovery, and exp
   }
 });
 
-it("refuses a record that follows an unsettled group, because this version writes no such record", async () => {
+// A record that follows a group must name an earlier frozen authoritative group (ADR 0065).
+it("fails closed for a record that follows a group that the Journal does not have", async () => {
   const test = await openJournalAppendTestWorkspace();
   try {
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
