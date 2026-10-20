@@ -237,21 +237,23 @@ struct EventBuffer {
     bytes: Vec<u8>,
     /// The start of the first event that `next_event` did not return.
     start: usize,
+    /// The first position at or after `start` where the next search for a blank line starts.
+    resume: usize,
 }
 
 impl EventBuffer {
     /// Moves the unfinished tail to the front one time, and then appends `chunk`.
     fn push(&mut self, chunk: &[u8]) {
         self.bytes.drain(..self.start);
+        self.resume -= self.start;
         self.start = 0;
         self.bytes.extend_from_slice(chunk);
     }
 
     /// The next complete event, without its blank line.
     fn next_event(&mut self) -> Option<&[u8]> {
-        let rest = &self.bytes[self.start..];
-        let (end, separator) = (0..rest.len()).find_map(|position| {
-            let tail = &rest[position..];
+        let found = (self.resume..self.bytes.len()).find_map(|position| {
+            let tail = &self.bytes[position..];
             if tail.starts_with(b"\n\n") {
                 Some((position, 2))
             } else if tail.starts_with(b"\r\n\r\n") {
@@ -259,9 +261,16 @@ impl EventBuffer {
             } else {
                 None
             }
-        })?;
-        let event = self.start..self.start + end;
-        self.start += end + separator;
+        });
+        let Some((end, separator)) = found else {
+            // Only the last bytes can start a blank line that is not complete.
+            let incomplete = b"\r\n\r\n".len() - 1;
+            self.resume = self.bytes.len().saturating_sub(incomplete).max(self.start);
+            return None;
+        };
+        let event = self.start..end;
+        self.start = end + separator;
+        self.resume = self.start;
         Some(&self.bytes[event])
     }
 }
