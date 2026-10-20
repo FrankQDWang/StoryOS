@@ -304,6 +304,23 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
                 "new_after_terminal", "append"
             ),
         ),
+        (
+            "observation-driven-pending",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "current_lifecycle_projection",
+                {
+                    "pending": "no_terminal_and_zero_observations",
+                    "outcome_unknown": "no_terminal_and_one_or_more_observations",
+                    "receipt_settled": "terminal_precedes_historical_observations",
+                },
+            ),
+        ),
+        (
+            "missing-observation-history",
+            lambda probe: probe["author_command_outcome_unknown"][
+                "current_lifecycle_projection"
+            ].pop("observation_rows", None),
+        ),
     ]
     for name, mutate in unknown_mutations:
         unknown_probe = copy.deepcopy(catalog)
@@ -530,7 +547,7 @@ def main() -> int:
         print("OK: takeover Receipt/Activity negative self-test rejected a bad catalog")
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
         print("OK: outcome-Query-family negative self-test rejected a bad catalog")
-        print("OK: outcome_unknown negative self-tests rejected seven bad catalogs and twelve bad SQL shapes")
+        print("OK: outcome_unknown negative self-tests rejected nine bad catalogs and twelve bad SQL shapes")
         print("OK: named-outcome-relation negative self-tests rejected five bad catalogs")
     return 0
 

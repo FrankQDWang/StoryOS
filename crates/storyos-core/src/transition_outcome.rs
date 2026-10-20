@@ -4,8 +4,11 @@ use std::convert::Infallible;
 
 /// The exhaustive Core classification of one admitted command.
 ///
-/// Only `Applied` changes Authoritative State and allocates an Authoritative Commit and
-/// an Author Action. The other outcomes record only a zero-authority Domain Receipt.
+/// Only `Applied` changes the target of the command. The declared settlement profile of the
+/// command selects the records that each outcome writes. An `Applied` outcome allocates an
+/// Authoritative Commit only when Authoritative State changes. A zero-authority outcome can
+/// write the Operational Records that its command declares, but no Authoritative Commit or
+/// Author Action.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransitionOutcome<A, N, C, R> {
     Applied(A),

@@ -581,7 +581,7 @@ meaning:
 
 | Wire operation | Semantic command owner | Public route placement | Release 1 settlement rule |
 | --- | --- | --- | --- |
-| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all five Core outcomes remain possible |
+| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all six Core outcomes remain possible |
 | `AcceptProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/acceptances` | explicit protected editor command; typed Acceptance Receipt stays distinct |
 | `RejectProposalOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/rejections` | exact selected pending operations and rejection events |
 | `WithdrawProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/withdrawals` | author cause or exact current-producer cause only |
