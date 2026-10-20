@@ -87,6 +87,8 @@ pub enum ContextBlockReason {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RejectionReason {
     OverItemTokenLimit,
+    /// The passage is in the item limit, but the passages of its collection together are above it.
+    OverCollectionTokenLimit,
     RequiredRevisionUnavailable,
     WorkingTargetRevisionUnavailable,
 }

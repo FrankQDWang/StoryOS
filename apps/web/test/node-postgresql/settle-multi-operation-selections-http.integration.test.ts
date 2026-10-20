@@ -345,8 +345,14 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
       assert.equal(run.context.sufficiency.kind, "blocked");
       assert.deepEqual(run.model_attempt, { kind: "absent" });
       assert.deepEqual(run.evidence, []);
-      if (boundary === "over_budget") assert.equal(run.context.selected.some((source) => source.source_class === "working_target"), false);
-      else assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
+      if (boundary === "over_budget") {
+        assert.equal(run.context.selected.some((source) => source.source_class === "working_target"), false);
+        const targets = run.context.considered.filter((source) => source.source_class === "working_target");
+        assert.deepEqual(targets.map(({ source_version, eligible }) => ({ source_version, eligible })),
+          setup.chapters.map(({ chapter }) => ({ source_version: chapter.current_revision.revision_id, eligible: false })));
+        assert.deepEqual(run.context.rejected, targets.map(({ source_class, source_version, token_count }) =>
+          ({ source_class, source_version, token_count, reason: { kind: "over_collection_token_limit" } })));
+      } else assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
       assert.equal(run.context.selected.some((source) => source.content === "Private foreign prose."), false);
     }
     assert.deepEqual(run.context.passage_targets, setup.target.targets);
