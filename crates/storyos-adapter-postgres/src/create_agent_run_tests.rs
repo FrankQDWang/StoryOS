@@ -242,7 +242,7 @@ async fn wait_for_row_lock_of(
     holder: i32,
     relation: &str,
 ) -> i32 {
-    let waited = tokio::time::timeout(Duration::from_secs(10), async {
+    let waited = tokio::time::timeout(Duration::from_secs(/*secs*/ 10), async {
         loop {
             let waiting = monitor
                 .query_opt(
@@ -259,7 +259,7 @@ async fn wait_for_row_lock_of(
                 .await
                 .unwrap();
             if let Some(row) = waiting {
-                return row.get::<_, i32>(0);
+                return row.get::<_, i32>(/*idx*/ 0);
             }
             tokio::task::yield_now().await;
         }
@@ -280,11 +280,11 @@ async fn wait_for_row_lock_of(
         .into_iter()
         .map(|row| {
             (
-                row.get::<_, String>(0),
-                row.get::<_, Option<String>>(1),
-                row.get::<_, Option<String>>(2),
-                row.get::<_, String>(3),
-                row.get::<_, Vec<i32>>(4),
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, Option<String>>(/*idx*/ 1),
+                row.get::<_, Option<String>>(/*idx*/ 2),
+                row.get::<_, String>(/*idx*/ 3),
+                row.get::<_, Vec<i32>>(/*idx*/ 4),
             )
         })
         .collect::<Vec<_>>();
@@ -638,7 +638,7 @@ async fn concurrent_existing_conversation_admissions_take_the_contention_refusal
         )
         .await
         .unwrap()
-        .get::<_, i64>(0);
+        .get::<_, i64>(/*idx*/ 0);
     let runs = admin
         .query(
             "SELECT conversation_id::text, run_id::text, status FROM storyos.agent_runs
@@ -648,7 +648,7 @@ async fn concurrent_existing_conversation_admissions_take_the_contention_refusal
         .await
         .unwrap()
         .into_iter()
-        .map(|row| (row.get(0), row.get(1), row.get(2)))
+        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))
         .collect::<Vec<(String, String, String)>>();
     assert_eq!(
         (conversations, runs),
