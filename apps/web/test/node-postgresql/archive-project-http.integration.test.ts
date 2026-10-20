@@ -11,6 +11,8 @@ import {
   createProjectCommandChallenge,
   digestArchiveProject,
   digestUpdateProject,
+  getManuscriptTree,
+  getProject,
   listProjects,
   updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -185,6 +187,13 @@ test("archiveProject settles lifecycle, replays, lists archived, and fails close
     const listedItem = listed.projects.find((item) => item.project_scope.project_id === first.projectId);
     assert.equal(listedItem?.lifecycle.kind, "archived");
     assert.equal(listedItem?.revision, "2");
+
+    const archivedProject = await getProject({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
+    assert.equal(archivedProject.project.title, "Empty Novel");
+    await assert.rejects(
+      getManuscriptTree({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
+    );
 
     const already = await archive(
       baseUrl,

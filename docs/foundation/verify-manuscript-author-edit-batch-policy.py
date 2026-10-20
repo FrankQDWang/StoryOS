@@ -26,6 +26,8 @@ APPLY_AUTHOR_EDIT_OUTCOME_SCHEMA_PATH = (
 ROUTE_CATALOG_PATH = ROOT / "docs/foundation/versioned-protocol-release-1-route-catalog.json"
 TYPESCRIPT_CLIENT_PATH = ROOT / "generated/typescript/storyos-public-release-1/client.d.mts"
 AUTHOR_ADMISSION_PATH = ROOT / "docs/foundation/author-command-admission.md"
+PROTOCOL_PATH = ROOT / "docs/foundation/versioned-command-query-artifact-event-protocol.md"
+ARTIFACT_PATH = ROOT / "docs/foundation/artifact-domain-model.md"
 PROJECTIONS = (
     ROOT / "docs/glossary/editor-and-author-commands.md",
     ROOT / "docs/adr/0003-specify-manuscript-revision-and-proposal-state-machine.md",
@@ -33,6 +35,8 @@ PROJECTIONS = (
     ROOT / "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
     ROOT / "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
     AUTHOR_ADMISSION_PATH,
+    PROTOCOL_PATH,
+    ARTIFACT_PATH,
 )
 REVISION = "storyos.author-edit-batch.release-1.preview.v1"
 EDITOR_REVISION = "storyos.editor-contract.release-1.v3"
@@ -941,6 +945,19 @@ def author_admission_errors(admission_projection: str) -> list[str]:
     return errors
 
 
+CORE_DRAFT_RETRY_REFUSED_ROW = (
+    "| `DraftRetry` | `Refused` | `Unchanged` with exact current `Open` closure and no new "
+    "event | the exact source Draft |"
+)
+WEB_DRAFT_RETRY_REFUSED_ROW = (
+    "| `DraftRetry.Refused` with matched source | exact source remains open with no "
+    "lifecycle event | keep only controls permitted by that open source and current result |"
+)
+ARTIFACT_AUTHOR_EDIT_RESULTS = (
+    "authoritative applied, Proposal revised, refused to Draft, refused, conflicted, or no effect."
+)
+
+
 def core_author_edit_result_errors(core_projection: str) -> list[str]:
     core = visible_markdown(core_projection)
     errors: list[str] = []
@@ -966,6 +983,7 @@ def core_author_edit_result_errors(core_projection: str) -> list[str]:
             "| `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; "
             "`DraftRetry` source is unchanged and creates no lifecycle event | 0 |",
         ),
+        "retry disposition": (CORE_DRAFT_RETRY_REFUSED_ROW,),
     }
     for label, required in requirements.items():
         if any(value not in core for value in required):
@@ -973,6 +991,22 @@ def core_author_edit_result_errors(core_projection: str) -> list[str]:
     rows = re.findall(r"^\| `ApplyAuthorEdit.Refused` \|.*$", core, flags=re.MULTILINE)
     if len(rows) != 1:
         errors.append("Core ordinary Refused allocation count drifted")
+    if len(re.findall(r"^\| `DraftRetry` \| `Refused` \|", core, flags=re.MULTILINE)) != 1:
+        errors.append("Core ordinary Refused retry disposition drifted")
+    return errors
+
+
+def author_edit_result_summary_errors(web: str, protocol: str, artifact: str) -> list[str]:
+    errors: list[str] = []
+    web_rows = re.findall(r"^\| `DraftRetry\.Refused`.*$", visible_markdown(web),
+                          flags=re.MULTILINE)
+    if web_rows != [WEB_DRAFT_RETRY_REFUSED_ROW]:
+        errors.append("Web DraftRetry ordinary Refused row drifted")
+    protocol = visible_markdown(protocol)
+    if "all six Core outcomes remain possible" not in protocol or "five Core outcomes" in protocol:
+        errors.append("protocol Author Edit outcome count drifted")
+    if ARTIFACT_AUTHOR_EDIT_RESULTS not in " ".join(visible_markdown(artifact).split()):
+        errors.append("Artifact Author Edit result summary drifted")
     return errors
 def policy_errors(
     policy: dict,
@@ -1105,6 +1139,11 @@ def policy_errors(
     errors.extend(author_admission_errors(
         projections.get(AUTHOR_ADMISSION_PATH.as_posix(), ""),
     ))
+    errors.extend(author_edit_result_summary_errors(
+        projections.get(PROJECTIONS[3].as_posix(), ""),
+        projections.get(PROTOCOL_PATH.as_posix(), ""),
+        projections.get(ARTIFACT_PATH.as_posix(), ""),
+    ))
     return errors
 def self_test() -> None:
     policy, evidence, candidate_metrics, response_schema, projections = current_sources()
@@ -1137,6 +1176,31 @@ def self_test() -> None:
         assert old in core, old
         changed_projections = dict(projections)
         changed_projections[PROJECTIONS[2].as_posix()] = core.replace(old, new, 1)
+        assert expected in policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections
+        ), old
+    for path, old, new, expected in (
+        (PROJECTIONS[2], CORE_DRAFT_RETRY_REFUSED_ROW + "\n", "",
+         "Core ordinary Refused retry disposition drifted"),
+        (PROJECTIONS[2], CORE_DRAFT_RETRY_REFUSED_ROW,
+         CORE_DRAFT_RETRY_REFUSED_ROW.replace("`Unchanged` with exact current `Open` closure",
+                                              "`ClosedSuperseded`"),
+         "Core ordinary Refused retry disposition drifted"),
+        (PROJECTIONS[3], WEB_DRAFT_RETRY_REFUSED_ROW + "\n", "",
+         "Web DraftRetry ordinary Refused row drifted"),
+        (PROJECTIONS[3], WEB_DRAFT_RETRY_REFUSED_ROW,
+         WEB_DRAFT_RETRY_REFUSED_ROW.replace("exact source remains open with no lifecycle event",
+                                             "old source `ClosedSuperseded`"),
+         "Web DraftRetry ordinary Refused row drifted"),
+        (PROTOCOL_PATH, "all six Core outcomes", "all five Core outcomes",
+         "protocol Author Edit outcome count drifted"),
+        (ARTIFACT_PATH, "refused to Draft, refused, conflicted", "refused to Draft, conflicted",
+         "Artifact Author Edit result summary drifted"),
+    ):
+        text = projections[path.as_posix()]
+        assert old in text, old
+        changed_projections = dict(projections)
+        changed_projections[path.as_posix()] = text.replace(old, new, 1)
         assert expected in policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections
         ), old

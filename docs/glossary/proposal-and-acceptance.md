@@ -45,7 +45,7 @@ A stable top-level manuscript block may contain at most one unresolved InlineEdi
 _Avoid_: Same-block Proposal concurrency, interval sharing, implicit Proposal merge
 
 **Proposal Structural Reshaping**:
-An author edit inside a pending Proposal Operation that splits, joins, moves, retypes, or changes the block span of its candidate content. StoryOS keeps the edit in a new Proposal Revision and shows a conflict. An explicit Replan can prove the same semantic identity and keep the Operation ID, or it can replace the Operation. A later candidate edit validates against its own base, and the conflict does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+An author edit inside a pending Proposal Operation that splits, joins, moves, retypes, or changes the block span of its candidate content. Release 1 does not make it. The Server refuses a structural primitive on a Proposal target with HTTP 422 `command_target_refused` before Admission ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)).
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
@@ -157,7 +157,7 @@ The first Core execution of one schema-valid, authorized Acceptance command afte
 _Avoid_: Acceptance retry, button click, Receipt lookup
 
 **Acceptance Result**:
-The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflicted, Refused, or NoEffect. Applied records its target resolution, and Refused includes a missing target Block. Only an Acceptance Receipt from before [ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md) records Conflicted. Only Applied changes Authoritative State and resolves selected Operations as applied. Infrastructure uncertainty is not a Result, and the idempotency key of the command reconciles it.
+The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflicted, or Refused. Applied records its target resolution, and Refused includes a missing target Block. Only an Acceptance Receipt from before [ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md) records Conflicted. Only Applied changes Authoritative State and resolves selected Operations as applied. Infrastructure uncertainty is not a Result, and the idempotency key of the command reconciles it.
 _Avoid_: Success boolean, exception text, accepted Proposal state, unknown as failure
 
 **Replacing Acceptance**:

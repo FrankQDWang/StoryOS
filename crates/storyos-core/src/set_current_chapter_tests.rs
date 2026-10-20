@@ -86,3 +86,22 @@ fn an_empty_project_classifies_as_refused_with_zero_authority_effect() {
         TransitionOutcome::Refused(SetCurrentChapterRefusal::EmptyProject)
     );
 }
+
+#[test]
+fn refusals_take_archived_project_then_invalid_chapter_join_then_empty_project() {
+    let mut removed_on_empty = command();
+    removed_on_empty.chapter_join = ChapterJoin::Invalid;
+    removed_on_empty.current_chapter_id = None;
+    let mut archived = removed_on_empty.clone();
+    archived.current_lifecycle = ProjectLifecycle::Archived;
+    assert_eq!(
+        [
+            set_current_chapter(&archived),
+            set_current_chapter(&removed_on_empty)
+        ],
+        [
+            TransitionOutcome::Refused(SetCurrentChapterRefusal::ArchivedProject),
+            TransitionOutcome::Refused(SetCurrentChapterRefusal::InvalidChapterJoin),
+        ]
+    );
+}

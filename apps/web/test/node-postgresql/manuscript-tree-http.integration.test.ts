@@ -87,6 +87,7 @@ test("getManuscriptTree returns the empty canonical tree and fail-closes across 
     assert.equal(tree.project_scope.owner_user_id, USER_A);
     assert.equal(tree.project_scope.project_id, empty.created.project_scope.project_id);
     assert.deepEqual(tree.volumes, []);
+    assert.equal(tree.tree_revision, "1");
     assert.equal(tree.snapshot.snapshot_kind, "canonical");
     assert.equal(tree.snapshot.project_scope.project_id, empty.created.project_scope.project_id);
 
