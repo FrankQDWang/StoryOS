@@ -1,0 +1,1121 @@
+{
+ "AD001": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Test edited (challenge consume API rename, empty earlier revision list); verdict premise kept.",
+  "evidence": "Diff is consume_project_command_challenge -> transaction.consume and earlier_revision_nonces: Vec::new(). Cover unchanged; still_unknown outcome query at project-http line ~510 then edit with same challenge."
+ },
+ "AD002": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Test edited (empty earlier revision list added); verdict premise kept.",
+  "evidence": "Only earlier_revision_nonces: Vec::new() added. Cover unchanged and asserts reason challenge_expired_unconsumed (line ~669)."
+ },
+ "AD025": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Test edited (empty earlier revision list, helper call shape); verdict premise kept.",
+  "evidence": "BASE 1597-1700 vs RECHECK 1578-1690 differ only by earlier_revision_nonces lines. Cover unchanged: strips author_edit_units (line ~867) and expects direct_edit_intent_unrecoverable (~890)."
+ },
+ "AD034": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+  "note": "Test edited (consume API rename); cover edited, assertion kept.",
+  "evidence": "Audited diff is consume_project_command_challenge -> transaction.consume. HTTP cover still installs test_reopen_failure trigger (line 166) and retries; only preserved_generation/closure fields added."
+ },
+ "AD046": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/export_work_tests.rs:52",
+  "note": "Receiver is the readable-first Adapter case; the Archive fallback check is not in it yet."
+ },
+ "AD050": {
+  "status": "changed",
+  "location": "crates/storyos-adapter-postgres/src/update_project_tests.rs:92",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294; crates/storyos-adapter-postgres/tests/project_scope.rs:321; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Test renamed in 9c4d8dd6 and lost its Activity count; the shared replay matrix now counts updateProject Activity, so no HTTP merge is needed.",
+  "evidence": "9c4d8dd6 renamed the test to update_project_renames_only_its_scope_and_replays_the_captured_project and dropped the project_updated count. replay_tests.rs:704-706 asserts updateProject applied [1,0,1,0,0], no_effect and conflicted with zero Activity."
+ },
+ "AD051": {
+  "status": "changed",
+  "location": "crates/storyos-adapter-postgres/src/archive_project_tests.rs:94",
+  "proof": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158; apps/web/test/node-postgresql/archive-project-http.integration.test.ts:308; crates/storyos-adapter-postgres/tests/project_scope.rs:321; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Test renamed in 9c4d8dd6 and lost its Activity count; the shared replay matrix now counts archiveProject Activity, so no HTTP merge is needed.",
+  "evidence": "9c4d8dd6 renamed the test to archive_project_archives_only_its_scope_once_and_replays_the_captured_project and removed the project_archival_changed count. replay_tests.rs:704-709 asserts archiveProject conflicted/applied/no_effect rows with Activity 1 only for applied."
+ },
+ "AD066": {
+  "status": "changed",
+  "location": "crates/storyos-adapter-postgres/src/command_sequence_tests/damaged_evidence_tests.rs:99",
+  "proof": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; crates/storyos-adapter-postgres/src/command_sequence_tests/damaged_evidence_tests.rs:99",
+  "note": "Test renamed and moved to damaged_evidence_tests.rs; it now also covers 16 non-structural commands that have no HTTP twin.",
+  "evidence": "every_structural_replay_separates_pre_capture_from_damaged_evidence became every_replay_separates_pre_capture_from_damaged_evidence (22 commands incl. Agent Run, Proposal, acceptProposal). HTTP damaged-evidence tests exist only for the structural/project/export/undo kinds, so delete as written loses coverage."
+ },
+ "AD067": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54; crates/storyos-adapter-postgres/src/create_volume_authority_tests.rs:257",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Undo cover edited, assertion kept.",
+  "evidence": "Matrix rows createVolume applied [1,1,1,1,1], conflicted, refused at replay_tests.rs:682-684. create_volume_authority_tests diff is API-only (UndoApplied, NamedEdit helpers)."
+ },
+ "AD071": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/create_volume_authority_tests.rs:257; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Undo cover edited, assertion kept.",
+  "evidence": "Matrix createVolume applied counts one Author Action and one Commit (replay_tests.rs:660,682). create_volume Undo still loads Structure snapshot via UndoRecords::Structure."
+ },
+ "AD073": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:399; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
+  "note": "Cover edited (Undo API change), assertion kept.",
+  "evidence": "create_chapter_authority_tests diff only swaps UndoLatestAuthorActionSettlementEffect for TransitionOutcome::Applied(UndoApplied); initial-revision checks unchanged."
+ },
+ "AD075": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/update_volume_tests.rs:695; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+  "note": "Cover edited (Undo API change), assertion kept.",
+  "evidence": "update_volume_tests Undo region diff is the envelope/input split and UndoRecords::Structure pattern only."
+ },
+ "AD076": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/update_chapter_tests.rs:785; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252",
+  "note": "Cover edited (Undo API change), assertion kept.",
+  "evidence": "update_chapter_tests Undo region diff is the envelope/input split and UndoRecords::Structure pattern only."
+ },
+ "AD077": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54; crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:399",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Undo cover edited, assertion kept.",
+  "evidence": "dc8fa9e3 renamed structure_command_tests.rs to command_sequence_tests; the matrix is now every_outcome_replays_its_first_settlement_and_writes_only_its_profile_records with the same createChapter rows (replay_tests.rs:693-695). Undo test diff is only the UndoApplied/UndoRecords::Structure API change."
+ },
+ "AD079": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54; crates/storyos-adapter-postgres/src/update_volume_tests.rs:695; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:10",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Undo covers edited, assertions kept.",
+  "evidence": "Matrix updateVolume rows at replay_tests.rs:685-688. Both Undo covers changed only for the UndoApplied API."
+ },
+ "AD081": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:10; crates/storyos-adapter-postgres/src/update_volume_tests.rs:695",
+  "note": "Test and covers edited only for the Undo API change; verdict premise kept.",
+  "evidence": "update_volume_tests diff at 1107+ and storage-order diff are the envelope/input split and UndoRecords::Structure pattern; tree comparisons unchanged."
+ },
+ "AD082": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:470; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Head-identity merge into HTTP still to do.",
+  "evidence": "Audited body unchanged; receiver HTTP test unchanged so it still lacks Head identity comparison. Matrix updateChapter rows at replay_tests.rs:696-699."
+ },
+ "AD089": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:10",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; repeated-Undo cover edited, assertion kept.",
+  "evidence": "Matrix deleteVolume rows at replay_tests.rs:689-692. update_volume_storage_order_tests diff is only the UndoApplied/UndoRecords::Structure pattern."
+ },
+ "AD090": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:10",
+  "note": "Test edited (Undo API change); the three durable-history assertions are still only here, so the merge remains to do.",
+  "evidence": "delete_volume_tests RECHECK keeps create_volume_receipts_after_undo 0, compensation_actions 1, live_removal_decisions 0. Receiver diff is API-only and has no such counts."
+ },
+ "AD091": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:417; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54; crates/storyos-adapter-postgres/src/delete_chapter_tests.rs:615",
+  "note": "Structural matrix moved to replay_tests.rs with its assertion kept; Undo cover edited, assertion kept.",
+  "evidence": "Matrix deleteChapter applied/no_effect/conflicted/refused rows at replay_tests.rs:700-703. delete_chapter Undo diff is only the undo call envelope and UndoApplied pattern."
+ },
+ "AD093": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
+  "note": "Test edited (sequence API; its replay assertion moved to the shared matrix); verdict premise kept.",
+  "evidence": "56f464fb/dc8fa9e3 changed to TransitionOutcome and removed the in-test replay; stale-current and wrong-target-Head assertions stay. HTTP cover unchanged."
+ },
+ "AD098": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:575; crates/storyos-adapter-postgres/src/author_edit_tests.rs:181",
+  "note": "Test edited (empty earlier revision list); covers edited for the sequence API, assertions kept.",
+  "evidence": "Audited test gained only earlier_revision_nonces; it still hand-writes takeover rows in SQL. takeover_admission_tests diff moves to ProjectCommandError/WriterTakeover; rejection-no-evidence checks remain."
+ },
+ "AP003": {
+  "status": "obsolete",
+  "note": "Application update_project module and its binding guard tests removed when Project rename moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/update_project.rs and update_project_tests.rs (125 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP004": {
+  "status": "obsolete",
+  "note": "Application update_project module and its binding guard tests removed when Project rename moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/update_project.rs and update_project_tests.rs (125 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP005": {
+  "status": "obsolete",
+  "note": "Application update_project module and its binding guard tests removed when Project rename moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/update_project.rs and update_project_tests.rs (125 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP006": {
+  "status": "obsolete",
+  "note": "Application update_project module and its binding guard tests removed when Project rename moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/update_project.rs and update_project_tests.rs (125 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP007": {
+  "status": "obsolete",
+  "note": "Application archive_project module and its binding guard tests removed when Project archive moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/archive_project.rs and archive_project_tests.rs (112 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP008": {
+  "status": "obsolete",
+  "note": "Application archive_project module and its binding guard tests removed when Project archive moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/archive_project.rs and archive_project_tests.rs (112 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP009": {
+  "status": "obsolete",
+  "note": "Application archive_project module and its binding guard tests removed when Project archive moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/archive_project.rs and archive_project_tests.rs (112 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP010": {
+  "status": "obsolete",
+  "note": "Application archive_project module and its binding guard tests removed when Project archive moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 deletes crates/storyos-application/src/archive_project.rs and archive_project_tests.rs (112 lines); git grep of all four test names at RECHECK finds nothing."
+ },
+ "AP011": {
+  "status": "obsolete",
+  "note": "Application set_current_chapter binding tests removed when Chapter selection moved to the ChapterSelection profile.",
+  "evidence": "56f464fb deletes crates/storyos-application/src/set_current_chapter_tests.rs (93 lines); names absent at RECHECK."
+ },
+ "AP012": {
+  "status": "obsolete",
+  "note": "Application set_current_chapter binding tests removed when Chapter selection moved to the ChapterSelection profile.",
+  "evidence": "56f464fb deletes crates/storyos-application/src/set_current_chapter_tests.rs (93 lines); names absent at RECHECK."
+ },
+ "AP013": {
+  "status": "obsolete",
+  "note": "Application undo binding tests removed when undoLatestAuthorAction moved to the command sequence.",
+  "evidence": "8c74bfe0 deletes crates/storyos-application/src/undo_latest_author_action_tests.rs (92 lines); names absent at RECHECK."
+ },
+ "AP014": {
+  "status": "obsolete",
+  "note": "Application undo binding tests removed when undoLatestAuthorAction moved to the command sequence.",
+  "evidence": "8c74bfe0 deletes crates/storyos-application/src/undo_latest_author_action_tests.rs (92 lines); names absent at RECHECK."
+ },
+ "AP015": {
+  "status": "obsolete",
+  "note": "Application createAgentRun digest guard test removed when createAgentRun moved to the command sequence.",
+  "evidence": "526b1d07 deletes crates/storyos-application/src/create_agent_run_tests.rs (80 lines); test name absent at RECHECK."
+ },
+ "AP018": {
+  "status": "obsolete",
+  "note": "Application takeover binding guard tests removed when writer takeover moved to the zero-authority write step.",
+  "evidence": "5c579681 deletes crates/storyos-application/src/takeover_tests.rs (103 lines); no application takeover_tests at RECHECK."
+ },
+ "AP019": {
+  "status": "obsolete",
+  "note": "Application takeover binding guard tests removed when writer takeover moved to the zero-authority write step.",
+  "evidence": "5c579681 deletes crates/storyos-application/src/takeover_tests.rs (103 lines); no application takeover_tests at RECHECK."
+ },
+ "AP020": {
+  "status": "obsolete",
+  "note": "Application author_edit binding guard tests removed when applyAuthorEdit moved to the admit and settle steps.",
+  "evidence": "5a1626c2 deletes crates/storyos-application/src/author_edit_tests.rs (168 lines); git grep of the three names at RECHECK finds nothing."
+ },
+ "AP021": {
+  "status": "obsolete",
+  "note": "Application author_edit binding guard tests removed when applyAuthorEdit moved to the admit and settle steps.",
+  "evidence": "5a1626c2 deletes crates/storyos-application/src/author_edit_tests.rs (168 lines); git grep of the three names at RECHECK finds nothing."
+ },
+ "AP022": {
+  "status": "obsolete",
+  "note": "Application author_edit binding guard tests removed when applyAuthorEdit moved to the admit and settle steps.",
+  "evidence": "5a1626c2 deletes crates/storyos-application/src/author_edit_tests.rs (168 lines); git grep of the three names at RECHECK finds nothing."
+ },
+ "AP032": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:127",
+  "note": "Cover edited (save wait and Chapter select helpers), assertion kept.",
+  "evidence": "s2-statistics diff changes only typeIntoCurrent wait and selectTreeChapter; count and counting-profile asserts unchanged."
+ },
+ "AP034": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:127",
+  "note": "Cover edited (save wait and Chapter select helpers), assertion kept.",
+  "evidence": "Deletion-path statistics asserts are outside the diff hunks; only helpers changed."
+ },
+ "AP036": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts:134; crates/storyos-application/src/manuscript_search_tests.rs:341",
+  "note": "Cover edited (save wait and Chapter select helpers), assertion kept.",
+  "evidence": "s2-search diff changes only typeIntoCurrent wait and selectTreeChapter; Chapter/Block/range asserts (data-chapter-id, data-range-start/end) unchanged; Unicode case :341 same."
+ },
+ "AP037": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts:134",
+  "note": "Cover edited (save wait and Chapter select helpers), assertion kept.",
+  "evidence": "currentMiss search for TOKEN_A in current_chapter after switch to Chapter B still asserts count 0 at RECHECK; diff touches helpers only."
+ },
+ "AP038": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts:134; apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78",
+  "note": "Cover edited (save wait and Chapter select helpers), assertion kept.",
+  "evidence": "zzz-no-match manuscript search still asserts count 0 and completeness complete; HTTP cover :78 same."
+ },
+ "AP045": {
+  "status": "obsolete",
+  "note": "Application export binding and profile guard tests removed when exportProjectArchive admission moved to the admit step.",
+  "evidence": "81083359 removes the three fns (createVolume kind, other archive_profile) from application project_export_tests.rs; names absent at RECHECK."
+ },
+ "AP046": {
+  "status": "obsolete",
+  "note": "Application export binding and profile guard tests removed when exportProjectArchive admission moved to the admit step.",
+  "evidence": "81083359 removes the three fns (createVolume kind, other archive_profile) from application project_export_tests.rs; names absent at RECHECK."
+ },
+ "AP047": {
+  "status": "obsolete",
+  "note": "Application export binding and profile guard tests removed when exportProjectArchive admission moved to the admit step.",
+  "evidence": "81083359 removes the three fns (createVolume kind, other archive_profile) from application project_export_tests.rs; names absent at RECHECK."
+ },
+ "AP050": {
+  "status": "obsolete",
+  "note": "Application readable export binding guard tests removed when exportHumanReadableManuscript moved to the admit step.",
+  "evidence": "4ca3a28e removes both fns from application readable_export_tests.rs (createVolume kind fixture); names absent at RECHECK."
+ },
+ "AP051": {
+  "status": "obsolete",
+  "note": "Application readable export binding guard tests removed when exportHumanReadableManuscript moved to the admit step.",
+  "evidence": "4ca3a28e removes both fns from application readable_export_tests.rs (createVolume kind fixture); names absent at RECHECK."
+ },
+ "AP053": {
+  "status": "obsolete",
+  "note": "Application assistance binding guard tests removed when assistance changes settled with the assistance response record.",
+  "evidence": "68421459 deletes crates/storyos-application/src/update_project_assistance_tests.rs (119 lines); names absent at RECHECK."
+ },
+ "AP054": {
+  "status": "obsolete",
+  "note": "Application assistance binding guard tests removed when assistance changes settled with the assistance response record.",
+  "evidence": "68421459 deletes crates/storyos-application/src/update_project_assistance_tests.rs (119 lines); names absent at RECHECK."
+ },
+ "AP055": {
+  "status": "obsolete",
+  "note": "Application assistance binding guard tests removed when assistance changes settled with the assistance response record.",
+  "evidence": "68421459 deletes crates/storyos-application/src/update_project_assistance_tests.rs (119 lines); names absent at RECHECK."
+ },
+ "AP056": {
+  "status": "obsolete",
+  "note": "Author command outcome_unknown observation store and its tests removed when admitted Author Edits recover through the settle step.",
+  "evidence": "47ab5c44 deletes application author_command_outcome_unknown_tests.rs and the lib.rs exports; no append_author_command_outcome_unknown remains at RECHECK."
+ },
+ "AP057": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:233; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:59",
+  "note": "Cover edited (challenge consume API rename, new field), assertion kept.",
+  "evidence": "Adapter cover diff only renames consume_project_command_challenge to transaction.consume and adds earlier_revision_nonces; FirstUse and no-false-rejection asserts remain; audited fake-resolver body same."
+ },
+ "BD001": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:309",
+  "note": "Cover edited (Author Edit submission hold added), real editor reload kept.",
+  "evidence": "s1-jrn-001:309 diff only adds updateAuthorEditSubmissionHold hold/release; firstRealm.location.reload() at line 400 is kept. protocol-http-host:106 same; foundation:22 same."
+ },
+ "BD002": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43",
+  "note": "Receiver is the Create Chapter journey; the initial-surface assertions are not in it yet."
+ },
+ "BD003": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43",
+  "note": "Receiver is the Create Chapter journey; the no-alert and no-AI surface checks are not in it yet."
+ },
+ "BD005": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts:46",
+  "note": "Receiver is the Rename Project journey; the empty-tree assertion is not in it yet."
+ },
+ "BD011": {
+  "status": "changed",
+  "proof": "none (re-audit needed)",
+  "note": "Selecting a Chapter now makes it current (0ffbc9b8), so save-truth no longer has the B-current, A-inspected state the hint transfer needs.",
+  "evidence": "save-truth:77 now selects A editable and reopens A; audited test now selects B, C, A (each editable) and points hints to B while A is current. Conflicting-hint input exists only in s2-09:95; chapter-navigation:38 cover was removed."
+ },
+ "BD013": {
+  "status": "changed",
+  "location": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:91",
+  "proof": "none (re-audit needed)",
+  "note": "Test renamed and reshaped: the current-selection menu was removed and it gained an Author Undo of a chapter switch that save-truth lacks.",
+  "evidence": "0ffbc9b8 removed [data-make-current-chapter] menu checks; 748582bd added undo_latest_author_action returning to Chapter A. It still GETs both Chapters and checks reopened editability; save-truth:77 has no Undo."
+ },
+ "BD017": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43",
+  "note": "Receiver is the Create Chapter journey; the hydration checks are not in it yet."
+ },
+ "BD018": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:309; apps/web/test/browser-source/reload-recovery.integration.test.ts:69",
+  "note": "Audited test unchanged; Stage 1 journey receiver still reloads with a retained pending intent and lacks the repeated reload.",
+  "evidence": "s2-interruption:95 same; s1-jrn-001:309 adds a submission hold so the retained intent stays saving through the single reload (line 400); no second reload or Revision equality yet. reload-recovery:69 edits are helper/version only."
+ },
+ "BD028": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-search.integration.test.ts:134; apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:127; apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts:122; apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts:65",
+  "note": "Covers edited for the new Chapter selection helper and a stricter saved wait, assertions kept; transfers remain pending.",
+  "evidence": "search/statistics/export diffs replace the make-current menu with selectTreeChapter and wait for a new authoritative revision; save-truth still writes two Chapters and reopens (now A). s2-jrn-001 body same."
+ },
+ "BD035": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:235; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:988; apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:184; apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10; apps/web/test/browser-exact-dist/production-host.integration.test.ts:30",
+  "note": "Two covers were renamed for the 32,000 item limit and compaction order with assertions kept; the others are unchanged or only refit.",
+  "evidence": "create-agent-run-http:988 keeps blocked exact_required_over_limit, destination_io none, rejected over_item_token_limit (now 32001); compact-active-context-http:184 keeps installed and refused (changed_input, restricted_source). admitted-proposal-target:58 is an unchanged test.each."
+ },
+ "BS016": {
+  "status": "applies",
+  "proof": "new apps/web/test/node-contract/browser-command-contract.test.ts (proposed by the audit)",
+  "note": "Target Node contract test does not exist yet."
+ },
+ "BS030": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105",
+  "note": "Test edited (persistReplaceSelection renamed to appendAuthorEdit); verdict premise kept.",
+  "evidence": "Only body change at RECHECK line 112 is the helper rename; cover activity-stream-consume:105 is unchanged and still drives resyncProjectActivityFromSnapshot with gen 2/pos 5 and sequence 6."
+ },
+ "BS042": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/activity-resync.integration.test.ts:197",
+  "proof": "none (re-audit needed)",
+  "note": "Commit 981c3d4c removed the equality-to-Chapter guard, so this case is now the only discriminating proof of the lower-bound guard.",
+  "evidence": "editor-session.ts:362-365 now refuses only canonical > Chapter or canonical < base; case position_before_base (canonical 4, Chapter 5, base 5) is rejected only by the lower bound. position_after_chapter (6 > 5) does not exercise it; keep the case."
+ },
+ "BS044": {
+  "status": "applies",
+  "location": "apps/web/test/browser-source/activity-resync.integration.test.ts:197",
+  "proof": "apps/web/test/browser-source/activity-resync.integration.test.ts:197",
+  "note": "Case kept unchanged; the oversized position is still also refused by the after-Chapter guard, so the premise holds.",
+  "evidence": "Case position_invalid sets canonical 18446744073709551616 (line 206); with the 981c3d4c guard, BigInt(2^64) > Chapter 5 still refuses without the bounded-u64 check. position_after_chapter case at the same it.each still asserts read-only recovery."
+ },
+ "BS049": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105; apps/web/test/browser-source/activity-resync.integration.test.ts:197",
+  "note": "Audited test unchanged; both receivers exist and still lack the exact scope rejection, so the transfer remains pending.",
+  "evidence": "stream-consume:277 body same (rejects.toThrow() with any error); stream-consume:105 same; activity-resync locator_scope case (tree scope fault near line 267) still only asserts editor-read-only-recovery and unchanged stores."
+ },
+ "BS051": {
+  "status": "applies",
+  "location": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:16",
+  "proof": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:16; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:186; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+  "note": "Case and covers edited for the writing controller; unmount and replace both close the same controller and keep the same assertions.",
+  "evidence": "draft-undo-lifetime:16 unmount now does root.unmount()+writing.close(), replace does writing.close()+rerender; both reach the same no draft-undo rows, no mutations, no callbacks asserts. author-undo-rate-limit:186 keeps the unmount case (plus new close)."
+ },
+ "BS069": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:218",
+  "note": "Cover edited for the writing controller, assertion kept.",
+  "evidence": "append-projection:218 still types '!' at offset 4 and '?' in the mounted ManuscriptEditor and asserts Base!? in the DOM and rebuildPendingProjection; adapter:129 body same."
+ },
+ "BS072": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-source/journal-gc-fenced.integration.test.ts:43; apps/web/test/browser-source/author-edit-outcome.integration.test.ts:14",
+  "note": "Audited test and receiver changed only by the appendAuthorEdit helper rename; transfer remains pending.",
+  "evidence": "git diff BASE..RECHECK for takeover-late-result and journal-gc-fenced shows only persistReplaceSelection -> appendAuthorEdit; author-edit-outcome:14 same."
+ },
+ "BS084": {
+  "status": "obsolete",
+  "note": "Textarea manual-input test removed with attachManualInput when the writing controller replaced the textarea write path (ADR 0046).",
+  "evidence": "Commit 5b0f9381 deleted apps/web/src/manual-input.ts and this test; git grep at RECHECK finds no 'settles trusted input' or 'controlled Chrome IME' test. ADR 0046 line 56 records the removal."
+ },
+ "BS085": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/manual-input.integration.test.ts:19",
+  "proof": "none (re-audit needed)",
+  "note": "Case rewritten onto the production writing controller; its fenced input-gate assertions are now product evidence that ack-loss:97 lacks.",
+  "evidence": "BASE manual-input:579 [validated stale refusal] drove attachManualInput on a textarea (editor.readOnly, blocked input); RECHECK manual-input:19 drives createEditorSessionWritingController and asserts canAcceptInput(false) and snapshot().projection.body. ack-loss:97 (helper rename only) still has no 412 editor_writer_stale interleaving."
+ },
+ "BS086": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/manual-input.integration.test.ts:19",
+  "proof": "none (re-audit needed)",
+  "note": "Case rewritten onto the production writing controller; its fenced input-gate assertions are now product evidence that ack-loss:97 lacks.",
+  "evidence": "BASE manual-input:579 [unrecognized Problem] drove attachManualInput on a textarea (editor.readOnly, blocked input); RECHECK manual-input:19 drives createEditorSessionWritingController and asserts canAcceptInput(false) and snapshot().projection.body. ack-loss:97 (helper rename only) still has no 412 editor_writer_stale interleaving."
+ },
+ "BS087": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/manual-input.integration.test.ts:19",
+  "proof": "none (re-audit needed)",
+  "note": "Case rewritten onto the production writing controller; its fenced input-gate assertions are now product evidence that ack-loss:97 lacks.",
+  "evidence": "BASE manual-input:579 [earlier challenge observation] drove attachManualInput on a textarea (editor.readOnly, blocked input); RECHECK manual-input:19 drives createEditorSessionWritingController and asserts canAcceptInput(false) and snapshot().projection.body. ack-loss:97 (helper rename only) still has no 412 editor_writer_stale interleaving."
+ },
+ "BS088": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/manual-input.integration.test.ts:19",
+  "proof": "none (re-audit needed)",
+  "note": "Case rewritten onto the production writing controller; its fenced input-gate assertions are now product evidence that ack-loss:97 lacks.",
+  "evidence": "BASE manual-input:579 [earlier admission observation] drove attachManualInput on a textarea (editor.readOnly, blocked input); RECHECK manual-input:19 drives createEditorSessionWritingController and asserts canAcceptInput(false) and snapshot().projection.body. ack-loss:97 (helper rename only) still has no 412 editor_writer_stale interleaving."
+ },
+ "BS089": {
+  "status": "changed",
+  "location": "apps/web/test/browser-source/manual-input.integration.test.ts:19",
+  "proof": "none (re-audit needed)",
+  "note": "Case rewritten onto the production writing controller; its fenced input-gate assertions are now product evidence that ack-loss:97 lacks.",
+  "evidence": "BASE manual-input:579 [earlier terminal observation] drove attachManualInput on a textarea (editor.readOnly, blocked input); RECHECK manual-input:19 drives createEditorSessionWritingController and asserts canAcceptInput(false) and snapshot().projection.body. ack-loss:97 (helper rename only) still has no 412 editor_writer_stale interleaving."
+ },
+ "CO003": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+  "note": "Test edited (result type and ProjectPresence input removed); verdict premise kept.",
+  "evidence": "Applied{revision 2} now ArchiveProjectApplied{revision 2}; HTTP cover body same as BASE."
+ },
+ "CO004": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+  "note": "Test edited (result type and ProjectPresence input removed); verdict premise kept.",
+  "evidence": "StaleProjectRevision Conflicted kept with new enum shape; HTTP cover body same as BASE."
+ },
+ "CO005": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+  "note": "Test edited (result type and ProjectPresence input removed); verdict premise kept.",
+  "evidence": "AlreadyArchived NoEffect kept with new enum shape; HTTP cover body same as BASE."
+ },
+ "CO006": {
+  "status": "obsolete",
+  "note": "Missing-Project guard and its ProjectPresence input left the Core classifier when archive moved to the ActivityOnly profile.",
+  "evidence": "9c4d8dd6 removed a_missing_project_classifies_as_refused_with_zero_lifecycle_effect, ProjectPresence and ArchiveProjectRefusal from archive_project; refusal type is now Infallible; no ArchiveProjectRefusal remains in crates."
+ },
+ "CO007": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+  "note": "Test edited (presence field and result type form); cover unchanged with rename and revision 2 read.",
+  "evidence": "Core diff removes presence and wraps Applied in UpdateProjectApplied; same inputs and title/revision 2. Cover at :210 unchanged and asserts Renamed Novel title and listed revision \"2\"."
+ },
+ "CO008": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+  "note": "Test edited (result type form only); cover unchanged with Stale Title Conflicted and kept title.",
+  "evidence": "Core diff is Conflicted tuple form only. Cover unchanged: Stale Title with rev 1 asserts receipt conflicted and title still Renamed Novel."
+ },
+ "CO009": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+  "note": "Test edited (result type form only); cover unchanged with same-title NoEffect Receipt.",
+  "evidence": "Core diff is NoEffect tuple form only. Cover unchanged and asserts receipt.result and effect.kind no_effect."
+ },
+ "CO010": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
+  "note": "Test edited (result type form only); title admission moved to server structure_title, so the guard is still unreachable.",
+  "evidence": "Core empty and 1025-byte cases unchanged. Server update_project.rs:40 calls command_admission::structure_title (empty or >1024 gives invalid_request) before the adapter; cover :294 unchanged and asserts 400 with title kept."
+ },
+ "CO011": {
+  "status": "obsolete",
+  "note": "Missing-project arm removed from Core when Project rename moved to the ActivityOnly profile; Core input has no presence field now.",
+  "evidence": "Commit 9c4d8dd6 deleted the test and the presence field of UpdateProject; git grep at RECHECK finds no ProjectPresence or MissingProject in core update_project*."
+ },
+ "CO050": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "56f464fb changed SetCurrentChapterResult::Applied to TransitionOutcome::Applied(TARGET) and dropped presence from the fixture; cover body unchanged."
+ },
+ "CO051": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Same AlreadyCurrent input, only the result type changed; cover body unchanged."
+ },
+ "CO052": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Same stale expected_current_chapter_id input to StaleCurrentChapter, only the result type changed; cover body unchanged."
+ },
+ "CO053": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Same wrong expected_target_revision_id input to WrongTargetHead, only the result type changed; cover body unchanged."
+ },
+ "CO054": {
+  "status": "obsolete",
+  "note": "Missing Project refusal left Core when the ChapterSelection profile settled setCurrentChapter through the command sequence.",
+  "evidence": "56f464fb removed ProjectPresence from SetCurrentChapter and the MissingProject refusal (commit message: 'The missing Project refusal leaves Core'); no ProjectPresence or MissingProject in core set_current_chapter.rs at RECHECK."
+ },
+ "CO055": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:542",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Same Archived lifecycle input to ArchivedProject, only the result type changed; cover body unchanged."
+ },
+ "CO056": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:542",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Same ChapterJoin::Invalid input to InvalidChapterJoin, only the result type changed; cover body unchanged."
+ },
+ "CO057": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246",
+  "note": "Test edited (result type moved to TransitionOutcome); synthetic EmptyProject branch premise kept.",
+  "evidence": "Same current_chapter_id None input to EmptyProject; adapter still passes the stored project.current_chapter_id; both covers unchanged."
+ },
+ "CO058": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162",
+  "note": "Test edited (result type moved to TransitionOutcome); cover unchanged, BD021 execution order still applies.",
+  "evidence": "Audited diff only wraps Compensated in TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated); s2-undo cover body unchanged."
+ },
+ "CO059": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1341",
+  "note": "Cover moved and edited, assertion kept; Core FrontierMismatch no longer carries the sequence, which the cover still checks.",
+  "evidence": "Cover at :1341 still asserts effect {conflicted, frontier_mismatch, current_author_undo_frontier_sequence} (offset 200-201); Core still checks the sequence before frontier-kind dispatch."
+ },
+ "CO061": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/set_current_chapter_authority_tests.rs:637",
+  "note": "Cover moved and edited, assertion kept.",
+  "evidence": "Cover at :637 still rewrites prior_chapter_id to an unavailable id, calls undo and asserts Refused(UndoLatestAuthorActionUnavailable::Barrier), unchanged current Chapter and zero new Author Actions."
+ },
+ "CO063": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16",
+  "note": "Cover edited (optional restored Revision fields), assertion kept.",
+  "evidence": "ec417fa9 only destructures authoritative_revision/commit_id as optional; compensated kind, prior body restore and pending reopened Proposal assertions remain."
+ },
+ "CO064": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:110",
+  "note": "Test edited (result type moved to TransitionOutcome); cover moved, body unchanged.",
+  "evidence": "Audited diff only wraps ReversalRequired in TransitionOutcome::Applied; cover body same, now at line 110."
+ },
+ "CO067": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1341",
+  "note": "Cover moved and edited, assertion kept; the shared frontier guard still runs before the Acceptance arm.",
+  "evidence": "undo_latest_author_action.rs:85 checks the sequence before the kind match; cover at :1341 still asserts frontier_mismatch with the current sequence."
+ },
+ "CO068": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:363",
+  "note": "Cover moved and edited (adds no-Revision check), assertion kept.",
+  "evidence": "Cover at :363 still deletes the Chapter and undoes with the old request, asserting compensated; edits only add an authoritative_revision absence check."
+ },
+ "CO069": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14",
+  "note": "Test edited (result now Applied(ExactBase) under TransitionOutcome); exact-head HTTP Acceptance cover unchanged.",
+  "evidence": "Core test still classifies the all-true exact-head input as Applied, now with the ExactBase resolution; HTTP cover body is the same as BASE."
+ },
+ "CO074": {
+  "status": "obsolete",
+  "note": "Accept changed-head conflict test removed when Acceptance on an earlier base became a Block replacement (ADR 0064).",
+  "evidence": "accept_proposal_tests.rs lost conflicts_a_changed_target_head in 242d4675; f79133aa also removed the Inline ChangedHead case; accept_proposal() no longer returns ChangedHead. The script 'now' points to the same-named reject_proposal_operations test, a different test that existed at BASE."
+ },
+ "CO084": {
+  "status": "changed",
+  "proof": "none (re-audit needed)",
+  "note": "Main cover now asserts a valid Revision on its own base (ADR 0064); no public test found that proves the changed-Head conflict of Block Proposals.",
+  "evidence": "65dac393 renamed the cover (now edit-inline-proposal-http:1007) and replaced validation==conflicted with valid; author_edit_proposal/revision.rs now passes the base as current_base_revision_id, so it no longer reaches ChangedHead. Reservation half still covered by open-block-proposal-http:286."
+ },
+ "CO085": {
+  "status": "changed",
+  "proof": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:184; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:235",
+  "note": "Compaction now needs a prior response, so the cited first-Run attempt count no longer detects accidental compaction.",
+  "evidence": "5ec529ff renamed the compaction HTTP cover (now 184, prefix still installs). complete-fake-model-decision:237 counts attempts only for a new-Conversation Run, which never compacts now; continuation:235 second Run (ordinary text, existing Conversation) asserts input_mapping incremental, which an installed summary would turn into new_transport."
+ },
+ "CO087": {
+  "status": "changed",
+  "location": "crates/storyos-core/src/compact_active_context_tests.rs:42",
+  "proof": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:184",
+  "note": "Test renamed and gained a SummaryOverItemLimit case with no public cover; the four original outcomes stay in the renamed HTTP test.",
+  "evidence": "Script marked it removed, but 5ec529ff renamed it to ..._or_a_large_summary (line 42) and added Err(SummaryOverItemLimit); git grep finds summary_over_item_limit in no other test. HTTP cover (now 184) asserts installed/changed_input/restricted_source/exact_required_unsatisfied; re-audit needed for the new case."
+ },
+ "CO088": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-core/src/manuscript_payload_tests.rs:571",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Audited diff is only ApplyAuthorEditResult -> TransitionOutcome::Applied(AuthorEditApplied). Versioned range matrix keeps the same 7 tuples (emoji, newline, CJK) at line 571."
+ },
+ "CO089": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is only the result-type wrapper for body Axy!B; Project HTTP cover body is unchanged."
+ },
+ "CO090": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/author_edit_tests.rs:181",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Adapter cover index 2 still sets author_edit_units[1].selection_snapshot.to = 15, asserts Refused InvalidSelection, reads the Committed Receipt and replays; edits are API/nonce plumbing."
+ },
+ "CO091": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-core/src/manuscript_payload_tests.rs:571",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Audited diff is result-type only; versioned matrix still has reversed (3,1), split surrogate (1,2),(2,3) and out-of-range (3,7) cases."
+ },
+ "CO093": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:806",
+  "note": "Test edited (result type only); cover moved within its file with an unchanged body.",
+  "evidence": "ProposalRevised candidate assertion kept in the Core test; the Inline interior-edit HTTP cover moved from 973 to 806 with the same body."
+ },
+ "CO094": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1007",
+  "note": "Cover renamed; authoritative body and unchanged candidate assertions kept, validation now stays valid on its base.",
+  "evidence": "Cover renamed in 65dac393 (now line 1007): still replaceUnit(0,5,'Keep'), authoritative_applied, body EDGE_BODY, candidate_text INLINE_CANDIDATE; only the conflicted-validation leg became valid. Core test diff is result-type only."
+ },
+ "CO095": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-adapter-postgres/src/author_edit_tests.rs:181",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Adapter cover outcome index 1 (empty insertion at 16) still asserts NoEffect ContentUnchanged with Receipt read-back and exact retry; Project HTTP cover unchanged."
+ },
+ "CO098": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:86",
+  "note": "Cover moved and edited, assertion kept.",
+  "evidence": "Cover at :86 keeps the patch loop with stale expected_target_revisions plus matching anchor base (index 1) and asserts effect.kind conflicted and unchanged retainedState; expand adapter still passes the current target revision to OpenInlineProposal."
+ },
+ "CO128": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:235",
+  "note": "Cover edited (item limit only), assertion kept.",
+  "evidence": "Continuation cover still checks none/incremental/full input_mapping and prior_continuation for first, incremental and full requests."
+ },
+ "CO130": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+  "note": "Test edited (result type now Ok(TransitionOutcome::Applied)); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Core Admitted now Ok(Applied(())); line 373 still asserts accepted admission, new Conversation, queued Run and captured settings."
+ },
+ "CO131": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:626",
+  "note": "Test edited (result now Err refusal); cover edited, absent-Conversation 404 assertion kept.",
+  "evidence": "Line 626 still posts conversation_id ...dead and requires 404 without USER_A in the body."
+ },
+ "CO133": {
+  "status": "changed",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
+  "note": "Cover no-binding case now refuses invalid_chapter_join; assistance_unavailable is now asserted only in the no-destination deployment test.",
+  "evidence": "77f864a6 binds each Project to the deployment destination; line 626 no-binding case expects invalid_chapter_join with 0 0 rows. New test at 833 restarts with modelDestination null and expects 422 assistance_unavailable but checks no Conversation/settings row counts."
+ },
+ "CO134": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+  "note": "Test edited (result now Err refusal); storage exclusivity and the conversation_busy assertion kept.",
+  "evidence": "Line 373 still expects 422 conversation_busy for a second live Run; unique index agent_runs_one_live_conversation (migration 0059) stays and contention_refusal maps to ConversationBusy."
+ },
+ "CO135": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+  "note": "Test edited (result now Err refusal); cover edited, invalid_chapter_join assertion kept.",
+  "evidence": "Line 373 still posts a nonexistent Chapter ...bad1 and requires 422 invalid_chapter_join."
+ },
+ "CO136": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:235",
+  "note": "Cover edited (Context item limit constant), assertion kept; Adapter still returns before the classifier for a Usable reference.",
+  "evidence": "Cover diff only changes repeat('a', 10001) to 32001 in the 237->235 test; agent_run_expiry.rs:64 still short-circuits on Usable before decide_confirmed_expiry_rebuild."
+ },
+ "CO137": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+  "note": "Cover edited (Context item limit constant), assertion kept.",
+  "evidence": "Only diff in the cover is repeat('a', 10001)->32001 (420253d0); disposition unknown_create and opaque_reused false still asserted at lines 295-296."
+ },
+ "CO138": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+  "note": "Cover edited (Context item limit constant), assertion kept.",
+  "evidence": "Only cover diff is the 10001->32001 constant; rebuilt recovery asserts opaque_reused false, fresh invocation/step (lines 230-236) and the UNUSABLE script case at line 315 remains."
+ },
+ "CO140": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+  "note": "Cover edited (Context item limit constant), assertion kept.",
+  "evidence": "covered_copy_restricted binding at line 340 with opaque_reused false and covered_content_included false at lines 349-350 unchanged; only diff is the 10001->32001 constant."
+ },
+ "CO141": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+  "note": "Cover edited (Context item limit constant); the only caller still passes effective_model_context_changed=true.",
+  "evidence": "agent_run_expiry.rs:92 still sets effective_model_context_changed: true, so the D5 premise holds; cover diff is only the 10001->32001 constant."
+ },
+ "CO148": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16",
+  "note": "Test edited (result type moved to TransitionOutcome); cover edited, assertion kept.",
+  "evidence": "Audited diff only changes Resolved to TransitionOutcome::Applied(()) (860f3e6c); cover diff only adds preserved_* fields to the archive record (47069787)."
+ },
+ "CO152": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+  "note": "Test edited (result type moved to TransitionOutcome); cover edited, assertion kept.",
+  "evidence": "Audited diff only changes Resolved to TransitionOutcome::Applied(()) (c49236dd); cover diff only adds preserved_generation/closure to the archive record."
+ },
+ "CO155": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts:15",
+  "note": "Test edited (TransitionOutcome, new inline_anchors_proven default); cover edited (conflict seeded by helper), assertion kept.",
+  "evidence": "Audited success case only adds inline_anchors_proven: true to the shared fixture; cover now seeds the conflict with seedAcceptanceCondition instead of a real Accept, Replan pending-revision assertions unchanged plus preserved_* fields."
+ },
+ "CO158": {
+  "status": "applies",
+  "location": "crates/storyos-core/src/withdraw_proposal_tests.rs:29",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17",
+  "note": "Renamed in c6657feb; Core allocation enum removed so it now asserts Applied(()), weaker than the unchanged HTTP cover.",
+  "evidence": "Same author_withdraw() input now in an_author_withdrawal_of_an_open_current_revision_applies; WithdrawalAllocation is gone (author and producer paths split in the adapter). Cover :17 unchanged (resolved withdrawal, zero commit ids)."
+ },
+ "CO159": {
+  "status": "applies",
+  "location": "crates/storyos-core/src/withdraw_proposal_tests.rs:37",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
+  "note": "Renamed in c6657feb; Core allocation enum removed so it now asserts Applied(()); HTTP cover unchanged.",
+  "evidence": "Same producer_withdraw() input now in a_matching_current_producer_withdrawal_applies. Cover :217 unchanged and asserts author_action_sequence and undo_disposition undefined plus unsupported_cause no-effect."
+ },
+ "CO160": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17; apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
+  "note": "Test edited (result type form only); covers unchanged with unsupported_cause and closure_not_open cases.",
+  "evidence": "Same three cases with TransitionOutcome::NoEffect form. Covers unchanged: :17 asserts closure_not_open at line 210, :217 asserts unsupported_cause at 269 and closure_not_open at 354."
+ },
+ "CO162": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+  "note": "Test edited (result type moved to TransitionOutcome); verdict premise kept.",
+  "evidence": "Audited diff only changes Resolved to TransitionOutcome::Applied(()) (49b1b19e); cover body unchanged."
+ },
+ "CO163": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+  "note": "Test edited (result type moved to TransitionOutcome); cover still asserts withdrawal_event_mismatch.",
+  "evidence": "Audited diff is NoEffect enum to TransitionOutcome::NoEffect only; cover body unchanged with no_effect/withdrawal_event_mismatch at line 449; adapter still derives closure_withdrawn from closure == withdrawn."
+ },
+ "CO165": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+  "note": "Test edited for the TransitionOutcome result type; cover edited, initialized revision 1 and binding query assertions kept.",
+  "evidence": "Core diff only wraps Initialized in TransitionOutcome::Applied and drops the presence field. Cover at RECHECK still asserts effect.kind initialized, revision \"1\" and deepEqual of getProjectAssistance with firstBinding; edits only add a bound/unconfigured restart section."
+ },
+ "CO166": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+  "note": "Test edited for the TransitionOutcome result type; cover edited, repeat-prepare NoEffect assertion kept.",
+  "evidence": "Core diff is result-type wrapping only. Cover still sends available rev 1 and asserts effect.kind no_effect plus assistance deepEqual firstBinding."
+ },
+ "CO167": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+  "note": "Test edited (Applied became Applied(Changed)); cover edited, toggle to revision 2 with kept binding identities still asserted.",
+  "evidence": "Core now asserts TransitionOutcome::Applied(UpdateProjectAssistanceApplied::Changed{Unavailable,2}). Cover still asserts authoritative_applied, revision \"2\", same destination identity, use binding revision and compatibility, and query deepEqual."
+ },
+ "CO168": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+  "note": "Test edited for the TransitionOutcome result type; cover edited, stale Conflicted and unchanged binding with replay kept.",
+  "evidence": "Cover still sends unavailable rev 0 after init, asserts effect.kind conflicted and deepEqual firstBinding, and replays the stale response bytes in the retry loop."
+ },
+ "CO169": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+  "note": "Test edited for the TransitionOutcome result type; cover edited, pre-initialization stale refusal and later replay kept.",
+  "evidence": "Cover still sends available rev 1 before init, expects 409 stale_assistance_revision, and after toggle reruns retryAbsent with identical bytes; edit only tightened the first 404 with problem code assistance_not_bound."
+ },
+ "CO170": {
+  "status": "obsolete",
+  "note": "Missing-project arm removed from Core when Project assistance moved to the command sequence; Core input has no presence field now.",
+  "evidence": "Commit 68421459 deleted the test and ProjectPresence/UpdateProjectAssistanceRefusal from update_project_assistance; git grep at RECHECK finds no MissingProject or presence in update_project_assistance*."
+ },
+ "CO171": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:235",
+  "note": "Covers edited (item limit 10000 to 32000, line shift), assertions kept.",
+  "evidence": "Line 373 still asserts sufficiency complete, host_control isolation, absent destination/outbound manifests and token profile; continuation cover changed only the over-limit repeat and line."
+ },
+ "CO172": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:988",
+  "note": "Test edited (limit constant); cover renamed with the over-limit case at 32001 and assertions kept.",
+  "evidence": "Cover renamed in 18456611 to the at-limit/above-limit test (line 988): still exact_required_over_limit working_target, rejected token 32001, only author_instruction selected, no destination I/O."
+ },
+ "CO174": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/create_agent_run_tests.rs:140",
+  "note": "Cover edited (command sequence API), assertion kept.",
+  "evidence": "Adapter cover still asserts Blocked WorkingTargetRevisionUnavailable and None destination/outbound manifest ids (lines ~244-251)."
+ },
+ "CO175": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:184",
+  "note": "Cover edited (item limit only), assertion kept.",
+  "evidence": "Audited body same; line 373 still queries selected content and sufficiency of the persisted assembly; historical H0 cover unchanged."
+ },
+ "CO184": {
+  "status": "applies",
+  "proof": "crates/storyos-core/src/manuscript_payload_tests.rs:571",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Cover edited, assertion kept.",
+  "evidence": "Versioned range matrix keeps the same emoji/newline/CJK tuples and whole-payload comparison; audited diff is the result wrapper only."
+ },
+ "CO185": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Legacy-only commands still route to the legacy classifier.",
+  "evidence": "Adapter classify_author_edit still uses the versioned path only when a Block primitive exists (author_edit.rs:240-250); Project HTTP cover unchanged."
+ },
+ "CO187": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:909; apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept. Inline cover moved within its file with an unchanged body.",
+  "evidence": "Inline sibling Acceptance cover moved 1076 -> 909 with same body; split/join journey unchanged."
+ },
+ "CO188": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; split/join journey body same as BASE."
+ },
+ "CO190": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; split/join journey body same as BASE."
+ },
+ "CO191": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; split/join journey body same as BASE."
+ },
+ "CO192": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; s2-input journey body same as BASE."
+ },
+ "CO194": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; move/retype journey body same as BASE."
+ },
+ "CO195": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; move/retype journey body same as BASE."
+ },
+ "CO197": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+  "note": "Test edited (result type now TransitionOutcome); verdict premise kept.",
+  "evidence": "Diff is the result wrapper only; move/retype journey body same as BASE."
+ },
+ "CT007": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Receiver is the Author Edit HTTP matrix; the over-limit cases with a genuine Challenge are not in it yet."
+ },
+ "CT010": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
+  "note": "Receiver is the registry-wide artifact test; the schema-consumer cases are not in it yet."
+ },
+ "CT011": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
+  "note": "Receiver is the registry-wide artifact test; the frame grammar cases are not in it yet."
+ },
+ "CT012": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
+  "note": "Receiver is the registry-wide artifact test; the Takeover schema checks are not in it yet."
+ },
+ "CT035": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14; crates/storyos-contracts/src/stage1_provenance_tests.rs:62",
+  "note": "Cover edited (workspace member list only), assertion kept; excluded_trees still comes from a fixed constant.",
+  "evidence": "stage1_provenance.rs:20 EXCLUDED_TREES = [prototypes/**, .reference/**] used at :91; only EXPECTED_CRATES changed. stage1_provenance_tests.rs:62 diff only adds new crate names to the temp workspace; refusal assertion on the journey path kept."
+ },
+ "CT047": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/stage1_provenance_tests.rs:62",
+  "note": "Cover edited (workspace member list only), assertion kept; audited test still checks only the test helper.",
+  "evidence": "Audited test at :34 calls only temp_workspace_at (test helper, :18). Cover at :62 still uses temp_workspace and asserts the missing-journey refusal; only the member string grew with 4 new crates."
+ },
+ "CT052": {
+  "status": "applies",
+  "proof": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:309; crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
+  "note": "Test edited (workspace member list only); cover edited (submission hold added), packaged PostgreSQL journey kept.",
+  "evidence": "Audited test diff only adds crate names to the temp Cargo.toml; it still asserts the missing PostgreSQL marker error. s1-jrn-001:309 keeps its title and real exact-dist run; diff only adds updateAuthorEditSubmissionHold hold/release steps."
+ },
+ "CT061": {
+  "status": "applies",
+  "proof": "crates/storyos-contracts/src/stage3_crosswalk_tests.rs:102",
+  "note": "Test edited (verifier moved to shared stage_crosswalk module); generator still verifies only its fixed BINDINGS and handoff.",
+  "evidence": "f7a5435b moved verify_stage3_record to StageCrosswalk::verify_record; its only non-test caller (stage_crosswalk.rs:137) passes self.bindings and a handoff built from constants. Cover at :102 body unchanged (artifact equality)."
+ },
+ "NC001": {
+  "status": "changed",
+  "proof": "apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts:95",
+  "note": "Cited browser test removed when selection began to set the Current Chapter; exact-dist navigation test now opens Chapter B through this path.",
+  "evidence": "0ffbc9b8 replaced the browser-source success scenario with a refusal-only test (chapter-navigation.integration.test.ts:130); no GET-path assertion remains. s2-09:95 selects Chapter B and C via selectChapter -> openSelectedChapter against the real server and asserts title, empty body, editable; exact path is checked only implicitly."
+ },
+ "NC004": {
+  "status": "changed",
+  "proof": "none (re-audit needed)",
+  "note": "Receiving browser test was removed; no browser test now has the current-Chapter null-pending needs_attention case.",
+  "evidence": "Receiver chapter-navigation.integration.test.ts:38 removed in 0ffbc9b8; the remaining test at :130 covers only refusals. Audited unit (:124, body same) still holds the currentPending=null case, which browseChapter (stage1-view.tsx:222) can still produce; no needs_attention selection case found in browser tests."
+ },
+ "NC022": {
+  "status": "applies",
+  "proof": "rewritten case at the packaged startup boundary in apps/web/test/node-contract/protocol-http.integration.test.ts",
+  "note": "Parser rejection stays in storyos-server/src/session_bootstrap_tests.rs:10; startup case still removes DATABASE_URL."
+ },
+ "NP025": {
+  "status": "changed",
+  "proof": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:294; apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts:46; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Adapter cover was renamed and lost its Activity count; the one-Activity check now lives in the command sequence contract suite.",
+  "evidence": "Audited :210, :294 and browser :46 unchanged. 9c4d8dd6 renamed the Adapter test to update_project_renames_only_its_scope_and_replays_the_captured_project (:92) and removed the Activity payload count; replay_tests.rs:54 asserts updateProject activity_applied = one Activity row (generic count)."
+ },
+ "NP030": {
+  "status": "changed",
+  "proof": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:308; apps/web/test/node-postgresql/project-http.integration.test.ts:170; crates/storyos-adapter-postgres/src/command_sequence_tests/replay_tests.rs:54",
+  "note": "Adapter cover was renamed and lost its Activity count; the one-Activity check now lives in the command sequence contract suite.",
+  "evidence": "Audited :158 and cover :308 unchanged. 9c4d8dd6 renamed archive_project_is_atomic_replayable_and_scope_safe to archive_project_archives_only_its_scope_once_and_replays_the_captured_project (:94) and removed the project_archival_changed count; replay_tests.rs:54 now asserts archiveProject activity_applied = one Receipt + one Activity row (generic count, not event kind)."
+ },
+ "NP065": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs:283; apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:363",
+  "note": "Cover edited, assertion kept.",
+  "evidence": "Adapter rate-budget test unchanged at :283; ChallengeRateClass::for_command_kind is still the one classifier (server command_admission.rs:450, project_command_challenge.rs:101). Undo :363 only adds a compensation record check."
+ },
+ "NP095": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "proof": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "note": "test.each body and case list unchanged; only the line moved.",
+  "evidence": "BASE :677-702 vs RECHECK :763-788 diff is empty; both 'This feels slow' and 'What would make this sharper?' are still elements."
+ },
+ "NP099": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "proof": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "note": "test.each body and case list unchanged; only the line moved.",
+  "evidence": "Body diff empty; 'SCRIPT:invalid' and retained 'Revise these passages: keep it. SCRIPT:incomplete' both present; fake script still maps both (create_plan.rs:223,227)."
+ },
+ "NP100": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "proof": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:763",
+  "note": "test.each body and case list unchanged; only the line moved.",
+  "evidence": "Body diff empty; 'Please invoke a tool on this passage.' and 'Revise these passages: invoke a tool.' both present; requested_execution_capability still gates admission (create_admission.rs:42)."
+ },
+ "NP104": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:482",
+  "note": "Cover edited, assertion kept; receiver still withdraws through withdrawOpenedProposal before Undo.",
+  "evidence": "Only edit in :482 replaces authoritative_commit_id === '' with an absent-field check (ec417fa9). Audited :17 unchanged; the Assistance-disable and closure_not_open checks are still only in :17."
+ },
+ "NP123": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts:168",
+  "note": "Receiver edited only for the new item limit; it still lacks the producer event sequence, so the merge is still needed.",
+  "evidence": "Audited :324 unchanged. Only change in :373 is item_token_limit 10000 -> 32000 (18456611); no Activity event kind/cursor checks added. Cross-table :168 unchanged."
+ },
+ "NP127": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+  "note": "Cover edited, assertion kept.",
+  "evidence": ":373 still has exact replay deepEqual(replay, created.admitted) at :407 and the conversation_busy refusal at :472; its only edit is the 32000 item limit. Audited :745 body unchanged."
+ },
+ "NP128": {
+  "status": "applies",
+  "proof": "crates/storyos-adapter-postgres/src/create_agent_run_tests.rs:140; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+  "note": "Test edited only to attach the refusal handler earlier; the hold is still removed without proof that the second admission reached the boundary.",
+  "evidence": "b3a61b07 moves assert.rejects(competing) before unlinkSync(holdPath); no wait for the competing request to block. Adapter target :140 still checks only a sequential busy refusal (:331), no controlled race; #1085 owns the MOVE."
+ },
+ "NP129": {
+  "status": "changed",
+  "location": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:988",
+  "proof": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:988; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:303",
+  "note": "Test renamed and gained an at-limit admission case (32,000 tokens complete) that the Worker refusal receiver does not have.",
+  "evidence": "18456611 renamed it to 'createAgentRun admits a Working Target at the item limit and blocks one above it before dispatch', moved over-limit to 32001 plus model_attempts 0, and added a 32000 admitted/complete check (:1056-1074). Receiver :303 only changed 10001 -> 32001; no HTTP at-limit check elsewhere."
+ },
+ "NP131": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/project-http.integration.test.ts:938; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:540",
+  "note": "Test edited to fill two rate windows; recovery is still the withChallengeBudget reset, so the plumbing premise holds.",
+  "evidence": "5da38736 replaced the one-window UPDATE with a two-window INSERT; cancelChallenge still calls withChallengeBudget, which sets issued_count = 0 (node-integration.ts:216). Covers :938 and :540 unchanged."
+ },
+ "NP138": {
+  "status": "applies",
+  "proof": "apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts:119",
+  "note": "Cover edited, assertion kept.",
+  "evidence": "Only edit in :119 (97efc70a) changes the winner snapshot id check from notEqual to equal with the canonical Snapshot; Takeover, exact retry and stale-writer refusal steps unchanged. Audited :113 unchanged."
+ },
+ "NP169": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "note": "Shared body edited only for a candidate reference helper; the stream and collection_stream cases are unchanged.",
+  "evidence": "BASE :396 vs RECHECK :498 differ only in candidate_target! -> candidateReference() (candidate mode). Case list unchanged, collection_stream still present."
+ },
+ "NP170": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "note": "Shared body edited only for a candidate reference helper; the decision and collection_decision cases are unchanged.",
+  "evidence": "BASE :396 vs RECHECK :498 differ only in candidate_target! -> candidateReference() (candidate mode). Case list unchanged, collection_decision still present."
+ },
+ "NP171": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:498",
+  "note": "Shared body edited only for a candidate reference helper; the cancelled and collection_cancelled cases are unchanged.",
+  "evidence": "BASE :396 vs RECHECK :498 differ only in candidate_target! -> candidateReference() (candidate mode). Case list unchanged, collection_cancelled still present."
+ },
+ "NP182": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:627",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:627",
+  "note": "test.each body unchanged; only the line moved.",
+  "evidence": "Script reports the %s body as same at :627; case list still ['undeclared_location', 'stale_location_base']."
+ },
+ "NP189": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:720",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:720",
+  "note": "test.each body unchanged; only the line moved.",
+  "evidence": "Script reports the %s body as same at :720; case list still ['', ' SCRIPT:reverse_locations']."
+ },
+ "NP192": {
+  "status": "applies",
+  "location": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:861",
+  "proof": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:861",
+  "note": "Loop renamed because the remaining Operation now applies; the retained case still runs the same branch as collection.",
+  "evidence": "30eeae6c renamed to '... and replaces the remaining Operation text', removed the changed_head conflict and Replan steps. Branches split only on legacy_overwritten and collection (extra Chapter check), so retained has no assertion absent from collection."
+ },
+ "SV001": {
+  "status": "applies",
+  "proof": "new foreign-target case next to apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+  "note": "Target is the authenticated Author Edit HTTP flow; it still sends only the captured target."
+ },
+ "SV004": {
+  "status": "applies",
+  "proof": "new case at the GET Author Edit outcome route in apps/web/test/node-postgresql/project-http.integration.test.ts",
+  "note": "Target boundary has no admitted-but-unsettled case yet; the audited test stays until it exists."
+ },
+ "SV028": {
+  "status": "applies",
+  "proof": "crates/storyos-server/src/web_host_tests.rs:394; crates/storyos-server/src/main.rs:84",
+  "note": "Expiry cover unchanged; main still sets one fixed session generation and revisions for every binding (code moved to line 84).",
+  "evidence": "Audited test and web_host_tests.rs:394 unchanged BASE..RECHECK. main.rs edits (settings layer, or_exit) only shift lines: BASE:64 `current_session_generation = 1` and BASE:65-68 revisions are RECHECK:84-88, bindings built at 89-105 from those values; no other non-test ClientSessionBinding/ServerConfig builder exists."
+ },
+ "SV030": {
+  "status": "applies",
+  "proof": "crates/storyos-server/src/public_origin_tests.rs:31; crates/storyos-server/src/main.rs:65",
+  "note": "Origin refusal test unchanged; main still derives allowed Origin only from bind address or validated public Origin (code moved to line 65).",
+  "evidence": "public_origin_tests.rs:31 unchanged (path, query, fragment cases still refused). BASE main.rs:45-59 match on PackagedTransportPlan is identical at RECHECK:65-79; main.rs:107 is still the only non-test ServerConfig literal."
+ },
+ "SV031": {
+  "status": "applies",
+  "proof": "crates/storyos-server/src/public_origin_tests.rs:31; crates/storyos-server/src/main.rs:95",
+  "note": "Origin refusal test unchanged; main still copies the same validated Origin into each binding (code moved to line 95).",
+  "evidence": "BASE main.rs:75-76 `allowed_origin: allowed_origin.clone()` in the binding is now RECHECK:95-96, same value also given to ServerConfig at RECHECK:114. No other producer of ClientSessionBinding outside tests."
+ }
+}
