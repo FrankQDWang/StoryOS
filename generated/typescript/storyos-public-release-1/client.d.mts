@@ -490,7 +490,7 @@ export type ContextSufficiency = { "kind": "complete" } | { "kind": "blocked", r
 
 export type ContextBlockReason = { "kind": "exact_required_over_limit", source_class: ContextSourceClass, } | { "kind": "required_instruction_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
 
-export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
+export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "over_collection_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
 
 export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" } | { "kind": "volcengine_agent_plan" };
 
