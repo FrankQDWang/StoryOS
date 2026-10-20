@@ -387,7 +387,8 @@ export function WritingAssistantPanel({
   }, [reference?.runId, run, terminal, failedReads]);
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
-  const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences) => {
+  /** `onRecorded` runs in the same step that stores the request record, before the request goes. */
+  const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences, onRecorded?: () => void) => {
     if (availability === "unavailable") {
       setRefused(true);
       return;
@@ -492,6 +493,7 @@ export function WritingAssistantPanel({
         },
       });
       saveReference(current);
+      onRecorded?.();
       storedNew = true;
       setReference(current);
       setRun(undefined);
