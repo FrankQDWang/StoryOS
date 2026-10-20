@@ -632,6 +632,19 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
+              "const": "over_collection_token_limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
               "const": "required_revision_unavailable",
               "type": "string"
             }

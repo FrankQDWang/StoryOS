@@ -278,14 +278,23 @@ async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the
 }
 
 /// The data of each complete event when the stream arrives in `chunks`.
+///
+/// After each search, the next search starts at the next event, or at most 3 bytes before the end
+/// of the received bytes. A blank line has at most 4 bytes, so each byte is in at most 4 searches.
 fn event_data_of(chunks: &[&[u8]]) -> Vec<Option<String>> {
     let mut buffer = super::EventBuffer::default();
     let mut data = Vec::new();
     for chunk in chunks {
         buffer.push(chunk);
-        while let Some(event) = buffer.next_event() {
-            data.push(super::event_data(event).map(std::borrow::Cow::into_owned));
+        while let Some(event) = buffer
+            .next_event()
+            .map(|event| super::event_data(event).map(std::borrow::Cow::into_owned))
+        {
+            assert_eq!(buffer.resume, buffer.start);
+            data.push(event);
         }
+        assert!(buffer.resume >= buffer.start);
+        assert!(buffer.resume + 3 >= buffer.bytes.len());
     }
     data
 }
@@ -315,5 +324,38 @@ fn each_chunking_of_a_stream_gives_the_same_ordered_event_data() {
     for split in 0..=stream.len() {
         let (head, tail) = stream.split_at(split);
         assert_eq!(event_data_of(&[head, tail]), expected, "split at {split}");
+    }
+}
+
+#[test]
+fn each_split_of_a_boundary_across_three_chunks_gives_the_same_events() {
+    let stream: &[u8] = b"data: a\n\ndata: b\r\n\r\ndata: c\r\n\ndata: d\n\r\n\r\n";
+    let expected = vec![
+        Some("a".to_owned()),
+        Some("b".to_owned()),
+        Some("c\r".to_owned()),
+        Some("d".to_owned()),
+    ];
+
+    for first in 0..=stream.len() {
+        for second in first..=stream.len() {
+            let chunks = [&stream[..first], &stream[first..second], &stream[second..]];
+            assert_eq!(
+                event_data_of(&chunks),
+                expected,
+                "split at {first} and {second}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_long_event_in_small_chunks_gives_its_data() {
+    let text = "x".repeat(/*n*/ 4096);
+    let stream = format!("data: {text}\r\n\r\n");
+
+    for chunk_size in [1, 16] {
+        let chunks: Vec<&[u8]> = stream.as_bytes().chunks(chunk_size).collect();
+        assert_eq!(event_data_of(&chunks), vec![Some(text.clone())]);
     }
 }
