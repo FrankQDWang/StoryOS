@@ -135,9 +135,18 @@ async fn author_undo_reverses_three_prose_edits_in_reverse_order() {
         two_chapter_writer(&store, /*base*/ 0xa700).await;
     let before = chapter_content(&admin, &session).await;
     let prior_frontier = latest_forward(&admin, &scope).await;
-    let first = edit(&store, &admin, &scope, &session, 0xa709, "one ").await;
-    let second = edit(&store, &admin, &scope, &session, 0xa70a, "two ").await;
-    let third = edit(&store, &admin, &scope, &session, 0xa70b, "three ").await;
+    let first = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa709, "one ",
+    )
+    .await;
+    let second = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa70a, "two ",
+    )
+    .await;
+    let third = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa70b, "three ",
+    )
+    .await;
 
     let mut steps = Vec::new();
     for suffix in [0xa70c, 0xa70d, 0xa70e] {
@@ -170,12 +179,24 @@ async fn author_undo_continues_after_a_later_edit_is_also_undone() {
     let (scope, _chapter_a, _chapter_b, _revision_b, session) =
         two_chapter_writer(&store, /*base*/ 0xa720).await;
     let before = chapter_content(&admin, &session).await;
-    let first = edit(&store, &admin, &scope, &session, 0xa729, "one ").await;
-    let second = edit(&store, &admin, &scope, &session, 0xa72a, "two ").await;
-    let undo_second = compensated(undo_latest(&store, &admin, &scope, &session, 0xa72b).await);
-    let third = edit(&store, &admin, &scope, &session, 0xa72c, "three ").await;
-    let undo_third = compensated(undo_latest(&store, &admin, &scope, &session, 0xa72d).await);
-    let undo_first = compensated(undo_latest(&store, &admin, &scope, &session, 0xa72e).await);
+    let first = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa729, "one ",
+    )
+    .await;
+    let second = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa72a, "two ",
+    )
+    .await;
+    let undo_second =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa72b).await);
+    let third = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa72c, "three ",
+    )
+    .await;
+    let undo_third =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa72d).await);
+    let undo_first =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa72e).await);
 
     assert_eq!(
         (
@@ -196,16 +217,30 @@ async fn a_barrier_between_two_prose_edits_stops_the_chain() {
     let (store, admin) = stores().await;
     let (scope, input) = pending_proposal(&store, &admin, /*base*/ 0xa740).await;
     let session = input.editor_session_id.as_ref().to_owned();
-    edit(&store, &admin, &scope, &session, 0xa74a, "one ").await;
+    edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa74a, "one ",
+    )
+    .await;
     let after_first = chapter_content(&admin, &session).await;
-    let rejection = issued(&store, &scope, 0xa74b, &REJECT_PROPOSAL_OPERATIONS, input).await;
+    let rejection = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa74b,
+        &REJECT_PROPOSAL_OPERATIONS,
+        input,
+    )
+    .await;
     reject_proposal_operations(&store, &rejection)
         .await
         .unwrap();
     let barrier = latest_forward(&admin, &scope).await;
-    let second = edit(&store, &admin, &scope, &session, 0xa74c, "two ").await;
-    let undo_second = compensated(undo_latest(&store, &admin, &scope, &session, 0xa74d).await);
-    let stopped = undo_latest(&store, &admin, &scope, &session, 0xa74e)
+    let second = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa74c, "two ",
+    )
+    .await;
+    let undo_second =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa74d).await);
+    let stopped = undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa74e)
         .await
         .outcome;
 
@@ -243,7 +278,14 @@ async fn author_undo_compensates_an_acceptance_after_the_undo_of_a_later_edit() 
         .get(/*idx*/ 0);
     seed_run(&admin, &scope, &run_id, "completed").await;
     let session = input.editor_session_id.as_ref().to_owned();
-    let call = issued(&store, &scope, 0xa769, &ACCEPT_PROPOSAL, input).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa769,
+        &ACCEPT_PROPOSAL,
+        input,
+    )
+    .await;
     // The writer Editor Session edits the accepted Chapter B, as an author who accepts in the
     // Chapter does.
     edit_in_chapter_of(
@@ -257,9 +299,14 @@ async fn author_undo_compensates_an_acceptance_after_the_undo_of_a_later_edit() 
     let accepted = resulting_revision(&admin, &call.envelope.ids.receipt_id).await;
     edit_in_chapter_of(&admin, &session, &accepted).await;
     let acceptance = latest_forward(&admin, &scope).await;
-    let second = edit(&store, &admin, &scope, &session, 0xa76a, "two ").await;
-    let undo_second = compensated(undo_latest(&store, &admin, &scope, &session, 0xa76b).await);
-    let undo_acceptance = compensated(undo_latest(&store, &admin, &scope, &session, 0xa76c).await);
+    let second = edit(
+        &store, &admin, &scope, &session, /*suffix*/ 0xa76a, "two ",
+    )
+    .await;
+    let undo_second =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa76b).await);
+    let undo_acceptance =
+        compensated(undo_latest(&store, &admin, &scope, &session, /*suffix*/ 0xa76c).await);
 
     assert_eq!(
         (
