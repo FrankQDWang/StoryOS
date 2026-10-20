@@ -15,8 +15,9 @@ export async function restoreJournalVersion(
       .map((name) => ({ name, keyPath: store.index(name).keyPath,
         unique: store.index(name).unique })),
       rows: rows.map((row: unknown) => {
-        const { working_set_partition_id: working, ...value } = requireRecord(row, "Journal row");
-        const kept = version === 4 && working !== undefined ? { ...value, working_set_partition_id: working } : value;
+        // Version 4 keeps each row with its field order, because some stored values compare as JSON text.
+        const { working_set_partition_id: _working, ...value } = requireRecord(row, "Journal row");
+        const kept = version === 4 ? requireRecord(row, "Journal row") : value;
         return name === "metadata" && kept.key === "schema" ? { ...kept, version } : kept;
       }),
     };
