@@ -302,6 +302,7 @@ fn encode_rejected(source: &RejectedSource) -> serde_json::Value {
         "token_count": source.token_count,
         "reason": match source.reason {
             RejectionReason::OverItemTokenLimit => "over_item_token_limit",
+            RejectionReason::OverCollectionTokenLimit => "over_collection_token_limit",
             RejectionReason::RequiredRevisionUnavailable => "required_revision_unavailable",
             RejectionReason::WorkingTargetRevisionUnavailable => {
                 "working_target_revision_unavailable"
@@ -317,6 +318,7 @@ fn decode_rejected(value: &serde_json::Value) -> Option<RejectedSource> {
         token_count: value.get("token_count")?.as_u64()?,
         reason: match value.get("reason")?.as_str()? {
             "over_item_token_limit" => RejectionReason::OverItemTokenLimit,
+            "over_collection_token_limit" => RejectionReason::OverCollectionTokenLimit,
             "required_revision_unavailable" => RejectionReason::RequiredRevisionUnavailable,
             "working_target_revision_unavailable" => {
                 RejectionReason::WorkingTargetRevisionUnavailable
