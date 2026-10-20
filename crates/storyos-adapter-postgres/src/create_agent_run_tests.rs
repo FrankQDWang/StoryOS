@@ -234,17 +234,26 @@ fn named_store(database_url: &str, application_name: &str) -> PostgresProjectRea
     ))
 }
 
-/// Waits until the backend of `application_name` waits for a lock of `holder` only, and returns
-/// the backend process ID.
-async fn wait_for_lock_of(monitor: &Client, application_name: &str, holder: i32) -> i32 {
+/// Waits until the backend of `application_name` waits for a row lock of `holder` only on a row of
+/// `relation`, and returns the backend process ID.
+async fn wait_for_row_lock_of(
+    monitor: &Client,
+    application_name: &str,
+    holder: i32,
+    relation: &str,
+) -> i32 {
     let waited = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let waiting = monitor
                 .query_opt(
-                    "SELECT pid FROM pg_catalog.pg_stat_activity
-                      WHERE application_name = $1 AND wait_event_type = 'Lock'
-                        AND pg_catalog.pg_blocking_pids(pid) = ARRAY[$2::int]",
-                    &[&application_name, &holder],
+                    "SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+                      WHERE activity.application_name = $1 AND activity.wait_event_type = 'Lock'
+                        AND pg_catalog.pg_blocking_pids(activity.pid) = ARRAY[$2::int]
+                        AND EXISTS (
+                          SELECT 1 FROM pg_catalog.pg_locks AS lock
+                           WHERE lock.pid = activity.pid AND lock.locktype = 'tuple'
+                             AND lock.relation = $3::text::regclass)",
+                    &[&application_name, &holder, &relation],
                 )
                 .await
                 .unwrap();
@@ -278,7 +287,7 @@ async fn wait_for_lock_of(monitor: &Client, application_name: &str, holder: i32)
             )
         })
         .collect::<Vec<_>>();
-    panic!("{application_name} did not wait for backend {holder}: {observations:?}");
+    panic!("{application_name} did not wait for backend {holder} on {relation}: {observations:?}");
 }
 
 #[tokio::test]
@@ -597,9 +606,21 @@ async fn concurrent_existing_conversation_admissions_take_the_contention_refusal
     let first_store = named_store(&runtime_url, "storyos_race_first_admission");
     let second_store = named_store(&runtime_url, "storyos_race_second_admission");
     let second_after_first_waits = async {
-        let first_pid = wait_for_lock_of(&admin, "storyos_race_first_admission", gate_pid).await;
+        let first_pid = wait_for_row_lock_of(
+            &admin,
+            "storyos_race_first_admission",
+            gate_pid,
+            "storyos.conversation_memory_settings",
+        )
+        .await;
         let open_gate = async {
-            wait_for_lock_of(&admin, "storyos_race_second_admission", first_pid).await;
+            wait_for_row_lock_of(
+                &admin,
+                "storyos_race_second_admission",
+                first_pid,
+                "storyos.projects",
+            )
+            .await;
             gate.batch_execute("ROLLBACK").await.unwrap();
         };
         tokio::join!(create(&second_store, second_call), open_gate).0
