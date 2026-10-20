@@ -1,6 +1,6 @@
 //! Damaged evidence tests drop or disable database checks for a short time. Each other
-//! PostgreSQL test of the lib target shares their database and process, so it must wait for the
-//! test lock before its first statement.
+//! PostgreSQL test of the lib target shares their database and process. Thus it holds the test
+//! lock from its first statement to its end.
 
 use std::path::{Path, PathBuf};
 
@@ -29,9 +29,26 @@ fn shown(path: &Path) -> String {
     path.strip_prefix(root).unwrap().display().to_string()
 }
 
+/// Tells if `statement` is `let _test_guard = <path>AUTHOR_EDIT_TEST_LOCK.lock().await`.
+fn holds_the_lock(statement: &str) -> bool {
+    let compact = statement
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    compact
+        .strip_prefix("let_test_guard=")
+        .and_then(|value| value.strip_suffix(&format!("{TEST_LOCK}.lock().await")))
+        .is_some_and(|path| {
+            path.chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == ':')
+        })
+}
+
 /// Gives `file:line name` for each ignored test whose first statement does not take the lock.
+/// A file that drops `_test_guard` early gives each of its ignored tests.
 fn tests_without_the_lock_first(path: &Path) -> Vec<String> {
     let source = std::fs::read_to_string(path).unwrap();
+    let drops_the_guard = source.contains("drop(_test_guard)");
     let lines = source.lines().collect::<Vec<_>>();
     let mut found = Vec::new();
     for (index, line) in lines.iter().enumerate() {
@@ -51,7 +68,7 @@ fn tests_without_the_lock_first(path: &Path) -> Vec<String> {
             .split(';')
             .next()
             .unwrap();
-        if !(first_statement.contains(TEST_LOCK) && first_statement.contains(".lock()")) {
+        if drops_the_guard || !holds_the_lock(first_statement) {
             found.push(format!("{}:{} {name}", shown(path), function + 1));
         }
     }
@@ -68,7 +85,7 @@ fn every_postgresql_test_of_the_lib_target_takes_the_test_lock_first() {
         found,
         Vec::<String>::new(),
         "make `let _test_guard = crate::author_edit::tests::{TEST_LOCK}.lock().await;` \
-         the first statement of each test"
+         the first statement of each test, and do not drop it early"
     );
 }
 
