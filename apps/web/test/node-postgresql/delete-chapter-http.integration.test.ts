@@ -18,10 +18,12 @@ import {
   digestCreateEditorSession,
   digestCreateVolume,
   digestDeleteChapter,
+  digestSetCurrentChapter,
   digestUpdateProject,
   getChapter,
   getManuscriptTree,
   getProject,
+  setCurrentChapter,
   updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -31,6 +33,7 @@ import type {
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   DeleteChapterRequest,
+  SetCurrentChapterRequest,
   UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -409,6 +412,146 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
       ),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+async function putCurrent(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  idempotencyKey: string,
+  input: { chapterId: string; expectedCurrentChapterId: string; expectedTargetRevisionId: string; editorSessionId: string },
+) {
+  const request: SetCurrentChapterRequest = {
+    command_schema: "storyos.command.set-current-chapter.request.v1",
+    set_current_chapter_input: {
+      chapter_id: input.chapterId,
+      expected_current_chapter_id: input.expectedCurrentChapterId,
+      expected_target_revision_id: input.expectedTargetRevisionId,
+      editor_session_id: input.editorSessionId,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: idempotencyKey,
+    },
+  };
+  const digest = await digestSetCurrentChapter(request);
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "PUT",
+      route_template: "/api/v1/projects/{project_id}/current-chapter",
+      command_schema: request.command_schema,
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  return setCurrentChapter({ baseUrl, projectId, fetchImpl, idempotencyKey, antiForgery: challenge.nonce, request });
+}
+
+test("deleteChapter of the last current Chapter selects the previous Chapter, and a removed Chapter is an invalid join on an Empty Project", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const { fetchImpl, projectId } = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-00000000d901",
+      "Previous Novel",
+      "018f0000-0000-7001-8000-00000000d902",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      "018f0000-0000-7001-8000-00000000d903",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-00000000d904"),
+    );
+    if (volume.effect.kind !== "authoritative_applied") throw new Error("Volume must apply");
+    const chapterAId = appliedId(await postChapter(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-00000000d905",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-00000000d906"),
+    ));
+    const chapterBId = appliedId(await postChapter(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-00000000d907",
+      chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-00000000d908"),
+    ));
+    const sessionRequest: CreateEditorSessionRequest = {
+      command_schema: "storyos.command.create-editor-session.request.v1",
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: "018f0000-0000-7001-8000-00000000d909",
+    };
+    const sessionChallenge = await withChallengeBudget(projectId, async () => createProjectCommandChallenge({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: sessionRequest.command_schema,
+        canonical_command_digest: await digestCreateEditorSession(sessionRequest),
+        idempotency_key: "018f0000-0000-7001-8000-00000000d90a",
+      },
+    }));
+    const session = await createEditorSession({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000d90a",
+      antiForgery: sessionChallenge.nonce,
+      request: sessionRequest,
+    });
+    const editorSessionId = session.editor_session.editor_session_id;
+    const revisionB = (await getChapter({ baseUrl, projectId, chapterId: chapterBId, fetchImpl }))
+      .chapter.current_revision.revision_id;
+    const selectedB = await putCurrent(baseUrl, fetchImpl, projectId, "018f0000-0000-7001-8000-00000000d90b", {
+      chapterId: chapterBId,
+      expectedCurrentChapterId: chapterAId,
+      expectedTargetRevisionId: revisionB,
+      editorSessionId,
+    });
+    assert.equal(selectedB.effect.kind, "authoritative_applied");
+
+    const removedB = await deleteOwned(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      chapterBId,
+      "018f0000-0000-7001-8000-00000000d90c",
+      deleteRequest("4", "018f0000-0000-7001-8000-00000000d90d"),
+    );
+    assert.equal(removedB.effect.kind, "authoritative_applied");
+    assert.deepEqual(removedB.project.open, { kind: "current_chapter", current_chapter_id: chapterAId });
+
+    const removedA = await deleteOwned(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      chapterAId,
+      "018f0000-0000-7001-8000-00000000d90e",
+      deleteRequest("5", "018f0000-0000-7001-8000-00000000d90f"),
+    );
+    assert.equal(removedA.effect.kind, "authoritative_applied");
+    assert.deepEqual(removedA.project.open, { kind: "empty" });
+
+    const removedJoin = await putCurrent(baseUrl, fetchImpl, projectId, "018f0000-0000-7001-8000-00000000d910", {
+      chapterId: chapterBId,
+      expectedCurrentChapterId: chapterBId,
+      expectedTargetRevisionId: revisionB,
+      editorSessionId,
+    });
+    assert.deepEqual(removedJoin.effect, { kind: "refused", reason: "invalid_chapter_join" });
   } finally {
     await stopRealServer(server);
   }
