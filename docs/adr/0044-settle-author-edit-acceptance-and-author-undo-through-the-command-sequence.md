@@ -57,7 +57,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 
 | Forward command kind and applied variant | Author Undo Disposition |
 | --- | --- |
-| `applyAuthorEdit`, `authoritative_applied` | Compensation. It restores the prior Revision. It reopens a Refused Edit Draft that the edit superseded. |
+| `applyAuthorEdit`, `authoritative_applied` | Compensation. It restores the prior Revision. It reopens a Refused Edit Draft that the edit superseded. The Head can be a Compensation of a later action ([ADR 0067](0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)). |
 | `applyAuthorEdit`, `proposal_revised` | Compensation. It appends a Proposal Revision that restores the candidate of the edited Operation before the edit. |
 | `acceptProposal` | Compensation when the Head is a Safe Compensation Head. Otherwise the Undo Acceptance outcome is reversal required or unavailable. |
 | `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, `deleteChapter` | Compensation ([ADR 0030](0030-restore-prior-identities-for-structure-compensation.md)). |
