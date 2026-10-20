@@ -39,6 +39,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
   const [unsent, setUnsent] = useState(false);
   const alive = useRef(true);
   const recovered = useRef(false);
+  // An edit of the author after a guidance takes over its message, so a conflicted reply does not resend it.
+  const edited = useRef(false);
   const known = run !== undefined && run.run_id === current?.runId
     && run.conversation_id === current.conversationId;
   const active = known && !settledRun(run);
@@ -49,14 +51,16 @@ export function AssistantComposer({ context, available, sending, current, run, o
   const submitControl = async (intent: RunControlIntent) => {
     if (context === undefined) return;
     saveRunControl(intent);
+    edited.current = false;
     setPending(intent);
     setBusy(true);
     onStatus("正在确认任务操作…");
     try {
       const response = await submitRunControl(context, intent);
       // The message waits for the next AgentRun, also through a reload, until the panel records its request.
-      if (response.effect.kind === "conflicted" && intent.kind === "guidance") saveRunControl({ ...intent, resend: true });
-      else clearRunControl(intent);
+      if (response.effect.kind === "conflicted" && intent.kind === "guidance" && !edited.current) {
+        saveRunControl({ ...intent, resend: true });
+      } else clearRunControl(intent);
       if (!alive.current) return;
       setPending(undefined);
       if (response.effect.kind === "retained" && intent.kind === "guidance") {
@@ -73,7 +77,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
         return;
       }
       if (!alive.current) return;
-      if (response.effect.kind === "conflicted" && intent.kind === "guidance") {
+      if (response.effect.kind === "conflicted" && intent.kind === "guidance" && !edited.current) {
         setResend(intent);
         return;
       }
@@ -106,6 +110,10 @@ export function AssistantComposer({ context, available, sending, current, run, o
   useEffect(() => {
     if (resend === undefined || !known || active) return;
     setResend(undefined);
+    if (edited.current) {
+      onStatus("任务已结束，这次操作未执行。");
+      return;
+    }
     const input = resend.request.steer_agent_run_input;
     onSend(input.author_message.text, () => setMessage(""), { references: input.selection_references ?? [],
       labels: resend.labels ?? [], keys: resend.referenceKeys ?? [] }, recorded);
@@ -157,6 +165,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
       <textarea name="assistant-message" aria-label="给写作助手的消息" rows={2} maxLength={4000}
         value={message} onChange={(event) => {
           setMessage(event.currentTarget.value);
+          edited.current = true;
           if (context !== undefined) clearResendRunControl(context.scope);
         }}
         // A paste of a copy from the editor adds its references. Other data pastes as text.

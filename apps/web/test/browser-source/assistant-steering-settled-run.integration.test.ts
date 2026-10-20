@@ -16,6 +16,7 @@ const RUN = "018f0000-0000-7001-8000-000000000c51";
 const NEXT_RUN = createFixture.effect.run_id;
 const CONVERSATION = agentRunFixture.conversation_id;
 const MESSAGE = "Now make it shorter.";
+const EDITED = `${MESSAGE} Keep the names.`;
 const scope = { owner_user_id: OWNER, project_id: PROJECT };
 const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: CHAPTER,
   base_authoritative_revision_id: REVISION, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
@@ -23,7 +24,7 @@ const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: CHAP
 
 type SteeringReply = "conflicted" | "refused" | "unknown";
 /** What happens after the steering reply: a failed refresh read, or a reload at one point. */
-type Interruption = "failed-refresh" | "reload-before-resend" | "reload-after-record";
+type Interruption = "failed-refresh" | "reload-before-resend" | "reload-after-record" | "edit-before-reply";
 /** What the author does after the reload. */
 type AuthorStep = "send" | "edit";
 
@@ -44,6 +45,9 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     : interruption === "reload-after-record" ? "create" : undefined;
   const commands: Array<{ route: string; body: Record<string, unknown> }> = [];
   const steered = () => commands.some((command) => command.route === "steering-inputs");
+  // The steering reply waits until the author edits the composer.
+  let reply = () => {};
+  const edited = new Promise<void>((resolve) => { reply = resolve; });
   const advisory = { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000c55", selected: true,
     text: "Keep the second sentence.", continuation: { kind: "absent" } };
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -69,6 +73,7 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     }
     commands.push({ route: path.split("/").at(-1)!, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
     if (path.endsWith("/steering-inputs")) {
+      if (interruption === "edit-before-reply") await edited;
       if (steering === "unknown") throw new TypeError("Failed to fetch");
       if (steering === "refused") return jsonResponse({ code: "project_command_refused" }, 403);
       return jsonResponse({ ...steerFixture, project_scope: scope, receipt: { ...steerFixture.receipt, project_scope: scope },
@@ -125,8 +130,13 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
       root = createRoot(host);
       await mount();
     }
+    if (interruption === "edit-before-reply") {
+      await type(EDITED);
+      reply();
+      await settle();
+    }
     if (step === "send") await send();
-    if (step === "edit") await type(`${MESSAGE} Keep the names.`);
+    if (step === "edit") await type(EDITED);
     return {
       commands,
       status: host.querySelector("[role=status]")?.textContent ?? null,
@@ -198,7 +208,15 @@ it("forgets the restored message as unsent when the author edits it", async () =
   const result = await sendAfterCompletion("conflicted", "reload-before-resend", "edit");
 
   expect({ composer: result.composer, retainedIntent: result.retainedIntent })
-    .toEqual({ composer: `${MESSAGE} Keep the names.`, retainedIntent: false });
+    .toEqual({ composer: EDITED, retainedIntent: false });
+});
+
+it("keeps an edit of the author and sends no AgentRun when the author edits before the conflicted reply", async () => {
+  const result = await sendAfterCompletion("conflicted", "edit-before-reply");
+
+  expect({ routes: result.commands.map((command) => command.route), status: result.status,
+    composer: result.composer, retainedIntent: result.retainedIntent }).toEqual({ routes: ["steering-inputs"],
+    status: "任务已结束，这次操作未执行。", composer: EDITED, retainedIntent: false });
 });
 
 it("sends no second AgentRun and shows no unsent message when the page reloads after the request record", async () => {
