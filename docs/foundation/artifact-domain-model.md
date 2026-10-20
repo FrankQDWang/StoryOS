@@ -493,7 +493,7 @@ coalescing is allowed only before Admission issuance while every pre-issuance
 input that the Admission contract will bind and every manuscript semantic
 field remain equal. The final body and digest receive one Admission and are
 never merged afterward. Core recomputes ownership from durable Heads, Proposal
-Anchors, and reservations and returns one whole-command result: authoritative
+Anchors, and reservations. It returns one result for the command: authoritative
 applied, Proposal revised, refused to Draft, refused, conflicted, or no
 effect. The client cannot select an authoritative or Proposal write route, and one
 mixed-ownership input is never split.
