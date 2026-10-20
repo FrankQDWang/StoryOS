@@ -590,7 +590,7 @@ actors, and raw external results are not producer-cause variants. A new variant
 is a coordinated contract change owned by the Manuscript/Proposal state
 machine, not an untyped fallback.
 
-An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, root Author Undo command digest and idempotency key, and an outcome union:
+An Acceptance Receipt records the command digest and idempotency key of one attempt. It also records the exact Proposal Revision, the Validation Receipt, the selected operations, and the expected targets. It records the prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, the child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused` result. An Undo Acceptance Receipt records the original Acceptance Receipt, root Author Undo command digest and idempotency key, and an outcome union:
 
 ```text
 Compensated { authoritative_commit_ref, proposal_ref? }

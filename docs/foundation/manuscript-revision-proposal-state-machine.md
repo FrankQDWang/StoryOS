@@ -74,7 +74,9 @@ The Project has one owning User acting as its Project Author. Project Scope is
 resolved from trusted Host state and must match every referenced object; a
 caller field, ProjectId alone, globally unique object ID, or editor session
 cannot establish ownership. Any missing or mismatched member fails before a
-domain attempt and cannot produce or retrieve a Receipt. Ownership transfer,
+domain attempt and cannot produce or retrieve a Receipt. This rule applies to a
+Project Scope member. A missing Proposal Operation in a command target gets the
+result of section 7.2. Ownership transfer,
 shared ownership, and multi-author editing are outside the current Foundation.
 
 ### 2.3 Ordered integers
@@ -326,9 +328,8 @@ Unlisted transitions are invalid.
 | validation | `pending` | `valid` | current Core validation succeeds |
 | validation | `pending` | `invalid` | current content violates its own contract |
 | validation | `pending`, `valid`, or `invalid` | `conflicted` | exact target proof no longer holds |
-| validation | `valid` | `pending` | author edits pending content in a new Proposal Revision |
-| validation | `invalid` | `pending` | corrected new Proposal Revision |
-| validation | `conflicted` | `pending` | author edits pending content, or an explicit Replan, in a new Proposal Revision |
+| validation | `valid`, `invalid`, or `conflicted` | `valid` or `conflicted` | author edits pending content in a new Proposal Revision, and Core validates it in the same Transition |
+| validation | `conflicted` | `pending` | an explicit Replan in a new Proposal Revision |
 | closure | `open` | `withdrawn` | `WithdrawProposal` |
 | closure | `withdrawn` | `open` | explicit reopen with new Revision |
 | closure | `open` or `withdrawn` | `superseded` | `SupersedeProposal` |
@@ -341,10 +342,12 @@ The validation `conflicted` does not block Acceptance
 ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 
 `superseded` is terminal. Content correction, replan, rejected-operation
-reopen, and Undo Acceptance append new Proposal Revisions. A content Revision
-starts validation at `pending`; Core may record an immediately proven
-structural conflict in the same Transition. Closure never rewrites Operation
-resolution, and resolution never rewrites Retention.
+reopen, and Undo Acceptance append new Proposal Revisions. A Replan Revision
+starts validation at `pending`. The Revision of an author candidate edit gets
+its validation and a new Validation Receipt in the same Transition as the edit.
+Thus the next read of that Revision shows the result of its validation, never
+`pending`. Closure never rewrites Operation resolution, and resolution never
+rewrites Retention.
 
 A candidate edit and its Compensation at Author Undo validate against their own
 base. The same rule applies to the Proposal Revision of a flat edit at an Inline
@@ -729,9 +732,6 @@ ApplyAuthorEditResult {
     | ProposalRevised {
         proposal_revision_id
         author_action_sequence
-        resulting_validation:
-          Pending
-          | StructuralReshapeConflict { proposal_conflict_ref }
       }
     | RefusedToDraft {
         refused_edit_draft_id
@@ -781,14 +781,17 @@ in this order:
    returns `ProposalRevised`, appends exactly one Proposal Revision, and creates
    exactly one Forward Author Action.
 
-Ordinary `ProposalRevised` resets validation to `Pending` and creates no
-condition. The sole append-and-immediate-conflict case is a command whose
-pre-command proofs all passed but whose own applied structural primitive
-creates Proposal Structural Reshaping. That result is
-`ProposalRevised.StructuralReshapeConflict`: the new Revision preserves the
-author edit and the same Transition deterministically records its
-`ProposalConflict`. This fact is caused by the new candidate shape and cannot
-be selected for a stale command. A Proposal Revision that is already
+A Proposal target with an Operation that is not a pending Operation of its
+current Proposal Revision is a target mismatch. When the expected Proposal
+Heads are the current Proposal Heads, step 3 returns
+`Refused { reason: target_mismatch }`. Otherwise step 1 returns `Conflicted`
+with the reason `proposal_head_present`.
+
+`ProposalRevised` creates no condition. In Release 1, each unit of a command with a
+Proposal target has exactly one `ReplaceSelection`. The Server refuses a
+structural primitive on a Proposal target before Admission with HTTP 422
+`command_target_refused`. Thus an author edit never makes Proposal Structural
+Reshaping in a Proposal candidate. A Proposal Revision that is already
 `conflicted` still accepts a direct Proposal edit without a Replan. The new
 Revision validates against its own base (section 6.4), and Acceptance can apply
 it (ADR 0064).
@@ -923,6 +926,8 @@ version, and result. Replan appends a new pending Revision; it never edits the
 old conflict or Receipt. The named source may carry either Proposal Conflict or
 Proposal Recovery Conflict; Replan must resolve the exact preserved surface and
 current targets without collapsing those condition kinds.
+Core also gives a Validation Receipt to the Revision of an author candidate
+edit in the same Transition as the edit (section 6.4).
 
 ### 7.5 AcceptProposal
 
@@ -1310,7 +1315,6 @@ AcceptanceResult =
   | Invalid { violations }
   | Conflicted { conflicts, current_target_revisions, replan_required }
   | Refused { reason }
-  | NoEffect { reason }
 ```
 
 Only `Applied` changes Authoritative State and resolves the selected Operations
@@ -1318,7 +1322,8 @@ as applied. `Invalid` projects validation invalid; `Conflicted` projects it
 conflicted. Only an Acceptance Receipt from before ADR 0064 records
 `Conflicted`. `Refused` covers state or
 selection ineligibility and a missing target Block without changing content
-validity. `NoEffect` creates no Commit and leaves Operations pending.
+validity. An Acceptance that changes no state gives `Invalid` or `Refused`,
+not `NoEffect`, and it leaves Operations pending.
 All reasons are versioned exhaustive types; free text is presentation only.
 
 Bundle Receipts compose exact child Receipts under the existing atomic or
@@ -1390,8 +1395,7 @@ empty. The closed allocation matrix is:
 | First-attempt result | Receipt | Authoritative Commit | Author Action | New Draft Artifact | Source Draft lifecycle | Proposal condition |
 | --- | --- | ---: | ---: | ---: | --- | ---: |
 | `ApplyAuthorEdit.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
-| `ApplyAuthorEdit.ProposalRevised.Pending` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
-| `ApplyAuthorEdit.ProposalRevised.StructuralReshapeConflict` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | exactly 1 `ProposalConflict` caused by the newly appended Revision's structural shape |
+| `ApplyAuthorEdit.ProposalRevised` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
 | `ApplyAuthorEdit.RefusedToDraft` | `DomainReceipt` | 0 | 0 | exactly 1 `RefusedEditDraft` | Fresh N/A; `DraftRetry` exact source closes `superseded` and the new Draft replaces it as the sole open surface | 0 |
 | `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source is unchanged and creates no lifecycle event | 0 |
 | `ApplyAuthorEdit.Conflicted` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source is unchanged and creates no lifecycle event | exactly 1 `ProposalConflict` only when an exact Proposal Revision is the affected surface; otherwise 0 |
@@ -1405,7 +1409,7 @@ empty. The closed allocation matrix is:
 | `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | N/A | 0 |
 | `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | validation becomes `invalid` |
 | `AcceptProposal.Conflicted` (only an Acceptance Receipt from before ADR 0064) | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
-| `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | 0 |
+| `AcceptProposal.Refused` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | 0 |
 
 Bundle Acceptance retains its declared atomic or ordered-independent policy:
 the parent Acceptance Receipt records the exact child Receipts and committed
@@ -1477,10 +1481,10 @@ action routes to its registered typed handler:
 - Refused Edit Draft expansion -> exact derived-Proposal withdrawal plus exact
   source-Draft reopen;
 - Acceptance -> `UndoAcceptance`;
-- rejection -> rejected-operation reopen;
 - withdrawal -> typed Proposal reopen;
 - Draft close -> typed Draft reopen while retained;
-- any action without a registered exact handler -> Barrier.
+- any action without a registered exact handler, for example a rejection
+  (ADR 0044) -> Barrier.
 
 A handler that reopens a consumed source Draft requires the exact retained
 `ClosedSuperseded` event from its source Receipt and the exact current
@@ -1576,7 +1580,7 @@ undo-allocation matrix is:
 | compensate `DraftRetry.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Compensation | exact source Draft reopen |
 | compensate ordinary author Proposal edit | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision |
 | compensate `DraftRetry.ProposalRevised` | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision plus exact source Draft reopen |
-| compensate rejection, withdrawal, or explicit Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact resolution/lifecycle event or Draft reopen |
+| compensate withdrawal or explicit Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact resolution/lifecycle event or Draft reopen |
 | compensate Refused Edit Draft expansion | `DomainReceipt` | 0 | exactly 1 Compensation | withdraw exact derived Proposal and reopen exact source Draft |
 | `UndoAcceptance.Compensated` | `UndoAcceptanceReceipt` | exactly 1 | exactly 1 Compensation | safe Proposal reopening Revision when available |
 | `UndoAcceptance.ReversalRequired` or another handler's `ReversalRequired` | owning typed Receipt | 0 | exactly 1 Forward | exactly 1 Reversal Proposal; source remains uncompensated |

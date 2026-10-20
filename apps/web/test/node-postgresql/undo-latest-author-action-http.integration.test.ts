@@ -962,7 +962,7 @@ async function reopenWithdrawn(proposal: OpenedProposal, session: EditorSession,
   return reopened.effect.author_action_sequence;
 }
 
-async function rejectAndReopen(proposal: OpenedProposal, session: EditorSession, ns: string) {
+async function reject(proposal: OpenedProposal, session: EditorSession, ns: string) {
   const rejectRequest: RejectProposalOperationsRequest = {
     command_schema: "storyos.command.reject-proposal-operations.request.v1",
     reject_proposal_operations_input: {
@@ -985,13 +985,18 @@ async function rejectAndReopen(proposal: OpenedProposal, session: EditorSession,
     }),
   );
   if (rejected.effect.kind !== "resolved") throw new Error("expected a rejection");
+  return rejected.effect;
+}
+
+async function rejectAndReopen(proposal: OpenedProposal, session: EditorSession, ns: string) {
+  const rejected = await reject(proposal, session, ns);
   const beforeReopen = await inspect(proposal);
   const reopenRequest: ReopenRejectedOperationsRequest = {
     command_schema: "storyos.command.reopen-rejected-operations.request.v1",
     reopen_rejected_operations_input: {
       proposal_revision_id: beforeReopen.proposal.revision_id,
       selected_rejected_operation_ids: [proposal.opened.proposal.operation_id],
-      rejection_event_refs: [rejected.effect.resolution_event_refs[0] ?? ""],
+      rejection_event_refs: [rejected.resolution_event_refs[0] ?? ""],
       expected_target_revisions: [await chapterHead(proposal)],
       editor_session_id: session.editor_session.editor_session_id,
       ...BINDING,
@@ -1136,6 +1141,23 @@ test("undoLatestAuthorAction rejects reopened operations again, and a later head
     const movedSession = await openSession(moved, "c96322");
     const reopened = await rejectAndReopen(moved, movedSession, "c96322");
     await assertBarrierAfterHeadMove(moved, movedSession, reopened.sequence, "c96322");
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("undoLatestAuthorAction of an Operation rejection is a Barrier and keeps the rejection", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "db0011");
+    const session = await openSession(proposal, "db0011");
+    const rejected = await reject(proposal, session, "db0011");
+    const beforeUndo = await inspect(proposal);
+    const blocked = await undoProposalDecision(proposal, session, rejected.author_action_sequence, "db0011");
+    assert.deepEqual(blocked.effect, { kind: "unavailable", reason: "barrier" });
+    assert.deepEqual((await inspect(proposal)).proposal, beforeUndo.proposal);
+    assert.equal(beforeUndo.proposal.operation_resolution, "rejected");
   } finally {
     await stopRealServer(started.server);
   }
