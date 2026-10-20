@@ -8,7 +8,7 @@ status: accepted
 
 ## Context
 
-The study used an earlier product base. On 2026-10-20 the executor examined each question again on `main` `e448962b`. The triage of 2026-10-17 recorded two author decisions: A-001 and A-009 keep the current behavior. On 2026-10-20 the author also decided A-004, A-008, and A-011 at the refresh gate of the ticket. For the other questions, this ADR records the current behavior as the contract.
+The study used an earlier product base. On 2026-10-20 the executor examined each question again on `main` `e448962b`. The triage of 2026-10-17 recorded two author decisions: A-001 and A-009 keep the current behavior. On 2026-10-20 the author also decided A-004, A-005, A-008, and A-011. For the other questions, this ADR records the current behavior as the contract.
 
 ## Decision
 
@@ -18,7 +18,7 @@ The study used an earlier product base. On 2026-10-20 the executor examined each
 | A-002 | What are the first revision values? | A new Project starts at Manuscript Tree Revision 1 and Project Revision 1. The Project query does not give the Project Revision; the list, update, and archive responses give it. A Project with no assistance binding takes the expected assistance revision 0 and gets revision 1. | Glossary, Manuscript Tree Revision; this ADR | `manuscript-tree-http`, `archive-project-http`, `update-project-assistance-http` |
 | A-003 | Which refusal of Set Current Chapter comes first? | `archived_project`, then `invalid_chapter_join`, then `empty_project`. A removed Chapter on an Empty Project gives `invalid_chapter_join`. | This ADR | `delete-chapter-http`, Core `set_current_chapter_tests.rs` |
 | A-004 | What does a schema-valid zero revision or order give? | HTTP 400 `invalid_request` before Admission. The generated schema does not change. Author decision of 2026-10-20. | Protocol section 4.1 and the error table | `update-volume-http.integration.test.ts` |
-| A-005 | Can the author undo an earlier direct edit after an Undo of a later one? | Open: waits for an author decision. | None | None |
+| A-005 | Can the author undo an earlier direct edit after an Undo of a later one? | Yes. Prose Undo goes back many steps, as in a usual text editor. Author decision of 2026-10-20. Current defect: after one prose Compensation, Author Undo of the earlier edit gives `wrong_target_head`. [Let Prose Undo Go Back Many Steps](https://github.com/FrankQDWang/StoryOS/issues/1237) owns the fix. | Glossary, Author Undo Order and Author Undo Frontier | None until the fix |
 | A-006 | When does a candidate edit get its validation? | In the same Transition as the edit. The next read gives a new Validation Receipt and never `pending`. A Replan Revision starts at `pending`. | State machine sections 6.4, 7.2, and 7.4 | Existing `edit-proposal-candidate-http.integration.test.ts` |
 | A-008 | Does Acceptance have a `NoEffect` result? | No. The foundation result set loses `NoEffect`, and the public contract does not change. Author decision of 2026-10-20. | State machine section 8.1 and its matrix; Artifact domain model; glossary, Acceptance Result | Existing Core `accept_proposal_tests.rs` |
 | A-009 | Which Chapter becomes current after a Chapter create or delete? | The first Chapter on an Empty Project becomes current. A delete of the Current Chapter selects the next Chapter in tree order, also in another Volume, else the previous one, else an Empty Project. Author decision of 2026-10-17. | Glossary, Current Chapter | `delete-chapter-http`, `create-chapter-http` |
