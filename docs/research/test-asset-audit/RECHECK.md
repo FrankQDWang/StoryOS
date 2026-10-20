@@ -1,0 +1,69 @@
+# Test asset audit recheck
+
+This recheck gives the current status of each DELETE, MERGE and MOVE verdict of [REPORT.md](REPORT.md) (330 DELETE, 52 MERGE, 5 MOVE). It is for [Recheck the Test Asset Audit Verdicts Against Current Main](https://github.com/FrankQDWang/StoryOS/issues/1217), under [Recheck and Apply the Test Asset Audit Verdicts on Current Main](https://github.com/FrankQDWang/StoryOS/issues/1086).
+
+- Audit baseline: `479224809cdaae997cda51cb8853e3fafa242b65`.
+- Recheck commit: `e448962b848c5a5b7461ca0bad7bb640d57b1f3e` (`main` on 2026-10-20). The tables do not follow later commits. Each follow-up ticket rechecks its own rows at its refresh gate.
+- Row tables: [recheck-core.md](recheck-core.md) for `storyos-core`, [recheck-rust.md](recheck-rust.md) for the other Rust crates and [recheck-web.md](recheck-web.md) for the Web test suites.
+- Rebuild: `python3 docs/research/test-asset-audit/recheck.py` writes the four Markdown files from Git objects of the two commits and from [recheck-notes.json](recheck-notes.json). `--check` fails if a written file differs. `--todo` lists the rows that have no manual judgment.
+
+## Method
+
+1. `recheck.py` reads each DELETE, MERGE and MOVE row of REPORT.md: ID, audited file, baseline line, test name, verdict, reason code and the cited covering tests.
+2. It finds the audited test at the recheck commit by its declaration in the audited file (`fn <name>` in Rust, `it(` or `test(` with the name in TypeScript). When the name is not in that file, it walks `git log BASE..RECHECK -- <file>` to find the first commit whose file does not have the name. That commit is the removing commit. A test with the same name in another file can be a different test, so such a row always goes to manual judgment, and the reviewer searches all sources for a rename or a move.
+3. It compares the test body at the baseline with the body at the recheck commit, from the declaration to the closing line at the same indentation. For Rust, the comparison also includes the attribute lines directly above the declaration (for example `#[ignore]`, `#[should_panic]` or `#[cfg]`), because they change what the test proves.
+4. It maps each cited covering test (`path:line` at the baseline) to its declaration name, finds it in the same file at the recheck commit, and compares its body.
+5. A row is `applies` without a manual note only when the audited test is in the same file with an unchanged body and every cited covering test is present with an unchanged body. The script refuses to write the tables while another row has no manual judgment.
+6. For each other row, a reviewer read the baseline and current test, the diff between the two commits, and each covering or receiving test at the recheck commit. The judgment looks at the specific assertion that the audit verdict relies on, not at the whole test. recheck-notes.json records the status, the current location when the script cannot find it (for example a parameterized case), the proof test, and a one-sentence reason. Read-only subagents made a first pass by area; the executor checked each row before it went into recheck-notes.json.
+7. Before it writes the tables, the script validates each manual `location` and each `path:line` in a manual proof at the recheck commit. The file must exist and the line must be in it. In a test file, the line must be a test declaration.
+8. The script marks each audited file that a stage crosswalk (`crates/storyos-contracts/src/stage*_crosswalk*.rs`) binds by path. Such a file keeps its path unless the binding owner agrees (point 4 of the parent issue).
+
+## Limit
+
+The mechanical rule of step 5 compares the text of the audited test and of its cited covering tests only. It does not follow helpers, shared fixtures, support files or product code that a test calls. A change there can make a verdict premise false while each compared body stays the same. The 197 rows that have no entry in recheck-notes.json have this limit. Thus each follow-up ticket examines its own rows again at its refresh gate, and before each deletion it confirms that the named test still proves the behavior (point 3 of the parent issue).
+
+## Status definitions
+
+- **applies:** the audited test exists at the recheck commit. Its body is the same, or it changed in a way that keeps the verdict premise. The covering or receiving test that the verdict relies on exists and still has that assertion. A covering test that was edited but kept the assertion also counts ("cover edited, assertion kept").
+- **changed:** the audited test exists, but a change makes the verdict impossible to apply as written. For example, the covering test was removed or split, the audited test gained a unique input, or the receiving test of a MERGE no longer exists. The row gives the new proof test, or "none (re-audit needed)". A test that moved to another file is also changed; the row gives its new path.
+- **obsolete:** the audited test does not exist at the recheck commit. The row gives the removing commit.
+
+## Status counts
+
+| Crate or suite | Rows | applies | changed | obsolete |
+|---|---:|---:|---:|---:|
+| core | 141 | 132 | 4 | 5 |
+| application | 54 | 27 | 0 | 27 |
+| contracts | 46 | 46 | 0 | 0 |
+| adapter-postgres | 33 | 30 | 3 | 0 |
+| server | 34 | 34 | 0 | 0 |
+| node-postgresql | 37 | 34 | 3 | 0 |
+| browser-source | 18 | 11 | 6 | 1 |
+| browser-exact-dist | 14 | 12 | 2 | 0 |
+| node-contract | 8 | 6 | 2 | 0 |
+| node-process-cut | 2 | 2 | 0 | 0 |
+| Total | 387 | 334 | 20 | 33 |
+
+## Proposed tickets
+
+One ticket for each crate or test suite. Each ticket applies its `applies` rows and re-audits its `changed` rows. Obsolete rows need no work. The open counts include both statuses. These are proposals; the coordinator triages them and creates the tickets.
+
+| Proposed ticket | Scope | applies | changed | Open DELETE | Open MERGE | Open MOVE | Table |
+|---|---|---:|---:|---:|---:|---:|---|
+| Apply the core audit verdicts | `crates/storyos-core/` | 132 | 4 | 135 | 1 | 0 | [recheck-core.md](recheck-core.md#core) |
+| Apply the application audit verdicts | `crates/storyos-application/` | 27 | 0 | 27 | 0 | 0 | [recheck-rust.md](recheck-rust.md#application) |
+| Apply the contracts audit verdicts | `crates/storyos-contracts/` | 46 | 0 | 42 | 4 | 0 | [recheck-rust.md](recheck-rust.md#contracts) |
+| Apply the adapter-postgres audit verdicts | `crates/storyos-adapter-postgres/` | 30 | 3 | 28 | 5 | 0 | [recheck-rust.md](recheck-rust.md#adapter-postgres) |
+| Apply the server audit verdicts | `crates/storyos-server/` | 34 | 0 | 28 | 4 | 2 | [recheck-rust.md](recheck-rust.md#server) |
+| Apply the node-postgresql audit verdicts | `apps/web/test/node-postgresql/` | 33 | 3 | 21 | 15 | 0 | [recheck-web.md](recheck-web.md#node-postgresql) |
+| Apply the browser-source audit verdicts | `apps/web/test/browser-source/` | 11 | 6 | 7 | 9 | 1 | [recheck-web.md](recheck-web.md#browser-source) |
+| Apply the browser-exact-dist audit verdicts | `apps/web/test/browser-exact-dist/` | 12 | 2 | 3 | 11 | 0 | [recheck-web.md](recheck-web.md#browser-exact-dist) |
+| Apply the node-contract audit verdicts | `apps/web/test/node-contract/` | 6 | 2 | 6 | 1 | 1 | [recheck-web.md](recheck-web.md#node-contract) |
+| Apply the node-process-cut audit verdicts | `apps/web/test/node-process-cut/` | 2 | 0 | 0 | 2 | 0 | [recheck-web.md](recheck-web.md#node-process-cut) |
+
+Notes for the tickets:
+
+- NP128 (MOVE) is owned by [Prove the Concurrent Existing-Conversation Admission Race in an Adapter Test](https://github.com/FrankQDWang/StoryOS/issues/1085), which applies it now. It is not in the node-postgresql count.
+- Several DELETE rows cite a MERGE or MOVE row as their covering test. RECONCILIATION.md gives the order: complete the transfer of that owner before it is removed.
+- The Web support cleanup in [SUPPORT.md](SUPPORT.md) and [support-removals.json](support-removals.json) has no verdict row. Each exclusive helper goes with the ticket that removes its owner row (BD034 and BD035 in browser-exact-dist, NC031 in node-contract).
+- A DELETE with reason D5 or D6, or a row that the random self-check marked MISS, is not mutation-proved. Before such a deletion, the ticket confirms that another test still proves the behavior (point 3 of the parent issue).
