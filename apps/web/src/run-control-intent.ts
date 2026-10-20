@@ -9,7 +9,9 @@ import type { AssistantContext } from "./writing-assistant-panel.tsx";
 type Target = { scope: ProjectScope; runId: string; conversationId: string; idempotencyKey: string };
 export type RunControlIntent = Target & (
   { kind: "pause"; request: PauseAgentRunRequest }
-  | { kind: "guidance"; request: SteerAgentRunRequest; labels?: string[]; referenceKeys?: string[] }
+  | { kind: "guidance"; request: SteerAgentRunRequest; labels?: string[]; referenceKeys?: string[];
+    /** The Server found the Run settled, so the message waits to go as the next AgentRun. */
+    resend?: true }
 );
 
 function storageKey(scope: ProjectScope) {
@@ -31,7 +33,8 @@ export function readRunControl(scope: ProjectScope): RunControlIntent | undefine
       case "guidance":
         return intent.request.command_schema === "storyos.command.steer-agent-run.request.v1"
           && intent.request.steer_agent_run_input.conversation_id === intent.conversationId
-          && typeof intent.request.steer_agent_run_input.author_message.text === "string" ? intent : undefined;
+          && typeof intent.request.steer_agent_run_input.author_message.text === "string"
+          && (intent.resend === undefined || intent.resend === true) ? intent : undefined;
     }
   } catch {
     return undefined;
@@ -46,6 +49,12 @@ export function clearRunControl(intent: RunControlIntent) {
   if (readRunControl(intent.scope)?.idempotencyKey === intent.idempotencyKey) {
     globalThis.sessionStorage?.removeItem(storageKey(intent.scope));
   }
+}
+
+/** Removes the stored guidance that waits for a resend, after the panel records it or the author changes it. */
+export function clearResendRunControl(scope: ProjectScope) {
+  const intent = readRunControl(scope);
+  if (intent?.kind === "guidance" && intent.resend === true) globalThis.sessionStorage?.removeItem(storageKey(scope));
 }
 
 export function freezeRunControl(context: AssistantContext, run: GetAgentRunResponse,
