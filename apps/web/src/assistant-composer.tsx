@@ -3,8 +3,8 @@ import { StoryOSProtocolError } from "../../../generated/typescript/storyos-publ
 import type { GetAgentRunResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AssistantContext, SentReferences } from "./writing-assistant-panel.tsx";
 import { settledRun } from "./assistant-run-outcome.ts";
-import { clearRunControl, freezeRunControl, readRunControl, saveRunControl, submitRunControl,
-  type RunControlIntent } from "./run-control-intent.ts";
+import { clearResendRunControl, clearRunControl, freezeRunControl, readRunControl, saveRunControl,
+  submitRunControl, type RunControlIntent } from "./run-control-intent.ts";
 import { historicalAcknowledgementUnavailable, HISTORICAL_ACKNOWLEDGEMENT_MESSAGE }
   from "./historical-acknowledgement.ts";
 import {
@@ -20,7 +20,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
   sending: boolean;
   current?: { runId?: string; conversationId?: string } | undefined;
   run?: GetAgentRunResponse | undefined;
-  onSend: (message: string, acknowledged: () => void, frozen?: SentReferences) => void;
+  onSend: (message: string, acknowledged: () => void, frozen?: SentReferences, recorded?: () => void) => void;
   onRefresh: () => Promise<unknown>;
   onStatus: (status: string) => void;
   /** Keeps the labels and the references of a retained steering input for the history. */
@@ -28,12 +28,15 @@ export function AssistantComposer({ context, available, sending, current, run, o
 }) {
   const draft = useReferenceDraft(context?.scope);
   const [message, setMessage] = useState("");
-  const [pending, setPending] = useState<RunControlIntent | undefined>(
-    () => context === undefined ? undefined : readRunControl(context.scope),
-  );
+  const [pending, setPending] = useState<RunControlIntent | undefined>(() => {
+    const stored = context === undefined ? undefined : readRunControl(context.scope);
+    return stored?.kind === "guidance" && stored.resend === true ? undefined : stored;
+  });
   const [busy, setBusy] = useState(false);
   // A guidance that arrived after its Run settled. It goes as the next AgentRun.
   const [resend, setResend] = useState<Extract<RunControlIntent, { kind: "guidance" }>>();
+  // A guidance that waited for its resend when the page reloaded. The author sends it again.
+  const [unsent, setUnsent] = useState(false);
   const alive = useRef(true);
   const recovered = useRef(false);
   const known = run !== undefined && run.run_id === current?.runId
@@ -51,7 +54,9 @@ export function AssistantComposer({ context, available, sending, current, run, o
     onStatus("正在确认任务操作…");
     try {
       const response = await submitRunControl(context, intent);
-      clearRunControl(intent);
+      // The message waits for the next AgentRun, also through a reload, until the panel records its request.
+      if (response.effect.kind === "conflicted" && intent.kind === "guidance") saveRunControl({ ...intent, resend: true });
+      else clearRunControl(intent);
       if (!alive.current) return;
       setPending(undefined);
       if (response.effect.kind === "retained" && intent.kind === "guidance") {
@@ -63,7 +68,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
       try {
         await onRefresh();
       } catch {
-        if (alive.current) onStatus("操作已确认，任务状态暂不可读取。请稍后检查。");
+        if (alive.current) onStatus(response.effect.kind === "conflicted" && intent.kind === "guidance"
+          ? "消息未发送，任务状态暂不可读取。请稍后重新发送。" : "操作已确认，任务状态暂不可读取。请稍后检查。");
         return;
       }
       if (!alive.current) return;
@@ -90,6 +96,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
     }
   };
 
+  const recorded = () => { if (context !== undefined) clearResendRunControl(context.scope); };
+
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; };
@@ -100,13 +108,23 @@ export function AssistantComposer({ context, available, sending, current, run, o
     setResend(undefined);
     const input = resend.request.steer_agent_run_input;
     onSend(input.author_message.text, () => setMessage(""), { references: input.selection_references ?? [],
-      labels: resend.labels ?? [], keys: resend.referenceKeys ?? [] });
+      labels: resend.labels ?? [], keys: resend.referenceKeys ?? [] }, recorded);
   }, [resend, known, active]);
+  // The read of the Run clears the status, so the status shows after it.
+  useEffect(() => {
+    if (!unsent || (current !== undefined && !known)) return;
+    setUnsent(false);
+    onStatus("上次的消息未发送，已放回输入框。请检查后重新发送。");
+  }, [unsent, known]);
   useEffect(() => {
     if (context === undefined || recovered.current || !available) return;
     recovered.current = true;
     const retained = readRunControl(context.scope);
-    if (retained !== undefined) {
+    if (retained?.kind === "guidance" && retained.resend === true) {
+      // Its references stay in the draft until the panel records the request.
+      setMessage(retained.request.steer_agent_run_input.author_message.text);
+      setUnsent(true);
+    } else if (retained !== undefined) {
       setPending(retained);
       if (retained.kind === "guidance") setMessage(retained.request.steer_agent_run_input.author_message.text);
       if (context.canSubmit) void submitControl(retained);
@@ -123,7 +141,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
           pause ? { kind: "pause" } : { kind: "guidance", text: message.trim(),
             references: draft.entries.map((entry) => entry.reference), labels: draftLabels(draft.entries),
             keys: draft.entries.map((entry) => entry.key) }));
-      } else if (message.trim().length > 0) onSend(message.trim(), () => setMessage(""));
+      } else if (message.trim().length > 0) onSend(message.trim(), () => setMessage(""), undefined, recorded);
     }}>
       {draft.entries.length === 0 || context === undefined ? null : <ul className="composer-references">
         {draft.entries.map((entry) => <li key={entry.key} data-selection-reference-label={draftLabels([entry])[0]}>
@@ -137,7 +155,10 @@ export function AssistantComposer({ context, available, sending, current, run, o
         </li>)}
       </ul>}
       <textarea name="assistant-message" aria-label="给写作助手的消息" rows={2} maxLength={4000}
-        value={message} onChange={(event) => setMessage(event.currentTarget.value)}
+        value={message} onChange={(event) => {
+          setMessage(event.currentTarget.value);
+          if (context !== undefined) clearResendRunControl(context.scope);
+        }}
         // A paste of a copy from the editor adds its references. Other data pastes as text.
         onPaste={(event) => {
           const data = event.clipboardData.getData(REFERENCE_CLIPBOARD_TYPE);
