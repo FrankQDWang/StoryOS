@@ -34,7 +34,7 @@ STATUSES = ("applies", "changed", "obsolete")
 
 # One proposed ticket for each crate or test suite.
 TICKETS = [
-    ("core", "crates/storyos-core/", "rust"),
+    ("core", "crates/storyos-core/", "core"),
     ("application", "crates/storyos-application/", "rust"),
     ("contracts", "crates/storyos-contracts/", "rust"),
     ("adapter-postgres", "crates/storyos-adapter-postgres/", "rust"),
@@ -45,7 +45,7 @@ TICKETS = [
     ("node-contract", "apps/web/test/node-contract/", "web"),
     ("node-process-cut", "apps/web/test/node-process-cut/", "web"),
 ]
-OUTPUTS = {"rust": "recheck-rust.md", "web": "recheck-web.md"}
+OUTPUTS = {"core": "recheck-core.md", "rust": "recheck-rust.md", "web": "recheck-web.md"}
 
 _cache = {}
 
@@ -160,18 +160,16 @@ def removal(path, name):
 
 
 def locate(path, name, near=None):
-    """Return the current (path, 1-based line) of a named test, or (None, None)."""
+    """Return the current (path, 1-based line) of a named test in its own file.
+
+    A test with the same name in another file can be a different test, so a test
+    that left its file always goes to manual judgment.
+    """
     lines = show(RECHECK, path)
     if lines is not None:
         i = find_name(lines, name, near)
         if i is not None:
             return path, i + 1
-    hits = git("grep", "-n", "-F", name, RECHECK, "--", "apps/web/test", "crates").stdout
-    for hit in hits.splitlines():
-        _, file, line, text = hit.split(":", 3)
-        if re.search(r"\bfn " + re.escape(name) + r"\b", text) or any(
-                q + name + q in text for q in "'\"`"):
-            return file, int(line)
     return None, None
 
 
@@ -187,8 +185,8 @@ def cover_state(path, line):
         return {"ref": f"{path}:{line}", "name": name, "state": "missing",
                 "removed": removal(path, name)}
     same = body(base, i) == body(show(RECHECK, cur), cur_line - 1)
-    state = "moved" if cur != path else "same" if same else "edited"
-    return {"ref": f"{path}:{line}", "name": name, "now": f"{cur}:{cur_line}", "state": state}
+    return {"ref": f"{path}:{line}", "name": name, "now": f"{cur}:{cur_line}",
+            "state": "same" if same else "edited"}
 
 
 def bound_stages(path):
@@ -217,7 +215,7 @@ def facts(row):
 
 
 def needs_note(row, f):
-    return not (f["now"] and f["now"].rsplit(":", 1)[0] == row["file"] and f["body"] == "same"
+    return not (f["now"] and f["body"] == "same"
                 and all(c["state"] == "same" for c in f["covers"]))
 
 

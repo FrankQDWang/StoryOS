@@ -4,15 +4,15 @@ This recheck gives the current status of each DELETE, MERGE and MOVE verdict of 
 
 - Audit baseline: `479224809cdaae997cda51cb8853e3fafa242b65`.
 - Recheck commit: `e448962b848c5a5b7461ca0bad7bb640d57b1f3e` (`main` on 2026-10-20). The tables do not follow later commits. Each follow-up ticket rechecks its own rows at its refresh gate.
-- Row tables: [recheck-rust.md](recheck-rust.md) for the Rust crates and [recheck-web.md](recheck-web.md) for the Web test suites.
-- Rebuild: `python3 docs/research/test-asset-audit/recheck.py` writes the three Markdown files from Git objects of the two commits and from [recheck-notes.json](recheck-notes.json). `--check` fails if a written file differs. `--todo` lists the rows that have no manual judgment.
+- Row tables: [recheck-core.md](recheck-core.md) for `storyos-core`, [recheck-rust.md](recheck-rust.md) for the other Rust crates and [recheck-web.md](recheck-web.md) for the Web test suites.
+- Rebuild: `python3 docs/research/test-asset-audit/recheck.py` writes the four Markdown files from Git objects of the two commits and from [recheck-notes.json](recheck-notes.json). `--check` fails if a written file differs. `--todo` lists the rows that have no manual judgment.
 
 ## Method
 
 1. `recheck.py` reads each DELETE, MERGE and MOVE row of REPORT.md: ID, audited file, baseline line, test name, verdict, reason code and the cited covering tests.
-2. It finds the audited test at the recheck commit by its declaration (`fn <name>` in Rust, `it(` or `test(` with the name in TypeScript). When the name is not in the audited file, it searches all test sources with `git grep`, and then walks `git log BASE..RECHECK -- <file>` to find the first commit whose file does not have the name. That commit is the removing commit.
+2. It finds the audited test at the recheck commit by its declaration in the audited file (`fn <name>` in Rust, `it(` or `test(` with the name in TypeScript). When the name is not in that file, it walks `git log BASE..RECHECK -- <file>` to find the first commit whose file does not have the name. That commit is the removing commit. A test with the same name in another file can be a different test, so such a row always goes to manual judgment, and the reviewer searches all sources for a rename or a move.
 3. It compares the test body at the baseline with the body at the recheck commit, from the declaration to the closing line at the same indentation.
-4. It maps each cited covering test (`path:line` at the baseline) to its declaration name, finds it at the recheck commit in the same way, and compares its body.
+4. It maps each cited covering test (`path:line` at the baseline) to its declaration name, finds it in the same file at the recheck commit, and compares its body.
 5. A row is `applies` without a manual note only when the audited test is in the same file with an unchanged body and every cited covering test is present with an unchanged body. The script refuses to write the tables while another row has no manual judgment.
 6. For each other row, a reviewer read the baseline and current test, the diff between the two commits, and each covering or receiving test at the recheck commit. The judgment looks at the specific assertion that the audit verdict relies on, not at the whole test. recheck-notes.json records the status, the current location when the script cannot find it (for example a parameterized case), the proof test, and a one-sentence reason. Read-only subagents made a first pass by area; the executor checked each row before it went into recheck-notes.json.
 7. The script marks each audited file that a stage crosswalk (`crates/storyos-contracts/src/stage*_crosswalk*.rs`) binds by path. Such a file keeps its path unless the binding owner agrees (point 4 of the parent issue).
