@@ -47,6 +47,9 @@ fn numbered_request(index: u64, generation: u64) -> IssueProjectCommandChallenge
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn fixed_window_capacity_and_rollover_are_deterministic_under_concurrency() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let last_second = fixed_clock_store(runtime_url.clone(), 119);
@@ -134,6 +137,9 @@ async fn fixed_window_capacity_and_rollover_are_deterministic_under_concurrency(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = fixed_clock_store(runtime_url.clone(), 180);
@@ -214,6 +220,9 @@ fn author_edit_request(index: u64, generation: u64) -> IssueProjectCommandChalle
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_edit_and_shared_challenges_use_separate_rate_budgets() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = fixed_clock_store(runtime_url, /*unix_seconds*/ 30_015);
@@ -281,6 +290,9 @@ fn undo_request(index: u64, generation: u64) -> IssueProjectCommandChallenge {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_and_author_edit_share_the_author_edit_rate_budget_for_one_project() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = fixed_clock_store(runtime_url, /*unix_seconds*/ 30_015);

@@ -53,6 +53,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 - Use deterministic coordination or controlled scheduling for concurrent work. Use a sleep only when no deterministic wait is available.
 - Use existing test helpers when they make a test shorter and easier to read.
 - Pass environment-derived flags or dependencies from above, in place of a change to the process environment in a test.
+- In `storyos-adapter-postgres`, the first statement of each `#[ignore]` test of the lib target is `let _test_guard = ...AUTHOR_EDIT_TEST_LOCK.lock().await;`. Keep the guard to the end of the test. A damaged evidence test drops or disables a database check under this lock, so write it only in the lib target. `postgres_test_lock_tests.rs` checks this rule.
 - Put a new test module in a separate sibling file. Use an explicit `#[path = "..._tests.rs"]` attribute that gives the file a descriptive name:
 
   ```rust

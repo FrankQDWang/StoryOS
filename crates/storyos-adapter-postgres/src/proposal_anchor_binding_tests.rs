@@ -21,6 +21,9 @@ const REPLANNED_BASE: &str = "018f0000-0000-7001-8000-0000000a9406";
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn legacy_anchor_rows_bind_to_the_opening_revision_and_a_different_base_fails_closed() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let (_isolated, reader, admin) =
         open_isolated_proof("storyos_anchor_binding", Some(BINDING_MIGRATION)).await;
     let digest = storyos_core::proposal_anchor_base_slice_digest(
