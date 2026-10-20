@@ -322,8 +322,16 @@ same transaction.
 
 A Journal that cannot upgrade keeps its earlier version and each
 row, and the editor enters read-only local recovery with `needs_attention`. The
-readable export of the Server text stays available. The local text stays in the
-earlier Journal, so a later reader can open it.
+readable export of the Server text stays available.
+
+The editor also opens the
+version 4 Journal with no version request, so the open does not upgrade or write
+it. It reads the pending projection of each partition in read-only transactions.
+The author can download the unsent text of each Chapter as one file that the
+editor labels as local unsent text. The file also holds the unsent candidate
+text of each Proposal, after the Chapter text. When the editor cannot read the
+records, for example in a version 3 Journal, it tells the author that local text
+exists. The earlier Journal stays unchanged, so a later reader can open it.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,

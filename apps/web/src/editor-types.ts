@@ -1,4 +1,5 @@
 import type { JournalWorkingBoundary } from "./journal-working-set.ts";
+import type { LocalUnsentText } from "./local-unsent-text.ts";
 import type {
   ApplyAuthorEditRequest,
   DraftRetry,
@@ -222,6 +223,8 @@ export interface PendingEditProjection {
   unsettled_intent_count: number;
   /** If absent, the Author Edit count equals the total unsettled count. */
   author_edit_unsettled_intent_count?: number;
+  /** True when an unsettled record follows a group (ADR 0065). */
+  has_follower_records?: true;
   authoritative_revision_id: string;
   author_undo_frontier_sequence?: string;
 }
@@ -234,6 +237,8 @@ export interface EditorWorkspace {
   maxJsonStringUtf8Bytes: number;
   submitQueue?: Promise<PendingEditProjection | void>;
   inlineProposalAnchors?: ProposalJournalAnchor[];
+  /** Set only on the read-only reader of a Journal that cannot upgrade (contract 3.2). */
+  readOnlyJournalVersion?: 4;
 }
 
 export interface EditorReadyState extends EditorWorkspace {
@@ -248,6 +253,8 @@ export interface EditorReadOnlyState {
   editor_session?: EditorSessionBinding;
   writer?: EditorWriterProjection;
   pending?: PendingEditProjection;
+  /** The unsent text of a Journal that did not open (contract 3.2). */
+  localUnsentText?: LocalUnsentText;
   error?: unknown;
 }
 

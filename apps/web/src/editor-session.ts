@@ -1,4 +1,5 @@
 import { upgradeJournalWorkingIndexes } from "./journal-working-set.ts";
+import { readLocalUnsentText } from "./local-unsent-text.ts";
 import {
   createEditorSession,
   createProjectCommandChallenge,
@@ -467,7 +468,14 @@ export async function openEditorWorkspace({
     }
     return { kind: "editor-ready", ...workspace, openedProjection: pending };
   } catch (error) {
-    database?.close();
-    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
+    if (database !== undefined) {
+      database.close();
+      return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
+    }
+    // The Journal did not open, for example after a failed upgrade. Read its unsent text with no write (contract 3.2).
+    const localUnsentText = indexedDBImpl === undefined ? undefined
+      : await readLocalUnsentText(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
+    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error,
+      ...(localUnsentText === undefined ? {} : { localUnsentText }) };
   }
 }

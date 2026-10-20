@@ -4,7 +4,7 @@ import type { DigestValue, EditorFlowDraftClosed, EditorFlowDraftReopened, Proje
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { canonicalDraftValue, MAX_DISCARD_RECORDS } from "./refused-edit-discard.ts";
-import { digestJournalValue, JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { digestJournalValue, JOURNAL_DATABASE_VERSION, journalReadVersion } from "./local-edit-journal.ts";
 import { uuidV7 } from "./acceptance-journal.ts";
 
 const keys = (value: unknown, required: string[], optional: string[] = []) => value !== null && typeof value === "object"
@@ -145,7 +145,7 @@ export async function readDraftUndoJournal(workspace: EditorWorkspace) {
     read(metadata.getAll(IDBKeyRange.bound("draft-undo-observation:", "draft-undo-observation:\uffff"), MAX_DISCARD_RECORDS + 1)) as Promise<Observation[]>,
     read(metadata.get("schema")) as Promise<{ version: number } | undefined>,
   ]);
-  if (schema?.version !== JOURNAL_DATABASE_VERSION || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Undo Journal unavailable");
+  if (schema?.version !== journalReadVersion(workspace) || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Undo Journal unavailable");
   for (const record of records) {
     const partition = await read(workspace.database.transaction("partitions").objectStore("partitions").get(record.journal_partition_id)) as EditorWorkspace["partition"] | undefined;
     const group = record.group, input = group?.frozen_request_body?.undo_latest_author_action_input;
