@@ -30,7 +30,8 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import { createEditorSessionWritingController } from "./editor-session-writing.ts";
+import type { ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
+import { InputBoundStopError, createEditorSessionWritingController } from "./editor-session-writing.ts";
 import {
   BlockProposalDisplay,
 } from "./block-proposal-display.tsx";
@@ -39,6 +40,7 @@ import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
+import { LocalUnsentTextPanel } from "./local-unsent-text-panel.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { ManuscriptTree } from "./manuscript-tree.tsx";
 import { readManuscriptTree } from "./manuscript-tree-read.ts";
@@ -58,6 +60,8 @@ interface Stage1ViewProps {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  /** The timers of the Editor Session writing controller. The default is the global timers. */
+  writingTimers?: ChallengeAdmissionTimers | undefined;
 }
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
@@ -72,6 +76,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
 }
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
+const INPUT_BOUND_STOP_MESSAGE =
+  "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
 
 function editorParagraphs(
   blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
@@ -99,7 +105,7 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 
 function ProjectReadyView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
-  proposalLocatorStore,
+  proposalLocatorStore, writingTimers,
 }: ProjectReadyViewProps) {
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -141,9 +147,9 @@ function ProjectReadyView({
   const editorState = state.editor;
   // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
   const writing = useMemo(() => editorState.kind === "editor-ready"
-    ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl,
+    ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl, ...writingTimers,
       onFailure: (error) => { onEditorFailureRef.current(error); } })
-    : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl]);
+    : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl, writingTimers]);
   useEffect(() => () => { writing?.close(); }, [writing]);
   useEffect(() => writing?.subscribe(() => {
     if (selectedChapterIdRef.current !== currentChapterId) return;
@@ -362,6 +368,7 @@ function ProjectReadyView({
       setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
       return;
     }
+    if (error instanceof InputBoundStopError) setSwitchRecovery(INPUT_BOUND_STOP_MESSAGE);
     setReadOnly(true);
     setSaveState("needs_attention");
     setEditorFailure(error instanceof Error ? error.message : "Manuscript editor failed");
@@ -441,6 +448,11 @@ function ProjectReadyView({
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
           />
+          {state.editor.kind === "editor-read-only-recovery" && state.editor.localUnsentText !== undefined ? (
+            <LocalUnsentTextPanel text={state.editor.localUnsentText}
+              chapterTitles={new Map(tree?.volumes.flatMap((volume) =>
+                volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))} />
+          ) : null}
           </div>
         </>
       )}
@@ -911,7 +923,7 @@ function ProtectedReadyView({
 }
 
 function Stage1View({
-  state, baseUrl, fetchImpl, cryptoImpl, setBootState,
+  state, baseUrl, fetchImpl, cryptoImpl, writingTimers, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
   const [editorGeneration, setEditorGeneration] = useState(0);
@@ -947,6 +959,7 @@ function Stage1View({
         proposalFocus={proposalFocus}
         proposalNotice={proposalNotice}
         proposalLocatorStore={proposalLocatorStore.current}
+        writingTimers={writingTimers}
         onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
         onReopened={setCurrent}
         onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}

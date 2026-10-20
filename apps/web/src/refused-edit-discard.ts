@@ -6,7 +6,7 @@ import type { CloseEditorFlowDraftRequest, CloseEditorFlowDraftResponse, DigestV
 import { uuidV7 } from "./acceptance-journal.ts";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
-import { digestJournalValue, rebuildPendingProjection } from "./local-edit-journal.ts";
+import { digestJournalValue, JOURNAL_DATABASE_VERSION, journalReadVersion, rebuildPendingProjection } from "./local-edit-journal.ts";
 
 export function canonicalDraftValue(value: unknown): string {
   const keys = new Set<string>();
@@ -108,7 +108,7 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
     result(metadata.getAll(IDBKeyRange.bound("discard-observation:", "discard-observation:\uffff"), MAX_WORKING_JOURNAL_ITEMS + 1)) as Promise<DiscardObservation[]>,
     result(metadata.get("schema")) as Promise<{ version: number }>,
   ]);
-  if (schema?.version !== 4 || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Discard Journal unavailable");
+  if (schema?.version !== journalReadVersion(workspace) || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Discard Journal unavailable");
   for (const record of records) {
     const input = record.group?.frozen_request_body?.close_editor_flow_draft_input;
     const partition = workspace.partition;
@@ -266,7 +266,7 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const metadata = transaction.objectStore("metadata");
     const [previous, partition, existing, schema] = await Promise.all([result(metadata.get("local_intent_sequence")) as Promise<{ value: number } | undefined>,
       result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(discardRecordKey(draft))), result(metadata.get("schema")) as Promise<{ version: number }>]);
-    if (!isCurrent() || schema?.version !== 4 || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
+    if (!isCurrent() || schema?.version !== JOURNAL_DATABASE_VERSION || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
       transaction.abort(); await done; return;
     }
     const createdAt = new Date().toISOString();

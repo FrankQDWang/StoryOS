@@ -137,13 +137,15 @@ local Discard record. This service exposes neither control nor compensation.
 Issue 832 adds one immutable explicit Discard record and frozen group in the
 existing Journal metadata store. The shared Project-local sequence allocator
 and partition bind the record. The record schema is
-`storyos.local-edit-journal.refused-edit-discard.v1`; observations use its
-`.observation` schema. Database version 4 stays current. No old record is
-rewritten. The existing working-item ceiling bounds record and observation
-reads; unknown schema, incomplete coverage, extra fields or digest drift stop
-Discard. Each record reserves three observation slots before Admission. Its
-kind-specific keys retain each observation once; changed evidence stops Discard.
-No throughput or retention-duration claim is added.
+`storyos.local-edit-journal.refused-edit-discard.v1`, and observations use its
+`.observation` schema. The Discard record adds no database version. Database
+version 5 is current. No old record is rewritten.
+
+The existing working-item ceiling bounds record and observation reads. An
+unknown schema, incomplete coverage, extra fields, or digest drift stop Discard.
+Each record reserves capacity for three observations before Admission. Its
+kind-specific keys retain each observation once, and changed evidence stops
+Discard. No throughput or retention-duration claim is added.
 
 The record commits before one fresh bounded Admission. It stores complete
 nonsecret command bytes, source bindings, coverage, digest and original key.

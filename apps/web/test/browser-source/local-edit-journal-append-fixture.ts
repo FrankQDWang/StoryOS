@@ -102,19 +102,24 @@ export async function openJournalAppendTestWorkspace() {
   };
   const openDatabases = new Set<IDBDatabase>();
   await deleteJournal(scenario.journalName);
-  const workspace = await openEditorWorkspace({
-    baseUrl: location.origin,
-    project: scenario.project,
-    chapter: scenario.chapter,
-    profile: scenario.profile,
-    fetchImpl,
-    indexedDBImpl: indexedDB,
-    cryptoImpl: crypto,
-  });
-  requireEditorReady(workspace);
-  trackDatabase(workspace.database, openDatabases);
+  async function open() {
+    const workspace = await openEditorWorkspace({
+      baseUrl: location.origin,
+      project: scenario.project,
+      chapter: scenario.chapter,
+      profile: scenario.profile,
+      fetchImpl,
+      indexedDBImpl: indexedDB,
+      cryptoImpl: crypto,
+    });
+    requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
+    return workspace;
+  }
+  const workspace = await open();
   return {
     workspace,
+    reopen: open,
     async close() {
       closeTrackedDatabases(openDatabases);
       sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);

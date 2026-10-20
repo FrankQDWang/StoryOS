@@ -112,6 +112,7 @@ fn command_issue(
         },
         nonce: format!("opaque-nonce-{suffix}"),
         nonce_digest: format!("sha256:nonce-{suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -661,6 +662,7 @@ pub(crate) async fn adjusted_edit_command(
             binding: command.challenge_binding.clone(),
             nonce: format!("edit-nonce-{suffix}"),
             nonce_digest: command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

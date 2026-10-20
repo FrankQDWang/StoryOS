@@ -1,4 +1,4 @@
-import { restoreVersionThreeJournal } from "./journal-version-three.ts";
+import { restoreJournalVersion } from "./journal-version-fixture.ts";
 import { expect, it, vi } from "vitest";
 import type { DigestValue, GetEditorSessionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -97,14 +97,14 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     expect(saved.records).toHaveLength(2400);
     expect(saved.records.every((record) => record.author_edit_unit === undefined)).toBe(true);
     expect(saved.groups.every((group) => group.payload_collection?.kind === "collected")).toBe(true);
-    await restoreVersionThreeJournal(workspace.database);
+    await restoreJournalVersion(workspace.database, 3);
     const putBeforeUpgrade = IDBObjectStore.prototype.put;
     const failedUpgrade = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
       this: IDBObjectStore, value: unknown, key?: IDBValidKey,
     ) {
       const request = key === undefined ? putBeforeUpgrade.call(this, value) : putBeforeUpgrade.call(this, value, key);
       if (this.name === "metadata" && value !== null && typeof value === "object"
-        && Reflect.get(value, "key") === "schema" && Reflect.get(value, "version") === 4) this.transaction.abort();
+        && Reflect.get(value, "key") === "schema" && Reflect.get(value, "version") === 5) this.transaction.abort();
       return request;
     });
     try {

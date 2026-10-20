@@ -60,6 +60,7 @@ fn issue_named_request(
         },
         nonce: format!("opaque-nonce-{idempotency_suffix}"),
         nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+        earlier_revision_nonces: Vec::new(),
     }
 }
 

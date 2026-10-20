@@ -262,6 +262,10 @@ CompletedIntentRecord {
 
   payload_chain_ref
   payload_digest
+  projection_dependency { snapshot_id, prior_sequence }
+  follows_submission_group (optional, version 5) {
+    journal_submission_group_id
+  }
   created_at
 }
 
@@ -288,6 +292,54 @@ ExplicitEditorCommandRecord {
 selection list. It contains no action class, request contract, idempotency key,
 challenge, Command, or Admission. The journal cannot choose authoritative
 versus Proposal routing.
+
+IndexedDB version 5 adds only the optional `follows_submission_group` binding.
+A record without it binds its stored base fields, as in version 4. A record with
+it follows the unsettled group G. Its base fields then record the projection base
+at append time, and they are not its submission binding. Its submission binds the
+installed base Snapshot and the authoritative heads of G when G applies.
+
+The editor writes such a record for input during a Challenge wait or an unknown
+outcome (ADR 0065). The binding names the latest group.
+
+Take the group that covers the
+record just before a run of these records. The run binds the installed base of
+that group after that group applies. The checkpoint of an authoritative run must
+also be equal to the installed text. After a `proposal_revised` group, the run
+binds the session base. A candidate run binds the latest Proposal Revision that
+the settlements before the run give.
+
+When that group ends in another way, the run has no binding. No request sends it,
+and the editor enters read-only local recovery with `needs_attention`. A reader
+that finds a binding that names no earlier group also enters local
+recovery. The records stay immutable in each case.
+
+The version 5 upgrade runs in one version-change transaction. It keeps each
+version 4 row under its primary key with its bytes, and it writes only the schema
+version. Thus a version 4 Journal with one unsettled group has the same meaning
+at version 5. A version 3 Journal first gets the version 4 working index in the
+same transaction.
+
+A Journal that cannot upgrade keeps its earlier version and each
+row, and the editor enters read-only local recovery with `needs_attention`. The
+readable export of the Server text stays available.
+
+The editor also opens the
+version 4 Journal with no version request, so the open does not upgrade or write
+it. It reads the records of each partition in read-only transactions.
+The author can download the unsent text of each Chapter as one file that the
+editor labels as local unsent text. The file also holds the unsent candidate
+text of each Proposal, after the Chapter text. When the editor cannot read the
+records, for example in a version 3 Journal, it tells the author that local text
+exists. The earlier Journal stays unchanged, so a later reader can open it.
+
+The file holds the text of each record that has no proof of save. Only an
+applied group and a group that gives a Proposal Revision prove a save. An
+explicit discard of a refused edit Draft also removes its text. A conflicted,
+refused, or no-effect group is not a save. A group that needs a new confirmation
+by the author is also not a save. When the editor cannot read one partition, it
+tells the author that local text exists, and the file keeps the text of each
+other partition.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,
@@ -326,10 +378,17 @@ JournalPayloadChain {
 An authoritative chain uses the materialized Chapter checkpoint and has no
 Proposal target. A candidate chain uses the candidate text checkpoint, binds
 the exact Proposal target, and retains the complete observed Proposal Head set.
+The checkpoint of a candidate run that follows a group is the candidate text
+before the run.
 Its patches contain one `ReplaceSelection` primitive per intent. Candidate
 patches never change the authoritative Chapter projection.
 
-These optional fields extend the existing IndexedDB version 4 record shape.
+Each run of records that follow a group (section 3.2) has its own authoritative
+chain. Its checkpoint is the full projection text before the first record of the
+run, and its source fields are the projection base at that time. Thus each later
+group collects alone (section 11).
+
+These optional fields extend the IndexedDB version 4 record shape, and version 5 keeps them.
 Existing records without them retain their authoritative checkpoint behavior;
 they are not assigned a candidate target during recovery. A candidate record
 with a missing target, missing head set, or inconsistent checkpoint fails
@@ -1278,6 +1337,11 @@ Proposal Revision. After any other result, the save state is `needs_attention`
 and the Journal refuses appends. The controller then keeps the held input in
 memory and does not submit it. A crash or a reload can lose held input of at
 most one candidate round trip. ADR 0046 gives the complete rule.
+
+During a Challenge wait or an unknown outcome, input enters the Journal at once
+as records that follow the frozen group (section 3.2). The wait does not hold the
+queue. Each later run freezes only after the group before it applies, so the
+groups submit in strict intent order. ADR 0065 gives the complete rule.
 
 This serial browser admission order prevents dependent edits from overtaking
 one another but is not Project authority order. An `ApplyAuthorEdit`

@@ -264,7 +264,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(4);
+    expect(workspace.database.version).toBe(5);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",
@@ -358,6 +358,14 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       undoGroupId: "018f0000-0000-7001-8000-000000000041",
       createdAt: "2026-08-15T08:00:01.000Z",
     })).rejects.toThrow(/limit failed|incompatible|settlement/);
+  }
+
+  async function persistFollower(workspace: EditorReadyState): Promise<void> {
+    await appendAuthorEdit(workspace, { from: 6, to: 6, text: "+", resultingBody: "Base!?+", inputOrigin: "typing",
+      undoGroupId: "018f0000-0000-7001-8000-000000000041", createdAt: "2026-08-15T08:00:01.000Z" });
+    const journal = await snapshot(workspace);
+    expect(journal.records.at(-1)?.follows_submission_group)
+      .toEqual({ journal_submission_group_id: requireGroup(journal).journal_submission_group_id });
   }
 
   await deleteJournal(scenario.journalName);
@@ -531,7 +539,8 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       kind: "outcome_query_unresolved",
       strongest: { kind: "challenge_issued", expires_at: EXPIRES },
     });
-    await persistBlocked(workspace);
+    // Input while the outcome is unknown follows the unsettled group (ADR 0065).
+    await persistFollower(workspace);
     const unknownSnapshot = await snapshot(workspace);
     await expect(retainLocalRecovery(workspace, requireGroup(unknownSnapshot).journal_submission_group_id))
       .rejects.toThrow(/Only a closed Author Edit/);

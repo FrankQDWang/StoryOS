@@ -353,24 +353,27 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
             )
             .await
             .map_err(challenge_error)?;
+        // A repeated request returns the original Challenge while its stored revision stays accepted.
+        let stored_revision = row.get::<_, String>(/*idx*/ 5);
+        let original_nonce = ChallengeRateClass::accepting(&binding.command_kind, &stored_revision)
+            .and(request.nonce_for_revision(&stored_revision))
+            .filter(|(_, nonce_digest)| row.get::<_, String>(/*idx*/ 10) == *nonce_digest);
         let exact = row.get::<_, String>(0) == binding.client_session_binding_digest
             && row.get::<_, String>(1) == client_session_generation
             && row.get::<_, String>(2) == binding.client_contract_revision
             && row.get::<_, String>(3) == binding.security_policy_revision
             && row.get::<_, String>(4) == binding.limit_profile_revision
-            && row.get::<_, String>(5) == binding.challenge_rate_policy_revision
             && row.get::<_, String>(6) == binding.method
             && row.get::<_, String>(7) == binding.route_template
             && row.get::<_, String>(8) == binding.command_schema
-            && row.get::<_, String>(9) == binding.canonical_command_digest
-            && row.get::<_, String>(10) == request.nonce_digest;
-        if !exact {
+            && row.get::<_, String>(/*idx*/ 9) == binding.canonical_command_digest;
+        let Some((nonce, _)) = original_nonce.filter(|_| exact) else {
             return Err(ProjectCommandChallengeError::BindingConflict);
-        }
+        };
         let expires_at = row.get::<_, String>(11);
         transaction.commit().await.map_err(challenge_error)?;
         Ok(ProjectCommandChallenge {
-            nonce: request.nonce.clone(),
+            nonce: nonce.to_owned(),
             expires_at,
         })
     }

@@ -1,4 +1,5 @@
 import { upgradeJournalWorkingIndexes } from "./journal-working-set.ts";
+import { readLocalUnsentText } from "./local-unsent-text.ts";
 import {
   createEditorSession,
   createProjectCommandChallenge,
@@ -79,13 +80,14 @@ async function openJournalDatabase(
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
-    if (event.oldVersion === 3) {
+    // Version 5 keeps each version 4 row. Version 3 also gets the working index of version 4.
+    if (event.oldVersion === 3 || event.oldVersion === 4) {
       const transaction = request.transaction!;
-      upgradeJournalWorkingIndexes(transaction);
+      if (event.oldVersion === 3) upgradeJournalWorkingIndexes(transaction);
       const schema = transaction.objectStore("metadata").get("schema");
       schema.onsuccess = () => {
         const value: unknown = schema.result;
-        if (value === null || typeof value !== "object" || Reflect.get(value, "version") !== 3) transaction.abort();
+        if (value === null || typeof value !== "object" || Reflect.get(value, "version") !== event.oldVersion) transaction.abort();
         else transaction.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
       };
       return;
@@ -466,7 +468,14 @@ export async function openEditorWorkspace({
     }
     return { kind: "editor-ready", ...workspace, openedProjection: pending };
   } catch (error) {
-    database?.close();
-    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
+    if (database !== undefined) {
+      database.close();
+      return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
+    }
+    // The Journal did not open, for example after a failed upgrade. Read its unsent text with no write (contract 3.2).
+    const localUnsentText = indexedDBImpl === undefined ? undefined
+      : await readLocalUnsentText(indexedDBImpl, scope, cryptoImpl, profile.max_json_string_utf8_bytes);
+    return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error,
+      ...(localUnsentText === undefined ? {} : { localUnsentText }) };
   }
 }

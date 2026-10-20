@@ -2,7 +2,8 @@ use axum::body::to_bytes;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, issue_project_command_challenge,
+    ChallengeRateClass, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
+    RevisionNonce, issue_project_command_challenge,
 };
 
 use super::*;
@@ -97,11 +98,9 @@ pub(super) async fn create_project_command_challenge(
         client_contract_revision: binding.client_contract_revision.clone(),
         security_policy_revision: binding.security_policy_revision.clone(),
         limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-        challenge_rate_policy_revision: storyos_application::ChallengeRateClass::for_command_kind(
-            command_kind,
-        )
-        .policy_revision()
-        .to_owned(),
+        challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(command_kind)
+            .policy_revision()
+            .to_owned(),
         method: request.method,
         route_template: request.route_template,
         command_schema: request.command_schema,
@@ -109,18 +108,32 @@ pub(super) async fn create_project_command_challenge(
         canonical_command_digest: canonical_digest(&request.canonical_command_digest),
         idempotency_key: request.idempotency_key,
     };
-    let nonce = secret_digest(
-        secret,
-        NONCE_HMAC_PROFILE,
-        &binding_parts(&challenge_binding),
-    );
-    let nonce_digest = plain_digest(nonce.as_bytes());
+    let nonce_for = |revision: &str| {
+        let nonce = secret_digest(
+            secret,
+            NONCE_HMAC_PROFILE,
+            &binding_parts(&challenge_binding, revision),
+        );
+        RevisionNonce {
+            challenge_rate_policy_revision: revision.to_owned(),
+            nonce_digest: plain_digest(nonce.as_bytes()),
+            nonce,
+        }
+    };
+    let current = nonce_for(&challenge_binding.challenge_rate_policy_revision);
+    let earlier_revision_nonces = ChallengeRateClass::accepted_for(command_kind)
+        .iter()
+        .map(|class| class.policy_revision())
+        .filter(|revision| *revision != current.challenge_rate_policy_revision)
+        .map(nonce_for)
+        .collect();
     let challenge = issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
             binding: challenge_binding,
-            nonce,
-            nonce_digest,
+            nonce: current.nonce,
+            nonce_digest: current.nonce_digest,
+            earlier_revision_nonces,
         },
     )
     .await
@@ -132,7 +145,8 @@ pub(super) async fn create_project_command_challenge(
     }))
 }
 
-fn binding_parts(binding: &ProjectCommandChallengeBinding) -> Vec<Vec<u8>> {
+/// The nonce input of the binding under one rate policy revision.
+fn binding_parts(binding: &ProjectCommandChallengeBinding, revision: &str) -> Vec<Vec<u8>> {
     vec![
         binding
             .project_scope
@@ -151,7 +165,7 @@ fn binding_parts(binding: &ProjectCommandChallengeBinding) -> Vec<Vec<u8>> {
         binding.client_contract_revision.as_bytes().to_vec(),
         binding.security_policy_revision.as_bytes().to_vec(),
         binding.limit_profile_revision.as_bytes().to_vec(),
-        binding.challenge_rate_policy_revision.as_bytes().to_vec(),
+        revision.as_bytes().to_vec(),
         binding.method.as_bytes().to_vec(),
         binding.route_template.as_bytes().to_vec(),
         binding.command_schema.as_bytes().to_vec(),

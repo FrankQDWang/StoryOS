@@ -71,6 +71,7 @@ async fn unexpired_challenge_is_unknown_and_the_query_does_not_consume_it() {
             binding: binding.clone(),
             nonce: "nonce-109".to_owned(),
             nonce_digest: nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -119,6 +120,7 @@ async fn expired_unconsumed_challenge_without_admission_is_rejected() {
             binding: binding.clone(),
             nonce: "nonce-110".to_owned(),
             nonce_digest: nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -175,6 +177,7 @@ async fn missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle
             binding: binding.clone(),
             nonce: "nonce-111".to_owned(),
             nonce_digest: nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -242,6 +245,7 @@ async fn outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejectio
             binding: binding.clone(),
             nonce: "nonce-113".to_owned(),
             nonce_digest: nonce_digest.to_owned(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await

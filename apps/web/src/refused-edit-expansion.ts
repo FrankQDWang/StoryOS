@@ -4,7 +4,7 @@ import type { ExpandRefusedEditDraftRequest, ExpandRefusedEditDraftResponse, Ref
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { canonicalDraftValue as canonical, MAX_DISCARD_RECORDS, type DiscardRecord } from "./refused-edit-discard.ts";
-import { digestJournalValue, rebuildPendingProjection, JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { digestJournalValue, rebuildPendingProjection, journalReadVersion } from "./local-edit-journal.ts";
 import { uuidV7 } from "./acceptance-journal.ts";
 import type { RetryTargetRead } from "./refused-edit-retry.ts";
 
@@ -94,7 +94,7 @@ export async function readExpansionJournal(workspace: EditorWorkspace) {
     read(metadata.get("schema")) as Promise<{ version: number } | undefined>]);
   const observations = await read(workspace.database.transaction("metadata").objectStore("metadata")
     .getAll(IDBKeyRange.bound("expansion-observation:", "expansion-observation:\uffff"), MAX_DISCARD_RECORDS + 1)) as Observation[];
-  if (schema?.version !== JOURNAL_DATABASE_VERSION || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Expansion Journal limit");
+  if (schema?.version !== journalReadVersion(workspace) || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Expansion Journal limit");
   const result = [];
   for (const record of records) {
     const partition = await read(workspace.database.transaction("partitions").objectStore("partitions").get(record.journal_partition_id)) as EditorWorkspace["partition"];

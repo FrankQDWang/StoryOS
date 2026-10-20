@@ -15,6 +15,12 @@ export interface ChallengeAdmissionWait {
    * Returns `undefined` when `cancel` occurs before or during a `Retry-After` wait. Other errors propagate.
    */
   retry<Result>(request: () => Promise<Result>, onWait?: () => void): Promise<Result | undefined>;
+  /**
+   * Runs one request. On a Challenge rate limit, it returns `waiting` at once and calls `onRetry` after the
+   * `Retry-After` wait. Thus the caller can do other work during the wait (ADR 0065).
+   */
+  attempt<Result>(request: () => Promise<Result>, onRetry: () => void)
+    : Promise<{ kind: "done"; result: Result } | { kind: "waiting" } | { kind: "cancelled" }>;
   /** Ends a current `Retry-After` wait at once and prevents later waits and attempts. */
   cancel(): void;
 }
@@ -43,6 +49,21 @@ export function createChallengeAdmissionWait({
         }
       }
       return undefined;
+    },
+    async attempt(request, onRetry) {
+      if (cancelled) return { kind: "cancelled" };
+      try {
+        return { kind: "done", result: await request() };
+      } catch (error) {
+        if (!(error instanceof StoryOSProtocolError && error.status === 429)) throw error;
+        if (cancelled) return { kind: "cancelled" };
+        const retryAfterSeconds = Math.max(1, error.retryAfterSeconds ?? 1);
+        pending = { timer: setTimeoutImpl(() => {
+          pending = undefined;
+          if (!cancelled) onRetry();
+        }, retryAfterSeconds * 1000), resolve: () => {} };
+        return { kind: "waiting" };
+      }
     },
     cancel() {
       cancelled = true;

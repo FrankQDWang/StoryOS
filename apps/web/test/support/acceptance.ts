@@ -411,10 +411,14 @@ type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];
 /** The Proposal ownership that one author edit observes: none, an acknowledged head, or an explicit target. */
 export type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };
 
-/** Sends one author edit from the current editor session base of the writer. */
-export async function sendAuthorEdit(started: Started,
-  context: { prepared: { projectId: string; fetchImpl: typeof fetch }; session: { editor_session: { editor_session_id: string } } },
-  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string) {
+type AuthorEditContext = {
+  prepared: { projectId: string; fetchImpl: typeof fetch };
+  session: { editor_session: { editor_session_id: string } };
+};
+
+/** Builds one author edit from the current editor session base of the writer. */
+export async function authorEditRequest(started: Started, context: AuthorEditContext,
+  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string): Promise<ApplyAuthorEditRequest> {
   const { projectId, fetchImpl } = context.prepared;
   const session = await getEditorSession({ baseUrl: started.baseUrl, projectId, fetchImpl,
     editorSessionId: context.session.editor_session.editor_session_id });
@@ -438,6 +442,14 @@ export async function sendAuthorEdit(started: Started,
       from: "from" in primitive ? primitive.from : "offset" in primitive ? primitive.offset : 0,
       to: "to" in primitive ? primitive.to : "offset" in primitive ? primitive.offset : 0 } }],
   };
+  return request;
+}
+
+/** Sends one author edit from the current editor session base of the writer. */
+export async function sendAuthorEdit(started: Started, context: AuthorEditContext,
+  primitive: AuthorEditPrimitive, ownership: EditOwnership, sequence: string, ns: string) {
+  const { projectId, fetchImpl } = context.prepared;
+  const request = await authorEditRequest(started, context, primitive, ownership, sequence, ns);
   return challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
     request.command_schema, await digestApplyAuthorEdit(request), id(`${ns}4`), (antiForgery) => applyAuthorEdit({
       baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request }));

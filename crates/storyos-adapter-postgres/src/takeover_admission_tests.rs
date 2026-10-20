@@ -148,6 +148,7 @@ async fn open_session(
             binding: binding.clone(),
             nonce: format!("nonce:{idempotency_key}"),
             nonce_digest: nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
@@ -248,6 +249,7 @@ async fn prepare_takeover(
             binding: binding.clone(),
             nonce: format!("nonce:takeover-admission-{id_base}"),
             nonce_digest: nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
         },
     )
     .await
