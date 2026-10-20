@@ -1,19 +1,36 @@
 import type { EditorBaseSnapshot, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { EditorWorkspace, JournalPartition } from "./editor-types.ts";
-import {
-  JOURNAL_OBJECT_STORES,
-  candidateTextsFromSnapshot,
-  pendingProjectionFromSnapshot,
-  readJournalSnapshot,
-  validateJournalSnapshot,
-} from "./local-edit-journal.ts";
+import type { EditorWorkspace, JournalIntentRecord, JournalPartition, ValidatedJournalSnapshot } from "./editor-types.ts";
+import { JOURNAL_OBJECT_STORES, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 
 /** The unsent text of a Local Edit Journal that cannot upgrade (contract 3.2). */
 export interface LocalUnsentText {
-  /** False when the Journal has records that this reader cannot read. */
+  /** False when the Journal has records that this reader cannot read. The text of each readable partition stays. */
   readable: boolean;
   chapters: Array<{ chapter_id: string; body: string }>;
   proposals: Array<{ proposal_id: string; text: string }>;
+}
+
+/**
+ * Gives the local text of each payload chain that has a record with no proof of save. Only an applied group and a
+ * group that gives a Proposal Revision prove a save. An explicit discard of a refused edit Draft also removes its text.
+ * The last record of a chain carries the text of each earlier record of that chain.
+ */
+function unsavedTexts(snapshot: ValidatedJournalSnapshot) {
+  const discarded = new Set((snapshot.explicitDiscard ?? []).map(({ record }) => record.author_visible_decision_ref.draft_id));
+  const done = new Set(snapshot.groups.filter(({ settlement }) => settlement.kind === "applied_receipt_settled"
+    || (settlement.kind === "zero_authority_receipt_settled" && (settlement.effect.kind === "proposal_revised"
+      || (settlement.effect.kind === "refused_to_draft" && discarded.has(settlement.effect.draft_id)))))
+    .flatMap((group) => group.ordered_coverage.map((item) => item.local_intent_sequence)));
+  const last = new Map<string, JournalIntentRecord>();
+  for (const record of snapshot.records) last.set(record.payload_chain_ref, record);
+  const unsaved = new Set(snapshot.records.filter((record) => !done.has(record.local_intent_sequence))
+    .map((record) => record.payload_chain_ref));
+  return [...unsaved].map((chain) => {
+    const record = last.get(chain)!;
+    const text = snapshot.bodyBySequence.get(record.local_intent_sequence);
+    if (text === undefined) throw new Error("Local Edit Journal text is unavailable");
+    return { record, text };
+  });
 }
 
 const requestResult = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
@@ -52,12 +69,16 @@ export async function readLocalUnsentText(
       .some((name) => !indexed.objectStore(name).indexNames.contains("working_partition"))) return unreadable;
     const transaction = database.transaction(["partitions", "metadata"]);
     const partitions = await requestResult(transaction.objectStore("partitions").getAll()) as JournalPartition[];
-    const chapters = new Map<string, { generation: bigint; body: string }>();
-    const proposals = new Map<string, string>();
+    const chapters: LocalUnsentText["chapters"] = [];
+    const proposals: LocalUnsentText["proposals"] = [];
+    let readable = true;
     for (const partition of partitions) {
       const stored = await requestResult(database.transaction("metadata").objectStore("metadata")
         .get(`active_base:${partition.journal_partition_id}`)) as { value?: EditorBaseSnapshot } | undefined;
-      if (stored?.value === undefined) continue;
+      if (stored?.value === undefined) {
+        readable = false;
+        continue;
+      }
       const workspace: EditorWorkspace = { database, partition, cryptoImpl, maxJsonStringUtf8Bytes,
         readOnlyJournalVersion: 4,
         session: { schema_id: "storyos.query.editor-session.response.v1", correlation_id: partition.editor_session_id,
@@ -65,20 +86,27 @@ export async function readLocalUnsentText(
           editor_session: { ...partition, opened_at: partition.created_at, disposition: "open" },
           writer: { kind: "current_writer", writer_generation: partition.writer_generation },
           base_snapshot: stored.value } };
-      const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-      const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-      const generation = BigInt(partition.writer_generation);
-      const earlier = chapters.get(stored.value.chapter_id);
-      // A Chapter text that is equal to the Server text has nothing to save.
-      if (projection.unsettled_intent_count > 0 && projection.body !== stored.value.materialized_revision.body
-        && (earlier === undefined || earlier.generation < generation)) {
-        chapters.set(stored.value.chapter_id, { generation, body: projection.body });
+      let texts: ReturnType<typeof unsavedTexts>;
+      try {
+        texts = unsavedTexts(await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace)));
+      } catch {
+        readable = false;
+        continue;
       }
-      for (const [key, value] of candidateTextsFromSnapshot(snapshot, true)) proposals.set(key.split(":")[0]!, value.text);
+      for (const { record, text } of texts) {
+        const target = record.proposal_target;
+        if (target !== undefined) {
+          if (!proposals.some((item) => item.proposal_id === target.proposal_id && item.text === text)) {
+            proposals.push({ proposal_id: target.proposal_id, text });
+          }
+        } else if (!chapters.some((item) => item.chapter_id === record.chapter_object_id && item.body === text)
+          // A Chapter text that is equal to the Server text of the base has nothing to save.
+          && !(record.chapter_object_id === stored.value.chapter_id && text === stored.value.materialized_revision.body)) {
+          chapters.push({ chapter_id: record.chapter_object_id, body: text });
+        }
+      }
     }
-    return { readable: true,
-      chapters: [...chapters].map(([chapter_id, value]) => ({ chapter_id, body: value.body })),
-      proposals: [...proposals].map(([proposal_id, text]) => ({ proposal_id, text })) };
+    return { readable, chapters, proposals };
   } catch {
     return { readable: false, chapters: [], proposals: [] };
   } finally {

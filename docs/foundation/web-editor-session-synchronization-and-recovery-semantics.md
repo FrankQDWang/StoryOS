@@ -326,12 +326,20 @@ readable export of the Server text stays available.
 
 The editor also opens the
 version 4 Journal with no version request, so the open does not upgrade or write
-it. It reads the pending projection of each partition in read-only transactions.
+it. It reads the records of each partition in read-only transactions.
 The author can download the unsent text of each Chapter as one file that the
 editor labels as local unsent text. The file also holds the unsent candidate
 text of each Proposal, after the Chapter text. When the editor cannot read the
 records, for example in a version 3 Journal, it tells the author that local text
 exists. The earlier Journal stays unchanged, so a later reader can open it.
+
+The file holds the text of each record that has no proof of save. Only an
+applied group and a group that gives a Proposal Revision prove a save. An
+explicit discard of a refused edit Draft also removes its text. A conflicted,
+refused, or no-effect group is not a save. A group that needs a new confirmation
+by the author is also not a save. When the editor cannot read one partition, it
+tells the author that local text exists, and the file keeps the text of each
+other partition.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,

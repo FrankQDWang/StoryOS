@@ -892,7 +892,7 @@ function provenNoEffectAgainstDurableBase(
     && manuscriptBlocksEqual(finalBlocks, checkpointBlocks);
 }
 
-export function pendingProjectionFromSnapshot(
+function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
@@ -1155,23 +1155,13 @@ async function persistCandidateSelection(
 export async function candidateTextsFromJournal(
   workspace: EditorWorkspace,
 ): Promise<Map<string, { revisions: string[]; text: string }>> {
-  return candidateTextsFromSnapshot(await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace)));
-}
-
-/** With `unsentOnly`, a record that a settled group covers gives no text. */
-export function candidateTextsFromSnapshot(
-  snapshot: ValidatedJournalSnapshot,
-  unsentOnly = false,
-): Map<string, { revisions: string[]; text: string }> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const retained = retainedRecoverySequences(snapshot);
-  const settled = new Set(unsentOnly ? snapshot.groups.filter((group) => group.settlement.kind !== "unsettled")
-    .flatMap((group) => group.ordered_coverage.map((item) => item.local_intent_sequence)) : []);
   const texts = new Map<string, { revisions: string[]; text: string }>();
   for (const record of snapshot.records) {
     const target = record.proposal_target;
     const text = snapshot.bodyBySequence.get(record.local_intent_sequence);
-    if (target === undefined || text === undefined || retained.has(record.local_intent_sequence)
-      || settled.has(record.local_intent_sequence)) continue;
+    if (target === undefined || text === undefined || retained.has(record.local_intent_sequence)) continue;
     const key = `${target.proposal_id}:${target.operation_id}`;
     const revisions = texts.get(key)?.revisions ?? [];
     texts.set(key, { revisions: revisions.includes(target.revision_id) ? revisions : [...revisions, target.revision_id], text });

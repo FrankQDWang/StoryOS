@@ -14,10 +14,8 @@ export function LocalUnsentTextPanel({ text, chapterTitles }: {
   text: LocalUnsentText;
   chapterTitles: ReadonlyMap<string, string>;
 }) {
-  if (!text.readable) {
-    return <section data-local-unsent-text=""><p>本机有尚未发送的文字，但无法读取。请不要清除浏览器数据。</p></section>;
-  }
-  if (text.chapters.length === 0 && text.proposals.length === 0) return null;
+  const empty = text.chapters.length === 0 && text.proposals.length === 0;
+  if (text.readable && empty) return null;
   const download = () => {
     const url = URL.createObjectURL(new Blob([localUnsentTextFile(text, chapterTitles)],
       { type: "text/plain;charset=utf-8" }));
@@ -32,8 +30,13 @@ export function LocalUnsentTextPanel({ text, chapterTitles }: {
   };
   return (
     <section data-local-unsent-text="">
-      <p>本机有尚未发送到服务器的文字。服务器导出不包含这些文字。</p>
-      <button type="button" onClick={download}>下载本机未发送的文字</button>
+      {text.readable ? null : <p>本机有尚未发送的文字，但无法读取。请不要清除浏览器数据。</p>}
+      {empty ? null : (
+        <>
+          <p>本机有尚未发送到服务器的文字。服务器导出不包含这些文字。</p>
+          <button type="button" onClick={download}>下载本机未发送的文字</button>
+        </>
+      )}
     </section>
   );
 }
