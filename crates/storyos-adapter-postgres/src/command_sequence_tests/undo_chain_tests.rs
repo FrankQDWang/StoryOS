@@ -3,6 +3,7 @@
 
 use storyos_application::{
     EditorSessionId, ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
+    UndoRecords,
 };
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
 use tokio_postgres::Client;
@@ -65,13 +66,18 @@ async fn undo_latest(
     undo(store, &call).await.unwrap()
 }
 
-/// The compensated source of an applied Author Undo and the Frontier after it.
+/// The compensated source of an applied Author Undo and the Frontier after it. A Reversal
+/// Proposal is not a Compensation.
 fn compensated(settlement: UndoLatestAuthorActionSettlement) -> (u64, Option<u64>) {
     match settlement.outcome {
-        TransitionOutcome::Applied(applied) => (
-            applied.source_sequence,
-            applied.author_undo_frontier_sequence,
-        ),
+        TransitionOutcome::Applied(applied)
+            if !matches!(applied.records, UndoRecords::ReversalRequired { .. }) =>
+        {
+            (
+                applied.source_sequence,
+                applied.author_undo_frontier_sequence,
+            )
+        }
         other => panic!("the Undo must compensate, got {other:?}"),
     }
 }
