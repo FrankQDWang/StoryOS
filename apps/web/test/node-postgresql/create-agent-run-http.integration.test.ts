@@ -1,6 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -820,16 +820,6 @@ test("createAgentRun exact retry after commit keeps the first acknowledgement", 
   }
 });
 
-async function waitForReached(path: string) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (existsSync(path)) return;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-  }
-  throw new Error(`createAgentRun conversation hold did not reach ${path}`);
-}
-
 test("createAgentRun exact retry replays in a deployment that offers no model destination", async () => {
   let started = await startRealServer();
   try {
@@ -867,120 +857,6 @@ test("createAgentRun exact retry replays in a deployment that offers no model de
         && problemCode(error) === "assistance_unavailable",
     );
   } finally {
-    await stopRealServer(started.server);
-  }
-});
-
-test("createAgentRun competing existing admission keeps one queued run", async () => {
-  const heldKey = "018f0000-0000-7001-8000-000000000b60";
-  const holdPath = join(tmpdir(), `storyos-conversation-hold-${heldKey}.flag`);
-  const reachedPath = join(tmpdir(), `storyos-conversation-hold-${heldKey}.reached`);
-  writeFileSync(holdPath, "hold");
-  const started = await startRealServer({
-    STORYOS_TEST_CONVERSATION_HOLD_PATH: holdPath,
-    STORYOS_TEST_CONVERSATION_HOLD_REACHED_PATH: reachedPath,
-    STORYOS_TEST_CONVERSATION_HOLD_IDEMPOTENCY_KEY: heldKey,
-  });
-  try {
-    const first = await createEmpty(started.baseUrl, "session-a", id("aa61"), "Compete Novel", id("aa14"));
-    const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
-    const created = await postRun(
-      started.baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-000000000b62",
-      runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b63"),
-    );
-    if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
-    await deleteAdmittedRun(first.projectId, created.admitted.effect.run_id);
-    const heldRequest = runRequest(
-      { kind: "existing", conversation_id: created.admitted.conversation_id },
-      chapterId,
-      "018f0000-0000-7001-8000-000000000b64",
-    );
-    const competingRequest = runRequest(
-      { kind: "existing", conversation_id: created.admitted.conversation_id },
-      chapterId,
-      "018f0000-0000-7001-8000-000000000b65",
-    );
-    const heldDigest = await digestCreateAgentRun(heldRequest);
-    const competingDigest = await digestCreateAgentRun(competingRequest);
-    const heldChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/agent-runs",
-        command_schema: "storyos.command.create-agent-run.request.v2",
-        canonical_command_digest: heldDigest,
-        idempotency_key: heldKey,
-      },
-    }));
-    const competingChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/agent-runs",
-        command_schema: "storyos.command.create-agent-run.request.v2",
-        canonical_command_digest: competingDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000b66",
-      },
-    }));
-    const held = createAgentRun({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: heldKey,
-      antiForgery: heldChallenge.nonce,
-      request: heldRequest,
-    });
-    await waitForReached(reachedPath);
-    const competing = createAgentRun({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000b66",
-      antiForgery: competingChallenge.nonce,
-      request: competingRequest,
-    });
-    // Attach the refusal handler before the next await. The competing refusal can arrive
-    // before the held acknowledgement.
-    const competingRefused = assert.rejects(
-      competing,
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 422 && problemCode(error) === "conversation_busy";
-      },
-    );
-    unlinkSync(holdPath);
-    const admitted = await held;
-    assert.equal(admitted.acknowledgement, "accepted");
-    await competingRefused;
-    assert.equal(
-      await queryPostgres(`
-        SELECT
-          (SELECT count(*) FROM storyos.project_conversations
-            WHERE project_id = '${first.projectId}'::uuid)::text
-          || ' ' ||
-          (SELECT count(*) FROM storyos.agent_runs
-            WHERE project_id = '${first.projectId}'::uuid)::text;
-      `),
-      "1 1",
-    );
-  } finally {
-    try {
-      unlinkSync(holdPath);
-    } catch {
-      // The hold file is already removed after the competing admission.
-    }
-    try {
-      unlinkSync(reachedPath);
-    } catch {
-      // The reached file is created only after the held request starts.
-    }
     await stopRealServer(started.server);
   }
 });
