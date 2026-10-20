@@ -73,10 +73,10 @@ ProjectScope {
 The Project has one owning User acting as its Project Author. Project Scope is
 resolved from trusted Host state and must match every referenced object; a
 caller field, ProjectId alone, globally unique object ID, or editor session
-cannot establish ownership. Any missing or mismatched Project Scope member fails
-before a domain attempt and cannot produce or retrieve a Receipt. A missing
-Proposal Operation in a command target is not a Project Scope member; section
-7.2 gives its result. Ownership transfer,
+cannot establish ownership. Any missing or mismatched member fails before a
+domain attempt and cannot produce or retrieve a Receipt. This rule applies to a
+Project Scope member. A missing Proposal Operation in a command target gets the
+result of section 7.2. Ownership transfer,
 shared ownership, and multi-author editing are outside the current Foundation.
 
 ### 2.3 Ordered integers
@@ -771,12 +771,7 @@ in this order:
    `Refused { reason: AuthorEditRefusal }`. It retains one typed Domain Receipt and
    no Revision, Authoritative Commit, Author Action, Project Activity, or Draft.
    This result is distinct from pre-Admission failure and `RefusedToDraft`;
-   exact retry returns the same Receipt and result. A Proposal target that
-   names an Operation that is not a pending Operation of the named current
-   Proposal Revision is a target mismatch. When the expected Proposal Heads are
-   equal to the current Proposal Heads, the result is
-   `Refused { reason: target_mismatch }`. When they are not equal, step 1
-   returns `Conflicted` with the reason `proposal_head_present`.
+   exact retry returns the same Receipt and result.
 4. A single-owner command whose normalized result equals current durable
    content returns `NoEffect`.
 5. An all-authoritative command returns `AuthoritativeApplied`, appends the
@@ -786,8 +781,13 @@ in this order:
    returns `ProposalRevised`, appends exactly one Proposal Revision, and creates
    exactly one Forward Author Action.
 
-`ProposalRevised` creates no condition. Core validates the new Revision in the
-same Transition (section 6.4). In Release 1, each unit of a command with a
+A Proposal target with an Operation that is not a pending Operation of its
+current Proposal Revision is a target mismatch. When the expected Proposal
+Heads are the current Proposal Heads, step 3 returns
+`Refused { reason: target_mismatch }`. Otherwise step 1 returns `Conflicted`
+with the reason `proposal_head_present`.
+
+`ProposalRevised` creates no condition. In Release 1, each unit of a command with a
 Proposal target has exactly one `ReplaceSelection`. The Server refuses a
 structural primitive on a Proposal target before Admission with HTTP 422
 `command_target_refused`. Thus an author edit never makes Proposal Structural
@@ -921,12 +921,12 @@ ReplanProposal {
 
 Only Core produces a Validation Receipt. It binds the exact Proposal Revision,
 target Revisions, schema checks, domain invariants, preconditions, validator
-version, and result. Core also produces it for the Revision of an author
-candidate edit in the same Transition as the edit (section 6.4). Replan appends
-a new pending Revision; it never edits the
+version, and result. Replan appends a new pending Revision; it never edits the
 old conflict or Receipt. The named source may carry either Proposal Conflict or
 Proposal Recovery Conflict; Replan must resolve the exact preserved surface and
 current targets without collapsing those condition kinds.
+Core also gives a Validation Receipt to the Revision of an author candidate
+edit in the same Transition as the edit (section 6.4).
 
 ### 7.5 AcceptProposal
 
@@ -1321,8 +1321,8 @@ as applied. `Invalid` projects validation invalid; `Conflicted` projects it
 conflicted. Only an Acceptance Receipt from before ADR 0064 records
 `Conflicted`. `Refused` covers state or
 selection ineligibility and a missing target Block without changing content
-validity. Acceptance has no `NoEffect` result. An Acceptance that changes no
-state gives `Invalid` or `Refused`, and it leaves Operations pending.
+validity. An Acceptance that changes no state gives `Invalid` or `Refused`,
+not `NoEffect`, and it leaves Operations pending.
 All reasons are versioned exhaustive types; free text is presentation only.
 
 Bundle Receipts compose exact child Receipts under the existing atomic or
@@ -1480,10 +1480,10 @@ action routes to its registered typed handler:
 - Refused Edit Draft expansion -> exact derived-Proposal withdrawal plus exact
   source-Draft reopen;
 - Acceptance -> `UndoAcceptance`;
-- rejection -> Barrier (ADR 0044);
 - withdrawal -> typed Proposal reopen;
 - Draft close -> typed Draft reopen while retained;
-- any action without a registered exact handler -> Barrier.
+- any action without a registered exact handler, for example a rejection
+  (ADR 0044) -> Barrier.
 
 A handler that reopens a consumed source Draft requires the exact retained
 `ClosedSuperseded` event from its source Receipt and the exact current

@@ -17,7 +17,7 @@ The 1-based rank of one live Volume among the Project's live Volumes, or of one 
 _Avoid_: Storage key, physical row order, browser-owned order, tombstone-inclusive sequence
 
 **Current Chapter**:
-The optional Project-scoped pointer to the Chapter that is the author's present working location. Its absence on an Empty Project is lawful. The first Chapter on an Empty Project becomes the Current Chapter. When the author deletes the Current Chapter, the next live Chapter in Canonical Manuscript Tree order becomes current, also in a different Volume. If no next Chapter exists, the previous one does. If no Chapter remains, the Project is an Empty Project ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)). It is Workspace Context, not manuscript structure and not Authoritative State.
+The optional Project-scoped pointer to the Chapter that is the author's present working location. Its absence on an Empty Project is lawful. The first Chapter on an Empty Project becomes the Current Chapter. A delete of the Current Chapter selects the next live Chapter in tree order, else the previous one, else an Empty Project ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)). It is Workspace Context, not manuscript structure and not Authoritative State.
 _Avoid_: Authoritative Chapter, required chapter, current passage as authority
 
 **Manuscript Tree Revision**:
@@ -25,7 +25,7 @@ The Project Scope-local generation of Authoritative manuscript structure. A new 
 _Avoid_: Authoritative Revision, Canonical Sibling Order, Canonical Query Snapshot, physical tree_order
 
 **Canonical Manuscript Tree**:
-The current live Volume and Chapter hierarchy under one Project Scope, read only with the latest Canonical Query Snapshot that committed with those facts. A stale Snapshot is not a historical tree. An archived Project has no readable tree: its tree query gives HTTP 404 `resource_unavailable`, and its Project query stays readable ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)).
+The current live Volume and Chapter hierarchy under one Project Scope. A read uses only the latest Canonical Query Snapshot that committed with those facts. A stale Snapshot is not a historical tree. An archived Project has no readable tree, and its tree query gives HTTP 404 `resource_unavailable` ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)). Its Project query stays readable.
 _Avoid_: Embedded Snapshot tree, versioned historical tree, live rows beside an older Snapshot
 
 **Structural Authority Settlement**:
