@@ -63,5 +63,5 @@ On 2026-10-13, [#1112](https://github.com/FrankQDWang/StoryOS/issues/1112) close
 On 2026-10-20, [#1194](https://github.com/FrankQDWang/StoryOS/issues/1194) set the rejected entries of a blocked passage collection. The Working Target of a passage collection is one item, and its token count is the total of its passages:
 
 - Each passage can be in the limit while the total is above it. Then each selectable passage goes to `rejected` with its own token count and the reason `over_collection_token_limit`. A passage above the limit keeps `over_item_token_limit`.
-- The target list can be empty or not agree with the passages. Then the record gives one Working Target entry, `unavailable` with 0 tokens, and the reason `working_target_revision_unavailable`. It does not show the source Chapter as the Working Target.
+- The target list can be empty or not agree with the passages. Then the record gives one Working Target entry, `unavailable` with 0 tokens, and the reason `working_target_revision_unavailable`. It does not show the source Chapter as the Working Target. The only Working Target block reason is then `working_target_revision_unavailable`.
 - In both cases, no Working Target is selected, and each considered Working Target is not eligible.

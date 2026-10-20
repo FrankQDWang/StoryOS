@@ -26,9 +26,6 @@ pub fn assemble_passage_collection(
         ContextSufficiency::Blocked { reasons } => reasons.clone(),
     };
     let target_list_bound = !targets.is_empty() && targets.len() == passages.len();
-    if !target_list_bound {
-        reasons.push(ContextBlockReason::WorkingTargetRevisionUnavailable);
-    }
     let total: u64 = passages
         .iter()
         .map(|input| count_context_item_tokens(&input.chapter_body))
@@ -80,7 +77,7 @@ pub fn assemble_passage_collection(
         });
     }
     if !target_list_bound {
-        // The record of an unbound target list must not show the source Chapter as the Working Target.
+        // An unbound target list must not show the source Chapter or a passage as the Working Target.
         let is_other = |class: ContextSourceClass| class != ContextSourceClass::WorkingTarget;
         record.considered.retain(|item| is_other(item.source_class));
         record.selected.retain(|item| is_other(item.source_class));
@@ -97,6 +94,16 @@ pub fn assemble_passage_collection(
             token_count: 0,
             reason: RejectionReason::WorkingTargetRevisionUnavailable,
         });
+        reasons.retain(|reason| {
+            !matches!(
+                reason,
+                ContextBlockReason::WorkingTargetRevisionUnavailable
+                    | ContextBlockReason::ExactRequiredOverLimit {
+                        source_class: ContextSourceClass::WorkingTarget,
+                    }
+            )
+        });
+        reasons.push(ContextBlockReason::WorkingTargetRevisionUnavailable);
     }
     record.operation_requirement.chapter_id = source.chapter_id.clone();
     record.operation_requirement.chapter_revision_id = source.chapter_revision_id.clone();

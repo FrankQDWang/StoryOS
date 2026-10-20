@@ -347,11 +347,13 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
       assert.deepEqual(run.evidence, []);
       if (boundary === "over_budget") {
         assert.equal(run.context.selected.some((source) => source.source_class === "working_target"), false);
-        const targets = run.context.considered.filter((source) => source.source_class === "working_target");
-        assert.deepEqual(targets.map(({ source_version, eligible }) => ({ source_version, eligible })),
-          setup.chapters.map(({ chapter }) => ({ source_version: chapter.current_revision.revision_id, eligible: false })));
-        assert.deepEqual(run.context.rejected, targets.map(({ source_class, source_version, token_count }) =>
-          ({ source_class, source_version, token_count, reason: { kind: "over_collection_token_limit" } })));
+        // The first passage is "Hello " and "World" with one line break. The second passage is 32,000 scalars.
+        const passages = setup.chapters.map(({ chapter }, index) => ({ source_class: "working_target",
+          source_version: chapter.current_revision.revision_id, token_count: ["12", "32000"][index] }));
+        assert.deepEqual(run.context.considered.filter((source) => source.source_class === "working_target"),
+          passages.map((source) => ({ ...source, eligible: false })));
+        assert.deepEqual(run.context.rejected,
+          passages.map((source) => ({ ...source, reason: { kind: "over_collection_token_limit" } })));
       } else assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
       assert.equal(run.context.selected.some((source) => source.content === "Private foreign prose."), false);
     }

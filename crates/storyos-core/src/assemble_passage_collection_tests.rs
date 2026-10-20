@@ -114,23 +114,28 @@ fn a_collection_above_the_limit_rejects_each_passage_with_its_own_count() {
 }
 
 #[test]
-fn an_empty_target_list_rejects_one_unavailable_working_target() {
-    let source = passage("ch-1", "The tide turned.");
-    let record = assemble_passage_collection(&source, Vec::new(), &[]);
+fn an_unbound_target_list_rejects_one_unavailable_working_target() {
+    let source = passage("ch-1", &"a".repeat(/*n*/ 16_001));
+    let other = passage("ch-2", &"b".repeat(/*n*/ 16_000));
+    let empty = assemble_passage_collection(&source, Vec::new(), &[]);
+    let unmatched_over_limit =
+        assemble_passage_collection(&source, vec![target("ch-1")], &[source.clone(), other]);
+
+    let unavailable = (
+        vec![ineligible("unavailable", 0)],
+        0,
+        vec![rejected(
+            "unavailable",
+            0,
+            RejectionReason::WorkingTargetRevisionUnavailable,
+        )],
+        ContextSufficiency::Blocked {
+            reasons: vec![ContextBlockReason::WorkingTargetRevisionUnavailable],
+        },
+    );
 
     assert_eq!(
-        working_target_outcome(&record),
-        (
-            vec![ineligible("unavailable", 0)],
-            0,
-            vec![rejected(
-                "unavailable",
-                0,
-                RejectionReason::WorkingTargetRevisionUnavailable
-            )],
-            ContextSufficiency::Blocked {
-                reasons: vec![ContextBlockReason::WorkingTargetRevisionUnavailable],
-            },
-        )
+        [&empty, &unmatched_over_limit].map(working_target_outcome),
+        [unavailable.clone(), unavailable]
     );
 }
