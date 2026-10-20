@@ -16,9 +16,6 @@ fn rejection(status: &str, body: &str) -> String {
 /// Sends one Agent Plan AgentRun to a destination that answers with `reply`. Returns the status
 /// and the decision that the author reads.
 async fn rejected_run(prefix: &str, reply: String) -> (AgentRunStatus, AgentRunDecisionInspect) {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![reply]).await;
     let (scope, run_id) = real_run(&store, &admin, prefix, &base).await;
@@ -40,6 +37,9 @@ async fn rejected_run(prefix: &str, reply: String) -> (AgentRunStatus, AgentRunD
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_destination_rejection_refuses_the_run_with_a_result_for_the_author() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     assert_eq!(
         rejected_run(
             "4d1",
@@ -61,6 +61,9 @@ async fn a_destination_rejection_refuses_the_run_with_a_result_for_the_author() 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_input_above_the_model_window_refuses_the_run_as_a_conversation_too_long() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     assert_eq!(
         rejected_run(
             "4d2",

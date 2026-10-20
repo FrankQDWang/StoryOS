@@ -164,7 +164,6 @@ impl ProjectCommand for CreateAgentRunInput {
                 destination,
             },
         };
-        hold_conversation_if_requested(&envelope.challenge_binding.idempotency_key).await;
         Ok(Classification {
             outcome: outcome.map_applied(|()| ((), assistance)),
             admission: Admission::Project(ProjectActionClass::AgentRunStart),
@@ -326,25 +325,6 @@ async fn conversation_admission(
     } else {
         ConversationAdmission::ExistingIdle
     })
-}
-
-async fn hold_conversation_if_requested(idempotency_key: &str) {
-    let Ok(expected) = std::env::var("STORYOS_TEST_CONVERSATION_HOLD_IDEMPOTENCY_KEY") else {
-        return;
-    };
-    if expected != idempotency_key {
-        return;
-    }
-    let Ok(path) = std::env::var("STORYOS_TEST_CONVERSATION_HOLD_PATH") else {
-        return;
-    };
-    if let Ok(reached) = std::env::var("STORYOS_TEST_CONVERSATION_HOLD_REACHED_PATH") {
-        let _write = std::fs::write(reached, "held");
-    }
-    let path = std::path::PathBuf::from(path);
-    while path.exists() {
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    }
 }
 
 fn sequence_error(error: CreateAgentRunError) -> ProjectCommandError {
