@@ -1557,6 +1557,7 @@ a `RecoveryDraft`.
 | `DraftRetry.AuthoritativeApplied` or `.ProposalRevised` | exact source `ClosedSuperseded`; immutable history remains inspectable | remove source retry/expand/discard; show only controls of the resulting authoritative or Proposal surface |
 | `DraftRetry.RefusedToDraft` replacement | old source `ClosedSuperseded`; exactly one new open `RefusedEditDraft` | controls appear only on the new Draft |
 | `DraftRetry.Conflicted` or `.NoEffect` with matched source | exact source remains open with no lifecycle event | keep only controls permitted by that open source and current result |
+| `DraftRetry.Refused` with matched source | exact source remains open with no lifecycle event | keep only controls permitted by that open source and current result |
 | `DraftRetry` source Revision/digest/closure mismatch | project exact observed current source disposition | if closed, remove all stale retry/expand controls; if open, use only its current Revision |
 | `ExpandRefusedEditDraftToProposal` applied | complete `WholeDraftPayload` becomes one fresh Proposal; exact source `ClosedSuperseded` | Proposal controls only; no second expansion from the closed source |
 | expansion source mismatch or not open | no Proposal, no Author Action, no lifecycle event | project exact current source; closed source has no retry/expand control |

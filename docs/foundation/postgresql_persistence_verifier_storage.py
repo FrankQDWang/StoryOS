@@ -453,9 +453,9 @@ def validate_author_command_outcome_unknown(
         "arbiter": "same_scoped_command_idempotency_row_as_receipt_settlement",
         "open_condition": "idempotency_in_progress_and_no_terminal_settlement",
         "current_lifecycle_projection": {
-            "pending": "no_terminal_and_zero_observations",
-            "outcome_unknown": "no_terminal_and_one_or_more_observations",
+            "pending": "no_terminal_settlement",
             "receipt_settled": "terminal_precedes_historical_observations",
+            "observation_rows": "history_only",
         },
         "exact_retry": "same_complete_scoped_observation_returns_original_row_and_time_even_after_terminal",
         "new_after_terminal": "reject",
