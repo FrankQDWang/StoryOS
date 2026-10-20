@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 
 import undoFixture from "../../../../generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json";
-import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
+import { AuthorUndoUnavailableError, createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { ManuscriptEditor } from "../../src/manuscript-editor.tsx";
 import type { EditorReadyState, PendingEditProjection } from "../../src/editor-types.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
@@ -36,6 +36,7 @@ async function openUndoEditor() {
   const firstChallengeRead = gate();
   const refusedChallenges = new Set([1]);
   const gates = { firstChallenge, undoResponse };
+  const responses: { undo: unknown } = { undo: undoFixture };
   let sessionReads = 0;
   const undoChallengeKeys: string[] = [];
   const undoKeys: string[] = [];
@@ -72,7 +73,7 @@ async function openUndoEditor() {
     if (path.endsWith("/author-actions/undo")) {
       undoKeys.push(requestHeaders(init).get("idempotency-key") ?? "");
       await gates.undoResponse.opened;
-      return jsonResponse(undoFixture);
+      return jsonResponse(responses.undo);
     }
     throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
   };
@@ -100,7 +101,7 @@ async function openUndoEditor() {
   surface.focus();
   let unmounted = false;
   return {
-    gates, sessionRefreshRead, firstChallengeRead, refusedChallenges, surface, timers, projections, failures, undoChallengeKeys, undoKeys,
+    gates, responses, sessionRefreshRead, firstChallengeRead, refusedChallenges, surface, timers, projections, failures, undoChallengeKeys, undoKeys,
     pressUndo() { void writing.undo(); },
     // A new Editor Session workspace closes the controller of the earlier one, and that abandons its Undo.
     async replaceWorkspace() {
@@ -159,6 +160,26 @@ it("keeps the editor editable while an Author Undo waits for Challenge admission
       undoKeys: undo.undoKeys, editable: undo.surface.getAttribute("contenteditable") })
       .toEqual({ failures: [], challengeKeys: 2, undoKeys: [undo.undoChallengeKeys[0]], editable: "true" });
     expect(undo.undoChallengeKeys[1]).toBe(undo.undoChallengeKeys[0]);
+  } finally {
+    await undo.close();
+  }
+});
+
+it("shows the saved state again when an Author Undo after a Challenge wait is unavailable", async () => {
+  const undo = await openUndoEditor();
+  try {
+    undo.responses.undo = { ...undoFixture, effect: { kind: "unavailable", reason: "barrier" },
+      receipt: { ...undoFixture.receipt, result: "refused", author_action_sequence: null,
+        authoritative_commit_ids: [], authoritative_revision_ids: [] } };
+    undo.pressUndo();
+    await undo.waitForRetryTimer();
+    await act(async () => { undo.retryTimers()[0]!.callback(); });
+    await expect.poll(() => undo.failures.length).toBe(1);
+
+    expect({ saveState: undo.projections.at(-1)?.save_state,
+      failure: undo.failures[0] instanceof AuthorUndoUnavailableError ? undo.failures[0].reason : undo.failures[0],
+      editable: undo.surface.getAttribute("contenteditable") })
+      .toEqual({ saveState: "saved", failure: "barrier", editable: "true" });
   } finally {
     await undo.close();
   }

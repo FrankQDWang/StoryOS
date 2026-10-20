@@ -521,7 +521,9 @@ export function createEditorSessionWritingController({
               return { proposalId, currentChapterId: isCurrent() && "project" in settled
                 && settled.project.open.kind === "current_chapter" ? settled.project.open.current_chapter_id : undefined };
             case "unavailable":
-              onFailure(new AuthorUndoUnavailableError(settled.effect.reason));
+              // A Challenge wait showed the projection as saving. Nothing changed, so show it again.
+              if (waited) await refresh();
+              if (isCurrent()) onFailure(new AuthorUndoUnavailableError(settled.effect.reason));
               return undefined;
             default:
               onFailure(new Error("Author Undo did not compensate"));
