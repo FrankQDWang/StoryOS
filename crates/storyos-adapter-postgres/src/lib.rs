@@ -21,6 +21,10 @@ mod takeover_admission_tests;
 mod create_project_challenge_tests;
 
 #[cfg(test)]
+#[path = "postgres_test_lock_tests.rs"]
+mod postgres_test_lock_tests;
+
+#[cfg(test)]
 #[path = "create_project_tests.rs"]
 mod create_project_tests;
 

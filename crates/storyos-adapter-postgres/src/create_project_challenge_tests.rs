@@ -43,6 +43,9 @@ fn issue_request(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn create_project_challenge_replays_conflicts_and_stays_user_isolated() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
