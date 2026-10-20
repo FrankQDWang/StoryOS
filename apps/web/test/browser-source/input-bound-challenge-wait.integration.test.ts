@@ -62,9 +62,11 @@ async function journalIntentCount(name: string): Promise<number> {
 
 /**
  * The Server refuses the first Author Edit Challenge with a rate limit, and then admits each group.
- * Each Author Edit applies on the current head.
+ * Each Author Edit applies on the current head. In the mode "unknown_outcome", the Server admits each Challenge,
+ * the response of the first Author Edit is lost, and its outcome stays unknown.
  */
-function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
+function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>,
+  mode: "rate_limit" | "unknown_outcome" = "rate_limit") {
   let session: GetEditorSessionResponse = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
   let head = session.base_snapshot.authoritative_head_revision_id;
   let body = session.base_snapshot.materialized_revision.body;
@@ -101,7 +103,7 @@ function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
       if (request.command_schema === AUTHOR_EDIT_SCHEMA) {
         challengeKeys.push(String(request.idempotency_key));
         digest = requireDigestValue(request.canonical_command_digest, "command digest");
-        if (challengeKeys.length === 1) {
+        if (challengeKeys.length === 1 && mode === "rate_limit") {
           return new Response(JSON.stringify({ schema_id: "storyos.problem.v1",
             code: "challenge_rate_limited", message: "The command challenge rate limit is exceeded." }),
           { status: 429, headers: { "content-type": "application/json", "retry-after": "7" } });
@@ -113,10 +115,18 @@ function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
     if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
     if (path.endsWith(`/editor-sessions/${SESSION}`)) return jsonResponse(session);
     if (path.endsWith("/activity")) return emptyActivityStream();
+    if (path.includes("/manuscript/author-edit-outcomes/")) {
+      return jsonResponse({ schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000081", project_scope: scenario.project.project_scope,
+        outcome: { outcome_kind: "still_unknown", observation: { observation_kind: "admission_committed",
+          command_id: "018f0000-0000-7001-8000-000000000311",
+          author_command_admission_id: "018f0000-0000-7001-8000-000000000312", reconciliation_required: true } } });
+    }
     if (path.endsWith("/manuscript/author-edits") && digest !== undefined) {
       const idempotencyKey = requestHeaders(init).get("idempotency-key") ?? "";
       const request = requireRequestBody(init);
       authorEdits.push(idempotencyKey);
+      if (mode === "unknown_outcome") throw new TypeError("Failed to fetch");
       const units = request.author_edit_units as Array<{ normalized_primitives: Array<{ text: string }> }>;
       for (const unit of units) body = `${body}${unit.normalized_primitives[0]!.text}`;
       const index = authorEdits.length;
@@ -138,9 +148,9 @@ function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>) {
   return { fetchImpl, challengeKeys, authorEdits };
 }
 
-it("stops the Challenge wait when the input bound stops input, and recovers the input of the wait after a reload", async () => {
+function boundHarness(mode: "rate_limit" | "unknown_outcome" = "rate_limit") {
   const scenario = createBrowserScenario();
-  const server = rateLimitedServer(scenario);
+  const server = rateLimitedServer(scenario, mode);
   const openDatabases = new Set<IDBDatabase>();
   let view: ReturnType<typeof mountStage1View> | undefined;
   const mount = async (timers: Timer[]) => {
@@ -155,14 +165,43 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
     await expect.poll(() => loaded.root.querySelector("[contenteditable='true']") !== null).toBe(true);
     return loaded.root;
   };
-  const fireIdle = (timers: Timer[]) => {
-    for (const timer of timers.filter((item) => item.timeout === 250 && !item.cleared)) {
-      timer.cleared = true;
-      timer.callback();
-    }
+  const unmount = () => {
+    view?.unmount();
+    closeTrackedDatabases(openDatabases);
   };
-  await deleteJournal(scenario.journalName);
-  sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+  const cleanup = async () => {
+    unmount();
+    document.body.replaceChildren();
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  };
+  /** Types "x" until the editor stops input. */
+  const typeToBound = async (root: HTMLElement) => {
+    let inputs = 0;
+    while (manuscriptIsEditable(manuscriptEditor(root, window)) && inputs < 300) {
+      await applyTrustedInput({ operation: "insert_text", text: "x" });
+      inputs += 1;
+    }
+    return inputs;
+  };
+  const stopState = (root: HTMLElement) => ({ alert: root.querySelector('[role="alert"]')?.textContent,
+    saveState: root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+    editable: manuscriptIsEditable(manuscriptEditor(root, window)) });
+  return { scenario, server, mount, unmount, cleanup, typeToBound, stopState };
+}
+
+function fireIdle(timers: Timer[]) {
+  for (const timer of timers.filter((item) => item.timeout === 250 && !item.cleared)) {
+    timer.cleared = true;
+    timer.callback();
+  }
+}
+
+const STOPPED = { alert: INPUT_BOUND_MESSAGE, saveState: "needs_attention", editable: false };
+
+it("stops the Challenge wait when the input bound stops input, and recovers the input of the wait after a reload", async () => {
+  const { scenario, server, mount, unmount, cleanup } = boundHarness();
+  await cleanup();
   try {
     const timers: Timer[] = [];
     let root = await mount(timers);
@@ -193,8 +232,7 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
 
     // Input that was queued before the stop still enters the Journal.
     await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(240);
-    view?.unmount();
-    closeTrackedDatabases(openDatabases);
+    unmount();
     const reloadTimers: Timer[] = [];
     root = await mount(reloadTimers);
     // The last input passed the bound, so it is not in the Journal.
@@ -214,10 +252,57 @@ it("stops the Challenge wait when the input bound stops input, and recovers the 
         first: server.challengeKeys[0], distinct: true });
     expect(server.authorEdits.length).toBeGreaterThan(1);
   } finally {
-    view?.unmount();
-    closeTrackedDatabases(openDatabases);
-    document.body.replaceChildren();
-    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
-    await deleteJournal(scenario.journalName);
+    await cleanup();
+  }
+});
+
+it("counts the recovered records that follow a group in the input bound after a reload", async () => {
+  const { scenario, server, mount, unmount, cleanup, typeToBound, stopState } = boundHarness();
+  await cleanup();
+  try {
+    const timers: Timer[] = [];
+    let root = await mount(timers);
+    focusManuscriptEnd(manuscriptEditor(root, window), window);
+    await applyTrustedInput({ operation: "insert_text", text: "!?" });
+    await expect.poll(() => timers.some((timer) => timer.timeout === 250)).toBe(true);
+    fireIdle(timers);
+    await expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true);
+    for (let index = 0; index < 9; index += 1) await applyTrustedInput({ operation: "insert_text", text: "x" });
+    await expect.poll(() => journalIntentCount(scenario.journalName)).toBe(10);
+    unmount();
+
+    // The reload has no Challenge wait. The first input sends the frozen group, and it applies.
+    // The 9 recovered records that follow it stay unsettled and count in the bound (ADR 0065).
+    root = await mount([]);
+    focusManuscriptEnd(manuscriptEditor(root, window), window);
+    const inputs = await typeToBound(root);
+    expect({ inputs, ...stopState(root), challenges: server.challengeKeys.length, authorEdits: server.authorEdits })
+      .toEqual({ inputs: 232, ...STOPPED, challenges: 2, authorEdits: [server.challengeKeys[0]] });
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(241);
+  } finally {
+    await cleanup();
+  }
+});
+
+it("counts the records that follow a group with an unknown outcome in the input bound", async () => {
+  const { scenario, server, mount, cleanup, typeToBound, stopState } = boundHarness("unknown_outcome");
+  await cleanup();
+  try {
+    const timers: Timer[] = [];
+    const root = await mount(timers);
+    focusManuscriptEnd(manuscriptEditor(root, window), window);
+    await applyTrustedInput({ operation: "insert_text", text: "!?" });
+    await expect.poll(() => timers.some((timer) => timer.timeout === 250)).toBe(true);
+    fireIdle(timers);
+    await expect.poll(() => server.authorEdits.length).toBe(1);
+    await expect.poll(() => root.querySelector("[data-save-state]")?.getAttribute("data-save-state")).toBe("saving");
+
+    // No Challenge wait is active. The input follows the group, and the bound counts it (ADR 0065).
+    const inputs = await typeToBound(root);
+    expect({ inputs, ...stopState(root), authorEdits: server.authorEdits.length })
+      .toEqual({ inputs: 240, ...STOPPED, authorEdits: 1 });
+    await expect.poll(() => journalIntentCount(scenario.journalName), { timeout: 10_000 }).toBe(240);
+  } finally {
+    await cleanup();
   }
 });

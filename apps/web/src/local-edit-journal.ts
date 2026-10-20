@@ -966,6 +966,8 @@ function pendingProjectionFromSnapshot(
         : "saved",
     unsettled_intent_count: pendingRecordCount + pendingAcceptanceCount,
     ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: pendingRecordCount } : {}),
+    ...(activeRecords.some((record) => record.follows_submission_group !== undefined)
+      ? { has_follower_records: true as const } : {}),
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }
@@ -1726,6 +1728,7 @@ async function persistAuthorEditUnit(
     blocks: edit.candidate === undefined ? cloneBlocks(edit.expectedBlocks) : projection.blocks,
     save_state: "saving",
     unsettled_intent_count: projection.unsettled_intent_count + 1,
+    ...(followsGroup || projection.has_follower_records ? { has_follower_records: true as const } : {}),
     authoritative_revision_id: projection.authoritative_revision_id,
     ...(projection.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: projection.author_undo_frontier_sequence }

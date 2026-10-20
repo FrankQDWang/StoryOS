@@ -159,8 +159,9 @@ export function createEditorSessionWritingController({
   // A Challenge wait does not hold the queue, so input of the wait enters the Journal at once (ADR 0065).
   let waitEnded: Promise<void> | undefined;
   let endWait: (() => void) | undefined;
-  // The Journal has records that follow an unsettled group, so the bound counts the Journal records too.
-  let followers = false;
+  // The Journal has records that follow a group, so the bound counts the Journal records too.
+  // Each Journal projection gives this state, also after a reload and after an unknown outcome (ADR 0065).
+  let followers = journal.has_follower_records === true;
   let inputStopped = false;
   let queuedOperations = 0;
   let queue: Promise<void> = Promise.resolve();
@@ -179,6 +180,7 @@ export function createEditorSessionWritingController({
 
   const install = (projection: PendingEditProjection, settled = false): void => {
     journal = projection;
+    followers = projection.has_follower_records === true;
     installs += 1;
     const local = unjournaled > 0;
     // Newer captured input stays visible over an older Journal projection.
@@ -292,10 +294,7 @@ export function createEditorSessionWritingController({
     }
     const projection = attempt.result;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
-    if (pendingIntentCount === 0) {
-      pendingTarget = undefined;
-      followers = false;
-    }
+    if (pendingIntentCount === 0) pendingTarget = undefined;
     if (projection.save_state === "saved" && pendingIntentCount === 0) submissionClosed = false;
     // Records that follow the settled group keep their undo group, so later input can continue their run.
     if (pendingIntentCount === 0) undoGroupId = undefined;
@@ -367,7 +366,6 @@ export function createEditorSessionWritingController({
     unjournaled -= 1;
     // Input can stop during the append. The Journal keeps the record, and the editor stays stopped.
     if (failed || stopped || inputStopped) return true;
-    if (waitEnded !== undefined) followers = true;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
     pendingTarget = target;
     openCandidate = candidateKey(edit);
@@ -445,7 +443,7 @@ export function createEditorSessionWritingController({
       if (inputStopped) return;
       captured += 1;
       unjournaled += 1;
-      // During a wait the bound counts the Journal records of all unsettled groups too (ADR 0065).
+      // During a wait or while follower records exist, the bound counts the unsettled Journal records too (ADR 0065).
       if ((waitEnded !== undefined || followers) && pendingIntentCount + unjournaled > AUTHOR_EDIT_MAX_UNITS) {
         stopInput();
         return;

@@ -222,6 +222,8 @@ export interface PendingEditProjection {
   unsettled_intent_count: number;
   /** If absent, the Author Edit count equals the total unsettled count. */
   author_edit_unsettled_intent_count?: number;
+  /** True when an unsettled record follows a group (ADR 0065). */
+  has_follower_records?: true;
   authoritative_revision_id: string;
   author_undo_frontier_sequence?: string;
 }
