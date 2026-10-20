@@ -794,6 +794,9 @@ fn inspect_context(
                     RejectionReason::OverItemTokenLimit => {
                         contracts::ContextRejectionReason::OverItemTokenLimit
                     }
+                    RejectionReason::OverCollectionTokenLimit => {
+                        contracts::ContextRejectionReason::OverCollectionTokenLimit
+                    }
                     RejectionReason::RequiredRevisionUnavailable => {
                         contracts::ContextRejectionReason::RequiredRevisionUnavailable
                     }
