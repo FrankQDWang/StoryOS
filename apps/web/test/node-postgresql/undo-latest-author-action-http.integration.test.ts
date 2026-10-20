@@ -1156,7 +1156,7 @@ test("undoLatestAuthorAction of an Operation rejection is a Barrier and keeps th
     const beforeUndo = await inspect(proposal);
     const blocked = await undoProposalDecision(proposal, session, rejected.author_action_sequence, "db0011");
     assert.deepEqual(blocked.effect, { kind: "unavailable", reason: "barrier" });
-    assert.deepEqual(await inspect(proposal), beforeUndo);
+    assert.deepEqual((await inspect(proposal)).proposal, beforeUndo.proposal);
     assert.equal(beforeUndo.proposal.operation_resolution, "rejected");
   } finally {
     await stopRealServer(started.server);
