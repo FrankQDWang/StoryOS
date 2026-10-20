@@ -66,6 +66,35 @@ fn request_validation_accepts_a_bounded_ordered_batch() {
     assert!(validate_request(&request).is_ok());
 }
 
+#[test]
+fn request_validation_refuses_a_structural_primitive_on_a_proposal_target() {
+    let mut request = request();
+    request.observed_ownership_partition = "mixed".to_owned();
+    request.expected_proposal_head_revision_ids =
+        vec!["018f0000-0000-7001-8000-000000000043".to_owned()];
+    request.proposal_target = Some(contracts::AuthorEditProposalTarget {
+        proposal_id: "018f0000-0000-7001-8000-000000000041".to_owned(),
+        operation_id: "018f0000-0000-7001-8000-000000000042".to_owned(),
+        revision_id: "018f0000-0000-7001-8000-000000000043".to_owned(),
+        manuscript_block_id: "018f0000-0000-7001-8000-000000000044".to_owned(),
+    });
+    assert!(validate_request(&request).is_ok());
+
+    request.author_edit_units[0].normalized_primitives =
+        vec![contracts::AuthorEditPrimitive::SplitBlock {
+            manuscript_block_id: "018f0000-0000-7001-8000-000000000044".to_owned(),
+            offset: 4,
+            new_manuscript_block_id: "018f0000-0000-7001-8000-000000000045".to_owned(),
+        }];
+    let Err(ApiError(status, problem)) = validate_request(&request) else {
+        panic!("a structural primitive on a Proposal target must be refused");
+    };
+    assert_eq!(
+        (status, problem.1.0.code.as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "command_target_refused")
+    );
+}
+
 #[tokio::test]
 async fn apply_author_edit_rejects_referer_without_origin() {
     let response = router()

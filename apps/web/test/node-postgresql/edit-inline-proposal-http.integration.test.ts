@@ -1988,7 +1988,7 @@ test("explicit Inline candidate input binds the exact Operation and preserves so
     wrong.completed_intent_record_id = id("d828055");
     wrong.proposal_target!.operation_id = id("d828057");
     const refused = await send(wrong, id("d828056"));
-    assert.equal(refused.effect.kind, "refused");
+    assert.deepEqual(refused.effect, { kind: "refused", reason: "target_mismatch" });
     assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
     assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
       opened.proposal);
