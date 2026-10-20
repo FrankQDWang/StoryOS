@@ -23,7 +23,7 @@ use crate::command_sequence::{
     ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
-use crate::undo_frontier::{ObservedFrontier, load_observed_frontier};
+use crate::undo_frontier::{ObservedFrontier, head_lineage_revision, load_observed_frontier};
 
 mod profile;
 mod replay;
@@ -98,6 +98,18 @@ impl ProjectCommand for UndoLatestAuthorAction {
             }
             _ => None,
         };
+        let current_head = observed
+            .as_ref()
+            .and_then(ObservedFrontier::prose_head)
+            .unwrap_or_default()
+            .to_owned();
+        let current_head_lineage = match observed.as_ref().and_then(ObservedFrontier::revision_head)
+        {
+            Some((chapter_id, head)) => {
+                head_lineage_revision(client, &request, chapter_id, head).await?
+            }
+            None => current_head.clone(),
+        };
         let outcome = classify_undo(&CoreUndo {
             expected_author_undo_frontier_sequence: request.expected_author_undo_frontier_sequence,
             current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
@@ -108,11 +120,8 @@ impl ProjectCommand for UndoLatestAuthorAction {
                     .map_or_else(|| frontier.kind(), |source| source.kind.clone()),
             }),
             expected_head_revision_id: request.expected_authoritative_revision_id.clone(),
-            current_head_revision_id: observed
-                .as_ref()
-                .and_then(ObservedFrontier::prose_head)
-                .unwrap_or_default()
-                .to_owned(),
+            current_head_revision_id: current_head,
+            current_head_lineage_revision_id: current_head_lineage,
         });
         let admission = undo_admission(client, &request, observed.as_ref()).await?;
         let expected = request.expected_authoritative_revision_id.clone();

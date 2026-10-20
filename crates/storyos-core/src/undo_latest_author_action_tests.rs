@@ -31,6 +31,7 @@ fn command() -> UndoLatestAuthorAction {
         }),
         expected_head_revision_id: HEAD.to_owned(),
         current_head_revision_id: HEAD.to_owned(),
+        current_head_lineage_revision_id: HEAD.to_owned(),
     }
 }
 
@@ -87,6 +88,56 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
     );
 }
 
+/// A command whose current Head is a Compensation of a later action. The lineage of the Head is
+/// `lineage`.
+fn compensated_head(mut command: UndoLatestAuthorAction, lineage: &str) -> UndoLatestAuthorAction {
+    command.expected_head_revision_id = OTHER.to_owned();
+    command.current_head_revision_id = OTHER.to_owned();
+    command.current_head_lineage_revision_id = lineage.to_owned();
+    command
+}
+
+#[test]
+fn a_prose_head_whose_lineage_restores_the_frontier_classifies_as_compensated() {
+    assert_eq!(
+        undo_latest_author_action(&compensated_head(command(), HEAD)),
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+            source_sequence: 1
+        })
+    );
+}
+
+#[test]
+fn a_prose_head_whose_lineage_does_not_restore_the_frontier_stays_conflicted() {
+    assert_eq!(
+        undo_latest_author_action(&compensated_head(command(), OTHER)),
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::WrongTargetHead)
+    );
+}
+
+#[test]
+fn a_stale_expected_head_stays_conflicted_when_the_lineage_restores_the_frontier() {
+    let mut stale = compensated_head(command(), HEAD);
+    stale.expected_head_revision_id = HEAD.to_owned();
+    assert_eq!(
+        undo_latest_author_action(&stale),
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::WrongTargetHead)
+    );
+}
+
+#[test]
+fn an_acceptance_head_whose_lineage_restores_the_acceptance_classifies_as_compensated() {
+    assert_eq!(
+        undo_latest_author_action(&compensated_head(
+            acceptance(HEAD, /*prior_evidence_usable*/ true),
+            HEAD
+        )),
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+            source_sequence: 1
+        })
+    );
+}
+
 #[test]
 fn a_matching_acceptance_frontier_classifies_as_compensated() {
     assert_eq!(
@@ -101,6 +152,7 @@ fn a_matching_acceptance_frontier_classifies_as_compensated() {
 fn a_drifted_acceptance_head_with_usable_evidence_requires_reversal() {
     let mut drifted = acceptance(HEAD, /*prior_evidence_usable*/ true);
     drifted.current_head_revision_id = OTHER.to_owned();
+    drifted.current_head_lineage_revision_id = OTHER.to_owned();
     drifted.expected_head_revision_id = OTHER.to_owned();
     assert_eq!(
         undo_latest_author_action(&drifted),
@@ -114,6 +166,7 @@ fn a_drifted_acceptance_head_with_usable_evidence_requires_reversal() {
 fn unusable_acceptance_evidence_is_unavailable() {
     let mut drifted = acceptance(HEAD, /*prior_evidence_usable*/ false);
     drifted.current_head_revision_id = OTHER.to_owned();
+    drifted.current_head_lineage_revision_id = OTHER.to_owned();
     drifted.expected_head_revision_id = OTHER.to_owned();
     assert_eq!(
         undo_latest_author_action(&drifted),

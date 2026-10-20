@@ -188,6 +188,81 @@ impl ObservedFrontier {
             Self::DraftClose(frontier) => Some(frontier.current_head_revision_id.as_str()),
         }
     }
+
+    /// The Chapter and its current Head when the frontier writes a Chapter Revision.
+    pub(crate) fn revision_head(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::Acceptance(frontier) => Some((
+                frontier.chapter_id.as_str(),
+                frontier.current_head_revision_id.as_str(),
+            )),
+            Self::Prose(frontier) => Some((
+                frontier.chapter_id.as_str(),
+                frontier.current_head_revision_id.as_str(),
+            )),
+            Self::Structure(_)
+            | Self::CurrentChapter(_)
+            | Self::Proposal(_)
+            | Self::Replan(_)
+            | Self::ReopenRejectedOperations(_)
+            | Self::ReopenWithdrawnProposal(_)
+            | Self::AuthorWithdrawal(_)
+            | Self::DraftClose(_)
+            | Self::Barrier { .. } => None,
+        }
+    }
+}
+
+/// The lineage Revision of the Head of a Chapter (ADR 0067). A Compensation Revision restores the
+/// prior Revision of its source Forward Commit, so the walk goes to that prior Revision and
+/// continues. The walk stops at a Revision that a Forward action or the Chapter creation wrote.
+pub(crate) async fn head_lineage_revision(
+    client: &tokio_postgres::Client,
+    command: &UndoRequest,
+    chapter_id: &str,
+    head_revision_id: &str,
+) -> Result<String, ProjectCommandError> {
+    let row = client
+        .query_one(
+            "WITH RECURSIVE lineage(revision_id, depth) AS (
+                 SELECT $4::text::uuid, 0
+               UNION ALL
+                 SELECT source_commit.prior_revision_id, lineage.depth + 1
+                   FROM lineage
+                   JOIN storyos.authoritative_commits AS commit
+                     ON commit.owner_user_id = $1::text::uuid
+                    AND commit.project_id = $2::text::uuid
+                    AND commit.manuscript_object_id = $3::text::uuid
+                    AND commit.resulting_revision_id = lineage.revision_id
+                   JOIN storyos.author_action_entries AS compensation
+                     ON (compensation.owner_user_id, compensation.project_id,
+                         compensation.authoritative_commit_id) =
+                        (commit.owner_user_id, commit.project_id, commit.authoritative_commit_id)
+                    AND compensation.disposition = 'compensation'
+                   JOIN storyos.author_action_entries AS source
+                     ON (source.owner_user_id, source.project_id, source.author_action_sequence) =
+                        (compensation.owner_user_id, compensation.project_id,
+                         compensation.compensated_source_sequence)
+                   JOIN storyos.authoritative_commits AS source_commit
+                     ON (source_commit.owner_user_id, source_commit.project_id,
+                         source_commit.authoritative_commit_id) =
+                        (source.owner_user_id, source.project_id, source.authoritative_commit_id)
+                    AND source_commit.manuscript_object_id = commit.manuscript_object_id
+             ) CYCLE revision_id SET looped USING path
+             SELECT revision_id::text FROM lineage
+              WHERE NOT looped
+              ORDER BY depth DESC
+              LIMIT 1",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &chapter_id,
+                &head_revision_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    Ok(row.get(/*idx*/ 0))
 }
 
 fn undo_database_error(error: tokio_postgres::Error) -> ProjectCommandError {

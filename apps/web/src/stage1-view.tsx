@@ -31,7 +31,8 @@ import type {
   ProjectReadyState,
 } from "./editor-types.ts";
 import type { ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
-import { InputBoundStopError, createEditorSessionWritingController } from "./editor-session-writing.ts";
+import { AuthorUndoUnavailableError, InputBoundStopError, createEditorSessionWritingController }
+  from "./editor-session-writing.ts";
 import {
   BlockProposalDisplay,
 } from "./block-proposal-display.tsx";
@@ -78,6 +79,13 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const INPUT_BOUND_STOP_MESSAGE =
   "等待保存时输入过多，编辑器已停止输入。已写入本机的输入会在刷新页面后继续保存，最后几次输入可能没有保存。请先复制需要保留的文字，再刷新页面。";
+
+/** The status text for an Author Undo that the Server reports unavailable (ADR 0067). */
+const AUTHOR_UNDO_UNAVAILABLE_MESSAGES: Record<AuthorUndoUnavailableError["reason"], string> = {
+  barrier: "无法继续撤销：更早的操作不能撤销。",
+  no_frontier: "没有可以撤销的操作。",
+  source_unavailable: "无法撤销：这个操作的记录已不可用。",
+};
 
 function editorParagraphs(
   blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
@@ -366,6 +374,10 @@ function ProjectReadyView({
   const onEditorFailure = (error: unknown) => {
     if (historicalAcknowledgementUnavailable(error)) {
       setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+      return;
+    }
+    if (error instanceof AuthorUndoUnavailableError) {
+      setSwitchRecovery(AUTHOR_UNDO_UNAVAILABLE_MESSAGES[error.reason]);
       return;
     }
     if (error instanceof InputBoundStopError) setSwitchRecovery(INPUT_BOUND_STOP_MESSAGE);

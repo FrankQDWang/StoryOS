@@ -20,6 +20,8 @@ import type {
   ProposalJournalAnchor,
 } from "./editor-types.ts";
 import { flattenChapterBody, type ManuscriptParagraph } from "./manuscript-doc.ts";
+import type { UndoLatestAuthorActionUnavailableReason }
+  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 import { retryRefusedEdit } from "./refused-edit-retry.ts";
 
@@ -90,6 +92,15 @@ type Captured = { edit: CapturedEdit; origin: InputOrigin; createdAt: string };
 /** The input bound stopped input. A Challenge wait stopped with it, and the frozen group stays in the Journal. */
 export class InputBoundStopError extends Error {
   constructor() { super("Manual input queue limit failed"); }
+}
+
+/** The Server reports that Author Undo is unavailable and changed nothing. The editor stays writable (ADR 0067). */
+export class AuthorUndoUnavailableError extends Error {
+  readonly reason: UndoLatestAuthorActionUnavailableReason;
+  constructor(reason: UndoLatestAuthorActionUnavailableReason) {
+    super(`Author Undo is unavailable: ${reason}`);
+    this.reason = reason;
+  }
 }
 
 const HARD_INPUT: readonly InputOrigin[] = ["composition_confirmation", "paste", "cut", "drop"];
@@ -509,6 +520,9 @@ export function createEditorSessionWritingController({
               // Input during the read abandons the Undo, so the editor keeps its Chapter (ADR 0038).
               return { proposalId, currentChapterId: isCurrent() && "project" in settled
                 && settled.project.open.kind === "current_chapter" ? settled.project.open.current_chapter_id : undefined };
+            case "unavailable":
+              onFailure(new AuthorUndoUnavailableError(settled.effect.reason));
+              return undefined;
             default:
               onFailure(new Error("Author Undo did not compensate"));
               return undefined;
