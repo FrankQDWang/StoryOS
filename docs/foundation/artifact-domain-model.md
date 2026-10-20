@@ -494,8 +494,8 @@ input that the Admission contract will bind and every manuscript semantic
 field remain equal. The final body and digest receive one Admission and are
 never merged afterward. Core recomputes ownership from durable Heads, Proposal
 Anchors, and reservations and returns one whole-command result: authoritative
-applied, Proposal revised, refused to Draft, conflicted, or no effect. The
-client cannot select an authoritative or Proposal write route, and one
+applied, Proposal revised, refused to Draft, refused, conflicted, or no
+effect. The client cannot select an authoritative or Proposal write route, and one
 mixed-ownership input is never split.
 
 ### 8.2 Acceptance
