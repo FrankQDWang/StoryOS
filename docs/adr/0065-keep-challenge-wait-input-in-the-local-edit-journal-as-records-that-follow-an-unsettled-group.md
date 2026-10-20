@@ -29,7 +29,7 @@ Before this change, the Local Edit Journal had at most one unsettled submission 
 - **Candidate input.** Candidate input during a wait and during an unknown outcome follows the group, as authoritative input does. Its run has its own candidate chain. The checkpoint is the candidate text before the run. Input on the next Revision of the same Proposal operation continues the run, and it keeps the stored Revision of the run. Records that follow a settled group keep their undo group, so later input can continue their run.
 - **Input that stays in memory.** A Draft retry and a structured edit with Proposal Heads still wait in memory for the earlier group. The editor refuses a structured edit while a submission is closed. Input during a request and input after `needs_attention` also stay in memory (ADR 0046).
 - **Proposal decisions.** Acceptance, rejection, and withdrawal need the save state `saved` with no unsettled input. Thus they refuse while follower records wait. When another actor closes the Proposal, the next follower group gets a zero-authority result, and each later run has no binding.
-- **Journal version.** IndexedDB version 5 carries the binding (ADR 0036). A reader fails closed on a binding that names a later group, or a missing group when no working boundary exists.
+- **Journal version.** IndexedDB version 5 carries the binding (ADR 0036). A reader fails closed on a binding that names a later group, or a missing group when no working boundary exists. When the upgrade fails, the author can download the unsent local text (contract 3.2).
 - **Settlement.** When follower records exist, the applied settlement of a group compares two texts. These are the applied text and the local text at the last record of that group.
 
 ## Replaced rules

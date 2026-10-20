@@ -36,6 +36,9 @@ import {
 } from "./journal-working-set.ts";
 
 export const JOURNAL_DATABASE_VERSION = 5;
+/** The schema version that a read of this workspace accepts. Writes always need the current version. */
+export const journalReadVersion = (workspace: EditorWorkspace): number =>
+  workspace.readOnlyJournalVersion ?? JOURNAL_DATABASE_VERSION;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -465,7 +468,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const groups = groupsValue as JournalSubmissionGroup[];
   const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
   const fences = storedFences?.value ?? [];
-  if (schema?.version !== JOURNAL_DATABASE_VERSION
+  if (schema?.version !== journalReadVersion(workspace)
     || records.length > MAX_WORKING_JOURNAL_ITEMS
     || payloadChains.length > MAX_WORKING_JOURNAL_ITEMS
     || groups.length > MAX_WORKING_JOURNAL_ITEMS) {
@@ -889,7 +892,7 @@ function provenNoEffectAgainstDurableBase(
     && manuscriptBlocksEqual(finalBlocks, checkpointBlocks);
 }
 
-function pendingProjectionFromSnapshot(
+export function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
@@ -1152,13 +1155,23 @@ async function persistCandidateSelection(
 export async function candidateTextsFromJournal(
   workspace: EditorWorkspace,
 ): Promise<Map<string, { revisions: string[]; text: string }>> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  return candidateTextsFromSnapshot(await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace)));
+}
+
+/** With `unsentOnly`, a record that a settled group covers gives no text. */
+export function candidateTextsFromSnapshot(
+  snapshot: ValidatedJournalSnapshot,
+  unsentOnly = false,
+): Map<string, { revisions: string[]; text: string }> {
   const retained = retainedRecoverySequences(snapshot);
+  const settled = new Set(unsentOnly ? snapshot.groups.filter((group) => group.settlement.kind !== "unsettled")
+    .flatMap((group) => group.ordered_coverage.map((item) => item.local_intent_sequence)) : []);
   const texts = new Map<string, { revisions: string[]; text: string }>();
   for (const record of snapshot.records) {
     const target = record.proposal_target;
     const text = snapshot.bodyBySequence.get(record.local_intent_sequence);
-    if (target === undefined || text === undefined || retained.has(record.local_intent_sequence)) continue;
+    if (target === undefined || text === undefined || retained.has(record.local_intent_sequence)
+      || settled.has(record.local_intent_sequence)) continue;
     const key = `${target.proposal_id}:${target.operation_id}`;
     const revisions = texts.get(key)?.revisions ?? [];
     texts.set(key, { revisions: revisions.includes(target.revision_id) ? revisions : [...revisions, target.revision_id], text });
