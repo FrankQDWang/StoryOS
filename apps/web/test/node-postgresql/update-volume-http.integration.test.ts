@@ -423,6 +423,48 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
   }
 });
 
+test("a zero expected Tree Revision or a zero order is an invalid request", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const owned = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000da01", "Zero Novel");
+    const invalidRequest = (error: unknown) =>
+      requireStoryOSProtocolError(error).status === 400 && problemCode(error) === "invalid_request";
+    await assert.rejects(
+      postVolume(
+        baseUrl,
+        owned.fetchImpl,
+        owned.projectId,
+        "018f0000-0000-7001-8000-00000000da02",
+        volumeRequest("Volume Zero", "0", "018f0000-0000-7001-8000-00000000da03"),
+      ),
+      invalidRequest,
+    );
+    const volume = await postVolume(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      "018f0000-0000-7001-8000-00000000da04",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-00000000da05"),
+    );
+    if (volume.created.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
+    await assert.rejects(
+      patchVolume(
+        baseUrl,
+        owned.fetchImpl,
+        owned.projectId,
+        volume.created.effect.volume_id,
+        "018f0000-0000-7001-8000-00000000da06",
+        updateRequest("Volume A", "0", "2", "018f0000-0000-7001-8000-00000000da07"),
+      ),
+      invalidRequest,
+    );
+    const tree = await getManuscriptTree({ baseUrl, projectId: owned.projectId, fetchImpl: owned.fetchImpl });
+    assert.equal(tree.tree_revision, "2");
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
 function capturingVolumePatch(inner: typeof fetch): { fetchImpl: typeof fetch; lastPatchBody: () => string } {
   let lastPatchBody = "";
   return {

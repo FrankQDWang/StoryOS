@@ -107,6 +107,13 @@ captured behind a Host mapping and never become canonical StoryOS domain types.
   identifier. An unversioned `json` or `metadata` catch-all is forbidden.
 - Domain `u64` values, including Project Activity, Run, Mailbox, and Commit
   sequences, are unsigned canonical decimal strings on the JSON wire.
+- An expected Manuscript Tree Revision, an expected Project Revision, and a
+  Canonical Sibling Order in a command request are positive. The generated
+  schema pattern also permits zero. The Server refuses zero in these fields
+  with HTTP 400 `invalid_request` before Admission. An expected Project
+  assistance revision of zero is lawful: it initializes the Project assistance
+  binding
+  ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)).
 - Audit time is UTC RFC 3339 with at least millisecond precision. It is never a
   concurrency precondition or causal order.
 
@@ -574,7 +581,7 @@ meaning:
 
 | Wire operation | Semantic command owner | Public route placement | Release 1 settlement rule |
 | --- | --- | --- | --- |
-| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all five Core outcomes remain possible |
+| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all six Core outcomes remain possible |
 | `AcceptProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/acceptances` | explicit protected editor command; typed Acceptance Receipt stays distinct |
 | `RejectProposalOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/rejections` | exact selected pending operations and rejection events |
 | `WithdrawProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/withdrawals` | author cause or exact current-producer cause only |
@@ -1283,7 +1290,7 @@ after Author Command Admission; they do not grant invocation authority.
 
 | Code | HTTP | Retryability | Meaning |
 | --- | ---: | --- | --- |
-| `invalid_request` | 400 | never | malformed or closed-schema-invalid request |
+| `invalid_request` | 400 | never | malformed or closed-schema-invalid request, or zero in a field that must be positive |
 | `invalid_session` | 401 | after_condition | no current Client Session Binding |
 | `operation_denied` | 403 | after_condition | caller may know the resource but the action is denied |
 | `resource_not_found` | 404 | never | unknown, cross-Scope, or existence-hidden resource |

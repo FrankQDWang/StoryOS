@@ -1,7 +1,7 @@
 use super::{
-    CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
-    CurrentPassageAssembly, CurrentPassageAssemblyRecord, assemble_current_passage_context,
-    count_context_item_tokens,
+    CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ContextBlockReason, ContextSourceClass,
+    ContextSufficiency, CurrentPassageAssembly, CurrentPassageAssemblyRecord, RejectedSource,
+    RejectionReason, assemble_current_passage_context, count_context_item_tokens,
 };
 use serde::{Deserialize, Serialize};
 
@@ -25,9 +25,7 @@ pub fn assemble_passage_collection(
         ContextSufficiency::Complete => Vec::new(),
         ContextSufficiency::Blocked { reasons } => reasons.clone(),
     };
-    if targets.is_empty() || targets.len() != passages.len() {
-        reasons.push(ContextBlockReason::WorkingTargetRevisionUnavailable);
-    }
+    let target_list_bound = !targets.is_empty() && targets.len() == passages.len();
     let total: u64 = passages
         .iter()
         .map(|input| count_context_item_tokens(&input.chapter_body))
@@ -57,12 +55,55 @@ pub fn assemble_passage_collection(
         }
     }
     if total > CONTEXT_ITEM_TOKEN_LIMIT {
+        let (over, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut record.selected)
+            .into_iter()
+            .partition(|item| item.source_class == ContextSourceClass::WorkingTarget);
+        record.selected = kept;
         record
-            .selected
-            .retain(|item| item.source_class != ContextSourceClass::WorkingTarget);
+            .rejected
+            .extend(over.into_iter().map(|item| RejectedSource {
+                source_class: item.source_class,
+                source_version: item.source_version,
+                token_count: item.token_count,
+                reason: RejectionReason::OverCollectionTokenLimit,
+            }));
+        for item in &mut record.considered {
+            if item.source_class == ContextSourceClass::WorkingTarget {
+                item.eligible = false;
+            }
+        }
         reasons.push(ContextBlockReason::ExactRequiredOverLimit {
             source_class: ContextSourceClass::WorkingTarget,
         });
+    }
+    if !target_list_bound {
+        // An unbound target list must not show the source Chapter or a passage as the Working Target.
+        let is_other = |class: ContextSourceClass| class != ContextSourceClass::WorkingTarget;
+        record.considered.retain(|item| is_other(item.source_class));
+        record.selected.retain(|item| is_other(item.source_class));
+        record.rejected.retain(|item| is_other(item.source_class));
+        record.considered.push(ConsideredSource {
+            source_class: ContextSourceClass::WorkingTarget,
+            source_version: "unavailable".to_owned(),
+            token_count: 0,
+            eligible: false,
+        });
+        record.rejected.push(RejectedSource {
+            source_class: ContextSourceClass::WorkingTarget,
+            source_version: "unavailable".to_owned(),
+            token_count: 0,
+            reason: RejectionReason::WorkingTargetRevisionUnavailable,
+        });
+        reasons.retain(|reason| {
+            !matches!(
+                reason,
+                ContextBlockReason::WorkingTargetRevisionUnavailable
+                    | ContextBlockReason::ExactRequiredOverLimit {
+                        source_class: ContextSourceClass::WorkingTarget,
+                    }
+            )
+        });
+        reasons.push(ContextBlockReason::WorkingTargetRevisionUnavailable);
     }
     record.operation_requirement.chapter_id = source.chapter_id.clone();
     record.operation_requirement.chapter_revision_id = source.chapter_revision_id.clone();
@@ -76,3 +117,7 @@ pub fn assemble_passage_collection(
     };
     record
 }
+
+#[cfg(test)]
+#[path = "assemble_passage_collection_tests.rs"]
+mod tests;
