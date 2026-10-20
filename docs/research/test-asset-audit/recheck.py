@@ -136,7 +136,11 @@ def body(lines, start):
             break
     rust = re.search(r"\bfn ", lines[start]) is not None
     indent = len(lines[start]) - len(lines[start].lstrip())
-    out = [lines[start].strip()]
+    # Attributes such as #[ignore], #[should_panic] or #[cfg] change what a test proves.
+    first = start
+    while rust and first > 0 and lines[first - 1].strip().startswith("#["):
+        first -= 1
+    out = [line.strip() for line in lines[first:start + 1]]
     for line in lines[start + 1:]:
         out.append(line.strip())
         stripped = line.strip()
@@ -214,6 +218,34 @@ def facts(row):
     return f
 
 
+REF = re.compile(r"((?:apps/web/test/|crates/)?[\w./-]+\.(?:rs|ts|tsx|mjs)):(\d+)")
+
+
+def check_ref(row_id, ref):
+    """Refuse a manual path:line that does not name a test declaration at RECHECK."""
+    path, line = ref.rsplit(":", 1)
+    for candidate in (path, "apps/web/test/" + path, "crates/" + path):
+        lines = show(RECHECK, candidate)
+        if lines is not None:
+            break
+    else:
+        raise SystemExit(f"{row_id}: {path} does not exist at the recheck commit")
+    line = int(line)
+    if not 1 <= line <= len(lines):
+        raise SystemExit(f"{row_id}: {ref} is outside the file at the recheck commit")
+    is_test = re.search(r"(_tests\.rs|\.test\.[mt]s|/tests/[\w/]+\.rs)$", candidate)
+    if is_test and not any(DECL.search(l) or re.search(r"\.each\(", l)
+                           for l in lines[line - 1:line + 4]):
+        raise SystemExit(f"{row_id}: {ref} is not a test declaration at the recheck commit")
+
+
+def check_note(row_id, note):
+    if note.get("location"):
+        check_ref(row_id, note["location"])
+    for path, line in REF.findall(note.get("proof") or ""):
+        check_ref(row_id, f"{path}:{line}")
+
+
 def needs_note(row, f):
     return not (f["now"] and f["body"] == "same"
                 and all(c["state"] == "same" for c in f["covers"]))
@@ -224,6 +256,7 @@ def resolve(row, f, note):
         if needs_note(row, f):
             return None
         note = {"status": "applies"}
+    check_note(row["id"], note)
     status = note["status"]
     if status not in STATUSES:
         raise SystemExit(f"{row['id']}: bad status {status}")

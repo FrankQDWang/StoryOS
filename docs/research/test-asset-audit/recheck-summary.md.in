@@ -11,11 +11,16 @@ This recheck gives the current status of each DELETE, MERGE and MOVE verdict of 
 
 1. `recheck.py` reads each DELETE, MERGE and MOVE row of REPORT.md: ID, audited file, baseline line, test name, verdict, reason code and the cited covering tests.
 2. It finds the audited test at the recheck commit by its declaration in the audited file (`fn <name>` in Rust, `it(` or `test(` with the name in TypeScript). When the name is not in that file, it walks `git log BASE..RECHECK -- <file>` to find the first commit whose file does not have the name. That commit is the removing commit. A test with the same name in another file can be a different test, so such a row always goes to manual judgment, and the reviewer searches all sources for a rename or a move.
-3. It compares the test body at the baseline with the body at the recheck commit, from the declaration to the closing line at the same indentation.
+3. It compares the test body at the baseline with the body at the recheck commit, from the declaration to the closing line at the same indentation. For Rust, the comparison also includes the attribute lines directly above the declaration (for example `#[ignore]`, `#[should_panic]` or `#[cfg]`), because they change what the test proves.
 4. It maps each cited covering test (`path:line` at the baseline) to its declaration name, finds it in the same file at the recheck commit, and compares its body.
 5. A row is `applies` without a manual note only when the audited test is in the same file with an unchanged body and every cited covering test is present with an unchanged body. The script refuses to write the tables while another row has no manual judgment.
 6. For each other row, a reviewer read the baseline and current test, the diff between the two commits, and each covering or receiving test at the recheck commit. The judgment looks at the specific assertion that the audit verdict relies on, not at the whole test. recheck-notes.json records the status, the current location when the script cannot find it (for example a parameterized case), the proof test, and a one-sentence reason. Read-only subagents made a first pass by area; the executor checked each row before it went into recheck-notes.json.
-7. The script marks each audited file that a stage crosswalk (`crates/storyos-contracts/src/stage*_crosswalk*.rs`) binds by path. Such a file keeps its path unless the binding owner agrees (point 4 of the parent issue).
+7. Before it writes the tables, the script validates each manual `location` and each `path:line` in a manual proof at the recheck commit. The file must exist and the line must be in it. In a test file, the line must be a test declaration.
+8. The script marks each audited file that a stage crosswalk (`crates/storyos-contracts/src/stage*_crosswalk*.rs`) binds by path. Such a file keeps its path unless the binding owner agrees (point 4 of the parent issue).
+
+## Limit
+
+The mechanical rule of step 5 compares the text of the audited test and of its cited covering tests only. It does not follow helpers, shared fixtures, support files or product code that a test calls. A change there can make a verdict premise false while each compared body stays the same. The 197 rows that have no entry in recheck-notes.json have this limit. Thus each follow-up ticket examines its own rows again at its refresh gate, and before each deletion it confirms that the named test still proves the behavior (point 3 of the parent issue).
 
 ## Status definitions
 
