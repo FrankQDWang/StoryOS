@@ -46,6 +46,9 @@ mod undo;
 #[path = "command_sequence_tests/undo_chain_tests.rs"]
 mod undo_chain;
 
+#[path = "command_sequence_tests/proposal_undo_chain_tests.rs"]
+mod proposal_undo_chain;
+
 #[path = "command_sequence_tests/author_edit_tests.rs"]
 mod author_edit;
 

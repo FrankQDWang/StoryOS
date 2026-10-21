@@ -157,8 +157,38 @@ pub(super) async fn edit_secondary_candidate(
     proposal: &TwoOperationProposal,
     suffix: u16,
 ) {
+    edit_operation_candidate(
+        store,
+        admin,
+        proposal,
+        CandidateEdit {
+            operation: 1,
+            suffix,
+            local_intent_sequence: 3,
+            text: "Edited ",
+        },
+    )
+    .await;
+}
+
+/// One Author Edit that prepends `text` to the candidate of one Operation of a Proposal.
+pub(super) struct CandidateEdit<'a> {
+    /// The index of the Operation: 0 for the primary and 1 for the secondary Operation.
+    pub(super) operation: usize,
+    pub(super) suffix: u16,
+    pub(super) local_intent_sequence: u64,
+    pub(super) text: &'a str,
+}
+
+/// Applies `edit` on the current Proposal head.
+pub(super) async fn edit_operation_candidate(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    proposal: &TwoOperationProposal,
+    edit: CandidateEdit<'_>,
+) {
     let (revision_id, _) = proposal_head(admin, &proposal.proposal_id).await;
-    let (operation_id, block_id) = proposal.operations[1].clone();
+    let (operation_id, block_id) = proposal.operations[edit.operation].clone();
     apply_named_edit(
         store,
         &proposal.scope,
@@ -166,9 +196,9 @@ pub(super) async fn edit_secondary_candidate(
             editor_session_id: &proposal.editor_session_id,
             chapter_id: &proposal.chapter_id,
             expected_revision_id: &proposal.chapter_revision_id,
-            suffix: &format!("{suffix:04x}"),
-            local_intent_sequence: 3,
-            text: "Edited ",
+            suffix: &format!("{:04x}", edit.suffix),
+            local_intent_sequence: edit.local_intent_sequence,
+            text: edit.text,
             proposal_target: Some(AuthorEditProposalTarget {
                 proposal_id: proposal.proposal_id.clone(),
                 operation_id,
@@ -202,7 +232,7 @@ async fn chapter_blocks(
 }
 
 /// The current Revision of one Proposal and the id of its Validation Receipt.
-async fn proposal_head(admin: &Client, proposal_id: &str) -> (String, String) {
+pub(super) async fn proposal_head(admin: &Client, proposal_id: &str) -> (String, String) {
     admin
         .query_one(
             "SELECT head.current_revision_id::text, receipt.validation_receipt_id::text
@@ -219,7 +249,10 @@ async fn proposal_head(admin: &Client, proposal_id: &str) -> (String, String) {
 }
 
 /// The candidate of each Operation of one Proposal, primary first.
-async fn operation_candidates(admin: &Client, proposal: &TwoOperationProposal) -> Vec<String> {
+pub(super) async fn operation_candidates(
+    admin: &Client,
+    proposal: &TwoOperationProposal,
+) -> Vec<String> {
     let mut candidates = Vec::new();
     for (operation_id, _) in &proposal.operations {
         candidates.push(

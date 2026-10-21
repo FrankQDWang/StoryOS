@@ -58,11 +58,11 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 | Forward command kind and applied variant | Author Undo Disposition |
 | --- | --- |
 | `applyAuthorEdit`, `authoritative_applied` | Compensation. It restores the prior Revision. It reopens a Refused Edit Draft that the edit superseded. The Head can be a Compensation of a later action ([ADR 0067](0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)). |
-| `applyAuthorEdit`, `proposal_revised` | Compensation. It appends a Proposal Revision that restores the candidate of the edited Operation before the edit. |
+| `applyAuthorEdit`, `proposal_revised` | Compensation. It appends a Proposal Revision that restores the candidate of the edited Operation before the edit. The Proposal head can be a Compensation of a later action ([ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). |
 | `acceptProposal` | Compensation when the Head is a Safe Compensation Head. Otherwise the Undo Acceptance outcome is reversal required or unavailable. |
 | `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, `deleteChapter` | Compensation ([ADR 0030](0030-restore-prior-identities-for-structure-compensation.md)). |
 | `setCurrentChapter` | Compensation when the prior Chapter is a lawful target. Otherwise Barrier. |
-| `withdrawProposal`, author form | Compensation. It reopens the Proposal. |
+| `withdrawProposal`, author form | Compensation. It reopens the Proposal. The Proposal head can be a Compensation of a later action ([ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). |
 | `closeEditorFlowDraft`, `expandRefusedEditDraftToProposal` | Compensation. It reopens the Draft. |
 | `replanProposal` | Compensation. It appends a Proposal Revision equal to the Revision before the replan: base, candidate text, generation state, closure, and validation. |
 | `reopenRejectedOperations` | Compensation. It appends a Proposal Revision equal to the Revision before the reopen, and it puts each reopened operation back to `rejected` and `resolved`. |
@@ -71,7 +71,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 | `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. |
 | `undoLatestAuthorAction`, `reversal_required` | Barrier. |
 
-- Each existing compensation keeps the binding checks and the outcomes of its family. A moved binding gives the same Barrier, conflict, unavailable, or reversal-required outcome as on `main`. For the three new compensations, a Proposal head that moved after the Forward action makes the Forward action a Barrier.
+- Each existing compensation keeps the binding checks and the outcomes of its family. A moved binding gives the same Barrier, conflict, unavailable, or reversal-required outcome as on `main`. For the three new compensations, a Proposal head that moved after the Forward action makes the Forward action a Barrier. [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md) replaces this rule for a candidate edit and an author withdrawal, and #1244 owns it for the three new compensations.
 - The compensations of `replanProposal`, `reopenRejectedOperations`, and `reopenWithdrawnProposal` are the only behavior changes of Author Undo in this decision. The `proposal_replans` and `proposal_operation_reopenings` rows stay, because they are history.
 - On 2026-10-07 the author decided two details of these three compensations. The appended Proposal Revision also gets a copy of the validation receipt of the earlier revision. An Acceptance conflict condition stays on the earlier revision, because its identity and its Acceptance Receipt bind it to that revision. Thus after an Undo of a Replan, the Proposal shows the validation of the earlier revision without the conflict. A new Acceptance then replaces the target text ([ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 - After an Undo of a reopen, the author cannot reopen the same withdrawal or rejection again, because the reopen records stay. [Decide if Author Undo of a Proposal Reopen Lets the Author Reopen Again](https://github.com/FrankQDWang/StoryOS/issues/1051) owns this question.

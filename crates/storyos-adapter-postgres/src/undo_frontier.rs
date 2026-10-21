@@ -265,6 +265,88 @@ pub(crate) async fn head_lineage_revision(
     Ok(row.get(/*idx*/ 0))
 }
 
+/// Whether `target_revision_id` is a Proposal Head Lineage Revision of the head of a Proposal
+/// (ADR 0068). A Proposal Compensation appends a Revision to the head, and its Undo Receipt
+/// records the appended Revision and its parent. The walk goes from such a Revision to the prior
+/// Revision of the compensated Forward action, and continues. The walk stops at a Revision that
+/// no recorded Proposal Compensation explains.
+pub(crate) async fn proposal_head_restores(
+    client: &tokio_postgres::Client,
+    command: &UndoRequest,
+    proposal_id: &str,
+    head_revision_id: &str,
+    target_revision_id: &str,
+) -> Result<bool, ProjectCommandError> {
+    let row = client
+        .query_one(
+            "WITH RECURSIVE lineage(revision_id) AS (
+                 SELECT $4::text::uuid
+               UNION ALL
+                 SELECT CASE WHEN source_receipt.command_kind = 'withdrawProposal'
+                             THEN withdrawal.proposal_revision_id
+                             ELSE resulting.parent_revision_id END
+                   FROM lineage
+                   JOIN storyos.proposal_revisions AS appended
+                     ON appended.owner_user_id = $1::text::uuid
+                    AND appended.project_id = $2::text::uuid
+                    AND appended.proposal_id = $3::text::uuid
+                    AND appended.revision_id = lineage.revision_id
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id) =
+                        (appended.owner_user_id, appended.project_id)
+                    AND receipt.result_payload->>'proposal_revision_id' =
+                        appended.revision_id::text
+                    AND receipt.result_payload->>'source_proposal_revision_id' =
+                        appended.parent_revision_id::text
+                   JOIN storyos.author_action_entries AS compensation
+                     ON (compensation.owner_user_id, compensation.project_id,
+                         compensation.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+                    AND compensation.disposition = 'compensation'
+                   JOIN storyos.author_action_entries AS source
+                     ON (source.owner_user_id, source.project_id, source.author_action_sequence) =
+                        (compensation.owner_user_id, compensation.project_id,
+                         compensation.compensated_source_sequence)
+                    AND source.disposition = 'forward'
+                   JOIN storyos.domain_receipts AS source_receipt
+                     ON (source_receipt.owner_user_id, source_receipt.project_id,
+                         source_receipt.receipt_id) =
+                        (source.owner_user_id, source.project_id, source.receipt_id)
+                   LEFT JOIN storyos.proposal_revisions AS resulting
+                     ON (resulting.owner_user_id, resulting.project_id, resulting.proposal_id,
+                         resulting.revision_id) =
+                        (appended.owner_user_id, appended.project_id, appended.proposal_id,
+                         source_receipt.proposal_revision_ids[1])
+                   LEFT JOIN storyos.proposal_withdrawals AS withdrawal
+                     ON (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
+                         withdrawal.withdrawal_receipt_id) =
+                        (appended.owner_user_id, appended.project_id, appended.proposal_id,
+                         source_receipt.receipt_id)
+                    AND withdrawal.withdrawal_reason = 'author_withdrew'
+                  WHERE (source_receipt.command_kind = 'withdrawProposal'
+                         AND withdrawal.proposal_revision_id IS NOT NULL)
+                     OR (source_receipt.command_kind IN
+                           ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations',
+                            'reopenWithdrawnProposal')
+                         AND resulting.parent_revision_id IS NOT NULL)
+             ) CYCLE revision_id SET looped USING path
+             SELECT EXISTS (
+               SELECT 1 FROM lineage
+                WHERE NOT looped AND revision_id = $5::text::uuid
+             )",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &proposal_id,
+                &head_revision_id,
+                &target_revision_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    Ok(row.get(/*idx*/ 0))
+}
+
 fn undo_database_error(error: tokio_postgres::Error) -> ProjectCommandError {
     ProjectCommandError::Unavailable(Box::new(error))
 }
