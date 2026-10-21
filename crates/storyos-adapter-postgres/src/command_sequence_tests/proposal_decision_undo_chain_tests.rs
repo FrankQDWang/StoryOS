@@ -81,7 +81,7 @@ async fn undo_and_retry(
 }
 
 /// Gives the current head of the Proposal a Proposal Conflict condition, as data from before
-/// ADR 0064 has, and replans it on the same Chapter head. Returns the Replan and the head state
+/// ADR 0064 has. Then replans it on the same Chapter head. Returns the Replan and the head state
 /// before it.
 async fn conflict_and_replan(
     store: &PostgresProjectReader,
@@ -148,7 +148,7 @@ async fn author_undo_restores_a_replan_after_the_undo_of_a_later_candidate_edit(
     )
     .await;
     let undo_edit = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4c0b).await);
-    let (undo_replan, retried) = undo_and_retry(&store, &admin, &proposal, 0x4c0c).await;
+    let (undo_replan, retried) = undo_and_retry(&store, &admin, &proposal, /*suffix*/ 0x4c0c).await;
 
     assert_eq!(
         (
@@ -236,7 +236,7 @@ async fn author_undo_rejects_a_reopened_operation_after_the_undo_of_its_candidat
     )
     .await;
     let undo_edit = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4c4c).await);
-    let (undo_reopen, retried) = undo_and_retry(&store, &admin, &proposal, 0x4c4d).await;
+    let (undo_reopen, retried) = undo_and_retry(&store, &admin, &proposal, /*suffix*/ 0x4c4d).await;
     let stopped = undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4c4e)
         .await
         .outcome;
@@ -309,7 +309,7 @@ async fn author_undo_withdraws_a_reopened_proposal_after_the_undo_of_a_later_can
     )
     .await;
     let undo_edit = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4c8c).await);
-    let (undo_reopen, retried) = undo_and_retry(&store, &admin, &proposal, 0x4c8d).await;
+    let (undo_reopen, retried) = undo_and_retry(&store, &admin, &proposal, /*suffix*/ 0x4c8d).await;
     let closure_after_undo = head_closure(&admin, &proposal.proposal_id).await;
     let undo_withdrawal =
         compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4c8e).await);
@@ -337,8 +337,8 @@ async fn author_undo_withdraws_a_reopened_proposal_after_the_undo_of_a_later_can
     );
 }
 
-/// The target of a Replan Undo is two Compensations below the head: Undo E appended C1, the
-/// author withdrew C1 in place, and Undo W appended C2. Undo R still restores the Proposal.
+/// The target of a Replan Undo is two Compensations below the head. Undo E appended C1, and the
+/// author withdrew C1 in place. Undo W appended C2. Undo R still restores the Proposal.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_restores_a_replan_two_compensations_below_the_head() {

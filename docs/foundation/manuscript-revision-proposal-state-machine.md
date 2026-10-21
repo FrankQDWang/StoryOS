@@ -1543,9 +1543,12 @@ Revision and its parent. The edit target is correct when the Revision that the
 edit wrote is one of them. The withdrawal target is correct when the current
 head is withdrawn and the withdrawn Revision is one of them.
 
-The Compensation appends its Revision to the current head. The three
-Proposal decisions keep the earlier rule until
-[#1244](https://github.com/FrankQDWang/StoryOS/issues/1244).
+A Proposal decision is a Replan or a reopen. Its target is correct when the
+Revision that the decision wrote is one of them. The Undo of a reopen of
+rejected Operations also needs each reopened Operation to be `pending` and
+`unresolved`.
+
+The Compensation appends its Revision to the current head.
 
 ### 10.2 UndoAcceptance
 

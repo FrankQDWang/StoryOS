@@ -135,8 +135,8 @@ pub(crate) fn decision_receipt_payload(
     )
 }
 
-/// Appends to the current head a Proposal Revision equal to the source revision of `decision`,
-/// with a copy of its validation receipt, and records the Compensation.
+/// Appends to the current head a copy of the source revision of `decision` and of its validation
+/// receipt. Then records the Compensation.
 pub(crate) async fn compensate_proposal_decision(
     client: &Client,
     command: &UndoRequest,

@@ -117,7 +117,11 @@ pub(super) async fn withdraw(
     latest_forward(admin, &proposal.scope).await
 }
 
-pub(super) const fn on(operation: usize, suffix: u16, local_intent_sequence: u64) -> CandidateEdit<'static> {
+pub(super) const fn on(
+    operation: usize,
+    suffix: u16,
+    local_intent_sequence: u64,
+) -> CandidateEdit<'static> {
     CandidateEdit {
         operation,
         suffix,

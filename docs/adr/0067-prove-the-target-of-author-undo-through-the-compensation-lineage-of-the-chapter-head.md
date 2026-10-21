@@ -23,7 +23,7 @@ E1 is now the Author Undo Frontier. Core accepted a prose Undo only when the cur
 - **Barrier.** A Forward action with the Barrier disposition of ADR 0044 stops the chain. The reason stays `barrier`. No new reason code is added.
 - **Editor.** When the Server reports an unavailable Undo (`no_frontier`, `barrier`, or `source_unavailable`), nothing changed. The editor stays writable and shows the reason. A `conflicted` result and an unknown result still make the editor read-only.
 - **Storage.** No migration. The walk uses the existing index on the resulting Revision of an Authoritative Commit.
-- **Scope.** Redo stays out of scope. The same defect for the Undo of a Proposal decision is [#1244](https://github.com/FrankQDWang/StoryOS/issues/1244).
+- **Scope.** Redo stays out of scope. [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md) gives the same rule for the Undo of a Proposal action, from [#1249](https://github.com/FrankQDWang/StoryOS/issues/1249) and [#1244](https://github.com/FrankQDWang/StoryOS/issues/1244).
 
 ## Replaced rules
 
