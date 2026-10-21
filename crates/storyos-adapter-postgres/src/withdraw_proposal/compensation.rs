@@ -11,7 +11,7 @@ use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
 };
-use crate::undo_frontier::proposal_head_lineage_revision;
+use crate::undo_frontier::proposal_head_restores;
 use crate::undo_latest_author_action::undo_database_error;
 
 /// Reopens a Proposal that the author withdrew.
@@ -148,9 +148,14 @@ async fn load_author_withdrawal(
     // Only later Proposal Compensations can explain a head that moved after the withdrawal
     // (ADR 0068).
     if current_revision_id != withdrawn_revision_id
-        && proposal_head_lineage_revision(client, command, &proposal_id, &current_revision_id)
-            .await?
-            != withdrawn_revision_id
+        && !proposal_head_restores(
+            client,
+            command,
+            &proposal_id,
+            &current_revision_id,
+            &withdrawn_revision_id,
+        )
+        .await?
     {
         return Ok(None);
     }

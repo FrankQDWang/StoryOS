@@ -545,11 +545,11 @@ async fn check_undo_receipt(admin: &Client, receipt_id: &str) -> Result<(), Stri
     })
 }
 
-/// The Receipt trigger refuses a Proposal edit Compensation whose recorded source is not the
-/// parent of its appended Revision.
+/// The Receipt trigger accepts the Undo of an earlier candidate edit, whose parent is a later
+/// Compensation. It refuses a recorded source that is not the parent of the appended Revision.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_receipt_trigger_refuses_a_source_that_is_not_the_parent() {
+async fn the_receipt_trigger_accepts_a_chained_parent_and_refuses_another_source() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -565,19 +565,29 @@ async fn the_receipt_trigger_refuses_a_source_that_is_not_the_parent() {
         ),
     )
     .await;
+    edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4aca, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
+    compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4acb).await);
     let call = undo_call(
         &store,
         &admin,
         &proposal.scope,
         &proposal.editor_session_id,
         &proposal.chapter_revision_id,
-        /*suffix*/ 0x4aca,
+        /*suffix*/ 0x4acc,
     )
     .await;
     compensated(&undo(&store, &call).await.unwrap());
     let receipt_id = call.envelope.ids.receipt_id.clone();
     let recorded = check_undo_receipt(&admin, &receipt_id).await;
-    // The Revision before the edit is in the same Proposal, but it is not the parent.
+    // The Revision before the edits is in the same Proposal, but it is not the parent.
     run_without_foreign_keys(
         &admin,
         &format!(
@@ -594,6 +604,90 @@ async fn the_receipt_trigger_refuses_a_source_that_is_not_the_parent() {
         (
             Ok(()),
             Err(r#"Some(("23514", "Incomplete Proposal compensation identity"))"#.to_owned())
+        )
+    );
+}
+
+/// A withdrawal of a head that a Compensation wrote. Each Undo of the chain E1, E2, Undo E2,
+/// W, reopen, Undo reopen, Undo W, Undo E1 compensates.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_reopens_a_withdrawal_of_a_compensation_head_and_continues() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ae0).await;
+    let before = operation_candidates(&admin, &proposal).await;
+    let prior = latest_forward(&admin, &proposal.scope).await;
+    let first = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4ae9, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
+    let second = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4aea, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
+    let undo_second = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4aeb).await);
+    let withdrawn = withdraw(&store, &admin, &proposal, /*suffix*/ 0x4aec).await;
+    let withdrawal_event_id: String = admin
+        .query_one(
+            "SELECT withdrawal_event_id::text FROM storyos.proposal_withdrawals
+              WHERE proposal_id = $1::text::uuid",
+            &[&proposal.proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let reopen = issued(
+        &store,
+        &proposal.scope,
+        /*suffix*/ 0x4aed,
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        ReopenWithdrawnProposalInput {
+            editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
+            proposal_id: proposal.proposal_id.clone(),
+            proposal_revision_id: head_revision(&admin, &proposal.proposal_id).await,
+            withdrawal_event_id,
+            expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
+        },
+    )
+    .await;
+    reopen_withdrawn_proposal(&store, &reopen).await.unwrap();
+    let reopened = latest_forward(&admin, &proposal.scope).await;
+
+    let mut steps = vec![undo_second];
+    for suffix in [0x4aee, 0x4aef, 0x4af0] {
+        steps.push(compensated(
+            &undo_latest(&store, &admin, &proposal, suffix).await,
+        ));
+    }
+
+    assert_eq!(
+        (
+            steps,
+            operation_candidates(&admin, &proposal).await,
+            head_closure(&admin, &proposal.proposal_id).await
+        ),
+        (
+            vec![
+                (second, Some(first)),
+                (reopened, Some(withdrawn)),
+                (withdrawn, Some(first)),
+                (first, Some(prior)),
+            ],
+            before,
+            "open".to_owned()
         )
     );
 }

@@ -137,7 +137,7 @@ The Revision that the current Head of a Chapter restores. Start at the Head. Whe
 _Avoid_: Text equality, content match, restored Head identity
 
 **Proposal Head Lineage Revision**:
-The Revision that the current head of a Proposal restores. Start at the head. When a recorded Proposal Compensation appended the Revision, go to the prior Revision of the compensated Forward action, and continue. The Undo Receipt payload of the Compensation records the appended Revision and its parent. Author Undo of a candidate edit or an author withdrawal proves its target with it ([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)).
+A Revision that the current head of a Proposal restores. The head is one. When a recorded Proposal Compensation appended one, the prior Revision of the compensated Forward action is also one. The Undo Receipt payload of the Compensation records the appended Revision and its parent. Author Undo of a candidate edit or an author withdrawal compensates when its target is one of them ([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)).
 _Avoid_: Candidate text equality, Proposal head identity, Chapter Head Lineage Revision
 
 **Author Undo Disposition**:

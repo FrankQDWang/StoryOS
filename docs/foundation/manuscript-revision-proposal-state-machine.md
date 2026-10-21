@@ -1535,14 +1535,13 @@ Head is the expected Head and its lineage Revision is the resulting Revision of
 the Frontier. Thus each Undo reverses the next older action until a Barrier.
 
 An author Proposal edit and an author withdrawal prove their target through the
-Proposal Head Lineage Revision of the current Proposal head
-([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). When a recorded Proposal Compensation appended the
-head, the lineage goes to the prior Revision of the compensated Forward action,
-and it continues. The Undo Receipt payload of that Compensation records the
-appended Revision and its parent. The edit target is correct when the lineage
-Revision is the Revision that the edit wrote. The withdrawal target is correct
-when the current head is withdrawn and its lineage Revision is the withdrawn
-Revision.
+Proposal Head Lineage Revisions of the current Proposal head
+([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). The current head is one. When a recorded Proposal
+Compensation appended one, the prior Revision of the compensated Forward action
+is also one. The Undo Receipt payload of that Compensation records the appended
+Revision and its parent. The edit target is correct when the Revision that the
+edit wrote is one of them. The withdrawal target is correct when the current
+head is withdrawn and the withdrawn Revision is one of them.
 
 The Compensation appends its Revision to the current head. The three
 Proposal decisions keep the earlier rule until

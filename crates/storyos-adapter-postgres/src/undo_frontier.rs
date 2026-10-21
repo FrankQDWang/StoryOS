@@ -265,25 +265,26 @@ pub(crate) async fn head_lineage_revision(
     Ok(row.get(/*idx*/ 0))
 }
 
-/// The lineage Revision of the head of a Proposal (ADR 0068). A Proposal Compensation appends a
-/// Revision to the head, and its Undo Receipt records the appended Revision and its parent. The
-/// walk goes from such a Revision to the prior Revision of the compensated Forward action, and
-/// continues. The walk stops at a Revision that no recorded Proposal Compensation explains.
-pub(crate) async fn proposal_head_lineage_revision(
+/// Whether `target_revision_id` is a Proposal Head Lineage Revision of the head of a Proposal
+/// (ADR 0068). A Proposal Compensation appends a Revision to the head, and its Undo Receipt
+/// records the appended Revision and its parent. The walk goes from such a Revision to the prior
+/// Revision of the compensated Forward action, and continues. The walk stops at a Revision that
+/// no recorded Proposal Compensation explains.
+pub(crate) async fn proposal_head_restores(
     client: &tokio_postgres::Client,
     command: &UndoRequest,
     proposal_id: &str,
     head_revision_id: &str,
-) -> Result<String, ProjectCommandError> {
+    target_revision_id: &str,
+) -> Result<bool, ProjectCommandError> {
     let row = client
         .query_one(
-            "WITH RECURSIVE lineage(revision_id, depth) AS (
-                 SELECT $4::text::uuid, 0
+            "WITH RECURSIVE lineage(revision_id) AS (
+                 SELECT $4::text::uuid
                UNION ALL
                  SELECT CASE WHEN source_receipt.command_kind = 'withdrawProposal'
                              THEN withdrawal.proposal_revision_id
-                             ELSE resulting.parent_revision_id END,
-                        lineage.depth + 1
+                             ELSE resulting.parent_revision_id END
                    FROM lineage
                    JOIN storyos.proposal_revisions AS appended
                      ON appended.owner_user_id = $1::text::uuid
@@ -329,15 +330,16 @@ pub(crate) async fn proposal_head_lineage_revision(
                             'reopenWithdrawnProposal')
                          AND resulting.parent_revision_id IS NOT NULL)
              ) CYCLE revision_id SET looped USING path
-             SELECT revision_id::text FROM lineage
-              WHERE NOT looped
-              ORDER BY depth DESC
-              LIMIT 1",
+             SELECT EXISTS (
+               SELECT 1 FROM lineage
+                WHERE NOT looped AND revision_id = $5::text::uuid
+             )",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &proposal_id,
                 &head_revision_id,
+                &target_revision_id,
             ],
         )
         .await
