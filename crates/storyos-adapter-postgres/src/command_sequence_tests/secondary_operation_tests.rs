@@ -187,7 +187,7 @@ pub(super) async fn edit_operation_candidate(
     proposal: &TwoOperationProposal,
     edit: CandidateEdit<'_>,
 ) {
-    let (revision_id, _) = proposal_head(admin, &proposal.proposal_id).await;
+    let revision_id = proposal_head_revision(admin, &proposal.proposal_id).await;
     let (operation_id, block_id) = proposal.operations[edit.operation].clone();
     apply_named_edit(
         store,
@@ -229,6 +229,19 @@ async fn chapter_blocks(
         .into_iter()
         .map(|block| (block.manuscript_block_id, block.text))
         .collect()
+}
+
+/// The current Revision of one Proposal. A Replan writes a Revision with no Validation Receipt.
+pub(super) async fn proposal_head_revision(admin: &Client, proposal_id: &str) -> String {
+    admin
+        .query_one(
+            "SELECT current_revision_id::text FROM storyos.proposal_heads
+              WHERE proposal_id = $1::text::uuid",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0)
 }
 
 /// The current Revision of one Proposal and the id of its Validation Receipt.

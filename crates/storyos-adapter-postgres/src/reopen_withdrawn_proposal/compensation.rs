@@ -1,4 +1,4 @@
-//! The withdrawn Proposal reopen Compensation of Author Undo (ADR 0044).
+//! The withdrawn Proposal reopen Compensation of Author Undo (ADR 0044, ADR 0068).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
@@ -23,7 +23,8 @@ impl CompensationAdapter for ReopenWithdrawnCompensation {
     type Evidence = ObservedProposalDecision;
     type Sequences = CompensationAction;
 
-    /// A Proposal head that moved after the reopen makes it a Barrier.
+    /// A Proposal head that does not restore the resulting Revision of the reopen makes it a
+    /// Barrier (ADR 0068).
     async fn load(
         client: &Client,
         command: &UndoRequest,

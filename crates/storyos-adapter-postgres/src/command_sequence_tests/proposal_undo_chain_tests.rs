@@ -18,13 +18,13 @@ use super::proposal_decision::{
 };
 use super::secondary_operation::{
     CandidateEdit, TwoOperationProposal, edit_operation_candidate, operation_candidates,
-    proposal_head, two_operation_proposal,
+    proposal_head, proposal_head_revision, two_operation_proposal,
 };
 use super::support::{CommandCall, issued, run_without_foreign_keys, stores, with_new_request_ids};
 use super::undo::{issued_undo, latest_forward, undo};
 
 /// Issues one Author Undo of the current Author Undo Frontier.
-async fn undo_call(
+pub(super) async fn undo_call(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -41,7 +41,7 @@ async fn undo_call(
 }
 
 /// One Author Undo of the current Author Undo Frontier of the Proposal fixture.
-async fn undo_latest(
+pub(super) async fn undo_latest(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
@@ -60,7 +60,7 @@ async fn undo_latest(
 }
 
 /// The compensated source of an applied Author Undo and the Frontier after it.
-fn compensated(settlement: &UndoLatestAuthorActionSettlement) -> (u64, Option<u64>) {
+pub(super) fn compensated(settlement: &UndoLatestAuthorActionSettlement) -> (u64, Option<u64>) {
     match &settlement.outcome {
         TransitionOutcome::Applied(applied) => (
             applied.source_sequence,
@@ -71,7 +71,7 @@ fn compensated(settlement: &UndoLatestAuthorActionSettlement) -> (u64, Option<u6
 }
 
 /// Prepends `text` to the candidate of one Operation and returns the Forward action.
-async fn edit(
+pub(super) async fn edit(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
@@ -81,21 +81,8 @@ async fn edit(
     latest_forward(admin, &proposal.scope).await
 }
 
-/// The current head of one Proposal.
-async fn head_revision(admin: &Client, proposal_id: &str) -> String {
-    admin
-        .query_one(
-            "SELECT current_revision_id::text FROM storyos.proposal_heads
-              WHERE proposal_id = $1::text::uuid",
-            &[&proposal_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
-}
-
 /// The closure of the current head of one Proposal.
-async fn head_closure(admin: &Client, proposal_id: &str) -> String {
+pub(super) async fn head_closure(admin: &Client, proposal_id: &str) -> String {
     admin
         .query_one(
             "SELECT revision.closure
@@ -112,7 +99,7 @@ async fn head_closure(admin: &Client, proposal_id: &str) -> String {
 }
 
 /// The author Withdrawal of the current head of the Proposal fixture.
-async fn withdraw(
+pub(super) async fn withdraw(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
@@ -121,7 +108,7 @@ async fn withdraw(
     let input = WithdrawProposalInput {
         editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
         proposal_id: proposal.proposal_id.clone(),
-        proposal_revision_id: proposal_head(admin, &proposal.proposal_id).await.0,
+        proposal_revision_id: proposal_head_revision(admin, &proposal.proposal_id).await,
         expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
         withdrawal_note: WithdrawalNote::Omitted,
     };
@@ -130,7 +117,11 @@ async fn withdraw(
     latest_forward(admin, &proposal.scope).await
 }
 
-const fn on(operation: usize, suffix: u16, local_intent_sequence: u64) -> CandidateEdit<'static> {
+pub(super) const fn on(
+    operation: usize,
+    suffix: u16,
+    local_intent_sequence: u64,
+) -> CandidateEdit<'static> {
     CandidateEdit {
         operation,
         suffix,
@@ -291,7 +282,7 @@ async fn author_undo_reopens_a_withdrawal_after_the_undo_of_a_later_reopen() {
         ReopenWithdrawnProposalInput {
             editor_session_id: EditorSessionId::new(session.clone()),
             proposal_id: proposal_id.clone(),
-            proposal_revision_id: head_revision(&admin, &proposal_id).await,
+            proposal_revision_id: proposal_head_revision(&admin, &proposal_id).await,
             withdrawal_event_id,
             expected_authoritative_revision_id: chapter_head.clone(),
         },
@@ -555,7 +546,7 @@ async fn the_receipt_trigger_accepts_a_chained_parent_and_refuses_another_source
         .await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ac0).await;
-    let unedited = head_revision(&admin, &proposal.proposal_id).await;
+    let unedited = proposal_head_revision(&admin, &proposal.proposal_id).await;
     edit(
         &store,
         &admin,
@@ -657,7 +648,7 @@ async fn author_undo_reopens_a_withdrawal_of_a_compensation_head_and_continues()
         ReopenWithdrawnProposalInput {
             editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
             proposal_id: proposal.proposal_id.clone(),
-            proposal_revision_id: head_revision(&admin, &proposal.proposal_id).await,
+            proposal_revision_id: proposal_head_revision(&admin, &proposal.proposal_id).await,
             withdrawal_event_id,
             expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
         },

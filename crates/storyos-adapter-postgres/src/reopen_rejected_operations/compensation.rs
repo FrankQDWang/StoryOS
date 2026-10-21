@@ -1,4 +1,4 @@
-//! The rejected operations reopen Compensation of Author Undo (ADR 0044).
+//! The rejected operations reopen Compensation of Author Undo (ADR 0044, ADR 0068).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
@@ -28,7 +28,8 @@ impl CompensationAdapter for ReopenRejectedCompensation {
     type Evidence = ObservedOperationReopening;
     type Sequences = CompensationAction;
 
-    /// A Proposal head or a reopened operation that changed after the reopen makes it a Barrier.
+    /// A reopened operation that changed after the reopen makes it a Barrier. So does a Proposal
+    /// head that does not restore the resulting Revision of the reopen (ADR 0068).
     async fn load(
         client: &Client,
         command: &UndoRequest,
@@ -40,6 +41,7 @@ impl CompensationAdapter for ReopenRejectedCompensation {
                 "SELECT reopening.proposal_id::text, proposal.chapter_id::text,
                         reopening.source_proposal_revision_id::text,
                         reopening.resulting_proposal_revision_id::text,
+                        head.current_revision_id::text,
                         reopening.operation_id::text,
                         operation.resolution = 'pending'
                           AND operation.reservation_state = 'unresolved'
@@ -53,10 +55,8 @@ impl CompensationAdapter for ReopenRejectedCompensation {
                      ON (proposal.owner_user_id, proposal.project_id, proposal.proposal_id) =
                         (reopening.owner_user_id, reopening.project_id, reopening.proposal_id)
                    JOIN storyos.proposal_heads AS head
-                     ON (head.owner_user_id, head.project_id, head.proposal_id,
-                         head.current_revision_id) =
-                        (reopening.owner_user_id, reopening.project_id, reopening.proposal_id,
-                         reopening.resulting_proposal_revision_id)
+                     ON (head.owner_user_id, head.project_id, head.proposal_id) =
+                        (reopening.owner_user_id, reopening.project_id, reopening.proposal_id)
                    JOIN storyos.proposal_operations AS operation
                      ON (operation.owner_user_id, operation.project_id, operation.proposal_id,
                          operation.operation_id) =
@@ -80,12 +80,16 @@ impl CompensationAdapter for ReopenRejectedCompensation {
         let Some(first) = rows.first() else {
             return Ok(None);
         };
-        if !rows.iter().all(|row| row.get::<_, bool>(/*idx*/ 5)) {
+        if !rows.iter().all(|row| row.get::<_, bool>(/*idx*/ 6)) {
+            return Ok(None);
+        }
+        let decision = ObservedProposalDecision::from_row(first, sequence);
+        if !decision.head_restores_result(client, command).await? {
             return Ok(None);
         }
         Ok(Some(ObservedOperationReopening {
-            decision: ObservedProposalDecision::from_row(first, sequence),
-            operation_ids: rows.iter().map(|row| row.get(/*idx*/ 4)).collect(),
+            decision,
+            operation_ids: rows.iter().map(|row| row.get(/*idx*/ 5)).collect(),
         }))
     }
 
