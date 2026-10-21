@@ -18,6 +18,8 @@ import uuid
 import verification_failure
 
 QUEUE_HELD = "STORYOS_VERIFICATION_HOST_QUEUE"
+# Trace context changes on each agent call and cannot change a build or test result.
+TRACE_CONTEXT = frozenset({"TRACEPARENT", "TRACESTATE", "BAGGAGE"})
 
 
 def digest(value):
@@ -259,7 +261,7 @@ class DailyCache:
                                                       stderr=subprocess.PIPE)))
             environment = {key: value for key, value in os.environ.items()
                            if key not in {"STORYOS_VERIFICATION_RUN", "STORYOS_VERIFICATION_PARENT",
-                                          "STORYOS_RUST_CACHE_ROOT", "_", "SHLVL"}}
+                                          "STORYOS_RUST_CACHE_ROOT", "_", "SHLVL", *TRACE_CONTEXT}}
             runners = [(path.name, hashlib.sha256(path.read_bytes()).hexdigest())
                        for path in sorted(Path(__file__).parent.glob("verification*.py"))]
             key = digest({"version": 1, "inputs": plan["source"]["inputs_sha256"],

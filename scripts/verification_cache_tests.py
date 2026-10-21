@@ -83,6 +83,18 @@ class DailyCacheTests(unittest.TestCase):
         result, report = self.run_daily()
         self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
 
+    def test_trace_context_change_reuses_the_daily_result(self):
+        environment = self.fixture.repo.environment
+        environment.update({"TRACEPARENT": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+                            "TRACESTATE": "fixture=first", "BAGGAGE": "fixture=first"})
+        first, report = self.run_daily()
+        self.assertEqual((first.returncode, report["cache"]["status"]), (0, "miss"), first.stderr)
+        environment.update({"TRACEPARENT": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                            "TRACESTATE": "fixture=second", "BAGGAGE": "fixture=second"})
+        second, report = self.run_daily()
+        self.assertEqual((second.returncode, report["cache"]["status"]), (0, "hit"), second.stderr)
+        self.assertNotIn("executed selected files", second.stdout)
+
     def test_missing_outputs_corrupt_entries_and_no_cache_force_execution(self):
         self.assertEqual(self.run_daily()[0].returncode, 0)
         entry = next(self.root.glob("target/verification-cache/*.json"))

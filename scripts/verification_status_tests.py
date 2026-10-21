@@ -53,6 +53,19 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertEqual(self.status()['status'], 'failed')
         self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
 
+    def test_trace_context_change_keeps_a_targeted_result_current(self):
+        trace = {'TRACEPARENT': '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+                 'TRACESTATE': 'fixture=first', 'BAGGAGE': 'fixture=first'}
+        self.repo.environment.update(trace)
+        self.assertEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
+        self.repo.environment.update({'TRACEPARENT': '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+                                      'TRACESTATE': 'fixture=second', 'BAGGAGE': 'fixture=second'})
+        value = self.status()
+        self.assertEqual((value['status'], value['decision']), ('passed', 'satisfied'), value)
+        for key in trace:
+            self.repo.environment.pop(key)
+        self.assertEqual(self.status()['decision'], 'satisfied')
+
     def test_summary_is_bounded_and_details_preserve_large_plan(self):
         fixture = verification_plan_tests.FilePlanTests()
         fixture.setUp()
