@@ -235,6 +235,9 @@ Public step, Rust, shared database, package, and recovery script entries create 
 root record or inherit the existing run. Direct Cargo, Vitest, or other shell
 commands outside these entries remain outside managed observation.
 
+The trace context variables `TRACEPARENT`, `TRACESTATE`, and `BAGGAGE` are not in
+the execution input digest or in the daily result cache key. Child commands still get them.
+
 Use `VERIFY_ARGS='--issue 744 --pr 123'` on daily or targeted Make entries for
 explicit attribution. Missing attribution stays null. Nested steps retain their
 parent step ID and do not create another root. Reports retain actual child start,
