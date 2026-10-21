@@ -1247,7 +1247,12 @@ test("undoLatestAuthorAction reopens a withdrawal after the Undo of a later reop
       { source: reopened, next: withdrawn.sequence, session: withdrawn.sequence },
       { source: withdrawn.sequence, next: prior, session: prior },
     ]);
-    assert.deepEqual(authorView(await inspect(proposal)), authorView(beforeWithdrawal));
+    // The withdrawal Compensation reopens the Proposal with a pending validation (ADR 0044).
+    const after = (await inspect(proposal)).proposal;
+    assert.deepEqual(
+      { closure: after.closure, candidate_text: after.candidate_text },
+      { closure: "open", candidate_text: beforeWithdrawal.proposal.candidate_text },
+    );
   } finally {
     await stopRealServer(started.server);
   }

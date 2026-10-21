@@ -138,13 +138,13 @@ async fn load_author_withdrawal(
     let Some(row) = row else {
         return Ok(None);
     };
-    let chapter_id: Option<String> = row.get(0);
+    let chapter_id: Option<String> = row.get(/*idx*/ 0);
     let Some(chapter_id) = chapter_id else {
         return Ok(None);
     };
-    let current_revision_id: String = row.get(1);
-    let proposal_id: String = row.get(5);
-    let withdrawn_revision_id: String = row.get(6);
+    let current_revision_id: String = row.get(/*idx*/ 1);
+    let proposal_id: String = row.get(/*idx*/ 5);
+    let withdrawn_revision_id: String = row.get(/*idx*/ 6);
     // Only later Proposal Compensations can explain a head that moved after the withdrawal
     // (ADR 0068).
     if current_revision_id != withdrawn_revision_id
@@ -159,9 +159,9 @@ async fn load_author_withdrawal(
         compensation_revision_id: Uuid::now_v7().to_string(),
         chapter_id,
         current_revision_id,
-        generation: row.get(2),
-        candidate_text: row.get(3),
-        base_authoritative_revision_id: row.get(4),
+        generation: row.get(/*idx*/ 2),
+        candidate_text: row.get(/*idx*/ 3),
+        base_authoritative_revision_id: row.get(/*idx*/ 4),
     }))
 }
 

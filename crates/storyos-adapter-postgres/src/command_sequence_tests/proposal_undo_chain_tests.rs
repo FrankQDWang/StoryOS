@@ -151,8 +151,24 @@ async fn author_undo_reverses_two_candidate_edits_and_replays_the_second_undo() 
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4a00).await;
     let before = operation_candidates(&admin, &proposal).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
-    let first = edit(&store, &admin, &proposal, on(1, 0x4a09, 3)).await;
-    let second = edit(&store, &admin, &proposal, on(1, 0x4a0a, 4)).await;
+    let first = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a09, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
+    let second = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a0a, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
     let undo_second = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4a0b).await);
     let call = undo_call(
         &store,
@@ -193,9 +209,33 @@ async fn author_undo_reverses_three_candidate_edits_in_reverse_order() {
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4a20).await;
     let before = operation_candidates(&admin, &proposal).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
-    let first = edit(&store, &admin, &proposal, on(1, 0x4a29, 3)).await;
-    let second = edit(&store, &admin, &proposal, on(0, 0x4a2a, 4)).await;
-    let third = edit(&store, &admin, &proposal, on(1, 0x4a2b, 5)).await;
+    let first = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a29, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
+    let second = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 0, /*suffix*/ 0x4a2a, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
+    let third = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a2b, /*local_intent_sequence*/ 5,
+        ),
+    )
+    .await;
 
     let mut steps = Vec::new();
     for suffix in [0x4a2c, 0x4a2d, 0x4a2e] {
@@ -289,7 +329,15 @@ async fn author_undo_reverses_a_candidate_edit_after_the_undo_of_a_later_withdra
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4a60).await;
     let before = operation_candidates(&admin, &proposal).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
-    let edited = edit(&store, &admin, &proposal, on(1, 0x4a69, 3)).await;
+    let edited = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a69, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
     let withdrawn = withdraw(&store, &admin, &proposal, /*suffix*/ 0x4a6a).await;
 
     let mut steps = Vec::new();
@@ -322,7 +370,15 @@ async fn a_barrier_between_candidate_edits_stops_the_chain() {
         .await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4a80).await;
-    edit(&store, &admin, &proposal, on(1, 0x4a89, 3)).await;
+    edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a89, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
     let after_first = operation_candidates(&admin, &proposal).await;
     let rejection = issued(
         &store,
@@ -343,8 +399,24 @@ async fn a_barrier_between_candidate_edits_stops_the_chain() {
         .await
         .unwrap();
     let barrier = latest_forward(&admin, &proposal.scope).await;
-    let second = edit(&store, &admin, &proposal, on(1, 0x4a8b, 4)).await;
-    let third = edit(&store, &admin, &proposal, on(1, 0x4a8c, 5)).await;
+    let second = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a8b, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
+    let third = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4a8c, /*local_intent_sequence*/ 5,
+        ),
+    )
+    .await;
     let mut steps = Vec::new();
     for suffix in [0x4a8d, 0x4a8e] {
         steps.push(compensated(
@@ -379,9 +451,33 @@ async fn a_proposal_head_that_the_records_cannot_explain_stops_the_chain() {
         .await;
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4aa0).await;
-    let first = edit(&store, &admin, &proposal, on(1, 0x4aa9, 3)).await;
-    let second = edit(&store, &admin, &proposal, on(1, 0x4aaa, 4)).await;
-    let third = edit(&store, &admin, &proposal, on(1, 0x4aab, 5)).await;
+    let first = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4aa9, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
+    let second = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4aaa, /*local_intent_sequence*/ 4,
+        ),
+    )
+    .await;
+    let third = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4aab, /*local_intent_sequence*/ 5,
+        ),
+    )
+    .await;
     let undo_third = compensated(&undo_latest(&store, &admin, &proposal, /*suffix*/ 0x4aac).await);
     let call = undo_call(
         &store,
@@ -460,7 +556,15 @@ async fn the_receipt_trigger_refuses_a_source_that_is_not_the_parent() {
     let (store, admin) = stores().await;
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ac0).await;
     let unedited = head_revision(&admin, &proposal.proposal_id).await;
-    edit(&store, &admin, &proposal, on(1, 0x4ac9, 3)).await;
+    edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 1, /*suffix*/ 0x4ac9, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
     let call = undo_call(
         &store,
         &admin,
