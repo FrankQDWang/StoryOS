@@ -1526,6 +1526,14 @@ one new `Forward` action and the source remains uncompensated. ProseMirror
 history may supply a session-local inverse candidate only for the exact
 Frontier; Core still verifies durable history.
 
+A Direct Author Action and an Acceptance prove their target through the Head
+Lineage Revision of the current Chapter Head
+([ADR 0067](../adr/0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)). When a Compensation wrote the
+Head, the lineage goes to the prior Revision of the source Forward Commit of
+that Compensation, and it continues. The target is correct when the current
+Head is the expected Head and its lineage Revision is the resulting Revision of
+the Frontier. Thus each Undo reverses the next older action until a Barrier.
+
 ### 10.2 UndoAcceptance
 
 ```text
@@ -1543,8 +1551,9 @@ Direct compensation requires all of these:
 - the source Acceptance Result is `Applied`;
 - no distinct successful Undo already compensated it;
 - the source Acceptance is the current Author Undo Frontier;
-- every affected target's current Head is exactly the resulting Revision in the
-  source Receipt;
+- the current Head of every affected target is the expected Head. Its Head
+  Lineage Revision (section 10.1) is the resulting Revision in the source
+  Receipt.
 - every current payload digest matches that resulting Revision;
 - prior Revisions, payloads, digests, schema, and compensation handler remain
   usable.
@@ -1556,9 +1565,10 @@ reactivates an old Revision ID, or mutates a Receipt.
 
 Safe Proposal lineage appends a reopening Revision. Proposal lineage drift may
 derive a new Proposal without blocking otherwise safe authoritative
-compensation. Any non-exact authoritative target Head forbids direct
-compensation even when a range appears non-overlapping: Core creates a Reversal
-Proposal when a safe inverse can be expressed, otherwise returns unavailable.
+compensation. A target Head whose lineage is another Revision forbids direct
+compensation, also when a range appears not to overlap. Then Core creates a
+Reversal Proposal when it can express a safe inverse. Otherwise Core returns
+unavailable.
 
 ```text
 UndoAcceptanceResult =

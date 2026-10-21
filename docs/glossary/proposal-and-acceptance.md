@@ -105,7 +105,7 @@ A non-destructive removal of a Proposal from active review by its current produc
 _Avoid_: Rejection, deletion
 
 **Safe Compensation Head**:
-The condition in which an Applied Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision recorded by its Receipt while the prior evidence remains usable. Any non-exact Head requires a Reversal Proposal or an unavailable outcome rather than range-level inference.
+The condition in which Author Undo can compensate an Applied Acceptance. The Acceptance is the current Author Undo Frontier, and no Undo compensated it. The Head Lineage Revision of the current Head of each affected target is the resulting Authoritative Revision that its Receipt records. The payload digest of the Head matches that Revision, and the prior evidence stays usable ([ADR 0067](../adr/0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)). Any other Head requires a Reversal Proposal or an unavailable outcome, not range-level inference.
 _Avoid_: Non-overlapping guess, inverse patch on a later Head, storage rollback
 
 **Undo Acceptance**:
@@ -129,8 +129,12 @@ The latest Forward Author Action Sequence that has not been named by a successfu
 _Avoid_: Maximum Author Action Sequence, compensation of a compensation, redo cursor
 
 **Author Undo Order**:
-A single newest-first order over uncompensated Forward author-owned actions, regardless of whether they changed Authoritative State or editable Proposal content. The Author Undo Frontier is its exact current candidate; an unsafe Frontier stops undo and requires its explicit reversal or unavailable disposition, and StoryOS never skips it to undo older work.
+A single newest-first order over uncompensated Forward author-owned actions, both authoritative changes and editable Proposal content changes. The Author Undo Frontier is its exact current candidate. An unsafe Frontier stops undo and requires its explicit reversal or unavailable disposition, and StoryOS never skips it to undo older work. After each successful Undo, the next older uncompensated Forward action is the Frontier. Thus the author can undo a chain of actions one at a time until a Barrier ([ADR 0067](../adr/0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)).
 _Avoid_: Independent undo stacks, editor-first undo, silent history skip
+
+**Head Lineage Revision**:
+The Revision that the current Head of a Chapter restores. Start at the Head. When a Compensation wrote the Revision, go to the prior Revision of the source Forward Commit of that Compensation, and continue. Author Undo of a Direct Author Action or an Acceptance proves its target with it ([ADR 0067](../adr/0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)).
+_Avoid_: Text equality, content match, restored Head identity
 
 **Author Undo Disposition**:
 The declared Author Undo result of one Forward author-owned command kind and applied result: an exact Compensation of its effect, or a Barrier. A Barrier Frontier stops Author Undo with no Compensation, and Author Undo never skips it, so earlier Forward actions also stay uncompensated. Every Forward command kind declares its disposition.

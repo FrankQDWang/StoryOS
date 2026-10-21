@@ -11,6 +11,10 @@ pub struct UndoLatestAuthorAction {
     pub current_author_undo_frontier: Option<AuthorUndoFrontier>,
     pub expected_head_revision_id: String,
     pub current_head_revision_id: String,
+    /// The Revision that the current Head restores. Go from the current Head through each
+    /// Compensation to the prior Revision of its source. It is the current Head when no
+    /// Compensation wrote the Head (ADR 0067).
+    pub current_head_lineage_revision_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -119,14 +123,13 @@ pub fn undo_latest_author_action(
                     UndoLatestAuthorActionConflict::WrongTargetHead,
                 );
             }
-            if command.current_head_revision_id == *resulting_revision_id && *prior_evidence_usable
-            {
+            let restores_acceptance =
+                command.current_head_lineage_revision_id == *resulting_revision_id;
+            if restores_acceptance && *prior_evidence_usable {
                 TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                     source_sequence: frontier.sequence,
                 })
-            } else if command.current_head_revision_id != *resulting_revision_id
-                && *prior_evidence_usable
-            {
+            } else if !restores_acceptance && *prior_evidence_usable {
                 TransitionOutcome::Applied(UndoLatestAuthorActionApplied::ReversalRequired {
                     source_sequence: frontier.sequence,
                 })
@@ -137,7 +140,7 @@ pub fn undo_latest_author_action(
         AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
             resulting_revision_id,
         } => {
-            if &command.expected_head_revision_id != resulting_revision_id
+            if &command.current_head_lineage_revision_id != resulting_revision_id
                 || command.current_head_revision_id != command.expected_head_revision_id
             {
                 return TransitionOutcome::Conflicted(

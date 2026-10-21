@@ -159,7 +159,7 @@ async function readRevision(frame: HTMLIFrameElement, projectId: string, chapter
   return chapter.chapter.current_revision;
 }
 
-it("undoes one exact admitted Author Action and restores identity after reload", async () => {
+it("undoes the admitted Author Actions one at a time, also after a reload", async () => {
   const { frame, projectId, chapterId } = await openChapterEditor();
   const root = appRoot(frame);
   const childWindow = applicationWindow(frame);
@@ -226,4 +226,17 @@ it("undoes one exact admitted Author Action and restores identity after reload",
   await expect.poll(() =>
     reopenedRoot.querySelector("[data-save-state]")?.getAttribute("data-author-undo-frontier")
   ).toBe(helloFrontier);
+
+  // The next Undo reverses the earlier edit, and the editor stays writable (ADR 0067).
+  const reopenedWindow = applicationWindow(reopened);
+  reopenedEditor.focus();
+  focusManuscriptEnd(reopenedEditor, reopenedWindow);
+  await applyTrustedInput({ operation: "undo_latest_author_action" });
+  await expect.poll(() => manuscriptBody(reopenedEditor), { timeout: 10_000 }).toBe("");
+  await waitSaved(reopenedRoot);
+  expect((await readRevision(reopened, projectId, chapterId)).blocks).toEqual(before.blocks);
+  await expect.poll(() =>
+    reopenedRoot.querySelector("[data-save-state]")?.getAttribute("data-author-undo-frontier")
+  ).not.toBe(helloFrontier);
+  expect(reopenedEditor.getAttribute("contenteditable")).toBe("true");
 });
