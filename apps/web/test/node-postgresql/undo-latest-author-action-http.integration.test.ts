@@ -25,6 +25,7 @@ import {
   digestUpdateProject,
   digestWithdrawProposal,
   getChapter,
+  getEditorSession,
   getProject,
   getProposal,
   rejectProposalOperations,
@@ -1181,6 +1182,72 @@ test("undoLatestAuthorAction restores the Proposal before a Replan, and a later 
     const moved = await openProposal(started.baseUrl, "c96332");
     const replanned = await conflictAndReplan(moved, "c96332");
     await assertBarrierAfterHeadMove(moved, replanned.session, replanned.sequence, "c96332");
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+// The Author Undo Frontier that the Web Client reads from the Editor Session before each Undo.
+async function sessionFrontier(proposal: OpenedProposal, session: EditorSession) {
+  return (await getEditorSession({
+    baseUrl: proposal.baseUrl, projectId: proposal.projectId,
+    editorSessionId: session.editor_session.editor_session_id, fetchImpl: proposal.fetchImpl,
+  })).author_undo_frontier_sequence ?? null;
+}
+
+// Each Undo takes the Editor Session frontier, and the frontier after it is the next older action.
+async function undoThroughSessionFrontier(proposal: OpenedProposal, session: EditorSession, namespaces: string[]) {
+  const steps = [];
+  for (const ns of namespaces) {
+    const frontier = await sessionFrontier(proposal, session);
+    if (frontier === null) throw new Error("expected an Author Undo Frontier");
+    const undone = await undoProposalDecision(proposal, session, frontier, ns);
+    if (undone.effect.kind !== "compensated") throw new Error(`expected a Compensation, got ${undone.effect.kind}`);
+    steps.push({ source: undone.effect.source_sequence, next: undone.effect.author_undo_frontier_sequence,
+      session: await sessionFrontier(proposal, session) });
+  }
+  return steps;
+}
+
+test("undoLatestAuthorAction reverses two candidate edits through the Editor Session frontier", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "4b0011");
+    const first = await reviseCandidate(proposal.baseUrl, proposal.fetchImpl, proposal.projectId, proposal.opened, "4b0012");
+    const afterFirst = await sessionFrontier(proposal, first.session);
+    await reviseCandidate(proposal.baseUrl, proposal.fetchImpl, proposal.projectId, first.revised, "4b0013", first.session);
+    const afterSecond = await sessionFrontier(proposal, first.session);
+    assert.notEqual(afterSecond, afterFirst);
+    const steps = await undoThroughSessionFrontier(proposal, first.session, ["4b0014", "4b0015"]);
+    const beforeFirst = steps[1]?.next ?? null;
+    assert.notEqual(beforeFirst, afterFirst);
+    assert.deepEqual(steps, [
+      { source: afterSecond, next: afterFirst, session: afterFirst },
+      { source: afterFirst, next: beforeFirst, session: beforeFirst },
+    ]);
+    assert.equal((await inspect(proposal)).proposal.candidate_text, proposal.opened.proposal.candidate_text);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("undoLatestAuthorAction reopens a withdrawal after the Undo of a later reopen", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "4b0021");
+    const session = await openSession(proposal, "4b0021");
+    const beforeWithdrawal = await inspect(proposal);
+    const prior = await sessionFrontier(proposal, session);
+    const withdrawn = await withdraw(proposal, session, "4b0022");
+    const reopened = await reopenWithdrawn(proposal, session, withdrawn.eventId, "4b0023");
+    const steps = await undoThroughSessionFrontier(proposal, session, ["4b0024", "4b0025"]);
+    assert.deepEqual(steps, [
+      { source: reopened, next: withdrawn.sequence, session: withdrawn.sequence },
+      { source: withdrawn.sequence, next: prior, session: prior },
+    ]);
+    assert.deepEqual(authorView(await inspect(proposal)), authorView(beforeWithdrawal));
   } finally {
     await stopRealServer(started.server);
   }
