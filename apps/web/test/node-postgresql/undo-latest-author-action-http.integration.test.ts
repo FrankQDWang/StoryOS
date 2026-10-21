@@ -1092,15 +1092,18 @@ function assertCompensated(undone: Awaited<ReturnType<typeof undoLatestAuthorAct
 }
 
 // A later Proposal head move: a withdrawal and its Undo append a revision after the decision.
-async function assertBarrierAfterHeadMove(proposal: OpenedProposal, session: EditorSession, sequence: string, ns: string) {
+// The Undo of the decision then goes through that Compensation (ADR 0068).
+async function assertCompensatedAfterHeadMove(proposal: OpenedProposal, session: EditorSession, sequence: string, ns: string) {
   const later = await withdraw(proposal, session, `${ns}9`);
   const reopened = await postProposalUndo(proposal, session, later.sequence, `${ns}9`);
   assert.equal(reopened.undone.effect.kind, "compensated");
-  const blocked = await undoProposalDecision(proposal, session, sequence, ns);
-  assert.deepEqual(blocked.effect, { kind: "unavailable", reason: "barrier" });
+  const undone = await undoProposalDecision(proposal, session, sequence, ns);
+  const after = await inspect(proposal);
+  assertCompensated(undone, sequence, after);
+  return after;
 }
 
-test("undoLatestAuthorAction withdraws a reopened Proposal again, and a later head move makes the reopen a Barrier", async () => {
+test("undoLatestAuthorAction withdraws a reopened Proposal again, also after the Undo of a later head move", async () => {
   const started = await startProposalServer();
   try {
     await drainLeftoverWork();
@@ -1118,14 +1121,17 @@ test("undoLatestAuthorAction withdraws a reopened Proposal again, and a later he
     const moved = await openProposal(started.baseUrl, "c96312");
     const movedSession = await openSession(moved, "c96312");
     const movedWithdrawal = await withdraw(moved, movedSession, "c96312");
+    const beforeMovedReopen = await inspect(moved);
     const movedSequence = await reopenWithdrawn(moved, movedSession, movedWithdrawal.eventId, "c96312");
-    await assertBarrierAfterHeadMove(moved, movedSession, movedSequence, "c96312");
+    const movedAfter = await assertCompensatedAfterHeadMove(moved, movedSession, movedSequence, "c96312");
+    assert.equal(movedAfter.proposal.closure, "withdrawn");
+    assert.deepEqual(authorView(movedAfter), authorView(beforeMovedReopen));
   } finally {
     await stopRealServer(started.server);
   }
 });
 
-test("undoLatestAuthorAction rejects reopened operations again, and a later head move makes the reopen a Barrier", async () => {
+test("undoLatestAuthorAction rejects reopened operations again, also after the Undo of a later head move", async () => {
   const started = await startProposalServer();
   try {
     await drainLeftoverWork();
@@ -1141,7 +1147,9 @@ test("undoLatestAuthorAction rejects reopened operations again, and a later head
     const moved = await openProposal(started.baseUrl, "c96322");
     const movedSession = await openSession(moved, "c96322");
     const reopened = await rejectAndReopen(moved, movedSession, "c96322");
-    await assertBarrierAfterHeadMove(moved, movedSession, reopened.sequence, "c96322");
+    const movedAfter = await assertCompensatedAfterHeadMove(moved, movedSession, reopened.sequence, "c96322");
+    assert.equal(movedAfter.proposal.operation_resolution, "rejected");
+    assert.deepEqual(authorView(movedAfter), authorView(reopened.beforeReopen));
   } finally {
     await stopRealServer(started.server);
   }
@@ -1164,7 +1172,7 @@ test("undoLatestAuthorAction of an Operation rejection is a Barrier and keeps th
   }
 });
 
-test("undoLatestAuthorAction restores the Proposal before a Replan, and a later head move makes the Replan a Barrier", async () => {
+test("undoLatestAuthorAction restores the Proposal before a Replan, also after the Undo of a later head move", async () => {
   const started = await startProposalServer();
   try {
     await drainLeftoverWork();
@@ -1181,7 +1189,15 @@ test("undoLatestAuthorAction restores the Proposal before a Replan, and a later 
 
     const moved = await openProposal(started.baseUrl, "c96332");
     const replanned = await conflictAndReplan(moved, "c96332");
-    await assertBarrierAfterHeadMove(moved, replanned.session, replanned.sequence, "c96332");
+    // The Replan moved the base to the new Chapter head, so the Undo copies the source Anchor set.
+    const movedBase = (await inspect(moved)).proposal.base_authoritative_revision_id;
+    assert.notEqual(movedBase, replanned.beforeReplan.proposal.base_authoritative_revision_id);
+    const movedAfter = await assertCompensatedAfterHeadMove(moved, replanned.session, replanned.sequence, "c96332");
+    assert.equal(movedAfter.proposal.base_authoritative_revision_id, replanned.beforeReplan.proposal.base_authoritative_revision_id);
+    assert.deepEqual(authorView(movedAfter), authorView({
+      ...replanned.beforeReplan,
+      proposal: { ...replanned.beforeReplan.proposal, validation: "valid", condition_refs: [], source_condition: { kind: "absent" } },
+    }));
   } finally {
     await stopRealServer(started.server);
   }
