@@ -11,6 +11,7 @@ use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
 };
+use crate::undo_frontier::proposal_head_lineage_revision;
 use crate::undo_latest_author_action::{undo_database_error, undo_from_author_edit};
 
 /// Appends a Proposal Revision that restores the candidate of the edited Operation.
@@ -27,7 +28,7 @@ impl CompensationAdapter for ProposalEditCompensation {
         _forward: (),
         sequence: u64,
     ) -> Result<Option<ObservedProposalFrontier>, ProjectCommandError> {
-        load_proposal_frontier(client, &command.project_scope, sequence).await
+        load_proposal_frontier(client, command, sequence).await
     }
 
     fn frontier_kind(_evidence: &ObservedProposalFrontier) -> AuthorUndoFrontierKind {
@@ -186,9 +187,10 @@ pub(crate) struct ObservedProposalFrontier {
 
 async fn load_proposal_frontier(
     client: &Client,
-    scope: &ProjectScope,
+    command: &UndoRequest,
     sequence: u64,
 ) -> Result<Option<ObservedProposalFrontier>, ProjectCommandError> {
+    let scope = &command.project_scope;
     let row = client
         .query_opt(
             "SELECT proposal.chapter_id::text, proposal.proposal_id::text,
@@ -196,7 +198,8 @@ async fn load_proposal_frontier(
                     COALESCE(revision.prior_operation_candidate_text, parent.candidate_text),
                     COALESCE(edited.manuscript_block_id, proposal.manuscript_block_id)::text,
                     revision.base_authoritative_revision_id::text,
-                    revision.edited_operation_id::text
+                    revision.edited_operation_id::text,
+                    revision.revision_id::text
                FROM storyos.author_action_entries AS action
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -206,10 +209,8 @@ async fn load_proposal_frontier(
                     (receipt.owner_user_id, receipt.project_id,
                      receipt.proposal_revision_ids[1])
                JOIN storyos.proposal_heads AS head
-                 ON (head.owner_user_id, head.project_id, head.proposal_id,
-                     head.current_revision_id) =
-                    (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id)
+                 ON (head.owner_user_id, head.project_id, head.proposal_id) =
+                    (revision.owner_user_id, revision.project_id, revision.proposal_id)
                JOIN storyos.proposals AS proposal
                  ON (proposal.owner_user_id, proposal.project_id, proposal.proposal_id) =
                     (revision.owner_user_id, revision.project_id, revision.proposal_id)
@@ -250,12 +251,26 @@ async fn load_proposal_frontier(
         )
         .await
         .map_err(undo_database_error)?;
-    Ok(row.map(|row| ObservedProposalFrontier {
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let proposal_id: String = row.get(/*idx*/ 1);
+    let current_revision_id: String = row.get(/*idx*/ 2);
+    let edited_revision_id: String = row.get(/*idx*/ 7);
+    // Only later Proposal Compensations can explain a head that moved after the edit (ADR 0068).
+    if current_revision_id != edited_revision_id
+        && proposal_head_lineage_revision(client, command, &proposal_id, &current_revision_id)
+            .await?
+            != edited_revision_id
+    {
+        return Ok(None);
+    }
+    Ok(Some(ObservedProposalFrontier {
         sequence,
         compensation_revision_id: Uuid::now_v7().to_string(),
         chapter_id: row.get(/*idx*/ 0),
-        proposal_id: row.get(/*idx*/ 1),
-        current_revision_id: row.get(/*idx*/ 2),
+        proposal_id,
+        current_revision_id,
         restored_candidate_text: row.get(/*idx*/ 3),
         manuscript_block_id: row.get(/*idx*/ 4),
         base_authoritative_revision_id: row.get(/*idx*/ 5),

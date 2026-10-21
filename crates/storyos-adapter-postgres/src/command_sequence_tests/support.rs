@@ -6,7 +6,9 @@ use storyos_application::{
     RefusableCommandError, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
     issue_project_command_challenge,
 };
-use storyos_application::{ChapterId, IssueProjectCommandChallenge, OpenChapter, open_chapter};
+use storyos_application::{
+    ChallengeRateClass, ChapterId, IssueProjectCommandChallenge, OpenChapter, open_chapter,
+};
 use storyos_core::{ReasonCode, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
@@ -178,8 +180,10 @@ pub(super) async fn issued_with_bytes<I>(
             client_contract_revision: "storyos.web-client.release-1.v3".to_owned(),
             security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
             limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
+            // The Server derives the rate class from the command kind.
+            challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(route.kind)
+                .policy_revision()
+                .to_owned(),
             method: route.method.to_owned(),
             route_template: route.path.to_owned(),
             command_schema: route.schema.to_owned(),

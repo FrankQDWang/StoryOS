@@ -81,6 +81,19 @@ async fn edit(
     latest_forward(admin, &proposal.scope).await
 }
 
+/// The current head of one Proposal.
+async fn head_revision(admin: &Client, proposal_id: &str) -> String {
+    admin
+        .query_one(
+            "SELECT current_revision_id::text FROM storyos.proposal_heads
+              WHERE proposal_id = $1::text::uuid",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0)
+}
+
 /// The closure of the current head of one Proposal.
 async fn head_closure(admin: &Client, proposal_id: &str) -> String {
     admin
@@ -238,7 +251,7 @@ async fn author_undo_reopens_a_withdrawal_after_the_undo_of_a_later_reopen() {
         ReopenWithdrawnProposalInput {
             editor_session_id: EditorSessionId::new(session.clone()),
             proposal_id: proposal_id.clone(),
-            proposal_revision_id: proposal_head(&admin, &proposal_id).await.0,
+            proposal_revision_id: head_revision(&admin, &proposal_id).await,
             withdrawal_event_id,
             expected_authoritative_revision_id: chapter_head.clone(),
         },
@@ -405,6 +418,78 @@ async fn a_proposal_head_that_the_records_cannot_explain_stops_the_chain() {
             [(third, Some(second)), (second, Some(first))],
             TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier),
             after_first
+        )
+    );
+}
+
+/// Runs the Receipt trigger function of migration 0096 on one recorded Undo Receipt.
+async fn check_undo_receipt(admin: &Client, receipt_id: &str) -> Result<(), String> {
+    let checked = admin
+        .batch_execute(&format!(
+            "BEGIN;
+             CREATE TEMPORARY TABLE receipt_probe
+               (owner_user_id uuid, project_id uuid, receipt_id uuid) ON COMMIT DROP;
+             CREATE TRIGGER receipt_probe_check AFTER INSERT ON receipt_probe
+               FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_retry_settlement();
+             INSERT INTO receipt_probe
+               SELECT owner_user_id, project_id, receipt_id FROM storyos.domain_receipts
+                WHERE receipt_id = '{receipt_id}';
+             COMMIT;"
+        ))
+        .await;
+    if checked.is_err() {
+        // A failed statement leaves the transaction open.
+        admin.batch_execute("ROLLBACK").await.unwrap();
+    }
+    checked.map_err(|error| {
+        let refusal = error
+            .as_db_error()
+            .map(|db| (db.code().code(), db.message()));
+        format!("{refusal:?}")
+    })
+}
+
+/// The Receipt trigger refuses a Proposal edit Compensation whose recorded source is not the
+/// parent of its appended Revision.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_receipt_trigger_refuses_a_source_that_is_not_the_parent() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ac0).await;
+    let unedited = head_revision(&admin, &proposal.proposal_id).await;
+    edit(&store, &admin, &proposal, on(1, 0x4ac9, 3)).await;
+    let call = undo_call(
+        &store,
+        &admin,
+        &proposal.scope,
+        &proposal.editor_session_id,
+        &proposal.chapter_revision_id,
+        /*suffix*/ 0x4aca,
+    )
+    .await;
+    compensated(&undo(&store, &call).await.unwrap());
+    let receipt_id = call.envelope.ids.receipt_id.clone();
+    let recorded = check_undo_receipt(&admin, &receipt_id).await;
+    // The Revision before the edit is in the same Proposal, but it is not the parent.
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.domain_receipts
+                SET result_payload = jsonb_set(result_payload, '{{source_proposal_revision_id}}',
+                                               to_jsonb('{unedited}'::text))
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+    )
+    .await;
+
+    assert_eq!(
+        (recorded, check_undo_receipt(&admin, &receipt_id).await),
+        (
+            Ok(()),
+            Err(r#"Some(("23514", "Incomplete Proposal compensation identity"))"#.to_owned())
         )
     );
 }

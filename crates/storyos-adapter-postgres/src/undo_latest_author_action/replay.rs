@@ -67,13 +67,14 @@ LEFT JOIN storyos.proposal_revisions AS source_proposal
      ON (source_proposal.owner_user_id, source_proposal.project_id, source_proposal.revision_id) =
         (source_receipt.owner_user_id, source_receipt.project_id,
          source_receipt.proposal_revision_ids[1])
+-- The parent of the appended Revision is the Proposal head of the Compensation (ADR 0068).
 LEFT JOIN storyos.proposal_revisions AS restored_proposal
      ON (restored_proposal.owner_user_id, restored_proposal.project_id,
-         restored_proposal.proposal_id, restored_proposal.parent_revision_id) =
+         restored_proposal.proposal_id) =
         (source_proposal.owner_user_id, source_proposal.project_id,
-         source_proposal.proposal_id, source_proposal.revision_id)
+         source_proposal.proposal_id)
     AND restored_proposal.revision_id::text = receipt.result_payload->>'proposal_revision_id'
-    AND source_proposal.revision_id::text =
+    AND restored_proposal.parent_revision_id::text =
         receipt.result_payload->>'source_proposal_revision_id'
 LEFT JOIN storyos.undo_acceptance_receipts AS child
      ON (child.owner_user_id, child.project_id, child.author_undo_receipt_id) =

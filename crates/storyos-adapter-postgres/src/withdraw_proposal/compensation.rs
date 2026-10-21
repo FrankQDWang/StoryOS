@@ -11,6 +11,7 @@ use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
 };
+use crate::undo_frontier::proposal_head_lineage_revision;
 use crate::undo_latest_author_action::undo_database_error;
 
 /// Reopens a Proposal that the author withdrew.
@@ -98,7 +99,9 @@ async fn load_author_withdrawal(
                     head.current_revision_id::text,
                     revision.generation,
                     revision.candidate_text,
-                    revision.base_authoritative_revision_id::text
+                    revision.base_authoritative_revision_id::text,
+                    withdrawal.proposal_id::text,
+                    withdrawal.proposal_revision_id::text
                FROM storyos.author_action_entries AS action
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -111,7 +114,6 @@ async fn load_author_withdrawal(
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
                     (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id)
-                AND head.current_revision_id = withdrawal.proposal_revision_id
                JOIN storyos.proposal_revisions AS revision
                  ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
                      revision.revision_id) =
@@ -140,11 +142,23 @@ async fn load_author_withdrawal(
     let Some(chapter_id) = chapter_id else {
         return Ok(None);
     };
+    let current_revision_id: String = row.get(1);
+    let proposal_id: String = row.get(5);
+    let withdrawn_revision_id: String = row.get(6);
+    // Only later Proposal Compensations can explain a head that moved after the withdrawal
+    // (ADR 0068).
+    if current_revision_id != withdrawn_revision_id
+        && proposal_head_lineage_revision(client, command, &proposal_id, &current_revision_id)
+            .await?
+            != withdrawn_revision_id
+    {
+        return Ok(None);
+    }
     Ok(Some(ObservedAuthorWithdrawal {
         sequence,
         compensation_revision_id: Uuid::now_v7().to_string(),
         chapter_id,
-        current_revision_id: row.get(1),
+        current_revision_id,
         generation: row.get(2),
         candidate_text: row.get(3),
         base_authoritative_revision_id: row.get(4),
@@ -166,13 +180,12 @@ async fn persist_withdrawal_compensation(
                 closure, candidate_text, base_authoritative_revision_id, parent_revision_id)
              SELECT withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
                     $4::text::uuid, $5, 'pending', 'open', $6, $7::text::uuid,
-                    withdrawal.proposal_revision_id
+                    $8::text::uuid
                FROM storyos.proposal_withdrawals AS withdrawal
               WHERE withdrawal.owner_user_id = $1::text::uuid
                 AND withdrawal.project_id = $2::text::uuid
                 AND withdrawal.author_action_sequence = $3::text::numeric
-                AND withdrawal.withdrawal_reason = 'author_withdrew'
-                AND withdrawal.proposal_revision_id = $8::text::uuid",
+                AND withdrawal.withdrawal_reason = 'author_withdrew'",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -197,11 +210,10 @@ async fn persist_withdrawal_compensation(
               WHERE head.owner_user_id = withdrawal.owner_user_id
                 AND head.project_id = withdrawal.project_id
                 AND head.proposal_id = withdrawal.proposal_id
-                AND head.current_revision_id = withdrawal.proposal_revision_id
+                AND head.current_revision_id = $5::text::uuid
                 AND withdrawal.owner_user_id = $1::text::uuid
                 AND withdrawal.project_id = $2::text::uuid
-                AND withdrawal.author_action_sequence = $3::text::numeric
-                AND withdrawal.proposal_revision_id = $5::text::uuid",
+                AND withdrawal.author_action_sequence = $3::text::numeric",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
