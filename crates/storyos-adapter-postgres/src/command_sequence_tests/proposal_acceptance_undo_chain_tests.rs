@@ -1,7 +1,7 @@
 //! Author Undo of a Proposal candidate edit after the Undo of a later Acceptance (ADR 0068).
 //! Each Undo takes the current Author Undo Frontier, as the Web Client does.
 
-use storyos_application::{AcceptProposalInput, EditorSessionId};
+use storyos_application::{AcceptProposalInput, EditorSessionId, UndoLatestAuthorActionSettlement};
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -9,13 +9,32 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 
 use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal};
+use super::agent_run::seed_run;
 use super::proposal_undo_chain::{compensated, edit, on, undo_call};
 use super::secondary_operation::{
-    TwoOperationProposal, operation_candidates, proposal_head, proposal_head_revision,
-    two_operation_proposal,
+    TwoOperationProposal, proposal_head, proposal_head_revision, two_operation_proposal,
 };
 use super::support::{issued, run_without_foreign_keys, stores};
 use super::undo::{latest_forward, undo};
+
+/// The Proposal fixture with its AgentRun, which a derived Proposal copies.
+async fn derivable_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> TwoOperationProposal {
+    let proposal = two_operation_proposal(store, admin, base).await;
+    let run_id: String = admin
+        .query_one(
+            "SELECT source_run_id::text FROM storyos.proposals WHERE proposal_id = $1::text::uuid",
+            &[&proposal.proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    seed_run(admin, &proposal.scope, &run_id, "completed").await;
+    proposal
+}
 
 /// Accepts the selected Operations of the current Proposal head and returns the Acceptance.
 /// The Chapter head of `proposal` moves to the accepted Revision.
@@ -62,7 +81,7 @@ async fn undo_latest(
     admin: &Client,
     proposal: &mut TwoOperationProposal,
     suffix: u16,
-) -> Result<TransitionOutcome, String> {
+) -> Result<UndoLatestAuthorActionSettlement, String> {
     let call = undo_call(
         store,
         admin,
@@ -76,7 +95,7 @@ async fn undo_latest(
         .await
         .map_err(|error| format!("{error:?}"))?;
     proposal.chapter_revision_id = chapter_head(admin, &proposal.chapter_id).await;
-    Ok(settled.outcome)
+    Ok(settled)
 }
 
 /// The compensated source of an Author Undo that must compensate.
@@ -130,23 +149,38 @@ async fn revision_lineage(admin: &Client, proposal_id: &str, revision_id: &str) 
     [row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)]
 }
 
-/// The resolution of each Operation of one Proposal, primary first.
-async fn operation_resolutions(admin: &Client, proposal: &TwoOperationProposal) -> Vec<String> {
-    let mut resolutions = Vec::new();
+/// One column of each Operation of the Proposal fixture, primary first. A derived Proposal
+/// copies the Operation ids, so the query also names the Proposal.
+async fn operation_values(
+    admin: &Client,
+    proposal: &TwoOperationProposal,
+    column: &str,
+) -> Vec<String> {
+    let mut values = Vec::new();
     for (operation_id, _) in &proposal.operations {
-        resolutions.push(
+        values.push(
             admin
                 .query_one(
-                    "SELECT resolution FROM storyos.proposal_operations
-                      WHERE operation_id = $1::text::uuid",
-                    &[operation_id],
+                    &format!(
+                        "SELECT {column} FROM storyos.proposal_operations
+                          WHERE proposal_id = $1::text::uuid AND operation_id = $2::text::uuid"
+                    ),
+                    &[&proposal.proposal_id, operation_id],
                 )
                 .await
                 .unwrap()
                 .get(/*idx*/ 0),
         );
     }
-    resolutions
+    values
+}
+
+async fn operation_candidates(admin: &Client, proposal: &TwoOperationProposal) -> Vec<String> {
+    operation_values(admin, proposal, "candidate_text").await
+}
+
+async fn operation_resolutions(admin: &Client, proposal: &TwoOperationProposal) -> Vec<String> {
+    operation_values(admin, proposal, "resolution").await
 }
 
 /// E1, Acceptance, Undo of the Acceptance, Undo of E1. The Undo of the Acceptance reopens the
@@ -308,7 +342,7 @@ async fn a_derived_or_unlinked_acceptance_undo_makes_the_earlier_edit_a_barrier(
                FROM storyos.proposal_operations WHERE proposal_id = '{proposal_id}'::uuid",
         ),
     ] {
-        let mut proposal = two_operation_proposal(&store, &admin, base).await;
+        let mut proposal = derivable_proposal(&store, &admin, base).await;
         edit(
             &store,
             &admin,
@@ -332,7 +366,9 @@ async fn a_derived_or_unlinked_acceptance_undo_makes_the_earlier_edit_a_barrier(
         .await;
         undo_source(&store, &admin, &mut proposal, base + 11).await;
         let candidates = operation_candidates(&admin, &proposal).await;
-        let outcome = undo_latest(&store, &admin, &mut proposal, base + 12).await;
+        let outcome = undo_latest(&store, &admin, &mut proposal, base + 12)
+            .await
+            .map(|settled| settled.outcome);
         stopped.push((
             outcome,
             proposal_head_revision(&admin, &proposal.proposal_id).await,
@@ -369,7 +405,7 @@ async fn the_undo_of_an_unselected_edit_compensates_after_a_derived_acceptance_u
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ea0).await;
+    let mut proposal = derivable_proposal(&store, &admin, /*base*/ 0x4ea0).await;
     let before = operation_candidates(&admin, &proposal).await;
     let first = edit(
         &store,
