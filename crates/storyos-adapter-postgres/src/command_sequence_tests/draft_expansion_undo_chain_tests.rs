@@ -323,11 +323,13 @@ async fn author_undo_reverses_an_expansion_after_the_undo_of_a_withdrawal() {
     );
 }
 
-/// Undo X after X, a prose edit P1, Undo P1 reopens the Draft. The Chapter Head is the
-/// Compensation of P1, and it restores the base of the expanded Proposal (ADR 0067).
+/// Undo X after X, a prose edit P1, Undo P1 is a Barrier, and the Draft stays closed. P1 also
+/// appends an inline rebind Revision to the expanded Proposal. No Receipt and no Compensation
+/// records that Revision, so it is not in the Proposal Head Lineage (ADR 0068). The Chapter Head
+/// is the Compensation of P1, and it restores the base of the expanded Proposal (ADR 0067).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn author_undo_reverses_an_expansion_after_the_undo_of_a_prose_edit() {
+async fn undo_of_an_expansion_after_the_undo_of_a_prose_edit_is_a_barrier() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -341,20 +343,27 @@ async fn author_undo_reverses_an_expansion_after_the_undo_of_a_prose_edit() {
         Edited::Prose,
     )
     .await;
+    let rebind = proposal_head_revision(&admin, &expanded.proposal_id).await;
 
-    let steps = [
-        compensated(&undo_latest(&store, &admin, &expanded, /*suffix*/ 0x4d8b).await),
-        compensated(&undo_latest(&store, &admin, &expanded, /*suffix*/ 0x4d8c).await),
-    ];
+    let undo_prose = compensated(&undo_latest(&store, &admin, &expanded, /*suffix*/ 0x4d8b).await);
+    let undo_expansion = undo_latest(&store, &admin, &expanded, /*suffix*/ 0x4d8c).await;
 
     assert_eq!(
-        (steps, closures(&admin, &expanded).await),
         (
-            [
-                (prose, Some(expanded.expansion)),
-                (expanded.expansion, expanded.prior)
-            ],
-            reopened()
+            undo_prose,
+            undo_expansion.outcome,
+            proposal_head_revision(&admin, &expanded.proposal_id).await,
+            closures(&admin, &expanded).await
+        ),
+        (
+            (prose, Some(expanded.expansion)),
+            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier),
+            rebind,
+            (
+                "closed".to_owned(),
+                "open".to_owned(),
+                "unresolved".to_owned()
+            )
         )
     );
 }
