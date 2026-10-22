@@ -499,12 +499,14 @@ async fn the_reopen_trigger_accepts_a_head_that_a_recorded_compensation_wrote() 
         &admin,
         &format!(
             "UPDATE storyos.domain_receipts
-                SET result_payload = result_payload - 'proposal_revision_id'
+                SET result_payload = jsonb_set(result_payload, '{{proposal_revision_id}}',
+                                               result_payload->'source_proposal_revision_id')
               WHERE receipt_id = '{}'",
             undo_edit.envelope.ids.receipt_id
         ),
     )
     .await;
+    // The Receipt no longer names the head, so no record explains it.
     let unexplained = check_reopen_event(&admin, &expanded.draft_id).await;
     // The shape of the reopen Revision of an Acceptance Compensation (migration 0074).
     run_without_foreign_keys(
