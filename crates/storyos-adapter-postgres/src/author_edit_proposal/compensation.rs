@@ -197,7 +197,7 @@ async fn load_proposal_frontier(
                     head.current_revision_id::text,
                     COALESCE(revision.prior_operation_candidate_text, parent.candidate_text),
                     COALESCE(edited.manuscript_block_id, proposal.manuscript_block_id)::text,
-                    revision.base_authoritative_revision_id::text,
+                    head_revision.base_authoritative_revision_id::text,
                     revision.edited_operation_id::text,
                     revision.revision_id::text
                FROM storyos.author_action_entries AS action
@@ -211,6 +211,11 @@ async fn load_proposal_frontier(
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
                     (revision.owner_user_id, revision.project_id, revision.proposal_id)
+               JOIN storyos.proposal_revisions AS head_revision
+                 ON (head_revision.owner_user_id, head_revision.project_id,
+                     head_revision.proposal_id, head_revision.revision_id) =
+                    (head.owner_user_id, head.project_id, head.proposal_id,
+                     head.current_revision_id)
                JOIN storyos.proposals AS proposal
                  ON (proposal.owner_user_id, proposal.project_id, proposal.proposal_id) =
                     (revision.owner_user_id, revision.project_id, revision.proposal_id)
@@ -242,7 +247,18 @@ async fn load_proposal_frontier(
                 AND compensation.author_action_sequence IS NULL
                 -- Without the edited Operation, only the primary candidate is exact.
                 AND (revision.edited_operation_id IS NOT NULL
-                  OR validation.manuscript_block_id = proposal.manuscript_block_id)",
+                  OR validation.manuscript_block_id = proposal.manuscript_block_id)
+                -- An Acceptance that no Undo reopened leaves the Operation `applied` (ADR 0068).
+                AND EXISTS (
+                      SELECT 1 FROM storyos.proposal_operations AS operation
+                       WHERE (operation.owner_user_id, operation.project_id,
+                              operation.proposal_id) =
+                             (revision.owner_user_id, revision.project_id, revision.proposal_id)
+                         AND operation.manuscript_block_id =
+                             COALESCE(edited.manuscript_block_id, proposal.manuscript_block_id)
+                         AND (revision.edited_operation_id IS NULL
+                           OR operation.operation_id = revision.edited_operation_id)
+                         AND operation.resolution = 'pending')",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

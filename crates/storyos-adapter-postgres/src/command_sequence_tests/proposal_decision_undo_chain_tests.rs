@@ -26,7 +26,7 @@ use super::support::{issued, run_without_foreign_keys, stores, with_new_request_
 use super::undo::{latest_forward, undo};
 
 /// The state axes, the candidate, and the base of the current head of one Proposal.
-async fn head_state(admin: &Client, proposal_id: &str) -> [String; 5] {
+pub(super) async fn head_state(admin: &Client, proposal_id: &str) -> [String; 5] {
     let row = admin
         .query_one(
             "SELECT revision.generation, revision.validation, revision.closure,
@@ -83,7 +83,7 @@ async fn undo_and_retry(
 /// Gives the current head of the Proposal a Proposal Conflict condition, as data from before
 /// ADR 0064 has. Then replans it on the same Chapter head. Returns the Replan and the head state
 /// before it.
-async fn conflict_and_replan(
+pub(super) async fn conflict_and_replan(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
