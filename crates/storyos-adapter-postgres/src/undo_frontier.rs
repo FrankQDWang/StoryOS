@@ -268,8 +268,9 @@ pub(crate) async fn head_lineage_revision(
 /// Whether `target_revision_id` is a Proposal Head Lineage Revision of the head of a Proposal
 /// (ADR 0068). A Proposal Compensation appends a Revision to the head, and its Undo Receipt
 /// records the appended Revision and its parent. The walk goes from such a Revision to the prior
-/// Revision of the compensated Forward action, and continues. The walk stops at a Revision that
-/// no recorded Proposal Compensation explains.
+/// Revision of the compensated Forward action, and continues. The walk goes from the reopen
+/// Revision of an Acceptance Compensation to the accepted Revision. The walk stops at a Revision
+/// that no recorded Compensation explains.
 pub(crate) async fn proposal_head_restores(
     client: &tokio_postgres::Client,
     command: &UndoRequest,
@@ -282,15 +283,13 @@ pub(crate) async fn proposal_head_restores(
             "WITH RECURSIVE lineage(revision_id) AS (
                  SELECT $4::text::uuid
                UNION ALL
+                 SELECT step.prior_revision_id
+                   FROM lineage
+             CROSS JOIN LATERAL (
                  SELECT CASE WHEN source_receipt.command_kind = 'withdrawProposal'
                              THEN withdrawal.proposal_revision_id
-                             ELSE resulting.parent_revision_id END
-                   FROM lineage
-                   JOIN storyos.proposal_revisions AS appended
-                     ON appended.owner_user_id = $1::text::uuid
-                    AND appended.project_id = $2::text::uuid
-                    AND appended.proposal_id = $3::text::uuid
-                    AND appended.revision_id = lineage.revision_id
+                             ELSE resulting.parent_revision_id END AS prior_revision_id
+                   FROM storyos.proposal_revisions AS appended
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id) =
                         (appended.owner_user_id, appended.project_id)
@@ -323,12 +322,49 @@ pub(crate) async fn proposal_head_restores(
                         (appended.owner_user_id, appended.project_id, appended.proposal_id,
                          source_receipt.receipt_id)
                     AND withdrawal.withdrawal_reason = 'author_withdrew'
-                  WHERE (source_receipt.command_kind = 'withdrawProposal'
-                         AND withdrawal.proposal_revision_id IS NOT NULL)
-                     OR (source_receipt.command_kind IN
-                           ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations',
-                            'reopenWithdrawnProposal')
-                         AND resulting.parent_revision_id IS NOT NULL)
+                  WHERE appended.owner_user_id = $1::text::uuid
+                    AND appended.project_id = $2::text::uuid
+                    AND appended.proposal_id = $3::text::uuid
+                    AND appended.revision_id = lineage.revision_id
+                    AND ((source_receipt.command_kind = 'withdrawProposal'
+                          AND withdrawal.proposal_revision_id IS NOT NULL)
+                      OR (source_receipt.command_kind IN
+                            ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations',
+                             'reopenWithdrawnProposal')
+                          AND resulting.parent_revision_id IS NOT NULL))
+               UNION ALL
+                 SELECT reopened.parent_revision_id
+                   FROM storyos.proposal_revisions AS reopened
+                   JOIN storyos.undo_acceptance_receipts AS undone
+                     ON (undone.owner_user_id, undone.project_id, undone.proposal_id,
+                         undone.proposal_revision_id) =
+                        (reopened.owner_user_id, reopened.project_id, reopened.proposal_id,
+                         reopened.revision_id)
+                    AND undone.outcome = 'compensated'
+                   JOIN storyos.acceptance_receipts AS acceptance
+                     ON (acceptance.owner_user_id, acceptance.project_id,
+                         acceptance.acceptance_receipt_id, acceptance.proposal_id,
+                         acceptance.proposal_revision_id) =
+                        (undone.owner_user_id, undone.project_id, undone.acceptance_receipt_id,
+                         reopened.proposal_id, reopened.parent_revision_id)
+                   JOIN storyos.author_action_entries AS compensation
+                     ON (compensation.owner_user_id, compensation.project_id,
+                         compensation.receipt_id, compensation.compensated_source_sequence) =
+                        (undone.owner_user_id, undone.project_id, undone.author_undo_receipt_id,
+                         undone.source_author_action_sequence)
+                    AND compensation.disposition = 'compensation'
+                   JOIN storyos.author_action_entries AS source
+                     ON (source.owner_user_id, source.project_id, source.author_action_sequence,
+                         source.receipt_id) =
+                        (compensation.owner_user_id, compensation.project_id,
+                         compensation.compensated_source_sequence,
+                         acceptance.acceptance_receipt_id)
+                    AND source.disposition = 'forward'
+                  WHERE reopened.owner_user_id = $1::text::uuid
+                    AND reopened.project_id = $2::text::uuid
+                    AND reopened.proposal_id = $3::text::uuid
+                    AND reopened.revision_id = lineage.revision_id
+             ) AS step
              ) CYCLE revision_id SET looped USING path
              SELECT EXISTS (
                SELECT 1 FROM lineage
