@@ -55,3 +55,4 @@ Before this change, a request worked on the Current Chapter. When the author cli
 - The Operation Requirement payload records the admitted references with their exact text. The Context Inspect response has the new optional field `selection_references`.
 - Six pull requests deliver the change. The first adds the Chapter text references. The second adds the candidate references and removes the public `proposal_candidate` kind. The third adds the references of a steering input. The fourth, the fifth, and the sixth change the web client.
 - The activity payload of a retained steering input can have the key `selection_references` (migration 0093).
+- [ADR 0071](0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md) amends the One Decision rule and its rejected option. One reply can revise a referenced candidate and grow its Proposal over Joinable Blocks.

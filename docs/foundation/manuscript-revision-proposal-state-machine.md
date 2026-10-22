@@ -275,6 +275,13 @@ Applied and rejected incarnations are frozen. A new Revision may edit only
 pending Operations. Reopening retains an Operation ID only when target and
 semantic identity are unchanged; otherwise it creates a new ID with Provenance.
 
+A Proposal Growth appends one Revision to a pending `block_edit` Proposal
+([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
+The Revision revises the referenced candidate. It adds one pending Operation for
+each changed Joinable Block, with its reservation.
+The Proposal then has the bundle policy `atomic`. The growth writes no Anchor
+and no Author Action.
+
 ### 6.2 Inline Proposal Anchors
 
 Each `InlineEditProposal` Operation contains one or more ordered anchors:

@@ -82,6 +82,37 @@ fn the_model_reads_the_exact_references_and_the_pending_candidate_target() {
 }
 
 #[test]
+fn a_joinable_block_is_marked_in_the_target_blocks() {
+    let DestinationRequest::Create(request) = crate::tests::create(
+        crate::tests::route("http://127.0.0.1:9"),
+        RequestAttempt::New,
+    ) else {
+        unreachable!("create() makes a Create request")
+    };
+    let chapter = request.declared_targets[0].clone();
+    let joinable = DeclaredTarget {
+        kind: DeclaredTargetKind::JoinableBlock { distance: -1 },
+        ..chapter.clone()
+    };
+    let request = CreateRequest {
+        declared_targets: vec![joinable, pending_candidate(&chapter)],
+        ..request
+    };
+
+    assert_eq!(
+        request_text(&request)
+            .split_once("Target blocks:\n")
+            .map(|(_, targets)| targets.to_owned()),
+        Some(format!(
+            "[block_id: {}] (joinable with the pending Proposal candidate)\n\
+             The rain fell hard on the old roof.\n\n\
+             [block_id: block-2] (pending Proposal candidate)\nThe wind stopped.",
+            chapter.block_id
+        ))
+    );
+}
+
+#[test]
 fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
     let DestinationRequest::Create(request) = crate::tests::create(
         crate::tests::route("http://127.0.0.1:9"),

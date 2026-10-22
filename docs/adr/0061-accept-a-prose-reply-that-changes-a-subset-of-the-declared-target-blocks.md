@@ -30,3 +30,4 @@ The Stage 3 rule required one change for each declared target block, and no othe
 - The location count of an Agent Decision is the count of changed blocks, not of declared targets.
 - The Host instructions changed, so the wire digest of an Agent Plan request changed. A Model Registration does not bind the instruction text, so no Registration drift occurs. An unknown Create that StoryOS sent before this change, with a successor after this change, pauses with `request_changed` and sends nothing.
 - After this change, S4-05 sends one live request that changes a part of the target, and records that the Proposal opens for that block only.
+- [ADR 0071](0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md) amends this rule: a Proposal Growth reply can change the referenced candidate and Joinable Blocks.

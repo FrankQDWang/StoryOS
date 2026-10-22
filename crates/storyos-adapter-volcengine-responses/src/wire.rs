@@ -23,7 +23,10 @@ target blocks.
 
 A target block that is marked as a pending Proposal candidate holds candidate text that the \
 author has not accepted, and its change replaces that candidate text. Change only Chapter target \
-blocks, or exactly one pending Proposal candidate block.
+blocks, or exactly one pending Proposal candidate block. A target block that is marked as \
+joinable is next to the Proposal of the pending candidate: you can change the candidate together \
+with joinable blocks, and then they join that Proposal. Then change no other block, and change \
+the joinable blocks next to the candidate first, with no gap.
 
 Author references show the exact text that the author selected for this request. Use the author \
 request to decide if you change the referenced text or only use it. A change replaces all of a \
@@ -138,6 +141,10 @@ fn request_text(request: &CreateRequest) -> String {
                 DeclaredTargetKind::ChapterBlock => {
                     format!("[block_id: {}]\n{}", target.block_id, target.block_text)
                 }
+                DeclaredTargetKind::JoinableBlock { .. } => format!(
+                    "[block_id: {}] (joinable with the pending Proposal candidate)\n{}",
+                    target.block_id, target.block_text
+                ),
                 DeclaredTargetKind::PendingCandidate => format!(
                     "[block_id: {}] (pending Proposal candidate)\n{}",
                     target.block_id, target.block_text

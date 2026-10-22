@@ -18,18 +18,47 @@ pub(crate) async fn apply(
         proposal_id: None,
         locations: Some(Vec::new()),
     };
-    let Some(candidate) = candidates.first() else {
+    let Some(first) = candidates.first() else {
         return Ok(result);
     };
     let loaded = super::candidate_revision_target::load(
         client,
         &claim.project_scope,
-        &candidate.chapter_id,
+        &first.chapter_id,
         target,
     )
     .await
     .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let outcome = if let Some(loaded) = loaded {
+    // ADR 0071: the other changes of a growth join the Proposal of the candidate.
+    let candidate_index = loaded
+        .as_ref()
+        .and_then(|loaded| {
+            candidates
+                .iter()
+                .position(|change| change.manuscript_block_id == loaded.block_id)
+        })
+        .unwrap_or_default();
+    let candidate = &candidates[candidate_index];
+    let joined: Vec<&ProseChangeCandidate> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != candidate_index)
+        .map(|(_, change)| change)
+        .collect();
+    let joined_free = match &loaded {
+        Some(loaded) => {
+            super::grow_block_proposal::joined_blocks_are_free(
+                client,
+                claim,
+                &loaded.base_revision_id,
+                &joined,
+            )
+            .await?
+        }
+        None => false,
+    };
+    let mut joined_operation_ids = Vec::new();
+    let outcome = if let Some(loaded) = loaded.filter(|_| joined_free) {
         // A referenced candidate keeps its own text. A legacy candidate target is the only
         // candidate text of its record.
         let previous = record
@@ -104,6 +133,9 @@ pub(crate) async fn apply(
                 Some(&target.operation_id),
             )
             .await?;
+            joined_operation_ids =
+                super::grow_block_proposal::join(client, claim, &target.proposal_id, &joined)
+                    .await?;
             result.proposal_id = Some(target.proposal_id.clone());
             ProseChangeLocationOutcome::Revised {
                 proposal_id: target.proposal_id.clone(),
@@ -118,14 +150,29 @@ pub(crate) async fn apply(
             reason: "stale_candidate".to_owned(),
         }
     };
-    result.locations = Some(vec![ProseChangeLocationInspect {
-        chapter_id: candidate.chapter_id.clone(),
-        manuscript_block_id: candidate.manuscript_block_id.clone(),
-        base_authoritative_revision_id: candidate.base_authoritative_revision_id.clone(),
-        candidate_text: candidate.candidate_text.clone(),
-        explanation: candidate.explanation.clone(),
-        outcome,
-        current: None,
-    }]);
+    let mut joined_operation_ids = joined_operation_ids.into_iter();
+    result.locations = Some(
+        candidates
+            .iter()
+            .enumerate()
+            .map(|(index, change)| {
+                let mut outcome = outcome.clone();
+                if let ProseChangeLocationOutcome::Revised { operation_id, .. } = &mut outcome
+                    && index != candidate_index
+                {
+                    *operation_id = joined_operation_ids.next().expect("joined Operation");
+                }
+                ProseChangeLocationInspect {
+                    chapter_id: change.chapter_id.clone(),
+                    manuscript_block_id: change.manuscript_block_id.clone(),
+                    base_authoritative_revision_id: change.base_authoritative_revision_id.clone(),
+                    candidate_text: change.candidate_text.clone(),
+                    explanation: change.explanation.clone(),
+                    outcome,
+                    current: None,
+                }
+            })
+            .collect(),
+    );
     Ok(result)
 }
