@@ -44,7 +44,7 @@ pub(super) async fn head_state(admin: &Client, proposal_id: &str) -> [String; 5]
 }
 
 /// The resolution and the reservation state of one Proposal Operation.
-async fn operation_state(admin: &Client, operation_id: &str) -> (String, String) {
+pub(super) async fn operation_state(admin: &Client, operation_id: &str) -> (String, String) {
     let row = admin
         .query_one(
             "SELECT resolution, reservation_state FROM storyos.proposal_operations
@@ -57,7 +57,7 @@ async fn operation_state(admin: &Client, operation_id: &str) -> (String, String)
 }
 
 /// Undo of the current Author Undo Frontier and an exact retry of the same Undo.
-async fn undo_and_retry(
+pub(super) async fn undo_and_retry(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
