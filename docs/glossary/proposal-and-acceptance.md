@@ -101,7 +101,7 @@ An author's non-destructive decision not to apply selected pending Proposal Oper
 _Avoid_: Withdrawal, deletion
 
 **Proposal Withdrawal**:
-A non-destructive removal of a Proposal from active review by its current producer or the author. Withdrawal is not represented as an author rejection.
+A non-destructive removal of a Proposal from active review by its current producer or the author. Withdrawal is not represented as an author rejection. Author Undo keeps a Withdrawal by the current producer. The Undo restores the content, and the Proposal stays `withdrawn` until the author reopens it ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
 _Avoid_: Rejection, deletion
 
 **Safe Compensation Head**:

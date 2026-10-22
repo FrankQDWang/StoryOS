@@ -1555,6 +1555,14 @@ rejected Operations also needs each reopened Operation to be `pending` and
 
 The Compensation appends its Revision to the current head.
 
+Author Undo keeps a Withdrawal by the current producer
+([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
+When the current head is `withdrawn`, the Compensation of a candidate edit, a
+Replan, or a reopen of rejected Operations keeps the closure `withdrawn`. It
+restores the content as before. The explicit reopen with that Withdrawal event
+accepts the head when the event names the head. It also accepts the head when
+the event names a withdrawn Revision below the head that such Compensations kept.
+
 ### 10.2 UndoAcceptance
 
 ```text

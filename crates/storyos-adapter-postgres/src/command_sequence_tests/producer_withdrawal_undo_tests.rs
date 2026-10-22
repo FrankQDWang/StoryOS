@@ -25,7 +25,7 @@ use super::proposal_undo_chain::{compensated, edit, head_closure, on, undo_lates
 use super::secondary_operation::{
     TwoOperationProposal, operation_candidates, proposal_head_revision, two_operation_proposal,
 };
-use super::support::{issued, stores};
+use super::support::{challenge_issue, command_call, issued, stores};
 use super::undo::latest_forward;
 
 /// The Withdrawal of the current head by the AgentRun decision that produced the Proposal.
@@ -51,14 +51,21 @@ async fn producer_withdraw(
         proposal_revision_id: proposal_head_revision(admin, &proposal.proposal_id).await,
         expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
     };
-    let call = issued(
-        store,
+    // The producer form takes no Command Challenge, so the call issues none. Each issued
+    // Challenge counts toward the rate limit of the Project.
+    let issue = challenge_issue(
         &proposal.scope,
         suffix,
         &WITHDRAW_PROPOSAL,
+        format!("sha256:producer-withdrawal:{suffix:04x}"),
+    );
+    let call = command_call(
+        issue.binding,
+        &issue.nonce_digest,
+        &format!("{suffix:04x}"),
+        b"{}",
         withdrawal,
-    )
-    .await;
+    );
     let settlement = store
         .withdraw_proposal_as_current_producer(&call.envelope, &call.input)
         .await

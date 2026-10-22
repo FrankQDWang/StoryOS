@@ -171,8 +171,28 @@ pub(super) async fn issued_with_bytes<I>(
     bytes: &[u8],
     digest: String,
 ) -> CommandCall<I> {
+    let issue = challenge_issue(scope, suffix, route, digest);
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    command_call(
+        issue.binding,
+        &issue.nonce_digest,
+        &format!("{suffix:04x}"),
+        bytes,
+        input,
+    )
+}
+
+/// The Command Challenge for `route` whose ids derive from `suffix`. It is not issued.
+pub(super) fn challenge_issue(
+    scope: &ProjectScope,
+    suffix: u16,
+    route: &Route,
+    digest: String,
+) -> IssueProjectCommandChallenge {
     let suffix = format!("{suffix:04x}");
-    let issue = IssueProjectCommandChallenge {
+    IssueProjectCommandChallenge {
         binding: ProjectCommandChallengeBinding {
             project_scope: scope.clone(),
             client_session_binding_digest: "sha256:session-a".to_owned(),
@@ -194,11 +214,7 @@ pub(super) async fn issued_with_bytes<I>(
         nonce: format!("opaque-nonce-{suffix}"),
         nonce_digest: format!("sha256:nonce-{suffix}"),
         earlier_revision_nonces: Vec::new(),
-    };
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    command_call(issue.binding, &issue.nonce_digest, &suffix, bytes, input)
+    }
 }
 
 /// Settles one call, replays it with new request identities, and requires an equal settlement.

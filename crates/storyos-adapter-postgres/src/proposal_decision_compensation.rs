@@ -136,7 +136,8 @@ pub(crate) fn decision_receipt_payload(
 }
 
 /// Appends to the current head a copy of the source revision of `decision` and of its validation
-/// receipt. Then records the Compensation.
+/// receipt. A withdrawn head stays withdrawn, because only a producer Withdrawal can explain it
+/// (ADR 0069). Then records the Compensation.
 pub(crate) async fn compensate_proposal_decision(
     client: &Client,
     command: &UndoRequest,
@@ -152,12 +153,17 @@ pub(crate) async fn compensate_proposal_decision(
                (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
                 closure, candidate_text, candidate_blocks, base_authoritative_revision_id,
                 parent_revision_id)
-             SELECT owner_user_id, project_id, proposal_id, $4::text::uuid, generation,
-                    validation, closure, candidate_text, candidate_blocks,
-                    base_authoritative_revision_id, $5::text::uuid
-               FROM storyos.proposal_revisions
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND revision_id = $6::text::uuid",
+             SELECT source.owner_user_id, source.project_id, source.proposal_id,
+                    $4::text::uuid, source.generation, source.validation,
+                    CASE WHEN head.closure = 'withdrawn' THEN 'withdrawn' ELSE source.closure END,
+                    source.candidate_text, source.candidate_blocks,
+                    source.base_authoritative_revision_id, $5::text::uuid
+               FROM storyos.proposal_revisions AS source
+               JOIN storyos.proposal_revisions AS head
+                 USING (owner_user_id, project_id, proposal_id)
+              WHERE source.owner_user_id = $1::text::uuid AND source.project_id = $2::text::uuid
+                AND source.proposal_id = $3::text::uuid AND source.revision_id = $6::text::uuid
+                AND head.revision_id = $5::text::uuid",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

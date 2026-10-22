@@ -42,6 +42,82 @@ pub(crate) struct WithdrawnRevision {
     operation_resolution: String,
 }
 
+/// Whether the Withdrawal event names `head_revision_id` or a Revision that it keeps withdrawn
+/// (ADR 0069). A recorded Compensation of a candidate edit, a Replan, or a reopen of rejected
+/// Operations keeps the closure of a withdrawn parent. The walk goes from each such appended
+/// Revision to its parent.
+async fn head_keeps_withdrawal(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    proposal_id: &str,
+    head_revision_id: &str,
+    withdrawal_event_id: &str,
+) -> Result<bool, ProjectCommandError> {
+    let scope = &envelope.project_scope;
+    let row = client
+        .query_one(
+            "WITH RECURSIVE kept(revision_id) AS (
+                 SELECT $4::text::uuid
+               UNION ALL
+                 SELECT appended.parent_revision_id
+                   FROM kept
+                   JOIN storyos.proposal_revisions AS appended
+                     ON (appended.owner_user_id, appended.project_id, appended.proposal_id,
+                         appended.revision_id) =
+                        ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
+                   JOIN storyos.proposal_revisions AS parent
+                     ON (parent.owner_user_id, parent.project_id, parent.proposal_id,
+                         parent.revision_id) =
+                        (appended.owner_user_id, appended.project_id, appended.proposal_id,
+                         appended.parent_revision_id)
+                    AND parent.closure = 'withdrawn'
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id) =
+                        (appended.owner_user_id, appended.project_id)
+                    AND receipt.result_payload->>'proposal_revision_id' =
+                        appended.revision_id::text
+                    AND receipt.result_payload->>'source_proposal_revision_id' =
+                        appended.parent_revision_id::text
+                   JOIN storyos.author_action_entries AS compensation
+                     ON (compensation.owner_user_id, compensation.project_id,
+                         compensation.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+                    AND compensation.disposition = 'compensation'
+                   JOIN storyos.author_action_entries AS source
+                     ON (source.owner_user_id, source.project_id, source.author_action_sequence) =
+                        (compensation.owner_user_id, compensation.project_id,
+                         compensation.compensated_source_sequence)
+                    AND source.disposition = 'forward'
+                   JOIN storyos.domain_receipts AS source_receipt
+                     ON (source_receipt.owner_user_id, source_receipt.project_id,
+                         source_receipt.receipt_id) =
+                        (source.owner_user_id, source.project_id, source.receipt_id)
+                    AND source_receipt.command_kind IN
+                          ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations')
+             ) CYCLE revision_id SET looped USING path
+             SELECT EXISTS (
+               SELECT 1
+                 FROM kept
+                 JOIN storyos.proposal_withdrawals AS withdrawal
+                   ON (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
+                       withdrawal.proposal_revision_id) =
+                      ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
+                WHERE NOT kept.looped
+                  AND withdrawal.withdrawal_event_id = $5::text::uuid
+             )",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &proposal_id,
+                &head_revision_id,
+                &withdrawal_event_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(row.get(/*idx*/ 0))
+}
+
 impl ProjectCommand for ReopenWithdrawnProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "reopenWithdrawnProposal",
@@ -96,15 +172,6 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                              AND operation.proposal_id = proposal.proposal_id
                            ORDER BY operation.operation_id
                            LIMIT 1
-                        ),
-                        EXISTS (
-                          SELECT 1
-                            FROM storyos.proposal_withdrawals AS withdrawal
-                           WHERE withdrawal.owner_user_id = proposal.owner_user_id
-                             AND withdrawal.project_id = proposal.project_id
-                             AND withdrawal.proposal_id = proposal.proposal_id
-                             AND withdrawal.proposal_revision_id = head.current_revision_id
-                             AND withdrawal.withdrawal_event_id = $4::text::uuid
                         )
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
@@ -126,7 +193,6 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
                     &self.proposal_id,
-                    &self.withdrawal_event_id,
                 ],
             )
             .await
@@ -143,7 +209,14 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
             proposal_revision_current: current_revision_id == self.proposal_revision_id,
             closure_withdrawn: closure == "withdrawn",
             terminal_supersession: closure == "superseded",
-            withdrawal_event_matches: row.get(/*idx*/ 8),
+            withdrawal_event_matches: head_keeps_withdrawal(
+                client,
+                envelope,
+                &self.proposal_id,
+                &current_revision_id,
+                &self.withdrawal_event_id,
+            )
+            .await?,
             expected_target_matches_head: row.get::<_, Option<String>>(/*idx*/ 6).as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
