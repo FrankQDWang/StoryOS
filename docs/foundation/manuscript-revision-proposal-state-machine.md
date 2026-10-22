@@ -1539,9 +1539,12 @@ Proposal Head Lineage Revisions of the current Proposal head
 ([ADR 0068](../adr/0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). The current head is one. When a recorded Proposal
 Compensation appended one, the prior Revision of the compensated Forward action
 is also one. The Undo Receipt payload of that Compensation records the appended
-Revision and its parent. The edit target is correct when the Revision that the
-edit wrote is one of them. The withdrawal target is correct when the current
-head is withdrawn and the withdrawn Revision is one of them.
+Revision and its parent. When the Compensation of an Acceptance reopened the
+Proposal with one, the accepted Revision is also one. The edit target is correct
+when the Revision that the edit wrote is one of them and the edited Operation is
+`pending`. The Compensation of the edit keeps the base of the current head. The
+withdrawal target is correct when the current head is withdrawn and the
+withdrawn Revision is one of them.
 
 A Proposal decision is a Replan or a reopen. Its target is correct when the
 Revision that the decision wrote is one of them. The Undo of a reopen of

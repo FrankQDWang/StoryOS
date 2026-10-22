@@ -215,3 +215,58 @@ test("a second Proposal request on the Block of an open Inline Proposal opens no
     await stopRealServer(started.server);
   }
 });
+
+/** Author Undo of the current Frontier `sequence` on the Chapter Head `expectedRevisionId`. */
+async function undoFrontier(context: Context, sequence: string, expectedRevisionId: string, ns: string) {
+  const request: UndoLatestAuthorActionRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+    undo_latest_author_action_input: { expected_author_undo_frontier_sequence: sequence,
+      expected_authoritative_revision_id: expectedRevisionId, editor_session_id: context.sessionId, ...BINDING,
+      correlation_id: id(`${ns}1`) } };
+  const { started, projectId, fetchImpl } = context;
+  return challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/author-actions/undo",
+    request.command_schema, await digestUndoLatestAuthorAction(request), id(`${ns}2`), (antiForgery) =>
+      undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId, fetchImpl, request, antiForgery,
+        idempotencyKey: id(`${ns}2`) }));
+}
+
+test("Author Undo of an Inline candidate edit goes back through the Undo of a replacing Acceptance", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const { context, opened, writer, h0 } = await openedInline(started, "d39");
+    const { baseUrl } = started;
+    const send = async (request: ReturnType<typeof replaceUnit>, key: string) => challenged(baseUrl, context.fetchImpl,
+      context.projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+      await digestApplyAuthorEdit(request), id(key), (antiForgery) => applyAuthorEdit({ baseUrl,
+        projectId: context.projectId, fetchImpl: context.fetchImpl, request, antiForgery, idempotencyKey: id(key) }));
+    const interior = await send(replaceUnit(14, 17, "xx", writer, "d3904", opened.revision_id), "d39046");
+    if (interior.effect.kind !== "proposal_revised") throw new Error("expected the candidate edit to apply");
+    const edited = await read(context, opened.proposal_id);
+    assert.equal(edited.candidate_text, "narrxxr tone");
+    writer.nextSequence = "3";
+    const edge = await send(replaceUnit(0, 5, "Keep", writer, "d3905", edited.revision_id), "d39056");
+    if (edge.effect.kind !== "authoritative_applied") throw new Error("expected the author edit to apply");
+
+    const accepted = applied(await accept(context, edited, edge.effect.authoritative_revision.revision_id, "d3906"));
+    assert.equal(accepted.target_resolution, "proven_range");
+    const restored = await undoAcceptance(context, accepted, "d3907");
+    assert.equal(restored.body, "Keep the narrator voice in this passage.");
+    const undoneEdge = await undoFrontier(context, edge.effect.author_action_sequence, restored.revision_id, "d3908");
+    if (undoneEdge.effect.kind !== "compensated" || undoneEdge.effect.authoritative_revision === undefined) {
+      throw new Error(`expected compensated, got ${JSON.stringify(undoneEdge.effect)}`);
+    }
+    assert.equal(undoneEdge.effect.authoritative_revision.body, "Guard the narrator voice in this passage.");
+    const reopened = await read(context, opened.proposal_id);
+
+    const undoneInterior = await undoFrontier(context, interior.effect.author_action_sequence,
+      undoneEdge.effect.authoritative_revision.revision_id, "d3909");
+    assert.equal(undoneInterior.effect.kind, "compensated");
+    const after = await read(context, opened.proposal_id);
+    assert.deepEqual(
+      [after.candidate_text, after.base_authoritative_revision_id, after.anchors, after.operation_resolution],
+      [opened.candidate_text, reopened.base_authoritative_revision_id, opened.anchors, "pending"]);
+    assert.equal(reopened.base_authoritative_revision_id, h0);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
