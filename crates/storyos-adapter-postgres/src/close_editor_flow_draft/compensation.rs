@@ -201,19 +201,22 @@ pub(crate) async fn load_frontier(
         if kind == AuthorUndoFrontierKind::ReversibleDraftClose {
             let restored = match &derived {
                 Some(derived) => {
-                    let (proposal, head, expanded): (String, String, String) =
-                        (derived.get(0), derived.get(1), derived.get(2));
-                    derived.get::<_, String>(3) == "open"
-                        && derived.get::<_, bool>(5)
+                    let (proposal, head, expanded): (String, String, String) = (
+                        derived.get(/*idx*/ 0),
+                        derived.get(/*idx*/ 1),
+                        derived.get(/*idx*/ 2),
+                    );
+                    derived.get::<_, String>(/*idx*/ 3) == "open"
+                        && derived.get::<_, bool>(/*idx*/ 5)
                         && (head == expanded
                             || proposal_head_restores(client, command, &proposal, &head, &expanded)
                                 .await?)
-                        && derived.get::<_, String>(4)
+                        && derived.get::<_, String>(/*idx*/ 4)
                             == head_lineage_revision(
                                 client,
                                 command,
-                                &row.get::<_, String>(12),
-                                &row.get::<_, String>(10),
+                                &row.get::<_, String>(/*idx*/ 12),
+                                &row.get::<_, String>(/*idx*/ 10),
                             )
                             .await?
                 }
