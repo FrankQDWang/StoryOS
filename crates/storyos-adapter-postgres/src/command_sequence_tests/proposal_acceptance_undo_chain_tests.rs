@@ -185,7 +185,7 @@ async fn operation_resolutions(admin: &Client, proposal: &TwoOperationProposal) 
 
 /// E1, Acceptance, Undo of the Acceptance, Undo of E1. The Undo of the Acceptance reopens the
 /// Proposal on the new Chapter Revision. The Undo of E1 restores the candidate before E1 on the
-/// base of that reopen Revision, so the Anchor set of the reopen Revision stays valid.
+/// base of that reopen Revision. Thus the Anchor set of the reopen Revision stays valid.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_reverses_a_candidate_edit_after_the_undo_of_its_acceptance() {

@@ -1540,7 +1540,9 @@ Proposal Head Lineage Revisions of the current Proposal head
 Compensation appended one, the prior Revision of the compensated Forward action
 is also one. The Undo Receipt payload of that Compensation records the appended
 Revision and its parent. When the Compensation of an Acceptance reopened the
-Proposal with one, the accepted Revision is also one. The edit target is correct
+Proposal with one, the accepted Revision is also one.
+
+The edit target is correct
 when the Revision that the edit wrote is one of them and the edited Operation is
 `pending`. The Compensation of the edit keeps the base of the current head. The
 withdrawal target is correct when the current head is withdrawn and the
