@@ -10,7 +10,7 @@ use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
 };
-use crate::undo_frontier::{head_lineage_revision, proposal_head_restores};
+use crate::undo_frontier::{chapter_head_restores, proposal_head_restores};
 use crate::undo_latest_author_action::undo_database_error;
 
 /// Reopens a Refused Edit Draft that the author closed or expanded to a Proposal.
@@ -211,14 +211,14 @@ pub(crate) async fn load_frontier(
                         && (head == expanded
                             || proposal_head_restores(client, command, &proposal, &head, &expanded)
                                 .await?)
-                        && derived.get::<_, String>(/*idx*/ 4)
-                            == head_lineage_revision(
-                                client,
-                                command,
-                                &row.get::<_, String>(/*idx*/ 12),
-                                &row.get::<_, String>(/*idx*/ 10),
-                            )
-                            .await?
+                        && chapter_head_restores(
+                            client,
+                            command,
+                            &row.get::<_, String>(/*idx*/ 12),
+                            &row.get::<_, String>(/*idx*/ 10),
+                            &derived.get::<_, String>(/*idx*/ 4),
+                        )
+                        .await?
                 }
                 None => false,
             };

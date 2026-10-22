@@ -3,8 +3,8 @@
 //! Client does.
 
 use storyos_application::{
-    AuthorEditProposalTarget, EditorSessionId, ProjectScope, UndoLatestAuthorActionSettlement,
-    UndoRecords, WithdrawProposalInput, WithdrawalNote,
+    AuthorEditProposalTarget, EditorSessionId, ExpandRefusedEditDraftToProposalInput, ProjectScope,
+    UndoLatestAuthorActionSettlement, UndoRecords, WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::{
     AuthorEditPrimitive, TransitionOutcome, UndoLatestAuthorActionConflict,
@@ -39,6 +39,17 @@ struct Expanded {
 /// Expands one retained Refused Edit Draft to a Proposal in a new Project.
 async fn expanded(store: &PostgresProjectReader, admin: &Client, base: u16) -> Expanded {
     let (scope, input) = refused_edit_expansion(store, admin, base, "retained").await;
+    expand(store, admin, base, scope, input).await
+}
+
+/// Expands the Draft of `input` with the expansion call `base + 9`.
+async fn expand(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    scope: ProjectScope,
+    input: ExpandRefusedEditDraftToProposalInput,
+) -> Expanded {
     let prior: Option<String> = admin
         .query_one(
             "SELECT max(author_action_sequence)::text FROM storyos.author_action_entries
@@ -214,6 +225,63 @@ fn reopened() -> (String, String, String) {
         "withdrawn".to_owned(),
         "resolved".to_owned(),
     )
+}
+
+/// Undo X right after X reopens the Draft when X used a Compensation Revision as its base. The
+/// Chapter Head is that base, and the lineage walk of the Head goes past it (ADR 0067).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_reverses_an_expansion_on_a_compensation_revision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, mut input) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x4dd0, "retained").await;
+    let session = input.editor_session_id.as_ref().to_owned();
+    edit_in_chapter_of(&admin, &session, &input.expected_target_revision_id).await;
+    // The frontier before the prose edit. The Undo of X skips the undone prose edit.
+    let before_prose = latest_forward(&admin, &scope).await;
+    let command = adjusted_edit_command(
+        &store,
+        &scope,
+        NamedEdit {
+            editor_session_id: &session,
+            chapter_id: &input.chapter_id,
+            expected_revision_id: &input.expected_target_revision_id,
+            suffix: &format!("{:04x}", 0x4ddau16),
+            local_intent_sequence: 0x4dda,
+            text: "Edited ",
+            proposal_target: None,
+        },
+        |_| {},
+    )
+    .await;
+    store.apply_author_edit(&command).await.unwrap();
+    let undo_prose = undo_call(
+        &store,
+        &admin,
+        &scope,
+        &session,
+        &session_chapter_head(&admin, &session).await,
+        /*suffix*/ 0x4ddb,
+    )
+    .await;
+    compensated(&undo(&store, &undo_prose).await.unwrap());
+    let compensation = session_chapter_head(&admin, &session).await;
+    input.expected_target_revision_id = compensation.clone();
+    input.anchor.base_authoritative_revision_id = compensation;
+    let expanded = expand(&store, &admin, /*base*/ 0x4dd0, scope, input).await;
+
+    let undo_expansion = undo_latest(&store, &admin, &expanded, /*suffix*/ 0x4ddc).await;
+
+    assert_eq!(
+        (
+            compensated(&undo_expansion),
+            closures(&admin, &expanded).await
+        ),
+        ((expanded.expansion, Some(before_prose)), reopened())
+    );
 }
 
 /// Undo X after X, E1, Undo E1 reopens the Draft and withdraws the head that Undo E1 wrote. An
