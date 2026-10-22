@@ -95,6 +95,8 @@ pub(crate) async fn append_proposal_revision_as(
     }
     let (edited_operation_id, prior_operation_candidate_text) = edited.unzip();
     let validation_receipt_id = Uuid::now_v7().to_string();
+    // A Forward edit has an open prior Revision. The Compensation of an edit keeps a withdrawn
+    // head withdrawn, because only a producer Withdrawal can explain it (ADR 0069).
     client
         .execute(
             "INSERT INTO storyos.proposal_revisions
@@ -102,7 +104,11 @@ pub(crate) async fn append_proposal_revision_as(
                 closure, candidate_text, base_authoritative_revision_id, parent_revision_id,
                 candidate_blocks, edited_operation_id, prior_operation_candidate_text)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'ready',
-                     $5, 'open', (SELECT CASE WHEN proposal.manuscript_block_id=$9::text::uuid
+                     $5, (SELECT CASE WHEN closure = 'withdrawn' THEN 'withdrawn' ELSE 'open' END
+                       FROM storyos.proposal_revisions
+                      WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
+                        AND proposal_id=$3::text::uuid AND revision_id=$8::text::uuid),
+                     (SELECT CASE WHEN proposal.manuscript_block_id=$9::text::uuid
                        THEN $6 ELSE prior.candidate_text END
                        FROM storyos.proposals AS proposal
                        JOIN storyos.proposal_revisions AS prior
