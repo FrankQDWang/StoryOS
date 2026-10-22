@@ -12,6 +12,14 @@ _Avoid_: Suggestion, direct write, executable extension
 A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen, while reopening creates a new Proposal Revision and retains the operation ID only when target and semantic identity are unchanged.
 _Avoid_: Diff hunk, visual change marker
 
+**Proposal Growth**:
+One Agent Decision that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
+_Avoid_: Proposal merge, Proposal extension, second Proposal for one passage
+
+**Joinable Block**:
+A Chapter block next to the Proposal of the one referenced candidate. A Chapter text reference of the Run covers it, fully or in part, and no pending Proposal reserves it. It continues the adjacent run of the pending Operations of that Proposal with no gap. The request marks each Joinable Block for the model, and only a Proposal Growth can add it to that Proposal ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
+_Avoid_: Covered block, adjacent target, join candidate
+
 **Proposal Generation**:
 One durably identified Agent production attempt for a Proposal, owning a strictly ordered and idempotent sequence of candidate batches under one active-writer boundary. A paused or completed Generation never reopens; explicit continuation creates a new Generation identity from an exact Proposal Revision.
 _Avoid_: Network stream, resumable socket, mutable generator session

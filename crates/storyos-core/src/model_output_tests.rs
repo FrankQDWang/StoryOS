@@ -133,3 +133,57 @@ fn a_prose_change_of_a_pending_candidate_is_the_only_change_of_its_result() {
         [true, true, false, false]
     );
 }
+
+#[test]
+fn a_growth_changes_the_candidate_and_one_adjacent_run_of_joinable_blocks() {
+    let declared = [
+        declared(
+            "above-2",
+            DeclaredTargetKind::JoinableBlock { distance: -2 },
+        ),
+        declared(
+            "above-1",
+            DeclaredTargetKind::JoinableBlock { distance: -1 },
+        ),
+        declared("candidate", DeclaredTargetKind::PendingCandidate),
+        declared("below-1", DeclaredTargetKind::JoinableBlock { distance: 1 }),
+        declared("below-2", DeclaredTargetKind::JoinableBlock { distance: 2 }),
+        declared("chapter", DeclaredTargetKind::ChapterBlock),
+        declared("other-candidate", DeclaredTargetKind::PendingCandidate),
+    ];
+    let with_changes = |blocks: &[&str]| {
+        let mut output = prose_change("candidate");
+        let template = output.prose_changes.take().unwrap().pop().unwrap();
+        output.prose_changes = Some(
+            blocks
+                .iter()
+                .map(|block| ProseChangeCandidate {
+                    manuscript_block_id: (*block).to_owned(),
+                    ..template.clone()
+                })
+                .collect(),
+        );
+        output
+    };
+    let selected = |blocks: &[&str]| {
+        matches!(
+            validate_agent_decision(Some(&with_changes(blocks)), &declared),
+            AgentDecisionOutcome::Decision { .. }
+        )
+    };
+
+    assert_eq!(
+        [
+            selected(&["candidate", "below-1"]),
+            selected(&["below-2", "below-1", "candidate"]),
+            selected(&["above-1", "candidate", "below-1", "below-2"]),
+            selected(&["below-1", "below-2"]),
+            selected(&["candidate", "chapter"]),
+            selected(&["candidate", "below-1", "chapter"]),
+            selected(&["candidate", "below-2"]),
+            selected(&["above-2", "candidate", "below-1"]),
+            selected(&["candidate", "other-candidate", "below-1"]),
+        ],
+        [true, true, true, true, false, false, false, false, false]
+    );
+}

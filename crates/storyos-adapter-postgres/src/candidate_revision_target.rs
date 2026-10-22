@@ -69,7 +69,7 @@ pub(crate) async fn load(
 }
 
 /// The pending candidate that a validated result revises. It is the candidate target of the Run,
-/// or the referenced candidate of the one change of the result (ADR 0062).
+/// or the referenced candidate of the one candidate change of the result (ADR 0062, ADR 0071).
 pub(crate) async fn admitted(
     client: &tokio_postgres::Client,
     claim: &storyos_application::ClaimedAgentRun,
@@ -87,20 +87,26 @@ pub(crate) async fn admitted(
     if let Some(target) = record.operation_requirement.candidate_target.clone() {
         return Ok(Some((record, target)));
     }
-    let Some([change]) = produced else {
+    let Some(produced) = produced else {
         return Ok(None);
     };
-    let target = record
-        .operation_requirement
-        .selection_references
-        .iter()
-        .flatten()
-        .filter(|admitted| admitted.candidate().is_some())
-        .find(|admitted| {
-            admitted.reference.chapter_id() == change.chapter_id
-                && admitted.manuscript_block_ids == [change.manuscript_block_id.as_str()]
-        })
-        .and_then(|admitted| admitted.reference.candidate_target());
+    let mut targets = produced.iter().filter_map(|change| {
+        record
+            .operation_requirement
+            .selection_references
+            .iter()
+            .flatten()
+            .filter(|admitted| admitted.candidate().is_some())
+            .find(|admitted| {
+                admitted.reference.chapter_id() == change.chapter_id
+                    && admitted.manuscript_block_ids == [change.manuscript_block_id.as_str()]
+            })
+            .and_then(|admitted| admitted.reference.candidate_target())
+    });
+    let target = match (targets.next(), targets.next()) {
+        (Some(target), None) => Some(target),
+        _ => None,
+    };
     Ok(target.map(|target| (record, target)))
 }
 
@@ -155,7 +161,7 @@ pub(crate) async fn declared(
 }
 
 /// The primary Context Assembly record of the active decision of the Run.
-async fn active_record(
+pub(crate) async fn active_record(
     client: &tokio_postgres::Client,
     claim: &storyos_application::ClaimedAgentRun,
 ) -> Result<

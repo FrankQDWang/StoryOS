@@ -173,6 +173,7 @@ pub(crate) async fn declared_targets(
             })
             .collect();
     declared.extend(crate::candidate_revision_target::declared(client, claim).await?);
+    crate::joinable_blocks::mark(client, claim, &mut declared).await?;
     Ok(declared)
 }
 

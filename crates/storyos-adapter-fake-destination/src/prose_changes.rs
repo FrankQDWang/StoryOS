@@ -1,8 +1,9 @@
 //! Fake-destination prose changes for the exact declared targets.
 
+use storyos_application::DeclaredTarget;
 use storyos_core::{
-    CONTEXT_ITEM_TOKEN_LIMIT, DeclaredLocation, PROSE_CHANGE_TEXT, ProseChangeCandidate,
-    SECOND_PROSE_CHANGE_TEXT,
+    CONTEXT_ITEM_TOKEN_LIMIT, DeclaredLocation, DeclaredTargetKind, PROSE_CHANGE_TEXT,
+    ProseChangeCandidate, SECOND_PROSE_CHANGE_TEXT,
 };
 
 /// Produce complete fake-destination changes for the exact declared targets.
@@ -73,6 +74,44 @@ pub(crate) fn produce_fake_candidate_revision(
             "Revise the selected candidate under the new author instruction.".to_owned();
     }
     changes
+}
+
+/// The other changes of a fake Proposal Growth reply (ADR 0071). `SCRIPT:grow_proposal` changes
+/// each joinable block. `SCRIPT:grow_gap` leaves out the joinable blocks next to the candidate.
+/// `SCRIPT:grow_unjoinable` changes the first Chapter block that is not joinable.
+pub(crate) fn produce_fake_growth(
+    targets: &[DeclaredTarget],
+    author_message: &str,
+) -> Vec<ProseChangeCandidate> {
+    let joinable = |target: &&DeclaredTarget| match target.kind {
+        DeclaredTargetKind::JoinableBlock { distance } => {
+            !author_message.ends_with("SCRIPT:grow_gap") || distance.abs() > 1
+        }
+        DeclaredTargetKind::ChapterBlock | DeclaredTargetKind::PendingCandidate => false,
+    };
+    let joined: Vec<&DeclaredTarget> = if author_message.ends_with("SCRIPT:grow_proposal")
+        || author_message.ends_with("SCRIPT:grow_gap")
+    {
+        targets.iter().filter(joinable).collect()
+    } else if author_message.ends_with("SCRIPT:grow_unjoinable") {
+        targets
+            .iter()
+            .filter(|target| target.kind == DeclaredTargetKind::ChapterBlock)
+            .take(/*n*/ 1)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    joined
+        .into_iter()
+        .map(|target| ProseChangeCandidate {
+            chapter_id: target.chapter_id.clone(),
+            manuscript_block_id: target.block_id.clone(),
+            base_authoritative_revision_id: target.base_revision_id.clone(),
+            candidate_text: format!("{} Join the scene.", target.block_text),
+            explanation: "Join this block to the revised passage.".to_owned(),
+        })
+        .collect()
 }
 
 /// Recognize an explicit candidate revision request in the finite fake profile.

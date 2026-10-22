@@ -53,7 +53,7 @@ The exact Project Scope-bound domain object, immutable input version, selection,
 _Avoid_: Working Target Context, whole Project, editor tab, inferred story scope, fabricated Job target
 
 **Selection Reference**:
-One exact text range that the author adds to one assistant message. It is a range of Chapter text bound to its base Revision, or a range of a pending Proposal candidate bound to its Proposal Revision. The references of a message are its Working Target, together with the Current Chapter. A reference has no mode: the author instruction tells if the model changes the text or only uses it. A reference grants no authority and no permission to change text outside the Working Target.
+One exact text range that the author adds to one assistant message. It is a range of Chapter text bound to its base Revision, or a range of a pending Proposal candidate bound to its Proposal Revision. The references of a message are its Working Target, together with the Current Chapter. A reference has no mode: the author instruction tells if the model changes the text or only uses it. A reference grants no authority and no permission to change text outside the Working Target and its Joinable Blocks ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
 _Avoid_: Caret target, focused candidate, attachment, quote mode
 
 **Operation Input Snapshot**:

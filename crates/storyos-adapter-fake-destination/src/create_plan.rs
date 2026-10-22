@@ -9,7 +9,8 @@ use storyos_core::{
 };
 
 use crate::prose_changes::{
-    is_fake_candidate_revision_request, produce_fake_candidate_revision, produce_fake_prose_changes,
+    is_fake_candidate_revision_request, produce_fake_candidate_revision, produce_fake_growth,
+    produce_fake_prose_changes,
 };
 
 const CLARIFICATION_QUESTION: &str = "Which wording should stay in this sentence?";
@@ -134,11 +135,18 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
         return;
     }
     let changes = match candidate {
-        Some(candidate) => produce_fake_candidate_revision(
-            &[candidate.location()],
-            author_message,
-            &candidate.block_text,
-        ),
+        Some(candidate) => {
+            let mut changes = produce_fake_candidate_revision(
+                &[candidate.location()],
+                author_message,
+                &candidate.block_text,
+            );
+            changes.extend(produce_fake_growth(
+                &request.declared_targets,
+                author_message,
+            ));
+            changes
+        }
         None => produce_fake_prose_changes(
             &request
                 .declared_targets
