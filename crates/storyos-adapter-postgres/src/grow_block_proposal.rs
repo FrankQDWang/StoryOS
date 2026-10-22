@@ -37,13 +37,17 @@ pub(crate) async fn joined_blocks_are_free(
 }
 
 /// Add one pending Operation with its reservation for each joined block, and make the bundle of
-/// the Proposal atomic. Returns the new Operation IDs in the order of `joined`.
+/// the Proposal atomic. Returns the new Operation IDs in the order of `joined`. A candidate
+/// revision with no joined block keeps its bundle policy.
 pub(crate) async fn join(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     proposal_id: &str,
     joined: &[&ProseChangeCandidate],
 ) -> Result<Vec<String>, CompleteAgentRunError> {
+    if joined.is_empty() {
+        return Ok(Vec::new());
+    }
     let owner = claim.project_scope.owner_user_id.as_ref();
     let project = claim.project_scope.project_id.as_ref();
     let mut operation_ids = Vec::with_capacity(joined.len());
