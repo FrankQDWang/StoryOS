@@ -10,6 +10,7 @@ use crate::PostgresProjectReader;
 
 use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal};
 use super::agent_run::seed_run;
+use super::proposal_decision_undo_chain::{conflict_and_replan, head_state};
 use super::proposal_undo_chain::{compensated, edit, on, undo_call};
 use super::secondary_operation::{
     TwoOperationProposal, proposal_head, proposal_head_revision, two_operation_proposal,
@@ -183,6 +184,54 @@ async fn operation_resolutions(admin: &Client, proposal: &TwoOperationProposal) 
     operation_values(admin, proposal, "resolution").await
 }
 
+/// Gives the secondary Operation an Anchor set on the Proposal Revision `revision_id`, on the
+/// base of the fixture.
+async fn add_secondary_anchor(admin: &Client, proposal: &TwoOperationProposal, revision_id: &str) {
+    let (secondary, secondary_block) = proposal.operations[1].clone();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_anchors
+               (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
+                manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
+                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
+                proposal_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal_id}', '{secondary}', 1,
+                     '{secondary_block}', '{base}', 1, 'prosemirror-token-utf16.v1', 0, 1,
+                     'exclusive-authoritative-edges.v1', 'fixture', '{revision_id}')",
+            owner = proposal.scope.owner_user_id.as_ref(),
+            project = proposal.scope.project_id.as_ref(),
+            proposal_id = proposal.proposal_id,
+            base = proposal.chapter_revision_id,
+        ),
+    )
+    .await;
+}
+
+/// The Anchor set Revision of the head of one Proposal and the base of each Anchor in it.
+async fn head_anchor_bases(admin: &Client, proposal_id: &str) -> (String, Vec<String>) {
+    let rows = admin
+        .query(
+            "SELECT anchor.proposal_revision_id::text, anchor.base_authoritative_revision_id::text
+               FROM storyos.proposal_heads AS head
+               JOIN storyos.proposal_anchors AS anchor
+                 ON anchor.proposal_id = head.proposal_id
+                AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
+                      head.owner_user_id, head.project_id, head.proposal_id,
+                      head.current_revision_id)
+              WHERE head.proposal_id = $1::text::uuid
+              ORDER BY anchor.operation_id, anchor.anchor_order",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap();
+    let set = rows
+        .first()
+        .map(|row| row.get(/*idx*/ 0))
+        .unwrap_or_default();
+    (set, rows.iter().map(|row| row.get(/*idx*/ 1)).collect())
+}
+
 /// E1, Acceptance, Undo of the Acceptance, Undo of E1. The Undo of the Acceptance reopens the
 /// Proposal on the new Chapter Revision. The Undo of E1 restores the candidate before E1 on the
 /// base of that reopen Revision. Thus the Anchor set of the reopen Revision stays valid.
@@ -195,25 +244,7 @@ async fn author_undo_reverses_a_candidate_edit_after_the_undo_of_its_acceptance(
     let (store, admin) = stores().await;
     let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4e00).await;
     let opening = proposal_head_revision(&admin, &proposal.proposal_id).await;
-    let (secondary, secondary_block) = proposal.operations[1].clone();
-    run_without_foreign_keys(
-        &admin,
-        &format!(
-            "INSERT INTO storyos.proposal_anchors
-               (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
-                manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
-                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
-                proposal_revision_id)
-             VALUES ('{owner}', '{project}', '{proposal_id}', '{secondary}', 1,
-                     '{secondary_block}', '{base}', 1, 'prosemirror-token-utf16.v1', 0, 1,
-                     'exclusive-authoritative-edges.v1', 'fixture', '{opening}')",
-            owner = proposal.scope.owner_user_id.as_ref(),
-            project = proposal.scope.project_id.as_ref(),
-            proposal_id = proposal.proposal_id,
-            base = proposal.chapter_revision_id,
-        ),
-    )
-    .await;
+    add_secondary_anchor(&admin, &proposal, &opening).await;
     let before = operation_candidates(&admin, &proposal).await;
     let first = edit(
         &store,
@@ -441,6 +472,61 @@ async fn the_undo_of_an_unselected_edit_compensates_after_a_derived_acceptance_u
             (second, first),
             before,
             vec!["applied".to_owned(), "pending".to_owned()]
+        )
+    );
+}
+
+/// Replan D, candidate edit E, Acceptance, Undo of the Acceptance, Undo of E, Undo of D. The edit
+/// gives the replanned Proposal a Validation Receipt, so the Acceptance is possible. The Undo of D
+/// restores the Revision before D with its base and a copy of its Anchor set (ADR 0063).
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_restores_a_replan_after_the_undo_of_an_acceptance_of_its_edit() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x4ec0).await;
+    let opening = proposal_head_revision(&admin, &proposal.proposal_id).await;
+    add_secondary_anchor(&admin, &proposal, &opening).await;
+    let fixture_base = proposal.chapter_revision_id.clone();
+    let before = operation_candidates(&admin, &proposal).await;
+    let (replanned, before_replan) =
+        conflict_and_replan(&store, &admin, &proposal, /*suffix*/ 0x4ec9).await;
+    let edited = edit(
+        &store,
+        &admin,
+        &proposal,
+        on(
+            /*operation*/ 0, /*suffix*/ 0x4eca, /*local_intent_sequence*/ 3,
+        ),
+    )
+    .await;
+    accept(
+        &store,
+        &admin,
+        &mut proposal,
+        &[0, 1],
+        /*suffix*/ 0x4ecb,
+    )
+    .await;
+    undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecc).await;
+    let undo_edit = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ecd).await;
+    let undo_replan = undo_source(&store, &admin, &mut proposal, /*suffix*/ 0x4ece).await;
+    let restored = proposal_head_revision(&admin, &proposal.proposal_id).await;
+
+    assert_eq!(
+        (
+            (undo_edit, undo_replan),
+            head_state(&admin, &proposal.proposal_id).await,
+            operation_candidates(&admin, &proposal).await,
+            head_anchor_bases(&admin, &proposal.proposal_id).await,
+        ),
+        (
+            (edited, replanned),
+            before_replan,
+            before,
+            (restored, vec![fixture_base]),
         )
     );
 }
