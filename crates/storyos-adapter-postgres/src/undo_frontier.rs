@@ -222,8 +222,34 @@ pub(crate) async fn head_lineage_revision(
     chapter_id: &str,
     head_revision_id: &str,
 ) -> Result<String, ProjectCommandError> {
-    let row = client
-        .query_one(
+    let mut path = head_lineage_path(client, command, chapter_id, head_revision_id).await?;
+    Ok(path.pop().unwrap_or_else(|| head_revision_id.to_owned()))
+}
+
+/// Whether the Head of a Chapter restores `target_revision_id` at a step of its lineage walk
+/// (ADR 0067). The Head itself is the first step.
+pub(crate) async fn chapter_head_restores(
+    client: &tokio_postgres::Client,
+    command: &UndoRequest,
+    chapter_id: &str,
+    head_revision_id: &str,
+    target_revision_id: &str,
+) -> Result<bool, ProjectCommandError> {
+    let path = head_lineage_path(client, command, chapter_id, head_revision_id).await?;
+    Ok(path
+        .iter()
+        .any(|revision_id| revision_id == target_revision_id))
+}
+
+/// The Revisions of the lineage walk of a Chapter Head, from the Head to its lineage Revision.
+async fn head_lineage_path(
+    client: &tokio_postgres::Client,
+    command: &UndoRequest,
+    chapter_id: &str,
+    head_revision_id: &str,
+) -> Result<Vec<String>, ProjectCommandError> {
+    let rows = client
+        .query(
             "WITH RECURSIVE lineage(revision_id, depth) AS (
                  SELECT $4::text::uuid, 0
                UNION ALL
@@ -251,8 +277,7 @@ pub(crate) async fn head_lineage_revision(
              ) CYCLE revision_id SET looped USING path
              SELECT revision_id::text FROM lineage
               WHERE NOT looped
-              ORDER BY depth DESC
-              LIMIT 1",
+              ORDER BY depth",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -262,7 +287,7 @@ pub(crate) async fn head_lineage_revision(
         )
         .await
         .map_err(undo_database_error)?;
-    Ok(row.get(/*idx*/ 0))
+    Ok(rows.iter().map(|row| row.get(/*idx*/ 0)).collect())
 }
 
 /// Whether `target_revision_id` is a Proposal Head Lineage Revision of the head of a Proposal

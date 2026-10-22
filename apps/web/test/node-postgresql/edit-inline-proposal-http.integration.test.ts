@@ -9,13 +9,13 @@ import {
   acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, getRefusedEditDraft, getApplyAuthorEditOutcome,
-  rejectProposalOperations, replanProposal, digestReplanProposal,
+  exportProjectArchive, getAgentRun, getChapter, getEditorSession, getExportOperation, getProposal, getRefusedEditDraft, getApplyAuthorEditOutcome,
+  rejectProposalOperations, replanProposal, digestReplanProposal, withdrawProposal, digestWithdrawProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CloseEditorFlowDraftRequest, CloseEditorFlowDraftResponse, AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
-  ExpandRefusedEditDraftRequest, ReplacementBlock, ReplanProposalRequest,
+  ExpandRefusedEditDraftRequest, ReplacementBlock, ReplanProposalRequest, WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
@@ -245,7 +245,7 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
     const guardUndo = { ...undo, undo_latest_author_action_input: { ...undo.undo_latest_author_action_input,
       expected_author_undo_frontier_sequence: guardExpansion.receipt.author_action_sequence! } };
     const beforeDriftUndo = await retainedState(prepared.projectId);
-    assert.deepEqual((await sendUndo(guardUndo, id("e0fb907"))).effect, { kind: "conflicted", reason: "source_binding_changed" });
+    assert.deepEqual((await sendUndo(guardUndo, id("e0fb907"))).effect, { kind: "unavailable", reason: "barrier" });
     assert.deepEqual(await retainedState(prepared.projectId), beforeDriftUndo);
     await queryPostgres(`UPDATE storyos.draft_artifacts SET retention_state='tombstoned' WHERE owner_user_id='${USER_A}'::uuid
       AND project_id='${prepared.projectId}'::uuid AND draft_id='${guardSource.draft_id}'::uuid`);
@@ -254,6 +254,81 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
     assert.deepEqual(await retainedState(prepared.projectId), beforeUnavailableUndo);
     await retainRefusedEditRecoveryExpectation(prepared.projectId, [{ draft: reopened, available: true },
       { draft: guardSource, available: false }], [], [withdrawn]);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("Undo of a Draft expansion after the Undo of a withdrawal reopens the Draft through the Editor Session frontier", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("4d4011"), "Expansion Undo Chain", "4d402");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "4d403");
+    const created = await sendMixed(started.baseUrl, prepared, mixedRequest(opened, writer, "4d404"), id("4d4046"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected a source Draft");
+    const source = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    const rejection: RejectProposalOperationsRequest = {
+      command_schema: "storyos.command.reject-proposal-operations.request.v1",
+      reject_proposal_operations_input: { ...BINDING, correlation_id: id("4d4051"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        proposal_revision_id: opened.proposal.revision_id, selected_pending_operation_ids: [opened.proposal.operation_id],
+        expected_target_revisions: [writer.authoritativeRevisionId],
+        rejection_reason: { kind: "author_declined", note: { kind: "omitted" } } },
+    };
+    await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", rejection.command_schema,
+      await digestRejectProposalOperations(rejection), id("4d4052"), (antiForgery) => rejectProposalOperations({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
+        request: rejection, fetchImpl: prepared.fetchImpl, antiForgery, idempotencyKey: id("4d4052") }));
+    const request: ExpandRefusedEditDraftRequest = { command_schema: "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
+      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("4d4061"),
+        draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
+        source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
+        selected_payload_range: { kind: "whole_draft_payload" }, proposal_kind: "inline_edit",
+        chapter_id: prepared.chapterId, target_refs: [opened.proposal.manuscript_block_id],
+        expected_target_revisions: [writer.authoritativeRevisionId], anchors: opened.proposal.anchors,
+        editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration } };
+    const expansion = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions", request.command_schema,
+      await digestExpandRefusedEditDraft(request), id("4d4062"), (antiForgery) => expandRefusedEditDraftToProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: source.draft_id,
+        fetchImpl: prepared.fetchImpl, request, antiForgery, idempotencyKey: id("4d4062") }));
+    if (expansion.effect.kind !== "proposal_created_from_draft") throw new Error("expected an expanded Proposal");
+    const proposalId = expansion.effect.proposal_id;
+    const inspect = () => getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId, fetchImpl: prepared.fetchImpl });
+    const sessionId = writer.session.editor_session.editor_session_id;
+    const withdrawal: WithdrawProposalRequest = { command_schema: "storyos.command.withdraw-proposal.request.v1",
+      withdraw_proposal_input: { cause: "author", proposal_revision_id: (await inspect()).proposal.revision_id,
+        expected_closure: "open", expected_target_revisions: [writer.authoritativeRevisionId],
+        withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
+        editor_session_id: sessionId, ...BINDING, correlation_id: id("4d4071") } };
+    const withdrawalResult = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals", withdrawal.command_schema,
+      await digestWithdrawProposal(withdrawal), id("4d4072"), (antiForgery) => withdrawProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId, fetchImpl: prepared.fetchImpl,
+        idempotencyKey: id("4d4072"), antiForgery, request: withdrawal }));
+    assert.equal(withdrawalResult.effect.kind, "resolved");
+    const frontier = async () => (await getEditorSession({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      editorSessionId: sessionId, fetchImpl: prepared.fetchImpl })).author_undo_frontier_sequence ?? null;
+    const effects = [];
+    for (const ns of ["4d408", "4d409"]) {
+      const undo = { command_schema: "storyos.command.undo-latest-author-action.request.v1" as const,
+        undo_latest_author_action_input: { ...BINDING, correlation_id: id(`${ns}1`), editor_session_id: sessionId,
+          expected_authoritative_revision_id: writer.authoritativeRevisionId,
+          expected_author_undo_frontier_sequence: (await frontier())! } };
+      effects.push((await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema, await digestUndoLatestAuthorAction(undo),
+        id(`${ns}2`), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          fetchImpl: prepared.fetchImpl, request: undo, antiForgery, idempotencyKey: id(`${ns}2`) }))).effect.kind);
+    }
+    const reopened = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    const withdrawn = (await inspect()).proposal;
+    assert.deepEqual({ effects, draft: reopened.closure, proposal: withdrawn.closure, reservation: withdrawn.reservation_state },
+      { effects: ["compensated", "draft_compensated"], draft: "open", proposal: "withdrawn", reservation: "resolved" });
+    assert.notEqual(await frontier(), expansion.receipt.author_action_sequence);
   } finally { await stopRealServer(started.server); }
 });
 

@@ -1612,7 +1612,7 @@ undo-allocation matrix is:
 | compensate ordinary author Proposal edit | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision |
 | compensate `DraftRetry.ProposalRevised` | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision plus exact source Draft reopen |
 | compensate withdrawal or explicit Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact resolution/lifecycle event or Draft reopen |
-| compensate Refused Edit Draft expansion | `DomainReceipt` | 0 | exactly 1 Compensation | withdraw exact derived Proposal and reopen exact source Draft |
+| compensate Refused Edit Draft expansion | `DomainReceipt` | 0 | exactly 1 Compensation | withdraw the derived Proposal head that restores the expanded Revision and reopen exact source Draft |
 | `UndoAcceptance.Compensated` | `UndoAcceptanceReceipt` | exactly 1 | exactly 1 Compensation | safe Proposal reopening Revision when available |
 | `UndoAcceptance.ReversalRequired` or another handler's `ReversalRequired` | owning typed Receipt | 0 | exactly 1 Forward | exactly 1 Reversal Proposal; source remains uncompensated |
 | `Unavailable` | owning typed Receipt or no child when the root is a Barrier | 0 | 0 | none |
