@@ -239,33 +239,34 @@ test("Author Undo of an Inline candidate edit goes back through the Undo of a re
       context.projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
       await digestApplyAuthorEdit(request), id(key), (antiForgery) => applyAuthorEdit({ baseUrl,
         projectId: context.projectId, fetchImpl: context.fetchImpl, request, antiForgery, idempotencyKey: id(key) }));
-    const interior = await send(replaceUnit(14, 17, "xx", writer, "d3904", opened.revision_id), "d39046");
+    const edge = await send(replaceUnit(0, 5, "Keep", writer, "d3904", opened.revision_id), "d39046");
+    if (edge.effect.kind !== "authoritative_applied") throw new Error("expected the author edit to apply");
+    const before = await read(context, opened.proposal_id);
+    assert.equal(before.base_authoritative_revision_id, h0);
+
+    Object.assign(writer, { authoritativeRevisionId: edge.effect.authoritative_revision.revision_id, nextSequence: "3" });
+    const request = replaceUnit(4, 7, "xx", writer, "d3905", before.revision_id);
+    request.proposal_target = { proposal_id: before.proposal_id, operation_id: before.operation_id,
+      revision_id: before.revision_id, manuscript_block_id: before.manuscript_block_id };
+    const interior = await send(request, "d39056");
     if (interior.effect.kind !== "proposal_revised") throw new Error("expected the candidate edit to apply");
     const edited = await read(context, opened.proposal_id);
     assert.equal(edited.candidate_text, "narrxxr tone");
-    writer.nextSequence = "3";
-    const edge = await send(replaceUnit(0, 5, "Keep", writer, "d3905", edited.revision_id), "d39056");
-    if (edge.effect.kind !== "authoritative_applied") throw new Error("expected the author edit to apply");
 
     const accepted = applied(await accept(context, edited, edge.effect.authoritative_revision.revision_id, "d3906"));
     assert.equal(accepted.target_resolution, "proven_range");
     const restored = await undoAcceptance(context, accepted, "d3907");
     assert.equal(restored.body, "Keep the narrator voice in this passage.");
-    const undoneEdge = await undoFrontier(context, edge.effect.author_action_sequence, restored.revision_id, "d3908");
-    if (undoneEdge.effect.kind !== "compensated" || undoneEdge.effect.authoritative_revision === undefined) {
-      throw new Error(`expected compensated, got ${JSON.stringify(undoneEdge.effect)}`);
-    }
-    assert.equal(undoneEdge.effect.authoritative_revision.body, "Guard the narrator voice in this passage.");
     const reopened = await read(context, opened.proposal_id);
+    assert.equal(reopened.base_authoritative_revision_id, h0);
 
-    const undoneInterior = await undoFrontier(context, interior.effect.author_action_sequence,
-      undoneEdge.effect.authoritative_revision.revision_id, "d3909");
-    assert.equal(undoneInterior.effect.kind, "compensated");
+    const undone = await undoFrontier(context, interior.effect.author_action_sequence, restored.revision_id, "d3908");
+    assert.equal(undone.effect.kind, "compensated");
     const after = await read(context, opened.proposal_id);
     assert.deepEqual(
       [after.candidate_text, after.base_authoritative_revision_id, after.anchors, after.operation_resolution],
-      [opened.candidate_text, reopened.base_authoritative_revision_id, opened.anchors, "pending"]);
-    assert.equal(reopened.base_authoritative_revision_id, h0);
+      [before.candidate_text, reopened.base_authoritative_revision_id, reopened.anchors, "pending"]);
+    assert.deepEqual(after.anchors, before.anchors);
   } finally {
     await stopRealServer(started.server);
   }
