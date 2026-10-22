@@ -55,6 +55,9 @@ mod proposal_decision_undo_chain;
 #[path = "command_sequence_tests/draft_expansion_undo_chain_tests.rs"]
 mod draft_expansion_undo_chain;
 
+#[path = "command_sequence_tests/proposal_acceptance_undo_chain_tests.rs"]
+mod proposal_acceptance_undo_chain;
+
 #[path = "command_sequence_tests/author_edit_tests.rs"]
 mod author_edit;
 
