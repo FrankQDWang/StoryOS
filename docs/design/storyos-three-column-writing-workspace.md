@@ -26,6 +26,7 @@ The primary writing workspace is a fixed three-column shell:
 - Candidate text has no visible label. Its quiet acceptance and rejection actions sit below the surface. Settled candidates leave ordinary prose or disappear without a repeated status row.
 - The proposal block uses the approved restrained treatment: warm off-white canvas, charcoal type, pale warm-gray proposal surface, and a thin vertical marker.
 - The author-facing actions are `接受` and `拒绝`. Exact-set Acceptance and Rejection remain public commands; the workspace does not add whole-set controls.
+- On an `atomic` Proposal, the action of one part applies to all of its parts (ADR 0071).
 - There is no visible diff comparison, `查看差异` action, or persistent Word-style tracked-change markup.
 - Technical receipts, JSON, state grids, and debugging controls do not appear in the manuscript surface.
 

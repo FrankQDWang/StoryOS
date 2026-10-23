@@ -43,6 +43,8 @@ pub struct AgentRunContext {
     pub working_target_availability: WorkingTargetAvailability,
     /// The current availability of each selection reference, in reference order.
     pub reference_availability: Vec<WorkingTargetAvailability>,
+    /// The Joinable Blocks that the dispatched request of the decision marked (ADR 0071).
+    pub joinable_block_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
