@@ -107,6 +107,106 @@ fn a_revised_candidate_moves_each_reference_of_its_proposal_to_the_new_revision(
 }
 
 #[test]
+fn a_growth_moves_the_chapter_references_of_the_joined_blocks_to_their_candidates() {
+    let candidate = |proposal: &str, operation: &str, block: &str, end_offset| AdmittedSelection {
+        reference: SelectionReference::ProposalCandidateText {
+            chapter_id: "chapter-1".to_owned(),
+            proposal_id: proposal.to_owned(),
+            operation_id: operation.to_owned(),
+            revision_id: "revision-2".to_owned(),
+            start_offset: 0,
+            end_offset,
+        },
+        selected_text: Some("雨夜".to_owned()),
+        manuscript_block_ids: vec![block.to_owned()],
+        candidate_text: Some("雨夜".to_owned()),
+    };
+    let chapter = |blocks: &[&str]| AdmittedSelection {
+        reference: SelectionReference::ChapterText {
+            chapter_id: "chapter-1".to_owned(),
+            base_authoritative_revision_id: "chapter-revision-1".to_owned(),
+            start: point(blocks[0], /*offset*/ 0),
+            end: point(blocks[blocks.len() - 1], /*offset*/ 2),
+        },
+        selected_text: Some("渡口".to_owned()),
+        manuscript_block_ids: blocks.iter().map(|block| (*block).to_owned()).collect(),
+        candidate_text: None,
+    };
+    let grown = |operation: &'static str, block: &'static str, text: &'static str| GrownCandidate {
+        chapter_id: "chapter-1",
+        manuscript_block_id: block,
+        target: crate::ProposalCandidateTarget {
+            proposal_id: "proposal-1".to_owned(),
+            operation_id: operation.to_owned(),
+            revision_id: "revision-2".to_owned(),
+        },
+        candidate_text: text,
+    };
+    let joined = |operation: &str, block: &str, text: &str| AdmittedSelection {
+        selected_text: Some(text.to_owned()),
+        candidate_text: Some(text.to_owned()),
+        ..candidate(
+            "proposal-1",
+            operation,
+            block,
+            text.encode_utf16().count() as u32,
+        )
+    };
+    let below = [
+        grown("operation-1", "b1", "雨夜"),
+        grown("operation-2", "b2", "船夫😀"),
+    ];
+    let above = [
+        grown("operation-0", "b0", "风停了"),
+        grown("operation-1", "b1", "雨夜"),
+    ];
+    let other = candidate("proposal-9", "operation-9", "b5", /*end_offset*/ 2);
+
+    assert_eq!(
+        [
+            reference_joined_candidates(
+                vec![
+                    candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                    chapter(&["b2"])
+                ],
+                &below,
+            ),
+            reference_joined_candidates(
+                vec![
+                    chapter(&["b0", "b1"]),
+                    candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2)
+                ],
+                &above,
+            ),
+            reference_joined_candidates(
+                vec![
+                    candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                    chapter(&["b2", "b3"]),
+                    other.clone()
+                ],
+                &below,
+            ),
+        ],
+        [
+            vec![
+                candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                joined("operation-2", "b2", "船夫😀")
+            ],
+            vec![
+                joined("operation-0", "b0", "风停了"),
+                candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2)
+            ],
+            vec![
+                candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                chapter(&["b2", "b3"]),
+                joined("operation-2", "b2", "船夫😀"),
+                other,
+            ],
+        ]
+    );
+}
+
+#[test]
 fn a_steering_input_adds_only_the_references_that_the_run_does_not_have() {
     let chapter = |start| SelectionReference::ChapterText {
         chapter_id: "chapter-1".to_owned(),

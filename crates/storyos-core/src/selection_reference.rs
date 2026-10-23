@@ -113,6 +113,79 @@ pub fn advance_candidate_references<'a>(
     }
 }
 
+/// One pending candidate that a Proposal Growth revised or added, at its new Revision.
+pub struct GrownCandidate<'a> {
+    pub chapter_id: &'a str,
+    pub manuscript_block_id: &'a str,
+    pub target: super::ProposalCandidateTarget,
+    pub candidate_text: &'a str,
+}
+
+/// Move the Chapter references of the joined blocks of a Proposal Growth to the candidates of
+/// their new Operations (ADR 0071). A grown candidate that a reference already names is the
+/// revised candidate. Each joined candidate gets one reference to all of its text, in the place of
+/// the first Chapter reference that covers its block. That Chapter reference stays only when it
+/// also covers a block that did not grow.
+pub fn reference_joined_candidates(
+    references: Vec<AdmittedSelection>,
+    grown: &[GrownCandidate<'_>],
+) -> Vec<AdmittedSelection> {
+    let mut joined: Vec<&GrownCandidate<'_>> = grown
+        .iter()
+        .filter(|candidate| {
+            !references.iter().any(|admitted| {
+                admitted.reference.candidate_target().is_some_and(|target| {
+                    target.proposal_id == candidate.target.proposal_id
+                        && target.operation_id == candidate.target.operation_id
+                })
+            })
+        })
+        .collect();
+    let mut moved = Vec::with_capacity(references.len() + joined.len());
+    for admitted in references {
+        let SelectionReference::ChapterText { chapter_id, .. } = &admitted.reference else {
+            moved.push(admitted);
+            continue;
+        };
+        let covers = |candidate: &GrownCandidate<'_>| {
+            candidate.chapter_id == chapter_id
+                && admitted
+                    .manuscript_block_ids
+                    .iter()
+                    .any(|block| block == candidate.manuscript_block_id)
+        };
+        let (covered, rest): (Vec<_>, Vec<_>) =
+            joined.into_iter().partition(|candidate| covers(candidate));
+        joined = rest;
+        let keep = covered.is_empty()
+            || admitted.manuscript_block_ids.iter().any(|block| {
+                !grown.iter().any(|candidate| {
+                    candidate.chapter_id == chapter_id && candidate.manuscript_block_id == block
+                })
+            });
+        if keep {
+            moved.push(admitted);
+        }
+        moved.extend(covered.into_iter().map(|candidate| {
+            AdmittedSelection {
+                reference: SelectionReference::ProposalCandidateText {
+                    chapter_id: candidate.chapter_id.to_owned(),
+                    proposal_id: candidate.target.proposal_id.clone(),
+                    operation_id: candidate.target.operation_id.clone(),
+                    revision_id: candidate.target.revision_id.clone(),
+                    start_offset: 0,
+                    end_offset: u32::try_from(candidate.candidate_text.encode_utf16().count())
+                        .unwrap_or(u32::MAX),
+                },
+                selected_text: Some(candidate.candidate_text.to_owned()),
+                manuscript_block_ids: vec![candidate.manuscript_block_id.to_owned()],
+                candidate_text: Some(candidate.candidate_text.to_owned()),
+            }
+        }));
+    }
+    moved
+}
+
 /// The references of a Run after a steering input adds its references (ADR 0062). A reference
 /// that the Run already has does not go in again, so the order of the first entry stays.
 pub fn merge_steering_references(
