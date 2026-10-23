@@ -41,19 +41,21 @@ pub(crate) async fn advance(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    for location in locations.unwrap_or_default() {
+    let locations = locations.unwrap_or_default();
+    let mut grown = Vec::new();
+    for location in &locations {
         if let storyos_contracts::ProseChangeLocationOutcome::Revised {
             proposal_id,
             operation_id,
             revision_id,
             prior_revision_id,
             ..
-        } = location.outcome
+        } = &location.outcome
         {
             let prior = storyos_core::ProposalCandidateTarget {
-                proposal_id,
-                operation_id,
-                revision_id: prior_revision_id,
+                proposal_id: proposal_id.clone(),
+                operation_id: operation_id.clone(),
+                revision_id: prior_revision_id.clone(),
             };
             if let Some(target) = retained.operation_requirement.candidate_target.as_mut()
                 && *target == prior
@@ -67,11 +69,26 @@ pub(crate) async fn advance(
                     .iter_mut()
                     .flatten(),
                 &prior,
-                &revision_id,
+                revision_id,
                 &location.candidate_text,
             );
+            grown.push(storyos_core::GrownCandidate {
+                chapter_id: &location.chapter_id,
+                manuscript_block_id: &location.manuscript_block_id,
+                target: storyos_core::ProposalCandidateTarget {
+                    revision_id: revision_id.clone(),
+                    ..prior
+                },
+                candidate_text: &location.candidate_text,
+            });
         }
     }
+    // ADR 0071: the Chapter references of the joined blocks move to their new candidates.
+    retained.operation_requirement.selection_references = retained
+        .operation_requirement
+        .selection_references
+        .take()
+        .map(|references| storyos_core::reference_joined_candidates(references, &grown));
     let position: String = row.get(3);
     let messages = client.query(
         "SELECT payload->>'author_message' FROM storyos.project_activity_event_payloads

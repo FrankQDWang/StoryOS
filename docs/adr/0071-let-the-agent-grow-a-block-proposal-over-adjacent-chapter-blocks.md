@@ -15,12 +15,10 @@ The author can select text that starts in a pending Proposal candidate and conti
 - **Proposal Growth.** One reply can revise the referenced candidate and also change Joinable Blocks. Then StoryOS adds those blocks to the same Proposal. This is one Agent Decision on one Proposal, so it needs no Agent tool loop.
 - **Scope.** Only a `block_edit` Proposal grows. The real model makes only `block_edit` Proposals. An `inline_edit` Proposal does not grow, and its Proposal Anchors do not change.
 - **Joinable Block.** A Chapter block is joinable when all these conditions are true:
-  - The Run references exactly one pending candidate.
+  - The Run references one or more pending candidates, and all of them are candidates of one Proposal.
   - A `chapter_text` reference of the Run covers the block, fully or in part.
   - No pending Proposal reserves the block.
   - The pending Operations of the Proposal of the candidate make one adjacent run of blocks. The joinable blocks continue that run up or down with no gap.
-
-  [Grow a Proposal again and move the steering references](https://github.com/FrankQDWang/StoryOS/issues/1268) extends the first condition to several candidate references of one Proposal.
 - **Working Target.** The request marks each joinable target block. The Host instructions tell the model that it can change the candidate together with joinable blocks. The model changes the joinable blocks next to the candidate first, with no gap.
 - **Reply validation.** The reply contract keeps its shape. A reply is a growth when it changes the referenced candidate and one or more joinable blocks, and no other block. The changed joinable blocks above the Proposal, and the changed joinable blocks below it, each start next to the Proposal and have no gap. These replies are not valid, and no Proposal changes:
   - A change of the candidate and of a block that is not joinable.
@@ -32,6 +30,8 @@ The author can select text that starts in a pending Proposal candidate and conti
 - **Recheck.** Under the lock of the Proposal head, StoryOS checks each joined block again. It must be in the current head at the base of the candidate, with no reservation. When a check fails, StoryOS refuses all of the growth with `stale_candidate`, and it writes nothing.
 - **Result.** Each change of a growth has the location outcome `revised`. A joined block names its new Operation. All changes name the same new Revision. The location contract does not change.
 - **Exact retry.** An exact retry of the request returns the same Run, and the Run writes no second Revision.
+- **Second growth.** A grown Proposal can grow again over the next adjacent Chapter block. The joinable block rule uses the run of all pending Operations of the Proposal. One growth revises only one candidate: a reply that changes two or more candidates of the Proposal is not valid, also together with joinable blocks.
+- **Steering after growth.** When steering continues the same Run, each candidate reference of the Proposal moves to the new Revision, as in ADR 0062. Each Chapter reference that covers a joined block gives one candidate reference of the new Operation of that block, with all of its candidate text. The new reference takes the place of the Chapter reference. A Chapter reference that also covers a block outside the growth stays, and the new reference comes after it.
 
 ## Considered options
 
@@ -42,6 +42,7 @@ The author can select text that starts in a pending Proposal candidate and conti
 ## Consequences
 
 - The Host instructions changed, so the wire digest of an Agent Plan request changed. A Model Registration does not bind the instruction text, so no Registration drift occurs.
+- After a growth, the Run can hold more than 8 references, because one Chapter reference can give one candidate reference for each joined block. This is a known limit: while the Run holds 8 or more references, a steering input that adds references is refused with `steering_reference_limit`. The contract does not change.
 - Migration 0098 grants the runtime role `UPDATE` of the column `bundle_policy` of `storyos.proposals` only.
 - A growth is an Agent result, not an Author Action, so Author Undo does not reverse it. The Proposal Head Lineage of [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md) does not explain the growth Revision. Thus the Undo of an earlier author candidate edit or decision on that Proposal gets a Barrier, as after an Agent candidate revision.
 - [Accept, withdraw, and show a grown Proposal](https://github.com/FrankQDWang/StoryOS/issues/1267) delivers the decisions on a grown Proposal and their display:

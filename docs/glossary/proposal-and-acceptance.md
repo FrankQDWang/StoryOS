@@ -13,11 +13,11 @@ A stable, independently resolvable domain change within a Proposal; dynamically 
 _Avoid_: Diff hunk, visual change marker
 
 **Proposal Growth**:
-One Agent Decision that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
+One Agent Decision that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)). Steering on the same Run then changes the Chapter reference of each joined block into a reference to its new candidate.
 _Avoid_: Proposal merge, Proposal extension, second Proposal for one passage
 
 **Joinable Block**:
-A Chapter block next to the Proposal of the one referenced candidate. A Chapter text reference of the Run covers it, fully or in part, and no pending Proposal reserves it. It continues the adjacent run of the pending Operations of that Proposal with no gap. The request marks each Joinable Block for the model, and only a Proposal Growth can add it to that Proposal ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
+A Chapter block next to the Proposal of the referenced candidates. All of these candidates belong to one Proposal. A Chapter text reference of the Run covers it, fully or in part, and no pending Proposal reserves it. It continues the adjacent run of all pending Operations of that Proposal with no gap, also after an earlier growth. The request marks each Joinable Block for the model, and only a Proposal Growth can add it to that Proposal ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
 _Avoid_: Covered block, adjacent target, join candidate
 
 **Proposal Generation**:

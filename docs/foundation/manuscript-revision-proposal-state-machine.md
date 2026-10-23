@@ -280,7 +280,8 @@ A Proposal Growth appends one Revision to a pending `block_edit` Proposal
 The Revision revises the referenced candidate. It adds one pending Operation for
 each changed Joinable Block, with its reservation.
 The Proposal then has the bundle policy `atomic`. The growth writes no Anchor
-and no Author Action.
+and no Author Action. A grown Proposal can grow again over the next adjacent
+Chapter block.
 
 ### 6.2 Inline Proposal Anchors
 

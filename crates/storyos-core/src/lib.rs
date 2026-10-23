@@ -762,9 +762,9 @@ pub use prose_change_locations::{
 };
 mod selection_reference;
 pub use selection_reference::{
-    AdmittedSelection, SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint,
+    AdmittedSelection, GrownCandidate, SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint,
     advance_candidate_references, assemble_selection_references, merge_steering_references,
-    select_candidate_text, select_chapter_text,
+    reference_joined_candidates, select_candidate_text, select_chapter_text,
 };
 
 mod assemble_candidate_context;

@@ -3,9 +3,10 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, DeclaredTarget};
 use storyos_core::DeclaredTargetKind;
 
-/// Mark each declared Chapter block that can join the Proposal of the one referenced candidate.
-/// A Chapter text reference covers a joinable block, and the block has no reservation. The
-/// joinable blocks and the pending Operations of that `block_edit` Proposal make one adjacent run.
+/// Mark each declared Chapter block that can join the Proposal of the referenced candidates. All of
+/// them are candidates of one Proposal. A Chapter text reference covers a joinable block, and the
+/// block has no reservation. The joinable blocks and the pending Operations of that `block_edit`
+/// Proposal make one adjacent run.
 pub(crate) async fn mark(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -19,10 +20,15 @@ pub(crate) async fn mark(
         .selection_references
         .as_deref()
         .unwrap_or_default();
-    let mut candidates = crate::selection_references::candidate_targets(references).into_iter();
-    let (Some((chapter_id, target, _)), None) = (candidates.next(), candidates.next()) else {
+    let candidates = crate::selection_references::candidate_targets(references);
+    let Some((chapter_id, target, _)) = candidates.first().cloned() else {
         return Ok(());
     };
+    if candidates.iter().any(|(chapter, candidate, _)| {
+        *chapter != chapter_id || candidate.proposal_id != target.proposal_id
+    }) {
+        return Ok(());
+    }
     let covered: std::collections::BTreeSet<&str> = references
         .iter()
         .filter(|admitted| {
