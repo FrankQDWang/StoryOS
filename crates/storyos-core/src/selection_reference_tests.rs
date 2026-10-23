@@ -107,6 +107,50 @@ fn a_revised_candidate_moves_each_reference_of_its_proposal_to_the_new_revision(
 }
 
 #[test]
+fn a_revised_candidate_covers_its_new_text_after_a_joined_location_of_the_same_growth() {
+    let mut references = [AdmittedSelection {
+        reference: SelectionReference::ProposalCandidateText {
+            chapter_id: "chapter-1".to_owned(),
+            proposal_id: "proposal-1".to_owned(),
+            operation_id: "operation-1".to_owned(),
+            revision_id: "revision-1".to_owned(),
+            start_offset: 1,
+            end_offset: 3,
+        },
+        selected_text: Some("夜。".to_owned()),
+        manuscript_block_ids: vec!["b1".to_owned()],
+        candidate_text: Some("雨夜。渡口".to_owned()),
+    }];
+    let prior = |operation: &str| crate::ProposalCandidateTarget {
+        proposal_id: "proposal-1".to_owned(),
+        operation_id: operation.to_owned(),
+        revision_id: "revision-1".to_owned(),
+    };
+
+    // A reply can list the joined block before the candidate.
+    for operation in ["operation-2", "operation-1"] {
+        advance_candidate_references(
+            references.iter_mut(),
+            &prior(operation),
+            "revision-2",
+            "风😀",
+        );
+    }
+
+    assert_eq!(
+        references[0].reference,
+        SelectionReference::ProposalCandidateText {
+            chapter_id: "chapter-1".to_owned(),
+            proposal_id: "proposal-1".to_owned(),
+            operation_id: "operation-1".to_owned(),
+            revision_id: "revision-2".to_owned(),
+            start_offset: 0,
+            end_offset: 3,
+        }
+    );
+}
+
+#[test]
 fn a_growth_moves_the_chapter_references_of_the_joined_blocks_to_their_candidates() {
     let candidate = |proposal: &str, operation: &str, block: &str, end_offset| AdmittedSelection {
         reference: SelectionReference::ProposalCandidateText {

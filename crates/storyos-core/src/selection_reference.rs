@@ -85,7 +85,8 @@ impl AdmittedSelection {
 
 /// Move the candidate references of a revised Proposal to its new revision. Each Operation of
 /// the Proposal shares the revision. The revised candidate gets a new text, so its reference
-/// covers all of that text. The ranges of the other Operations stay.
+/// covers all of that text. The ranges of the other Operations stay. A reference that an earlier
+/// location of the same growth already moved to the new revision still gets its new range.
 pub fn advance_candidate_references<'a>(
     references: impl IntoIterator<Item = &'a mut AdmittedSelection>,
     revised: &super::ProposalCandidateTarget,
@@ -102,7 +103,7 @@ pub fn advance_candidate_references<'a>(
             ..
         } = &mut admitted.reference
             && *proposal_id == revised.proposal_id
-            && *revision_id == revised.revision_id
+            && (*revision_id == revised.revision_id || revision_id == new_revision_id)
         {
             *revision_id = new_revision_id.to_owned();
             if *operation_id == revised.operation_id {
