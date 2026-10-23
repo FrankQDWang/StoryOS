@@ -85,7 +85,8 @@ impl AdmittedSelection {
 
 /// Move the candidate references of a revised Proposal to its new revision. Each Operation of
 /// the Proposal shares the revision. The revised candidate gets a new text, so its reference
-/// covers all of that text. The ranges of the other Operations stay.
+/// covers all of that text. The ranges of the other Operations stay. A reference that an earlier
+/// location of the same growth already moved to the new revision still gets its new range.
 pub fn advance_candidate_references<'a>(
     references: impl IntoIterator<Item = &'a mut AdmittedSelection>,
     revised: &super::ProposalCandidateTarget,
@@ -102,7 +103,7 @@ pub fn advance_candidate_references<'a>(
             ..
         } = &mut admitted.reference
             && *proposal_id == revised.proposal_id
-            && *revision_id == revised.revision_id
+            && (*revision_id == revised.revision_id || revision_id == new_revision_id)
         {
             *revision_id = new_revision_id.to_owned();
             if *operation_id == revised.operation_id {
@@ -111,6 +112,89 @@ pub fn advance_candidate_references<'a>(
             }
         }
     }
+}
+
+/// One pending candidate that a Proposal Growth revised or added, at its new Revision.
+pub struct GrownCandidate<'a> {
+    pub chapter_id: &'a str,
+    pub manuscript_block_id: &'a str,
+    pub target: super::ProposalCandidateTarget,
+    pub candidate_text: &'a str,
+}
+
+/// Move the Chapter references of the joined blocks of a Proposal Growth to the candidates of
+/// their new Operations (ADR 0071). A grown candidate that a reference already names is the
+/// revised candidate. Each joined candidate gets one reference to all of its text, in the place of
+/// the first Chapter reference that covers its block. A Chapter reference that covers a joined block
+/// stays only when it also covers a block that did not grow.
+pub fn reference_joined_candidates(
+    references: Vec<AdmittedSelection>,
+    grown: &[GrownCandidate<'_>],
+) -> Vec<AdmittedSelection> {
+    let joined: Vec<&GrownCandidate<'_>> = grown
+        .iter()
+        .filter(|candidate| {
+            !references.iter().any(|admitted| {
+                admitted.reference.candidate_target().is_some_and(|target| {
+                    target.proposal_id == candidate.target.proposal_id
+                        && target.operation_id == candidate.target.operation_id
+                })
+            })
+        })
+        .collect();
+    let mut moved = Vec::with_capacity(references.len() + joined.len());
+    let mut referenced: Vec<&GrownCandidate<'_>> = Vec::with_capacity(joined.len());
+    for admitted in references {
+        let SelectionReference::ChapterText { chapter_id, .. } = &admitted.reference else {
+            moved.push(admitted);
+            continue;
+        };
+        let covers = |candidate: &GrownCandidate<'_>| {
+            candidate.chapter_id == chapter_id
+                && admitted
+                    .manuscript_block_ids
+                    .iter()
+                    .any(|block| block == candidate.manuscript_block_id)
+        };
+        let covers_joined = joined.iter().any(|candidate| covers(candidate));
+        let added: Vec<&GrownCandidate<'_>> = joined
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                covers(candidate)
+                    && !referenced
+                        .iter()
+                        .any(|known| std::ptr::eq(*known, *candidate))
+            })
+            .collect();
+        referenced.extend(&added);
+        let keep = !covers_joined
+            || admitted.manuscript_block_ids.iter().any(|block| {
+                !grown.iter().any(|candidate| {
+                    candidate.chapter_id == chapter_id && candidate.manuscript_block_id == block
+                })
+            });
+        if keep {
+            moved.push(admitted);
+        }
+        moved.extend(added.into_iter().map(|candidate| {
+            AdmittedSelection {
+                reference: SelectionReference::ProposalCandidateText {
+                    chapter_id: candidate.chapter_id.to_owned(),
+                    proposal_id: candidate.target.proposal_id.clone(),
+                    operation_id: candidate.target.operation_id.clone(),
+                    revision_id: candidate.target.revision_id.clone(),
+                    start_offset: 0,
+                    end_offset: u32::try_from(candidate.candidate_text.encode_utf16().count())
+                        .unwrap_or(u32::MAX),
+                },
+                selected_text: Some(candidate.candidate_text.to_owned()),
+                manuscript_block_ids: vec![candidate.manuscript_block_id.to_owned()],
+                candidate_text: Some(candidate.candidate_text.to_owned()),
+            }
+        }));
+    }
+    moved
 }
 
 /// The references of a Run after a steering input adds its references (ADR 0062). A reference
