@@ -57,7 +57,7 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the complete attempted structured payload, exact selection snapshot, and edit intent for narrowed retry, Proposal expansion, copy, or discard; a retry replacement or expansion closes the exact source as `superseded`, while no effect or a non-source conflict leaves it open and a source-binding conflict leaves its observed closure unchanged.
+A non-authoritative Draft Core Artifact that the refused `ApplyAuthorEdit` Core Transition creates when one author edit crosses Authoritative State and Proposal ownership. It keeps the complete attempted payload, selection snapshot, and edit intent for a narrowed retry, Proposal expansion, copy, or discard. A retry replacement or an expansion closes the exact source as `superseded`. No effect, or a conflict on another source, leaves it open, and a conflict on the source binding keeps its observed closure. The Web editor sends no crossing edit (ADR 0072), so only a Draft retry or an earlier Local Edit Journal record makes a new Draft.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
@@ -65,7 +65,7 @@ A non-authoritative Draft Core Artifact created by an Editor Recovery Creator fr
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
-A complete author input intent bounded by one IME composition lifecycle and classified as a single edit only after the input method finishes while Agent document writes remain fenced. A single-owner result commits atomically, while mixed ownership restores the last durable projection and creates a Refused Edit Draft.
+A complete author input intent that one IME composition lifecycle bounds. StoryOS classifies it as a single edit only after the input method finishes, while Agent document writes stay fenced. A single-owner result commits atomically. On a selection that crosses owners, the editor restores the projection from the start of the composition. Then the confirmed text replaces only the First Owner Part.
 _Avoid_: Per-event authoritative write, cancelled IME as correctness, interleaved Agent write
 
 **Proposal Safe Mode**:

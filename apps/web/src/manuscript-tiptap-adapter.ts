@@ -7,6 +7,7 @@ import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import UniqueID from "@tiptap/extension-unique-id";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { ReplaceStep } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
@@ -23,7 +24,7 @@ import {
   readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 
-import { captureStructuredSelection } from "./structured-edit-capture.ts";
+import { firstOwnerRange, narrowToFirstOwner } from "./first-owner-range.ts";
 
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
@@ -79,7 +80,7 @@ export function originFromTransaction(
 ): InputOrigin {
   const origin: unknown = transaction.getMeta(STORYOS_ORIGIN);
   if (origin === "paste" || origin === "cut" || origin === "drop"
-    || origin === "move_block" || origin === "retype_block") {
+    || origin === "move_block" || origin === "retype_block" || origin === "composition_confirmation") {
     return origin;
   }
   if (edit.text.length === 0 && edit.to > edit.from) return "deletion";
@@ -120,6 +121,15 @@ function manuscriptContentWithCandidates(
     nodes.push(node, ...(attached.get(node.attrs.id as string) ?? []));
   });
   return Fragment.fromArray(nodes);
+}
+
+function replacesCrossingSelection(state: EditorState, transaction: Transaction): boolean {
+  const [step] = transaction.steps;
+  const { from, to, empty } = state.selection;
+  if (empty || transaction.steps.length !== 1 || !(step instanceof ReplaceStep)
+    || step.from !== from || step.to !== to) return false;
+  const range = firstOwnerRange(state.doc, from, to);
+  return range.from !== from || range.to !== to;
 }
 
 function insertNewline(view: EditorView): boolean {
@@ -184,7 +194,7 @@ export function storyosManuscriptExtensions(
   blockId: string,
   onAuthorUndo?: () => boolean,
   canAcceptCandidateInput?: (hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }) => boolean,
-  hasMixedComposition?: () => boolean,
+  hasCrossingComposition?: () => boolean,
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
@@ -204,16 +214,12 @@ export function storyosManuscriptExtensions(
       addKeyboardShortcuts() {
         return {
           Enter: () => {
+            narrowToFirstOwner(this.editor.view);
             if (this.editor.state.selection.$from.parent.type.name === "blockProposal"
               || this.editor.state.selection.$from.parent.type.name === "inlineProposal") {
               return insertNewline(this.editor.view);
             }
             if (!this.editor.state.selection.empty) {
-              const mixed = this.editor.state.tr.deleteSelection().setMeta(STORYOS_ORIGIN, "split_block");
-              if (captureStructuredSelection(this.editor.state, mixed) !== undefined) {
-                this.editor.view.dispatch(mixed);
-                return true;
-              }
               this.editor.commands.command(({ tr, dispatch }) => {
                 dispatch?.(tr.deleteSelection());
                 return true;
@@ -247,16 +253,10 @@ export function storyosManuscriptExtensions(
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
                 return true;
               }
-              if (hasMixedComposition?.() === true) return true;
+              if (hasCrossingComposition?.() === true) return true;
+              // Each input narrows a crossing selection first, so a replacement that still crosses owners is refused.
+              if (replacesCrossingSelection(state, transaction)) return false;
               routeInlineEdgeInsertion(transaction, state);
-              const mixed = captureStructuredSelection(state, transaction);
-              if (mixed !== undefined) {
-                if (canAcceptCandidateInput?.(true) !== true) return false;
-                transaction.setMeta("storyos.structuredEdit", mixed);
-                transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
-                transaction.setSelection(TextSelection.create(transaction.doc, state.selection.anchor, state.selection.head));
-                return true;
-              }
               const next = readManuscriptParagraphs(transaction.doc);
               if (next === undefined) return false;
               const previous = readManuscriptParagraphs(state.doc);
@@ -297,6 +297,10 @@ export function storyosEditorProps(blockId: string) {
       "data-manuscript-editor": "",
       "data-manuscript-block-id": blockId,
     },
+    handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+      if (event.key === "Backspace" || event.key === "Delete") narrowToFirstOwner(view);
+      return false;
+    },
     handlePaste: (view: EditorView, event: ClipboardEvent) => {
       event.preventDefault();
       dispatchPlainTextReplacement(
@@ -327,15 +331,16 @@ export function storyosEditorProps(blockId: string) {
     },
     handleDOMEvents: {
       beforeinput: (view: EditorView, event: Event) => {
-        if (!(event instanceof InputEvent) || event.isComposing
-          || event.inputType !== "insertText" || event.data === null) return false;
-        const transaction = view.state.tr.insertText(event.data);
-        if (routeInlineEdgeInsertion(transaction, view.state)) {
+        if (!(event instanceof InputEvent) || event.isComposing) return false;
+        if (event.inputType.startsWith("delete") && narrowToFirstOwner(view)) {
           event.preventDefault();
-          view.dispatch(transaction);
+          view.dispatch(view.state.tr.deleteSelection());
           return true;
         }
-        if (captureStructuredSelection(view.state, transaction) === undefined) return false;
+        if (event.inputType !== "insertText" || event.data === null) return false;
+        const narrowed = narrowToFirstOwner(view);
+        const transaction = view.state.tr.insertText(event.data);
+        if (!routeInlineEdgeInsertion(transaction, view.state) && !narrowed) return false;
         event.preventDefault();
         view.dispatch(transaction);
         return true;
@@ -346,6 +351,7 @@ export function storyosEditorProps(blockId: string) {
       },
       cut: (view: EditorView, event: Event) => {
         if (!(event instanceof ClipboardEvent)) return false;
+        narrowToFirstOwner(view);
         const { from, to } = view.state.selection;
         event.clipboardData?.setData("text/plain", view.state.doc.textBetween(from, to, "\n"));
         event.preventDefault();
@@ -363,13 +369,8 @@ function dispatchPlainTextReplacement(
 ): void {
   const previous = readManuscriptParagraphs(view.state.doc);
   if (previous === undefined) return;
+  narrowToFirstOwner(view);
   const { from, to } = view.state.selection;
-  const replacement = view.state.tr.insertText(text, from, to);
-  if (captureStructuredSelection(view.state, replacement) !== undefined) {
-    replacement.setMeta(STORYOS_ORIGIN, origin);
-    view.dispatch(replacement);
-    return;
-  }
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
   if (($from.parent.type.name === "blockProposal" || $from.parent.type.name === "inlineProposal")

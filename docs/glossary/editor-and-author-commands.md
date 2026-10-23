@@ -27,6 +27,10 @@ _Avoid_: Author-triggered automation, silent bulk edit
 One completed semantic editor intent, or a bounded idle-coalesced sequence of intents, that one Author Command Admission submits to StoryOS Core. Coalescing occurs only before Admission issuance while each bound input and manuscript semantic field stay equal, and no merge occurs after Admission. Core classifies the full command and produces an authoritative change, a Proposal Revision, a Refused Edit Draft, an ordinary refusal, a conflict, or no effect. Core never splits one input across authority boundaries, and raw editor transactions and browser undo groups are only diagnostic or presentation evidence.
 _Avoid_: Client-selected write path, ProseMirror transaction as authority, fixed-window batching, partial mixed edit
 
+**First Owner Part**:
+The contiguous part of an editor selection from its start to the first text of another owner. An owner is the Chapter text or one Proposal candidate, and the first owner owns the first selected character in document order. An author edit on a crossing selection replaces only this part. The other part does not change and leaves the selection, so the Web editor sends one ordinary single-owner Author Edit (ADR 0072).
+_Avoid_: Anchor owner, mixed edit, split edit
+
 **Editor Verification Split**:
 The two complementary deterministic gates for an Author Edit. Browser integration proves complete IME and editor intent capture plus local group coverage before Admission; Core proves ordered atomic settlement, with a typed zero-authority Receipt for an admitted refusal, conflict, or no effect and no Receipt for a pre-Admission refusal or infrastructure failure before commit.
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
