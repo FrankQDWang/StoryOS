@@ -802,7 +802,9 @@ export function BlockProposalDisplay({
             <button type="button" className="block-proposal-reject" data-proposal-reject={item.proposalId}
               key={item.operationId} disabled={accepting !== undefined}
               onClick={() => rejectDisplayed({ proposalId: item.proposalId, operationId: item.operationId,
-                revisionId: proposal?.revision_id ?? "", text: item.text })}>
+                revisionId: proposal?.revision_id ?? "", text: item.text,
+                ...(proposal?.bundle_policy === "atomic" ? { operationIds: proposal.operations
+                  .filter((operation) => operation.resolution === "pending").map((operation) => operation.operation_id).sort() } : {}) })}>
               {item.retryRejection ? "重试拒绝" : "× 拒绝"}</button>))}
         </p>
       ))}

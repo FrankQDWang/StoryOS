@@ -85,3 +85,34 @@ it.each([
     }
   });
 });
+
+it("rejects all parts of a grown Proposal from the Reject control of a part whose Block is not in the Chapter Head", async () => {
+  const test = await openTwoBlockWorkspace();
+  const grown = grownProposal(test.workspace);
+  const proposal = { ...grown, operations: [grown.operations[0]!,
+    { ...grown.operations[1]!, manuscript_block_id: "018f0000-0000-7001-8000-000000000e09" }] };
+  const rejections: string[] = [];
+  const transport = proposalTransport(test.workspace, proposal, { proposals: [proposal], completeness: "complete" },
+    async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : input).pathname;
+      if (path.endsWith("/anti-forgery-challenges")) {
+        return jsonResponse({ nonce: "b".repeat(64), expires_at: "2026-12-13T08:05:00.000Z" });
+      }
+      if (path.endsWith("/rejections")) rejections.push(String(init?.body));
+      return jsonResponse({ code: "service_unavailable" }, 503);
+    });
+  await withActEnvironment(async () => {
+    const tab = await renderTab(test.workspace, [{ proposalId: proposal.proposal_id, runId: proposal.source.run_id,
+      decisionId: proposal.source.decision_id }], transport.fetchImpl);
+    const absent = () => tab.host.querySelector<HTMLButtonElement>(`[data-proposal-unavailable="${proposal.proposal_id}"] button[data-proposal-reject]`);
+    try {
+      await expect.poll(() => absent()).not.toBeNull();
+      await act(async () => { absent()!.click(); });
+      await expect.poll(() => rejections.length).toBe(1);
+      expect((JSON.parse(rejections[0]!) as RejectProposalOperationsRequest).reject_proposal_operations_input
+        .selected_pending_operation_ids).toEqual(proposal.operations.map((operation) => operation.operation_id).sort());
+    } finally {
+      await tab.unmount(); await test.close();
+    }
+  });
+});
