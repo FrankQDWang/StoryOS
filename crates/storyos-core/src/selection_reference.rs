@@ -124,13 +124,13 @@ pub struct GrownCandidate<'a> {
 /// Move the Chapter references of the joined blocks of a Proposal Growth to the candidates of
 /// their new Operations (ADR 0071). A grown candidate that a reference already names is the
 /// revised candidate. Each joined candidate gets one reference to all of its text, in the place of
-/// the first Chapter reference that covers its block. That Chapter reference stays only when it
-/// also covers a block that did not grow.
+/// the first Chapter reference that covers its block. A Chapter reference that covers a joined block
+/// stays only when it also covers a block that did not grow.
 pub fn reference_joined_candidates(
     references: Vec<AdmittedSelection>,
     grown: &[GrownCandidate<'_>],
 ) -> Vec<AdmittedSelection> {
-    let mut joined: Vec<&GrownCandidate<'_>> = grown
+    let joined: Vec<&GrownCandidate<'_>> = grown
         .iter()
         .filter(|candidate| {
             !references.iter().any(|admitted| {
@@ -142,6 +142,7 @@ pub fn reference_joined_candidates(
         })
         .collect();
     let mut moved = Vec::with_capacity(references.len() + joined.len());
+    let mut referenced: Vec<&GrownCandidate<'_>> = Vec::with_capacity(joined.len());
     for admitted in references {
         let SelectionReference::ChapterText { chapter_id, .. } = &admitted.reference else {
             moved.push(admitted);
@@ -154,10 +155,19 @@ pub fn reference_joined_candidates(
                     .iter()
                     .any(|block| block == candidate.manuscript_block_id)
         };
-        let (covered, rest): (Vec<_>, Vec<_>) =
-            joined.into_iter().partition(|candidate| covers(candidate));
-        joined = rest;
-        let keep = covered.is_empty()
+        let covers_joined = joined.iter().any(|candidate| covers(candidate));
+        let added: Vec<&GrownCandidate<'_>> = joined
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                covers(candidate)
+                    && !referenced
+                        .iter()
+                        .any(|known| std::ptr::eq(*known, *candidate))
+            })
+            .collect();
+        referenced.extend(&added);
+        let keep = !covers_joined
             || admitted.manuscript_block_ids.iter().any(|block| {
                 !grown.iter().any(|candidate| {
                     candidate.chapter_id == chapter_id && candidate.manuscript_block_id == block
@@ -166,7 +176,7 @@ pub fn reference_joined_candidates(
         if keep {
             moved.push(admitted);
         }
-        moved.extend(covered.into_iter().map(|candidate| {
+        moved.extend(added.into_iter().map(|candidate| {
             AdmittedSelection {
                 reference: SelectionReference::ProposalCandidateText {
                     chapter_id: candidate.chapter_id.to_owned(),

@@ -161,6 +161,15 @@ fn a_growth_moves_the_chapter_references_of_the_joined_blocks_to_their_candidate
         grown("operation-1", "b1", "雨夜"),
     ];
     let other = candidate("proposal-9", "operation-9", "b5", /*end_offset*/ 2);
+    let narrow = AdmittedSelection {
+        reference: SelectionReference::ChapterText {
+            chapter_id: "chapter-1".to_owned(),
+            base_authoritative_revision_id: "chapter-revision-1".to_owned(),
+            start: point("b2", /*offset*/ 1),
+            end: point("b2", /*offset*/ 2),
+        },
+        ..chapter(&["b2"])
+    };
 
     assert_eq!(
         [
@@ -186,6 +195,14 @@ fn a_growth_moves_the_chapter_references_of_the_joined_blocks_to_their_candidate
                 ],
                 &below,
             ),
+            reference_joined_candidates(
+                vec![
+                    candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                    chapter(&["b2"]),
+                    narrow
+                ],
+                &below,
+            ),
         ],
         [
             vec![
@@ -201,6 +218,10 @@ fn a_growth_moves_the_chapter_references_of_the_joined_blocks_to_their_candidate
                 chapter(&["b2", "b3"]),
                 joined("operation-2", "b2", "船夫😀"),
                 other,
+            ],
+            vec![
+                candidate("proposal-1", "operation-1", "b1", /*end_offset*/ 2),
+                joined("operation-2", "b2", "船夫😀")
             ],
         ]
     );
