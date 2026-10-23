@@ -347,6 +347,9 @@ pub struct AgentRunContextInspect {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub selection_references: Option<Vec<SelectionReferenceInspect>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub joinable_block_ids: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

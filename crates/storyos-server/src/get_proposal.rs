@@ -83,6 +83,7 @@ pub(super) async fn get_proposal(
                     reservation_state: operation.reservation_state,
                 })
                 .collect(),
+            bundle_policy: record.bundle_policy,
             chapter_id: record.chapter_id,
             manuscript_block_id: record.manuscript_block_id,
             base_authoritative_revision_id: record.base_authoritative_revision_id,

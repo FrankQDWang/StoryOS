@@ -382,6 +382,7 @@ export function BlockProposalDisplay({
         && editorProps.focusProposal.operationId === operation.operation_id
         && editorProps.focusProposal.revisionId === proposal.revision_id,
       pendingOperationIds: proposal.operations.filter((item) => item.resolution === "pending").map((item) => item.operation_id).sort(),
+      atomicBundle: proposal.bundle_policy === "atomic",
       revisionId: proposal.revision_id,
       blockId: operation.manuscript_block_id,
       sourceRunId: proposal.source.kind === "agent_run_decision" ? proposal.source.run_id : "",
@@ -801,7 +802,9 @@ export function BlockProposalDisplay({
             <button type="button" className="block-proposal-reject" data-proposal-reject={item.proposalId}
               key={item.operationId} disabled={accepting !== undefined}
               onClick={() => rejectDisplayed({ proposalId: item.proposalId, operationId: item.operationId,
-                revisionId: proposal?.revision_id ?? "", text: item.text })}>
+                revisionId: proposal?.revision_id ?? "", text: item.text,
+                ...(proposal?.bundle_policy === "atomic" ? { operationIds: proposal.operations
+                  .filter((operation) => operation.resolution === "pending").map((operation) => operation.operation_id).sort() } : {}) })}>
               {item.retryRejection ? "重试拒绝" : "× 拒绝"}</button>))}
         </p>
       ))}

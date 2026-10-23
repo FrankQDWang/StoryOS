@@ -99,6 +99,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
             proposal["properties"][field]["format"] = json!("uuid");
         }
         proposal["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit", "reversal"]);
+        proposal["properties"]["bundle_policy"]["enum"] = json!(["none", "atomic"]);
     }
     if let Some(operation) = schema["$defs"].get_mut("ProposalOperationInspect") {
         for field in ["operation_id", "manuscript_block_id"] {
@@ -257,6 +258,7 @@ fn proposal_fixture() -> Value {
                 "resolution": "pending",
                 "reservation_state": "unresolved"
             }],
+            "bundle_policy": "none",
             "chapter_id": "018f0000-0000-7001-8000-000000000301",
             "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
             "base_authoritative_revision_id": "018f0000-0000-7001-8000-000000000b06",
