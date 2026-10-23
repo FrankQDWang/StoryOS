@@ -2,7 +2,7 @@ use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreateRequest, ProjectAssistanceRecord,
     WirePayloadProjection,
 };
-use storyos_core::{DestinationKind, RuntimeQualification};
+use storyos_core::{DeclaredTargetKind, DestinationKind, RuntimeQualification};
 use uuid::Uuid;
 
 use crate::agent_run_expiry::RebuildDispatch;
@@ -88,6 +88,15 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    let joinable: Vec<&str> = request
+        .declared_targets
+        .iter()
+        .filter(|target| matches!(target.kind, DeclaredTargetKind::JoinableBlock { .. }))
+        .map(|target| target.block_id.as_str())
+        .collect();
+    if !joinable.is_empty() {
+        payload["wire"]["joinable_block_ids"] = serde_json::json!(joinable);
+    }
     if let Some(setting) = projection.cache_setting {
         payload["cache"] = crate::provider_evidence::encode_cache_setting(setting);
     }

@@ -115,6 +115,16 @@
           "format": "uuid",
           "type": "string"
         },
+        "joinable_block_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "operation_requirement_id": {
           "format": "uuid",
           "type": "string"

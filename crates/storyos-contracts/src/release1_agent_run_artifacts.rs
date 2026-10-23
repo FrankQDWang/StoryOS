@@ -236,6 +236,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
             ],
         );
         constrain_count_fields(inspect);
+        inspect["properties"]["joinable_block_ids"]["items"]["format"] = json!("uuid");
     }
     for name in [
         "AgentRunSteeringInspect",

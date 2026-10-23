@@ -141,13 +141,20 @@ pub(super) async fn load_agent_run(
         run_id: row.get(3),
         status,
         steering_inputs: crate::agent_run_steering::inspect(client, scope, run_id).await?,
-        context: super::context::load_assembled_context(
-            client,
-            scope,
-            run_id,
-            &row.get::<_, String>(16),
-        )
-        .await?,
+        context: storyos_application::AgentRunContext {
+            joinable_block_ids: payload
+                .as_ref()
+                .and_then(|value| value.pointer("/wire/joinable_block_ids"))
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_default(),
+            ..super::context::load_assembled_context(
+                client,
+                scope,
+                run_id,
+                &row.get::<_, String>(/*idx*/ 16),
+            )
+            .await?
+        },
         decision: inspect_decision(
             requested_attempt
                 .is_none()

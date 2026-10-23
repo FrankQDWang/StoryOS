@@ -225,6 +225,13 @@
           "format": "uuid",
           "type": "string"
         },
+        "bundle_policy": {
+          "enum": [
+            "none",
+            "atomic"
+          ],
+          "type": "string"
+        },
         "candidate_blocks": {
           "items": {
             "$ref": "#/$defs/ReplacementBlock"
@@ -321,6 +328,7 @@
         "operation_id",
         "operation_resolution",
         "operations",
+        "bundle_policy",
         "chapter_id",
         "manuscript_block_id",
         "base_authoritative_revision_id",

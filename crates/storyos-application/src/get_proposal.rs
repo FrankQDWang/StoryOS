@@ -18,6 +18,7 @@ pub struct BlockProposalRecord {
     pub operation_id: String,
     pub operation_resolution: String,
     pub operations: Vec<ProposalOperationRecord>,
+    pub bundle_policy: String,
     pub chapter_id: String,
     pub manuscript_block_id: String,
     pub base_authoritative_revision_id: String,

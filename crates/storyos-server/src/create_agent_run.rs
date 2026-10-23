@@ -704,6 +704,8 @@ fn inspect_context(
                     )
                     .collect()
             }),
+        joinable_block_ids: (!context.joinable_block_ids.is_empty())
+            .then(|| context.joinable_block_ids.clone()),
         candidate_target: record
             .operation_requirement
             .candidate_target

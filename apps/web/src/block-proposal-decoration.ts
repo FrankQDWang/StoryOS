@@ -29,6 +29,8 @@ export type BlockProposalProjection = {
   expectedHeads: string[];
   localPending?: boolean;
   pendingOperationIds?: string[];
+  /** Each decision on one part of an `atomic` Proposal selects all of its pending Operations (ADR 0071). */
+  atomicBundle?: boolean;
   focused?: boolean;
 };
 
@@ -37,7 +39,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "earlierBase", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "candidateEditable", "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "candidateEditable", "focused", "pendingOperationIds", "atomicBundle", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -156,6 +158,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
         pendingOperationIds: proposal.pendingOperationIds ?? [],
+        atomicBundle: proposal.atomicBundle ?? false,
         focused: proposal.focused ?? false,
         inlineProposal: proposal.inlineProposal ?? false,
         inlineFrom: anchor?.from ?? null,
@@ -216,6 +219,7 @@ export const blockProposalDecoration = TiptapNode.create({
     const retryRejection = node.attrs.retryRejection === true;
     const withdrawEligible = node.attrs.withdrawEligible === true;
     const copyEligible = node.attrs.copyEligible === true;
+    const all = node.attrs.atomicBundle === true ? { "data-proposal-all": "" } : {};
     return ["div", {
       class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
         : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
@@ -243,11 +247,12 @@ export const blockProposalDecoration = TiptapNode.create({
       type: "button",
       class: "block-proposal-accept",
       "data-proposal-accept": node.attrs.proposalId,
+      ...all,
       contenteditable: "false",
     }, retryPending ? "重试接受" : "✓ 接受"]] : []),
     ...(rejectEligible || retryRejection ? [["button", {
       type: "button", class: "block-proposal-reject",
-      "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
+      "data-proposal-reject": node.attrs.proposalId, ...all, contenteditable: "false",
     }, retryRejection ? "重试拒绝" : "× 拒绝"]] : []),
     ...(withdrawEligible ? [["button", {
       type: "button", class: "block-proposal-withdraw",

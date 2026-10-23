@@ -382,6 +382,7 @@ export function BlockProposalDisplay({
         && editorProps.focusProposal.operationId === operation.operation_id
         && editorProps.focusProposal.revisionId === proposal.revision_id,
       pendingOperationIds: proposal.operations.filter((item) => item.resolution === "pending").map((item) => item.operation_id).sort(),
+      atomicBundle: proposal.bundle_policy === "atomic",
       revisionId: proposal.revision_id,
       blockId: operation.manuscript_block_id,
       sourceRunId: proposal.source.kind === "agent_run_decision" ? proposal.source.run_id : "",

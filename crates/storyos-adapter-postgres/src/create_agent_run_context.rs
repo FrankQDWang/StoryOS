@@ -198,6 +198,7 @@ pub(crate) async fn persist_current_passage_assembly(
                 None => WorkingTargetAvailability::Unavailable,
             })
             .collect(),
+        joinable_block_ids: Vec::new(),
         record,
     })
 }
@@ -274,6 +275,7 @@ pub(super) async fn load_assembled_context(
     Ok(AgentRunContext {
         record,
         reference_availability,
+        joinable_block_ids: Vec::new(),
         assembly_manifest_id: row.get(1),
         destination_context_manifest_id: row.get(2),
         outbound_disclosure_manifest_id: row.get(3),

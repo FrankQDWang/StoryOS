@@ -36,7 +36,8 @@ impl ProposalReader for PostgresProjectReader {
                           'decision_id',proposal.source_decision_id::text)
                         ELSE jsonb_build_object('kind','refused_edit_draft','draft_id',proposal.source_draft_id::text,
                           'draft_revision_id',proposal.source_draft_revision_id::text,
-                          'payload_digest',source_revision.payload_digest,'payload',source_revision.payload) END::text
+                          'payload_digest',source_revision.payload_digest,'payload',source_revision.payload) END::text,
+                        proposal.bundle_policy
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -134,6 +135,7 @@ impl ProposalReader for PostgresProjectReader {
                 operation_id: row.get(6),
                 operation_resolution: row.get(7),
                 operations,
+                bundle_policy: row.get(/*idx*/ 21),
                 chapter_id: row.get(8),
                 manuscript_block_id: row.get(9),
                 base_authoritative_revision_id: row.get(10),
