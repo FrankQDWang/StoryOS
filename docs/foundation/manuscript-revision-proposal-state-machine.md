@@ -1049,11 +1049,17 @@ ProposalWithdrawalReason =
 
 All commands except `WithdrawProposal` require
 `AuthorCommandAdmission { action_class: explicit_editor_command }`.
-`WithdrawProposal` permits either that author cause or the exact
-`AgentRunStep`/`ToolCall` recorded as the current Proposal Revision's producer;
-`CurrentProducerWithdrew` is required for the latter and forbidden for the
-author cause. `ReplanProposal` likewise permits an explicit author cause or the
-exact current producer. No other non-author cause is eligible.
+`WithdrawProposal` permits either that author cause or the producer of the
+Proposal: the exact AgentRun and Decision that the Proposal records as its
+source. `CurrentProducerWithdrew` is required for the latter and forbidden for
+the author cause. A Proposal Revision records no producer. Thus an author
+candidate edit does not change which producer can withdraw the Proposal.
+
+`ReplanProposal` likewise permits an explicit author cause or the exact current
+producer. No other non-author cause is eligible. For a Withdrawal, the names
+`CurrentProducerWithdrew`, `CurrentProducerOwned`, and current-producer
+`WithdrawProposal` keep the words "current producer". In these names, the
+current producer is the producer of the Proposal.
 
 All first domain attempts produce one `DomainReceipt`. Pre-domain schema,
 scope, authorization, Admission, idempotency, or cause failures follow section
@@ -1567,7 +1573,7 @@ rejected Operations also needs each reopened Operation to be `pending` and
 
 The Compensation appends its Revision to the current head.
 
-Author Undo keeps a Withdrawal by the current producer
+Author Undo keeps a Withdrawal by the producer of the Proposal
 ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
 When the current head is `withdrawn`, the Compensation of a candidate edit, a
 Replan, or a reopen of rejected Operations keeps the closure `withdrawn`. It
