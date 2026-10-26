@@ -62,29 +62,6 @@
             "decision_id"
           ],
           "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "draft_id": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "draft_revision_id": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "kind": {
-              "const": "refused_edit_draft",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "draft_id",
-            "draft_revision_id"
-          ],
-          "type": "object"
         }
       ]
     },
