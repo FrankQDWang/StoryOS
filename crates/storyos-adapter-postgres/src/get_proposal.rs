@@ -131,7 +131,7 @@ impl ProposalReader for PostgresProjectReader {
                 base_authoritative_revision_id: row.get(10),
                 reservation_state: row.get(11),
                 candidate_text: row.get(12),
-                source: serde_json::from_str(&row.get::<_, String>(19))
+                source: serde_json::from_str(&row.get::<_, String>(/*idx*/ 19))
                     .map_err(ProjectReadError::unavailable)?,
                 validation_receipt_id: row.get(15),
                 validation_receipt_result: row.get(16),
@@ -200,7 +200,7 @@ async fn read_operations(
     rows.into_iter()
         .map(|row| {
             Ok(ProposalOperationRecord {
-                candidate_text: row.get(4),
+                candidate_text: row.get(/*idx*/ 4),
                 operation_id: row.get(0),
                 manuscript_block_id: row.get(1),
                 resolution: row.get(2),

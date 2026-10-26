@@ -55,7 +55,7 @@ test("an earlier crossing edit or Draft retry gets invalid_request_shape and cha
     const before = await retainedState(projectId);
     for (const [index, earlier] of [crossing, retry].entries()) {
       const key = id(`be3${index}`);
-      const request = earlier as unknown as ApplyAuthorEditRequest;
+      const request = earlier as ApplyAuthorEditRequest;
       const refused = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
         "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
         await digestApplyAuthorEdit(request), key, (antiForgery) => applyAuthorEdit({ baseUrl: started.baseUrl,
