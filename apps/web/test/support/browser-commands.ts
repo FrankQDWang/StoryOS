@@ -17,7 +17,6 @@ import { settleOnce } from "./acceptance";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionRunEvidence } from "./production-run-evidence-command";
 import { verifyProductionHostJourney } from "./production-host-command";
-import { verifyProductionInlineProposal } from "./production-inline-proposal-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 import { verifyProductionCapturedMemory } from "./production-captured-memory.ts";
 
@@ -102,9 +101,6 @@ export const storyOSBrowserCommands = {
       } else if (request.scenario === "multi_proposal") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionMultiProposal(context.context, process.env.STORYOS_DEV_SERVER);
-      } else if (request.scenario === "inline_proposal") {
-        if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
-        await verifyProductionInlineProposal(context.context, process.env.STORYOS_DEV_SERVER);
       } else if (request.scenario === "selection_reference") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionSelectionReference(context.context, process.env.STORYOS_DEV_SERVER);

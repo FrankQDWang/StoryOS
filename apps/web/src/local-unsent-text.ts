@@ -1,6 +1,7 @@
 import type { EditorBaseSnapshot, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace, JournalIntentRecord, JournalPartition, ValidatedJournalSnapshot } from "./editor-types.ts";
-import { JOURNAL_OBJECT_STORES, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
+import { JOURNAL_OBJECT_STORES, isRemovedDraftGroup, isRemovedDraftRecord, readJournalSnapshot,
+  validateJournalSnapshot } from "./local-edit-journal.ts";
 
 /** The unsent text of a Local Edit Journal that cannot upgrade (contract 3.2). */
 export interface LocalUnsentText {
@@ -12,15 +13,15 @@ export interface LocalUnsentText {
 
 /**
  * Gives the local text of each payload chain that has a record with no proof of save. Only an applied group and a
- * group that gives a Proposal Revision prove a save. An explicit discard of a refused edit Draft also removes its text.
- * The last record of a chain carries the text of each earlier record of that chain.
+ * group that gives a Proposal Revision prove a save. A record and a group of a removed Draft path have no text
+ * (ADR 0073). The last record of a chain carries the text of each earlier record of that chain.
  */
 function unsavedTexts(snapshot: ValidatedJournalSnapshot) {
-  const discarded = new Set((snapshot.explicitDiscard ?? []).map(({ record }) => record.author_visible_decision_ref.draft_id));
-  const done = new Set(snapshot.groups.filter(({ settlement }) => settlement.kind === "applied_receipt_settled"
-    || (settlement.kind === "zero_authority_receipt_settled" && (settlement.effect.kind === "proposal_revised"
-      || (settlement.effect.kind === "refused_to_draft" && discarded.has(settlement.effect.draft_id)))))
+  const done = new Set(snapshot.groups.filter((group) => group.settlement.kind === "applied_receipt_settled"
+    || (group.settlement.kind === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised")
+    || isRemovedDraftGroup(group))
     .flatMap((group) => group.ordered_coverage.map((item) => item.local_intent_sequence)));
+  for (const record of snapshot.records) if (isRemovedDraftRecord(record)) done.add(record.local_intent_sequence);
   const last = new Map<string, JournalIntentRecord>();
   for (const record of snapshot.records) last.set(record.payload_chain_ref, record);
   const unsaved = new Set(snapshot.records.filter((record) => !done.has(record.local_intent_sequence))

@@ -243,23 +243,27 @@ it("does not show the refusal text of an earlier Proposal Revision", async () =>
   }
 });
 
-it("shows an Inline Proposal on an earlier base in its candidate card with Accept, Reject, candidate editing, and the note", async () => {
+it("shows no inline Proposal, with no candidate, control, status, or unavailable line", async () => {
   const test = await openJournalAppendTestWorkspace();
   const block = test.workspace.openedProjection.blocks[0]!;
   const base = candidateFor(test.workspace);
-  const proposal = { ...base, kind: "inline_edit", base_authoritative_revision_id: EARLIER_BASE, candidate_text: "AS",
+  const proposal = { ...base, kind: "inline_edit", candidate_text: "AS",
     operations: base.operations.map((operation) => ({ ...operation, candidate_text: "AS" })),
-    anchors: [{ manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: EARLIER_BASE,
+    anchors: [{ manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: base.base_authoritative_revision_id,
       manuscript_schema_version: 1, coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 1,
       boundary_profile: "exclusive-authoritative-edges.v1", base_slice_digest: `sha256:${"0".repeat(64)}` }] } as Proposal;
   await withActEnvironment(async () => {
     const shown = await display(test.workspace, proposal);
     try {
-      await expect.poll(() => shown.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
-      expect({ ...shown.controls(), candidate: shown.card()?.querySelector(".block-proposal-text")?.textContent,
-        inline: shown.tab.host.querySelectorAll("[data-inline-proposal-id]").length, failures: shown.tab.failures })
-        .toEqual({ accept: 1, reject: 1, withdraw: 0, replan: 0, editable: true, note: NOTE, candidate: "AS",
-          inline: 0, failures: [] });
+      await expect.poll(() => shown.sent.length + shown.tab.host.querySelectorAll("[data-manuscript-editor]").length)
+        .toBeGreaterThan(0);
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+      const id = proposal.proposal_id;
+      expect({ card: shown.card(), status: shown.status(),
+        unavailable: shown.tab.host.querySelectorAll(`[data-proposal-unavailable="${id}"]`).length,
+        controls: shown.tab.host.querySelectorAll(`[data-proposal-accept="${id}"], [data-proposal-reject="${id}"]`).length,
+        failures: shown.tab.failures })
+        .toEqual({ card: null, status: null, unavailable: 0, controls: 0, failures: [] });
     } finally {
       await shown.tab.unmount(); await test.close();
     }
@@ -311,16 +315,14 @@ it("shows Reject and Withdraw and no Accept or candidate editing for a Proposal 
   });
 });
 
-it.each([["Block", "block_edit"], ["Inline", "inline_edit"]])("rejects an open %s Proposal whose target Block is not in the Chapter Head, with no Accept or candidate editing", async (_, kind) => {
+it("rejects an open Block Proposal whose target Block is not in the Chapter Head, with no Accept or candidate editing", async () => {
   const test = await openJournalAppendTestWorkspace();
   const workspace = test.workspace;
   const deleted = "018f0000-0000-7001-8000-000000000e09";
   const base = candidateFor(workspace);
-  const open = { ...base, kind, manuscript_block_id: deleted,
+  const open = { ...base, manuscript_block_id: deleted,
     operations: base.operations.map((operation) => ({ ...operation, manuscript_block_id: deleted })),
-    anchors: kind === "inline_edit" ? [{ manuscript_block_id: deleted, base_authoritative_revision_id: base.base_authoritative_revision_id,
-      manuscript_schema_version: 1, coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 1,
-      boundary_profile: "exclusive-authoritative-edges.v1", base_slice_digest: `sha256:${"0".repeat(64)}` }] : [] } as Proposal;
+  } as Proposal;
   const server: { proposal: Proposal; list: OpenProposalListAnswer } = {
     proposal: open, list: { proposals: [open], completeness: "complete" } };
   const rejections: RejectProposalOperationsRequest[] = [];

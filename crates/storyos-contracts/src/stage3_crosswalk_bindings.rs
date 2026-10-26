@@ -1,9 +1,9 @@
 use super::{
     ACCEPT, ADMITTED_TARGET, Binding, CANCEL, CANDIDATE_EDIT, CAPTURED_MEMORY, COMPACT, COMPARISON,
     CONTINUE, CONTINUE_GENERATION, CREATE_RUN, EXPIRY, EvidenceClass, FAKE_DECISION, INLINE,
-    INLINE_PRODUCTION, LOOKUP, MULTI, OPEN_BLOCK, PARTIAL, PHYSICAL_DRILL, PHYSICAL_SCRIPT,
-    PRODUCTION_HOST, PROOF, REJECT, RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE,
-    UNDO, WITHDRAW, WORKSPACE,
+    LOOKUP, MULTI, OPEN_BLOCK, PARTIAL, PHYSICAL_DRILL, PHYSICAL_SCRIPT, PRODUCTION_HOST, PROOF,
+    REJECT, RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE, UNDO, WITHDRAW,
+    WORKSPACE,
 };
 
 macro_rules! issue {
@@ -72,14 +72,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("879"),
         ],
         evidence: PRODUCTION_HOST,
-        supporting_evidence: &[
-            ACCEPT,
-            REJECT,
-            OPEN_BLOCK,
-            CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
-            MULTI,
-        ],
+        supporting_evidence: &[ACCEPT, REJECT, OPEN_BLOCK, CANDIDATE_EDIT, MULTI],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -148,7 +141,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             COMPARISON,
             PRODUCTION_HOST,
             CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
         ],
         evidence_class: EvidenceClass::Integration,
     },
@@ -210,7 +202,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             PHYSICAL_SCRIPT,
             "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
             CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
             MULTI,
         ],
         evidence_class: EvidenceClass::Integration,
@@ -220,7 +211,7 @@ pub(super) const BINDINGS: &[Binding] = &[
         owners: &["OWN-CORE", "OWN-ADM", "OWN-WEB"],
         implementation_issues: &[issue!("379"), issue!("380"), issue!("382"), issue!("879")],
         evidence: ACCEPT,
-        supporting_evidence: &[REJECT, PRODUCTION_HOST, MULTI, INLINE_PRODUCTION],
+        supporting_evidence: &[REJECT, PRODUCTION_HOST, MULTI],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -291,7 +282,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             PRODUCTION_HOST,
             OPEN_BLOCK,
             CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
         ],
         evidence_class: EvidenceClass::Integration,
     },
@@ -343,7 +333,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             WORKSPACE,
             ADMITTED_TARGET,
             CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
             CAPTURED_MEMORY,
             RUN_EVIDENCE,
         ],
@@ -405,7 +394,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("879"),
         ],
         evidence: PRODUCTION_HOST,
-        supporting_evidence: &[ACCEPT, REJECT, CANDIDATE_EDIT, INLINE_PRODUCTION, MULTI],
+        supporting_evidence: &[ACCEPT, REJECT, CANDIDATE_EDIT, MULTI],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -457,7 +446,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             COMPARISON,
             OPEN_BLOCK,
             CANDIDATE_EDIT,
-            INLINE_PRODUCTION,
             PRODUCTION_HOST,
         ],
         evidence_class: EvidenceClass::Integration,

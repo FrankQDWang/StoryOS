@@ -20,11 +20,8 @@ const schema = getSchema(storyosManuscriptExtensions(FIRST!));
 
 const text = (value: string) => [{ type: "text", text: value }];
 const paragraph = (block: string, ...content: object[]) => ({ type: "paragraph", attrs: { id: block }, content });
-const inline = (source: string, candidate: string) => ({ type: "inlineProposal",
-  attrs: { proposalId: id("e01"), operationId: id("e02"), revisionId: id("e03"), blockId: THIRD, sourceText: source },
-  content: text(candidate) });
 
-/** 一 / 雨夜。渡口 / [candidate] / 船夫😀等着 / 灯[亮起]。 / 二, where 亮起 is an inline candidate for 灭了. */
+/** 一 / 雨夜。渡口 / [candidate] / 船夫😀等着 / 灯灭了。 / 二. */
 function manuscript(withBlockCandidate: boolean): ProseMirrorNode {
   return schema.nodeFromJSON({ type: "doc", content: [
     { type: "heading", attrs: { id: HEADING, level: 1 }, content: text("一") },
@@ -32,7 +29,7 @@ function manuscript(withBlockCandidate: boolean): ProseMirrorNode {
     ...withBlockCandidate ? [{ type: "blockProposal", attrs: { proposalId: id("e04"), blockId: FIRST },
       content: text("雨停了。") }] : [],
     paragraph(SECOND!, ...text("船夫😀等着")),
-    paragraph(THIRD!, ...text("灯"), inline("灭了", "亮起"), ...text("。")),
+    paragraph(THIRD!, ...text("灯灭了。")),
     { type: "heading", attrs: { id: LATER, level: 1 }, content: text("二") },
   ] });
 }
@@ -56,18 +53,15 @@ function reference(start: [string, number], end: [string, number]): ChapterTextR
 test("a selection becomes the exact Chapter text range of its blocks and returns to the same range", () => {
   const doc = manuscript(false);
   const select = (from: number, to: number) => chapterTextReference(doc, { from, to }, CHAPTER, REVISION);
-  // 灯[亮起]。: the editor offset 4 is after the candidate, and the source offset is 1 + 2.
   const cases: [number, number, ChapterTextReference | undefined][] = [
     [at(doc, FIRST!, 3), at(doc, FIRST!, 5), reference([FIRST!, 3], [FIRST!, 5])],
     [at(doc, SECOND!, 2), at(doc, THIRD!, 1), reference([SECOND!, 2], [THIRD!, 1])],
-    [at(doc, THIRD!, 5), at(doc, THIRD!, 6), reference([THIRD!, 3], [THIRD!, 4])],
+    [at(doc, THIRD!, 3), at(doc, THIRD!, 4), reference([THIRD!, 3], [THIRD!, 4])],
     [at(doc, HEADING!, 0), at(doc, FIRST!, 2), reference([HEADING!, 0], [FIRST!, 2])],
     // A range that only touches the next block at its start ends in the previous block.
     [at(doc, FIRST!, 3), at(doc, SECOND!, 0), reference([FIRST!, 3], [FIRST!, 5])],
     [at(doc, FIRST!, 5), at(doc, SECOND!, 0), undefined],
     [at(doc, FIRST!, 2), at(doc, FIRST!, 2), undefined],
-    [at(doc, THIRD!, 0), at(doc, THIRD!, 3), undefined],
-    [at(doc, THIRD!, 2), at(doc, THIRD!, 3), undefined],
   ];
   for (const [from, to, expected] of cases) {
     assert.deepEqual(select(from, to), expected, `${from}..${to}`);
@@ -76,8 +70,8 @@ test("a selection becomes the exact Chapter text range of its blocks and returns
       assert.deepEqual(range === undefined ? undefined : select(range.from, range.to), expected);
     }
   }
-  // A range in the source text of an inline candidate has no editor range.
-  assert.equal(referenceRange(doc, reference([THIRD!, 2], [THIRD!, 4])), undefined);
+  // An offset after the end of its block has no editor range.
+  assert.equal(referenceRange(doc, reference([THIRD!, 2], [THIRD!, 5])), undefined);
   assert.equal(referenceRange(doc, reference([id("a99"), 0], [THIRD!, 1])), undefined);
 });
 
@@ -140,25 +134,25 @@ test("a label numbers the Chapter in reading order and counts only the paragraph
 test("a selection over Chapter text and candidates gives one reference for each part", () => {
   const candidateAttrs = (suffix: string, blockId: string) =>
     ({ proposalId: id(`f${suffix}1`), operationId: id(`f${suffix}2`), revisionId: id(`f${suffix}3`), blockId });
-  // 雨夜。渡口 / [雨停了。] / 灯[亮起]。, with a block candidate for the first block and an inline one for 灭了.
+  // 雨夜。渡口 / [雨停了。] / 灯灭了。 / [灯亮了。], with a block candidate for each block.
   const doc = schema.nodeFromJSON({ type: "doc", content: [
     paragraph(FIRST!, ...text("雨夜。渡口")),
     { type: "blockProposal", attrs: candidateAttrs("1", FIRST!), content: text("雨停了。") },
-    paragraph(THIRD!, ...text("灯"), { type: "inlineProposal",
-      attrs: { ...candidateAttrs("2", THIRD!), inlineFrom: 1, sourceText: "灭了" }, content: text("亮起") }, ...text("。")),
+    paragraph(THIRD!, ...text("灯灭了。")),
+    { type: "blockProposal", attrs: candidateAttrs("2", THIRD!), content: text("灯亮了。") },
   ] });
   const candidate = (suffix: string, start: number, end: number) => ({ kind: "proposal_candidate_text",
     chapter_id: CHAPTER, proposal_id: id(`f${suffix}1`), operation_id: id(`f${suffix}2`), revision_id: id(`f${suffix}3`),
     coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: start, end_offset: end }) as const;
-  // From 渡口 in the first block to 亮 in the inline candidate.
-  const selected = selectionReferences(doc, { from: at(doc, FIRST!, 3), to: 17 }, CHAPTER, REVISION);
+  // From 渡口 in the first block to 灯 in the second candidate.
+  const selected = selectionReferences(doc, { from: at(doc, FIRST!, 3), to: 21 }, CHAPTER, REVISION);
   assert.deepEqual(selected, [
     { reference: reference([FIRST!, 3], [FIRST!, 5]) },
-    { reference: candidate("1", 0, 4), candidate: { blockId: FIRST, inlineFrom: null } },
-    { reference: reference([THIRD!, 0], [THIRD!, 1]) },
-    { reference: candidate("2", 0, 1), candidate: { blockId: THIRD, inlineFrom: 1 } },
+    { reference: candidate("1", 0, 4), candidate: { blockId: FIRST } },
+    { reference: reference([THIRD!, 0], [THIRD!, 4]) },
+    { reference: candidate("2", 0, 1), candidate: { blockId: THIRD } },
   ]);
-  assert.deepEqual(candidateRange(doc, candidate("2", 0, 1)), { from: 16, to: 17 });
+  assert.deepEqual(candidateRange(doc, candidate("2", 0, 1)), { from: 20, to: 21 });
   // A selection in candidate text alone gives only the candidate reference.
   assert.deepEqual(selectionReferences(doc, { from: 9, to: 11 }, CHAPTER, REVISION).map((item) => item.reference),
     [candidate("1", 1, 3)]);

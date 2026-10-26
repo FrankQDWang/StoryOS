@@ -6,16 +6,10 @@ import type {
   AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
-  DraftRetry,
   EditorBaseSnapshot,
   ManuscriptBlock,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
-import { validDraftRetry, validRetrySettlement } from "./draft-retry-binding.ts";
-import { readDraftUndoJournal } from "./draft-undo-journal.ts";
-import { readDiscardJournal } from "./refused-edit-discard.ts";
-import { readExpansionJournal } from "./refused-edit-expansion.ts";
 import { readUnsettledAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
   EditorWorkspace,
@@ -159,7 +153,7 @@ function followedBase(
   if (prior === undefined) return snapshot.workingBoundary === undefined ? "unbound" : "retired";
   const group = snapshot.groups.find((item) => item.ordered_coverage?.some((coverage) =>
     coverage.local_intent_sequence === prior.local_intent_sequence));
-  if (group === undefined || group.settlement.kind === "unsettled") return "waiting";
+  if (group === undefined || (group.settlement.kind === "unsettled" && !isRemovedDraftGroup(group))) return "waiting";
   if (group.settlement.kind === "applied_receipt_settled") return { base: group.settlement.installed_base_snapshot };
   return proposalSuccessors([group]).size === 1
     ? { revisedHead: group.frozen_request_body.expected_authoritative_revision_id } : "unbound";
@@ -406,6 +400,23 @@ function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
     || group?.settlement?.kind === "outcome_query_requires_reconfirmation";
 }
 
+const isStructuredPrimitive = (primitive: { kind: string }) => primitive.kind === "replace_structured_selection";
+
+/** A stored record of a removed Draft path (ADR 0073). The Journal never sends it, and it is resolved. */
+export function isRemovedDraftRecord(record: JournalIntentRecord) {
+  return record.retry_source?.kind === "draft_retry"
+    || (record.author_edit_unit?.normalized_primitives ?? []).some(isStructuredPrimitive);
+}
+
+/** A stored group of a removed Draft path (ADR 0073). The Journal never sends it, and it is resolved. */
+export function isRemovedDraftGroup(group: JournalSubmissionGroup) {
+  const request = group.frozen_request_body;
+  return request.retry_source !== undefined
+    || request.author_edit_units.some((unit) => unit.normalized_primitives.some(isStructuredPrimitive))
+    || (group.settlement.kind === "zero_authority_receipt_settled"
+      && group.settlement.effect.kind === "refused_to_draft");
+}
+
 function closedReconciliation(group: JournalSubmissionGroup) {
   const reconciliation = group?.reconciliation;
   if (reconciliation === undefined) return true;
@@ -456,9 +467,6 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const localRecovery = await localRecoveryPromise;
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
   const explicitAcceptance = await explicitAcceptancePromise;
-  const explicitDiscard = await readDiscardJournal(workspace);
-  const explicitExpansion = await readExpansionJournal(workspace);
-  const explicitDraftUndo = await readDraftUndoJournal(workspace);
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
   const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;
@@ -478,7 +486,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    localRecovery, watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard, explicitDraftUndo, explicitExpansion,
+    localRecovery, watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance,
     ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
@@ -627,12 +635,18 @@ async function validateCoverage(
   workingBoundary: JournalSnapshot["workingBoundary"],
 ) {
   const covered = new Set<number>();
+  const grouped = new Set(groups.flatMap((group) =>
+    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
+  // A pending record of a removed Draft path never gets a group, so it counts as covered (ADR 0073).
+  const removed = records.filter((record) =>
+    !grouped.has(record.local_intent_sequence) && isRemovedDraftRecord(record));
+  const coverable = records.filter((record) => !removed.includes(record));
   let coveredRecordCount = 0;
   for (const group of groups) {
     const first = group.covered_sequence_range?.first;
     const last = group.covered_sequence_range?.last;
     const coverage = group.ordered_coverage ?? [];
-    const coveredRecords = records.slice(coveredRecordCount, coveredRecordCount + coverage.length);
+    const coveredRecords = coverable.slice(coveredRecordCount, coveredRecordCount + coverage.length);
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
@@ -717,14 +731,6 @@ async function validateCoverage(
         > AUTHOR_EDIT_MAX_WIRE_BODY_BYTES) {
       throw new Error("Journal Submission Group is corrupt");
     }
-    const settled = group.settlement;
-    if (request.retry_source !== undefined && settled.kind === "zero_authority_receipt_settled"
-      && !validRetrySettlement(request, settled)) throw new Error("Retry settlement is corrupt");
-    if (request.retry_source !== undefined && settled.kind === "applied_receipt_settled"
-      && !validRetrySettlement(request, { receipt: settled.receipt, source_draft_disposition: settled.source_draft_disposition ?? null,
-        effect: { kind: "authoritative_applied", authoritative_revision: settled.installed_base_snapshot.materialized_revision,
-          authoritative_commit_id: settled.authoritative_commit_id, author_action_sequence: settled.author_action_sequence,
-          project_activity_position: settled.project_activity_position } })) throw new Error("Retry settlement is corrupt");
     for (const [index, item] of coverage.entries()) {
       const record = coveredRecords[index]!;
       const sequence = record.local_intent_sequence;
@@ -741,6 +747,7 @@ async function validateCoverage(
     }
     coveredRecordCount += coverage.length;
   }
+  for (const record of removed) covered.add(record.local_intent_sequence);
   return covered;
 }
 
@@ -761,7 +768,7 @@ export async function validateJournalSnapshot(
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
       || !validFollowsBinding(record, groups, snapshot.workingBoundary)
-      || (record.retry_source?.kind !== "fresh_editor_intent" && !validDraftRetry(record.retry_source))
+      || (record.retry_source?.kind !== "fresh_editor_intent" && record.retry_source?.kind !== "draft_retry")
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || record.undo_group_binding?.kind !== "direct_author_input"
@@ -896,17 +903,19 @@ function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
-  const pendingDiscardCount = snapshot.explicitDiscard?.filter(({ observation }) =>
-    observation === undefined || observation.kind === "unresolved").length ?? 0;
-  const pendingUndoCount = snapshot.explicitDraftUndo?.filter(({ observation }) => observation === undefined).length ?? 0;
-  const pendingExpansionCount = snapshot.explicitExpansion?.filter(({ observation }) => observation === undefined).length ?? 0;
-  const pendingAcceptanceCount = pendingExpansionCount + pendingUndoCount + pendingDiscardCount + (snapshot.explicitAcceptance?.groups.filter((group) =>
-    (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0);
+  const pendingAcceptanceCount = snapshot.explicitAcceptance?.groups.filter((group) =>
+    (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0;
   const resolvedSequences = retainedRecoverySequences(snapshot);
+  for (const record of snapshot.records) {
+    if (isRemovedDraftRecord(record)) resolvedSequences.add(record.local_intent_sequence);
+  }
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
+    if (isRemovedDraftGroup(group)) {
+      for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
+    }
     if (group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence))) continue;
     if (isAppliedSettlement(group)) {
       for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
@@ -914,15 +923,6 @@ function pendingProjectionFromSnapshot(
       if ((group.frozen_request_body.proposal_target !== undefined
           && group.settlement.kind === "zero_authority_receipt_settled"
           && group.settlement.effect.kind === "proposal_revised")
-        || (group.settlement.kind === "zero_authority_receipt_settled"
-          && group.settlement.effect.kind === "refused_to_draft"
-          && group.settlement.receipt.result === "refused_to_draft")
-        || (group.frozen_request_body.retry_source !== undefined
-          && group.settlement.kind === "zero_authority_receipt_settled"
-          && group.settlement.source_draft_disposition?.kind === "unchanged"
-          && ["no_effect", "conflicted", "refused"].includes(group.settlement.effect.kind))
-        || (group.frozen_request_body.retry_source !== undefined
-          && group.settlement.kind === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised")
         || provenNoEffectAgainstDurableBase(group, snapshot, base)) {
         for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
       } else {
@@ -936,12 +936,7 @@ function pendingProjectionFromSnapshot(
     && !resolvedSequences.has(record.local_intent_sequence));
   const unboundFollower = activeRecords.some((record) => !snapshot.covered.has(record.local_intent_sequence)
     && followerIsUnbound(record, snapshot, base));
-  const recoveredRetrySequences = new Set(snapshot.groups.filter((group) =>
-    group.settlement.kind === "unsettled" && group.frozen_request_body.retry_source !== undefined
-    && group.frozen_request_body.chapter_id === base.chapter_id).flatMap((group) =>
-    group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
-  for (const record of activeRecords) recoveredRetrySequences.delete(record.local_intent_sequence);
-  const pendingRecordCount = activeRecords.length + recoveredRetrySequences.size;
+  const pendingRecordCount = activeRecords.length;
   const authoritativeRecords = activeRecords.filter((record) => record.proposal_target === undefined);
   const blocks = (authoritativeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
@@ -949,11 +944,9 @@ function pendingProjectionFromSnapshot(
   const body = (authoritativeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
-  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
   const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
     snapshot.records,
-    coveredSequences,
+    snapshot.covered,
     base,
   );
   return {
@@ -1026,7 +1019,6 @@ async function persistReplaceSelection(
     },
     expectedBody: flattenChapterBody(expectedBlocks),
     expectedBlocks,
-    ...(edit.expectedProposalHeads === undefined ? {} : { expectedProposalHeads: edit.expectedProposalHeads }),
     extraUtf8: edit.text,
     resultingBody: edit.resultingBody,
     inputOrigin: edit.inputOrigin ?? "typing",
@@ -1035,47 +1027,8 @@ async function persistReplaceSelection(
   }, cryptoImpl);
 }
 
-async function persistStructuredSelection(
-  workspace: EditorWorkspace,
-  edit: StructuredSelectionEdit & { inputOrigin: InputOrigin; undoGroupId?: string; createdAt: string },
-  cryptoImpl: Crypto,
-): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  if (projection.unsettled_intent_count !== 0
-    || edit.expectedProposalHeads.some((head) => !UUID.test(head))
-    || edit.expectedProposalHeads.length !== new Set(edit.expectedProposalHeads).size) {
-    throw new Error("Mixed input is stale");
-  }
-  return persistAuthorEditUnit(workspace, { snapshot, projection,
-    authorEditUnit: edit.authorEditUnit,
-    expectedBody: projection.body, expectedBlocks: projection.blocks,
-    resultingBody: projection.body, extraUtf8: JSON.stringify(edit.authorEditUnit),
-    inputOrigin: edit.inputOrigin, undoGroupId: edit.undoGroupId, createdAt: edit.createdAt,
-    expectedProposalHeads: edit.expectedProposalHeads,
-  }, cryptoImpl);
-}
-
-async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEditUnit: AuthorEditUnit,
-  retrySource: DraftRetry, expectedProposalHeads: string[]): Promise<PendingEditProjection> {
-  const snapshot = await prepareJournalAppend(workspace);
-  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  if (projection.save_state !== "saved" || projection.unsettled_intent_count !== 0 || !validDraftRetry(retrySource)
-    || expectedProposalHeads.some((head) => !UUID.test(head))
-    || expectedProposalHeads.length !== new Set(expectedProposalHeads).size) {
-    throw new Error("Draft retry requires a settled writer");
-  }
-  const expectedBlocks = cloneBlocks(projection.blocks);
-  for (const primitive of authorEditUnit.normalized_primitives) applyAuthorEditPrimitive(expectedBlocks, primitive);
-  const expectedBody = flattenChapterBody(expectedBlocks);
-  return persistAuthorEditUnit(workspace, { snapshot, projection, authorEditUnit, retrySource,
-    expectedBody, expectedBlocks, resultingBody: expectedBody, extraUtf8: JSON.stringify(authorEditUnit),
-    inputOrigin: "selection_replacement", expectedProposalHeads }, workspace.cryptoImpl);
-}
-
 export interface CandidateSelectionEdit {
   kind: "candidate_selection";
-  retrySource?: DraftRetry;
   target: AuthorEditProposalTarget;
   expectedProposalHeads: string[];
   priorText: string;
@@ -1125,7 +1078,6 @@ async function persistCandidateSelection(
   }], primitive);
   return persistAuthorEditUnit(workspace, {
     snapshot, projection,
-    ...(edit.retrySource === undefined ? {} : { retrySource: edit.retrySource }),
     authorEditUnit: {
       normalized_primitives: [primitive],
       selection_snapshot: {
@@ -1460,8 +1412,6 @@ async function persistAuthorEditUnit(
     inputOrigin: InputOrigin;
     undoGroupId?: string | undefined;
     createdAt?: string | undefined;
-    expectedProposalHeads?: string[];
-    retrySource?: DraftRetry;
     candidate?: {
       target: AuthorEditProposalTarget;
       expectedProposalHeads: string[];
@@ -1515,19 +1465,15 @@ async function persistAuthorEditUnit(
     edit.candidate === undefined ? Promise.resolve(undefined)
       : digestJournalValue(edit.candidate.checkpointText, cryptoImpl),
   ]);
-  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
-  const frozenGroup = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
+  const coveredSequences = snapshot.covered;
+  const frozenGroup = snapshot.groups.find((group) =>
+    group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group));
   const lastRecord = snapshot.records.at(-1);
   // Input while a group is unsettled, or after records that follow it, follows the latest group (ADR 0065).
   const followsGroup = frozenGroup !== undefined || snapshot.records.some((record) =>
     record.follows_submission_group !== undefined && !coveredSequences.has(record.local_intent_sequence));
   const latestGroup = [...snapshot.groups].sort((left, right) =>
     right.covered_sequence_range.first - left.covered_sequence_range.first)[0];
-  // A Draft retry and a structured edit with Proposal Heads wait for the earlier group (ADR 0046).
-  if (followsGroup && (edit.expectedProposalHeads !== undefined || edit.retrySource !== undefined)) {
-    throw new Error("Local Edit Journal requires prior group settlement");
-  }
   const followerCheckpoint = followsGroup ? edit.candidate?.priorText ?? blocksMaterialization(projection) : undefined;
   const followerCheckpointDigest = followerCheckpoint === undefined ? undefined
     : await digestJournalValue(followerCheckpoint, cryptoImpl);
@@ -1635,18 +1581,15 @@ async function persistAuthorEditUnit(
     ? activeChains.find((chain) => chain.payload_chain_id === lastRecord.payload_chain_ref) : undefined;
   const runFirst = followerChain && snapshot.records.find((item) =>
     item.payload_chain_ref === followerChain.payload_chain_id);
-  const expectedProposalHeads = edit.expectedProposalHeads ?? edit.candidate?.expectedProposalHeads
-    ?? base.proposal_head_revision_ids;
-  const ownership = edit.expectedProposalHeads !== undefined
-    ? edit.expectedProposalHeads.length === 0 ? "authoritative" : "mixed" : edit.candidate === undefined
-    ? base.observed_ownership_partition : "mixed";
+  const expectedProposalHeads = edit.candidate?.expectedProposalHeads ?? base.proposal_head_revision_ids;
+  const ownership = edit.candidate === undefined ? base.observed_ownership_partition : "mixed";
   // The fields of this record that decide whether it continues the run.
   const probe: JournalIntentRecord | undefined = lastRecord && { ...lastRecord, input_origin: inputOrigin,
     created_at: createdAt, undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
     base_snapshot_id: base.snapshot_id, base_activity_position: base.project_activity_position,
     target_refs: base.target_refs, expected_authoritative_heads: [base.authoritative_head_revision_id],
     expected_proposal_heads: expectedProposalHeads, observed_ownership_partition: ownership,
-    proposal_anchors: workspace.inlineProposalAnchors ?? [] };
+    proposal_anchors: [] };
   if (probe !== undefined && edit.candidate === undefined) delete probe.proposal_target;
   else if (probe !== undefined) probe.proposal_target = edit.candidate!.target;
   const existingPayloadChain = followsGroup
@@ -1707,12 +1650,12 @@ async function persistAuthorEditUnit(
     expected_authoritative_heads: [base.authoritative_head_revision_id],
     expected_proposal_heads: expectedProposalHeads,
     ...(edit.candidate === undefined ? {} : { proposal_target: edit.candidate.target }),
-    proposal_anchors: workspace.inlineProposalAnchors ?? [],
+    proposal_anchors: [],
     observed_ownership_partition: ownership,
     ...(followsGroup ? { follows_submission_group: {
       journal_submission_group_id: latestGroup!.journal_submission_group_id } } : {}),
     author_edit_unit: authorEditUnit,
-    retry_source: edit.retrySource ?? { kind: "fresh_editor_intent" },
+    retry_source: { kind: "fresh_editor_intent" },
     editor_contract_revision: EDITOR_CONTRACT_REVISION,
     undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
     payload_chain_ref: payloadChain.payload_chain_id,
@@ -1754,9 +1697,8 @@ export async function reconfirmLegacyReplaceSelection(
     throw new Error("Local Edit Journal limit failed");
   }
   const snapshot = await prepareJournalAppend(workspace);
-  const covered = new Set(snapshot.groups.flatMap((group) =>
-    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
-  if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled")) {
+  const covered = snapshot.covered;
+  if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled" && !isRemovedDraftGroup(group))) {
     throw new Error("Local Edit Journal requires prior group settlement");
   }
   const pendingLegacy = snapshot.records.filter((record) =>
@@ -1822,10 +1764,8 @@ type EditInputFields = { inputOrigin?: InputOrigin; undoGroupId?: string; create
 /** One author edit for the Journal. An edit without `kind` replaces a selection. */
 export type JournalAuthorEdit =
   | ReplaceSelectionEdit
-  | (CapturedManuscriptEdit & { expectedProposalHeads?: string[] } & EditInputFields)
-  | CandidateSelectionEdit
-  | (StructuredSelectionEdit & EditInputFields)
-  | { kind: "draft_retry"; authorEditUnit: AuthorEditUnit; retrySource: DraftRetry; expectedProposalHeads: string[] };
+  | (CapturedManuscriptEdit & EditInputFields)
+  | CandidateSelectionEdit;
 
 /** Appends one author edit to the Journal and returns the Pending Edit Projection after the append. */
 export async function appendAuthorEdit(
@@ -1835,10 +1775,6 @@ export async function appendAuthorEdit(
 ): Promise<PendingEditProjection> {
   if (!("kind" in edit)) return persistReplaceSelection(workspace, edit, cryptoImpl);
   switch (edit.kind) {
-    case "draft_retry":
-      return persistDraftRetryUnit(workspace, edit.authorEditUnit, edit.retrySource, edit.expectedProposalHeads);
-    case "structured_selection": return persistStructuredSelection(workspace, { ...edit,
-      inputOrigin: edit.inputOrigin ?? "typing", createdAt: edit.createdAt ?? new Date().toISOString() }, cryptoImpl);
     case "candidate_selection": return persistCandidateSelection(workspace, edit, cryptoImpl);
     case "split_block": return persistSplitBlock(workspace, edit, cryptoImpl);
     case "join_blocks": return persistJoinBlocks(workspace, edit, cryptoImpl);

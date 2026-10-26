@@ -264,15 +264,14 @@ it("keeps an IME composition in a candidate while the controller publishes a sav
   });
 });
 
-it("keeps the caret in place when only an inline Proposal changes its attributes", () => {
+it("keeps the caret in place when only a Proposal changes its attributes", () => {
   const host = document.createElement("div"); document.body.append(host);
   const editor = new Editor({ element: host, extensions: storyosManuscriptExtensions(BLOCK),
     content: manuscriptJson(BLOCK, "Base"), injectCSS: false });
   try {
     const id = proposalFixture.proposal.proposal_id;
     const projection: BlockProposalProjection = { proposalId: id, operationId: id, revisionId: id, blockId: BLOCK,
-      sourceRunId: id, sourceDecisionId: id, text: "AS", eligible: true, expectedHeads: [id],
-      inlineProposal: true, inlineAnchor: { from: 1, to: 3, sourceText: "as" } };
+      sourceRunId: id, sourceDecisionId: id, text: "AS", eligible: true, expectedHeads: [id] };
     projectBlockProposals(editor, [projection]);
     editor.commands.setTextSelection(1);
     const before = { text: editor.state.doc.textContent, selection: editor.state.selection.toJSON() };

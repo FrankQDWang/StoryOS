@@ -34,6 +34,7 @@ import {
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
   JOURNAL_DATABASE_VERSION,
   boundJournalRecord,
+  isRemovedDraftGroup,
   journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   recordTargetsCurrentBase,
@@ -45,8 +46,6 @@ import {
   commitProtectedTransportSend,
   readAvailableCommandProof,
 } from "./protected-transport-capsule.ts";
-
-import { validRetrySettlement } from "./draft-retry-binding.ts";
 
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -168,7 +167,7 @@ async function validateFrozenGroup(
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
       !== JSON.stringify(firstRecord.expected_proposal_heads)
-    || JSON.stringify(request?.retry_source) !== JSON.stringify(firstRecord.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
+    || request?.retry_source !== undefined
     || JSON.stringify(request?.proposal_target)
       !== JSON.stringify(firstRecord.proposal_target)
     || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
@@ -209,7 +208,8 @@ export async function freezeOneIntentSubmission(
     throw new Error("Editor Session is read only");
   }
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
+  const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled"
+    && !isRemovedDraftGroup(group));
   if (existing) {
     if (existing.reconciliation?.kind === "outcome_query_unresolved") return existing;
     const existingRecords = existing.ordered_coverage.map((coverage) => {
@@ -222,8 +222,7 @@ export async function freezeOneIntentSubmission(
     );
     return existing;
   }
-  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
-    group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
+  const coveredSequences = snapshot.covered;
   const firstUncovered = snapshot.records.find((record) =>
     !coveredSequences.has(record.local_intent_sequence));
   // A record that follows a group submits only on the installed base that it binds (ADR 0065).
@@ -281,7 +280,6 @@ export async function freezeOneIntentSubmission(
     undo_group_id: firstRecord.undo_group_binding.undo_group_id,
     completed_intent_record_id: firstRecord.completed_intent_record_id,
     local_intent_sequence: String(firstRecord.local_intent_sequence),
-    ...(firstRecord.retry_source.kind === "draft_retry" ? { retry_source: firstRecord.retry_source } : {}),
     author_edit_units: records.map((record) => record.author_edit_unit!),
   };
   const orderedCoverage: JournalCoverage[] = records.map((record) => ({
@@ -387,10 +385,9 @@ async function settleAuthorEditResponse({
         !== JSON.stringify([effect?.kind === "proposal_revised" ? effect.proposal_revision_id : ""])
         || receipt.proposal_revision_ids.length !== 1)
       : JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([]))
-    || !validRetrySettlement(group.frozen_request_body, settledResponse)
-    || (group.frozen_request_body.retry_source === undefined && (
-      JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify(effect?.kind === "refused_to_draft" ? [effect.draft_id] : [])
-      || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify(effect?.kind === "refused_to_draft" ? [effect.creation_event_id] : [])))
+    || settledResponse.source_draft_disposition !== undefined
+    || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify([])
+    || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
     || typeof receipt.created_at !== "string"
     || Number.isNaN(Date.parse(receipt.created_at))) {
@@ -417,7 +414,6 @@ async function settleAuthorEditResponse({
         command_id: settledResponse.command_id,
         author_command_admission_id: settledResponse.author_command_admission_id,
         receipt,
-        ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
         effect,
       },
     };
@@ -436,15 +432,7 @@ async function settleAuthorEditResponse({
           .includes(effect.reason)
           && UUID.test(effect.current_authoritative_revision_id ?? "")
           && receipt.result === "conflicted"
-        : effect?.kind === "refused_to_draft"
-          ? effect.refusal_origin === (group.frozen_request_body.retry_source === undefined ? "fresh_editor_intent" : "draft_retry_replacement")
-            && receipt.result === "refused_to_draft"
-            && UUID.test(effect.draft_id) && UUID.test(effect.draft_revision_id)
-            && UUID.test(effect.creation_event_id)
-            && group.frozen_request_body.author_edit_units.length === 1
-            && group.frozen_request_body.author_edit_units[0]?.normalized_primitives[0]?.kind
-              === "replace_structured_selection"
-          : effect?.kind === "refused"
+        : effect?.kind === "refused"
           && ["unsupported_intent_shape", "invalid_selection", "target_mismatch"]
             .includes(effect.reason)
           && receipt.result === "refused";
@@ -465,7 +453,6 @@ async function settleAuthorEditResponse({
         command_id: settledResponse.command_id,
         author_command_admission_id: settledResponse.author_command_admission_id,
         receipt,
-        ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
         effect,
       },
     };
@@ -503,38 +490,6 @@ async function settleAuthorEditResponse({
   });
   const freshBase = canonical.base_snapshot;
   const request = group.frozen_request_body;
-  const primitive = request.author_edit_units[0]?.normalized_primitives[0];
-  const canonicalRetryProjection = request.retry_source !== undefined
-    && request.author_edit_units.length === 1
-    && request.author_edit_units[0]?.normalized_primitives.length === 1
-    && primitive?.kind === "replace_block_selection"
-    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
-    && request.observed_ownership_partition === "mixed"
-    && request.expected_proposal_head_revision_ids.length > 0
-    && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
-    && workspace.session.base_snapshot.observed_ownership_partition === "authoritative";
-  const edgeRecord = request.retry_source === undefined && request.proposal_target === undefined
-    && request.author_edit_units.length === 1 && request.author_edit_units[0]?.normalized_primitives.length === 1
-    && primitive?.kind === "replace_block_selection" && primitive.from === primitive.to
-    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
-    && request.observed_ownership_partition === "mixed" && request.expected_proposal_head_revision_ids.length === 1
-    && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
-    && workspace.session.base_snapshot.observed_ownership_partition === "authoritative"
-    ? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).records.find(
-      (record) => record.completed_intent_record_id === group.ordered_coverage[0]?.intent_record_ref,
-    ) : undefined;
-  const anchor = edgeRecord?.proposal_anchors.length === 1 ? edgeRecord.proposal_anchors[0] : undefined;
-  const canonicalInlineEdgeProjection = anchor !== undefined && primitive?.kind === "replace_block_selection"
-    && anchor.manuscript_block_id === primitive.manuscript_block_id
-    && (primitive.from === anchor.from || primitive.from === anchor.to);
-  const canonicalPendingProjection = canonicalRetryProjection || canonicalInlineEdgeProjection;
-  const sourceRecord = durableQuery && canonicalPendingProjection
-    ? edgeRecord ?? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).records.find(
-      (record) => record.completed_intent_record_id === group.ordered_coverage[0]?.intent_record_ref,
-    ) : undefined;
-  const recoveredCanonicalBase = sourceRecord !== undefined
-    && sourceRecord.base_snapshot_id !== freshBase.snapshot_id
-    && JSON.stringify(freshBase) === JSON.stringify(workspace.session.base_snapshot);
   if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
@@ -543,16 +498,15 @@ async function settleAuthorEditResponse({
       canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
     )
     || !UUID.test(freshBase?.snapshot_id ?? "")
-    || (freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id && !recoveredCanonicalBase)
+    || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
     || freshBase.project_activity_position !== effect.project_activity_position
     || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id
     || JSON.stringify(freshBase.proposal_head_revision_ids)
-      !== JSON.stringify(canonicalPendingProjection ? [] : request.expected_proposal_head_revision_ids)
+      !== JSON.stringify(request.expected_proposal_head_revision_ids)
     || JSON.stringify(freshBase.target_refs)
       !== JSON.stringify(group.frozen_request_body.target_refs)
-    || freshBase.observed_ownership_partition
-      !== (canonicalPendingProjection ? "authoritative" : request.observed_ownership_partition)
+    || freshBase.observed_ownership_partition !== request.observed_ownership_partition
     || JSON.stringify(freshBase.materialized_revision)
       !== JSON.stringify(effect.authoritative_revision)
     || freshBase.materialized_payload_digest?.algorithm !== "sha256"
@@ -579,7 +533,6 @@ async function settleAuthorEditResponse({
       command_id: settledResponse.command_id,
       author_command_admission_id: settledResponse.author_command_admission_id,
       receipt,
-      ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
       authoritative_revision: effect.authoritative_revision,
       authoritative_commit_id: effect.authoritative_commit_id,
       author_action_sequence: effect.author_action_sequence,

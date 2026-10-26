@@ -27,15 +27,6 @@ const paragraph = (id: string, ...content: JSONContent[]) => ({ type: "paragraph
 const BLOCK: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Hello")),
   { type: "blockProposal", attrs: candidate(FIRST), content: text("Candidate") },
   paragraph(RIGHT, ...text("World"))] };
-// Guard [voice -> tone] here. The candidate text is at 8 to 12.
-const INLINE: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Guard "),
-  { type: "inlineProposal", attrs: { ...candidate(FIRST), inlineFrom: 6, inlineTo: 11, sourceText: "voice" },
-    content: text("tone") }, ...text(" here"))] };
-// Guard [voice -> tone] here / [Next]. The Chapter text " here" is at 13 to 18, and the block candidate at 20 to 24.
-const MIXED: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Guard "),
-  { type: "inlineProposal", attrs: { ...candidate(FIRST), inlineFrom: 6, inlineTo: 11, sourceText: "voice" },
-    content: text("tone") }, ...text(" here")),
-  { type: "blockProposal", attrs: candidate(SECOND), content: text("Next") }] };
 // Hello / [One] / [Two]. The two candidates are at 8 to 11 and 13 to 16.
 const TWO: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Hello")),
   { type: "blockProposal", attrs: candidate(FIRST), content: text("One") },
@@ -76,7 +67,7 @@ async function edit(content: JSONContent, anchor: number, head: number, input: (
   await input();
   const candidates: string[] = [];
   current.state.doc.descendants((node) => {
-    if (node.type.name === "blockProposal" || node.type.name === "inlineProposal") candidates.push(node.textContent);
+    if (node.type.name === "blockProposal") candidates.push(node.textContent);
   });
   return { chapter: readManuscriptParagraphs(current.state.doc)?.map((block) => block.text), candidates,
     selection: { anchor: current.state.selection.anchor, head: current.state.selection.head }, captured };
@@ -132,37 +123,12 @@ it("a multi-line paste from Chapter text into a candidate keeps the caret in the
     candidates: ["Candidate"], selection: { anchor: 18, head: 18 } }, captured: 1 });
 });
 
-it.each([
-  { name: "Chapter text", anchor: 3, head: 10, chapter: ["GuXvoice here"], candidates: ["tone"], caret: 4,
-    captured: "chapter replace_block_selection" },
-  { name: "the candidate", anchor: 10, head: 16, chapter: ["Guard voice here"], candidates: ["toX"], caret: 11,
-    captured: `candidate ${FIRST}` },
-])("typing over an inline candidate changes only $name when it is first", async ({ anchor, head, chapter,
-  candidates, caret, captured }) => {
-  expect(await edit(INLINE, anchor, head, type("X"))).toEqual({ chapter, candidates,
-    selection: { anchor: caret, head: caret }, captured: [captured] });
-});
-
 it("Enter from Chapter text into a candidate breaks only the Chapter line, and the candidate stays after its block",
   async () => {
     const { captured, ...changed } = await edit(BLOCK, 3, 12, () => applyTrustedInput({ operation: "enter" }));
     expect({ changed, captured: captured.length }).toEqual({ changed: { chapter: ["He", "", "World"],
       candidates: ["Candidate"], selection: { anchor: 16, head: 16 } }, captured: 1 });
   });
-
-it("a multi-line paste after an inline candidate keeps both candidates in place", async () => {
-  const { captured, ...changed } = await edit(MIXED, 15, 22, paste("A\nB"));
-  expect({ changed, captured: captured.length }).toEqual({ changed: { chapter: ["Guard voice hA", "B"],
-    candidates: ["tone", "Next"], selection: { anchor: 25, head: 25 } }, captured: 1 });
-});
-
-it.each([
-  { name: "paste", input: paste("X"), chapter: ["GuXvoice here"], caret: 4 },
-  { name: "cut", input: cut, chapter: ["Guvoice here"], caret: 3 },
-])("$name from Chapter text into an inline candidate keeps the candidate", async ({ input, chapter, caret }) => {
-  expect(await edit(INLINE, 3, 10, input)).toEqual({ chapter, candidates: ["tone"],
-    selection: { anchor: caret, head: caret }, captured: ["chapter replace_block_selection"] });
-});
 
 it("typing over two candidates changes only the first candidate", async () => {
   expect(await edit(TWO, 9, 14, type("X"))).toEqual({ chapter: ["Hello"], candidates: ["OX", "Two"],

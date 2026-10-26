@@ -124,7 +124,7 @@ function withCandidate(candidate: string, revision = CANDIDATE_REVISION) {
 function candidateEntry(start: number, end: number): Omit<DraftReference, "key"> {
   return { reference: { kind: "proposal_candidate_text", chapter_id: CHAPTER, proposal_id: PROPOSAL,
     operation_id: OPERATION, revision_id: CANDIDATE_REVISION, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-    start_offset: start, end_offset: end }, candidate: { blockId: FIRST!, inlineFrom: null },
+    start_offset: start, end_offset: end }, candidate: { blockId: FIRST! },
   label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 }, candidate: true }, moved: false };
 }
 

@@ -228,9 +228,7 @@ export function ManuscriptEditor({
                 primitive.kind === "replace_block_selection")?.text ?? "",
             }
             : edit);
-      const edgeHeads = transaction.getMeta("storyos.inlineEdgeHeads") as string[] | undefined;
-      writingRef.current?.capture(edgeHeads === undefined ? edit
-        : { ...edit, expectedProposalHeads: edgeHeads }, origin, nextBlocks);
+      writingRef.current?.capture(edit, origin, nextBlocks);
     },
   }, []);
 
@@ -296,9 +294,7 @@ export function ManuscriptEditor({
       const button = acceptButton ?? rejectButton ?? withdrawButton ?? copyButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
       const proposalId = proposal?.dataset.proposalId;
-      const inline = proposalId === undefined ? null
-        : editor.view.dom.querySelector(`[data-inline-proposal-id="${proposalId}"]`);
-      const text = inline?.textContent ?? proposal?.querySelector(".block-proposal-text")?.textContent;
+      const text = proposal?.querySelector(".block-proposal-text")?.textContent;
       if (button === null || button === undefined || proposal === null
         || proposal === undefined || text === null || text === undefined) return;
       const decision = {
@@ -353,7 +349,7 @@ export function ManuscriptEditor({
       crossingCompositionStartRef.current = crossing ? editor.state.doc : null;
       const parent = editor.state.selection.$from.parent;
       const candidateSelected = !crossing
-        && (parent.type.name === "blockProposal" || parent.type.name === "inlineProposal");
+        && parent.type.name === "blockProposal";
       candidateCompositionBlockedRef.current = candidateSelected && !writing.canAcceptInput(true,
         { proposalId: String(parent.attrs.proposalId), operationId: String(parent.attrs.operationId) });
       candidateCompositionStartRef.current = candidateSelected

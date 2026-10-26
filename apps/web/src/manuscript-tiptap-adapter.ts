@@ -1,4 +1,3 @@
-import { inlineProposalDecoration, routeInlineEdgeInsertion } from "./inline-proposal-decoration.ts";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import Document from "@tiptap/extension-document";
@@ -236,7 +235,6 @@ export function storyosManuscriptExtensions(
     Heading.configure({ levels: [1] }),
     Text,
     blockProposalDecoration,
-    inlineProposalDecoration,
     UniqueID.configure({
       attributeName: "id",
       types: ["paragraph", "heading"],
@@ -249,8 +247,7 @@ export function storyosManuscriptExtensions(
         return {
           Enter: () => {
             narrowToFirstOwner(this.editor.view);
-            if (this.editor.state.selection.$from.parent.type.name === "blockProposal"
-              || this.editor.state.selection.$from.parent.type.name === "inlineProposal") {
+            if (this.editor.state.selection.$from.parent.type.name === "blockProposal") {
               return insertNewline(this.editor.view);
             }
             // The deletion of the selection and the block split are one edit, so a refusal changes nothing.
@@ -282,7 +279,6 @@ export function storyosManuscriptExtensions(
               if (hasCrossingComposition?.() === true) return true;
               // Each input narrows a crossing selection first, so a replacement that still crosses owners is refused.
               if (replacesCrossingSelection(state, transaction)) return false;
-              routeInlineEdgeInsertion(transaction, state);
               const next = readManuscriptParagraphs(transaction.doc);
               if (next === undefined) return false;
               const previous = readManuscriptParagraphs(state.doc);
@@ -342,7 +338,7 @@ export function storyosEditorProps(blockId: string) {
       if (dropPos !== null) {
         const $pos = view.state.doc.resolve(dropPos.pos);
         if ($pos.parent.type.name === "paragraph" || $pos.parent.type.name === "heading"
-          || $pos.parent.type.name === "blockProposal" || $pos.parent.type.name === "inlineProposal") {
+          || $pos.parent.type.name === "blockProposal") {
           view.dispatch(view.state.tr.setSelection(
             TextSelection.create(view.state.doc, dropPos.pos),
           ));
@@ -364,11 +360,9 @@ export function storyosEditorProps(blockId: string) {
           return true;
         }
         if (event.inputType !== "insertText" || event.data === null) return false;
-        const narrowed = narrowToFirstOwner(view);
-        const transaction = view.state.tr.insertText(event.data);
-        if (!routeInlineEdgeInsertion(transaction, view.state) && !narrowed) return false;
+        if (!narrowToFirstOwner(view)) return false;
         event.preventDefault();
-        view.dispatch(transaction);
+        view.dispatch(view.state.tr.insertText(event.data));
         return true;
       },
       dragover: (_view: EditorView, event: Event) => {
@@ -399,7 +393,7 @@ function dispatchPlainTextReplacement(
   const { from, to } = view.state.selection;
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
-  if (($from.parent.type.name === "blockProposal" || $from.parent.type.name === "inlineProposal")
+  if ($from.parent.type.name === "blockProposal"
     && $to.parent.type.name === $from.parent.type.name
     && $from.before($from.depth) === $to.before($to.depth)) {
     const transaction = view.state.tr.insertText(text, from, to);
@@ -413,7 +407,7 @@ function dispatchPlainTextReplacement(
   }
   const lines = text.split(/\r\n|\n|\r/);
   if ($from.sameParent($to)) {
-    // A replacement in one block keeps the inline candidates before it, and the caret stays at its end.
+    // A replacement in one block keeps the candidates of the block after it, and the caret stays at its end.
     const transaction = replaceWithLinesTransaction(view.state, from, to, lines);
     if (transaction === undefined) return;
     transaction.setMeta(STORYOS_ORIGIN, origin);

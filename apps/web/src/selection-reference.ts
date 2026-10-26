@@ -9,8 +9,8 @@ export const SELECTION_REFERENCE_LIMIT = 8;
 export type ChapterTextReference = Extract<SelectionReference, { kind: "chapter_text" }>;
 export type CandidateTextReference = Extract<SelectionReference, { kind: "proposal_candidate_text" }>;
 export type EditorRange = { from: number; to: number };
-/** The Chapter block of a candidate, and the source offset of an inline candidate in that block. */
-export type CandidateTarget = { blockId: string; inlineFrom: number | null };
+/** The Chapter block of a candidate. */
+export type CandidateTarget = { blockId: string };
 /** One reference of a selection. A candidate reference also has the target of its candidate. */
 export type SelectedReference = { reference: SelectionReference; candidate?: CandidateTarget };
 /** The part of the manuscript tree that a label reads: the Chapters of each Volume in reading order. */
@@ -40,46 +40,18 @@ function editorBlocks(doc: ProseMirrorNode): EditorBlock[] {
   return blocks;
 }
 
-/** The authoritative offset of a document position in a block. An inline candidate holds the length of its source text. */
-function blockOffset(block: EditorBlock, position: number): number | undefined {
-  let offset = 0;
-  let result: number | undefined;
-  block.node.forEach((child, childOffset) => {
-    if (result !== undefined) return;
-    const start = block.start + childOffset;
-    if (child.type.name === "inlineProposal") {
-      if (position > start && position < start + child.nodeSize) result = -1;
-      else if (position <= start) result = offset;
-      else offset += (child.attrs.sourceText as string | null ?? "").length;
-    } else if (position <= start + child.nodeSize) {
-      result = offset + Math.max(0, position - start);
-    } else {
-      offset += child.nodeSize;
-    }
-  });
-  if (result === -1) return undefined;
-  return result ?? offset;
+/** The authoritative offset of a document position in a block. */
+function blockOffset(block: EditorBlock, position: number): number {
+  return Math.min(Math.max(0, position - block.start), block.end - block.start);
 }
 
-/** The document position of an authoritative offset in a block, outside the inline candidates. */
+/** The document position of an authoritative offset in a block. */
 function blockPosition(block: EditorBlock, offset: number): number | undefined {
-  let remaining = offset;
-  let result: number | undefined;
-  block.node.forEach((child, childOffset) => {
-    if (result !== undefined) return;
-    const start = block.start + childOffset;
-    const length = child.type.name === "inlineProposal"
-      ? (child.attrs.sourceText as string | null ?? "").length : child.nodeSize;
-    if (remaining === 0) result = start;
-    else if (remaining < length) result = child.type.name === "inlineProposal" ? -1 : start + remaining;
-    else remaining -= length;
-  });
-  if (result === -1) return undefined;
-  return result ?? (remaining === 0 ? block.end : undefined);
+  return offset <= block.end - block.start ? block.start + offset : undefined;
 }
 
 function isCandidate(node: ProseMirrorNode): boolean {
-  return node.type.name === "blockProposal" || node.type.name === "inlineProposal";
+  return node.type.name === "blockProposal";
 }
 
 /**
@@ -89,7 +61,7 @@ function isCandidate(node: ProseMirrorNode): boolean {
 export function chapterTextReference(doc: ProseMirrorNode, range: EditorRange, chapterId: string,
   revisionId: string): ChapterTextReference | undefined {
   if (range.to <= range.from) return undefined;
-  // A range that touches the text of a pending candidate, in its own block or inline, has no reference.
+  // A range that touches the text of a pending candidate has no reference.
   let touched = false;
   doc.nodesBetween(range.from, range.to, (node, position) => {
     if (isCandidate(node) && position < range.to && position + node.nodeSize > range.from) touched = true;
@@ -108,7 +80,7 @@ function chapterRangeReference(doc: ProseMirrorNode, range: EditorRange, chapter
   if (first < 0 || last < first) return undefined;
   const start = blockOffset(blocks[first]!, Math.max(range.from, blocks[first]!.start));
   const end = blockOffset(blocks[last]!, Math.min(range.to, blocks[last]!.end));
-  if (start === undefined || end === undefined || (first === last && end <= start)) return undefined;
+  if (first === last && end <= start) return undefined;
   const point = (block: EditorBlock, offset: number): TextPoint => ({ manuscript_block_id: block.id, offset });
   return { kind: "chapter_text", chapter_id: chapterId, base_authoritative_revision_id: revisionId,
     coordinate_profile: "storyos.editor.utf16-code-unit.v1",
@@ -139,8 +111,7 @@ function candidateReference(chapterId: string, candidate: EditorCandidate,
   return { reference: { kind: "proposal_candidate_text", chapter_id: chapterId, proposal_id: attrs.proposalId,
     operation_id: attrs.operationId, revision_id: attrs.revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
     start_offset: from - candidate.start, end_offset: to - candidate.start },
-  candidate: { blockId: attrs.blockId, inlineFrom: candidate.node.type.name === "inlineProposal"
-    ? attrs.inlineFrom as number : null } };
+  candidate: { blockId: attrs.blockId } };
 }
 
 /**
@@ -182,10 +153,7 @@ export function candidateTextReference(doc: ProseMirrorNode, range: EditorRange,
   return selected?.reference.kind === "proposal_candidate_text" ? selected.reference : undefined;
 }
 
-/**
- * The editor range of a reference in a document at its base Revision. A missing block, or an offset
- * inside the source text of an inline candidate, has none.
- */
+/** The editor range of a reference in a document at its base Revision. A missing block has none. */
 export function referenceRange(doc: ProseMirrorNode, reference: ChapterTextReference): EditorRange | undefined {
   const blocks = editorBlocks(doc);
   const find = (point: TextPoint) => blocks.find((block) => block.id === point.manuscript_block_id);

@@ -112,7 +112,6 @@
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
@@ -211,8 +210,7 @@
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -295,7 +293,6 @@
           "scripts/verify-recovery-hold.sh",
           "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
@@ -317,8 +314,7 @@
         "supporting_evidence": [
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
-          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -418,8 +414,7 @@
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -471,7 +466,6 @@
           "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
           "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
@@ -564,7 +558,6 @@
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
@@ -627,7 +620,6 @@
           "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
         ],
         "evidence_class": "integration"
