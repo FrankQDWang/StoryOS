@@ -33,9 +33,6 @@ pub enum AuthorUndoFrontierKind {
         prior_evidence_usable: bool,
     },
     ReversibleStructureTransition,
-    ReversibleDraftClose,
-    DraftSourceUnavailable,
-    DraftBindingChanged,
     Barrier,
 }
 
@@ -92,22 +89,6 @@ pub fn undo_latest_author_action(
     match &frontier.kind {
         AuthorUndoFrontierKind::Barrier => {
             TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier)
-        }
-        AuthorUndoFrontierKind::DraftSourceUnavailable => {
-            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable)
-        }
-        AuthorUndoFrontierKind::DraftBindingChanged => {
-            TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::SourceBindingChanged)
-        }
-        AuthorUndoFrontierKind::ReversibleDraftClose => {
-            if command.current_head_revision_id != command.expected_head_revision_id {
-                return TransitionOutcome::Conflicted(
-                    UndoLatestAuthorActionConflict::WrongTargetHead,
-                );
-            }
-            TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
-                source_sequence: frontier.sequence,
-            })
         }
         AuthorUndoFrontierKind::ReversibleStructureTransition => {
             TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {

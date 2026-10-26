@@ -16,9 +16,6 @@ mod proposal_decision;
 #[path = "command_sequence_tests/proposal_generation_tests.rs"]
 mod proposal_generation;
 
-#[path = "command_sequence_tests/draft_tests.rs"]
-mod draft;
-
 #[path = "command_sequence_tests/agent_run_tests.rs"]
 mod agent_run;
 
@@ -51,9 +48,6 @@ mod proposal_undo_chain;
 
 #[path = "command_sequence_tests/proposal_decision_undo_chain_tests.rs"]
 mod proposal_decision_undo_chain;
-
-#[path = "command_sequence_tests/draft_expansion_undo_chain_tests.rs"]
-mod draft_expansion_undo_chain;
 
 #[path = "command_sequence_tests/proposal_acceptance_undo_chain_tests.rs"]
 mod proposal_acceptance_undo_chain;

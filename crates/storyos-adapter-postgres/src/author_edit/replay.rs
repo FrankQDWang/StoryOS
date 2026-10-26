@@ -1,7 +1,5 @@
 //! The replay checks and the effect query of `applyAuthorEdit` (ADR 0043, ADR 0044).
 
-use storyos_contracts::SourceDraftDisposition;
-
 use super::sequence::AuthorEditRecord;
 use crate::command_replay::{CommandReplay, ReplayFault};
 
@@ -57,34 +55,9 @@ pub(super) fn check_replay_records(replay: &CommandReplay) -> Result<(), ReplayF
 }
 
 /// The recorded facts of a settled Author Edit.
-pub(super) fn replayed_record(
-    replay: &CommandReplay,
-    refused_to_draft: bool,
-) -> Result<AuthorEditRecord, ReplayFault> {
+pub(super) fn replayed_record(replay: &CommandReplay) -> Result<AuthorEditRecord, ReplayFault> {
     let effect = replay.effect();
-    let damaged =
-        |what: &str| ReplayFault::Unavailable(format!("the Author Edit {what} is damaged").into());
-    let source: Option<SourceDraftDisposition> =
-        match effect.fields().get("source_draft_disposition") {
-            None | Some(serde_json::Value::Null) => None,
-            Some(value) => Some(
-                serde_json::from_value(value.clone())
-                    .map_err(|_| damaged("source Draft disposition"))?,
-            ),
-        };
-    let retry: Option<storyos_contracts::DraftRetry> = match effect.fields().get("retry_source") {
-        None | Some(serde_json::Value::Null) => None,
-        Some(value) => {
-            Some(serde_json::from_value(value.clone()).map_err(|_| damaged("retry source"))?)
-        }
-    };
     Ok(AuthorEditRecord {
-        replacement_provenance: if refused_to_draft {
-            crate::draft_retry::replacement_provenance(source.as_ref(), retry.as_ref())
-        } else {
-            None
-        },
-        source_draft_disposition: source,
         completed_intent_record_id: effect.required("completed_intent_record_id")?,
         local_intent_sequence: effect.required_u64("local_intent_sequence")?,
     })
@@ -165,21 +138,13 @@ pub(super) const AUTHOR_EDIT_REPLAY_EFFECT: &str = "SELECT jsonb_build_object(
         'admission_chapter_id', admission.chapter_object_id::text,
         'admission_expected_revision_id', admission.expected_authoritative_revision_id::text,
         'admission_target_refs', to_jsonb(admission.target_refs),
-        'source_draft_disposition', receipt.source_draft_disposition,
-        'retry_source', admission.command_payload->'retry_source',
         'completed_intent_record_id', admission.completed_intent_record_id::text,
         'local_intent_sequence', admission.local_intent_sequence::text,
-        'proposal_revision_id', receipt.proposal_revision_ids[1]::text,
-        'draft_id', draft.draft_id::text,
-        'draft_revision_id', draft.revision_id::text,
-        'creation_event_id', draft.creation_event_id::text)::text
+        'proposal_revision_id', receipt.proposal_revision_ids[1]::text)::text
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admissions AS admission
      ON (admission.owner_user_id, admission.project_id, admission.author_command_admission_id) =
         (receipt.owner_user_id, receipt.project_id, receipt.author_command_admission_id)
-LEFT JOIN storyos.draft_lifecycle_events AS draft
-     ON (draft.owner_user_id, draft.project_id, draft.receipt_id) =
-        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
   WHERE receipt.owner_user_id = $1::text::uuid
     AND receipt.project_id = $2::text::uuid
     AND receipt.receipt_id = $3::text::uuid";

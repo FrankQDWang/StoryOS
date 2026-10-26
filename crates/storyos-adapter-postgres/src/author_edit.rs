@@ -4,10 +4,9 @@ use storyos_application::{
 };
 use storyos_core::{
     ApplyAuthorEdit, ApplyAuthorEditOutcome, ApplyVersionedAuthorEdit, AuthorEditApplied,
-    AuthorEditPrimitive, AuthorEditRefused, BlockReservation, COORDINATE_VERSION,
-    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload, TransitionOutcome,
-    VersionedTargetOwnership, apply_author_edit as apply_core_author_edit,
-    apply_versioned_author_edit, chapter_display_body,
+    AuthorEditPrimitive, COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock,
+    ManuscriptPayload, TransitionOutcome, VersionedTargetOwnership,
+    apply_author_edit as apply_core_author_edit, apply_versioned_author_edit, chapter_display_body,
 };
 
 use super::*;
@@ -72,13 +71,7 @@ impl PostgresProjectReader {
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
-        if !command
-            .author_edit_units
-            .iter()
-            .any(|unit| unit.selection_snapshot.ordered_selection.is_some())
-        {
-            self.pause_generating_proposals_for_input(command).await?;
-        }
+        self.pause_generating_proposals_for_input(command).await?;
         let envelope = author_edit_envelope(command);
         let author_edit = AuthorEdit::new(command, fault);
         let settled = admit_and_settle(self, &envelope, &author_edit, || {
@@ -172,16 +165,7 @@ pub(crate) fn author_edit_settlement(
                 zero.record,
             )
         }
-        TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft) => {
-            let zero = zero.ok_or_else(missing)?;
-            (
-                AuthorEditSettlementEffect::RefusedToDraft {
-                    identity: zero.draft.ok_or_else(missing)?,
-                },
-                zero.record,
-            )
-        }
-        TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)) => (
+        TransitionOutcome::Refused(reason) => (
             AuthorEditSettlementEffect::Refused { reason },
             zero.ok_or_else(missing)?.record,
         ),
@@ -189,8 +173,6 @@ pub(crate) fn author_edit_settlement(
     Ok(AuthorEditSettlement {
         ids: settled.ids,
         effect,
-        source_draft_disposition: record.source_draft_disposition,
-        replacement_provenance: record.replacement_provenance,
         receipt_created_at: settled.receipt_created_at,
         completed_intent_record_id: record.completed_intent_record_id,
         local_intent_sequence: record.local_intent_sequence,
@@ -251,40 +233,6 @@ async fn classify_author_edit(
     });
     let loaded = super::author_edit_proposal::load_chapter_proposal_heads(client, command).await?;
     let current_ownership = loaded.ownership.clone();
-    if command
-        .author_edit_units
-        .iter()
-        .any(|unit| unit.selection_snapshot.ordered_selection.is_some())
-    {
-        let facts = super::refused_edit_source::load_sources(
-            client,
-            command,
-            current_revision_id,
-            &current_body,
-        )
-        .await?;
-        return Ok(ClassifiedAuthorEdit {
-            result: apply_core_author_edit(&ApplyAuthorEdit {
-                chapter_id: command.chapter_id.clone(),
-                current_authoritative_revision_id: current_revision_id.to_owned(),
-                current_body,
-                expected_authoritative_revision_id: command
-                    .expected_authoritative_revision_id
-                    .clone(),
-                expected_proposal_head_revision_ids: command
-                    .expected_proposal_head_revision_ids
-                    .clone(),
-                current_ownership,
-                ordered_source_facts: Some(facts),
-                target_refs: command.target_refs.clone(),
-                observed_ownership_partition: command.observed_ownership_partition.clone(),
-                inline_edit_disposition: storyos_core::InlineEditDisposition::Unspecified,
-                author_edit_units: command.author_edit_units.clone(),
-            }),
-            successor_blocks: None,
-            proposal_context: None,
-        });
-    }
     if !uses_versioned_payload
         && loaded.context.is_none()
         && !current_ownership.proposal_head_revision_ids.is_empty()
@@ -294,9 +242,7 @@ async fn classify_author_edit(
         {
             TransitionOutcome::Conflicted(storyos_core::AuthorEditConflict::ProposalHeadPresent)
         } else {
-            TransitionOutcome::Refused(AuthorEditRefused::Refused(
-                storyos_core::AuthorEditRefusal::TargetMismatch,
-            ))
+            TransitionOutcome::Refused(storyos_core::AuthorEditRefusal::TargetMismatch)
         };
         return Ok(ClassifiedAuthorEdit {
             result,
@@ -313,7 +259,7 @@ async fn classify_author_edit(
             Ok(routed) => routed,
             Err(reason) => {
                 return Ok(ClassifiedAuthorEdit {
-                    result: TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)),
+                    result: TransitionOutcome::Refused(reason),
                     successor_blocks: None,
                     proposal_context: None,
                 });
@@ -331,7 +277,6 @@ async fn classify_author_edit(
                     .expected_proposal_head_revision_ids
                     .clone(),
                 current_ownership,
-                ordered_source_facts: None,
                 target_refs: command.target_refs.clone(),
                 observed_ownership_partition: command.observed_ownership_partition.clone(),
                 inline_edit_disposition: routed.disposition,
@@ -351,7 +296,7 @@ async fn classify_author_edit(
     )
     .await
     .map_err(author_edit_database_error)?;
-    let mut current_target_ownership = super::author_edit_inline::load_inline_target_ownership(
+    let current_target_ownership = super::author_edit_inline::load_inline_target_ownership(
         client,
         command,
         loaded.context.as_ref(),
@@ -359,43 +304,6 @@ async fn classify_author_edit(
     )
     .await?
     .unwrap_or(VersionedTargetOwnership::Chapter);
-    if command.retry_source.is_some()
-        && let [unit] = command.author_edit_units.as_slice()
-        && let [
-            AuthorEditPrimitive::ReplaceBlockSelection {
-                manuscript_block_id,
-                ..
-            },
-        ] = unit.normalized_primitives.as_slice()
-        && blocks
-            .iter()
-            .any(|block| block.manuscript_block_id == *manuscript_block_id)
-    {
-        let reserved: bool = client
-            .query_one(
-                "SELECT EXISTS (SELECT 1 FROM storyos.proposal_operations AS reservation
-               WHERE reservation.owner_user_id=$1::text::uuid
-                 AND reservation.project_id=$2::text::uuid
-                 AND reservation.manuscript_block_id=$3::text::uuid
-                 AND reservation.reservation_state='unresolved')",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &manuscript_block_id,
-                ],
-            )
-            .await
-            .map_err(author_edit_database_error)?
-            .get(0);
-        current_target_ownership = VersionedTargetOwnership::Block {
-            manuscript_block_id: manuscript_block_id.clone(),
-            reservation: if reserved {
-                BlockReservation::Present
-            } else {
-                BlockReservation::Absent
-            },
-        };
-    }
     Ok(
         match apply_versioned_author_edit(&ApplyVersionedAuthorEdit {
             chapter_id: command.chapter_id.clone(),
@@ -433,7 +341,7 @@ async fn classify_author_edit(
                 proposal_context: None,
             },
             TransitionOutcome::Refused(reason) => ClassifiedAuthorEdit {
-                result: TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)),
+                result: TransitionOutcome::Refused(reason),
                 successor_blocks: None,
                 proposal_context: None,
             },

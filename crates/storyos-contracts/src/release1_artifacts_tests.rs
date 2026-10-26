@@ -294,8 +294,6 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
     assert_eq!(
         response["$defs"]["DomainReceiptCommandKind"]["enum"],
         serde_json::json!([
-            "expandRefusedEditDraftToProposal",
-            "closeEditorFlowDraft",
             "applyAuthorEdit",
             "takeOverProjectWriter",
             "createProject",
@@ -640,13 +638,6 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         ApplyAuthorEditEffect::Refused {
             reason: AuthorEditRefusalReason::InvalidSelection,
         },
-        ApplyAuthorEditEffect::RefusedToDraft {
-            replacement_provenance: None,
-            refusal_origin: crate::RefusedEditOrigin::FreshEditorIntent,
-            draft_id: "draft-1".to_owned(),
-            draft_revision_id: "draft-revision-1".to_owned(),
-            creation_event_id: "creation-1".to_owned(),
-        },
     ];
     for effect in zero_authority {
         let mut value = serde_json::to_value(effect).expect("zero-authority effect serializes");
@@ -706,17 +697,15 @@ fn changed_review_catalog_contract_is_rejected() {
 }
 
 /// Operations whose source HTTP statuses differ from the reviewed route catalog before this test existed.
-const KNOWN_HTTP_STATUS_DRIFT: [&str; 6] = [
+const KNOWN_HTTP_STATUS_DRIFT: [&str; 4] = [
     "createProject",
     "createProjectCommandChallenge",
     "getProject",
-    "expandRefusedEditDraftToProposal",
-    "closeEditorFlowDraft",
     "getChapter",
 ];
 
 /// Operations whose contract-graph preconditions omit a reviewed route-catalog precondition.
-const KNOWN_PRECONDITION_DRIFT: [&str; 12] = [
+const KNOWN_PRECONDITION_DRIFT: [&str; 10] = [
     "createEditorSession",
     "applyAuthorEdit",
     "acceptProposal",
@@ -725,8 +714,6 @@ const KNOWN_PRECONDITION_DRIFT: [&str; 12] = [
     "reopenRejectedOperations",
     "completeReadyPartialProposal",
     "continueProposalGeneration",
-    "expandRefusedEditDraftToProposal",
-    "closeEditorFlowDraft",
     "undoLatestAuthorAction",
     "getApplyAuthorEditOutcome",
 ];

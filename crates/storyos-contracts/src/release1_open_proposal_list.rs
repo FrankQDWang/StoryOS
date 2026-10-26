@@ -44,14 +44,7 @@ pub const LIST_CHAPTER_OPEN_PROPOSALS_METHOD: &str = LIST_CHAPTER_OPEN_PROPOSALS
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OpenProposalSource {
-    AgentRunDecision {
-        run_id: String,
-        decision_id: String,
-    },
-    RefusedEditDraft {
-        draft_id: String,
-        draft_revision_id: String,
-    },
+    AgentRunDecision { run_id: String, decision_id: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -61,7 +61,6 @@ impl CompensationAdapter for ProposalEditCompensation {
         source_sequence: u64,
     ) -> Result<UndoRecords, ProjectCommandError> {
         let context = ProposalEditContext {
-            structured_candidate: false,
             proposal_id: frontier.proposal_id.clone(),
             operation_id: frontier.operation_id.clone(),
             prior_revision_id: frontier.current_revision_id.clone(),

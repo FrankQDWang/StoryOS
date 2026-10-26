@@ -2,8 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
-    method, operation_schemas,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
@@ -31,15 +30,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             (REQUEST_SCHEMA_PATH, request_schema_bytes()),
             (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
         );
-        vec![
-            request,
-            response,
-            GeneratedSchema {
-                schema_id: "storyos.event.editor-flow-draft-reopened.v1",
-                path: EVENT_SCHEMA_PATH,
-                bytes: event_schema_bytes(),
-            },
-        ]
+        vec![request, response]
     },
     openapi: || method(&UNDO_LATEST_AUTHOR_ACTION, openapi()),
     typescript_types: typescript_type_declarations,
@@ -55,17 +46,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 |_| boundary_fixture_bytes(),
             ],
         )
-        .into_iter()
-        .chain(event_fixtures(
-            EVENT_FIXTURE_PATHS,
-            [
-                "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
-                "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
-            ],
-            UNDO_LATEST_AUTHOR_ACTION.operation_id,
-            [|_| event_fixture_bytes(), |_| event_invalid_fixture_bytes()],
-        ))
-        .collect()
+        .into()
     },
 };
 
@@ -145,9 +126,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
-        crate::DraftReopenReceipt::decl(&config),
-        crate::EditorFlowDraftReopened::decl(&config),
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         UndoLatestAuthorActionInput::decl(&config),
         UndoLatestAuthorActionRequest::decl(&config),
         UndoLatestAuthorActionConflictReason::decl(&config),
@@ -266,56 +245,4 @@ fn command_fixture(created_at: &str) -> Value {
             "project_activity_position": "3"
         }
     })
-}
-
-pub(super) const EVENT_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json";
-pub(super) const EVENT_FIXTURE_PATHS: [&str; 2] = [
-    "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json",
-    "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json",
-];
-pub(super) fn event_schema_bytes() -> Vec<u8> {
-    let mut value = schema_value::<crate::EditorFlowDraftReopened>(
-        "storyos.event.editor-flow-draft-reopened.v1",
-        "StoryOS Draft Reopened Event",
-    );
-    for (field, constant) in [
-        ("schema_id", "storyos.event.editor-flow-draft-reopened.v1"),
-        ("event_kind", "editor_flow_draft_reopened"),
-        ("prior_closure", "closed"),
-        ("closure", "open"),
-    ] {
-        value["properties"][field]["const"] = json!(constant);
-    }
-    json_bytes(&value)
-}
-pub(super) fn event_fixture_bytes() -> Vec<u8> {
-    let mut event: Value = serde_json::from_slice(
-        &crate::release1_close_editor_flow_draft_artifacts::event_fixture_bytes(),
-    )
-    .expect("close event fixture is JSON");
-    event["schema_id"] = json!("storyos.event.editor-flow-draft-reopened.v1");
-    event["event_kind"] = json!("editor_flow_draft_reopened");
-    event["source_close_event_id"] = event["event_id"].clone();
-    event["event_id"] = json!("018f0000-0000-7001-8000-000000000970");
-    event["prior_closure"] = json!("closed");
-    event["closure"] = json!("open");
-    event
-        .as_object_mut()
-        .expect("event fixture is an object")
-        .remove("close_reason");
-    event["source"]["command_digest"]["profile"] = json!(UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE);
-    event["source_author_action_sequence"] = event["author_action_sequence"].clone();
-    event["author_action_sequence"] = json!("5");
-    event["handler_receipt"] = json!({"schema_id":"storyos.receipt.draft-reopen.v1",
-        "receipt_id":"018f0000-0000-7001-8000-000000000971", "project_scope":event["project_scope"],
-        "author_undo_receipt_id":event["source"]["receipt_id"], "source_close_event_id":event["source_close_event_id"],
-        "event_id":event["event_id"], "result":"draft_reopened", "created_at":event["created_at"]});
-    json_bytes(&event)
-}
-pub(super) fn event_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value: Value =
-        serde_json::from_slice(&event_fixture_bytes()).expect("reopen event fixture is JSON");
-    value["closure"] = json!("closed");
-    json_bytes(&value)
 }

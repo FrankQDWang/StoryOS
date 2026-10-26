@@ -79,7 +79,6 @@ pub(super) async fn two_operation_proposal(
                     new_manuscript_block_id: Uuid::now_v7().to_string(),
                 }],
                 selection_snapshot: SelectionSnapshot {
-                    ordered_selection: None,
                     coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                     from: 6,
                     to: 6,

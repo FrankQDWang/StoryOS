@@ -7,9 +7,7 @@ use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
     AuthorEditConflictReason, AuthorEditPrimitive, AuthorEditProposalTarget,
     AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt, DomainReceiptCommandKind,
-    DomainReceiptProducerCause, DomainReceiptResult, EditSourceOwner, NoEffectReason,
-    OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload, ReplacementBlock,
-    SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
+    DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
 };
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
@@ -83,46 +81,23 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
 
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
-    let source_types = [
-        crate::DraftRetry::decl(&config),
-        crate::DraftRetryKind::decl(&config),
-        crate::ExactStructuredRangeKind::decl(&config),
-        crate::DraftPayloadPosition::decl(&config),
-        crate::ExactStructuredRange::decl(&config),
-        crate::RetryDraftKind::decl(&config),
-        crate::RetryDraftClosure::decl(&config),
-        crate::SourceDraftDisposition::decl(&config),
-        crate::ObservedDraftClosure::decl(&config),
-        crate::DraftRetryReplacement::decl(&config),
-        RefusedEditPayload::decl(&config),
-        RefusedEditOrigin::decl(&config),
-        ReplacementBlock::decl(&config),
-        OrderedSourceSelection::decl(&config),
-        SelectedEditSource::decl(&config),
-        SourceSelectionEndpoint::decl(&config),
-        EditSourceOwner::decl(&config),
-    ]
-    .into_iter()
-    .map(|value| format!("export {value}\n\n"))
-    .collect::<String>();
-    source_types
-        + &format!(
-            "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
-            AuthorEditPrimitive::decl(&config),
-            SelectionSnapshot::decl(&config),
-            AuthorEditUnit::decl(&config),
-            AuthorEditProposalTarget::decl(&config),
-            ApplyAuthorEditRequest::decl(&config),
-            DomainReceiptCommandKind::decl(&config),
-            DomainReceiptProducerCause::decl(&config),
-            DomainReceiptResult::decl(&config),
-            DomainReceipt::decl(&config),
-            NoEffectReason::decl(&config),
-            AuthorEditConflictReason::decl(&config),
-            AuthorEditRefusalReason::decl(&config),
-            ApplyAuthorEditEffect::decl(&config),
-            ApplyAuthorEditResponse::decl(&config),
-        )
+    format!(
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        AuthorEditPrimitive::decl(&config),
+        SelectionSnapshot::decl(&config),
+        AuthorEditUnit::decl(&config),
+        AuthorEditProposalTarget::decl(&config),
+        ApplyAuthorEditRequest::decl(&config),
+        DomainReceiptCommandKind::decl(&config),
+        DomainReceiptProducerCause::decl(&config),
+        DomainReceiptResult::decl(&config),
+        DomainReceipt::decl(&config),
+        NoEffectReason::decl(&config),
+        AuthorEditConflictReason::decl(&config),
+        AuthorEditRefusalReason::decl(&config),
+        ApplyAuthorEditEffect::decl(&config),
+        ApplyAuthorEditResponse::decl(&config),
+    )
 }
 
 pub(super) fn openapi() -> String {

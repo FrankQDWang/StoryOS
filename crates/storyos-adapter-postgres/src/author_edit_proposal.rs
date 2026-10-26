@@ -25,7 +25,6 @@ pub(super) struct ProposalEditContext {
     pub kind: String,
     pub ranges: Vec<(u32, u32)>,
     pub candidate_text: String,
-    pub structured_candidate: bool,
 }
 
 pub(super) struct RoutedInlineAuthorEdit {
@@ -45,10 +44,6 @@ pub(super) async fn load_chapter_proposal_heads(
     client: &Client,
     command: &ApplyAuthorEditCommand,
 ) -> Result<LoadedProposalHeads, AuthorEditError> {
-    let structured = command
-        .author_edit_units
-        .iter()
-        .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
     let versioned = command.author_edit_units.iter().any(|unit| {
         unit.normalized_primitives.iter().any(|primitive| {
             matches!(
@@ -61,18 +56,13 @@ pub(super) async fn load_chapter_proposal_heads(
             )
         })
     });
-    let row_limit = if versioned || command.proposal_target.is_some() {
-        None
-    } else {
-        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1)
-    };
     let rows = client
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
-                    CASE WHEN $4 THEN '' ELSE operation.candidate_text END, operation.manuscript_block_id::text,
+                    operation.candidate_text, operation.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text, proposal.kind,
                     operation.operation_id::text, operation.resolution,
-                    operation.reservation_state, operation.candidate_blocks IS NOT NULL
+                    operation.reservation_state
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -91,13 +81,11 @@ pub(super) async fn load_chapter_proposal_heads(
                 AND revision.closure = 'open'
                 AND operation.resolution = 'pending'
                 AND operation.reservation_state = 'unresolved'
-              ORDER BY head.current_revision_id, operation.operation_id LIMIT $5",
+              ORDER BY head.current_revision_id, operation.operation_id",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &command.chapter_id,
-                &structured,
-                &row_limit,
             ],
         )
         .await
@@ -118,8 +106,7 @@ pub(super) async fn load_chapter_proposal_heads(
                 && row.get::<_, Option<String>>(8).as_deref() == Some("unresolved")
                 && matches!(kind.as_str(), "block_edit" | "inline_edit")
         });
-        let inline_target = !structured
-            && command.proposal_target.is_none()
+        let inline_target = command.proposal_target.is_none()
             && kind == "inline_edit"
             && command.expected_proposal_head_revision_ids == [revision_id.clone()];
         if explicit_target || inline_target {
@@ -137,7 +124,6 @@ pub(super) async fn load_chapter_proposal_heads(
                     kind: kind.clone(),
                     ranges: Vec::new(),
                     candidate_text: candidate_text.clone(),
-                    structured_candidate: row.get(9),
                 },
                 candidate_text,
             ));
@@ -180,8 +166,7 @@ pub(super) async fn load_chapter_proposal_heads(
                         left_manuscript_block_id == &manuscript_block_id
                             || right_manuscript_block_id == &manuscript_block_id
                     }
-                    AuthorEditPrimitive::ReplaceStructuredSelection { .. }
-                    | AuthorEditPrimitive::ReplaceSelection { .. } => false,
+                    AuthorEditPrimitive::ReplaceSelection { .. } => false,
                 })
         });
         if kind == "block_edit" && versioned && !acknowledged && !mentions_block {
@@ -292,9 +277,6 @@ pub(super) fn route_inline_author_edit(
         return Err(AuthorEditRefusal::UnsupportedIntentShape);
     };
     if context.operation_id.is_some() {
-        if context.structured_candidate {
-            return Err(AuthorEditRefusal::UnsupportedIntentShape);
-        }
         let candidate_to = u32::try_from(context.candidate_text.encode_utf16().count())
             .map_err(|_| AuthorEditRefusal::InvalidSelection)?;
         if classify_inline_input_owner(&[(0, candidate_to)], from, to) != InlineInputOwner::Proposal
@@ -310,9 +292,6 @@ pub(super) fn route_inline_author_edit(
     }
     match classify_inline_input_owner(&context.ranges, from, to) {
         InlineInputOwner::Proposal => {
-            if context.structured_candidate {
-                return Err(AuthorEditRefusal::UnsupportedIntentShape);
-            }
             let Some((anchor_from, _)) = context.ranges.first().copied() else {
                 return Err(AuthorEditRefusal::UnsupportedIntentShape);
             };
@@ -380,7 +359,6 @@ fn remap_units(
             Ok(AuthorEditUnit {
                 normalized_primitives: remapped,
                 selection_snapshot: storyos_core::SelectionSnapshot {
-                    ordered_selection: None,
                     coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
                     from,
                     to,

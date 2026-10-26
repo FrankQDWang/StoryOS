@@ -100,7 +100,7 @@ fn response_schema_bytes() -> Vec<u8> {
         .and_then(Value::as_array_mut)
     {
         for variant in variants {
-            for field in ["run_id", "decision_id", "draft_id", "draft_revision_id"] {
+            for field in ["run_id", "decision_id"] {
                 if variant
                     .get("properties")
                     .and_then(|properties| properties.get(field))
@@ -219,9 +219,9 @@ fn list_fixture() -> Value {
                 "revision_id": "018f0000-0000-7001-8000-000000000c03",
                 "kind": "inline_edit",
                 "source": {
-                    "kind": "refused_edit_draft",
-                    "draft_id": "018f0000-0000-7001-8000-000000000c04",
-                    "draft_revision_id": "018f0000-0000-7001-8000-000000000c05"
+                    "kind": "agent_run_decision",
+                    "run_id": "018f0000-0000-7001-8000-000000000c04",
+                    "decision_id": "018f0000-0000-7001-8000-000000000c05"
                 }
             }
         ]

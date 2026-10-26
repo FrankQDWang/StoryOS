@@ -75,7 +75,6 @@ pub(super) async fn get_proposal(
                 .operations
                 .into_iter()
                 .map(|operation| contracts::ProposalOperationInspect {
-                    candidate_blocks: operation.candidate_blocks,
                     candidate_text: operation.candidate_text,
                     operation_id: operation.operation_id,
                     manuscript_block_id: operation.manuscript_block_id,
@@ -89,7 +88,6 @@ pub(super) async fn get_proposal(
             base_authoritative_revision_id: record.base_authoritative_revision_id,
             reservation_state: record.reservation_state,
             candidate_text: record.candidate_text,
-            candidate_blocks: record.candidate_blocks,
             source: record.source,
             validation_receipt: match (
                 record.validation_receipt_id,

@@ -41,8 +41,6 @@ pub(crate) struct CommandReplay {
     /// Whether the Admission has the command kind, digest, and idempotency key of the Receipt and
     /// the canonical command payload of the request.
     pub(crate) admission_matches: bool,
-    /// The Draft references of the Domain Receipt.
-    pub(crate) draft_artifact_refs: Vec<String>,
     /// The condition references of the Domain Receipt.
     pub(crate) condition_refs: Vec<String>,
     /// The Authoritative Revision that the Commit of the Receipt binds, with its Activity record
@@ -270,11 +268,6 @@ impl CommandReplay {
         &self.receipt.0
     }
 
-    /// One required string field of the Receipt payload.
-    pub(crate) fn receipt_text(&self, key: &str) -> Result<&str, ReplayFault> {
-        self.receipt.required(key)
-    }
-
     /// One Receipt payload field that a historical format leaves out. It is `None` only when it
     /// is absent.
     pub(crate) fn receipt_historical_decimal(&self, key: &str) -> Result<Option<u64>, ReplayFault> {
@@ -282,29 +275,6 @@ impl CommandReplay {
             Field::Absent => Ok(None),
             Field::Text(text) => decimal(key, text).map(Some),
             Field::Null => Err(unavailable(format!("the stored field {key} is null"))),
-        }
-    }
-
-    /// The UUID text of one Receipt payload field, or `None` when it is null.
-    pub(crate) fn receipt_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
-        self.receipt
-            .nullable(key)?
-            .map(|text| uuid_text(key, text))
-            .transpose()
-    }
-
-    /// The UUID text of one required Receipt payload field.
-    pub(crate) fn receipt_uuid(&self, key: &str) -> Result<String, ReplayFault> {
-        uuid_text(key, self.receipt.required(key)?)
-    }
-
-    /// Requires the Receipt payload field `key` to be present and null.
-    pub(crate) fn require_receipt_null(&self, key: &str) -> Result<(), ReplayFault> {
-        match self.receipt.field(key)? {
-            Field::Null => Ok(()),
-            Field::Absent | Field::Text(_) => {
-                Err(unavailable(format!("the stored field {key} is not null")))
-            }
         }
     }
 
@@ -560,7 +530,6 @@ pub(crate) async fn read_command_replay(
         resulting_heads: row.try_get(/*idx*/ 19).map_err(unavailable)?,
         fence_digest_matches: row.get(/*idx*/ 20),
         author_action_disposition: row.get(/*idx*/ 21),
-        draft_artifact_refs: row.try_get(/*idx*/ 22).map_err(unavailable)?,
         admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
         condition_refs: row.try_get(/*idx*/ 33).map_err(unavailable)?,
         revision: match (
@@ -660,7 +629,7 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         receipt.resulting_heads::text[],
         idempotency.canonical_command_digest = receipt.command_digest,
         action.disposition,
-        receipt.draft_artifact_refs,
+        NULL, -- ADR 0073 removed this Draft column. The later indexes stay.
         (admission.command_kind, admission.canonical_command_digest, admission.idempotency_key,
          admission.command_payload) =
         (receipt.command_kind, receipt.command_digest, receipt.idempotency_key,

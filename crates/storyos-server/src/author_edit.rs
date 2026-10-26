@@ -127,7 +127,6 @@ pub(super) async fn apply_author_edit(
                 manuscript_block_id: target.manuscript_block_id.clone(),
             }
         }),
-        retry_source: body.retry_source.clone(),
         target_refs: body.target_refs.clone(),
         observed_ownership_partition: body.observed_ownership_partition.clone(),
         editor_contract_revision: body.editor_contract_revision.clone(),
@@ -221,25 +220,6 @@ pub(super) fn author_edit_response(
                 author_action_sequence: author_action_sequence.to_string(),
             },
         ),
-        AuthorEditSettlementEffect::RefusedToDraft { identity: draft } => (
-            contracts::DomainReceiptResult::RefusedToDraft,
-            vec![identity.expected_authoritative_revision_id.clone()],
-            vec![identity.expected_authoritative_revision_id.clone()],
-            Vec::new(),
-            Vec::new(),
-            None,
-            contracts::ApplyAuthorEditEffect::RefusedToDraft {
-                refusal_origin: if settlement.replacement_provenance.is_some() {
-                    contracts::RefusedEditOrigin::DraftRetryReplacement
-                } else {
-                    contracts::RefusedEditOrigin::FreshEditorIntent
-                },
-                replacement_provenance: settlement.replacement_provenance,
-                draft_id: draft.draft_id,
-                draft_revision_id: draft.draft_revision_id,
-                creation_event_id: draft.creation_event_id,
-            },
-        ),
         AuthorEditSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             vec![identity.expected_authoritative_revision_id.clone()],
@@ -302,25 +282,6 @@ pub(super) fn author_edit_response(
             },
         ),
     };
-    let mut draft_refs = match &effect {
-        contracts::ApplyAuthorEditEffect::RefusedToDraft { draft_id, .. } => vec![draft_id.clone()],
-        _ => Vec::new(),
-    };
-    let mut lifecycle_refs = match &effect {
-        contracts::ApplyAuthorEditEffect::RefusedToDraft {
-            creation_event_id, ..
-        } => vec![creation_event_id.clone()],
-        _ => Vec::new(),
-    };
-    if let Some(contracts::SourceDraftDisposition::ClosedSuperseded {
-        source_draft_id,
-        closure_event_ref,
-        ..
-    }) = &settlement.source_draft_disposition
-    {
-        draft_refs.push(source_draft_id.clone());
-        lifecycle_refs.push(closure_event_ref.clone());
-    }
     Ok(contracts::ApplyAuthorEditResponse {
         schema_id: contracts::APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: identity.correlation_id,
@@ -352,14 +313,13 @@ pub(super) fn author_edit_response(
             },
             authoritative_commit_ids,
             author_action_sequence,
-            draft_artifact_refs: draft_refs,
-            artifact_lifecycle_event_refs: lifecycle_refs,
+            draft_artifact_refs: Vec::new(),
+            artifact_lifecycle_event_refs: Vec::new(),
             condition_refs: Vec::new(),
             result: receipt_result,
             created_at: settlement.receipt_created_at,
         },
         effect,
-        source_draft_disposition: settlement.source_draft_disposition,
         completed_intent_record_id: settlement.completed_intent_record_id,
         local_intent_sequence: settlement.local_intent_sequence.to_string(),
     })
@@ -399,51 +359,6 @@ fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiE
     }
     if body.target_refs != [format!("manuscript:{}", body.chapter_id)] {
         return Err(command_target_refused());
-    }
-    for unit in &body.author_edit_units {
-        if let Some(selection) = &unit.selection_snapshot.ordered_selection {
-            if body.proposal_target.is_some() {
-                return Err(command_target_refused());
-            }
-            for source in &selection.sources {
-                match &source.owner {
-                    contracts::EditSourceOwner::Manuscript {
-                        manuscript_block_id,
-                    } => valid_uuid(manuscript_block_id)?,
-                    contracts::EditSourceOwner::Proposal {
-                        proposal_id,
-                        operation_id,
-                        revision_id,
-                        manuscript_block_id,
-                    } => {
-                        for value in [proposal_id, operation_id, revision_id, manuscript_block_id] {
-                            valid_uuid(value)?;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if let Some(retry) = &body.retry_source {
-        valid_uuid(&retry.source_draft_id)?;
-        valid_uuid(&retry.source_current_draft_revision_id)?;
-        if retry.selected_payload_range.coordinate_profile
-            != "storyos.draft-replacement.block-utf16.v1"
-            || [
-                &retry.source_draft_payload_digest,
-                &retry.selected_payload_range.slice_digest,
-            ]
-            .iter()
-            .any(|digest| {
-                digest.len() != 64
-                    || !digest
-                        .bytes()
-                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-            })
-            || body.author_edit_units.len() != 1
-        {
-            return Err(command_target_refused());
-        }
     }
     if let Some(target) = &body.proposal_target {
         for value in [

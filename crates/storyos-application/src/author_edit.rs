@@ -41,7 +41,6 @@ pub struct ApplyAuthorEditCommand {
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
     pub proposal_target: Option<AuthorEditProposalTarget>,
-    pub retry_source: Option<storyos_contracts::DraftRetry>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub editor_contract_revision: String,
@@ -55,8 +54,6 @@ pub struct ApplyAuthorEditCommand {
 pub struct AuthorEditSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub effect: AuthorEditSettlementEffect,
-    pub source_draft_disposition: Option<storyos_contracts::SourceDraftDisposition>,
-    pub replacement_provenance: Option<storyos_contracts::DraftRetryReplacement>,
     pub receipt_created_at: String,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: u64,
@@ -64,9 +61,6 @@ pub struct AuthorEditSettlement {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorEditSettlementEffect {
-    RefusedToDraft {
-        identity: crate::RefusedEditDraftIdentity,
-    },
     AuthoritativeApplied {
         ids: AuthoritativeAppliedIds,
         body: String,

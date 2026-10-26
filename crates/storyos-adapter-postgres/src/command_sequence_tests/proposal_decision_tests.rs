@@ -14,7 +14,6 @@ use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
-use super::draft::compensation_action;
 use super::support::{
     CommandCall, Route, SequenceError, issued, replayed_outcome, run_without_foreign_keys, stores,
     two_chapter_writer, with_new_request_ids,
@@ -647,4 +646,13 @@ async fn a_pre_capture_effect_row_does_not_hide_a_damaged_author_action() {
         .await,
     ];
     assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
+}
+
+/// Gives the Forward Author Action of `receipt_id` the compensation disposition.
+fn compensation_action(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.author_action_entries
+            SET disposition = 'compensation', compensated_source_sequence = author_action_sequence
+          WHERE receipt_id = '{receipt_id}'"
+    )
 }

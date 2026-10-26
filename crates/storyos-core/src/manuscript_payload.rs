@@ -137,7 +137,6 @@ pub fn apply_versioned_author_edit(
                 && target == manuscript_block_id
                 && from == to
                 && (*from == range.0 || *from == range.1)
-                && unit.selection_snapshot.ordered_selection.is_none()
                 && unit.selection_snapshot.from == *from
                 && unit.selection_snapshot.to == *to
                 && classify_inline_input_owner(reserved_ranges, *from, *to)
@@ -164,7 +163,6 @@ pub fn apply_versioned_author_edit(
                 return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
             };
             *reservation == BlockReservation::Absent
-                && unit.selection_snapshot.ordered_selection.is_none()
                 && matches!(unit.normalized_primitives.as_slice(),
                     [AuthorEditPrimitive::ReplaceBlockSelection { manuscript_block_id: target, from, to, .. }]
                     if target == manuscript_block_id && unit.selection_snapshot.from == *from
@@ -330,8 +328,7 @@ fn apply_primitive(
             manuscript_block_id,
             block_kind,
         } => retype_block(payload, manuscript_block_id, block_kind),
-        AuthorEditPrimitive::ReplaceSelection { .. }
-        | AuthorEditPrimitive::ReplaceStructuredSelection { .. } => {
+        AuthorEditPrimitive::ReplaceSelection { .. } => {
             Err(AuthorEditRefusal::UnsupportedIntentShape)
         }
     }

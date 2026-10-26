@@ -6,7 +6,6 @@ use super::*;
 
 fn request() -> contracts::ApplyAuthorEditRequest {
     contracts::ApplyAuthorEditRequest {
-        retry_source: None,
         command_schema: contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
         client_contract_revision: "client".to_owned(),
         security_policy_revision: "security".to_owned(),
@@ -30,7 +29,6 @@ fn request() -> contracts::ApplyAuthorEditRequest {
                 text: "!".to_owned(),
             }],
             selection_snapshot: contracts::SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 4,
                 to: 4,
@@ -56,7 +54,6 @@ fn request_validation_accepts_a_bounded_ordered_batch() {
             text: "?".to_owned(),
         }],
         selection_snapshot: contracts::SelectionSnapshot {
-            ordered_selection: None,
             coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,

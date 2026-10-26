@@ -14,7 +14,6 @@ use crate::command_sequence::{
     ActionOnly, ActionSequence, AppliedVariant, AuthoritativeRevision, CommandSpec, LockedProject,
     RevisionSequences, RevisionWrite, SelectsRecords, SettlementProfile, unavailable,
 };
-use crate::draft_retry::{SupersedeWrite, write_supersede};
 
 /// The record set of an applied Author Edit.
 #[derive(Clone, Copy)]
@@ -39,10 +38,7 @@ pub(crate) enum AuthorEditSequences {
 /// The applied writes of an Author Edit.
 pub(crate) enum AuthorEditWrite<E> {
     Revision(Box<RevisionEdit<E>>),
-    Proposal {
-        effect: E,
-        supersede: Option<SupersedeWrite>,
-    },
+    Proposal { effect: E },
 }
 
 /// The applied writes of an Author Edit that creates an Authoritative Revision.
@@ -50,7 +46,6 @@ pub(crate) struct RevisionEdit<E> {
     pub(super) revision: RevisionWrite<E>,
     /// The Inline Proposal whose candidate the edit also revises.
     pub(super) inline: Option<ProposalEditContext>,
-    pub(super) supersede: Option<SupersedeWrite>,
 }
 
 /// The applied value of an Author Edit settlement.
@@ -115,11 +110,7 @@ impl SettlementProfile for AuthorEditProfile {
         let scope = &envelope.project_scope;
         match (sequences, write) {
             (AuthorEditSequences::Revision(sequences), AuthorEditWrite::Revision(edit)) => {
-                let RevisionEdit {
-                    revision,
-                    inline,
-                    supersede,
-                } = *edit;
+                let RevisionEdit { revision, inline } = *edit;
                 let applied = AuthoritativeRevision::persist(
                     client, envelope, project, spec, variant, sequences, revision,
                 )
@@ -135,39 +126,12 @@ impl SettlementProfile for AuthorEditProfile {
                     .await
                     .map_err(project_error)?;
                 }
-                if let Some(supersede) = supersede {
-                    write_supersede(
-                        client,
-                        scope,
-                        &envelope.ids.receipt_id,
-                        &supersede,
-                        variant.result_kind(),
-                        Some(applied.author_action_sequence),
-                    )
-                    .await
-                    .map_err(project_error)?;
-                }
                 Ok(AuthorEditProfileApplied::Revision(applied))
             }
-            (
-                AuthorEditSequences::Proposal(sequence),
-                AuthorEditWrite::Proposal { effect, supersede },
-            ) => {
+            (AuthorEditSequences::Proposal(sequence), AuthorEditWrite::Proposal { effect }) => {
                 let applied =
                     ActionOnly::persist(client, envelope, project, spec, variant, sequence, effect)
                         .await?;
-                if let Some(supersede) = supersede {
-                    write_supersede(
-                        client,
-                        scope,
-                        &envelope.ids.receipt_id,
-                        &supersede,
-                        variant.result_kind(),
-                        Some(applied.author_action_sequence),
-                    )
-                    .await
-                    .map_err(project_error)?;
-                }
                 Ok(AuthorEditProfileApplied::Proposal(applied))
             }
             (AuthorEditSequences::Revision(_), AuthorEditWrite::Proposal { .. })

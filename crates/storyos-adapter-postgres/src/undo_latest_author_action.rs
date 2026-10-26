@@ -8,9 +8,9 @@ use storyos_application::{
     UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
 };
 use storyos_core::{
-    AuthorUndoFrontier, AuthorUndoFrontierKind, ProjectLifecycle, TransitionOutcome,
-    UndoLatestAuthorAction as CoreUndo, UndoLatestAuthorActionConflict,
-    UndoLatestAuthorActionUnavailable, undo_latest_author_action as classify_undo,
+    AuthorUndoFrontier, ProjectLifecycle, TransitionOutcome, UndoLatestAuthorAction as CoreUndo,
+    UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable,
+    undo_latest_author_action as classify_undo,
 };
 use tokio_postgres::Client;
 
@@ -18,9 +18,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec, EditorAdmission,
-    EditorWriter, LockedProject, MissingAdmission, ProfileSequences, ProjectCommand,
-    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReceiptTime, ReplayEffect,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    LockedProject, MissingAdmission, ProfileSequences, ProjectCommand, ProjectResponse,
+    RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
+    ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
 use crate::undo_frontier::{ObservedFrontier, head_lineage_revision, load_observed_frontier};
@@ -58,7 +58,6 @@ impl ProjectCommand for UndoLatestAuthorAction {
         kind: "undoLatestAuthorAction",
         applied: &[
             AppliedVariant::Compensation("authoritative_applied"),
-            AppliedVariant::Compensation("draft_closure_changed"),
             AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),
         ],
         isolation: CommandIsolation::Serializable,
@@ -91,13 +90,6 @@ impl ProjectCommand for UndoLatestAuthorAction {
         }
         let request = UndoRequest::new(envelope, &self.input);
         let observed = load_observed_frontier(client, &request).await?;
-        let retry_source = match &observed {
-            Some(frontier @ (ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_))) => {
-                crate::close_editor_flow_draft::load_frontier(client, &request, frontier.sequence())
-                    .await?
-            }
-            _ => None,
-        };
         let current_head = observed
             .as_ref()
             .and_then(ObservedFrontier::prose_head)
@@ -114,10 +106,7 @@ impl ProjectCommand for UndoLatestAuthorAction {
             expected_author_undo_frontier_sequence: request.expected_author_undo_frontier_sequence,
             current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
                 sequence: frontier.sequence(),
-                kind: retry_source
-                    .as_ref()
-                    .filter(|source| source.kind != AuthorUndoFrontierKind::ReversibleDraftClose)
-                    .map_or_else(|| frontier.kind(), |source| source.kind.clone()),
+                kind: frontier.kind(),
             }),
             expected_head_revision_id: request.expected_authoritative_revision_id.clone(),
             current_head_revision_id: current_head,
@@ -177,25 +166,6 @@ impl ProjectCommand for UndoLatestAuthorAction {
 
     fn applied_receipt_payload(&self, (): &(), plan: &UndoPlan) -> String {
         serde_json::Value::Object(plan.receipt_payload()).to_string()
-    }
-
-    fn applied_receipt_refs(&self, (): &(), plan: &UndoPlan) -> ReceiptRefs {
-        let (mut draft_artifact_refs, mut artifact_lifecycle_event_refs): (Vec<_>, Vec<_>) =
-            plan.receipt_draft().into_iter().unzip();
-        let created_at = match &plan.source_reopen {
-            Some(source) => {
-                draft_artifact_refs.push(source.draft_id.clone());
-                artifact_lifecycle_event_refs.push(source.reopen_event_id.clone());
-                ReceiptTime::Transaction
-            }
-            None => ReceiptTime::Clock,
-        };
-        ReceiptRefs {
-            draft_artifact_refs,
-            artifact_lifecycle_event_refs,
-            created_at,
-            ..ReceiptRefs::default()
-        }
     }
 
     async fn apply(
@@ -287,7 +257,6 @@ async fn undo_admission(
         Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
-            | ObservedFrontier::DraftClose(_)
             | ObservedFrontier::Barrier { .. },
         )
         | None => match session_chapter.as_deref() {
@@ -300,30 +269,7 @@ async fn undo_admission(
         chapter_object_id: chapter.map(str::to_owned),
         expected_authoritative_revision_id: expected_revision.map(str::to_owned),
         target_refs: Vec::new(),
-        writer: EditorWriter::Current,
     }))
-}
-
-/// The `created_at` text of the Undo Receipt of `command`, as the Receipt records it.
-pub(crate) async fn receipt_created_at(
-    client: &Client,
-    command: &UndoRequest,
-) -> Result<String, ProjectCommandError> {
-    Ok(client
-        .query_one(
-            "SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-               FROM storyos.domain_receipts
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?
-        .get(/*idx*/ 0))
 }
 
 pub(crate) fn undo_database_error(error: tokio_postgres::Error) -> ProjectCommandError {

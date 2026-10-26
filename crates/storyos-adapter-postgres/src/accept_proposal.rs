@@ -19,7 +19,7 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
-    CommandIsolation, CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission,
+    CommandIsolation, CommandSpec, EditorAdmission, LockedProject, MissingAdmission,
     ProfileSequences, ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads,
     ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroAuthorityRows,
     ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
@@ -214,7 +214,6 @@ impl ProjectCommand for AcceptProposal {
                     input.expected_authoritative_revision_id.clone(),
                 ),
                 target_refs: Vec::new(),
-                writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
                 expected: head.clone(),

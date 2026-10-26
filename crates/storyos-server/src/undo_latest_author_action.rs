@@ -74,12 +74,9 @@ fn undo_response(
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let envelope = &admitted.envelope;
     let expected = admitted.input.expected_authoritative_revision_id.clone();
-    let mut source_reopen_event = None;
     let mut acknowledgement = UndoAcknowledgement {
         proposal_id: None,
         proposal_revision_id: None,
-        draft_refs: Vec::new(),
-        lifecycle_refs: Vec::new(),
         revision_ids: Vec::new(),
         commit_ids: Vec::new(),
         resulting_head: expected.clone(),
@@ -87,7 +84,6 @@ fn undo_response(
     };
     let (receipt_result, effect) = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            source_reopen_event = applied.source_reopen_event;
             acknowledgement.action_sequence = Some(applied.author_action_sequence.to_string());
             let frontier = applied
                 .author_undo_frontier_sequence
@@ -166,18 +162,6 @@ fn undo_response(
                         ),
                     )
                 }
-                UndoRecords::Draft { event } => {
-                    acknowledgement.draft_refs = vec![event.draft_id.clone()];
-                    acknowledgement.lifecycle_refs = vec![event.event_id.clone()];
-                    acknowledgement.action_sequence = Some(event.author_action_sequence.clone());
-                    (
-                        contracts::DomainReceiptResult::DraftClosureChanged,
-                        contracts::UndoLatestAuthorActionEffect::DraftCompensated {
-                            event,
-                            author_undo_frontier_sequence: frontier,
-                        },
-                    )
-                }
                 UndoRecords::ReversalRequired {
                     proposal_id,
                     proposal_revision_id,
@@ -219,16 +203,11 @@ fn undo_response(
             },
         ),
     };
-    if let Some(event) = &source_reopen_event {
-        acknowledgement.draft_refs.push(event.draft_id.clone());
-        acknowledgement.lifecycle_refs.push(event.event_id.clone());
-    }
     let project_scope = contract_scope(&envelope.project_scope);
     let expected_heads = vec![expected];
     Ok(Json(contracts::UndoLatestAuthorActionResponse {
         proposal_id: acknowledgement.proposal_id,
         proposal_revision_id: acknowledgement.proposal_revision_id,
-        source_reopen_event,
         schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: envelope.correlation_id.clone(),
         project_scope: project_scope.clone(),
@@ -253,8 +232,8 @@ fn undo_response(
             proposal_revision_ids: Vec::new(),
             authoritative_commit_ids: acknowledgement.commit_ids,
             author_action_sequence: acknowledgement.action_sequence,
-            draft_artifact_refs: acknowledgement.draft_refs,
-            artifact_lifecycle_event_refs: acknowledgement.lifecycle_refs,
+            draft_artifact_refs: Vec::new(),
+            artifact_lifecycle_event_refs: Vec::new(),
             condition_refs: Vec::new(),
             result: receipt_result,
             created_at: settlement.receipt_created_at,
@@ -268,8 +247,6 @@ fn undo_response(
 struct UndoAcknowledgement {
     proposal_id: Option<String>,
     proposal_revision_id: Option<String>,
-    draft_refs: Vec<String>,
-    lifecycle_refs: Vec<String>,
     revision_ids: Vec<String>,
     commit_ids: Vec<String>,
     resulting_head: String,

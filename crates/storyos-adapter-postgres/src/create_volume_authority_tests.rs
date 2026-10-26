@@ -557,7 +557,6 @@ pub(crate) async fn adjusted_edit_command(
         proposal_target,
     } = edit;
     let mut command = ApplyAuthorEditCommand {
-        retry_source: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "sha256:session-a".to_owned(),
@@ -616,7 +615,6 @@ pub(crate) async fn adjusted_edit_command(
                 text: text.to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 0,
                 to: 0,

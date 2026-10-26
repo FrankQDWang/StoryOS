@@ -435,7 +435,3 @@ mod fixture_corpus_tests;
 #[cfg(test)]
 #[path = "release1_artifacts_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "release1_refused_edit_draft_artifacts_tests.rs"]
-mod refused_edit_draft_artifacts_tests;

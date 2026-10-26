@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use storyos_application::ProjectCommandError;
 use storyos_core::ReceiptResult;
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
@@ -11,10 +10,6 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use super::acceptance::accept_proposal_call;
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
-};
-use super::draft::{
-    close_editor_flow_draft_call, discard_call, expand_refused_edit_draft_call, expansion_call,
-    refused_edit_draft, refused_edit_expansion,
 };
 use super::project_session::{
     archive_project_call, update_project_assistance_call, update_project_call,
@@ -410,22 +405,8 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
             "result_payload - 'transition'",
         )
         .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x9c70).await,
-            "result_payload - 'reason'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x9c80).await,
-            "result_payload - 'reason'",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 9]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
 }
 
 #[tokio::test]
@@ -435,7 +416,7 @@ async fn a_receipt_replay_refuses_a_null_or_zero_historical_order_and_a_zero_sha
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let mut observed = vec![
+    let observed = vec![
         replay_with_receipt_payload(
             &store,
             &admin,
@@ -451,31 +432,5 @@ async fn a_receipt_replay_refuses_a_null_or_zero_historical_order_and_a_zero_sha
         )
         .await,
     ];
-    for (base, changed) in [
-        (
-            0xa220,
-            format!(
-                "jsonb_set(result_payload, '{{event_id}}', '\"{}\"'::jsonb)",
-                Uuid::now_v7()
-            ),
-        ),
-        (0xa230, "result_payload - 'event_id'".to_owned()),
-    ] {
-        let (scope, tombstoned) = refused_edit_draft(&store, &admin, base, "tombstoned").await;
-        let refused = discard_call(&store, &scope, base + 9, tombstoned).await;
-        observed.push(replay_with_receipt_payload(&store, &admin, &refused, &changed).await);
-    }
-    let (scope, tombstoned) =
-        refused_edit_expansion(&store, &admin, /*base*/ 0xa240, "tombstoned").await;
-    let refused = expansion_call(&store, &scope, /*suffix*/ 0xa249, tombstoned).await;
-    observed.push(
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &refused,
-            "jsonb_set(result_payload, '{proposal_id}', '7'::jsonb)",
-        )
-        .await,
-    );
-    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }

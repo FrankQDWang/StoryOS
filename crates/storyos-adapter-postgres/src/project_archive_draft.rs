@@ -74,7 +74,6 @@ pub(super) fn withheld_payload_gaps(
     let events = rows("draft_lifecycle_events")?;
     let admissions = rows("author_command_admissions")?;
     let receipts = rows("domain_receipts")?;
-    let close_events = rows("draft_close_events")?;
     let mut gaps = Vec::new();
     let mut withheld_revisions = 0;
     let mut withheld_admissions = 0;
@@ -135,97 +134,13 @@ pub(super) fn withheld_payload_gaps(
             return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
         };
         let creation_id = text(event, "creation_event_id")?;
-        let (draft_refs, event_refs) = if receipt["source_draft_disposition"].is_null() {
-            if admission.get("draft_retry_source").is_some() {
-                return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
-            }
-            (json!([draft_id]), json!([creation_id]))
-        } else {
-            let invalid = || ProjectArchiveBuildRefusal::InvalidProvenance;
-            let retry: storyos_contracts::DraftRetry = serde_json::from_value(
-                admission
-                    .get("draft_retry_source")
-                    .ok_or_else(invalid)?
-                    .clone(),
-            )
-            .map_err(|_| invalid())?;
-            let same_scope = |row: &Value| {
-                row["owner_user_id"] == draft["owner_user_id"]
-                    && row["project_id"] == draft["project_id"]
-            };
-            let source_revisions = revisions
-                .iter()
-                .filter(|row| {
-                    same_scope(row)
-                        && row["draft_id"] == retry.source_draft_id
-                        && row["revision_id"] == retry.source_current_draft_revision_id
-                        && row["payload_digest"] == retry.source_draft_payload_digest
-                })
-                .collect::<Vec<_>>();
-            let [source_revision] = source_revisions.as_slice() else {
-                return Err(invalid());
-            };
-            let source_closes = close_events
-                .iter()
-                .filter(|row| {
-                    same_scope(row)
-                        && row["draft_id"] == retry.source_draft_id
-                        && row["revision_id"] == retry.source_current_draft_revision_id
-                        && row["payload_digest"] == retry.source_draft_payload_digest
-                        && row["receipt_id"] == receipt_id
-                        && row["receipt_result_kind"] == "refused_to_draft"
-                        && row["close_reason"] == "superseded"
-                        && row["author_action_sequence"].is_null()
-                        && row["created_at"] == receipt["created_at"]
-                })
-                .collect::<Vec<_>>();
-            let [closed] = source_closes.as_slice() else {
-                return Err(invalid());
-            };
-            let close_id = text(closed, "event_id")?;
-            let range = &retry.selected_payload_range;
-            if ![event, admission, receipt]
-                .iter()
-                .all(|row| same_scope(row))
-                || retry.source_draft_id == draft_id
-                || range.coordinate_profile != "storyos.draft-replacement.block-utf16.v1"
-                || (range.from.block_index, range.from.offset)
-                    > (range.to.block_index, range.to.offset)
-                || range.slice_digest.len() != 64
-                || !range
-                    .slice_digest
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-                || receipt["source_draft_disposition"]
-                    != json!({"kind":"closed_superseded","source_draft_kind":"refused_edit",
-                    "source_draft_id":retry.source_draft_id,"source_draft_revision_id":retry.source_current_draft_revision_id,
-                    "source_draft_payload_digest":retry.source_draft_payload_digest,"prior_closure":"open",
-                    "resulting_closure":"closed","close_reason":"superseded","closure_event_ref":close_id})
-            {
-                return Err(invalid());
-            }
-            if let Some(payload) = source_revision.get("payload") {
-                let source: storyos_core::RefusedEditPayload =
-                    serde_json::from_value(payload.clone()).map_err(|_| invalid())?;
-                let selected = storyos_core::select_draft_replacement(
-                    &source,
-                    (range.from.block_index, range.from.offset),
-                    (range.to.block_index, range.to.offset),
-                )
-                .ok_or_else(invalid)?;
-                if hex_sha256(
-                    canonical_json(&serde_json::to_value(selected).map_err(|_| invalid())?)
-                        .as_bytes(),
-                ) != range.slice_digest
-                {
-                    return Err(invalid());
-                }
-            }
-            (
-                json!([draft_id, retry.source_draft_id]),
-                json!([creation_id, close_id]),
-            )
-        };
+        // ADR 0073: Release 1 keeps no Draft retry, so a recorded source Draft has no provenance.
+        if !receipt["source_draft_disposition"].is_null()
+            || admission.get("draft_retry_source").is_some()
+        {
+            return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+        }
+        let (draft_refs, event_refs) = (json!([draft_id]), json!([creation_id]));
         if admission.get("command_payload").is_some()
             || receipt["command_digest"] != command_digest
             || receipt["result_kind"] != "refused_to_draft"

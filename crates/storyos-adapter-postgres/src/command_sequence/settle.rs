@@ -139,9 +139,9 @@ async fn admit<C: AdmittedCommand>(
     }
     Err(match C::SPEC.missing_admission {
         MissingAdmission::Diagnosed => command.diagnose_missing_admission(client, envelope).await,
-        MissingAdmission::InvalidChallenge
-        | MissingAdmission::BindingConflict
-        | MissingAdmission::InvalidWriter => C::SPEC.missing_admission.error().into(),
+        MissingAdmission::InvalidChallenge | MissingAdmission::BindingConflict => {
+            C::SPEC.missing_admission.error().into()
+        }
     })
 }
 

@@ -130,10 +130,6 @@ project_command_request!(
     contracts::RejectProposalOperationsRequest,
     nested reject_proposal_operations_input
 );
-project_command_request!(
-    contracts::CloseEditorFlowDraftRequest,
-    nested close_editor_flow_draft_input
-);
 project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
 project_command_request!(
     contracts::ReopenRejectedOperationsRequest,
@@ -146,10 +142,6 @@ project_command_request!(
 project_command_request!(
     contracts::ContinueProposalGenerationRequest,
     nested continue_proposal_generation_input
-);
-project_command_request!(
-    contracts::ExpandRefusedEditDraftRequest,
-    nested expand_refused_edit_draft_to_proposal_input
 );
 project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
 project_command_request!(contracts::CancelAgentRunRequest, nested cancel_agent_run_input);

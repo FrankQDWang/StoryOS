@@ -17,24 +17,15 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
-mod draft_retry;
-mod expand_refused_edit_draft;
 mod grant_scope;
 mod host_fake_profile;
+mod manuscript_payload;
 mod model_output;
 mod model_registration;
+mod ordinary_passage_request;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
 mod unknown_create_successor;
-pub use expand_refused_edit_draft::{
-    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, ExpandRefusedEditDraftResult,
-    expand_refused_edit_draft,
-};
-mod manuscript_payload;
-mod refused_edit;
-pub use draft_retry::select_draft_replacement;
-pub use refused_edit::{CurrentOrderedSourceFacts, ProposalEditSourceFacts};
-mod ordinary_passage_request;
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
@@ -311,7 +302,6 @@ pub struct ApplyAuthorEdit {
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
     pub current_ownership: CurrentOwnershipFacts,
-    pub ordered_source_facts: Option<CurrentOrderedSourceFacts>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub inline_edit_disposition: InlineEditDisposition,
@@ -335,9 +325,6 @@ pub struct AuthorEditUnit {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthorEditPrimitive {
-    ReplaceStructuredSelection {
-        replacement: Vec<ReplacementBlock>,
-    },
     ReplaceSelection {
         from: u32,
         to: u32,
@@ -371,77 +358,14 @@ pub enum AuthorEditPrimitive {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SelectionSnapshot {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ordered_selection: Option<OrderedSourceSelection>,
     pub coordinate_profile: String,
     pub from: u32,
     pub to: u32,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReplacementBlock {
-    pub block_kind: ManuscriptBlockKind,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OrderedSourceSelection {
-    pub sources: Vec<SelectedEditSource>,
-    pub anchor: SourceSelectionEndpoint,
-    pub head: SourceSelectionEndpoint,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SourceSelectionEndpoint {
-    pub source_index: u32,
-    pub source_offset: u32,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SelectedEditSource {
-    pub owner: EditSourceOwner,
-    pub coordinate_profile: String,
-    pub from: u32,
-    pub to: u32,
-    pub block_kind: ManuscriptBlockKind,
-    pub source_text: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum EditSourceOwner {
-    Manuscript {
-        manuscript_block_id: String,
-    },
-    Proposal {
-        proposal_id: String,
-        operation_id: String,
-        revision_id: String,
-        manuscript_block_id: String,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RefusedEditPayload {
-    pub schema_revision: String,
-    pub chapter_id: String,
-    pub expected_authoritative_revision_id: String,
-    pub expected_proposal_head_revision_ids: Vec<String>,
-    pub target_refs: Vec<String>,
-    pub author_edit_units: Vec<AuthorEditUnit>,
-    pub undo_group_id: String,
-    pub completed_intent_record_id: String,
-    pub local_intent_sequence: String,
 }
 
 /// The Core classification of one Author Edit.
 pub type ApplyAuthorEditOutcome =
-    TransitionOutcome<AuthorEditApplied, AuthorEditNoEffect, AuthorEditConflict, AuthorEditRefused>;
+    TransitionOutcome<AuthorEditApplied, AuthorEditNoEffect, AuthorEditConflict, AuthorEditRefusal>;
 
 /// The applied variants of an Author Edit.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -495,63 +419,6 @@ transition_outcome::reason_codes!(AuthorEditRefusal {
     TargetMismatch => "target_mismatch",
 });
 
-/// A refused Author Edit. The edit is refused for a reason, or it is kept as a Refused Edit
-/// Draft.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AuthorEditRefused {
-    /// The Receipt result kind is `refused` with the reason.
-    Refused(AuthorEditRefusal),
-    /// The Receipt result kind is `refused_to_draft`, and the Receipt records no reason.
-    RefusedToDraft,
-}
-
-impl AuthorEditRefused {
-    const TO_DRAFT: &'static str = "refused_to_draft";
-}
-
-impl From<AuthorEditRefusal> for AuthorEditRefused {
-    fn from(reason: AuthorEditRefusal) -> Self {
-        Self::Refused(reason)
-    }
-}
-
-impl ReasonCode for AuthorEditRefused {
-    fn code(&self) -> &'static str {
-        match self {
-            Self::Refused(reason) => reason.code(),
-            Self::RefusedToDraft => Self::TO_DRAFT,
-        }
-    }
-
-    fn from_code(code: &str) -> Option<Self> {
-        if code == Self::TO_DRAFT {
-            return Some(Self::RefusedToDraft);
-        }
-        AuthorEditRefusal::from_code(code).map(Self::Refused)
-    }
-
-    fn receipt_result(&self) -> Option<&'static str> {
-        match self {
-            Self::Refused(_) => None,
-            Self::RefusedToDraft => Some(Self::TO_DRAFT),
-        }
-    }
-
-    fn recorded_code(&self) -> Option<&'static str> {
-        match self {
-            Self::Refused(reason) => Some(reason.code()),
-            Self::RefusedToDraft => None,
-        }
-    }
-
-    fn from_receipt(result: &str, outcome: &'static str, code: Option<&str>) -> Option<Self> {
-        if result == Self::TO_DRAFT {
-            return code.is_none().then_some(Self::RefusedToDraft);
-        }
-        AuthorEditRefusal::from_receipt(result, outcome, code).map(Self::Refused)
-    }
-}
-
 pub const UTF16_COORDINATE_PROFILE: &str = "storyos.editor.utf16-code-unit.v1";
 
 pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
@@ -580,9 +447,6 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
     if command.observed_ownership_partition != current_partition {
         return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
     }
-    if command.ordered_source_facts.is_some() {
-        return refused_edit::classify(command);
-    }
     if command.inline_edit_disposition == InlineEditDisposition::AuthoritativeDespiteReservation {
         if current_partition != "mixed" || command.expected_proposal_head_revision_ids.is_empty() {
             return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
@@ -608,34 +472,26 @@ fn apply_author_edit_body(
     kind: AuthorEditAppliedKind,
 ) -> ApplyAuthorEditOutcome {
     if command.target_refs != [format!("manuscript:{}", command.chapter_id)] {
-        return TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::TargetMismatch,
-        ));
+        return TransitionOutcome::Refused(AuthorEditRefusal::TargetMismatch);
     }
     if command.author_edit_units.is_empty() {
-        return TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::UnsupportedIntentShape,
-        ));
+        return TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape);
     }
     let mut body = command.current_body.clone();
     for unit in &command.author_edit_units {
         let [AuthorEditPrimitive::ReplaceSelection { from, to, text }] =
             unit.normalized_primitives.as_slice()
         else {
-            return TransitionOutcome::Refused(AuthorEditRefused::Refused(
-                AuthorEditRefusal::UnsupportedIntentShape,
-            ));
+            return TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape);
         };
         if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE
             || unit.selection_snapshot.from != *from
             || unit.selection_snapshot.to != *to
         {
-            return TransitionOutcome::Refused(AuthorEditRefused::Refused(
-                AuthorEditRefusal::InvalidSelection,
-            ));
+            return TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection);
         }
         if let Err(reason) = replace_checked_utf16_range(&mut body, *from, *to, text) {
-            return TransitionOutcome::Refused(AuthorEditRefused::Refused(reason));
+            return TransitionOutcome::Refused(reason);
         }
     }
     if body == command.current_body {
@@ -749,12 +605,6 @@ mod set_current_chapter_tests;
 #[cfg(test)]
 #[path = "undo_latest_author_action_tests.rs"]
 mod undo_latest_author_action_tests;
-
-mod close_editor_flow_draft;
-pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftConflict, CloseEditorFlowDraftRefusal, CloseEditorFlowDraftResult,
-    DraftCloseSource, close_editor_flow_draft,
-};
 
 mod prose_change_locations;
 pub use prose_change_locations::{

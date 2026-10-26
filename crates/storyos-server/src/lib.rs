@@ -25,7 +25,6 @@ mod author_edit;
 mod author_edit_outcome;
 mod cancel_agent_run;
 mod chapter;
-mod close_editor_flow_draft;
 mod command_admission;
 mod contract_reason;
 mod create_agent_run;
@@ -36,9 +35,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod editor_session;
-mod expand_refused_edit_draft;
 mod get_proposal;
-mod get_refused_edit_draft;
 mod list_open_proposals;
 mod list_projects;
 mod manuscript_search;
@@ -104,7 +101,6 @@ use delete_chapter::delete_chapter;
 use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use get_proposal::get_proposal;
-use get_refused_edit_draft::get_refused_edit_draft;
 use list_open_proposals::list_chapter_open_proposals;
 use list_projects::list_projects;
 use manuscript_search::search_manuscript_query;
@@ -357,27 +353,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
-            ),
-        )
-        .route(
-            contracts::CLOSE_EDITOR_FLOW_DRAFT_PATH,
-            routing::on(
-                method_filter("POST"),
-                close_editor_flow_draft::close_editor_flow_draft,
-            ),
-        )
-        .route(
-            contracts::EXPAND_REFUSED_EDIT_DRAFT_PATH,
-            routing::on(
-                method_filter("POST"),
-                expand_refused_edit_draft::expand_refused_edit_draft,
-            ),
-        )
-        .route(
-            contracts::GET_REFUSED_EDIT_DRAFT_PATH,
-            routing::on(
-                method_filter(contracts::GET_REFUSED_EDIT_DRAFT_METHOD),
-                get_refused_edit_draft,
             ),
         )
         .route(

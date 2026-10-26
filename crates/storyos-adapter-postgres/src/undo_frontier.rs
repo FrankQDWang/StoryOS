@@ -4,7 +4,6 @@ use storyos_core::AuthorUndoFrontierKind;
 use crate::accept_proposal::{AcceptanceCompensation, LoadedAcceptance};
 use crate::author_edit::{ObservedProseFrontier, ProseCompensation};
 use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
-use crate::close_editor_flow_draft::{DraftCompensation, ObservedDraftClose};
 use crate::proposal_decision_compensation::ObservedProposalDecision;
 use crate::reopen_rejected_operations::{ObservedOperationReopening, ReopenRejectedCompensation};
 use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
@@ -24,7 +23,6 @@ pub(crate) enum ObservedFrontier {
     ReopenRejectedOperations(ObservedOperationReopening),
     ReopenWithdrawnProposal(ObservedProposalDecision),
     AuthorWithdrawal(ObservedAuthorWithdrawal),
-    DraftClose(ObservedDraftClose),
     Barrier { sequence: u64 },
 }
 
@@ -125,9 +123,6 @@ pub(crate) async fn load_observed_frontier(
                 .await?
                 .map(ObservedFrontier::AuthorWithdrawal)
         }
-        UndoDisposition::Draft => DraftCompensation::load(client, command, (), sequence)
-            .await?
-            .map(ObservedFrontier::DraftClose),
         UndoDisposition::Barrier => None,
     };
     Ok(Some(
@@ -146,7 +141,6 @@ impl ObservedFrontier {
             Self::Replan(frontier) | Self::ReopenWithdrawnProposal(frontier) => frontier.sequence,
             Self::ReopenRejectedOperations(frontier) => frontier.decision.sequence,
             Self::AuthorWithdrawal(frontier) => frontier.sequence,
-            Self::DraftClose(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
     }
@@ -168,7 +162,6 @@ impl ObservedFrontier {
             Self::AuthorWithdrawal(frontier) => {
                 AuthorWithdrawalCompensation::frontier_kind(frontier)
             }
-            Self::DraftClose(frontier) => DraftCompensation::frontier_kind(frontier),
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
     }
@@ -185,7 +178,6 @@ impl ObservedFrontier {
             | Self::ReopenWithdrawnProposal(_)
             | Self::AuthorWithdrawal(_)
             | Self::Barrier { .. } => None,
-            Self::DraftClose(frontier) => Some(frontier.current_head_revision_id.as_str()),
         }
     }
 
@@ -207,7 +199,6 @@ impl ObservedFrontier {
             | Self::ReopenRejectedOperations(_)
             | Self::ReopenWithdrawnProposal(_)
             | Self::AuthorWithdrawal(_)
-            | Self::DraftClose(_)
             | Self::Barrier { .. } => None,
         }
     }
@@ -224,21 +215,6 @@ pub(crate) async fn head_lineage_revision(
 ) -> Result<String, ProjectCommandError> {
     let mut path = head_lineage_path(client, command, chapter_id, head_revision_id).await?;
     Ok(path.pop().unwrap_or_else(|| head_revision_id.to_owned()))
-}
-
-/// Whether the Head of a Chapter restores `target_revision_id` at a step of its lineage walk
-/// (ADR 0067). The Head itself is the first step.
-pub(crate) async fn chapter_head_restores(
-    client: &tokio_postgres::Client,
-    command: &UndoRequest,
-    chapter_id: &str,
-    head_revision_id: &str,
-    target_revision_id: &str,
-) -> Result<bool, ProjectCommandError> {
-    let path = head_lineage_path(client, command, chapter_id, head_revision_id).await?;
-    Ok(path
-        .iter()
-        .any(|revision_id| revision_id == target_revision_id))
 }
 
 /// The Revisions of the lineage walk of a Chapter Head, from the Head to its lineage Revision.

@@ -11,24 +11,6 @@ pub fn author_edit_units_from_wire(
                 .normalized_primitives
                 .iter()
                 .map(|primitive| match primitive {
-                    wire::AuthorEditPrimitive::ReplaceStructuredSelection { replacement } => {
-                        storyos_core::AuthorEditPrimitive::ReplaceStructuredSelection {
-                            replacement: replacement
-                                .iter()
-                                .map(|block| storyos_core::ReplacementBlock {
-                                    block_kind: match block.block_kind {
-                                        wire::ManuscriptBlockKind::Paragraph => {
-                                            storyos_core::ManuscriptBlockKind::Paragraph
-                                        }
-                                        wire::ManuscriptBlockKind::Heading => {
-                                            storyos_core::ManuscriptBlockKind::Heading
-                                        }
-                                    },
-                                    text: block.text.clone(),
-                                })
-                                .collect(),
-                        }
-                    }
                     wire::AuthorEditPrimitive::ReplaceSelection { from, to, text } => {
                         storyos_core::AuthorEditPrimitive::ReplaceSelection {
                             from: *from,
@@ -87,54 +69,6 @@ pub fn author_edit_units_from_wire(
                 })
                 .collect(),
             selection_snapshot: storyos_core::SelectionSnapshot {
-                ordered_selection: unit.selection_snapshot.ordered_selection.as_ref().map(
-                    |selection| storyos_core::OrderedSourceSelection {
-                        sources: selection
-                            .sources
-                            .iter()
-                            .map(|source| storyos_core::SelectedEditSource {
-                                owner: match &source.owner {
-                                    wire::EditSourceOwner::Manuscript {
-                                        manuscript_block_id,
-                                    } => storyos_core::EditSourceOwner::Manuscript {
-                                        manuscript_block_id: manuscript_block_id.clone(),
-                                    },
-                                    wire::EditSourceOwner::Proposal {
-                                        proposal_id,
-                                        operation_id,
-                                        revision_id,
-                                        manuscript_block_id,
-                                    } => storyos_core::EditSourceOwner::Proposal {
-                                        proposal_id: proposal_id.clone(),
-                                        operation_id: operation_id.clone(),
-                                        revision_id: revision_id.clone(),
-                                        manuscript_block_id: manuscript_block_id.clone(),
-                                    },
-                                },
-                                coordinate_profile: source.coordinate_profile.clone(),
-                                from: source.from,
-                                to: source.to,
-                                block_kind: match source.block_kind {
-                                    wire::ManuscriptBlockKind::Paragraph => {
-                                        storyos_core::ManuscriptBlockKind::Paragraph
-                                    }
-                                    wire::ManuscriptBlockKind::Heading => {
-                                        storyos_core::ManuscriptBlockKind::Heading
-                                    }
-                                },
-                                source_text: source.source_text.clone(),
-                            })
-                            .collect(),
-                        anchor: storyos_core::SourceSelectionEndpoint {
-                            source_index: selection.anchor.source_index,
-                            source_offset: selection.anchor.source_offset,
-                        },
-                        head: storyos_core::SourceSelectionEndpoint {
-                            source_index: selection.head.source_index,
-                            source_offset: selection.head.source_offset,
-                        },
-                    },
-                ),
                 coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
                 from: unit.selection_snapshot.from,
                 to: unit.selection_snapshot.to,
@@ -154,24 +88,6 @@ pub fn author_edit_units_to_wire(
                 .normalized_primitives
                 .iter()
                 .map(|primitive| match primitive {
-                    storyos_core::AuthorEditPrimitive::ReplaceStructuredSelection {
-                        replacement,
-                    } => wire::AuthorEditPrimitive::ReplaceStructuredSelection {
-                        replacement: replacement
-                            .iter()
-                            .map(|block| wire::ReplacementBlock {
-                                block_kind: match block.block_kind {
-                                    storyos_core::ManuscriptBlockKind::Paragraph => {
-                                        wire::ManuscriptBlockKind::Paragraph
-                                    }
-                                    storyos_core::ManuscriptBlockKind::Heading => {
-                                        wire::ManuscriptBlockKind::Heading
-                                    }
-                                },
-                                text: block.text.clone(),
-                            })
-                            .collect(),
-                    },
                     storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text } => {
                         wire::AuthorEditPrimitive::ReplaceSelection {
                             from: *from,
@@ -230,54 +146,6 @@ pub fn author_edit_units_to_wire(
                 })
                 .collect(),
             selection_snapshot: wire::SelectionSnapshot {
-                ordered_selection: unit.selection_snapshot.ordered_selection.as_ref().map(
-                    |selection| wire::OrderedSourceSelection {
-                        sources: selection
-                            .sources
-                            .iter()
-                            .map(|source| wire::SelectedEditSource {
-                                owner: match &source.owner {
-                                    storyos_core::EditSourceOwner::Manuscript {
-                                        manuscript_block_id,
-                                    } => wire::EditSourceOwner::Manuscript {
-                                        manuscript_block_id: manuscript_block_id.clone(),
-                                    },
-                                    storyos_core::EditSourceOwner::Proposal {
-                                        proposal_id,
-                                        operation_id,
-                                        revision_id,
-                                        manuscript_block_id,
-                                    } => wire::EditSourceOwner::Proposal {
-                                        proposal_id: proposal_id.clone(),
-                                        operation_id: operation_id.clone(),
-                                        revision_id: revision_id.clone(),
-                                        manuscript_block_id: manuscript_block_id.clone(),
-                                    },
-                                },
-                                coordinate_profile: source.coordinate_profile.clone(),
-                                from: source.from,
-                                to: source.to,
-                                block_kind: match source.block_kind {
-                                    storyos_core::ManuscriptBlockKind::Paragraph => {
-                                        wire::ManuscriptBlockKind::Paragraph
-                                    }
-                                    storyos_core::ManuscriptBlockKind::Heading => {
-                                        wire::ManuscriptBlockKind::Heading
-                                    }
-                                },
-                                source_text: source.source_text.clone(),
-                            })
-                            .collect(),
-                        anchor: wire::SourceSelectionEndpoint {
-                            source_index: selection.anchor.source_index,
-                            source_offset: selection.anchor.source_offset,
-                        },
-                        head: wire::SourceSelectionEndpoint {
-                            source_index: selection.head.source_index,
-                            source_offset: selection.head.source_offset,
-                        },
-                    },
-                ),
                 coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
                 from: unit.selection_snapshot.from,
                 to: unit.selection_snapshot.to,

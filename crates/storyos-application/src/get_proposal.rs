@@ -24,7 +24,6 @@ pub struct BlockProposalRecord {
     pub base_authoritative_revision_id: String,
     pub reservation_state: String,
     pub candidate_text: String,
-    pub candidate_blocks: Option<Vec<storyos_contracts::ReplacementBlock>>,
     pub source: storyos_contracts::ProposalSourceInspect,
     pub validation_receipt_id: Option<String>,
     pub validation_receipt_result: Option<String>,
@@ -36,7 +35,6 @@ pub struct BlockProposalRecord {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalOperationRecord {
     pub candidate_text: String,
-    pub candidate_blocks: Option<Vec<storyos_contracts::ReplacementBlock>>,
     pub operation_id: String,
     pub manuscript_block_id: String,
     pub resolution: String,
