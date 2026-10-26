@@ -31,6 +31,11 @@ const BLOCK: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Hel
 const INLINE: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Guard "),
   { type: "inlineProposal", attrs: { ...candidate(FIRST), inlineFrom: 6, inlineTo: 11, sourceText: "voice" },
     content: text("tone") }, ...text(" here"))] };
+// Guard [voice -> tone] here / [Next]. The Chapter text " here" is at 13 to 18, and the block candidate at 20 to 24.
+const MIXED: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Guard "),
+  { type: "inlineProposal", attrs: { ...candidate(FIRST), inlineFrom: 6, inlineTo: 11, sourceText: "voice" },
+    content: text("tone") }, ...text(" here")),
+  { type: "blockProposal", attrs: candidate(SECOND), content: text("Next") }] };
 // Hello / [One] / [Two]. The two candidates are at 8 to 11 and 13 to 16.
 const TWO: JSONContent = { type: "doc", content: [paragraph(LEFT, ...text("Hello")),
   { type: "blockProposal", attrs: candidate(FIRST), content: text("One") },
@@ -136,6 +141,19 @@ it.each([
   candidates, caret, captured }) => {
   expect(await edit(INLINE, anchor, head, type("X"))).toEqual({ chapter, candidates,
     selection: { anchor: caret, head: caret }, captured: [captured] });
+});
+
+it("Enter from Chapter text into a candidate breaks only the Chapter line, and the candidate stays after its block",
+  async () => {
+    const { captured, ...changed } = await edit(BLOCK, 3, 12, () => applyTrustedInput({ operation: "enter" }));
+    expect({ changed, captured: captured.length }).toEqual({ changed: { chapter: ["He", "", "World"],
+      candidates: ["Candidate"], selection: { anchor: 16, head: 16 } }, captured: 1 });
+  });
+
+it("a multi-line paste after an inline candidate keeps both candidates in place", async () => {
+  const { captured, ...changed } = await edit(MIXED, 15, 22, paste("A\nB"));
+  expect({ changed, captured: captured.length }).toEqual({ changed: { chapter: ["Guard voice hA", "B"],
+    candidates: ["tone", "Next"], selection: { anchor: 25, head: 25 } }, captured: 1 });
 });
 
 it.each([

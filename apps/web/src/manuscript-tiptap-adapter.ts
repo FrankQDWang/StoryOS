@@ -150,21 +150,43 @@ function insertNewline(view: EditorView): boolean {
   return true;
 }
 
-function splitParagraphTransaction(state: EditorState, newId: string): Transaction | undefined {
-  if (!isBlockNode(state.selection.$from.parent.type.name)) return undefined;
-  if (!state.selection.empty) return undefined;
-  const splitPos = state.selection.from;
-  const transaction = state.tr.split(splitPos);
-  const newParagraphPos = splitPos + 1;
-  const newParagraph = transaction.doc.nodeAt(newParagraphPos);
-  const paragraph = transaction.doc.type.schema.nodes.paragraph;
-  if (newParagraph === null || !isBlockNode(newParagraph.type.name)
-    || paragraph === undefined) {
-    return undefined;
-  }
-  return transaction.setNodeMarkup(newParagraphPos, paragraph, {
-    id: newId,
+/**
+ * Replaces `from` to `to` in Chapter text with lines, as one transaction. Each line after the first starts a
+ * new block. A block candidate stays after its target block, the first block, and the caret goes to the end.
+ */
+function replaceWithLinesTransaction(
+  state: EditorState,
+  from: number,
+  to: number,
+  lines: readonly string[],
+): Transaction | undefined {
+  const paragraph = state.schema.nodes.paragraph;
+  if (!isBlockNode(state.doc.resolve(from).parent.type.name) || !isBlockNode(state.doc.resolve(to).parent.type.name)
+    || paragraph === undefined) return undefined;
+  const transaction = state.tr.delete(from, to);
+  const head = transaction.doc.resolve(from).parent;
+  let position = from;
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      transaction.split(position, 1, [{ type: paragraph, attrs: { id: createJournalUuid() } }]);
+      position += 2;
+    }
+    if (line !== "") transaction.insertText(line, position);
+    position += line.length;
   });
+  const headEnd = transaction.doc.resolve(from).after(1);
+  const tailEnd = transaction.doc.resolve(position).after(1);
+  let candidatesEnd = tailEnd;
+  for (let node = transaction.doc.nodeAt(candidatesEnd); node?.type.name === "blockProposal"
+    && node.attrs.blockId === head.attrs.id; node = transaction.doc.nodeAt(candidatesEnd)) {
+    candidatesEnd += node.nodeSize;
+  }
+  if (headEnd !== tailEnd && candidatesEnd > tailEnd) {
+    const candidates = transaction.doc.slice(tailEnd, candidatesEnd).content;
+    transaction.delete(tailEnd, candidatesEnd).insert(headEnd, candidates);
+    position += candidates.size;
+  }
+  return transaction.setSelection(TextSelection.create(transaction.doc, position));
 }
 
 function moveCurrentBlock(view: EditorView, delta: -1 | 1): boolean {
@@ -231,19 +253,11 @@ export function storyosManuscriptExtensions(
               || this.editor.state.selection.$from.parent.type.name === "inlineProposal") {
               return insertNewline(this.editor.view);
             }
-            if (!this.editor.state.selection.empty) {
-              this.editor.commands.command(({ tr, dispatch }) => {
-                dispatch?.(tr.deleteSelection());
-                return true;
-              });
-            }
-            const newId = createJournalUuid();
-            return this.editor.commands.command(({ state, dispatch }) => {
-              const transaction = splitParagraphTransaction(state, newId);
-              if (transaction === undefined) return true;
-              dispatch?.(transaction);
-              return true;
-            });
+            // The deletion of the selection and the block split are one edit, so a refusal changes nothing.
+            const { from, to } = this.editor.state.selection;
+            const transaction = replaceWithLinesTransaction(this.editor.state, from, to, ["", ""]);
+            if (transaction !== undefined) this.editor.view.dispatch(transaction);
+            return true;
           },
           "Shift-Enter": () => insertNewline(this.editor.view),
           "Mod-ArrowUp": () => moveCurrentBlock(this.editor.view, -1),
@@ -398,9 +412,10 @@ function dispatchPlainTextReplacement(
     return;
   }
   const lines = text.split(/\r\n|\n|\r/);
-  if ($from.sameParent($to) && lines.length === 1) {
-    // One line in one block keeps the inline candidates of the block, and the caret stays at its end.
-    const transaction = view.state.tr.insertText(text, from, to);
+  if ($from.sameParent($to)) {
+    // A replacement in one block keeps the inline candidates before it, and the caret stays at its end.
+    const transaction = replaceWithLinesTransaction(view.state, from, to, lines);
+    if (transaction === undefined) return;
     transaction.setMeta(STORYOS_ORIGIN, origin);
     view.dispatch(transaction);
     return;
