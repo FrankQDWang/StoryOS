@@ -196,9 +196,6 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 
 export interface JournalSnapshot {
   localRecovery?: import("./local-recovery-record.ts").LocalRecoveryMaterial[];
-  explicitExpansion?: Awaited<ReturnType<typeof import("./refused-edit-expansion.ts").readExpansionJournal>>;
-  explicitDraftUndo?: Awaited<ReturnType<typeof import("./draft-undo-journal.ts").readDraftUndoJournal>>;
-  explicitDiscard?: Awaited<ReturnType<typeof import("./refused-edit-discard.ts").readDiscardJournal>>;
   explicitAcceptance?: { records: Record<string, unknown>[]; groups: Record<string, unknown>[] };
   workingBoundary?: JournalWorkingBoundary;
   watermark: { key: string; value: number } | undefined;
@@ -236,7 +233,6 @@ export interface EditorWorkspace {
   cryptoImpl: Crypto;
   maxJsonStringUtf8Bytes: number;
   submitQueue?: Promise<PendingEditProjection | void>;
-  inlineProposalAnchors?: ProposalJournalAnchor[];
   /** Set only on the read-only reader of a Journal that cannot upgrade (contract 3.2). */
   readOnlyJournalVersion?: 4;
 }
@@ -261,7 +257,6 @@ export interface EditorReadOnlyState {
 export type EditorState = EditorReadyState | EditorReadOnlyState;
 
 export interface ReplaceSelectionEdit {
-  expectedProposalHeads?: string[];
   from: number;
   to: number;
   text: string;

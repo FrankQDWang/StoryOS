@@ -86,8 +86,6 @@ const ADMITTED_TARGET: &str =
     "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts";
 const CANDIDATE_EDIT: &str =
     "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts";
-const INLINE_PRODUCTION: &str =
-    "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts";
 const CAPTURED_MEMORY: &str =
     "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts";
 const RUN_EVIDENCE: &str =

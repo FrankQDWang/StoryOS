@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 function isCandidate(node: ProseMirrorNode): boolean {
-  return node.type.name === "blockProposal" || node.type.name === "inlineProposal";
+  return node.type.name === "blockProposal";
 }
 
 /**

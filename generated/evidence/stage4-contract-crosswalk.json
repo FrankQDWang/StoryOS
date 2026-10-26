@@ -122,7 +122,7 @@
           "https://github.com/FrankQDWang/StoryOS/issues/1165",
           "https://github.com/FrankQDWang/StoryOS/issues/396"
         ],
-        "evidence": "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+        "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
@@ -266,7 +266,6 @@
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
           "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
           "crates/storyos-core/src/model_output_tests.rs"
         ],

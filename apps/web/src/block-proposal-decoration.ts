@@ -2,12 +2,9 @@ import { Node as TiptapNode, type Editor } from "@tiptap/core";
 import { Fragment, Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
-import { inlineAnchorAgrees, projectInlineCandidate, restoreInlineSource } from "./inline-proposal-decoration.ts";
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
 
 export type BlockProposalProjection = {
-  inlineProposal?: boolean;
-  inlineAnchor?: { from: number; to: number; sourceText: string };
   proposalId: string;
   operationId: string;
   revisionId: string;
@@ -39,14 +36,13 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "earlierBase", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "candidateEditable", "focused", "pendingOperationIds", "atomicBundle", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "candidateEditable", "focused", "pendingOperationIds", "atomicBundle",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
   const nodes: ProseMirrorNode[] = [];
   doc.descendants((node) => {
-    if (node.type.name === "inlineProposal"
-      || node.type.name === "blockProposal" && node.attrs.inlineFrom === null) nodes.push(node);
+    if (node.type.name === "blockProposal") nodes.push(node);
   });
   return nodes;
 }
@@ -57,7 +53,7 @@ function candidateAnchorsValid(doc: ProseMirrorNode): boolean {
   doc.descendants((node) => {
     if (node.type.name === "paragraph" || node.type.name === "heading") {
       blockId = node.attrs.id as string;
-    } else if ((node.type.name === "blockProposal" || node.type.name === "inlineProposal")
+    } else if (node.type.name === "blockProposal"
       && (blockId === "" || node.attrs.blockId !== blockId)) {
       valid = false;
     }
@@ -128,16 +124,11 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const next: ProseMirrorNode[] = [];
   editor.state.doc.forEach((node) => {
     if (node.type.name === "blockProposal") return;
-    node = restoreInlineSource(node);
     next.push(node);
     for (const proposal of byBlock.get(node.attrs.id as string) ?? []) {
       const current = existing.get(`${proposal.proposalId}:${proposal.operationId}`);
       const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
         ? current.textContent : proposal.text;
-      const anchor = proposal.inlineAnchor !== undefined && inlineAnchorAgrees(node.textContent, proposal.inlineAnchor)
-        ? proposal.inlineAnchor : undefined;
-      // A Block text that does not agree shows no Accept control. The projection after the hydrate shows it.
-      const shown = anchor !== undefined || proposal.inlineAnchor === undefined;
       const attrs = {
         proposalId: proposal.proposalId,
         operationId: proposal.operationId,
@@ -145,12 +136,12 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         blockId: proposal.blockId,
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
-        eligible: shown && proposal.eligible,
-        candidateEditable: shown && (proposal.candidateEditable ?? proposal.eligible),
-        retryPending: shown && (proposal.retryPending ?? false),
+        eligible: proposal.eligible,
+        candidateEditable: proposal.candidateEditable ?? proposal.eligible,
+        retryPending: proposal.retryPending ?? false,
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
-        earlierBase: shown && (proposal.earlierBase ?? false),
+        earlierBase: proposal.earlierBase ?? false,
         withdrawEligible: proposal.withdrawEligible ?? false,
         copyEligible: proposal.copyEligible ?? false,
         conditionKind: proposal.conditionKind ?? "absent",
@@ -160,14 +151,8 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         pendingOperationIds: proposal.pendingOperationIds ?? [],
         atomicBundle: proposal.atomicBundle ?? false,
         focused: proposal.focused ?? false,
-        inlineProposal: proposal.inlineProposal ?? false,
-        inlineFrom: anchor?.from ?? null,
-        inlineTo: anchor?.to ?? null,
-        sourceText: anchor?.sourceText ?? null,
       };
-      if (anchor !== undefined) next[next.length - 1] = projectInlineCandidate(node, anchor, attrs, text);
-      next.push(candidateType.create(attrs, anchor === undefined && text.length
-        ? schema.text(text) : undefined));
+      next.push(candidateType.create(attrs, text.length ? schema.text(text) : undefined));
     }
   });
   const doc = editor.state.doc;
@@ -221,8 +206,7 @@ export const blockProposalDecoration = TiptapNode.create({
     const copyEligible = node.attrs.copyEligible === true;
     const all = node.attrs.atomicBundle === true ? { "data-proposal-all": "" } : {};
     return ["div", {
-      class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
-        : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
+      class: "block-proposal",
       "data-proposal-focused": node.attrs.focused === true ? "true" : "false",
       "data-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,

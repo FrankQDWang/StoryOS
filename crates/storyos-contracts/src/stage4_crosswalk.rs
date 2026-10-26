@@ -133,8 +133,6 @@ const STAGE2_JOURNEY: &str = "apps/web/test/browser-exact-dist/s2-jrn-001.integr
 const WORKSPACE: &str = "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts";
 const PHYSICAL_DRILL: &str =
     "apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts";
-const INLINE_PRODUCTION: &str =
-    "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts";
 const RUN_EVIDENCE: &str =
     "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts";
 const SELECTION_JOURNEY: &str =

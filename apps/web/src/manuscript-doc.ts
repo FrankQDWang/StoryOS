@@ -122,12 +122,8 @@ function paragraphText(paragraph: Node): string | undefined {
   let text = "";
   for (let offset = 0; offset < paragraph.childCount; offset += 1) {
     const child = paragraph.child(offset);
-    if (child.type.name === "inlineProposal" && typeof child.attrs.sourceText === "string") {
-      text += child.attrs.sourceText;
-    } else {
-      if (!child.isText || child.marks.length > 0) return undefined;
-      text += child.text ?? "";
-    }
+    if (!child.isText || child.marks.length > 0) return undefined;
+    text += child.text ?? "";
   }
   return text;
 }

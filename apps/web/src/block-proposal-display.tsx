@@ -1,4 +1,3 @@
-import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { getProposal, listChapterOpenProposals } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -7,10 +6,8 @@ import type {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
 import type { EditorReadyState } from "./editor-types.ts";
-import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
-import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
-import { readExpansionJournal, retryExpansion } from "./refused-edit-expansion.ts";
+import { canonicalValue as canonical } from "./canonical-value.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
 import { acceptDraftCandidates } from "./selection-reference-draft.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
@@ -87,7 +84,6 @@ export function BlockProposalDisplay({
     const shown = writing?.candidates.get(`${proposal.proposal_id}:${operationId}`);
     return shown?.revisions.includes(proposal.revision_id) === true ? shown.text : undefined;
   };
-  const [discardHold, setDiscardHold] = useState(false);
   const [settlementRefresh, setSettlementRefresh] = useState(0);
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
   // null: a later decision replaced the refusal, so the journal read does not bring it back.
@@ -157,17 +153,10 @@ export function BlockProposalDisplay({
     if (workspace === undefined) return () => { active = false; };
     const generation = decisionGeneration;
     void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace),
-      readExpansionJournal(workspace), pendingWithdrawIds(workspace), dropStoredReplans(workspace)])
-      .then(async ([acceptance, rejection, expansions, withdrawals]) => {
-      for (const entry of expansions) if (entry.observation === undefined) {
-        const response = await retryExpansion(workspace, entry.record, editorProps.baseUrl, editorProps.fetchImpl, () => active);
-        entry.observation = { key: `expansion-observation:${entry.record.key}`, record_key: entry.record.key, response };
-        await onAccepted();
-      }
+      pendingWithdrawIds(workspace), dropStoredReplans(workspace)])
+      .then(([acceptance, rejection, withdrawals]) => {
       if (!active) return;
-      setRecoveredProposalIds([...new Set([...acceptance.proposalIds,
-        ...rejection.proposalIds, ...expansions.flatMap(({ observation }) =>
-          observation?.response.effect.kind === "proposal_created_from_draft" ? [observation.response.effect.proposal_id] : [])])]);
+      setRecoveredProposalIds([...new Set([...acceptance.proposalIds, ...rejection.proposalIds])]);
       setJournalPendingIds([...new Set([...acceptance.unresolvedIds,
         ...rejection.pendingIds])]);
       setPendingRejections(rejection.pendingIds);
@@ -317,7 +306,9 @@ export function BlockProposalDisplay({
   const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId && proposal.closure === "open"
       && proposal.operations.some((item) => item.resolution === "pending" && item.reservation_state === "unresolved")
     ? [proposal.revision_id] : []).sort();
-  const pendingOperations = reads.flatMap<ProposalRead & { operation: BlockProposalInspect["operations"][number] | undefined }>(({ locator, proposal }) => proposal === undefined
+  // The Web shows no inline Proposal (ADR 0073).
+  const shownReads = reads.filter(({ proposal }) => proposal?.kind !== "inline_edit");
+  const pendingOperations = shownReads.flatMap<ProposalRead & { operation: BlockProposalInspect["operations"][number] | undefined }>(({ locator, proposal }) => proposal === undefined
     ? [{ locator, proposal, operation: undefined }]
     : proposal.operations.filter((item) => item.resolution === "pending")
       .map((operation) => ({ locator, proposal, operation })));
@@ -329,14 +320,12 @@ export function BlockProposalDisplay({
     if (listedIds !== undefined && !listedIds.has(locator.proposalId)) continue;
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
-      && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
+      && (proposal.kind === "block_edit" || proposal.kind === "reversal")
       && operation !== undefined
       && blockCounts.get(operation?.manuscript_block_id ?? "") === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
     // Acceptance of a Proposal on an earlier base replaces the current text of its target (ADR 0064).
     const acceptableValidation = (result: string) => result === "valid" || result === "conflicted";
-    const inlineAnchor = proposal === undefined ? undefined
-      : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
     const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
       && editorProps.persistWorkspace.session.writer.kind === "current_writer";
     const sessionBlocked = proposal !== undefined && sessionBlockedIds.includes(proposal.proposal_id);
@@ -360,7 +349,6 @@ export function BlockProposalDisplay({
     const eligible = controlsReady
       && proposal.generation === "ready" && acceptableValidation(proposal.validation)
       && condition !== "proposal_recovery_conflict"
-      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined || !baseMatches)
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
@@ -374,8 +362,6 @@ export function BlockProposalDisplay({
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
-      inlineProposal: proposal.kind === "inline_edit",
-      ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
       focused: editorProps.focusProposal?.proposalId === proposal.proposal_id
@@ -391,7 +377,7 @@ export function BlockProposalDisplay({
       eligible,
       candidateEditable: rejectEligible && condition !== "proposal_recovery_conflict"
         && proposal.generation === "ready" && proposal.validation !== "invalid"
-        && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined || !baseMatches) && !pendingAcceptance,
+        && !pendingAcceptance,
       retryPending: pendingAcceptance && knownProblems[proposal.proposal_id] === undefined
         && accepting !== proposal.proposal_id,
       rejectEligible,
@@ -407,15 +393,6 @@ export function BlockProposalDisplay({
       expectedHeads,
       localPending: localText !== undefined,
     });
-  }
-
-  if (editorProps.writing !== undefined) {
-    editorProps.writing.setInlineProposalAnchors(reads.flatMap(({ proposal }) =>
-      proposal?.chapter_id === chapterId && proposal.kind === "inline_edit"
-        && expectedHeads.length === 1 && expectedHeads[0] === proposal.revision_id
-        && inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId) !== undefined
-        ? proposal.anchors.map(({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest }) =>
-          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []));
   }
 
   const acceptDisplayed = (target: {
@@ -727,7 +704,7 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && !discardHold && !recoveryUnavailable
+        editable={editorProps.editable && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || journalProposalsChecked || (locators.length === 0
             && recoveredProposalIds.length === 0 && writing?.projection.unsettled_intent_count === 0))
@@ -744,29 +721,8 @@ export function BlockProposalDisplay({
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed}
         onWithdrawProposal={withdrawDisplayed}
         onCopyProposal={copyDisplayed} />
-      <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
-        baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}:${settlements}`} onHoldChange={setDiscardHold}
-        onProjection={async () => { await editorProps.writing?.refresh().catch(editorProps.onFailure); }}
-        retryDraft={editorProps.writing?.retryDraft}
-        onResult={() => setSettlementRefresh((value) => value + 1)} />
-      {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
-        <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
-          <header className="editor-recovery-heading">
-            <span>From a preserved edit</span>
-            <h2>Proposal from your draft</h2>
-            <p>{proposal.closure === "closed"
-              ? proposal.operation_resolution === "applied" ? "Accepted into the manuscript." : "This proposal is closed."
-              : proposal.validation === "valid" ? "The complete preserved text is ready for review. Accept it to change the manuscript."
-                : proposal.validation === "invalid" ? "The proposal needs review before it can be accepted."
-                  : "The proposal is waiting for validation before it can be accepted."}</p>
-          </header>
-          {proposal.candidate_blocks?.map((block, index) => block.block_kind === "heading"
-            ? <h3 key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</h3>
-            : <p key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</p>)}
-        </section>] : [])}
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
-      {reads.map(({ locator, proposal }) => (
+      {shownReads.map(({ locator, proposal }) => (
         <ProposalDecisionStatus key={locator.proposalId} proposalId={locator.proposalId}
           proposal={proposal} problem={knownProblems[locator.proposalId]}
           rejectionResult={settledRejections[locator.proposalId]}

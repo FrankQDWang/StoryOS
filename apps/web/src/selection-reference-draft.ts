@@ -227,8 +227,7 @@ export function trackDraftReferences(scope: ProjectScope, chapterId: string, tra
 
 /**
  * Makes each reference to an accepted candidate a Chapter text reference at the Revision after the
- * acceptance. The accepted text replaces the source of its candidate, so the offsets move by the source
- * offset of an inline candidate.
+ * acceptance. The accepted text replaces the text of its block, so the offsets do not change.
  */
 export function acceptDraftCandidates(scope: ProjectScope, proposalId: string, operationIds: readonly string[],
   revisionId: string): void {
@@ -241,8 +240,8 @@ export function acceptDraftCandidates(scope: ProjectScope, proposalId: string, o
     if (!accepted(entry) || entry.reference.kind !== "proposal_candidate_text" || entry.candidate === undefined) {
       return entry;
     }
-    const { blockId, inlineFrom } = entry.candidate;
-    const point = (offset: number) => ({ manuscript_block_id: blockId, offset: (inlineFrom ?? 0) + offset });
+    const { blockId } = entry.candidate;
+    const point = (offset: number) => ({ manuscript_block_id: blockId, offset });
     return { key: entry.key, moved: false, label: { chapter: entry.label.chapter, part: entry.label.part },
       reference: { kind: "chapter_text", chapter_id: entry.reference.chapter_id,
         base_authoritative_revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
@@ -316,12 +315,11 @@ function clipboardEntry(value: unknown): Omit<DraftReference, "key"> | undefined
   } else if (ref.kind === "proposal_candidate_text") {
     if (!text(ref.proposal_id) || !text(ref.operation_id) || !text(ref.revision_id) || !offset(ref.start_offset)
       || !offset(ref.end_offset) || ref.start_offset >= ref.end_offset || typeof candidate !== "object"
-      || candidate === null || !text(candidate.blockId) || !(candidate.inlineFrom === null || offset(candidate.inlineFrom))
-      || label.candidate !== true) return undefined;
+      || candidate === null || !text(candidate.blockId) || label.candidate !== true) return undefined;
     reference = { kind: "proposal_candidate_text", chapter_id: ref.chapter_id, proposal_id: ref.proposal_id,
       operation_id: ref.operation_id, revision_id: ref.revision_id, coordinate_profile: ref.coordinate_profile,
       start_offset: ref.start_offset, end_offset: ref.end_offset };
-    target = { blockId: candidate.blockId, inlineFrom: candidate.inlineFrom };
+    target = { blockId: candidate.blockId };
   } else {
     return undefined;
   }

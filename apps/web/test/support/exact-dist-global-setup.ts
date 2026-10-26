@@ -17,9 +17,6 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       ), prose_request AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Prose request %'
-      ), inline_proposal AS (
-        SELECT owner_user_id, project_id FROM storyos.projects
-        WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Inline Proposal %'
       ), captured_memory AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Captured Memory acceptance %'
@@ -53,15 +50,6 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           ) AS receipts),
           'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
             JOIN prose_request USING (owner_user_id, project_id))
-        ),
-        'inline_proposal', json_build_object(
-          'project_count', (SELECT count(*) FROM inline_proposal),
-          'receipts', (SELECT json_object_agg(command_kind, count) FROM (
-            SELECT command_kind, count(*) FROM storyos.domain_receipts
-            JOIN inline_proposal USING (owner_user_id, project_id) GROUP BY command_kind
-          ) AS receipts),
-          'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
-            JOIN inline_proposal USING (owner_user_id, project_id))
         ),
         'selection_reference', json_build_object(
           'project_count', (SELECT count(*) FROM selection_reference),
@@ -189,7 +177,6 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id <> '${PROJECT_A}'::uuid
             AND project_id NOT IN (SELECT project_id FROM production)
             AND project_id NOT IN (SELECT project_id FROM prose_request)
-            AND project_id NOT IN (SELECT project_id FROM inline_proposal)
             AND project_id NOT IN (SELECT project_id FROM captured_memory)
             AND project_id NOT IN (SELECT project_id FROM run_evidence)
             AND project_id NOT IN (SELECT project_id FROM composer)
@@ -230,14 +217,6 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           updateProjectAssistance: 2, createAgentRun: 5, acceptProposal: 2,
           rejectProposalOperations: 1, takeOverProjectWriter: 1 },
         author_action_count: 16,
-      },
-      inline_proposal: {
-        project_count: 1,
-        receipts: { createProject: 1, createVolume: 1, createChapter: 6,
-          updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
-          applyAuthorEdit: 18, acceptProposal: 3, rejectProposalOperations: 1,
-          takeOverProjectWriter: 1 },
-        author_action_count: 33,
       },
       selection_reference: {
         project_count: 1,

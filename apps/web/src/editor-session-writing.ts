@@ -17,16 +17,14 @@ import type {
   EditorWorkspace,
   InputOrigin,
   PendingEditProjection,
-  ProposalJournalAnchor,
 } from "./editor-types.ts";
 import { flattenChapterBody, type ManuscriptParagraph } from "./manuscript-doc.ts";
 import type { UndoLatestAuthorActionUnavailableReason }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
-import { retryRefusedEdit } from "./refused-edit-retry.ts";
 
 /** One edit that the editor captures. The controller adds the input origin, the undo group, and the time. */
-export type CapturedEdit = Exclude<JournalAuthorEdit, { kind: "draft_retry" }>;
+export type CapturedEdit = JournalAuthorEdit;
 
 /** The text of one Proposal operation that the controller shows, and the Revisions that this text continues. */
 export interface CandidateText {
@@ -74,10 +72,6 @@ export interface EditorSessionWritingController {
   runAfterQuiesce<Result>(condition: "journaled" | "settled", command: (projection: PendingEditProjection) => Promise<Result>)
     : Promise<{ kind: "ran"; result: Result } | { kind: "refused"; reason: QuietRefusal }>;
   reconfirmLegacyBlocks(): Promise<void>;
-  /** Submits a Refused Edit Draft retry and installs its projection. */
-  retryDraft(retry: Omit<Parameters<typeof retryRefusedEdit>[0], "workspace" | "baseUrl" | "fetchImpl">): Promise<void>;
-  /** The inline Proposal anchors that the next frozen Author Edit binds. */
-  setInlineProposalAnchors(anchors: ProposalJournalAnchor[]): void;
   /** True during an IME composition, and while captured input waits outside the Journal. */
   hasIncompleteInput(): boolean;
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
@@ -352,8 +346,7 @@ export function createEditorSessionWritingController({
   /** Journals one captured edit. Returns false when the edit must stay held. */
   const append = async ({ edit: capturedEdit, origin, createdAt }: Captured): Promise<boolean> => {
     if (attention) return false;
-    const hardBoundary = HARD_INPUT.includes(origin) || STRUCTURAL_INPUT.includes(origin)
-      || ("kind" in capturedEdit && capturedEdit.kind === "structured_selection");
+    const hardBoundary = HARD_INPUT.includes(origin) || STRUCTURAL_INPUT.includes(origin);
     const completedAt = Date.parse(createdAt);
     // A new Revision of the same Proposal operation continues the run. The Journal binds it (ADR 0065).
     const targetOf = (edit: CapturedEdit) => candidateKey(edit) ?? "authoritative";
@@ -370,7 +363,7 @@ export function createEditorSessionWritingController({
     try {
       projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
     } catch (error) {
-      // A Draft retry and a structured edit with Proposal Heads wait in memory for the earlier group (ADR 0046).
+      // An edit that cannot continue the pending records waits in memory for the earlier group (ADR 0046).
       if (error instanceof Error && error.message === "Local Edit Journal requires prior group settlement") return false;
       throw error;
     }
@@ -508,10 +501,6 @@ export function createEditorSessionWritingController({
           if (!isCurrent() || settled === undefined) return undefined;
           const proposalId = "proposal_id" in settled ? settled.proposal_id ?? undefined : undefined;
           switch (settled.effect.kind) {
-            case "draft_compensated":
-            case "draft_reconciled":
-              await refresh();
-              return isCurrent() ? { proposalId: undefined } : undefined;
             case "reversal_required":
               if (waited) await refresh();
               return { proposalId };
@@ -560,11 +549,6 @@ export function createEditorSessionWritingController({
       await reconfirmLegacyReplaceSelection(workspace, cryptoImpl);
       await refresh();
     },
-    async retryDraft(retry) {
-      await retryRefusedEdit({ ...retry, workspace, baseUrl, fetchImpl });
-      await refresh();
-    },
-    setInlineProposalAnchors(anchors) { workspace.inlineProposalAnchors = anchors; },
     hasIncompleteInput,
     canAcceptInput(hardBoundary, candidate) {
       if (stopped || failed || attention

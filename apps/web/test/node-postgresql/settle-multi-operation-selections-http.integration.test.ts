@@ -21,7 +21,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { canonicalDraftValue } from "../../src/refused-edit-discard.ts";
+import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
@@ -1093,7 +1093,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
           }
         }
       }
-      const encoded = canonicalDraftValue(facts);
+      const encoded = canonicalValue(facts);
       const digest = createHash("sha256").update(encoded).digest("hex");
       await queryPostgres(`UPDATE storyos.pinned_export_sources SET facts=${replacement},
         facts_sha256='${digest}' WHERE project_id='${prepared.projectId}'::uuid AND export_id='${exportId}'::uuid`);

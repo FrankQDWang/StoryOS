@@ -2,7 +2,6 @@ import {
   createProjectCommandChallenge,
   digestUndoLatestAuthorAction,
   getEditorSession,
-  getRefusedEditDraft,
   undoLatestAuthorAction,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ChallengeAdmissionWait } from "./challenge-admission-wait.ts";
@@ -10,17 +9,10 @@ import { historicalAcknowledgementUnavailable } from "./historical-acknowledgeme
 import type {
   EditorBaseSnapshot,
   UndoLatestAuthorActionRequest,
-  EditorFlowDraftReopened,
   UndoLatestAuthorActionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { EditorReadyState, EditorWorkspace, PendingEditProjection } from "./editor-types.ts";
-
-import { readDiscardJournal, canonicalDraftValue } from "./refused-edit-discard.ts";
-import { readExpansionJournal } from "./refused-edit-expansion.ts";
-import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
-import { freezeDraftUndo, readDraftUndoJournal, observeDraftUndo, reconcileDraftUndo,
-  type DraftUndoRecord } from "./draft-undo-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -79,12 +71,9 @@ export async function undoOwnedLatestAuthorAction(options: {
   isCurrent: () => boolean;
   challengeAdmission: ChallengeAdmissionWait;
   onChallengeWait: () => void;
-}): Promise<UndoLatestAuthorActionResponse | { effect: { kind: "draft_reconciled"; event: EditorFlowDraftReopened } } | undefined> {
-  const retainedUndo = await readDraftUndoJournal(options.workspace);
-  const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
+}): Promise<UndoLatestAuthorActionResponse | undefined> {
   if (options.workspace.partition.disposition !== "current_writer_open"
-    || (options.projection.save_state !== "saved"
-      && options.projection.unsettled_intent_count !== pendingUndo.length)) {
+    || options.projection.save_state !== "saved") {
     throw new Error("Author Undo requires a settled current writer");
   }
   const canonical = await getEditorSession({
@@ -109,96 +98,23 @@ export async function undoOwnedLatestAuthorAction(options: {
   }
   if (!options.isCurrent()) throw new Error("Undo view changed");
   options.workspace.session = canonical;
-  let durable: DraftUndoRecord | undefined = pendingUndo[0]?.record;
-  if (durable !== undefined && durable.journal_partition_id !== options.workspace.partition.journal_partition_id) {
-    throw new Error("Original Undo belongs to another writer");
-  }
-  const frontier = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_author_undo_frontier_sequence
-    ?? canonical.author_undo_frontier_sequence;
-  const expectedHead = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id
-    ?? canonical.base_snapshot.authoritative_head_revision_id;
+  const frontier = canonical.author_undo_frontier_sequence;
+  const expectedHead = canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
   const flight: UndoSubmission = {
     idempotencyKey: uuidV7(options.cryptoImpl),
     correlationId: uuidV7(options.cryptoImpl),
   };
-  if (durable === undefined) {
-    let closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
-      observation?.kind === "settled_closed" ? [observation.event]
-        : observation?.kind === "settled" && observation.response.effect.kind === "draft_closure_changed"
-          ? [observation.response.effect.event] : []).concat((await readExpansionJournal(options.workspace)).flatMap(({ observation }) =>
-            observation?.response.effect.kind === "proposal_created_from_draft" ? [observation.response.effect.event] : []))
-      .find((event) => event.author_action_sequence === frontier);
-    if (closed === undefined) {
-      const snapshot = await validateJournalSnapshot(options.workspace, await readJournalSnapshot(options.workspace));
-      const group = snapshot.groups.find(({ settlement }) =>
-        (settlement.kind === "applied_receipt_settled" || settlement.kind === "zero_authority_receipt_settled"
-          && settlement.effect.kind === "proposal_revised")
-        && settlement.receipt.author_action_sequence === frontier
-        && settlement.source_draft_disposition?.kind === "closed_superseded");
-      const settled = group?.settlement;
-      if (settled?.kind === "applied_receipt_settled" || settled?.kind === "zero_authority_receipt_settled") {
-        const source = settled.source_draft_disposition;
-        if (source?.kind === "closed_superseded") {
-          const current = await getRefusedEditDraft({ baseUrl: options.baseUrl, projectId: canonical.project_scope.project_id,
-            draftId: source.source_draft_id, fetchImpl: options.fetchImpl });
-          closed = current.draft.closure_event ?? undefined;
-          if (canonicalDraftValue(current.project_scope) !== canonicalDraftValue(canonical.project_scope)
-            || current.draft.retention_state !== "retained" || current.draft.closure !== "closed"
-            || current.draft.draft_revision_id !== source.source_draft_revision_id
-            || current.draft.payload_digest !== source.source_draft_payload_digest
-            || closed?.event_id !== source.closure_event_ref || closed.author_action_sequence !== frontier
-            || closed.close_reason !== "superseded" || closed.source.receipt_id !== settled.receipt.receipt_id
-            || closed.source.idempotency_key !== group!.idempotency_key
-            || canonicalDraftValue(closed.source.command_digest) !== canonicalDraftValue(group!.frozen_request_digest)) {
-            throw new Error("Undo source changed");
-          }
-        }
-      }
-    }
-    if (closed !== undefined) {
-      const current = await getRefusedEditDraft({ baseUrl: options.baseUrl, projectId: canonical.project_scope.project_id,
-        draftId: closed.draft_id, fetchImpl: options.fetchImpl });
-      if (current.draft.closure !== "closed" || current.draft.retention_state !== "retained"
-        || canonicalDraftValue(current.draft.closure_event) !== canonicalDraftValue(closed)) throw new Error("Undo source changed");
-      durable = await freezeDraftUndo(options.workspace, closed,
-        undoRequest(options.workspace, frontier, expectedHead, flight.correlationId), flight.idempotencyKey, options.isCurrent);
-      await readDraftUndoJournal(options.workspace);
-    }
-  }
-  if (durable !== undefined) {
-    flight.idempotencyKey = durable.group.idempotency_key;
-    flight.correlationId = durable.group.frozen_request_body.undo_latest_author_action_input.correlation_id;
-  }
-  const fetchImpl = options.fetchImpl;
-  const guarded = { ...options, fetchImpl: ((input, init) => {
-    if (!options.isCurrent()) throw new Error("Undo view changed");
-    return fetchImpl(input, init);
-  }) as typeof fetch };
   try {
-    const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.group.frozen_request_body);
-    if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled }, options.isCurrent);
-    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
-      || settled.effect.kind === "reversal_required") {
+    const settled = await submitUndo(options, frontier, expectedHead, flight);
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
   } catch (error) {
-    if (!options.isCurrent()) throw error;
-    if (durable !== undefined) {
-      const current = await getRefusedEditDraft({ baseUrl: options.baseUrl,
-        projectId: durable.project_scope.project_id, draftId: durable.source_close.draft_id, fetchImpl: options.fetchImpl });
-      const event = await reconcileDraftUndo(options.workspace, current.draft, options.isCurrent);
-      if (event !== undefined) { await refreshSessionAfterCompensation(options);
-        return { effect: { kind: "draft_reconciled", event } }; }
-      throw error;
-    }
-    if (historicalAcknowledgementUnavailable(error)) {
-      throw error;
-    }
+    if (!options.isCurrent() || historicalAcknowledgementUnavailable(error)) throw error;
     const settled = await submitUndo(options, frontier, expectedHead, flight);
-    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
-      || settled.effect.kind === "reversal_required") {
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
@@ -236,9 +152,8 @@ async function submitUndo(
   frontier: string,
   expectedHead: string,
   flight: UndoSubmission,
-  frozen?: UndoLatestAuthorActionRequest,
 ): Promise<UndoLatestAuthorActionResponse> {
-  const request = frozen ?? undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
+  const request = undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
   if (flight.nonce === undefined) {
     const challenge = await options.challengeAdmission.retry(async () => createProjectCommandChallenge({
       baseUrl: options.baseUrl,

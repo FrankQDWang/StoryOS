@@ -41,7 +41,7 @@ One exhaustive StoryOS Core command-and-event change to a Proposal State Axis un
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
-The durable, versioned, block-relative address of an InlineEditProposal Operation. It binds a stable Manuscript Block, an exact base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. A multi-block Operation has ordered Anchors, and editor positions are only projections. Each Anchor belongs to the Anchor set of the Revision that wrote it ([ADR 0063](../adr/0063-bind-each-proposal-anchor-set-to-a-proposal-revision.md)). A Replan or a Replacing Acceptance finds the range on the Chapter Head only with an exact proof ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+The durable, versioned, block-relative address of an InlineEditProposal Operation, which Release 1 removes ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)). It binds a stable Manuscript Block, an exact base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. A multi-block Operation has ordered Anchors, and editor positions are only projections. Each Anchor belongs to the Anchor set of the Revision that wrote it ([ADR 0063](../adr/0063-bind-each-proposal-anchor-set-to-a-proposal-revision.md)). A Replan or a Replacing Acceptance finds the range on the Chapter Head only with an exact proof ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Absolute editor position, DOM range, Decoration identity, visible-text match
 
 **Proposal Boundary Ownership**:
@@ -57,7 +57,7 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft Core Artifact that the refused `ApplyAuthorEdit` Core Transition creates when one author edit crosses Authoritative State and Proposal ownership. It keeps the complete attempted payload, selection snapshot, and edit intent for a narrowed retry, Proposal expansion, copy, or discard. A retry replacement or an expansion closes the exact source as `superseded`. No effect, or a conflict on another source, leaves it open, and a conflict on the source binding keeps its observed closure. The Web editor sends no crossing edit (ADR 0072), so only a Draft retry or an earlier Local Edit Journal record makes a new Draft.
+A non-authoritative Draft Core Artifact that the refused `ApplyAuthorEdit` Core Transition creates when one author edit crosses Authoritative State and Proposal ownership. It keeps the complete attempted payload, selection snapshot, and edit intent for a narrowed retry, Proposal expansion, copy, or discard. A retry replacement or an expansion closes the exact source as `superseded`. No effect, or a conflict on another source, leaves it open, and a conflict on the source binding keeps its observed closure. Release 1 removes it, and the Web shows no such Draft and sends no Draft command ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
