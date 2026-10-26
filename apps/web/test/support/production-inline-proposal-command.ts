@@ -319,34 +319,10 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
     assert.equal(editRequest?.proposal_target?.proposal_id, second.proposalId);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-    // A selection from the Chapter text into the candidate sends only a Chapter edit. The Server refuses each
-    // Chapter edit outside the edges of a pending inline Proposal, so the edit conflicts (ADR 0072, #1273).
-    await editor.focus();
-    await secondCandidate.evaluate((element) => {
-      const range = document.createRange();
-      range.setStart(element.parentElement!.firstChild!, 6);
-      range.setEnd(element.firstChild!, 5);
-      const selection = window.getSelection()!;
-      selection.removeAllRanges(); selection.addRange(range);
-      document.dispatchEvent(new Event("selectionchange"));
-    });
-    assert.equal(await secondCandidate.evaluate(() => window.getSelection()?.toString()), "the nar f");
-    await page.keyboard.insertText("a ");
-    await expect.poll(() => (editResponse as { effect?: { kind?: string; reason?: string } } | undefined)?.effect)
-      .toMatchObject({ kind: "conflicted", reason: "proposal_head_present" }).catch((error) => {
-        throw new Error(`${error}\nChapter request and response: ${JSON.stringify({ editRequest, editResponse })}`);
-      });
-    assert.equal(editRequest?.proposal_target, undefined);
-    assert.deepEqual(editRequest?.author_edit_units.flatMap((unit) => unit.normalized_primitives)
-      .map((primitive) => primitive.kind), ["replace_block_selection"]);
-    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
-    assert.equal(await proposalText(), "nar first owner");
-    assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
-      WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
     await page.reload();
     await expect(secondCandidate).toHaveText("nar first owner");
     await expect(page.locator("[data-refused-edit-draft]")).toHaveCount(0);
-    await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-first-owner-edits.png") });
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-first-owner-edit.png") });
     await page.locator(`[data-proposal-reject="${second.proposalId}"]`).click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId: second.proposalId })).proposal.operation_resolution)
       .toBe("rejected");
@@ -511,6 +487,42 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect(page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`)).toHaveCount(0);
       assert.equal(refusedPosts, 0, "reload must not submit a stale writer decision");
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-writer-refused-reloaded.png") });
+      // A selection from the Chapter text into an inline candidate sends only a Chapter edit. The Server
+      // refuses each Chapter edit outside the edges of a pending inline Proposal, so the edit conflicts
+      // (ADR 0072, #1273). The conflict leaves the Chapter in need of attention, so this step is last.
+      let chapterFirstRequest: ApplyAuthorEditRequest | undefined;
+      let chapterFirstResponse: unknown;
+      await observer.route((url) => url.pathname.endsWith("/author-edits"), async (route) => {
+        chapterFirstRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+        const response = await route.fetch();
+        chapterFirstResponse = await response.json();
+        await route.fulfill({ response });
+      });
+      const observerCandidate = observer.locator(`span[data-inline-proposal-id="${writerProposal.proposalId}"]`);
+      await expect(observerCandidate).toHaveText("narrator tone");
+      await observer.locator('[data-manuscript-editor][contenteditable="true"]').focus();
+      await observerCandidate.evaluate((element) => {
+        window.getSelection()?.setBaseAndExtent(element.parentElement!.firstChild!, 6, element.firstChild!, 5);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      assert.equal(await observerCandidate.evaluate(() => window.getSelection()?.toString()), "the narra");
+      await observer.keyboard.insertText("a ");
+      await expect.poll(() => (chapterFirstResponse as { effect?: { kind?: string; reason?: string } } | undefined)?.effect)
+        .toMatchObject({ kind: "conflicted", reason: "proposal_head_present" }).catch((error) => {
+          throw new Error(`${error}\nChapter request and response: ${JSON.stringify({ chapterFirstRequest, chapterFirstResponse })}`);
+        });
+      assert.equal(chapterFirstRequest?.proposal_target, undefined);
+      assert.deepEqual(chapterFirstRequest?.author_edit_units.flatMap((unit) => unit.normalized_primitives)
+        .map((primitive) => primitive.kind), ["replace_block_selection"]);
+      assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, writerBase.chapter);
+      assert.deepEqual((await getProposal({ ...options, proposalId: writerProposal.proposalId })).proposal,
+        writerProposal.proposal);
+      assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
+        WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
+      await observer.reload();
+      await observer.locator('[data-save-state="needs_attention"][data-unsettled-intent-count="1"]').waitFor();
+      await expect(observer.locator("[data-refused-edit-draft]")).toHaveCount(0);
+      await observer.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-chapter-first-conflict.png") });
     } finally { await observer.close(); }
     assert.deepEqual(errors, []);
   } catch (error) {
