@@ -237,7 +237,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
           applyAuthorEdit: 18, acceptProposal: 3, rejectProposalOperations: 1,
           takeOverProjectWriter: 1 },
-        author_action_count: 34,
+        author_action_count: 33,
       },
       selection_reference: {
         project_count: 1,
