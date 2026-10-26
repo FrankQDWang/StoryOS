@@ -14,7 +14,9 @@ The author can select across the Chapter text and a pending Proposal candidate t
 
 - **First owner.** The owner of a selected character is the Chapter text or one Proposal candidate. The first owner of a selection is the owner of its first selected character in document order. The direction of the selection (anchor and head) does not change the first owner.
 - **First owner part.** The first owner part is the contiguous part of the selection from its start to the first text of another owner. For a selection over Chapter block A, a candidate P, and Chapter block B, the first owner part is the selected part of A only.
-- **Edit.** Typing, paste, cut, delete, drop, Enter, and a confirmed IME composition on a selection that crosses owners replace only the first owner part. The other part does not change, and the editor removes it from the selection. After the edit, the selection is a caret in the first owner.
+- **Edit.** Typing, paste, cut, delete, Enter, and a confirmed IME composition on a selection that crosses owners replace only the first owner part. The other part does not change, and the editor removes it from the selection. After the edit, the selection is a caret at the end of the replacement, in the first owner.
+- **Drop.** A drop inserts the dropped text at the drop point and replaces no selected text. Thus it changes only the owner of the drop point. When the drop point is not in text, the drop replaces the selection, and the rule above applies.
+- **Target block.** The editor refuses a Chapter edit that removes the target block of a pending block Proposal, with or without a crossing. A first owner part that joins Chapter blocks can remove such a block. Then the input makes no edit.
 - **Two candidates.** The same rule applies to a selection that crosses two candidates.
 - **Cut.** A cut copies only the first owner part, because only that part is removed.
 - **IME.** A composition on a crossing selection shows in the browser until it ends. At the end, the editor restores the document from the start of the composition and replaces the first owner part with the confirmed text. A cancelled composition makes no edit.

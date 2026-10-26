@@ -123,6 +123,18 @@ function manuscriptContentWithCandidates(
   return Fragment.fromArray(nodes);
 }
 
+/** The position at `offset` in the Chapter block at `index`. Candidate blocks do not count. */
+function manuscriptPosition(doc: ProseMirrorNode, index: number, offset: number): number {
+  let position = doc.content.size;
+  let seen = 0;
+  doc.forEach((node, start) => {
+    if (node.type.name === "blockProposal") return;
+    if (seen === index) position = start + 1 + Math.min(offset, node.content.size);
+    seen += 1;
+  });
+  return position;
+}
+
 function replacesCrossingSelection(state: EditorState, transaction: Transaction): boolean {
   const [step] = transaction.steps;
   const { from, to, empty } = state.selection;
@@ -385,9 +397,18 @@ function dispatchPlainTextReplacement(
     || $to.parent.type.name !== "paragraph" && $to.parent.type.name !== "heading") {
     return;
   }
+  const lines = text.split(/\r\n|\n|\r/);
+  if ($from.sameParent($to) && lines.length === 1) {
+    // One line in one block keeps the inline candidates of the block, and the caret stays at its end.
+    const transaction = view.state.tr.insertText(text, from, to);
+    transaction.setMeta(STORYOS_ORIGIN, origin);
+    view.dispatch(transaction);
+    return;
+  }
+  const startIndex = manuscriptIndex(view.state.doc, $from.index(0));
   const next = paragraphsFromPlainTextReplacement(
     previous,
-    manuscriptIndex(view.state.doc, $from.index(0)),
+    startIndex,
     $from.parentOffset,
     manuscriptIndex(view.state.doc, $to.index(0)),
     $to.parentOffset,
@@ -397,6 +418,10 @@ function dispatchPlainTextReplacement(
   if (next === undefined) return;
   const content = manuscriptContentWithCandidates(view.state.doc, next);
   const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, content);
+  // The caret stays at the end of the replacement, in the first owner (ADR 0072).
+  const endOffset = lines.length === 1 ? $from.parentOffset + text.length : lines.at(-1)!.length;
+  transaction.setSelection(TextSelection.create(transaction.doc,
+    manuscriptPosition(transaction.doc, startIndex + lines.length - 1, endOffset)));
   transaction.setMeta(STORYOS_ORIGIN, origin);
   view.dispatch(transaction);
 }

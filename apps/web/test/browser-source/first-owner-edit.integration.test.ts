@@ -78,6 +78,16 @@ async function edit(content: JSONContent, anchor: number, head: number, input: (
 }
 
 const type = (value: string) => () => applyTrustedInput({ operation: "insert_text", text: value });
+const paste = (value: string) => async () => {
+  await updateClipboardPermission({ action: "grant" });
+  await navigator.clipboard.writeText(value);
+  await applyTrustedInput({ operation: "paste" });
+};
+const cut = async () => {
+  await updateClipboardPermission({ action: "grant" });
+  await navigator.clipboard.writeText("");
+  await applyTrustedInput({ operation: "cut" });
+};
 
 it.each([
   { name: "typing from Chapter text into a candidate changes only the Chapter text", anchor: 3, head: 12,
@@ -88,11 +98,7 @@ it.each([
     anchor: 21, head: 3, input: type("X"), chapter: ["HeX", "World"], candidates: ["Candidate"], caret: 4,
     captured: "chapter" },
   { name: "paste from a candidate into Chapter text changes only the candidate", anchor: 12, head: 21,
-    input: async () => {
-      await updateClipboardPermission({ action: "grant" });
-      await navigator.clipboard.writeText("Pasted");
-      await applyTrustedInput({ operation: "paste" });
-    }, chapter: ["Hello", "World"], candidates: ["CandPasted"], caret: 18, captured: "candidate" },
+    input: paste("Pasted"), chapter: ["Hello", "World"], candidates: ["CandPasted"], caret: 18, captured: "candidate" },
   { name: "Backspace from Chapter text into a candidate deletes only the Chapter text", anchor: 3, head: 12,
     input: () => applyTrustedInput({ operation: "backspace" }), chapter: ["He", "World"],
     candidates: ["Candidate"], caret: 3, captured: "chapter" },
@@ -109,12 +115,16 @@ it.each([
 });
 
 it("cut from Chapter text into a candidate removes and copies only the Chapter text", async () => {
-  await updateClipboardPermission({ action: "grant" });
-  await navigator.clipboard.writeText("");
-  const { selection, ...changed } = await edit(BLOCK, 3, 12, () => applyTrustedInput({ operation: "cut" }));
-  expect({ changed, empty: selection.anchor === selection.head }).toEqual({ changed: { chapter: ["He", "World"],
-    candidates: ["Candidate"], captured: ["chapter replace_block_selection"] }, empty: true });
+  expect(await edit(BLOCK, 3, 12, cut)).toEqual({ chapter: ["He", "World"], candidates: ["Candidate"],
+    selection: { anchor: 3, head: 3 }, captured: ["chapter replace_block_selection"] });
   expect(await navigator.clipboard.readText()).toBe("llo");
+});
+
+it("a multi-line paste from Chapter text into a candidate keeps the caret in the Chapter text", async () => {
+  // The candidate follows its target block, so the new block B comes after it. The caret is at the end of B.
+  const { captured, ...changed } = await edit(BLOCK, 3, 12, paste("A\nB"));
+  expect({ changed, captured: captured.length }).toEqual({ changed: { chapter: ["HeA", "B", "World"],
+    candidates: ["Candidate"], selection: { anchor: 18, head: 18 } }, captured: 1 });
 });
 
 it.each([
@@ -126,6 +136,14 @@ it.each([
   candidates, caret, captured }) => {
   expect(await edit(INLINE, anchor, head, type("X"))).toEqual({ chapter, candidates,
     selection: { anchor: caret, head: caret }, captured: [captured] });
+});
+
+it.each([
+  { name: "paste", input: paste("X"), chapter: ["GuXvoice here"], caret: 4 },
+  { name: "cut", input: cut, chapter: ["Guvoice here"], caret: 3 },
+])("$name from Chapter text into an inline candidate keeps the candidate", async ({ input, chapter, caret }) => {
+  expect(await edit(INLINE, 3, 10, input)).toEqual({ chapter, candidates: ["tone"],
+    selection: { anchor: caret, head: caret }, captured: ["chapter replace_block_selection"] });
 });
 
 it("typing over two candidates changes only the first candidate", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 
 import { firstOwnerRange } from "./first-owner-range.ts";
 
@@ -104,7 +105,7 @@ export function ManuscriptEditor({
   const composingRef = useRef(false);
   const focusedProposalRef = useRef<string | undefined>(undefined);
   // The first owner part of a composition over a crossing selection, and the document at its start.
-  const crossingCompositionRef = useRef<{ from: number; to: number } | undefined>(undefined);
+  const crossingCompositionRef = useRef<{ from: number; to: number; anchor: number; head: number } | undefined>(undefined);
   const crossingCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionBlockedRef = useRef(false);
@@ -345,10 +346,10 @@ export function ManuscriptEditor({
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
       composingRef.current = true;
-      const { from, to } = editor.state.selection;
+      const { from, to, anchor, head } = editor.state.selection;
       const range = firstOwnerRange(editor.state.doc, from, to);
       const crossing = range.from !== from || range.to !== to;
-      crossingCompositionRef.current = crossing ? range : undefined;
+      crossingCompositionRef.current = crossing ? { ...range, anchor, head } : undefined;
       crossingCompositionStartRef.current = crossing ? editor.state.doc : null;
       const parent = editor.state.selection.$from.parent;
       const candidateSelected = !crossing
@@ -372,10 +373,14 @@ export function ManuscriptEditor({
       const crossingStart = crossingCompositionStartRef.current;
       crossingCompositionStartRef.current = null;
       if (crossing !== undefined && crossingStart !== null) {
-        // The confirmed text replaces only the first owner part, as one ordinary edit (ADR 0072).
-        editor.view.dispatch(editor.state.tr
-          .replaceWith(0, editor.state.doc.content.size, crossingStart.content).setMeta("storyos.hydrate", true));
-        if (event.data !== "") editor.view.dispatch(editor.state.tr.insertText(event.data, crossing.from, crossing.to)
+        // The confirmed text replaces only the first owner part, as one ordinary edit, and the caret stays
+        // at its end (ADR 0072). A cancelled composition restores the start selection.
+        const restored = editor.state.tr.replaceWith(0, editor.state.doc.content.size, crossingStart.content);
+        editor.view.dispatch(restored.setSelection(TextSelection.create(restored.doc, crossing.anchor, crossing.head))
+          .setMeta("storyos.hydrate", true));
+        if (event.data === "") return;
+        const confirmed = editor.state.tr.insertText(event.data, crossing.from, crossing.to);
+        editor.view.dispatch(confirmed.setSelection(TextSelection.create(confirmed.doc, crossing.from + event.data.length))
           .setMeta("storyos.origin", "composition_confirmation"));
         return;
       }

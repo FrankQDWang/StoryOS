@@ -182,11 +182,24 @@ it("freezes one Tiptap IME intent over a crossing selection as one Chapter edit 
       window.getSelection()!.setBaseAndExtent(first, 1, last, 2);
       document.dispatchEvent(new Event("selectionchange"));
     };
+    /** The text from the start of the Chapter paragraph to a collapsed caret in it. */
+    const caret = () => {
+      const selection = window.getSelection()!;
+      const chapter = surface.querySelector("p")!;
+      if (!selection.isCollapsed || !chapter.contains(selection.anchorNode)) return undefined;
+      const range = document.createRange();
+      range.setStart(chapter, 0);
+      range.setEnd(selection.anchorNode!, selection.anchorOffset);
+      return range.toString();
+    };
     select();
+    const selected = window.getSelection()!.toString();
     await applyImeComposition({ text: "provisional", replacementStart: 1, replacementEnd: 8, selectionStart: 11, selectionEnd: 11 });
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
     await applyImeComposition({ operation: "cancel" });
+    // A cancelled composition restores the start selection.
+    await expect.poll(() => window.getSelection()!.toString()).toBe(selected);
     await expect.poll(() => writing.hasIncompleteInput()).toBe(false);
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
@@ -203,6 +216,8 @@ it("freezes one Tiptap IME intent over a crossing selection as one Chapter edit 
         manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id }], target: undefined });
     expect(surface.querySelector("p")!.textContent).toBe("BComplete 中文");
     expect(surface.querySelector(".block-proposal-text")!.textContent).toBe("Old");
+    // The caret stays at the end of the confirmed text, in the first owner.
+    await expect.poll(caret).toBe("BComplete 中文");
     expect(failure).toBeUndefined();
   } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
