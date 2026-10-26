@@ -207,7 +207,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             OPEN_BLOCK,
             WITHDRAW,
             PRODUCTION_HOST,
-            "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
+            PHYSICAL_SCRIPT,
             "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
             CANDIDATE_EDIT,
             INLINE_PRODUCTION,

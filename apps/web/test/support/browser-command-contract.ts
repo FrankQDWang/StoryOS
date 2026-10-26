@@ -39,7 +39,7 @@ export type AuthorEditSubmissionHoldResult = Readonly<{
   kind: "author_edit_submission_hold_updated";
 }>;
 export type ProductionHostRequest = Readonly<{
-  scenario: "open_edit_reload_takeover" | "prose_request" | "refused_edit" | "restored_refused_edit"
+  scenario: "open_edit_reload_takeover" | "prose_request" | "first_owner_edit"
     | "conflicted_proposal" | "inline_proposal" | "run_evidence" | "captured_memory" | "multi_proposal" | "composer_controls"
     | "selection_reference";
 }>;
@@ -224,7 +224,7 @@ export function parseAuthorEditSubmissionHoldResult(
 export function parseProductionHostRequest(value: unknown): ProductionHostRequest {
   const request = exactObject(value, ["scenario"], "production host request");
   const scenario = property(request, "scenario");
-  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request" && scenario !== "refused_edit" && scenario !== "restored_refused_edit" && scenario !== "conflicted_proposal" && scenario !== "inline_proposal" && scenario !== "run_evidence" && scenario !== "captured_memory" && scenario !== "multi_proposal" && scenario !== "composer_controls" && scenario !== "selection_reference") {
+  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request" && scenario !== "first_owner_edit" && scenario !== "conflicted_proposal" && scenario !== "inline_proposal" && scenario !== "run_evidence" && scenario !== "captured_memory" && scenario !== "multi_proposal" && scenario !== "composer_controls" && scenario !== "selection_reference") {
     throw new TypeError("production host scenario is unsupported");
   }
   return { scenario };

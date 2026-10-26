@@ -1,8 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 
-import { captureStructuredSelection, type StructuredSelectionEdit } from "./structured-edit-capture.ts";
+import { firstOwnerRange } from "./first-owner-range.ts";
 
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
 import {
@@ -103,8 +104,9 @@ export function ManuscriptEditor({
   const capturedInputRef = useRef(0);
   const composingRef = useRef(false);
   const focusedProposalRef = useRef<string | undefined>(undefined);
-  const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
-  const mixedCompositionStartRef = useRef<ProseMirrorNode | null>(null);
+  // The first owner part of a composition over a crossing selection, and the document at its start.
+  const crossingCompositionRef = useRef<{ from: number; to: number; anchor: number; head: number } | undefined>(undefined);
+  const crossingCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionBlockedRef = useRef(false);
   const candidateCompositionDirtyRef = useRef(false);
@@ -136,7 +138,7 @@ export function ManuscriptEditor({
         () => onAuthorUndoRef.current(),
         (hardBoundary, candidate) => !candidateCompositionBlockedRef.current
           && writingRef.current?.canAcceptInput(hardBoundary, candidate) === true,
-        () => composingRef.current && mixedCompositionRef.current !== undefined),
+        () => composingRef.current && crossingCompositionRef.current !== undefined),
     ],
     content: manuscriptBlocksJson(blocks),
     editable,
@@ -177,19 +179,6 @@ export function ManuscriptEditor({
       }
       // New input changes the Author Undo Frontier, so an Undo in progress can only conflict.
       writingRef.current?.abandonUndo();
-      const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
-      if (mixed !== undefined) {
-        if (current.view.composing || composingRef.current) {
-          mixedCompositionRef.current ??= mixed;
-          return;
-        }
-        const primitive = mixed.authorEditUnit.normalized_primitives[0];
-        const text = primitive?.kind === "replace_structured_selection"
-          ? primitive.replacement.map((block) => block.text).join("\n") : "";
-        capturedInputRef.current += 1;
-        writingRef.current?.capture(mixed, originFromTransaction(transaction, { from: 0, to: 1, text }));
-        return;
-      }
       const candidate = capturedCandidateEditFromTransaction(transaction);
       if (candidate !== undefined) {
         const { proposal, priorText, from, to, text, resultingBody } = candidate;
@@ -357,11 +346,14 @@ export function ManuscriptEditor({
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
       composingRef.current = true;
-      mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
-      if (mixedCompositionRef.current !== undefined && !writing.canAcceptInput(true)) mixedCompositionRef.current = undefined;
-      mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
+      const { from, to, anchor, head } = editor.state.selection;
+      const range = firstOwnerRange(editor.state.doc, from, to);
+      const crossing = range.from !== from || range.to !== to;
+      crossingCompositionRef.current = crossing ? { ...range, anchor, head } : undefined;
+      crossingCompositionStartRef.current = crossing ? editor.state.doc : null;
       const parent = editor.state.selection.$from.parent;
-      const candidateSelected = parent.type.name === "blockProposal" || parent.type.name === "inlineProposal";
+      const candidateSelected = !crossing
+        && (parent.type.name === "blockProposal" || parent.type.name === "inlineProposal");
       candidateCompositionBlockedRef.current = candidateSelected && !writing.canAcceptInput(true,
         { proposalId: String(parent.attrs.proposalId), operationId: String(parent.attrs.operationId) });
       candidateCompositionStartRef.current = candidateSelected
@@ -376,20 +368,20 @@ export function ManuscriptEditor({
       candidateCompositionStartRef.current = null;
       candidateCompositionBlockedRef.current = false;
       candidateCompositionDirtyRef.current = false;
-      const mixed = mixedCompositionRef.current;
-      mixedCompositionRef.current = undefined;
-      const mixedStart = mixedCompositionStartRef.current;
-      mixedCompositionStartRef.current = null;
-      if (mixed !== undefined) {
-        if (mixedStart !== null) editor.view.dispatch(editor.state.tr
-          .replaceWith(0, editor.state.doc.content.size, mixedStart.content).setMeta("storyos.hydrate", true));
-        if (event.data !== "") {
-          const primitive = mixed.authorEditUnit.normalized_primitives[0];
-          if (primitive?.kind === "replace_structured_selection") {
-            primitive.replacement = [{ block_kind: primitive.replacement[0]!.block_kind, text: event.data }];
-            writing.capture(mixed, "composition_confirmation");
-          }
-        }
+      const crossing = crossingCompositionRef.current;
+      crossingCompositionRef.current = undefined;
+      const crossingStart = crossingCompositionStartRef.current;
+      crossingCompositionStartRef.current = null;
+      if (crossing !== undefined && crossingStart !== null) {
+        // The confirmed text replaces only the first owner part, as one ordinary edit, and the caret stays
+        // at its end (ADR 0072). A cancelled composition restores the start selection.
+        const restored = editor.state.tr.replaceWith(0, editor.state.doc.content.size, crossingStart.content);
+        editor.view.dispatch(restored.setSelection(TextSelection.create(restored.doc, crossing.anchor, crossing.head))
+          .setMeta("storyos.hydrate", true));
+        if (event.data === "") return;
+        const confirmed = editor.state.tr.insertText(event.data, crossing.from, crossing.to);
+        editor.view.dispatch(confirmed.setSelection(TextSelection.create(confirmed.doc, crossing.from + event.data.length))
+          .setMeta("storyos.origin", "composition_confirmation"));
         return;
       }
       if (candidateStart !== null) {

@@ -15,8 +15,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { verifyConflictedProposalRecovery } from "./production-conflict-recovery-command.ts";
-import { verifyRestoredProductionDiscard } from "./production-discard-command.ts";
-import { verifyProductionRefusedEdit } from "./production-refused-edit-command.ts";
+import { verifyProductionFirstOwnerEdit } from "./production-first-owner-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -39,10 +38,9 @@ function uuidV7(): string {
 }
 
 export async function verifyProductionProseRequest(context: BrowserContext, scenario = "prose_request"): Promise<void> {
-  if (scenario === "restored_refused_edit") { await verifyRestoredProductionDiscard(context); return; }
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "the packaged Server origin is required");
-  let owned = scenario === "refused_edit" ? await startStoryOSServer({ repositoryRoot,
+  let owned = scenario === "first_owner_edit" ? await startStoryOSServer({ repositoryRoot,
     serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server"), sessions: { "session-a": USER } }) : undefined;
   const origin = owned?.baseUrl ?? new URL(configured).origin;
   const page = await context.newPage();
@@ -54,7 +52,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
   try {
     assert.equal((await page.goto(origin))?.status(), 200);
     await page.locator('#app[data-boot-state="protected-ready"]').waitFor();
-    await page.locator('input[name="title"]').fill(`${scenario === "refused_edit" ? "Refused edit" : "Prose request"} ${uuidV7()}`);
+    await page.locator('input[name="title"]').fill(`${scenario === "first_owner_edit" ? "First owner edit" : "Prose request"} ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
     await page.locator("[data-project-id]").waitFor();
@@ -250,8 +248,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       assert.deepEqual(errors, []);
       return;
     }
-    if (scenario === "refused_edit") {
-      await verifyProductionRefusedEdit({ page, context, origin, projectId, chapter: before, proposal: firstProposal,
+    if (scenario === "first_owner_edit") {
+      await verifyProductionFirstOwnerEdit({ page, projectId, chapter: before, proposal: firstProposal,
         restart: async () => { await stopStoryOSServer(owned!.server);
           owned = await startStoryOSServer({ repositoryRoot, bind: new URL(origin).host,
             serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server"), sessions: { "session-a": USER } }); } });

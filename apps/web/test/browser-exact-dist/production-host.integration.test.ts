@@ -12,8 +12,8 @@ it("recovers one prose request through the production Web, Server, database, and
     .resolves.toEqual({ kind: "production_host_verified" });
 });
 
-it("preserves and copies a complete mixed edit through response loss, reload and Server restart", async () => {
-  await expect(verifyProductionHost({ scenario: "refused_edit" })).resolves.toEqual({ kind: "production_host_verified" });
+it("replaces only the first owner part of a crossing edit through response loss, reload and Server restart", async () => {
+  await expect(verifyProductionHost({ scenario: "first_owner_edit" })).resolves.toEqual({ kind: "production_host_verified" });
 });
 
 it("accepts a Proposal on an earlier base through reload and an explicit retry", async () => {

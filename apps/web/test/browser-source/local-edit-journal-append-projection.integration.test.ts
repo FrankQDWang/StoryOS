@@ -152,7 +152,7 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
   } finally { await test.close(); }
 });
 
-it("freezes one complete mixed Tiptap IME intent only after confirmation and ignores cancellation", async () => {
+it("freezes one Tiptap IME intent over a crossing selection as one Chapter edit after confirmation and ignores cancellation", async () => {
   const test = await openJournalAppendTestWorkspace();
   const host = document.createElement("div");
   document.body.append(host);
@@ -182,11 +182,24 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
       window.getSelection()!.setBaseAndExtent(first, 1, last, 2);
       document.dispatchEvent(new Event("selectionchange"));
     };
+    /** The text from the start of the Chapter paragraph to a collapsed caret in it. */
+    const caret = () => {
+      const selection = window.getSelection()!;
+      const chapter = surface.querySelector("p")!;
+      if (!selection.isCollapsed || !chapter.contains(selection.anchorNode)) return undefined;
+      const range = document.createRange();
+      range.setStart(chapter, 0);
+      range.setEnd(selection.anchorNode!, selection.anchorOffset);
+      return range.toString();
+    };
     select();
+    const selected = window.getSelection()!.toString();
     await applyImeComposition({ text: "provisional", replacementStart: 1, replacementEnd: 8, selectionStart: 11, selectionEnd: 11 });
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
     await applyImeComposition({ operation: "cancel" });
+    // A cancelled composition restores the start selection.
+    await expect.poll(() => window.getSelection()!.toString()).toBe(selected);
     await expect.poll(() => writing.hasIncompleteInput()).toBe(false);
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
@@ -197,18 +210,14 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
     await expect.poll(async () => (await readJournalSnapshot(test.workspace)).records.length).toBe(1);
     const [record] = (await readJournalSnapshot(test.workspace)).records;
     expect(record!.input_origin).toBe("composition_confirmation");
-    expect(record!.author_edit_unit).toEqual({ normalized_primitives: [{ kind: "replace_structured_selection",
-      replacement: [{ block_kind: "paragraph", text: "Complete 中文" }] }],
-      selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 1, to: 2,
-        ordered_selection: { anchor: { source_index: 0, source_offset: 1 }, head: { source_index: 1, source_offset: 2 }, sources: [
-          { owner: { kind: "manuscript", manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
-            coordinate_profile: "prosemirror-token-utf16.v1", from: 1, to: 4, block_kind: "paragraph", source_text: "Base" },
-          { owner: { kind: "proposal", proposal_id: id, operation_id: id, revision_id: id,
-            manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 2, block_kind: "paragraph", source_text: "Old" },
-        ] } } });
-    expect(surface.querySelector("p")!.textContent).toBe("Base");
+    // The composition replaces only the Chapter part, the part of the first owner (ADR 0072).
+    expect({ unit: record!.author_edit_unit?.normalized_primitives, target: record!.proposal_target }).toEqual({
+      unit: [{ kind: "replace_block_selection", text: "Complete 中文", from: 1, to: 4,
+        manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id }], target: undefined });
+    expect(surface.querySelector("p")!.textContent).toBe("BComplete 中文");
     expect(surface.querySelector(".block-proposal-text")!.textContent).toBe("Old");
+    // The caret stays at the end of the confirmed text, in the first owner.
+    await expect.poll(caret).toBe("BComplete 中文");
     expect(failure).toBeUndefined();
   } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }

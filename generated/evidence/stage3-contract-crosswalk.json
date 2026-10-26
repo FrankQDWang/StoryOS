@@ -292,7 +292,7 @@
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
-          "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
+          "scripts/verify-recovery-hold.sh",
           "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",

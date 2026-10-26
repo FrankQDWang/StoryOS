@@ -112,7 +112,7 @@ export const storyOSBrowserCommands = {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
         await verifyProductionCapturedMemory(context.context);
-      } else if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
+      } else if (request.scenario === "prose_request" || request.scenario === "first_owner_edit" || request.scenario === "conflicted_proposal") {
         await verifyProductionProseRequest(context.context, request.scenario);
       } else {
         await verifyProductionHostJourney(context.context);

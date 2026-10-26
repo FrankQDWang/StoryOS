@@ -773,7 +773,11 @@ in this order:
 2. With all preconditions proven, recompute ownership from those current facts.
    Mixed authoritative/Proposal ownership returns `RefusedToDraft`, changes
    neither target, and preserves the complete attempted structured payload in
-   one `RefusedEditDraft`.
+   one `RefusedEditDraft`. The Web editor sends no mixed edit: an author edit
+   on a selection that crosses owners replaces only its First Owner Part
+   ([ADR 0072](../adr/0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md)).
+   Thus this result comes only from a Draft retry or an earlier Local Edit
+   Journal record.
 3. Validate the admitted edit payload before committing any unit.
    Invalid selection, unsupported intent shape, or target mismatch returns
    `Refused { reason: AuthorEditRefusal }`. It retains one typed Domain Receipt and

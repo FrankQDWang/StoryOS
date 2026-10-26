@@ -290,14 +290,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     const secondCandidate = page.locator(`span[data-inline-proposal-id="${second.proposalId}"]`);
     await expect(secondCandidate).toHaveText("narrator tone");
     await page.locator(`[data-proposal-id="${second.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
-    let mixedRequest: ApplyAuthorEditRequest | undefined;
-    let mixedResponse: unknown;
+    let editRequest: ApplyAuthorEditRequest | undefined;
+    let editResponse: unknown;
     let edgeLossArmed = false;
     const edgeRequests: { key: string | undefined; body: string | null }[] = [];
     await page.route((url) => url.pathname.endsWith("/author-edits"), async (route) => {
-      mixedRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+      editRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
       const response = await route.fetch();
-      mixedResponse = await response.json();
+      editResponse = await response.json();
       if (edgeLossArmed || edgeRequests.length > 0) {
         edgeRequests.push({ key: (await route.request().allHeaders())["idempotency-key"],
           body: route.request().postData() });
@@ -305,43 +305,24 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       if (edgeLossArmed) { edgeLossArmed = false; await route.abort("failed"); }
       else await route.fulfill({ response });
     });
-    await editor.focus();
-    await secondCandidate.evaluate((element) => {
-      const range = document.createRange();
-      range.setStart(element.parentElement!.firstChild!, 6);
-      range.setEnd(element.firstChild!, 5);
-      const selection = window.getSelection()!;
-      selection.removeAllRanges(); selection.addRange(range);
-      document.dispatchEvent(new Event("selectionchange"));
-    });
-    assert.equal(await secondCandidate.evaluate(() => window.getSelection()?.toString()), "the narra");
-    await page.keyboard.insertText("Preserve my complete mixed input.");
-    await expect(page.locator("[data-draft-replacement]")).toHaveText("Preserve my complete mixed input.").catch((error) => {
-      throw new Error(`${error}\nMixed input request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
-    });
-    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
-    assert.deepEqual((await getProposal({ ...options, proposalId: second.proposalId })).proposal, second.proposal);
-    const sources = mixedRequest?.author_edit_units[0]?.selection_snapshot.ordered_selection?.sources;
-    assert.equal(sources?.length, 2);
-    assert.deepEqual(sources?.map((source) => [source.owner.kind, source.source_text]),
-      [["manuscript", SOURCE], ["proposal", "narrator tone"]]);
+    const proposalText = async () => (await getProposal({ ...options, proposalId: second.proposalId })).proposal.candidate_text;
+    // A selection from the candidate into the Chapter text changes only the candidate (ADR 0072).
     await editor.focus();
     await secondCandidate.evaluate((element) => {
       window.getSelection()?.setBaseAndExtent(element.firstChild!, 3, element.parentElement!.lastChild!, 8);
       document.dispatchEvent(new Event("selectionchange"));
     });
-    await page.keyboard.insertText("Preserve reverse mixed input.");
-    const preservedInputs = ["Preserve my complete mixed input.", "Preserve reverse mixed input."];
-    await expect(page.locator("[data-draft-replacement]")).toHaveText(preservedInputs);
+    await page.keyboard.insertText(" first owner");
+    await expect.poll(proposalText).toBe("nar first owner").catch((error) => {
+      throw new Error(`${error}\nCandidate request and response: ${JSON.stringify({ editRequest, editResponse })}`);
+    });
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
-    assert.deepEqual((await getProposal({ ...options, proposalId: second.proposalId })).proposal, second.proposal);
-    assert.deepEqual(mixedRequest?.author_edit_units[0]?.selection_snapshot.ordered_selection?.sources
-      .map((source) => [source.owner.kind, source.source_text]),
-      [["proposal", "narrator tone"], ["manuscript", SOURCE]]);
+    assert.equal(editRequest?.proposal_target?.proposal_id, second.proposalId);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.reload();
-    await expect(page.locator("[data-draft-replacement]")).toHaveText(preservedInputs);
-    await expect(secondCandidate).toHaveText("narrator tone");
-    await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-mixed-preserved.png") });
+    await expect(secondCandidate).toHaveText("nar first owner");
+    await expect(page.locator("[data-refused-edit-draft]")).toHaveCount(0);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-first-owner-edit.png") });
     await page.locator(`[data-proposal-reject="${second.proposalId}"]`).click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId: second.proposalId })).proposal.operation_resolution)
       .toBe("rejected");
@@ -378,7 +359,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks)
         .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText },
           edgeBase.chapter.current_revision.blocks[1]!]).catch((error) => {
-          throw new Error(`${error}\nEdge request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
+          throw new Error(`${error}\nEdge request and response: ${JSON.stringify({ editRequest, editResponse })}`);
         });
       const retainEdgeFacts = async () => {
         const journal = await page.evaluate(async () => {
@@ -399,10 +380,10 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
           }
           return result;
         });
-        const session = mixedRequest === undefined ? undefined : await getEditorSession({ ...options,
-          editorSessionId: mixedRequest.editor_session_id });
+        const session = editRequest === undefined ? undefined : await getEditorSession({ ...options,
+          editorSessionId: editRequest.editor_session_id });
         await writeFile(join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-facts.json`),
-          JSON.stringify({ request: mixedRequest, response: mixedResponse, edgeRequests, session, journal }, null, 2));
+          JSON.stringify({ request: editRequest, response: editResponse, edgeRequests, session, journal }, null, 2));
       };
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor().catch(async (error) => {
         await retainEdgeFacts(); throw error;
@@ -412,8 +393,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
         assert.ok(edgeRequests.length >= 1);
         assert.ok(edgeRequests.every((request) => JSON.stringify(request) === JSON.stringify(edgeRequests[0])));
       }
-      assert.deepEqual(mixedRequest?.expected_proposal_head_revision_ids, [opened.proposal.revision_id]);
-      assert.equal(mixedRequest?.proposal_target, undefined);
+      assert.deepEqual(editRequest?.expected_proposal_head_revision_ids, [opened.proposal.revision_id]);
+      assert.equal(editRequest?.proposal_target, undefined);
       const afterEdge = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
       assert.equal(afterEdge.revision_id, opened.proposal.revision_id);
       assert.equal(afterEdge.candidate_text, "narrator tone");
@@ -506,6 +487,42 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect(page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`)).toHaveCount(0);
       assert.equal(refusedPosts, 0, "reload must not submit a stale writer decision");
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-writer-refused-reloaded.png") });
+      // A selection from the Chapter text into an inline candidate sends only a Chapter edit. The Server
+      // refuses each Chapter edit outside the edges of a pending inline Proposal, so the edit conflicts
+      // (ADR 0072, #1273). The conflict leaves the Chapter in need of attention, so this step is last.
+      let chapterFirstRequest: ApplyAuthorEditRequest | undefined;
+      let chapterFirstResponse: unknown;
+      await observer.route((url) => url.pathname.endsWith("/author-edits"), async (route) => {
+        chapterFirstRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+        const response = await route.fetch();
+        chapterFirstResponse = await response.json();
+        await route.fulfill({ response });
+      });
+      const observerCandidate = observer.locator(`span[data-inline-proposal-id="${writerProposal.proposalId}"]`);
+      await expect(observerCandidate).toHaveText("narrator tone");
+      await observer.locator('[data-manuscript-editor][contenteditable="true"]').focus();
+      await observerCandidate.evaluate((element) => {
+        window.getSelection()?.setBaseAndExtent(element.parentElement!.firstChild!, 6, element.firstChild!, 5);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      assert.equal(await observerCandidate.evaluate(() => window.getSelection()?.toString()), "the narra");
+      await observer.keyboard.insertText("a ");
+      await expect.poll(() => (chapterFirstResponse as { effect?: { kind?: string; reason?: string } } | undefined)?.effect)
+        .toMatchObject({ kind: "conflicted", reason: "proposal_head_present" }).catch((error) => {
+          throw new Error(`${error}\nChapter request and response: ${JSON.stringify({ chapterFirstRequest, chapterFirstResponse })}`);
+        });
+      assert.equal(chapterFirstRequest?.proposal_target, undefined);
+      assert.deepEqual(chapterFirstRequest?.author_edit_units.flatMap((unit) => unit.normalized_primitives)
+        .map((primitive) => primitive.kind), ["replace_block_selection"]);
+      assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, writerBase.chapter);
+      assert.deepEqual((await getProposal({ ...options, proposalId: writerProposal.proposalId })).proposal,
+        writerProposal.proposal);
+      assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
+        WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
+      await observer.reload();
+      await observer.locator('[data-save-state="needs_attention"][data-unsettled-intent-count="1"]').waitFor();
+      await expect(observer.locator("[data-refused-edit-draft]")).toHaveCount(0);
+      await observer.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-chapter-first-conflict.png") });
     } finally { await observer.close(); }
     assert.deepEqual(errors, []);
   } catch (error) {

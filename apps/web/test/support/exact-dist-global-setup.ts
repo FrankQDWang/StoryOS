@@ -202,7 +202,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
               AND command_kind IN ('updateProjectAssistance', 'createAgentRun',
                 'acceptProposal', 'rejectProposalOperations', 'replanProposal'))
             AND project_id NOT IN (SELECT project_id FROM storyos.projects
-              WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Refused edit %')
+              WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'First owner edit %')
             AND (command_kind, idempotency_key) NOT IN (
               ('updateProjectAssistance', '018f0000-0000-7001-8000-00000000f802'::uuid),
               ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))
@@ -237,7 +237,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           updateProjectAssistance: 1, setCurrentChapter: 5, createAgentRun: 7,
           applyAuthorEdit: 18, acceptProposal: 3, rejectProposalOperations: 1,
           takeOverProjectWriter: 1 },
-        author_action_count: 32,
+        author_action_count: 33,
       },
       selection_reference: {
         project_count: 1,
