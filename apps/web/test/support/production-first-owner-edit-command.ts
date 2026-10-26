@@ -40,9 +40,13 @@ export async function verifyProductionFirstOwnerEdit({ page, projectId, chapter,
   await committed;
   const edited = `${proposal.candidate_text.slice(0, 5)} first owner`;
   assert.ok(request && response?.effect.kind === "proposal_revised", JSON.stringify(response?.effect));
-  assert.deepEqual({ target: request.proposal_target?.proposal_id, units: request.author_edit_units
-    .map((unit) => unit.normalized_primitives) }, { target: proposal.proposal_id,
-    units: [[{ kind: "replace_selection", from: 5, to: proposal.candidate_text.length, text: " first owner" }]] });
+  // The Journal can drop the common prefix of the old and new text, so examine the result of the one unit.
+  const primitives = request.author_edit_units.flatMap((unit) => unit.normalized_primitives);
+  const [primitive] = primitives;
+  assert.ok(primitive?.kind === "replace_selection" && primitives.length === 1, JSON.stringify(request.author_edit_units));
+  assert.deepEqual({ target: request.proposal_target?.proposal_id, to: primitive.to,
+    result: proposal.candidate_text.slice(0, primitive.from) + primitive.text },
+  { target: proposal.proposal_id, to: proposal.candidate_text.length, result: edited });
   await restart();
   await page.reload();
   const candidate = page.locator(`[data-proposal-id="${proposal.proposal_id}"] .block-proposal-text`);
