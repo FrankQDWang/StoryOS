@@ -1,7 +1,5 @@
-import type {
-  AuthorEditPrimitive,
-  ManuscriptBlock,
-} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ManuscriptBlock } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { StoredAuthorEditPrimitive } from "./editor-types.ts";
 
 function replaceOnText(body: string, from: number, to: number, text: string): string {
   if (!Number.isSafeInteger(from)
@@ -23,7 +21,7 @@ function replaceOnText(body: string, from: number, to: number, text: string): st
  */
 export function applyAuthorEditPrimitive(
   blocks: ManuscriptBlock[],
-  primitive: AuthorEditPrimitive,
+  primitive: StoredAuthorEditPrimitive,
 ): void {
   if (primitive.kind === "replace_structured_selection") return;
   if (primitive.kind === "replace_selection") {

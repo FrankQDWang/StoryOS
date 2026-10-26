@@ -26,6 +26,8 @@ import type {
   JournalIntentRecord,
   JournalSubmissionGroup,
   PendingEditProjection,
+  StoredApplyAuthorEditRequest,
+  StoredAuthorEditUnit,
 } from "./editor-types.ts";
 import {
   AUTHOR_EDIT_BATCH_POLICY_REVISION,
@@ -167,7 +169,7 @@ async function validateFrozenGroup(
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
       !== JSON.stringify(firstRecord.expected_proposal_heads)
-    || request?.retry_source !== undefined
+    || (request as StoredApplyAuthorEditRequest | undefined)?.retry_source !== undefined
     || JSON.stringify(request?.proposal_target)
       !== JSON.stringify(firstRecord.proposal_target)
     || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
@@ -385,7 +387,7 @@ async function settleAuthorEditResponse({
         !== JSON.stringify([effect?.kind === "proposal_revised" ? effect.proposal_revision_id : ""])
         || receipt.proposal_revision_ids.length !== 1)
       : JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([]))
-    || settledResponse.source_draft_disposition !== undefined
+    || (response as { source_draft_disposition?: unknown }).source_draft_disposition !== undefined
     || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
@@ -496,7 +498,7 @@ async function settleAuthorEditResponse({
   const edgeRecord = request.proposal_target === undefined
     && request.author_edit_units.length === 1 && request.author_edit_units[0]?.normalized_primitives.length === 1
     && primitive?.kind === "replace_block_selection" && primitive.from === primitive.to
-    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
+    && (request.author_edit_units[0] as StoredAuthorEditUnit | undefined)?.selection_snapshot?.ordered_selection == null
     && request.observed_ownership_partition === "mixed" && request.expected_proposal_head_revision_ids.length === 1
     && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
     && workspace.session.base_snapshot.observed_ownership_partition === "authoritative"

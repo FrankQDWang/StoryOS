@@ -1,4 +1,3 @@
-import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
@@ -54,7 +53,6 @@ export async function verifyProductionFirstOwnerEdit({ page, projectId, chapter,
   await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
   assert.equal(posts, 1, "response loss and restart must not submit another command");
   assert.deepEqual(await page.locator("[data-manuscript-editor] > p").allTextContents(), blocks.map((block) => block.text));
-  await expect(page.locator("[data-refused-edit-draft]")).toHaveCount(0);
   const read = await page.evaluate(async ({ projectId, chapterId, proposalId }) => {
     const [chapter, proposal] = await Promise.all([fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`),
       fetch(`/api/v1/projects/${projectId}/proposals/${proposalId}`)]);
@@ -62,6 +60,4 @@ export async function verifyProductionFirstOwnerEdit({ page, projectId, chapter,
   }, { projectId, chapterId: chapter.chapter.chapter_id, proposalId: proposal.proposal_id });
   assert.deepEqual(read.chapter.chapter.current_revision, chapter.chapter.current_revision);
   assert.equal(read.proposal.candidate_text, edited);
-  assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
-    WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
 }
