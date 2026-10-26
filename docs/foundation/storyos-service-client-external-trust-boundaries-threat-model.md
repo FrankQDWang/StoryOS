@@ -276,7 +276,7 @@ create another class or lifecycle:
 | Evidence or content | Fixed classification consumed here |
 |---|---|
 | Admission issuance, `outcome_unknown`, reconciliation observations, terminal settlement, sanitized pre-admission refusal, Editor Input Fence, Author Action, and every typed Receipt | Operational Records under their owning contracts |
-| `RefusedEditDraft` and `RecoveryDraft` | non-authoritative Draft Artifacts with Artifact revisions, retention, and reversible Draft closure |
+| `RecoveryDraft` | non-authoritative Draft Artifact with Artifact revisions, retention, and reversible Draft closure |
 | Proposal Conflict | the `conflicted` condition on one exact Proposal Revision's validation axis, projected from immutable Core evidence |
 
 An identity or evidence record is not reusable authority. Browser cache,
@@ -1265,10 +1265,8 @@ Heads, Receipt convergence, Draft preservation, and truthful recovery.
 The Local Edit Journal and Pending Edit Projection preserve continuity but are
 never authority, settlement, or evidence that no Server effect occurred.
 Admission and Receipt lifecycles remain durable Operational Records. A
-`RefusedEditDraft` remains a Draft Artifact. Only an `ApplyAuthorEdit` Core
-Transition with the `RefusedToDraft` effect creates it. A `RecoveryDraft`
-remains a Draft Artifact. The Host creates it only under the closed Editor
-Recovery ingress matrix. Preserved browser-local records, in-memory text,
+`RecoveryDraft` is the only Draft Artifact of this flow (ADR 0073). The Host
+creates it only under the closed Editor Recovery ingress matrix. Preserved browser-local records, in-memory text,
 clipboard text, and Pending Edit Projections remain local-only and are not
 Artifacts.
 
@@ -1291,10 +1289,8 @@ Receipt; changed or expired commands require reconfirmation; corrupt or missing
 local state cannot delete canonical prose; and all refused or unrecoverable
 content remains inspectable and copyable. Preserved browser-local records,
 in-memory text, clipboard text, and Pending Edit Projections are not Artifacts.
-The fixed Draft Artifact classification applies to a `RefusedEditDraft` only
-when an `ApplyAuthorEdit` Core Transition has the `RefusedToDraft` effect. It
-also applies to a `RecoveryDraft` created by the Host under the closed Editor
-Recovery ingress matrix.
+The fixed Draft Artifact classification applies to a `RecoveryDraft` created
+by the Host under the closed Editor Recovery ingress matrix.
 
 **Residual risk and owner.** A currently admitted writer or compromised browser
 can submit commands within its bounded client claim, and local storage

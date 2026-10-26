@@ -839,7 +839,7 @@ def validate_families(catalog: dict[str, Any], route_catalog: dict[str, Any], er
             if wire_history in {"referenced_by_wire_history", "event_representation_referenced"} and route_wire_owner != "protocol":
                 fail(errors, f"{family_id}: referenced wire-history operation {operation_id} does not name the protocol route wire owner")
         known_referenced_events = {event_id for event_id in referenced_event_ids if event_id in event_by_id}
-        actual_activity_profiles = {event_by_id[event_id].get("wire_profile") for event_id in known_referenced_events if event_id not in {"storyos.event.refused-edit-draft-created.v1", "storyos.event.editor-flow-draft-closed.v1", "storyos.event.editor-flow-draft-reopened.v1"}}
+        actual_activity_profiles = {event_by_id[event_id].get("wire_profile") for event_id in known_referenced_events}
         if actual_activity_profiles and actual_activity_profiles != {declared_activity_profile}:
             fail(errors, f"{family_id}: activity_profile {declared_activity_profile!r} disagrees with route Event wire profiles {sorted(actual_activity_profiles)}")
         if selected_events and declared_activity_profile is None:

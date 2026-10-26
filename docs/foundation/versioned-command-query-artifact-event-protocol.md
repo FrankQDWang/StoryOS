@@ -581,7 +581,7 @@ meaning:
 
 | Wire operation | Semantic command owner | Public route placement | Release 1 settlement rule |
 | --- | --- | --- | --- |
-| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all six Core outcomes remain possible |
+| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all five Core outcomes remain possible |
 | `AcceptProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/acceptances` | explicit protected editor command; typed Acceptance Receipt stays distinct |
 | `RejectProposalOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/rejections` | exact selected pending operations and rejection events |
 | `WithdrawProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/withdrawals` | author cause or exact current-producer cause only |
@@ -591,8 +591,6 @@ meaning:
 | `ReplanProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/replans` | exact Proposal Conflict or Proposal Recovery Conflict source |
 | `CompleteReadyPartialProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-completions` | exact `ready_partial` generation and candidate digest |
 | `ContinueProposalGeneration` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-continuations` | synchronous generation-axis transition; a fresh generation ID is returned |
-| `ExpandRefusedEditDraftToProposal` | Manuscript Revision and Proposal State Machine | `/drafts/{draft_id}/proposal-expansions` | `WholeDraftPayload` only; source Draft closes once as `superseded` |
-| `CloseEditorFlowDraft` | Manuscript Revision and Proposal State Machine | `/drafts/{draft_id}/closures` | exact `dismissed`, `superseded`, or `abandoned` closure |
 | `UndoLatestAuthorAction` | Manuscript Revision and Proposal State Machine | `/author-actions/undo` | one unified newest-first frontier; compensation or reversal remains typed |
 
 `WithdrawProposal` and `ReplanProposal` each have one public operation and a
@@ -1090,17 +1088,9 @@ filter only after authorization. Internal Worker queues, lease traffic,
 Mailbox messages, Adapter frames, Provider tokens, and progress noise are not
 public Project Activity Events.
 
-Issue 827 implements one narrow exception to the subscription representation:
-`storyos.event.refused-edit-draft-created.v1` is an immutable CoreTransition
-Artifact creation record under `storyos.artifact-lifecycle.v1`. The authenticated
-exact-Scope `getRefusedEditDraft` query returns it with the retained Revision,
-payload digest, exact command/Admission/Receipt source, and current lifecycle.
-It creates no Project Activity row or cursor and has no SSE representation.
-Its standalone schema and golden fixtures define the exact creation shape.
-Other public Events keep the existing Project Activity profile. This exception
-does not implement other Draft events or a second event stream. The
-[Refused Edit Input profile](refused-edit-input-release-1-profile.md) defines the
-first service input and qualification boundary.
+[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft creation record
+`storyos.event.refused-edit-draft-created.v1` and the query `getRefusedEditDraft`.
+Each public Event uses the Project Activity profile.
 
 ### 10.2 Durable Event envelope
 

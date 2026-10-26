@@ -16,10 +16,7 @@
   },
   "input_coverage": {
     "retained_synthetic_evidence": "legacy_single_owner_primitives_only",
-    "legacy_evidence_policy_source": "docs/research/author-edit-batch-prerelease-policy-source.v1.json",
-    "structured_source_profile": "docs/foundation/refused-edit-input-release-1-profile.md",
-    "structured_source_evidence_owner": "https://github.com/FrankQDWang/StoryOS/issues/827",
-    "new_workload_qualified_by_legacy_measurements": false
+    "legacy_evidence_policy_source": "docs/research/author-edit-batch-prerelease-policy-source.v1.json"
   },
   "selected": {
     "adjacent_completed_intent_idle_ms": 250,

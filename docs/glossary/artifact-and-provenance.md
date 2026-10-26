@@ -125,7 +125,7 @@ A non-binding account of a potentially useful execution outcome, with relevant s
 _Avoid_: Executable instruction, promoted Skill, verified general rule
 
 **Draft**:
-A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, including Plan, Refused Edit, and Recovery Drafts. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.
+A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, including Plan and Recovery Drafts. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.
 _Avoid_: Proposal, authoritative draft
 
 **Message**:

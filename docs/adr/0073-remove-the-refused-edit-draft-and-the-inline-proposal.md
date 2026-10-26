@@ -45,5 +45,7 @@ This record supersedes these parts of earlier records:
 ## Consequences
 
 - The Web ticket removes the Web Draft and inline code and the packaged inline journey. The Server ticket removes the Draft contract and Server code. The last ticket removes the `inline_edit` kind. Until the Server tickets merge, the Server and the HTTP tests keep the removed paths.
+- The Server ticket removes the three Draft routes, the Draft events, and the Draft shapes of the contract. Migration `0099_remove_refused_edit_draft.sql` adds `CHECK (false)` to `draft_artifacts` and refuses the Draft command and result kinds in `domain_receipts`. The Domain Receipt keeps `draft_artifact_refs` and `artifact_lifecycle_event_refs`, and they are always empty. Stored Undo conflict Receipts can still name `source_binding_changed`, so that reason stays.
+- The Web keeps local types for the removed stored shapes. Thus the Local Edit Journal read rule still reads and resolves an old record.
 - The primary Stage 4 evidence of `S4-REQ-005` moves from the removed inline journey to the production host journey.
 - [Keep the inline rebind lineage](https://github.com/FrankQDWang/StoryOS/issues/1257) has no effect after the last ticket.

@@ -99,7 +99,6 @@ typed producer cause is closed in section 8.6.
 | `EditorInputFence` | Immutable Operational Record and automatic safety cause; it is recorded once and never receives an Author Action Sequence | StoryOS Host at the protected editor-input boundary; Core consumes the exact identity as its safety cause | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `AuthorActionRef` | Immutable Author Action Operational Record created only for a successfully committed author-owned Core Transition, with one Project Scope-local sequence and `Forward \| Compensation` disposition | StoryOS Core, atomically with the successful Transition | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | typed Receipt | Immutable Operational Record for one Core validation or domain-command attempt; it has no Artifact revision, derivation, retention, or Acceptance lifecycle | StoryOS Core only | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) for the current closed Receipt kinds |
-| `RefusedEditDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure | the refused `ApplyAuthorEdit` Core Transition and its Receipt | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `RecoveryDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure; it preserves complete author text without proving invocation or commit | StoryOS Host-assigned `EditorRecovery` bound to one exact Editor Session, writer generation, complete recovered intent, and journal, admission-settlement, takeover, or in-memory recovery evidence as applicable | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns recovery evidence and presentation |
 | `ProposalConflict` | The `conflicted` condition on an exact Proposal Revision's validation axis, projected from immutable Core Receipt/Event evidence; the condition is not a fourth durable space, another Artifact, or the Operational Record that detected it | StoryOS Core validation or target-drift detection | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `ProposalRecoveryConflict` | Fail-closed recovery condition on a preserved Proposal surface when exact Heads, stream/fence order, Anchors, digests, or checkpoint evidence cannot prove one review projection; it is neither an Artifact nor a Receipt | StoryOS Core recovery classification over exact durable Core and Host recovery evidence | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns journal, checkpoint, and takeover evidence |
@@ -153,7 +152,6 @@ CandidateKind
 
 DraftKind
 ├── PlanDraft
-├── RefusedEditDraft
 └── RecoveryDraft
 
 ResearchArtifactKind
@@ -163,8 +161,8 @@ ResearchArtifactKind
 └── ResearchSynthesis
 ```
 
-`RefusedEditDraft` and `RecoveryDraft` are the only Draft kinds in the
-manuscript editor refusal/recovery flow. `PlanDraft` belongs to plan authoring
+`RecoveryDraft` is the only Draft kind in the manuscript editor recovery flow.
+[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft. `PlanDraft` belongs to plan authoring
 and is not an alternative outcome for an Author Edit.
 
 One Candidate represents one independently reviewable semantic candidate. A batch of such candidates creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
@@ -288,26 +286,28 @@ EditorRecovery {
 ```
 
 Each revision has one direct Creator. There is no generic `System`, browser,
-model, MCP, extension, or local-projection Creator: MCP and extension
-production resolves through `ToolCall`; model production resolves through
-`AgentRunStep`; author production binds the exact Author Command Admission;
-Core-produced refusal and Host-produced recovery Artifacts bind the exact
-Receipt or recovery Operational Record respectively. `RefusedEditDraft` uses
-`CoreTransition`, while a durably created `RecoveryDraft` uses Host-assigned
-`EditorRecovery`, whose evidence
-reference binds the complete journal, admission settlement, takeover, or
-in-memory recovery boundary owned by the Web Editor Session contract. The
-manuscript state machine owns their Retry and Draft-closure semantics plus
-Refused Edit Draft Proposal expansion. If an author edits an Agent-produced
-revision, the new revision's Creator is the Author and a `derived_from` edge
-preserves the Agent-produced source.
+model, MCP, extension, or local-projection Creator.
+
+| Production | Creator binding |
+| --- | --- |
+| MCP and extension | resolves through `ToolCall` |
+| model | resolves through `AgentRunStep` |
+| author | binds the exact Author Command Admission |
+| Core | binds the exact Receipt |
+| Host recovery | binds the exact recovery Operational Record |
+
+A durably created `RecoveryDraft` uses Host-assigned `EditorRecovery`. Its evidence reference
+binds the complete recovery boundary that the Web Editor Session contract
+owns: journal, admission settlement, takeover, or in-memory. If an author edits
+an Agent-produced revision, the new revision's Creator is the Author. A
+`derived_from` edge keeps the Agent-produced source.
 Contributor history is derived from the provenance graph rather than stored as
 a mutable list.
 
 Creator eligibility remains subtype-specific. `Import` creates imported source
-Artifacts, never a Proposal; `EditorRecovery` creates only a
-`RecoveryDraft`; and `CoreTransition` creates only the exact Core Artifact
-named by its Receipt, including `RefusedEditDraft` and `ReversalProposal`.
+Artifacts, never a Proposal. `EditorRecovery` creates only a `RecoveryDraft`.
+`CoreTransition` creates only the exact Core Artifact that its Receipt
+identifies, for example a `ReversalProposal`.
 
 ### 5.2 Typed provenance edges
 
@@ -361,12 +361,10 @@ Candidate, Draft, and Proposal workflow never grants authority and does not repl
 
 Candidate and Draft use a simple reversible `open | closed` closure. A close event records exactly one closed reason from `dismissed | superseded | abandoned`.
 
-Derivation alone does not close a source Candidate or Draft, and one source may
-produce multiple Proposals unless the owning contract defines a typed
-source-consuming transition. The editor-flow state machine does so for
-`ExpandRefusedEditDraftToProposal`: it atomically closes the exact source Draft
-as `superseded` while preserving both immutable histories. Supersession is an
-explicit provenance relationship and does not rewrite either history.
+Derivation alone does not close a source Candidate or Draft. One source can
+give multiple Proposals, unless the owning contract defines a typed
+source-consuming transition. Supersession is an explicit provenance
+relationship and does not rewrite either history.
 
 Messages, Research Artifacts, Analysis Reports, Tool Artifacts, and App View Artifacts have no type-specific workflow; they use revisions, provenance, supersession where needed, and the common retention axis.
 
@@ -494,7 +492,7 @@ input that the Admission contract will bind and every manuscript semantic
 field remain equal. The final body and digest receive one Admission and are
 never merged afterward. Core recomputes ownership from durable Heads, Proposal
 Anchors, and reservations. It returns one result for the command: authoritative
-applied, Proposal revised, refused to Draft, refused, conflicted, or no
+applied, Proposal revised, refused, conflicted, or no
 effect. The client cannot select an authoritative or Proposal write route, and one
 mixed-ownership input is never split.
 
@@ -532,15 +530,11 @@ For a domain Proposal, the selected operations are atomic: all succeed or none a
 
 The state machine's closed per-command payload and applied-result matrices
 define the exact source/current/replacing Proposal Revisions, selections,
-typed reasons, generations, Draft revision/digest/range, close reason, and
+typed reasons, generations, and
 result references consumed here. This model does not reinterpret absent fields
 or serialize those contracts.
 
-Its source-consuming rules are equally closed: successful Draft retry, retry
-replacement by a new Refused Edit Draft, and Refused Edit Draft expansion each
-close the exact source Draft as `superseded` in the same Transition. Conflict
-or no effect creates no source lifecycle event, and exact retry reuses the
-original Receipt and event identities.
+Exact retry reuses the original Receipt and event identities.
 
 ### 8.4 Undo Acceptance
 
@@ -708,7 +702,7 @@ author-owned creative state.
 19. Every project-scoped durable object, reference, command, idempotency record, index, cache, and read projection binds and validates one exact Project Scope.
 20. No cross-Project Scope reference, join, retrieval result, cache reuse, or disclosure is valid merely because an opaque ID or content digest matches.
 21. Admission issuance, pre-admission refusal, OutcomeUnknown, reconciliation, terminal settlement, Editor Input Fences, Author Actions, and typed Receipts remain Operational Records; none can be promoted into Authoritative State or reused as authority.
-22. `RefusedEditDraft` and `RecoveryDraft` are Draft Artifacts; their payload existence never proves or applies an author-owned Core Transition.
+22. `RecoveryDraft` is a Draft Artifact. Its payload existence never proves or applies an author-owned Core Transition.
 23. Proposal Conflict and Proposal Recovery Conflict are conditions on preserved Proposal surfaces projected from exact evidence, never new Artifacts, Receipts, or authority states.
 24. Artifact Creator and Core `ProducerCause` are separate closed unions with no generic `System`, browser, model, MCP, extension, or local-projection fallback.
 

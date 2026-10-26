@@ -57,11 +57,11 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft Core Artifact that the refused `ApplyAuthorEdit` Core Transition creates when one author edit crosses Authoritative State and Proposal ownership. It keeps the complete attempted payload, selection snapshot, and edit intent for a narrowed retry, Proposal expansion, copy, or discard. A retry replacement or an expansion closes the exact source as `superseded`. No effect, or a conflict on another source, leaves it open, and a conflict on the source binding keeps its observed closure. Release 1 removes it, and the Web shows no such Draft and sends no Draft command ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
+A removed Draft Core Artifact kind. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), the refused `ApplyAuthorEdit` Core Transition created one when one author edit crossed Authoritative State and Proposal ownership. Release 1 has no Refused Edit Draft: no command creates, retries, expands, discards, or undoes one, and a stored Draft row stops migration 0099.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It requires explicit retry or discard and never applies automatically; a successful or replacement retry closes the exact source as `superseded`, while no effect or a non-source conflict leaves it open and a source-binding conflict leaves its observed closure unchanged, without turning any of those facts into a Receipt, Proposal condition, or proof of prior Core invocation.
+A non-authoritative Draft Core Artifact that an Editor Recovery Creator creates from one complete author-edit intent. It keeps the exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It never applies automatically. The author can copy its text, and Release 1 has no retry or discard command for it ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)). It is not a Receipt, Proposal condition, or proof of prior Core invocation.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
