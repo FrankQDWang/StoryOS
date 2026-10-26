@@ -8,7 +8,7 @@ On 2026-10-26, the author accepted the plan of [Remove the Refused Edit Draft, i
 
 ## Context
 
-Before [ADR 0072](0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md), an author edit over a selection that crossed the Chapter text and a Proposal candidate was one `mixed` Author Edit. The Server refused it and created a Refused Edit Draft. The author could retry, discard, or expand that Draft into a Proposal, and Author Undo could reverse each of these Draft commands. After ADR 0072, the Web editor sends no such edit, so no Web input creates a Draft.
+Before [ADR 0072](0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md), an author edit over a selection that crossed the Chapter text and a Proposal candidate was one `mixed` Author Edit. The Server refused it and created a Refused Edit Draft. The author can retry, discard, or expand that Draft into a Proposal, and Author Undo can reverse each of these Draft commands. After ADR 0072, the Web editor sends no such edit, so no Web input creates a Draft.
 
 An Inline Proposal (`inline_edit`) holds a Proposal Anchor in one Chapter block. It adds anchor proofs to Acceptance, Replan, Author Edit, and Author Undo. A Block Proposal does the same work for the author with no anchor.
 
@@ -19,7 +19,7 @@ No production deployment exists ([ADR 0022](0022-prefer-widely-validated-hosted-
 - **Refused Edit Draft.** Release 1 has no Refused Edit Draft. No command creates, retries, closes, expands, or undoes one. The commands `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal`, the `applyAuthorEdit` effect `refused_to_draft`, the field `retry_source`, the primitive `replace_structured_selection`, and the Author Undo effect `draft_compensated` go.
 - **Inline Proposal.** Release 1 has no Inline Proposal. The Proposal kinds are `block_edit` and `reversal`. The Proposal Anchor, the Acceptance target resolutions `proven_range` and `base_block_replacement`, and the inline rebind Revision go.
 - **Web.** The Web shows no Refused Edit Draft and no Inline Proposal, and it sends no Draft command. It shows a stored `inline_edit` Proposal nowhere: no candidate, no control, and no status.
-- **Local Edit Journal read rule.** A stored record of a removed path counts as resolved, and the Journal never sends it. These are a pending record with a `replace_structured_selection` primitive, a record with a `draft_retry` source, a Submission Group of such a record, a Submission Group settled with `refused_to_draft`, and the Draft Discard, expansion, and Draft Undo metadata rows. The Journal drops the replacement text of such a record. The Server never applied that text. The editor contract revision does not change, so each other stored record stays readable.
+- **Local Edit Journal read rule.** A stored record of a removed path counts as resolved, and the Journal never sends it. These are a record with a `replace_structured_selection` primitive or a `draft_retry` source, and a Submission Group of such a record. Also included are a Submission Group settled with `refused_to_draft`, and the Draft Discard, expansion, and Draft Undo metadata rows. The Journal drops the replacement text of such a record. The Server never applied that text. The editor contract revision does not change, so each other stored record stays readable.
 - **Old client.** After the Server ticket, a request with a removed field or primitive does not match the closed request schema. The Server answers HTTP 422 `invalid_request_shape` before admission and writes nothing.
 - **Stored rows.** The Server tickets add guard constraints to the dormant Draft and Anchor tables and to `domain_receipts`. A stored row of a removed path stops the migration. The migrations delete no data, and the tables stay in the Project archive format.
 
@@ -29,11 +29,11 @@ This record supersedes these parts of earlier records:
 
 - [ADR 0003](0003-specify-manuscript-revision-and-proposal-state-machine.md): the Refused Edit Draft and the Inline Proposal parts of the state machine contract.
 - [ADR 0043](0043-settle-every-project-command-through-declared-profiles-of-one-sequence.md): the Draft command rules, the expansion target read, and the Draft replay rules.
-- [ADR 0044](0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md): the disposition rows of `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal`, the reopen of a superseded Refused Edit Draft in the `applyAuthorEdit` rows, and the applied edit of an Inline Proposal.
+- [ADR 0044](0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md): the disposition rows of `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal`. Also the reopen of a superseded Refused Edit Draft and the applied edit of an Inline Proposal in the `applyAuthorEdit` rows.
 - [ADR 0063](0063-bind-each-proposal-anchor-set-to-a-proposal-revision.md): the Proposal Anchor rules. Its open Proposal list rules stay.
 - [ADR 0064](0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md): the target resolutions `proven_range` and `base_block_replacement`.
 - [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md): the expansion target and the inline rebind lineage.
-- [ADR 0072](0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md): the consequences about the remaining Draft path and the Chapter edit next to an Inline Proposal.
+- [ADR 0072](0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md): the consequences for the remaining Draft path and the Chapter edit next to an Inline Proposal.
 
 ## Considered options
 
