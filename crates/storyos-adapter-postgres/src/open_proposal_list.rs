@@ -42,9 +42,7 @@ impl OpenProposalListReader for PostgresProjectReader {
                 "SELECT proposal.proposal_id::text AS proposal_id,
                         revision.revision_id::text AS revision_id, proposal.kind,
                         proposal.source_run_id::text AS run_id,
-                        proposal.source_decision_id::text AS decision_id,
-                        proposal.source_draft_id::text AS draft_id,
-                        proposal.source_draft_revision_id::text AS draft_revision_id
+                        proposal.source_decision_id::text AS decision_id
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -54,9 +52,6 @@ impl OpenProposalListReader for PostgresProjectReader {
                          revision.revision_id) =
                         (head.owner_user_id, head.project_id, head.proposal_id,
                          head.current_revision_id)
-                   LEFT JOIN storyos.draft_artifacts AS source_draft
-                     ON (source_draft.owner_user_id, source_draft.project_id, source_draft.draft_id) =
-                        (proposal.owner_user_id, proposal.project_id, proposal.source_draft_id)
                   WHERE proposal.owner_user_id = $1::text::uuid
                     AND proposal.project_id = $2::text::uuid
                     AND proposal.chapter_id = $3::text::uuid
@@ -66,8 +61,7 @@ impl OpenProposalListReader for PostgresProjectReader {
                        WHERE (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                              (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
                          AND operation.resolution = 'pending')
-                    AND (proposal.source_run_id IS NOT NULL
-                      OR source_draft.retention_state = 'retained')
+                    AND proposal.source_run_id IS NOT NULL
                   ORDER BY proposal.proposal_id
                   LIMIT $4",
                 &[
@@ -85,21 +79,11 @@ impl OpenProposalListReader for PostgresProjectReader {
                 let source = match (
                     row.get::<_, Option<String>>("run_id"),
                     row.get::<_, Option<String>>("decision_id"),
-                    row.get::<_, Option<String>>("draft_id"),
-                    row.get::<_, Option<String>>("draft_revision_id"),
                 ) {
-                    (Some(run_id), Some(decision_id), None, None) => {
-                        OpenProposalSource::AgentRunDecision {
-                            run_id,
-                            decision_id,
-                        }
-                    }
-                    (None, None, Some(draft_id), Some(draft_revision_id)) => {
-                        OpenProposalSource::RefusedEditDraft {
-                            draft_id,
-                            draft_revision_id,
-                        }
-                    }
+                    (Some(run_id), Some(decision_id)) => OpenProposalSource::AgentRunDecision {
+                        run_id,
+                        decision_id,
+                    },
                     _ => {
                         return Err(ProjectReadError::unavailable(std::io::Error::other(
                             "the Proposal source shape is invalid",

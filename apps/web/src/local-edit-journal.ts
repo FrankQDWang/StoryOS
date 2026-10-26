@@ -20,6 +20,7 @@ import type {
   JournalSubmissionGroup,
   PendingEditProjection,
   ReplaceSelectionEdit,
+  StoredApplyAuthorEditRequest,
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
@@ -694,7 +695,7 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
-      || JSON.stringify(request?.retry_source) !== JSON.stringify(firstRecord?.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
+      || JSON.stringify((request as StoredApplyAuthorEditRequest | undefined)?.retry_source) !== JSON.stringify(firstRecord?.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
       || JSON.stringify(request?.proposal_target)
         !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)

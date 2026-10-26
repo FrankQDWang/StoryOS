@@ -3,11 +3,9 @@
 
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
-    RefusedEditDraftIdentity,
 };
-use storyos_contracts::{DraftRetryReplacement, SourceDraftDisposition};
 use storyos_core::{
-    AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefused, ManuscriptBlock,
+    AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, ManuscriptBlock,
     TransitionOutcome,
 };
 use tokio_postgres::Client;
@@ -24,10 +22,8 @@ use crate::command_sequence::{
     Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification, CommandError,
     CommandIsolation, CommandSpec, DirectEditorAdmission, LockedProject, MissingAdmission,
     NoResponse, ProfileSequences, ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs,
-    ReceiptTime, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroAuthorityRows,
-    ZeroOutcome, ZeroReceipt, unavailable,
+    ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroReceipt, unavailable,
 };
-use crate::draft_retry::{SupersedeWrite, plan_disposition, write_supersede};
 use crate::undo_compensation::{AuthorEditVariant, ForwardCommand};
 
 /// The settlement error of an Author Edit. The sequence error is the Author Edit error.
@@ -76,8 +72,6 @@ impl CommandError for AuthorEditFailure {
 /// The facts that the acknowledgement of every Author Edit outcome records.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AuthorEditRecord {
-    pub(crate) source_draft_disposition: Option<SourceDraftDisposition>,
-    pub(crate) replacement_provenance: Option<DraftRetryReplacement>,
     pub(crate) completed_intent_record_id: String,
     pub(crate) local_intent_sequence: u64,
 }
@@ -94,8 +88,6 @@ pub(crate) struct AuthorEditEffect {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AuthorEditZeroEffect {
     pub(crate) record: AuthorEditRecord,
-    /// The Refused Edit Draft of a `refused_to_draft` outcome.
-    pub(crate) draft: Option<RefusedEditDraftIdentity>,
     pub(crate) current_authoritative_revision_id: String,
 }
 
@@ -105,8 +97,6 @@ pub(crate) struct AuthorEditPlan {
     current_revision_id: String,
     successor_blocks: Option<Vec<ManuscriptBlock>>,
     proposal_context: Option<ProposalEditContext>,
-    source: Option<SourceDraftDisposition>,
-    supersede: Option<SupersedeWrite>,
 }
 
 impl AuthorEditPlan {
@@ -120,12 +110,8 @@ impl AuthorEditPlan {
 pub(crate) struct AuthorEdit<'a> {
     pub(crate) command: &'a ApplyAuthorEditCommand,
     pub(crate) fault: AuthorEditFault,
-    /// The identities of a Refused Edit Draft that the edit can create.
-    draft: RefusedEditDraftIdentity,
     /// The identity of a Proposal Revision that the edit can append.
     proposal_revision_id: String,
-    /// The identity of the close event of a superseded source Draft.
-    source_close_event_id: String,
 }
 
 impl<'a> AuthorEdit<'a> {
@@ -133,27 +119,12 @@ impl<'a> AuthorEdit<'a> {
         Self {
             command,
             fault,
-            draft: crate::refused_edit_draft::new_identity(),
             proposal_revision_id: Uuid::now_v7().to_string(),
-            source_close_event_id: Uuid::now_v7().to_string(),
         }
     }
 
-    fn record(
-        &self,
-        source: Option<SourceDraftDisposition>,
-        refused_to_draft: bool,
-    ) -> AuthorEditRecord {
+    fn record(&self) -> AuthorEditRecord {
         AuthorEditRecord {
-            replacement_provenance: if refused_to_draft {
-                crate::draft_retry::replacement_provenance(
-                    source.as_ref(),
-                    self.command.retry_source.as_ref(),
-                )
-            } else {
-                None
-            },
-            source_draft_disposition: source,
             completed_intent_record_id: self.command.completed_intent_record_id.clone(),
             local_intent_sequence: self.command.local_intent_sequence,
         }
@@ -213,39 +184,6 @@ impl<'a> AuthorEdit<'a> {
             local_intent_sequence: command.local_intent_sequence,
         })
     }
-
-    /// The Receipt references of a recorded source Draft disposition.
-    fn source_refs(
-        source: Option<&SourceDraftDisposition>,
-    ) -> Result<ReceiptRefs, ProjectCommandError> {
-        let mut refs = ReceiptRefs::default();
-        if let Some(source) = source {
-            refs.source_draft_disposition =
-                Some(serde_json::to_string(source).map_err(unavailable)?);
-            refs.created_at = ReceiptTime::Transaction;
-            if let SourceDraftDisposition::ClosedSuperseded {
-                source_draft_id,
-                closure_event_ref,
-                ..
-            } = source
-            {
-                refs.draft_artifact_refs.push(source_draft_id.clone());
-                refs.artifact_lifecycle_event_refs
-                    .push(closure_event_ref.clone());
-            }
-        }
-        Ok(refs)
-    }
-}
-
-/// The result kind that the Receipt of one classified Author Edit records.
-fn result_kind(outcome: &storyos_core::ApplyAuthorEditOutcome) -> &'static str {
-    match outcome {
-        TransitionOutcome::Applied(applied) => applied.result_kind(),
-        TransitionOutcome::NoEffect(_)
-        | TransitionOutcome::Conflicted(_)
-        | TransitionOutcome::Refused(_) => outcome.receipt_result_kind(),
-    }
 }
 
 impl ProjectCommand for AuthorEdit<'_> {
@@ -275,7 +213,7 @@ impl ProjectCommand for AuthorEdit<'_> {
     type Effect = AuthorEditEffect;
     type NoEffect = AuthorEditNoEffect;
     type Conflict = AuthorEditConflict;
-    type Refusal = AuthorEditRefused;
+    type Refusal = AuthorEditRefusal;
 
     async fn classify(
         &self,
@@ -340,36 +278,17 @@ impl ProjectCommand for AuthorEdit<'_> {
         };
         let current_revision_id: String = row.get(/*idx*/ 0);
         let current_body: String = row.get(/*idx*/ 1);
-        let retry_source = crate::draft_retry::load_source(client, command).await?;
         let ClassifiedAuthorEdit {
             result,
             successor_blocks,
             proposal_context,
-        } = if retry_source
-            .as_ref()
-            .is_some_and(|source| !source.input_matches)
-        {
-            ClassifiedAuthorEdit {
-                result: TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged),
-                successor_blocks: None,
-                proposal_context: None,
-            }
-        } else {
-            classify_author_edit(client, command, &current_revision_id, current_body).await?
-        };
-        let (source, supersede) = plan_disposition(
-            retry_source.map(|source| source.disposition),
-            result_kind(&result),
-            self.source_close_event_id.clone(),
-        )?;
+        } = classify_author_edit(client, command, &current_revision_id, current_body).await?;
         let heads = ReceiptHeads {
             expected: vec![command.expected_authoritative_revision_id.clone()],
             prior: vec![current_revision_id.clone()],
             resulting: vec![current_revision_id.clone()],
         };
-        let mut refs = Self::source_refs(source.as_ref())?;
         let mut fields = serde_json::Map::new();
-        let mut draft = None;
         let outcome = match result {
             TransitionOutcome::Applied(applied) => {
                 let kind = match &applied {
@@ -388,8 +307,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                         current_revision_id: current_revision_id.clone(),
                         successor_blocks,
                         proposal_context,
-                        source: source.clone(),
-                        supersede,
                     },
                 ))
             }
@@ -401,27 +318,10 @@ impl ProjectCommand for AuthorEdit<'_> {
                 );
                 TransitionOutcome::Conflicted(reason)
             }
-            TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft) => {
-                let identity = self.draft.clone();
-                for (key, value) in [
-                    ("draft_id", &identity.draft_id),
-                    ("draft_revision_id", &identity.draft_revision_id),
-                    ("creation_event_id", &identity.creation_event_id),
-                ] {
-                    fields.insert(key.to_owned(), value.clone().into());
-                }
-                refs.draft_artifact_refs
-                    .insert(/*index*/ 0, identity.draft_id.clone());
-                refs.artifact_lifecycle_event_refs
-                    .insert(/*index*/ 0, identity.creation_event_id.clone());
-                draft = Some(identity);
-                TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft)
-            }
             TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
         };
         let effect = AuthorEditZeroEffect {
-            record: self.record(source, draft.is_some()),
-            draft,
+            record: self.record(),
             current_authoritative_revision_id: current_revision_id,
         };
         Ok(Classification {
@@ -430,7 +330,7 @@ impl ProjectCommand for AuthorEdit<'_> {
             heads,
             zero_receipt: ZeroReceipt::Observed {
                 fields,
-                refs,
+                refs: ReceiptRefs::default(),
                 effect,
             },
         })
@@ -494,8 +394,7 @@ impl ProjectCommand for AuthorEdit<'_> {
         _applied: &AuthorEditApplied,
         plan: &AuthorEditPlan,
     ) -> ReceiptRefs {
-        // The source disposition serializes, because classify serialized it.
-        let mut refs = Self::source_refs(plan.source.as_ref()).unwrap_or_default();
+        let mut refs = ReceiptRefs::default();
         if let AuthorEditSelector::Proposal = plan.kind {
             refs.proposal_revision_ids = vec![self.proposal_revision_id.clone()];
         }
@@ -512,7 +411,7 @@ impl ProjectCommand for AuthorEdit<'_> {
         applied: AuthorEditApplied,
     ) -> Result<AuthorEditWrite<AuthorEditEffect>, ProjectCommandError> {
         let command = self.command;
-        let record = self.record(plan.source.clone(), /*refused_to_draft*/ false);
+        let record = self.record();
         match applied {
             AuthorEditApplied::AuthoritativeApplied { body } => {
                 let (payload, members) = match plan.successor_blocks {
@@ -542,7 +441,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                     inline: plan
                         .proposal_context
                         .filter(|context| context.kind == "inline_edit"),
-                    supersede: plan.supersede,
                 })))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {
@@ -563,7 +461,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                         record,
                         proposal_revision_id: Some(proposal_revision_id),
                     },
-                    supersede: plan.supersede,
                 })
             }
         }
@@ -601,7 +498,7 @@ impl ProjectCommand for AuthorEdit<'_> {
     fn decode(&self, replay: &CommandReplay) -> Result<AuthorEditEffect, ReplayFault> {
         let effect = replay.effect();
         Ok(AuthorEditEffect {
-            record: replayed_record(replay, /*refused_to_draft*/ false)?,
+            record: replayed_record(replay)?,
             proposal_revision_id: match replay.result_kind() {
                 "proposal_revised" => Some(effect.required("proposal_revision_id")?),
                 _ => None,
@@ -609,95 +506,12 @@ impl ProjectCommand for AuthorEdit<'_> {
         })
     }
 
-    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
-        match outcome {
-            ZeroOutcome::Refused(AuthorEditRefused::RefusedToDraft) => ZeroAuthorityRows::Effect,
-            ZeroOutcome::NoEffect(_) | ZeroOutcome::Conflicted(_) | ZeroOutcome::Refused(_) => {
-                ZeroAuthorityRows::None
-            }
-        }
-    }
-
-    async fn write_zero_authority_effect(
-        &self,
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        _outcome: &ZeroOutcome<'_, Self>,
-    ) -> Result<AuthorEditZeroEffect, ProjectCommandError> {
-        let command = self.command;
-        let identity = crate::refused_edit_draft::persist(client, command, self.draft.clone())
-            .await
-            .map_err(project_error)?;
-        // The settle step holds the lock of the source Draft, so its facts do not change.
-        let retry_source = crate::draft_retry::load_source(client, command)
-            .await
-            .map_err(project_error)?;
-        let (source, supersede) = plan_disposition(
-            retry_source.map(|source| source.disposition),
-            "refused_to_draft",
-            self.source_close_event_id.clone(),
-        )
-        .map_err(project_error)?;
-        if let Some(supersede) = supersede {
-            write_supersede(
-                client,
-                &envelope.project_scope,
-                &envelope.ids.receipt_id,
-                &supersede,
-                "refused_to_draft",
-                /*action_sequence*/ None,
-            )
-            .await
-            .map_err(project_error)?;
-        }
-        let current_authoritative_revision_id = client
-            .query_one(
-                "SELECT current_revision_id::text FROM storyos.authoritative_heads
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND manuscript_object_id = $3::text::uuid",
-                &[
-                    &envelope.project_scope.owner_user_id.as_ref(),
-                    &envelope.project_scope.project_id.as_ref(),
-                    &command.chapter_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?
-            .get(/*idx*/ 0);
-        Ok(AuthorEditZeroEffect {
-            record: self.record(source, /*refused_to_draft*/ true),
-            draft: Some(identity),
-            current_authoritative_revision_id,
-        })
-    }
-
     fn decode_zero_authority_effect(
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<AuthorEditZeroEffect>, ReplayFault> {
-        let refused_to_draft = replay.result_kind() == "refused_to_draft";
-        let effect = replay.effect();
-        let draft = if refused_to_draft {
-            let identity = RefusedEditDraftIdentity {
-                draft_id: replay.receipt_uuid("draft_id")?,
-                draft_revision_id: replay.receipt_uuid("draft_revision_id")?,
-                creation_event_id: replay.receipt_uuid("creation_event_id")?,
-            };
-            if effect.text("draft_id")?.as_ref() != Some(&identity.draft_id)
-                || effect.text("draft_revision_id")?.as_ref() != Some(&identity.draft_revision_id)
-                || effect.text("creation_event_id")?.as_ref() != Some(&identity.creation_event_id)
-            {
-                return Err(ReplayFault::Unavailable(
-                    "the Refused Edit Draft does not match its Receipt".into(),
-                ));
-            }
-            Some(identity)
-        } else {
-            None
-        };
         Ok(Some(AuthorEditZeroEffect {
-            record: replayed_record(replay, refused_to_draft)?,
-            draft,
+            record: replayed_record(replay)?,
             current_authoritative_revision_id: replay
                 .resulting_heads
                 .first()

@@ -5,45 +5,6 @@
         {
           "additionalProperties": false,
           "properties": {
-            "creation_event_id": {
-              "type": "string"
-            },
-            "draft_id": {
-              "type": "string"
-            },
-            "draft_revision_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "refused_to_draft",
-              "type": "string"
-            },
-            "refusal_origin": {
-              "$ref": "#/$defs/RefusedEditOrigin"
-            },
-            "replacement_provenance": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/DraftRetryReplacement"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "refusal_origin",
-            "draft_id",
-            "draft_revision_id",
-            "creation_event_id"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
             "author_action_sequence": {
               "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
               "type": "string"
@@ -281,16 +242,6 @@
         },
         "schema_id": {
           "type": "string"
-        },
-        "source_draft_disposition": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SourceDraftDisposition"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "required": [
@@ -540,8 +491,6 @@
     },
     "DomainReceiptCommandKind": {
       "enum": [
-        "expandRefusedEditDraftToProposal",
-        "closeEditorFlowDraft",
         "applyAuthorEdit",
         "takeOverProjectWriter",
         "createProject",
@@ -573,96 +522,11 @@
     },
     "DomainReceiptResult": {
       "enum": [
-        "proposal_created_from_draft",
-        "draft_closure_changed",
-        "refused_to_draft",
         "authoritative_applied",
         "proposal_revised",
         "no_effect",
         "conflicted",
         "refused"
-      ],
-      "type": "string"
-    },
-    "DraftPayloadPosition": {
-      "additionalProperties": false,
-      "properties": {
-        "block_index": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "offset": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "block_index",
-        "offset"
-      ],
-      "type": "object"
-    },
-    "DraftRetryReplacement": {
-      "additionalProperties": false,
-      "properties": {
-        "closure_event_ref": {
-          "type": "string"
-        },
-        "selected_payload_range": {
-          "$ref": "#/$defs/ExactStructuredRange"
-        },
-        "source_draft_id": {
-          "type": "string"
-        },
-        "source_draft_payload_digest": {
-          "type": "string"
-        },
-        "source_draft_revision_id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "source_draft_id",
-        "source_draft_revision_id",
-        "source_draft_payload_digest",
-        "closure_event_ref",
-        "selected_payload_range"
-      ],
-      "type": "object"
-    },
-    "ExactStructuredRange": {
-      "additionalProperties": false,
-      "properties": {
-        "coordinate_profile": {
-          "type": "string"
-        },
-        "from": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        },
-        "kind": {
-          "$ref": "#/$defs/ExactStructuredRangeKind"
-        },
-        "slice_digest": {
-          "type": "string"
-        },
-        "to": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        }
-      },
-      "required": [
-        "kind",
-        "coordinate_profile",
-        "from",
-        "to",
-        "slice_digest"
-      ],
-      "type": "object"
-    },
-    "ExactStructuredRangeKind": {
-      "enum": [
-        "exact_structured_range"
       ],
       "type": "string"
     },
@@ -699,44 +563,6 @@
       ],
       "type": "string"
     },
-    "ObservedDraftClosure": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "open",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "close_reason": {
-              "type": "string"
-            },
-            "closure_event_ref": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "closed",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "close_reason",
-            "closure_event_ref"
-          ],
-          "type": "object"
-        }
-      ]
-    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -752,111 +578,6 @@
         "project_id"
       ],
       "type": "object"
-    },
-    "RefusedEditOrigin": {
-      "enum": [
-        "fresh_editor_intent",
-        "draft_retry_replacement"
-      ],
-      "type": "string"
-    },
-    "RetryDraftClosure": {
-      "enum": [
-        "open"
-      ],
-      "type": "string"
-    },
-    "RetryDraftKind": {
-      "enum": [
-        "refused_edit"
-      ],
-      "type": "string"
-    },
-    "SourceDraftDisposition": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "current_closure": {
-              "$ref": "#/$defs/ObservedDraftClosure"
-            },
-            "current_source_draft_payload_digest": {
-              "type": "string"
-            },
-            "current_source_draft_revision_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "unchanged",
-              "type": "string"
-            },
-            "requested_source_draft_revision_id": {
-              "type": "string"
-            },
-            "source_draft_id": {
-              "type": "string"
-            },
-            "source_draft_kind": {
-              "$ref": "#/$defs/RetryDraftKind"
-            }
-          },
-          "required": [
-            "kind",
-            "source_draft_kind",
-            "source_draft_id",
-            "requested_source_draft_revision_id",
-            "current_source_draft_revision_id",
-            "current_source_draft_payload_digest",
-            "current_closure"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "close_reason": {
-              "type": "string"
-            },
-            "closure_event_ref": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "closed_superseded",
-              "type": "string"
-            },
-            "prior_closure": {
-              "$ref": "#/$defs/RetryDraftClosure"
-            },
-            "resulting_closure": {
-              "type": "string"
-            },
-            "source_draft_id": {
-              "type": "string"
-            },
-            "source_draft_kind": {
-              "$ref": "#/$defs/RetryDraftKind"
-            },
-            "source_draft_payload_digest": {
-              "type": "string"
-            },
-            "source_draft_revision_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "source_draft_kind",
-            "source_draft_id",
-            "source_draft_revision_id",
-            "source_draft_payload_digest",
-            "prior_closure",
-            "resulting_closure",
-            "close_reason",
-            "closure_event_ref"
-          ],
-          "type": "object"
-        }
-      ]
     }
   },
   "$id": "storyos.query.apply-author-edit-outcome.response.v1",

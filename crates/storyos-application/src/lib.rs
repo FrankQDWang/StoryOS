@@ -41,11 +41,6 @@ mod model_gateway_ports;
 mod model_lease_renewal;
 mod model_stream_commit;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
-mod refused_edit_draft;
-pub use refused_edit_draft::{
-    AUTHOR_EDIT_INLINE_SOURCE_MAX_BYTES, RefusedEditDraftClosure, RefusedEditDraftIdentity,
-    RefusedEditDraftReader, RefusedEditDraftRecord,
-};
 mod author_edit_outcome;
 mod diagnostics;
 pub use diagnostics::{
@@ -552,13 +547,3 @@ pub async fn open_current_chapter(
 #[cfg(test)]
 #[path = "project_read_tests.rs"]
 mod tests;
-
-mod close_editor_flow_draft;
-mod expand_refused_edit_draft;
-pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftInput, CloseEditorFlowDraftSettlement, DraftCloseObservation, DraftClosed,
-};
-pub use expand_refused_edit_draft::{
-    DraftExpanded, DraftExpansionObservation, ExpandRefusedEditDraftSettlement,
-    ExpandRefusedEditDraftToProposalInput,
-};

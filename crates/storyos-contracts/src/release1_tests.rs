@@ -57,7 +57,6 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
 #[test]
 fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
     let request = ApplyAuthorEditRequest {
-        retry_source: None,
         command_schema: APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
         client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
         security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
@@ -81,7 +80,6 @@ fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: "storyos.editor.utf16-code-unit.v1".to_owned(),
                 from: 4,
                 to: 4,

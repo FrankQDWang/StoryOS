@@ -144,8 +144,7 @@ fn prepare_follow_up(
             *to = position;
             *text = "x".to_owned();
         }
-        AuthorEditPrimitive::ReplaceStructuredSelection { .. }
-        | AuthorEditPrimitive::ReplaceBlockSelection { .. }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. }
         | AuthorEditPrimitive::SplitBlock { .. }
         | AuthorEditPrimitive::JoinBlocks { .. }
         | AuthorEditPrimitive::MoveBlock { .. }
@@ -161,8 +160,7 @@ fn prepare_follow_up(
             *to = position + 1;
             *text = replacement.to_owned();
         }
-        AuthorEditPrimitive::ReplaceStructuredSelection { .. }
-        | AuthorEditPrimitive::ReplaceBlockSelection { .. }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. }
         | AuthorEditPrimitive::SplitBlock { .. }
         | AuthorEditPrimitive::JoinBlocks { .. }
         | AuthorEditPrimitive::MoveBlock { .. }

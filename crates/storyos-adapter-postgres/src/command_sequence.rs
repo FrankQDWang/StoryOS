@@ -102,15 +102,6 @@ pub(crate) struct EditorAdmission {
     pub(crate) expected_authoritative_revision_id: Option<String>,
     /// The Manuscript Block references that the command targets, in command order.
     pub(crate) target_refs: Vec<String>,
-    pub(crate) writer: EditorWriter,
-}
-
-/// The writer generation that an editor Admission insert requires of the Editor Session.
-pub(crate) enum EditorWriter {
-    /// The session holds the current writer generation.
-    Current,
-    /// The session holds the current writer generation, and it is equal to the client value.
-    ClientGeneration(u64),
 }
 
 /// The head arrays that the Domain Receipt of every outcome records.
@@ -121,35 +112,17 @@ pub(crate) struct ReceiptHeads {
     pub(crate) resulting: Vec<String>,
 }
 
-/// The Proposal Revision, Draft, lifecycle, and condition references that one Domain Receipt
-/// records.
+/// The Proposal Revision and condition references that one Domain Receipt records.
 #[derive(Default)]
 pub(crate) struct ReceiptRefs {
     pub(crate) proposal_revision_ids: Vec<String>,
     pub(crate) condition_refs: Vec<String>,
-    pub(crate) draft_artifact_refs: Vec<String>,
-    pub(crate) artifact_lifecycle_event_refs: Vec<String>,
-    /// The JSON text of the source Draft disposition, when the Receipt records one.
-    pub(crate) source_draft_disposition: Option<String>,
-    pub(crate) created_at: ReceiptTime,
-}
-
-/// The time that a Domain Receipt records.
-#[derive(Clone, Copy, Default)]
-pub(crate) enum ReceiptTime {
-    #[default]
-    Clock,
-    /// The start of the transaction. A Draft lifecycle event of the same settlement records the
-    /// same time.
-    Transaction,
 }
 
 /// The error of an Admission insert that inserts no row.
 pub(crate) enum MissingAdmission {
     InvalidChallenge,
     BindingConflict,
-    /// The Editor Session does not hold the writer generation that the Admission requires.
-    InvalidWriter,
     /// `ProjectCommand::diagnose_missing_admission` gives a typed error of the command.
     Diagnosed,
 }
@@ -160,7 +133,6 @@ impl MissingAdmission {
         match self {
             Self::InvalidChallenge => ProjectCommandError::InvalidChallenge,
             Self::BindingConflict => ProjectCommandError::BindingConflict,
-            Self::InvalidWriter => ProjectCommandError::WriterIneligible,
             Self::Diagnosed => unavailable("the command declares no missing-Admission diagnosis"),
         }
     }
@@ -614,9 +586,9 @@ async fn first_use<C: ProjectCommand>(
             MissingAdmission::Diagnosed => {
                 command.diagnose_missing_admission(client, envelope).await
             }
-            MissingAdmission::InvalidChallenge
-            | MissingAdmission::BindingConflict
-            | MissingAdmission::InvalidWriter => C::SPEC.missing_admission.error().into(),
+            MissingAdmission::InvalidChallenge | MissingAdmission::BindingConflict => {
+                C::SPEC.missing_admission.error().into()
+            }
         });
     }
     settle_classified(client, envelope, command, &project, classification).await

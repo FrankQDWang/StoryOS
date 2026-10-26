@@ -13,9 +13,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec,
-    EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect,
-    ZeroReceipt, settle_project_command, unavailable,
+    EditorAdmission, LockedProject, MissingAdmission, ProfileSequences, ProjectCommand,
+    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -237,7 +237,6 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                     self.expected_authoritative_revision_id.clone(),
                 ),
                 target_refs: Vec::new(),
-                writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
                 expected: head.clone(),

@@ -21,8 +21,6 @@ pub(super) const UNDO_REPLAY_EFFECT: &str = "SELECT jsonb_build_object(
         'acceptance_source_sequence', child.source_author_action_sequence::text,
         'acceptance_proposal_id', child.proposal_id::text,
         'acceptance_proposal_revision_id', child.proposal_revision_id::text,
-        'draft_event', draft_event.payload,
-        'source_reopen_event', source_reopen.payload,
         'author_undo_frontier_sequence', (
           SELECT forward.author_action_sequence::text
             FROM storyos.author_action_entries AS forward
@@ -89,32 +87,6 @@ LEFT JOIN LATERAL (
           ORDER BY snapshot.project_activity_position, snapshot.created_at
           LIMIT 1
        ) AS compensation_snapshot ON true
-LEFT JOIN LATERAL (
-         SELECT event.payload
-           FROM storyos.draft_reopen_events AS event
-           JOIN storyos.draft_reopen_receipts AS handler
-             ON (handler.owner_user_id, handler.project_id, handler.receipt_id) =
-                (event.owner_user_id, event.project_id, event.handler_receipt_id)
-          WHERE (event.owner_user_id, event.project_id) =
-                (receipt.owner_user_id, receipt.project_id)
-            AND event.event_id::text = receipt.result_payload->>'event_id'
-       ) AS draft_event ON true
-LEFT JOIN LATERAL (
-         SELECT event.payload
-           FROM storyos.draft_reopen_receipts AS handler
-           JOIN storyos.draft_reopen_events AS event
-             ON (event.owner_user_id, event.project_id, event.handler_receipt_id) =
-                (handler.owner_user_id, handler.project_id, handler.receipt_id)
-           JOIN storyos.draft_close_events AS source
-             ON (source.owner_user_id, source.project_id, source.event_id) =
-                (event.owner_user_id, event.project_id, event.source_close_event_id)
-          WHERE (handler.owner_user_id, handler.project_id, handler.author_undo_receipt_id) =
-                (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-            AND receipt.result_kind = 'authoritative_applied'
-            AND source.close_reason = 'superseded'
-            AND receipt.draft_artifact_refs = ARRAY[event.draft_id::text]
-            AND receipt.artifact_lifecycle_event_refs = ARRAY[event.event_id::text]
-       ) AS source_reopen ON true
   WHERE receipt.owner_user_id = $1::text::uuid
     AND receipt.project_id = $2::text::uuid
     AND receipt.receipt_id = $3::text::uuid";
@@ -187,10 +159,6 @@ impl UndoReplay {
             authoritative_commit_id: self.text("authoritative_commit_id")?,
             restored_proposal_revision_id: self.text("restored_proposal_revision_id")?,
             receipt_payload: replay.receipt_fields(),
-            draft_event: self
-                .fields
-                .get("draft_event")
-                .filter(|event| !event.is_null()),
             revision: replay.revision.as_ref(),
             acceptance: self.acceptance()?,
         })
@@ -228,29 +196,6 @@ impl UndoReplay {
             },
             None,
         ))
-    }
-
-    /// The Author Undo Frontier that the Receipt payload of a Draft Compensation records.
-    pub(super) fn draft_frontier(
-        &self,
-        replay: &CommandReplay,
-    ) -> Result<Option<u64>, ReplayFault> {
-        match replay.receipt_fields().get("author_undo_frontier_sequence") {
-            None | Some(serde_json::Value::Null) => Ok(None),
-            Some(serde_json::Value::String(text)) => text.parse().map(Some).map_err(|_| damaged()),
-            Some(_) => Err(damaged()),
-        }
-    }
-
-    pub(super) fn source_reopen_event(
-        &self,
-    ) -> Result<Option<storyos_contracts::EditorFlowDraftReopened>, ReplayFault> {
-        match self.fields.get("source_reopen_event") {
-            None | Some(serde_json::Value::Null) => Ok(None),
-            Some(event) => serde_json::from_value(event.clone())
-                .map(Some)
-                .map_err(|_| damaged()),
-        }
     }
 }
 

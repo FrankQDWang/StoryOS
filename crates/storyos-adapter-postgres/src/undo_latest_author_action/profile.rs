@@ -11,7 +11,6 @@ use super::replay::{UndoReplay, frontier_as_of_receipt};
 use crate::accept_proposal::{AcceptanceCompensation, LoadedAcceptance, reversal_blocks};
 use crate::author_edit::{ObservedProseFrontier, ProseCompensation};
 use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
-use crate::close_editor_flow_draft::{DraftCompensation, ObservedDraftClose};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedVariant, AuthoritativeRevision, CommandSpec, LockedProject, ReceiptHeads,
@@ -30,7 +29,6 @@ use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, ForwardCommand, UndoDisposition, UndoRequest,
     allocate_compensation_action,
 };
-use crate::undo_draft_retry::{load_source_reopen, persist_source_reopen};
 use crate::undo_frontier::ObservedFrontier;
 use crate::withdraw_proposal::{AuthorWithdrawalCompensation, ObservedAuthorWithdrawal};
 
@@ -38,8 +36,6 @@ use crate::withdraw_proposal::{AuthorWithdrawalCompensation, ObservedAuthorWithd
 pub(crate) struct UndoPlan {
     family: UndoFamily,
     source_sequence: u64,
-    /// The Refused Edit Draft that the source superseded, which the Compensation reopens.
-    pub(super) source_reopen: Option<ObservedDraftClose>,
     /// The current Project Activity position.
     project_activity_position: u64,
 }
@@ -55,7 +51,6 @@ enum UndoFamily {
     ReopenRejectedOperations(ObservedOperationReopening),
     ReopenWithdrawnProposal(ObservedProposalDecision),
     AuthorWithdrawal(ObservedAuthorWithdrawal),
-    Draft(ObservedDraftClose),
     /// The Forward Author Action of an Undo Acceptance that requires a Reversal Proposal.
     Reversal {
         loaded: LoadedAcceptance,
@@ -110,23 +105,9 @@ impl UndoPlan {
                 (source_sequence, UndoFamily::from_frontier(observed)?)
             }
         };
-        let source_reopen = match &family {
-            UndoFamily::Draft(_) => None,
-            UndoFamily::Prose(_)
-            | UndoFamily::Acceptance(_)
-            | UndoFamily::Structure(_)
-            | UndoFamily::CurrentChapter(_)
-            | UndoFamily::ProposalEdit(_)
-            | UndoFamily::Replan(_)
-            | UndoFamily::ReopenRejectedOperations(_)
-            | UndoFamily::ReopenWithdrawnProposal(_)
-            | UndoFamily::AuthorWithdrawal(_)
-            | UndoFamily::Reversal { .. } => load_source_reopen(client, request).await?,
-        };
         Ok(Some(Self {
             family,
             source_sequence,
-            source_reopen,
             project_activity_position: current_activity_position(client, &request.project_scope)
                 .await?,
         }))
@@ -137,7 +118,6 @@ impl UndoPlan {
             UndoFamily::Reversal { .. } => {
                 AppliedVariant::Forward(ForwardCommand::UndoReversalRequired)
             }
-            UndoFamily::Draft(_) => AppliedVariant::Compensation(DraftCompensation::RESULT_KIND),
             UndoFamily::Prose(_)
             | UndoFamily::Acceptance(_)
             | UndoFamily::Structure(_)
@@ -165,8 +145,7 @@ impl UndoPlan {
             | UndoFamily::Replan(_)
             | UndoFamily::ReopenRejectedOperations(_)
             | UndoFamily::ReopenWithdrawnProposal(_)
-            | UndoFamily::AuthorWithdrawal(_)
-            | UndoFamily::Draft(_) => expected.to_owned(),
+            | UndoFamily::AuthorWithdrawal(_) => expected.to_owned(),
         };
         ReceiptHeads {
             expected: vec![expected.to_owned()],
@@ -191,28 +170,11 @@ impl UndoPlan {
             UndoFamily::AuthorWithdrawal(evidence) => {
                 AuthorWithdrawalCompensation::receipt_payload(evidence, position)
             }
-            UndoFamily::Draft(evidence) => DraftCompensation::receipt_payload(evidence, position),
             UndoFamily::Prose(_)
             | UndoFamily::Acceptance(_)
             | UndoFamily::Structure(_)
             | UndoFamily::CurrentChapter(_)
             | UndoFamily::Reversal { .. } => serde_json::Map::new(),
-        }
-    }
-
-    pub(super) fn receipt_draft(&self) -> Option<(String, String)> {
-        match &self.family {
-            UndoFamily::Draft(evidence) => DraftCompensation::receipt_draft(evidence),
-            UndoFamily::Prose(_)
-            | UndoFamily::Acceptance(_)
-            | UndoFamily::Structure(_)
-            | UndoFamily::CurrentChapter(_)
-            | UndoFamily::ProposalEdit(_)
-            | UndoFamily::Replan(_)
-            | UndoFamily::ReopenRejectedOperations(_)
-            | UndoFamily::ReopenWithdrawnProposal(_)
-            | UndoFamily::AuthorWithdrawal(_)
-            | UndoFamily::Reversal { .. } => None,
         }
     }
 }
@@ -233,7 +195,6 @@ impl UndoFamily {
                 Self::ReopenWithdrawnProposal(decision)
             }
             ObservedFrontier::AuthorWithdrawal(withdrawal) => Self::AuthorWithdrawal(withdrawal),
-            ObservedFrontier::DraftClose(close) => Self::Draft(close),
             ObservedFrontier::Barrier { .. } => return Err(ProjectCommandError::BindingConflict),
         })
     }
@@ -250,7 +211,6 @@ impl SelectsRecords<UndoCompensation> for UndoPlan {
             | UndoFamily::ReopenRejectedOperations(_)
             | UndoFamily::ReopenWithdrawnProposal(_)
             | UndoFamily::AuthorWithdrawal(_)
-            | UndoFamily::Draft(_)
             | UndoFamily::Reversal { .. } => UndoSelector::Action,
         }
     }
@@ -365,9 +325,6 @@ impl SettlementProfile for UndoCompensation {
                 )
                 .await?
             }
-            (UndoFamily::Draft(evidence), UndoSequences::Action(sequences)) => {
-                DraftCompensation::compensate(client, request, evidence, sequences, source).await?
-            }
             (UndoFamily::Reversal { loaded, blocks }, UndoSequences::Action(sequences)) => {
                 crate::accept_proposal::persist_reversal(
                     client, request, loaded, blocks, sequences, source,
@@ -376,19 +333,7 @@ impl SettlementProfile for UndoCompensation {
             }
             (_, _) => return Err(mismatch()),
         };
-        let source_reopen_event = match &plan.source_reopen {
-            Some(source) => {
-                Some(persist_source_reopen(client, request, source, author_action_sequence).await?)
-            }
-            None => None,
-        };
         let author_undo_frontier_sequence = match &plan.family {
-            UndoFamily::Draft(evidence) => evidence
-                .next_frontier
-                .as_deref()
-                .map(str::parse)
-                .transpose()
-                .map_err(unavailable)?,
             UndoFamily::Reversal { .. } => None,
             UndoFamily::Prose(_)
             | UndoFamily::Acceptance(_)
@@ -413,7 +358,6 @@ impl SettlementProfile for UndoCompensation {
             source_sequence: source,
             author_action_sequence,
             author_undo_frontier_sequence,
-            source_reopen_event,
             records,
         })
     }
@@ -485,11 +429,6 @@ impl SettlementProfile for UndoCompensation {
                 AuthorWithdrawalCompensation::decode(&compensation)?,
                 frontier_as_of_receipt(replay)?,
             ),
-            Some(UndoDisposition::Draft) => (
-                stored.compensated_source_sequence()?,
-                DraftCompensation::decode(&compensation)?,
-                stored.draft_frontier(replay)?,
-            ),
             Some(UndoDisposition::Barrier) => return Err(damaged()),
             None => stored.reversal()?,
         };
@@ -498,7 +437,6 @@ impl SettlementProfile for UndoCompensation {
             source_sequence,
             author_action_sequence,
             author_undo_frontier_sequence,
-            source_reopen_event: stored.source_reopen_event()?,
             records,
         })
     }

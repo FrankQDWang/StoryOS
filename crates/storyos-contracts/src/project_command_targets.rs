@@ -166,18 +166,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.continue-proposal-generation.request.v1",
     ),
     target(
-        "expandRefusedEditDraftToProposal",
-        "POST",
-        "/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions",
-        "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
-    ),
-    target(
-        "closeEditorFlowDraft",
-        "POST",
-        "/api/v1/projects/{project_id}/drafts/{draft_id}/closures",
-        "storyos.command.close-editor-flow-draft.request.v1",
-    ),
-    target(
         "undoLatestAuthorAction",
         "POST",
         "/api/v1/projects/{project_id}/author-actions/undo",

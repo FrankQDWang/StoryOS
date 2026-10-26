@@ -3,9 +3,8 @@
 use std::future::Future;
 
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorSessionId, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, UndoLatestAuthorActionInput,
-    UndoRecords,
+    AuthorCommandAdmissionIds, EditorSessionId, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectScope, UndoLatestAuthorActionInput, UndoRecords,
 };
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
@@ -15,8 +14,6 @@ use crate::command_replay::ReplayFault;
 /// The request facts of one Author Undo that the compensation adapters read.
 pub(crate) struct UndoRequest {
     pub(crate) project_scope: ProjectScope,
-    pub(crate) challenge_binding: ProjectCommandChallengeBinding,
-    pub(crate) canonical_command_bytes: Vec<u8>,
     pub(crate) ids: AuthorCommandAdmissionIds,
     pub(crate) editor_session_id: EditorSessionId,
     pub(crate) expected_author_undo_frontier_sequence: u64,
@@ -30,8 +27,6 @@ impl UndoRequest {
     ) -> Self {
         Self {
             project_scope: envelope.project_scope.clone(),
-            challenge_binding: envelope.challenge_binding.clone(),
-            canonical_command_bytes: envelope.canonical_command_bytes.clone(),
             ids: envelope.ids.clone(),
             editor_session_id: input.editor_session_id.clone(),
             expected_author_undo_frontier_sequence: input.expected_author_undo_frontier_sequence,
@@ -84,12 +79,6 @@ pub(crate) trait CompensationAdapter {
         _project_activity_position: u64,
     ) -> serde_json::Map<String, serde_json::Value> {
         serde_json::Map::new()
-    }
-
-    /// The Draft and its lifecycle event that the Undo Receipt records, when the Compensation
-    /// reopens a Draft.
-    fn receipt_draft(_evidence: &Self::Evidence) -> Option<(String, String)> {
-        None
     }
 
     /// Writes the Compensation records after the Undo Receipt and gives them.
@@ -146,8 +135,6 @@ pub(crate) struct CompensationReplay<'a> {
     /// The Proposal Revision that a Proposal Compensation appended to the source head.
     pub(crate) restored_proposal_revision_id: Option<String>,
     pub(crate) receipt_payload: &'a serde_json::Map<String, serde_json::Value>,
-    /// The `payload` JSON of the Draft reopen event of a Draft Compensation.
-    pub(crate) draft_event: Option<&'a serde_json::Value>,
     pub(crate) revision: Option<&'a crate::command_replay::ReplayedRevision>,
     /// The `undo_acceptance_receipts` row of an Undo Acceptance.
     pub(crate) acceptance: Option<AcceptanceChildReplay>,
@@ -169,8 +156,6 @@ pub(crate) enum ForwardCommand {
     Structure(StructureCommand),
     SetCurrentChapter,
     WithdrawProposal,
-    CloseEditorFlowDraft,
-    ExpandRefusedEditDraftToProposal,
     ReplanProposal,
     ReopenRejectedOperations,
     ReopenWithdrawnProposal,
@@ -208,7 +193,6 @@ pub(crate) enum UndoDisposition {
     Structure(StructureCommand),
     CurrentChapter,
     AuthorWithdrawal,
-    Draft,
     Barrier,
 }
 
@@ -230,8 +214,6 @@ impl ForwardCommand {
             "deleteChapter" => Self::Structure(StructureCommand::DeleteChapter),
             "setCurrentChapter" => Self::SetCurrentChapter,
             "withdrawProposal" => Self::WithdrawProposal,
-            "closeEditorFlowDraft" => Self::CloseEditorFlowDraft,
-            "expandRefusedEditDraftToProposal" => Self::ExpandRefusedEditDraftToProposal,
             "replanProposal" => Self::ReplanProposal,
             "reopenRejectedOperations" => Self::ReopenRejectedOperations,
             "reopenWithdrawnProposal" => Self::ReopenWithdrawnProposal,
@@ -256,8 +238,6 @@ impl ForwardCommand {
             Self::Structure(StructureCommand::DeleteChapter) => "deleteChapter",
             Self::SetCurrentChapter => "setCurrentChapter",
             Self::WithdrawProposal => "withdrawProposal",
-            Self::CloseEditorFlowDraft => "closeEditorFlowDraft",
-            Self::ExpandRefusedEditDraftToProposal => "expandRefusedEditDraftToProposal",
             Self::ReplanProposal => "replanProposal",
             Self::ReopenRejectedOperations => "reopenRejectedOperations",
             Self::ReopenWithdrawnProposal => "reopenWithdrawnProposal",
@@ -281,8 +261,6 @@ impl ForwardCommand {
             | Self::ReopenRejectedOperations
             | Self::ReopenWithdrawnProposal => "proposal_revised",
             Self::WithdrawProposal => "proposal_closure_changed",
-            Self::CloseEditorFlowDraft => "draft_closure_changed",
-            Self::ExpandRefusedEditDraftToProposal => "proposal_created_from_draft",
             Self::RejectProposalOperations => "proposal_operations_resolved",
             Self::CompleteReadyPartialProposal => "proposal_generation_completed",
             Self::ContinueProposalGeneration => "proposal_generation_started",
@@ -300,9 +278,6 @@ impl ForwardCommand {
             Self::Structure(command) => UndoDisposition::Structure(command),
             Self::SetCurrentChapter => UndoDisposition::CurrentChapter,
             Self::WithdrawProposal => UndoDisposition::AuthorWithdrawal,
-            Self::CloseEditorFlowDraft | Self::ExpandRefusedEditDraftToProposal => {
-                UndoDisposition::Draft
-            }
             Self::RejectProposalOperations
             | Self::CompleteReadyPartialProposal
             | Self::ContinueProposalGeneration

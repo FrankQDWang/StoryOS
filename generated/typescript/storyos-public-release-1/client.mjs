@@ -436,38 +436,6 @@ export async function continueProposalGeneration({ projectId, proposalId, reques
   return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(proposalId)}/generation-continuations`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
-export async function digestExpandRefusedEditDraft(request, cryptoImpl = globalThis.crypto) {
-  if (!request || typeof request !== "object") throw new TypeError("digestExpandRefusedEditDraft requires request");
-  const canonical = canonicalJson(request);
-  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return { algorithm: "sha256", profile: "storyos.command.expandRefusedEditDraftToProposal.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
-}
-
-export async function expandRefusedEditDraftToProposal({ projectId, draftId, request, idempotencyKey, antiForgery, ...options } = {}) {
-  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("expandRefusedEditDraftToProposal requires projectId");
-  if (typeof draftId !== "string" || draftId.length === 0) throw new TypeError("expandRefusedEditDraftToProposal requires draftId");
-  if (!request || typeof request !== "object") throw new TypeError("expandRefusedEditDraftToProposal requires request");
-  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("expandRefusedEditDraftToProposal requires security bindings");
-  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/drafts/${encodeURIComponent(draftId)}/proposal-expansions`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
-}
-
-export async function digestCloseEditorFlowDraft(request, cryptoImpl = globalThis.crypto) {
-  if (!request || typeof request !== "object") throw new TypeError("digestCloseEditorFlowDraft requires request");
-  const canonical = canonicalJson(request);
-  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return { algorithm: "sha256", profile: "storyos.command.closeEditorFlowDraft.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
-}
-
-export async function closeEditorFlowDraft({ projectId, draftId, request, idempotencyKey, antiForgery, ...options } = {}) {
-  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("closeEditorFlowDraft requires projectId");
-  if (typeof draftId !== "string" || draftId.length === 0) throw new TypeError("closeEditorFlowDraft requires draftId");
-  if (!request || typeof request !== "object") throw new TypeError("closeEditorFlowDraft requires request");
-  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("closeEditorFlowDraft requires security bindings");
-  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/drafts/${encodeURIComponent(draftId)}/closures`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
-}
-
 export async function digestUndoLatestAuthorAction(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestUndoLatestAuthorAction requires request");
   const canonical = canonicalJson(request);
@@ -605,12 +573,6 @@ export async function listChapterOpenProposals({ projectId, chapterId, ...option
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listChapterOpenProposals requires projectId");
   if (typeof chapterId !== "string" || chapterId.length === 0) throw new TypeError("listChapterOpenProposals requires chapterId");
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/open-proposals` });
-}
-
-export async function getRefusedEditDraft({ projectId, draftId, ...options } = {}) {
-  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getRefusedEditDraft requires projectId");
-  if (typeof draftId !== "string" || draftId.length === 0) throw new TypeError("getRefusedEditDraft requires draftId");
-  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/refused-edit-drafts/${encodeURIComponent(draftId)}` });
 }
 
 export async function getApplyAuthorEditOutcome({ projectId, idempotencyKey, antiForgery, ...options } = {}) {

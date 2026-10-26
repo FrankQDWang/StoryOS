@@ -555,24 +555,30 @@ async fn an_archive_build_refusal_writes_no_row_and_the_archive_pins_its_own_adm
     let (store, admin) = stores().await;
     let call = export_call::<ExportProjectArchiveInput>(&store, /*base*/ 0xc660).await;
     let scope = &call.envelope.project_scope;
-    // A tombstoned Draft without its revision has no valid provenance.
-    let draft = format!(
-        "INSERT INTO storyos.draft_artifacts
-           (owner_user_id, project_id, draft_id, current_revision_id, retention_state)
-         VALUES ('{}', '{}', '{}', '{}', 'tombstoned')",
-        scope.owner_user_id.as_ref(),
-        scope.project_id.as_ref(),
-        Uuid::now_v7(),
-        Uuid::now_v7(),
+    // An applied Acceptance of a missing Proposal Revision has no valid provenance.
+    let acceptance = format!(
+        "INSERT INTO storyos.acceptance_receipts
+           (owner_user_id, project_id, acceptance_receipt_id, proposal_id, proposal_revision_id,
+            validation_receipt_id, selected_operation_id, selected_operation_ids, result,
+            applied_authoritative_revision_id, target_resolution)
+         SELECT owner_user_id, project_id, receipt_id, '{proposal}', '{revision}', '{validation}',
+                '{operation}', ARRAY['{operation}']::uuid[], 'authoritative_applied',
+                '{revision}', 'exact_base'
+           FROM storyos.domain_receipts WHERE project_id = '{project}' LIMIT 1",
+        project = scope.project_id.as_ref(),
+        proposal = Uuid::now_v7(),
+        revision = Uuid::now_v7(),
+        validation = Uuid::now_v7(),
+        operation = Uuid::now_v7(),
     );
-    run_without_foreign_keys(&admin, &draft).await;
+    run_without_foreign_keys(&admin, &acceptance).await;
     let refused = call.input.admit(&store, &call.envelope).await;
     let ([admissions, operations, sources, receipts, _, unused], fence) =
         admitted_rows(&admin, &call).await;
     run_without_foreign_keys(
         &admin,
         &format!(
-            "DELETE FROM storyos.draft_artifacts WHERE project_id = '{}'",
+            "DELETE FROM storyos.acceptance_receipts WHERE project_id = '{}'",
             scope.project_id.as_ref()
         ),
     )

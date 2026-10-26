@@ -18,14 +18,6 @@ mod release1_author_edit;
 mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
-mod release1_draft_retry;
-mod release1_editor_session_artifacts;
-mod release1_selection_reference;
-pub use release1_draft_retry::{
-    DraftPayloadPosition, DraftRetry, DraftRetryKind, DraftRetryReplacement, ExactStructuredRange,
-    ExactStructuredRangeKind, ObservedDraftClosure, RetryDraftClosure, RetryDraftKind,
-    SourceDraftDisposition,
-};
 mod release1_create_chapter;
 mod release1_create_chapter_artifacts;
 mod release1_create_project;
@@ -36,6 +28,7 @@ mod release1_delete_chapter;
 mod release1_delete_chapter_artifacts;
 mod release1_delete_volume;
 mod release1_delete_volume_artifacts;
+mod release1_editor_session_artifacts;
 mod release1_list_projects;
 mod release1_list_projects_artifacts;
 mod release1_manuscript_search;
@@ -64,8 +57,6 @@ mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
 mod release1_readable_export_query_artifacts;
-mod release1_refused_edit_draft;
-mod release1_refused_edit_draft_artifacts;
 mod release1_reject_proposal_operations;
 mod release1_reject_proposal_operations_artifacts;
 mod release1_reopen_rejected_operations;
@@ -74,6 +65,7 @@ mod release1_reopen_withdrawn_proposal;
 mod release1_reopen_withdrawn_proposal_artifacts;
 mod release1_replan_proposal;
 mod release1_replan_proposal_artifacts;
+mod release1_selection_reference;
 mod release1_set_current_chapter;
 mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
@@ -182,9 +174,8 @@ pub use release1_author_edit::{
     APPLY_AUTHOR_EDIT_METHOD, APPLY_AUTHOR_EDIT_PATH, ApplyAuthorEditEffect,
     ApplyAuthorEditRequest, ApplyAuthorEditResponse, AuthorEditConflictReason, AuthorEditPrimitive,
     AuthorEditProposalTarget, AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt,
-    DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult, EditSourceOwner,
-    NoEffectReason, OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload,
-    ReplacementBlock, SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
+    DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason,
+    SelectionSnapshot,
 };
 pub use release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
@@ -362,12 +353,11 @@ pub use release1_takeover::{
     TakeoverCompareFailedReason,
 };
 pub use release1_undo_latest_author_action::{
-    DraftReopenReceipt, EditorFlowDraftReopened, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
-    UNDO_LATEST_AUTHOR_ACTION_METHOD, UNDO_LATEST_AUTHOR_ACTION_PATH,
-    UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID, UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
-    UndoLatestAuthorActionConflictReason, UndoLatestAuthorActionEffect,
-    UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest, UndoLatestAuthorActionResponse,
-    UndoLatestAuthorActionUnavailableReason,
+    UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE, UNDO_LATEST_AUTHOR_ACTION_METHOD,
+    UNDO_LATEST_AUTHOR_ACTION_PATH, UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
+    UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID, UndoLatestAuthorActionConflictReason,
+    UndoLatestAuthorActionEffect, UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest,
+    UndoLatestAuthorActionResponse, UndoLatestAuthorActionUnavailableReason,
 };
 pub use release1_update_chapter::{
     UPDATE_CHAPTER_DIGEST_PROFILE, UPDATE_CHAPTER_METHOD, UPDATE_CHAPTER_PATH,
@@ -413,29 +403,5 @@ pub use stage4_crosswalk::{
     write_stage4_crosswalk,
 };
 
-pub use release1_refused_edit_draft::{
-    GET_REFUSED_EDIT_DRAFT_METHOD, GET_REFUSED_EDIT_DRAFT_PATH,
-    GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, GET_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
-    GetRefusedEditDraftResponse, REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID, RefusedEditDraftCreated,
-    RefusedEditDraftCreator, RefusedEditDraftInspect, RefusedEditDraftSource,
-};
-
-mod release1_close_editor_flow_draft;
-mod release1_expand_refused_edit_draft;
-mod release1_expand_refused_edit_draft_artifacts;
-pub use release1_expand_refused_edit_draft::{
-    EXPAND_REFUSED_EDIT_DRAFT_DIGEST_PROFILE, EXPAND_REFUSED_EDIT_DRAFT_PATH,
-    EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
-    ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
-    ExpandRefusedEditDraftResponse, WholeDraftPayload,
-};
 mod release1_chapter_query_artifacts;
-mod release1_close_editor_flow_draft_artifacts;
 mod release1_command_challenge_artifacts;
-pub use release1_close_editor_flow_draft::{
-    CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE, CLOSE_EDITOR_FLOW_DRAFT_PATH,
-    CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID, CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
-    CloseEditorFlowDraftEffect, CloseEditorFlowDraftInput, CloseEditorFlowDraftRequest,
-    CloseEditorFlowDraftResponse, DraftCloseRefusal, EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
-    EditorFlowDraftClosed,
-};

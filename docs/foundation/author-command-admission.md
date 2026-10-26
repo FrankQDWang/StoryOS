@@ -114,7 +114,7 @@ The closed Release 1 action classes are:
 | Action class | Author-facing source | Examples |
 | --- | --- | --- |
 | `direct_editor_action` | immediate direct manipulation in the manuscript editor | typing, paste, delete, deterministic structural edit |
-| `explicit_editor_command` | an explicit editor control over fully displayed current state | Proposal accept/reject/withdraw, retry or discard a Draft, Author Undo |
+| `explicit_editor_command` | an explicit editor control over fully displayed current state | Proposal accept/reject/withdraw, Author Undo |
 | `explicit_project_command` | an explicit project control over fully displayed current scope | export, project settings, Project deletion request |
 | `agent_run_start` | an explicit author control that starts an AgentRun over fully displayed current scope | `createAgentRun` |
 | `agent_run_control` | an explicit author control over one fully displayed current AgentRun | `pauseAgentRun`, `cancelAgentRun`, `steerAgentRun` |
@@ -196,7 +196,6 @@ The current `ApplyAuthorEdit` mapping is closed:
 | --- | --- |
 | `AuthoritativeApplied` | `ActivityBacked { project_activity_position }`; exactly one Receipt-backed Project Activity relation |
 | `ProposalRevised` | `ReceiptOnly`; one typed Receipt, one Proposal Revision, one Forward Author Action, no Authoritative Commit, and zero Project Activity |
-| `RefusedToDraft` | `ReceiptOnly`; one typed Receipt, one retained Draft, one immutable Draft Revision and creation Event, no Authoritative Commit, no Author Action, and zero Project Activity |
 | `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity |
 
 `RequiresReconfirmation` proves that this admission will create no Core effect.
@@ -298,7 +297,7 @@ committed domain outcome.
   repeats an Author Action.
 - **Browser continuity.** A pending edit remains author-visible through the Web
   Editor Session contract until settlement and projection convergence, or
-  until it becomes a Refused Edit Draft or Recovery Draft.
+  until it becomes a Recovery Draft.
 
 ## 8. Verification
 

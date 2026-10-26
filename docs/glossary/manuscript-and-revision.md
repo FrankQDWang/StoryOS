@@ -73,7 +73,7 @@ The exact immutable content owned by an Authoritative Revision, Artifact Revisio
 _Avoid_: Blob cache, derived projection, Provider-held source of truth
 
 **Core Transition**:
-The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, Author Actions, lifecycle events, the author command Admission's `ReceiptSettled` link when applicable, and required follow-up intent become visible together. A refusal or conflict records no partial domain effect and only the no-authority Receipt, Refused Edit Draft, or Proposal condition allocated by its exhaustive result.
+The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, Author Actions, lifecycle events, the author command Admission's `ReceiptSettled` link when applicable, and required follow-up intent become visible together. A refusal or conflict records no partial domain effect and only the no-authority Receipt or Proposal condition allocated by its exhaustive result.
 _Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
 
 **Core Transition Outcome**:

@@ -30,7 +30,6 @@ pub(super) async fn load_inline_target_ownership(
         || context.base_authoritative_revision_id != current_revision_id
         || context.manuscript_block_id != *manuscript_block_id
         || command.proposal_target.is_some()
-        || command.retry_source.is_some()
         || command.expected_proposal_head_revision_ids != [context.prior_revision_id.clone()]
     {
         return Ok(None);

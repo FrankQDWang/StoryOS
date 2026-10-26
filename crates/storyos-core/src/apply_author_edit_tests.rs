@@ -12,7 +12,6 @@ fn command() -> ApplyAuthorEdit {
             anchor_refs: Vec::new(),
             unresolved_reservation_refs: Vec::new(),
         },
-        ordered_source_facts: None,
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
         inline_edit_disposition: InlineEditDisposition::Unspecified,
@@ -23,7 +22,6 @@ fn command() -> ApplyAuthorEdit {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 1,
                 to: 3,
@@ -53,7 +51,6 @@ fn ordered_units_apply_against_one_transient_body() {
                 text: "xy".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 1,
                 to: 3,
@@ -66,7 +63,6 @@ fn ordered_units_apply_against_one_transient_body() {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
-                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 3,
                 to: 3,
@@ -99,9 +95,7 @@ fn invalid_later_unit_refuses_the_complete_batch() {
 
     assert_eq!(
         apply_author_edit(&batch),
-        TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::InvalidSelection
-        ))
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
     );
 }
 
@@ -128,9 +122,7 @@ fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
         *to = end;
         assert_eq!(
             apply_author_edit(&invalid),
-            TransitionOutcome::Refused(AuthorEditRefused::Refused(
-                AuthorEditRefusal::InvalidSelection
-            ))
+            TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
         );
     }
 }
@@ -225,21 +217,14 @@ fn unchanged_content_is_a_no_effect_core_result() {
 
 #[test]
 fn every_zero_authority_author_edit_outcome_round_trips_through_its_receipt_codes() {
-    let outcomes: [ApplyAuthorEditOutcome; 8] = [
+    let outcomes: [ApplyAuthorEditOutcome; 7] = [
         TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged),
         TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead),
         TransitionOutcome::Conflicted(AuthorEditConflict::ProposalHeadPresent),
         TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged),
-        TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::UnsupportedIntentShape,
-        )),
-        TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::InvalidSelection,
-        )),
-        TransitionOutcome::Refused(AuthorEditRefused::Refused(
-            AuthorEditRefusal::TargetMismatch,
-        )),
-        TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft),
+        TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape),
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection),
+        TransitionOutcome::Refused(AuthorEditRefusal::TargetMismatch),
     ];
     let recorded = outcomes
         .iter()
@@ -255,7 +240,6 @@ fn every_zero_authority_author_edit_outcome_round_trips_through_its_receipt_code
             ("refused", Some("unsupported_intent_shape")),
             ("refused", Some("invalid_selection")),
             ("refused", Some("target_mismatch")),
-            ("refused_to_draft", None),
         ]
     );
     for (outcome, (result, reason)) in outcomes.into_iter().zip(recorded) {
@@ -264,11 +248,7 @@ fn every_zero_authority_author_edit_outcome_round_trips_through_its_receipt_code
             Some(outcome)
         );
     }
-    // A Refused Edit Draft records no reason, and a refusal needs its reason.
-    assert_eq!(
-        ApplyAuthorEditOutcome::from_zero_authority_codes("refused_to_draft", Some("x")),
-        None
-    );
+    // A refusal needs its reason.
     assert_eq!(
         ApplyAuthorEditOutcome::from_zero_authority_codes("refused", None),
         None

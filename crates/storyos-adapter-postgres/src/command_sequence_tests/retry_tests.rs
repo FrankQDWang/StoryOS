@@ -13,7 +13,6 @@ use crate::update_volume_tests::seed_project;
 
 use super::acceptance::accept_proposal_call;
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
-use super::draft::{close_editor_flow_draft_call, expand_refused_edit_draft_call};
 use super::project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, archive_project_call, take_over_project_writer,
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
@@ -170,12 +169,6 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d20).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
         )
         .await,
@@ -183,12 +176,6 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &store,
             &admin,
             &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7520).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
-            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e20).await,
         )
         .await,
         in_progress_retry(
@@ -222,7 +209,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 25]);
+    assert_eq!(observed, vec![(true, [0; 5]); 23]);
 }
 
 #[tokio::test]

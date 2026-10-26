@@ -68,7 +68,6 @@ pub(crate) fn author_command(
         key,
     );
     let mut command = ApplyAuthorEditCommand {
-        retry_source: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "binding:author-edit".to_owned(),
@@ -105,7 +104,6 @@ pub(crate) fn author_command(
                     text: "x".to_owned(),
                 }],
                 selection_snapshot: SelectionSnapshot {
-                    ordered_selection: None,
                     coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                     from: 15,
                     to: 15,
@@ -118,7 +116,6 @@ pub(crate) fn author_command(
                     text: "!".to_owned(),
                 }],
                 selection_snapshot: SelectionSnapshot {
-                    ordered_selection: None,
                     coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                     from: 15,
                     to: 16,

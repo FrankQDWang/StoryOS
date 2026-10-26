@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:62d3c1c7afe2497e41d88c6e440a49be08a5193c9d4541c77fc81bbf2e635347",
+    "migration_chain_digest": "sha256:d2e833b40bf40653806afad247f9860b0fc2fc59f45a9dfbef56add8f37d17e7",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:79f74cb4cae5ccfa28e52f3f3db5966b06542175982bdc5037736c00918dbff0",
+      "route_catalog_sha256": "sha256:0a85776b5fa16deec4fdff5b6cc609784ac96af3e11633231c3184ea27ab1ec1",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:bc16bcbae54d97d59c3d6a227ff78093463701fcae2a41a4e8e0d4f45320fddf",
+      "manifest_sha256": "sha256:2533627a6bdd965e59cc5ef4d05e83a08446a9e5a6f29e491c63fbcd96a57764",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -627,6 +627,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0098_grow_block_proposal.sql",
           "lf_sha256": "sha256:b8527925ec4ff5b13b2effe9d74c8593651d5dc1d91dd574df1796d5e70dcb78"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0099_remove_refused_edit_draft.sql",
+          "lf_sha256": "sha256:96806e9746e8098cecc85a6b738e07f33b0ef1b8f53cff424a1803907d323373"
         }
       ]
     },
@@ -768,7 +772,7 @@
       "head": "scoped_head",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "artifact_lifecycle_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "listChapterOpenProposals", "getRefusedEditDraft", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": {"mode": "refused_edit_creation_discard_and_reopen"}, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "undoLatestAuthorAction", "getProposal", "listChapterOpenProposals", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-receipts-actions",

@@ -334,8 +334,7 @@ records, for example in a version 3 Journal, it tells the author that local text
 exists. The earlier Journal stays unchanged, so a later reader can open it.
 
 The file holds the text of each record that has no proof of save. Only an
-applied group and a group that gives a Proposal Revision prove a save. An
-explicit discard of a refused edit Draft also removes its text. A conflicted,
+applied group and a group that gives a Proposal Revision prove a save. A conflicted,
 refused, or no-effect group is not a save. A group that needs a new confirmation
 by the author is also not a save. When the editor cannot read one partition, it
 tells the author that local text exists, and the file keeps the text of each
@@ -343,7 +342,7 @@ other partition.
 
 An `ExplicitEditorCommandRecord` durably represents takeover, Acceptance,
 rejection, withdrawal, reopen, supersede, continuation, completion,
-Draft closure, Author Undo, or another explicit editor command before network
+Author Undo, or another explicit editor command before network
 submission. It is never coalesced. Before Admission, its protected transport
 attempts may only finish that same already-confirmed submission; after
 Admission, uncertainty can never automatically invoke it.
@@ -534,7 +533,7 @@ GroupSettlement =
   | ZeroAuthorityReceiptSettled {
       apply_author_edit_zero_authority_observation_id
       receipt_ref: DomainReceiptRef
-      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused
+      result: ProposalRevised | NoEffect | Conflicted | Refused
       committed_at
     }
   | OtherEditorReceiptSettled {
@@ -571,7 +570,7 @@ AuthorSurfaceConvergence =
   | ZeroAuthorityReceiptVisible {
       apply_author_edit_zero_authority_observation_id
       receipt_ref: DomainReceiptRef
-      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused
+      result: ProposalRevised | NoEffect | Conflicted | Refused
       unchanged_installed_base_proof | attention_surface_proof
     }
   | OtherEditorReceiptConverged {
@@ -813,8 +812,8 @@ BrowserProtocolObservation =
       author_command_admission_id
       project_scope
       correlation_id
-      receipt: DomainReceipt { result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused }
-      effect: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused
+      receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }
+      effect: ProposalRevised | NoEffect | Conflicted | Refused
       completed_intent_record_id
       local_intent_sequence
       observed_at
@@ -1156,7 +1155,7 @@ response.
 
 Every typed Core result reaches one explicit Receipt settlement branch.
 `AppliedReceiptSettled` is the Activity-backed `ApplyAuthorEdit` branch.
-`ZeroAuthorityReceiptSettled` covers `ProposalRevised`, `RefusedToDraft`,
+`ZeroAuthorityReceiptSettled` covers `ProposalRevised`,
 `NoEffect`, `Conflicted`, and `Refused` without a Project Activity member.
 `ProposalRevised` is a successful candidate edit: it creates one Proposal
 Revision and one Forward Author Action, but no Authoritative Commit or
@@ -1164,15 +1163,10 @@ Project Activity. It is neither `NoEffect` nor Acceptance. Settlement, result
 visibility, applied convergence, attention, and payload retention remain
 separate axes and never override one another.
 
-`RefusedToDraft` retains one Refused Edit Draft and one typed Receipt; it creates
-no Authoritative or Proposal Revision, Authoritative Commit, Author Action, or
-Project Activity. It is not ordinary `Refused` or `ProposalRevised`.
-Fresh input preserves `FreshEditorIntent` provenance; retry replacement preserves
-`DraftRetryReplacement` provenance and the exact `source_draft_disposition`.
-The exact `draft_id`, `draft_revision_id`, and `creation_event_id` remain bound
-through acknowledgement, outcome Query, exact replay, reload, and inspection.
-Retention and controls follow the existing Core and Refused Edit Input profile;
-source supersession does not remove the immutable source history.
+Release 1 has no Refused Edit Draft
+([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
+A stored Local Edit Journal group that an earlier client settled with
+`refused_to_draft` counts as resolved, and the Journal never sends it.
 
 For Block Proposal candidate input, the frozen Journal group retains the exact
 Proposal, Operation, current Proposal Revision, and manuscript Block target.
@@ -1233,10 +1227,9 @@ The #70-owned [structured prerelease policy](author-edit-batch-release-1-policy.
 selects the replaceable Release 1 window and ceilings and records the candidate
 set, evidence, and future anonymous calibration gate. The current
 `storyos.editor-contract.release-1.v3` retains that legacy policy and the request
-digest binding. Its new structured-source input, separate qualification, and
-retained v2 Journal read-only recovery boundary are specified in the
-[Refused Edit Input profile](refused-edit-input-release-1-profile.md). The old
-synthetic measurements do not qualify the nested mixed-source workload. The selection is conservative prerelease policy, not a permanent
+digest binding. The retained v2 Journal read-only recovery boundary is
+specified in the [Refused Edit Input profile](refused-edit-input-release-1-profile.md).
+ADR 0073 removes the structured-source input of that profile. The selection is conservative prerelease policy, not a permanent
 or real-user-validated product default.
 
 The positive long-session case is therefore reachable: 240 consecutive typing
@@ -1268,7 +1261,7 @@ The author-facing save state is derived:
 | --- | --- |
 | `saving` | complete intent/command is durably journaled, but settlement or its applicable convergence branch remains pending |
 | `saved` | an installed authorized Server base has no unsettled journal work and needs no attention, including a newly installed base with no local records, `AuthoritativeApplied` that has converged through its exact Activity/Snapshot position, or `NoEffect` that has resolved against the already-installed exact durable base without advancing that base |
-| `needs_attention` | a visible zero-authority `RefusedToDraft`, `Refused`, or `Conflicted` result, outcome Query rejection with preserved local work, a converged reconfirmation, Draft, or other typed result requires an author decision, or current evidence cannot safely reconstruct the surface |
+| `needs_attention` | a visible zero-authority `Refused` or `Conflicted` result, outcome Query rejection with preserved local work, a converged reconfirmation, Recovery Draft, or other typed result requires an author decision, or current evidence cannot safely reconstruct the surface |
 
 `Accepted` HTTP acknowledgement, an exact replay that remains in progress, a
 Receipt without its applicable result visibility or convergence proof, and an
@@ -1345,7 +1338,7 @@ groups submit in strict intent order. ADR 0065 gives the complete rule.
 
 This serial browser admission order prevents dependent edits from overtaking
 one another but is not Project authority order. An `ApplyAuthorEdit`
-`RefusedToDraft`, `Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action or
+`Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action or
 Project Activity. Project authority remains ordered only by Core Heads, Author
 Action Sequence, and Project Activity that an owning result actually creates.
 
@@ -1368,7 +1361,7 @@ Action Sequence, and Project Activity that an owning result actually creates.
 | pre-admission Problem | exact safe `PreAdmissionProblemObservation`; no Admission or Receipt for the proven attempt | retain complete payload; either terminally show the typed refusal or, only when the exact Problem permits and the frozen request remains equal, enter `ProvenNoAdmission` before a fresh challenge |
 | unexpected HTTP `Accepted` for a Release-1 editor command | exact asynchronous operation reference and settlement query; no browser-visible Admission identity or terminal fact | enter `ProtocolIncompatibleAccepted`; preserve payload, pause the queue, and fail closed for protocol resync/compatible deployment without claiming query convergence |
 | HTTP `applyAuthorEdit` v2 `AuthoritativeApplied` | terminal `AppliedReceiptSettled`, exact typed Receipt, and applied-only Activity position | append `ApplyAuthorEditAppliedObservation`; wait for applied author-facing Activity/Snapshot convergence if not already observed |
-| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` | terminal `ZeroAuthorityReceiptSettled` and exact typed Receipt; no Activity exists for this result | append `ApplyAuthorEditZeroAuthorityObservation`; make the exact result visible without advancing checkpoint, Activity watermark, authoritative projection, or active base |
+| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | terminal `ZeroAuthorityReceiptSettled` and exact typed Receipt; no Activity exists for this result | append `ApplyAuthorEditZeroAuthorityObservation`; make the exact result visible without advancing checkpoint, Activity watermark, authoritative projection, or active base |
 | other editor HTTP `Committed` | terminal `OtherEditorReceiptSettled`, exact typed Receipt, and its existing Activity position | retain its Activity/Snapshot convergence contract |
 | HTTP `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | show the exact reconfirmation reason and applicable preserved payload/Draft; a later author confirmation creates a new command and Admission |
 | post-admission `outcome_unknown` Problem | exact Admission identity and settlement query from that Problem; no claim about Receipt presence | enter `KnownSettlementQuery`; forbid blind retry or a new command derived from the uncertain one |
@@ -1388,7 +1381,7 @@ by this contract:
 | --- | --- | --- |
 | `ApplyAuthorEdit` | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
 | `TakeOverProjectWriter` | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
-| explicit editor decisions, including Proposal, Draft, undo, and reversal controls | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
+| explicit editor decisions, including Proposal, undo, and reversal controls | complete owning short transaction | `Committed`, `RequiresReconfirmation`, or pre/post-admission `StoryOSProblem`; never `Accepted` |
 
 This is the protocol's existing rule that work able to settle in its owning
 short transaction uses `Committed`; long work is modeled as an asynchronous
@@ -1417,7 +1410,7 @@ state, missing HTTP, or Event arrival is never an effect oracle.
 | --- | --- |
 | exact replay for another command returns `PreAdmissionProblemObservation` that positively proves the original attempt created no Admission | enter `ProvenNoAdmission`; either terminally resolve that refusal or, only when its retry semantics and every frozen local fact allow, obtain a fresh challenge and append a fresh physical attempt |
 | outcome Query returns `applyAuthorEdit` v2 `AuthoritativeApplied` | append the exact query observation and one `ApplyAuthorEditAppliedObservation` lifecycle effect, enter terminal `AppliedReceiptSettled`, wait for its exact Activity/Snapshot convergence, and never invoke again |
-| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` | append the exact query observation and one `ApplyAuthorEditZeroAuthorityObservation` lifecycle effect, enter terminal `ZeroAuthorityReceiptSettled`, make that exact Receipt result visible, including its retained Draft for `RefusedToDraft`, with no Activity/checkpoint/projection/base advance, and never invoke again |
+| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` | append the exact query observation and one `ApplyAuthorEditZeroAuthorityObservation` lifecycle effect, enter terminal `ZeroAuthorityReceiptSettled`, make that exact Receipt result visible, with no Activity/checkpoint/projection/base advance, and never invoke again |
 | outcome Query returns `Rejected { challenge_expired_unconsumed }` | append `RejectedNoAdmission`; enter `OutcomeQueryRejectedNoAdmission` and `OutcomeQueryRejectedVisible` through the same query observation identity; retain the author payload and never resend automatically |
 | outcome Query returns `StillUnknown { ChallengeIssued }` | preserve `OutcomeQueryUnresolved`, exact same expiry, `Unsettled`, queue block, capsule, and payload; no success, rejection, or retry permission |
 | outcome Query returns `StillUnknown { AdmissionCommitted }` | preserve the exact Command and Admission as the strongest valid observation, remain `Unsettled`, and never invoke or replay the admitted command |
@@ -1451,7 +1444,7 @@ Equality of a subset is failure.
 
 A visible reconfirmation creates a new idempotency key, anti-forgery challenge,
 Command, Admission, and eventual Receipt. Once an Admission exists,
-Acceptance, rejection, withdrawal, Draft closure, Author Undo, takeover, and
+Acceptance, rejection, withdrawal, Author Undo, takeover, and
 other explicit commands are never automatically invoked by no-Receipt
 recovery; they settle `RequiresReconfirmation`. Before Admission, exact
 transport replay, or one fresh-challenge attempt after positive no-Admission
@@ -1497,27 +1490,10 @@ Convergence is positive and branches by settlement kind:
 | Settlement | Required convergence proof |
 | --- | --- |
 | `AppliedReceiptSettled` | the exact `ApplyAuthorEditAppliedObservation`, `DomainReceiptRef`, and applied-only canonical `project_activity_position`; processed Project Activity or a Snapshot must prove projection at or beyond that same position; the resulting authoritative Head and Commit are reflected before `AppliedReceiptConverged` |
-| `ZeroAuthorityReceiptSettled` | the exact `ApplyAuthorEditZeroAuthorityObservation`, `DomainReceiptRef`, and `ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused` effect are visible as `ZeroAuthorityReceiptVisible`; no Project Activity position, checkpoint advance, authoritative projection advance, or active-base roll-forward exists or is fabricated |
+| `ZeroAuthorityReceiptSettled` | the exact `ApplyAuthorEditZeroAuthorityObservation`, `DomainReceiptRef`, and `ProposalRevised | NoEffect | Conflicted | Refused` effect are visible as `ZeroAuthorityReceiptVisible`; no Project Activity position, checkpoint advance, authoritative projection advance, or active-base roll-forward exists or is fabricated |
 | `OtherEditorReceiptSettled` | the exact `OtherEditorCommittedObservation`, `ReceiptRef`, and canonical `project_activity_position`; processed Project Activity or a Snapshot proves projection at or beyond it, preserving the pre-correction convergence rule |
 | `PreAdmissionRefused` | the exact `PreAdmissionProblemObservation`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
 | `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained payload or returned `recovery_draft_ref` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
-
-For a validated Draft Retry with one `ReplaceBlockSelection`, no ordered
-selection, and a frozen mixed command with Proposal Heads, an existing
-canonical authoritative base permits the next canonical Snapshot to retain
-empty Proposal Heads and authoritative ownership. This Snapshot projects
-authoritative materialization. Its empty array does not prove that the Chapter
-has no Proposal. Receipt and source settlement checks remain required, and
-the frozen command retains its actual Heads and ownership. This qualification
-does not authorize fresh edits or regrouping. A later Retry must read its
-known scoped Proposal Heads and check the target again before submission.
-After reload, covered unsettled Draft Retry records remain pending even if a
-later authorized base is installed. They do not replay a patch into that base.
-The existing protected proof queries the frozen command identity. A validated
-single Block Retry outcome may settle against the same installed canonical
-Snapshot only when its whole base matches and its ID differs from the first
-validated covered record's original base. Direct acknowledgements still
-require a new Snapshot ID.
 
 Applied manuscript convergence additionally requires no unresolved earlier
 Activity gap. Zero-authority result visibility neither clears nor creates an
@@ -1526,7 +1502,7 @@ converge while an unrelated manuscript projection remains in resync, but it
 cannot label that manuscript surface `saved`. Every branch rejects an
 incompatible writer generation for the surface being shown. `AuthorAttention`
 is evaluated separately: a visible zero-authority conflict or refusal, or a
-converged Draft or reconfirmation, normally remains `Required`.
+converged Recovery Draft or reconfirmation, normally remains `Required`.
 
 ## 8. Core result and control projection
 
@@ -1539,7 +1515,6 @@ Acceptance from an authoritative result or from the absence of a candidate.
 | --- | --- | --- |
 | `AuthoritativeApplied` | resulting authoritative Head and Commit become `saved` only after `AppliedReceiptConverged` and complete active-base installation | no recovery controls; retain journal payload until GC successor proof |
 | `ProposalRevised` | `ZeroAuthorityReceiptVisible` shows the exact new Proposal Revision and Forward Author Action identities; authoritative prose stays unchanged | no Authoritative Commit, Project Activity, checkpoint, authoritative projection, or active-base advance; retain payload until the exact result is visible and successor proof holds |
-| `RefusedToDraft` | `ZeroAuthorityReceiptVisible` shows the exact `draft_id`, `draft_revision_id`, and `creation_event_id`; preserve fresh or retry-replacement provenance and exact source disposition; `needs_attention` | no Authoritative or Proposal Revision, Authoritative Commit, Author Action, Project Activity, checkpoint, authoritative projection, or active-base advance; retain complete payload until the exact result is visible and successor proof holds; derive controls from the returned current Draft state |
 | `NoEffect` | `ZeroAuthorityReceiptVisible`; the already-installed durable base and exact current surface may remain `saved` only when they independently prove the no-op | no Activity, checkpoint, projection, or base advance; retain until the unchanged durable Revision is an exact digest-equal successor |
 | `Conflicted` | `ZeroAuthorityReceiptVisible`; complete local intent remains beside the independently current authoritative projection; `needs_attention` | no Activity, checkpoint, projection, or base advance; retain payload and revalidate Heads before dependent submission |
 | `Refused` | `ZeroAuthorityReceiptVisible`; exact refusal reason and complete local intent remain visible; `needs_attention` | no Activity, checkpoint, projection, or base advance; retain payload until an explicit safe successor exists |
@@ -1550,26 +1525,18 @@ a preserved Proposal surface. Neither is a Draft Artifact. A healthy local
 journal retaining complete conflicted text is not automatically converted into
 a `RecoveryDraft`.
 
-### 8.2 Source-Draft and editor decision matrix
+### 8.2 Editor decision matrix
 
-| Command/result | Source Draft projection | Controls after convergence |
-| --- | --- | --- |
-| `DraftRetry.AuthoritativeApplied` or `.ProposalRevised` | exact source `ClosedSuperseded`; immutable history remains inspectable | remove source retry/expand/discard; show only controls of the resulting authoritative or Proposal surface |
-| `DraftRetry.RefusedToDraft` replacement | old source `ClosedSuperseded`; exactly one new open `RefusedEditDraft` | controls appear only on the new Draft |
-| `DraftRetry.Conflicted` or `.NoEffect` with matched source | exact source remains open with no lifecycle event | keep only controls permitted by that open source and current result |
-| `DraftRetry.Refused` with matched source | exact source remains open with no lifecycle event | keep only controls permitted by that open source and current result |
-| `DraftRetry` source Revision/digest/closure mismatch | project exact observed current source disposition | if closed, remove all stale retry/expand controls; if open, use only its current Revision |
-| `ExpandRefusedEditDraftToProposal` applied | complete `WholeDraftPayload` becomes one fresh Proposal; exact source `ClosedSuperseded` | Proposal controls only; no second expansion from the closed source |
-| expansion source mismatch or not open | no Proposal, no Author Action, no lifecycle event | project exact current source; closed source has no retry/expand control |
-| explicit Draft close | exact `DraftClosureChanged` and Receipt | no stale Draft controls; applicable Core undo only |
-| exact retry of any settled command | same Receipt, Heads, Draft/Proposal, lifecycle events, and Author Action identities | never duplicate a surface or control |
+| Command/result | Controls after convergence |
+| --- | --- |
+| exact retry of any settled command | same Receipt, Heads, Proposal, lifecycle events, and Author Action identities; never duplicate a surface or control |
 
 Copy is read-only and creates no Receipt. A clipboard copy is not a durable
 successor for journal GC.
 
 ### 8.3 Proposal, condition, and Draft control consumer matrix
 
-This matrix consumes the current Proposal/Draft state and retained production
+This matrix consumes the current Proposal and Recovery Draft state and retained production
 UX contract. It does not create a Core transition or infer eligibility from a
 label.
 
@@ -1580,13 +1547,11 @@ label.
 | Proposal whose base is not the Chapter Head of the editor, `open`, `ready`, validation `valid` or `conflicted` | accept; reject; candidate edit; copy; a short note that Acceptance replaces the current text of its target; no confirmation dialog (ADR 0064) |
 | `ProposalConflict` on a preserved Proposal | accept, reject pending Operations, candidate edit, copy, and the same note (ADR 0064) |
 | `ProposalRecoveryConflict` on a preserved Proposal | reject pending Operations, withdraw, copy; no accept and no candidate edit |
-| open `RefusedEditDraft` | narrow/retry through `DraftRetry`, copy, expand only with `WholeDraftPayload`, discard |
-| open `RecoveryDraft` | retry through `DraftRetry`, copy, discard; no expansion |
-| closed Draft or `superseded` Proposal | immutable history/copy only; no retry, expand, accept, reject, withdraw, or discard |
+| `RecoveryDraft` | copy only; no retry, discard, or expansion (ADR 0073) |
+| `superseded` Proposal | immutable history/copy only; no accept, reject, or withdraw |
 
 All state-changing controls create one durable
-`ExplicitEditorCommandRecord`/group except narrow/retry, which creates the
-new direct-edit intent/group owned by `ApplyAuthorEdit`. Copy remains read-only.
+`ExplicitEditorCommandRecord`/group. Copy remains read-only.
 
 The result consumer is likewise closed:
 
@@ -1604,7 +1569,6 @@ The result consumer is likewise closed:
 | `ReopenRejectedOperations` applied | selected Operations become pending in the new validation-pending Revision; remove stale rejection-event controls |
 | `ContinueProposalGeneration` applied | project the new Generation ID and `generating`; remove controls bound to the prior Generation ID and disable Acceptance until a later exact ready/valid state |
 | `CompleteReadyPartialProposal` applied | project `ready` for the same current Revision with every other returned axis preserved; remove the stale complete control and derive Acceptance only from current validation/closure/resolution |
-| `CloseEditorFlowDraft` applied | project exact closed reason/event; remove retry, expand, and discard from that Draft |
 | any explicit decision `Refused`, `Conflicted`, or `NoEffect` | project the returned `DecisionCurrentTarget` and condition exactly; allocate no lifecycle change locally and derive controls only from that returned current target |
 | exact retry of any settled explicit command | replay the same Receipt, event identities, Heads, and controls; create no duplicate transition or surface |
 
@@ -1638,7 +1602,6 @@ never skips a Barrier.
 | Core undo settlement | Projection |
 | --- | --- |
 | compensation of direct edit or Proposal edit | exact new Heads/Proposal Revision and Compensation Author Action |
-| compensation of source-consuming retry or expansion | content/Proposal effect and exact source-Draft reopen appear together or neither appears |
 | `ReversalRequired` | one new inspectable Reversal Proposal; source remains uncompensated |
 | `Unavailable` or `Conflicted` | no partial local inverse and `needs_attention` |
 
@@ -1733,10 +1696,9 @@ A complete local journal group may still enter the ordinary
 author-confirmed/current-binding `ApplyAuthorEdit` flow; that is a normal edit
 attempt, not a RecoveryDraft-preservation channel.
 
-A `RecoveryDraft` Retry is a new `ApplyAuthorEdit`/`DraftRetry` with an
-explicit author confirmation and new Admission unless section 6's exact
-same-Admission automatic branch still applies before Draft creation. Its
-result and closure follow section 8.2.
+A `RecoveryDraft` has no Retry command. The author can copy its text into a new
+edit, which is a new `ApplyAuthorEdit` with a new Admission
+([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
 
 ## 10. Reload, crash, and takeover recovery matrix
 
@@ -1817,7 +1779,7 @@ dependencies are eligible for collection only when all of these are proven:
    again.
 
 Exact durable successors include the resulting Authoritative or Proposal
-Revision, a `RefusedEditDraft` or `RecoveryDraft` Artifact Revision, or another
+Revision, a `RecoveryDraft` Artifact Revision, or another
 typed retained Core payload that contains the complete intent. A
 zero-authority Receipt alone is not a successor. `NoEffect` may use the exact
 digest-equal current durable Revision. A conflict, refusal, or
@@ -1929,7 +1891,7 @@ Browser integration and the deterministic oracle cover:
   takeover retains its separate owner-defined applied/compare-failed rule—and
   preservation without automatic Draft
   fabrication;
-- every `ApplyAuthorEdit`, source-Draft, explicit decision, exact retry, undo,
+- every `ApplyAuthorEdit`, explicit decision, exact retry, undo,
   reversal, and stale-control row in section 8;
 - positive classification of Admission/refusal/reconciliation evidence,
   Receipts, Draft Artifacts, Proposal conditions, local payload, projections,
@@ -1941,7 +1903,7 @@ Browser integration and the deterministic oracle cover:
   remain local-only; and
 - applied Activity-backed convergence, zero-authority Receipt-only result
   visibility, and no-Receipt refusal/reconfirmation convergence, including
-  proof that `ApplyAuthorEdit` `ProposalRevised`, `RefusedToDraft`, `NoEffect`,
+  proof that `ApplyAuthorEdit` `ProposalRevised`, `NoEffect`,
   `Conflicted`, and `Refused` have no
   fabricated Activity/checkpoint/projection/base advance;
 - GC refusal for unknown, unsettled, unconverged, dependency-bearing, or
@@ -2001,15 +1963,14 @@ advisory until their numerical values are accepted by the appropriate owner.
 11. `ApplyAuthorEdit` convergence is tagged by result. Only
     `AuthoritativeApplied` retains a canonical `project_activity_position` and
     uses processed Activity or a Snapshot at or beyond it.
-    `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, and `Refused` use
+    `ProposalRevised`, `NoEffect`, `Conflicted`, and `Refused` use
     `ZeroAuthorityReceiptVisible` with no Activity, checkpoint, authoritative
     projection, or active-base advance. Pre-admission refusal and
     `RequiresReconfirmation` converge through their exact no-Receipt surfaces
     without fabricated Activity or resulting Heads.
-12. Every Core result, source-Draft disposition, explicit decision, undo, and
-    reversal projects
-    only its exact permitted controls; a closed source has no stale retry or
-    expansion control and no result fabricates Proposal Acceptance.
+12. Every Core result, explicit decision, undo, and reversal projects
+    only its exact permitted controls, and no result fabricates Proposal
+    Acceptance.
 13. Takeover is one non-auto-recoverable explicit-command group whose applied
     or compare-failed result is carried only by the existing
     `DomainReceiptRef`; both results settle with canonical Project Activity,

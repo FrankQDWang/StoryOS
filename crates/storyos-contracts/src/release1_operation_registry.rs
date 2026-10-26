@@ -136,8 +136,6 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_reopen_withdrawn_proposal_artifacts::ARTIFACTS,
     &crate::release1_reopen_rejected_operations_artifacts::ARTIFACTS,
     &crate::release1_proposal_generation_decision_artifacts::ARTIFACTS,
-    &crate::release1_expand_refused_edit_draft_artifacts::ARTIFACTS,
-    &crate::release1_close_editor_flow_draft_artifacts::ARTIFACTS,
     &crate::release1_undo_latest_author_action_artifacts::ARTIFACTS,
     &crate::release1_agent_run_artifacts::ARTIFACTS,
     &crate::release1_agent_run_control_artifacts::ARTIFACTS,
@@ -148,7 +146,6 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_manuscript_statistics_artifacts::ARTIFACTS,
     &crate::release1_proposal_artifacts::ARTIFACTS,
     &crate::release1_open_proposal_list_artifacts::ARTIFACTS,
-    &crate::release1_refused_edit_draft_artifacts::ARTIFACTS,
     &crate::release1_author_edit_outcome_artifacts::ARTIFACTS,
     &crate::release1_snapshot_artifacts::ARTIFACTS,
     &crate::release1_manuscript_search_artifacts::ARTIFACTS,
@@ -193,29 +190,6 @@ pub(super) fn fixture_triple(
             fixture_id,
             classification,
             operation_id: operation.operation_id,
-            bytes,
-        },
-    )
-}
-
-/// The positive and invalid fixtures of one event schema.
-pub(super) fn event_fixtures(
-    paths: [&'static str; 2],
-    fixture_ids: [&'static str; 2],
-    operation_id: &'static str,
-    producers: [fn(&Release1ProtocolProfile) -> Vec<u8>; 2],
-) -> [FixtureMembership; 2] {
-    let [positive, invalid] = producers;
-    [
-        ("positive", paths[0], fixture_ids[0], positive),
-        ("invalid", paths[1], fixture_ids[1], invalid),
-    ]
-    .map(
-        |(classification, path, fixture_id, bytes)| FixtureMembership {
-            path,
-            fixture_id,
-            classification,
-            operation_id,
             bytes,
         },
     )

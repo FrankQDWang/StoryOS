@@ -13,10 +13,6 @@ use crate::undo_latest_author_action::UndoLatestAuthorAction;
 use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal};
 use super::agent_run::seed_run;
 use super::damaged_evidence::{ReplayError, damaged_replay, evidence_replays};
-use super::draft::{
-    close_editor_flow_draft, close_editor_flow_draft_call, expand_refused_edit_draft,
-    expand_refused_edit_draft_call,
-};
 use super::project_session::UPDATE_PROJECT;
 use super::proposal_decision::{
     reject_proposal_operations, reject_proposal_operations_call, reopen_rejected_operations,
@@ -49,8 +45,6 @@ enum Case {
     ReplanProposal,
     ReopenRejectedOperations,
     ReopenWithdrawnProposal,
-    CloseEditorFlowDraft,
-    ExpandRefusedEditDraft,
     ApplyAuthorEdit,
     /// An Author Edit of the candidate of a Proposal Operation.
     EditProposalCandidate,
@@ -61,8 +55,6 @@ enum Case {
     AcceptanceReversal,
     /// A stale Author Undo Frontier.
     StaleFrontier,
-    /// A Draft Close whose Draft is no longer retained.
-    ArchivedDraft,
     /// A Forward action with a Barrier disposition.
     Barrier,
     /// An Acceptance Undo that expects a head that is not current.
@@ -72,15 +64,13 @@ enum Case {
 }
 
 /// The cases whose Author Undo applies, in the order of their result rows.
-const APPLIED: [Case; 13] = [
+const APPLIED: [Case; 11] = [
     Case::CreateVolume,
     Case::SetCurrentChapter,
     Case::WithdrawProposal,
     Case::ReplanProposal,
     Case::ReopenRejectedOperations,
     Case::ReopenWithdrawnProposal,
-    Case::CloseEditorFlowDraft,
-    Case::ExpandRefusedEditDraft,
     Case::ApplyAuthorEdit,
     Case::EditProposalCandidate,
     Case::EditSecondaryCandidate,
@@ -89,9 +79,8 @@ const APPLIED: [Case; 13] = [
 ];
 
 /// The cases whose Author Undo has a zero-authority outcome.
-const ZERO_AUTHORITY: [Case; 5] = [
+const ZERO_AUTHORITY: [Case; 4] = [
     Case::StaleFrontier,
-    Case::ArchivedDraft,
     Case::Barrier,
     Case::AcceptanceWrongHead,
     Case::AcceptanceUnavailable,
@@ -253,42 +242,6 @@ async fn undo_call(
                 call.envelope.project_scope,
                 call.input.editor_session_id.as_ref().to_owned(),
                 head,
-            )
-        }
-        Case::CloseEditorFlowDraft | Case::ArchivedDraft => {
-            let call = close_editor_flow_draft_call(store, admin, base).await;
-            close_editor_flow_draft(store, &call).await.unwrap();
-            if matches!(case, Case::ArchivedDraft) {
-                admin
-                    .execute(
-                        "UPDATE storyos.draft_artifacts SET retention_state = 'archived'
-                          WHERE draft_id = $1::text::uuid",
-                        &[&call.input.draft_id],
-                    )
-                    .await
-                    .unwrap();
-            }
-            let head = session_chapter_head(admin, call.input.editor_session_id.as_ref()).await;
-            (
-                call.envelope.project_scope,
-                call.input.editor_session_id.as_ref().to_owned(),
-                head,
-            )
-        }
-        Case::ExpandRefusedEditDraft => {
-            let call = expand_refused_edit_draft_call(store, admin, base).await;
-            expand_refused_edit_draft(store, &call).await.unwrap();
-            // The writer Editor Session edits Chapter B, the target of the Draft.
-            edit_in_chapter_of(
-                admin,
-                call.input.editor_session_id.as_ref(),
-                &call.input.expected_target_revision_id,
-            )
-            .await;
-            (
-                call.envelope.project_scope,
-                call.input.editor_session_id.as_ref().to_owned(),
-                call.input.expected_target_revision_id,
             )
         }
         Case::ApplyAuthorEdit => {
@@ -457,8 +410,7 @@ async fn undo_acceptance_rows(admin: &Client, receipt_id: &str) -> i64 {
         .get(/*idx*/ 0)
 }
 
-/// Issues one Author Undo whose canonical bytes and digest are those of its command body. The
-/// Draft reopen records check both.
+/// Issues one Author Undo whose canonical bytes and digest are those of its command body.
 pub(super) async fn issued_undo(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
@@ -535,7 +487,6 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     let structure = ("authoritative_applied", [1, 1, 0, 1, 0]);
     let current_chapter = ("authoritative_applied", [1, 1, 0, 0, 0]);
     let proposal = ("authoritative_applied", [1, 1, 0, 0, 0]);
-    let draft = ("draft_closure_changed", [1, 1, 0, 0, 0]);
     let revision = ("authoritative_applied", [1, 1, 1, 1, 1]);
     // The Receipt of a Reversal records `authoritative_applied` and a Forward Author Action, as
     // on `main`.
@@ -554,15 +505,12 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
             proposal,
             proposal,
             proposal,
-            draft,
-            draft,
             revision,
             proposal,
             proposal,
             revision,
             reversal,
             conflicted,
-            refused,
             refused,
             conflicted,
             refused,
@@ -572,7 +520,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     // on `main`.
     assert_eq!(
         acceptance_children,
-        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1]
     );
 }
 
@@ -616,7 +564,6 @@ async fn every_failing_undo_step_rolls_back_every_row_and_keeps_the_challenge_un
     let mut expected = vec![applied; APPLIED.len()];
     expected.extend([
         conflicted(ReceiptResult::Conflicted),
-        refused.clone(),
         refused.clone(),
         conflicted(ReceiptResult::Conflicted),
         refused,
@@ -669,7 +616,6 @@ async fn every_undo_replay_separates_pre_capture_from_damaged_evidence() {
         [
             ReceiptResult::Conflicted,
             ReceiptResult::Refused,
-            ReceiptResult::Refused,
             ReceiptResult::Conflicted,
             ReceiptResult::Refused,
         ]
@@ -711,19 +657,11 @@ async fn a_damaged_undo_replay_is_a_store_fault() {
                   WHERE receipt_id = '{receipt_id}'"
             )
         }),
-        (Case::CloseEditorFlowDraft, 0x3e30, |receipt_id: &str| {
-            format!(
-                "DELETE FROM storyos.draft_reopen_events AS event
-                  USING storyos.domain_receipts AS receipt
-                  WHERE receipt.receipt_id = '{receipt_id}'
-                    AND event.event_id::text = receipt.result_payload->>'event_id'"
-            )
-        }),
     ] {
         let call = undo_call(&store, &admin, case, base).await;
         observed.push(damaged_replay(&store, &admin, &call, damage).await);
     }
-    assert_eq!(observed, vec![ReplayError::Unavailable; 4]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 3]);
 }
 
 /// A Project setting command writes no Author Action (ADR 0044). Thus Author Undo after a

@@ -24,7 +24,7 @@ A deterministic, immediately visible change caused through the author's own edit
 _Avoid_: Author-triggered automation, silent bulk edit
 
 **Author Edit**:
-One completed semantic editor intent, or a bounded idle-coalesced sequence of intents, that one Author Command Admission submits to StoryOS Core. Coalescing occurs only before Admission issuance while each bound input and manuscript semantic field stay equal, and no merge occurs after Admission. Core classifies the full command and produces an authoritative change, a Proposal Revision, a Refused Edit Draft, an ordinary refusal, a conflict, or no effect. Core never splits one input across authority boundaries, and raw editor transactions and browser undo groups are only diagnostic or presentation evidence.
+One completed semantic editor intent, or a bounded idle-coalesced sequence of intents, that one Author Command Admission submits to StoryOS Core. Coalescing occurs only before Admission issuance while each bound input and manuscript semantic field stay equal, and no merge occurs after Admission. Core classifies the full command and produces an authoritative change, a Proposal Revision, an ordinary refusal, a conflict, or no effect. Core never splits one input across authority boundaries, and raw editor transactions and browser undo groups are only diagnostic or presentation evidence.
 _Avoid_: Client-selected write path, ProseMirror transaction as authority, fixed-window batching, partial mixed edit
 
 **First Owner Part**:

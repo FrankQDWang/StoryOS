@@ -4,20 +4,19 @@ use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
     ArchiveProjectConflict, ArchiveProjectNoEffect, CancelAgentRunConflict, CancelAgentRunNoEffect,
-    CloseEditorFlowDraftConflict, CloseEditorFlowDraftRefusal, CreateChapterConflict,
-    CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict,
-    DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect,
-    DeleteVolumeRefusal, ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal,
-    PauseAgentRunConflict, PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
-    RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
-    ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
-    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
-    ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
-    SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
-    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
-    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
-    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
-    WithdrawProposalNoEffect, WithdrawProposalRefusal,
+    CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal,
+    DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict,
+    DeleteVolumeNoEffect, DeleteVolumeRefusal, PauseAgentRunConflict, PauseAgentRunNoEffect,
+    ReasonCode, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
+    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
+    ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
+    SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
+    SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict, UpdateChapterNoEffect,
+    UpdateChapterRefusal, UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
+    UpdateProjectConflict, UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect,
+    UpdateVolumeRefusal, WithdrawProposalConflict, WithdrawProposalNoEffect,
+    WithdrawProposalRefusal,
 };
 
 use storyos_core::{
@@ -405,25 +404,6 @@ fn every_withdrawal_reason_maps_to_its_public_reason() {
 }
 
 #[test]
-fn every_draft_discard_reason_maps_to_its_public_or_persisted_reason() {
-    // The conflict has no public reason. Its code is the persisted Receipt reason text.
-    assert_maps(vec![(
-        CloseEditorFlowDraftConflict::SourceBindingChanged,
-        "source_binding_changed".to_owned(),
-    )]);
-    assert_maps(vec![
-        (
-            CloseEditorFlowDraftRefusal::SourceDraftNotOpen,
-            contracts::DraftCloseRefusal::SourceDraftNotOpen,
-        ),
-        (
-            CloseEditorFlowDraftRefusal::SourceUnavailable,
-            contracts::DraftCloseRefusal::SourceUnavailable,
-        ),
-    ]);
-}
-
-#[test]
 fn every_proposal_generation_decision_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         ProposalGenerationConflict::ChangedHead,
@@ -479,33 +459,6 @@ fn every_proposal_generation_decision_reason_maps_to_its_public_reason() {
         (
             ContinueProposalGenerationRefusal::DuplicateIdentities,
             contracts::ContinueProposalGenerationRefusalReason::DuplicateIdentities,
-        ),
-    ]);
-}
-
-#[test]
-fn every_draft_expansion_reason_maps_to_its_public_or_persisted_reason() {
-    // The conflict has no public reason. Its code is the persisted Receipt reason text.
-    assert_maps(vec![(
-        ExpandRefusedEditDraftConflict::SourceOrTargetChanged,
-        "source_or_target_changed".to_owned(),
-    )]);
-    assert_maps(vec![
-        (
-            ExpandRefusedEditDraftRefusal::SourceDraftNotOpen,
-            "source_draft_not_open".to_owned(),
-        ),
-        (
-            ExpandRefusedEditDraftRefusal::SourceUnavailable,
-            "source_unavailable".to_owned(),
-        ),
-        (
-            ExpandRefusedEditDraftRefusal::UnsupportedPayload,
-            "unsupported_payload".to_owned(),
-        ),
-        (
-            ExpandRefusedEditDraftRefusal::TargetUnavailable,
-            "target_unavailable".to_owned(),
         ),
     ]);
 }

@@ -31,8 +31,6 @@ pub struct UndoApplied<E> {
     pub author_action_sequence: u64,
     /// The Author Undo Frontier after the settlement. A Reversal Proposal gives none.
     pub author_undo_frontier_sequence: Option<u64>,
-    /// The Refused Edit Draft that the Undo reopens because the source superseded it.
-    pub source_reopen_event: Option<storyos_contracts::EditorFlowDraftReopened>,
     pub records: UndoRecords,
 }
 
@@ -62,9 +60,6 @@ pub enum UndoRecords {
     Proposal {
         proposal_revision_id: Option<String>,
         project_activity_position: u64,
-    },
-    Draft {
-        event: Box<storyos_contracts::EditorFlowDraftReopened>,
     },
     /// The Forward Author Action of an Undo Acceptance that requires a Reversal Proposal.
     ReversalRequired {

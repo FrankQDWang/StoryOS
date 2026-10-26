@@ -55,10 +55,7 @@ import {
   requireString,
 } from "./scenario.ts";
 
-type ZeroAuthorityResult = Exclude<
-  DomainReceiptResult,
-  "authoritative_applied" | "proposal_revised" | "refused_to_draft" | "draft_closure_changed" | "proposal_created_from_draft"
->;
+type ZeroAuthorityResult = Exclude<DomainReceiptResult, "authoritative_applied" | "proposal_revised">;
 
 
 // The projection that the last Journal call in a test returned.

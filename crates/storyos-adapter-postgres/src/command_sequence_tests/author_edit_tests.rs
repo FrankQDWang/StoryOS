@@ -27,29 +27,24 @@ enum Edit {
     StaleHead,
     /// An edit whose selection is outside the body.
     InvalidSelection,
-    /// A structured edit across an Inline Proposal and the Manuscript, which is kept as a Refused
-    /// Edit Draft.
-    RefusedToDraft,
 }
 
-const EDITS: [Edit; 6] = [
+const EDITS: [Edit; 5] = [
     Edit::Prose,
     Edit::ProposalCandidate,
     Edit::Unchanged,
     Edit::StaleHead,
     Edit::InvalidSelection,
-    Edit::RefusedToDraft,
 ];
 
 /// The Receipt result kind and the Receipt, Author Action, Activity, Commit, and Snapshot rows of
 /// each case, in the order of `EDITS`.
-const RECORDS: [(&str, [i64; 5]); 6] = [
+const RECORDS: [(&str, [i64; 5]); 5] = [
     ("authoritative_applied", [1, 1, 1, 1, 1]),
     ("proposal_revised", [1, 1, 0, 0, 0]),
     ("no_effect", [1, 0, 0, 0, 0]),
     ("conflicted", [1, 0, 0, 0, 0]),
     ("refused", [1, 0, 0, 0, 0]),
-    ("refused_to_draft", [1, 0, 0, 0, 0]),
 ];
 
 /// The Author Edit of `edit` in a new Project, with its issued Command Challenge.
@@ -60,9 +55,6 @@ async fn edit_command(
     base: u16,
 ) -> ApplyAuthorEditCommand {
     let suffix = format!("{:04x}", base + 9);
-    if let Edit::RefusedToDraft = edit {
-        return refused_to_draft_command(store, admin, base, &suffix).await;
-    }
     if let Edit::ProposalCandidate = edit {
         let (scope, input, _chapter_a_head) = acceptable_proposal(store, admin, base).await;
         let run_id: String = admin
@@ -124,7 +116,7 @@ async fn edit_command(
         proposal_target: None,
     };
     match edit {
-        Edit::Prose | Edit::ProposalCandidate | Edit::RefusedToDraft => {
+        Edit::Prose | Edit::ProposalCandidate => {
             named_edit_command(
                 store,
                 &scope,
@@ -176,191 +168,6 @@ async fn edit_command(
             .await
         }
     }
-}
-
-/// A structured edit that replaces an Inline Proposal candidate and the Manuscript text after
-/// its Anchor. Core keeps it as a Refused Edit Draft.
-async fn refused_to_draft_command(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    base: u16,
-    suffix: &str,
-) -> ApplyAuthorEditCommand {
-    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
-        two_chapter_writer(store, base).await;
-    // The writer edits Chapter B and writes its text first.
-    edit_in_chapter_of(admin, &editor_session_id, &revision_b).await;
-    let written = format!("{:04x}", base + 8);
-    let written = named_edit_command(
-        store,
-        &scope,
-        NamedEdit {
-            editor_session_id: &editor_session_id,
-            chapter_id: &chapter_b,
-            expected_revision_id: &revision_b,
-            suffix: &written,
-            local_intent_sequence: 1,
-            text: "Hello world",
-            proposal_target: None,
-        },
-    )
-    .await;
-    let written = store.apply_author_edit(&written).await.unwrap();
-    let storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied {
-        ids, blocks, ..
-    } = written.effect
-    else {
-        panic!("the text edit must apply");
-    };
-    let revision_b = ids.revision_id;
-    let block = blocks.into_iter().next().unwrap();
-    let (block_id, block_text) = (block.manuscript_block_id, block.text);
-    let input = storyos_application::AcceptProposalInput {
-        editor_session_id: storyos_application::EditorSessionId::new(editor_session_id.clone()),
-        proposal_id: Uuid::now_v7().to_string(),
-        proposal_revision_id: Uuid::now_v7().to_string(),
-        validation_receipt_id: Uuid::now_v7().to_string(),
-        selected_operation_ids: vec![Uuid::now_v7().to_string()],
-        expected_authoritative_revision_id: revision_b.clone(),
-    };
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "INSERT INTO storyos.proposals
-               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
-                source_run_id, source_decision_id)
-             VALUES ('{owner}', '{project}', '{proposal}', 'inline_edit', '{chapter}',
-                     '{block}', '{run}', '{decision}');
-             INSERT INTO storyos.proposal_revisions
-               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
-                closure, candidate_text, base_authoritative_revision_id)
-             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', 'valid',
-                     'open', 'Accepted text', '{base_revision}');
-             INSERT INTO storyos.proposal_heads
-               (owner_user_id, project_id, proposal_id, current_revision_id)
-             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
-             INSERT INTO storyos.proposal_operations
-               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
-                resolution, reservation_state, candidate_text)
-             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
-                     'pending', 'unresolved', 'Accepted text')",
-            owner = scope.owner_user_id.as_ref(),
-            project = scope.project_id.as_ref(),
-            proposal = input.proposal_id,
-            chapter = chapter_b,
-            block = block_id,
-            run = Uuid::now_v7(),
-            decision = Uuid::now_v7(),
-            revision = input.proposal_revision_id,
-            base_revision = revision_b,
-            operation = input.selected_operation_ids[0],
-        ),
-    )
-    .await;
-    let block_end = block_text.encode_utf16().count() as u32;
-    assert!(block_end >= 2, "the fixture Block needs two characters");
-    let anchor_to = 1;
-    let digest = storyos_core::proposal_anchor_base_slice_digest(
-        &block_id,
-        "paragraph",
-        /*manuscript_schema_version*/ 1,
-        "prosemirror-token-utf16.v1",
-        /*from*/ 0,
-        anchor_to,
-        &block_text[..1],
-    );
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "INSERT INTO storyos.proposal_anchors
-               (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
-                manuscript_block_id, base_authoritative_revision_id, manuscript_schema_version,
-                coordinate_profile, range_from, range_to, boundary_profile, base_slice_digest,
-                proposal_revision_id)
-             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', 1, '{block}',
-                     '{revision}', 1, 'prosemirror-token-utf16.v1', 0, {anchor_to},
-                     'exclusive-authoritative-edges.v1', '{digest}', '{proposal_revision}')",
-            owner = scope.owner_user_id.as_ref(),
-            project = scope.project_id.as_ref(),
-            proposal = input.proposal_id,
-            proposal_revision = input.proposal_revision_id,
-            operation = input.selected_operation_ids[0],
-            block = block_id,
-            revision = revision_b,
-        ),
-    )
-    .await;
-    let candidate = "Accepted text".to_owned();
-    let candidate_end = candidate.encode_utf16().count() as u32;
-    let sources = vec![
-        storyos_core::SelectedEditSource {
-            owner: storyos_core::EditSourceOwner::Proposal {
-                proposal_id: input.proposal_id.clone(),
-                operation_id: input.selected_operation_ids[0].clone(),
-                revision_id: input.proposal_revision_id.clone(),
-                manuscript_block_id: block_id.clone(),
-            },
-            coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
-            from: 0,
-            to: candidate_end,
-            block_kind: storyos_core::ManuscriptBlockKind::Paragraph,
-            source_text: candidate,
-        },
-        storyos_core::SelectedEditSource {
-            owner: storyos_core::EditSourceOwner::Manuscript {
-                manuscript_block_id: block_id,
-            },
-            coordinate_profile: "prosemirror-token-utf16.v1".to_owned(),
-            from: anchor_to,
-            to: block_end,
-            block_kind: storyos_core::ManuscriptBlockKind::Paragraph,
-            source_text: block_text,
-        },
-    ];
-    adjusted_edit_command(
-        store,
-        &scope,
-        NamedEdit {
-            editor_session_id: &editor_session_id,
-            chapter_id: &chapter_b,
-            expected_revision_id: &revision_b,
-            suffix,
-            local_intent_sequence: 2,
-            text: "x",
-            proposal_target: None,
-        },
-        |command| {
-            command.expected_proposal_head_revision_ids = vec![input.proposal_revision_id.clone()];
-            command.observed_ownership_partition = "mixed".to_owned();
-            command.author_edit_units = vec![storyos_core::AuthorEditUnit {
-                normalized_primitives: vec![
-                    storyos_core::AuthorEditPrimitive::ReplaceStructuredSelection {
-                        replacement: vec![storyos_core::ReplacementBlock {
-                            block_kind: storyos_core::ManuscriptBlockKind::Paragraph,
-                            text: "New passage".to_owned(),
-                        }],
-                    },
-                ],
-                selection_snapshot: storyos_core::SelectionSnapshot {
-                    ordered_selection: Some(storyos_core::OrderedSourceSelection {
-                        sources,
-                        anchor: storyos_core::SourceSelectionEndpoint {
-                            source_index: 0,
-                            source_offset: 0,
-                        },
-                        head: storyos_core::SourceSelectionEndpoint {
-                            source_index: 1,
-                            source_offset: block_end,
-                        },
-                    }),
-                    coordinate_profile: "storyos.editor.ordered-source.v1".to_owned(),
-                    from: 0,
-                    to: block_end,
-                },
-            }];
-        },
-    )
-    .await
 }
 
 /// The command of `command` with new request identities, as an exact retry sends it.
@@ -555,9 +362,6 @@ async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_
                    FROM storyos.domain_receipts WHERE receipt_id = '{receipt_id}'"
             )
         }),
-        (Edit::RefusedToDraft, 0x3960, |receipt_id: &str| {
-            format!("DELETE FROM storyos.draft_lifecycle_events WHERE receipt_id = '{receipt_id}'")
-        }),
     ] {
         let command = edit_command(&store, &admin, edit, base).await;
         let first = store.apply_author_edit(&command).await.unwrap();
@@ -580,7 +384,7 @@ async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_
             Err(AuthorEditError::Unavailable(_))
         ));
     }
-    assert_eq!(observed, vec![true; 5]);
+    assert_eq!(observed, vec![true; 4]);
 }
 
 /// The outcome query of one Author Edit, as the Server sends it after a cut.

@@ -2,9 +2,8 @@ import type { JournalWorkingBoundary } from "./journal-working-set.ts";
 import type { LocalUnsentText } from "./local-unsent-text.ts";
 import type {
   ApplyAuthorEditRequest,
-  DraftRetry,
-  SourceDraftDisposition,
   ApplyAuthorEditEffect,
+  AuthorEditPrimitive,
   AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
@@ -19,6 +18,29 @@ import type {
   ProjectScope,
   Release1ProtocolProfile,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+
+/** ADR 0073 removed the Refused Edit Draft from the contract. A Journal record or group that an earlier client
+ * stored can still hold one of these shapes. The Journal reads them only to resolve the removed path, and it never
+ * sends them. */
+export type StoredDraftRetry = Record<string, unknown> & { kind: "draft_retry" };
+
+export type StoredAuthorEditPrimitive =
+  | AuthorEditPrimitive
+  | (Record<string, unknown> & { kind: "replace_structured_selection" });
+
+export interface StoredAuthorEditUnit {
+  normalized_primitives: StoredAuthorEditPrimitive[];
+  selection_snapshot: AuthorEditUnit["selection_snapshot"] & { ordered_selection?: unknown };
+}
+
+export type StoredApplyAuthorEditRequest = Omit<ApplyAuthorEditRequest, "author_edit_units"> & {
+  retry_source?: StoredDraftRetry;
+  author_edit_units: StoredAuthorEditUnit[];
+};
+
+export type StoredApplyAuthorEditEffect =
+  | ApplyAuthorEditEffect
+  | (Record<string, unknown> & { kind: "refused_to_draft" });
 
 export type InputOrigin =
   | "typing"
@@ -75,7 +97,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   proposal_anchors: ProposalJournalAnchor[];
   observed_ownership_partition: string;
   author_edit_unit?: AuthorEditUnit;
-  retry_source: { kind: "fresh_editor_intent" } | DraftRetry;
+  retry_source: { kind: "fresh_editor_intent" } | StoredDraftRetry;
   editor_contract_revision: string;
   undo_group_binding: { kind: "direct_author_input"; undo_group_id: string };
   payload_chain_ref: string;
@@ -138,7 +160,7 @@ export type SubmissionSettlement =
       command_id: string;
       author_command_admission_id: string;
       receipt: DomainReceipt;
-      source_draft_disposition?: SourceDraftDisposition;
+      source_draft_disposition?: unknown;
       authoritative_revision: { revision_id: string; body: string };
       authoritative_commit_id: string;
       author_action_sequence: string;
@@ -150,8 +172,8 @@ export type SubmissionSettlement =
       command_id: string;
       author_command_admission_id: string;
       receipt: DomainReceipt;
-      source_draft_disposition?: SourceDraftDisposition;
-      effect: Exclude<ApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
+      source_draft_disposition?: unknown;
+      effect: Exclude<StoredApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
     })
   | (Record<string, unknown> & {
       kind: "outcome_query_rejected_no_admission";

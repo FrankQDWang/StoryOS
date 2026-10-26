@@ -386,9 +386,6 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     if len(effect_variants) != len(variants):
         errors.append("applyAuthorEdit effect branches are not unique tagged objects")
     expected_fields = {
-        "refused_to_draft": {
-            "kind", "refusal_origin", "draft_id", "draft_revision_id", "creation_event_id",
-            "replacement_provenance"},
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
             "author_action_sequence", "project_activity_position"},
@@ -404,9 +401,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         variant = variants.get(kind, {})
         properties = variant.get("properties", {})
         required = variant.get("required", [])
-        expected_required = expected_variant_fields - (
-            {"replacement_provenance"} if kind == "refused_to_draft" else set())
-        if set(properties) != expected_variant_fields or set(required) != expected_required:
+        if set(properties) != expected_variant_fields or set(required) != expected_variant_fields:
             errors.append(f"applyAuthorEdit {kind} effect shape drifted")
         if variant.get("additionalProperties") is not False:
             errors.append(f"applyAuthorEdit {kind} no-extra-field guard drifted")
@@ -436,7 +431,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         )
         require_union_variant_shape(
             errors, settlement, "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled",
-            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -464,7 +459,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, convergence_union, "ZeroAuthorityReceiptVisible",
             "OtherEditorReceiptConverged",
-            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -503,8 +498,8 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, observation_union, "ApplyAuthorEditZeroAuthorityObservation",
             "OtherEditorCommittedObservation",
-            ("receipt: DomainReceipt { result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused }",
-             "effect: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
+            ("receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
+             "effect: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -513,23 +508,14 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
             ("receipt_ref: ReceiptRef", "project_activity_position"),
         )
     for required in (
-        "| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` |",
-        "| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
         "| `ProposalRevised` | `ZeroAuthorityReceiptVisible`",
-        "| `RefusedToDraft` | `ZeroAuthorityReceiptVisible` shows the exact `draft_id`, "
-        "`draft_revision_id`, and `creation_event_id`",
-        "`RefusedToDraft` retains one Refused Edit Draft and one typed Receipt; it creates",
-        "no Authoritative or Proposal Revision, Authoritative Commit, Author Action, or",
-        "Project Activity. It is not ordinary `Refused` or `ProposalRevised`.",
-        "The exact `draft_id`, `draft_revision_id`, and `creation_event_id` remain bound",
-        "Fresh input preserves `FreshEditorIntent` provenance; retry replacement preserves",
-        "`DraftRetryReplacement` provenance and the exact `source_draft_disposition`.",
-        "`ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, and `Refused` use",
-        "`RefusedToDraft`, `Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
+        "`refused_to_draft` counts as resolved, and the Journal never sends it.",
+        "`ProposalRevised`, `NoEffect`, `Conflicted`, and `Refused` use",
+        "`Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
         "Receipt has no matching Project Activity Event",
-        "`ZeroAuthorityReceiptSettled` covers `ProposalRevised`, `RefusedToDraft`,",
-        "no Authoritative or Proposal Revision, Authoritative Commit, Author Action, "
-        "Project Activity, checkpoint, authoritative projection, or active-base advance;",
+        "`ZeroAuthorityReceiptSettled` covers `ProposalRevised`,",
     ):
         if required not in visible_web:
             errors.append(f"Web Author Edit result mapping missing {required}")
@@ -554,7 +540,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "436aa300eaa02fe3145a5e0ec9c3743fc260f66cbf35703665a8467acdcb7055":
+    ).encode()).hexdigest() != "d0e3a704dd3802328c0fcab6688d763bbb9ccd8cd59658f3bfa6bd4a2f17078d":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
@@ -902,14 +888,8 @@ def author_admission_errors(admission_projection: str) -> list[str]:
         visible_admission,
         flags=re.MULTILINE,
     )
-    draft_rows = re.findall(
-        r"^\|\s*`RefusedToDraft`\s*\|.*$", visible_admission, flags=re.MULTILINE,
-    )
-    if len(draft_rows) != 1 or any(required not in draft_rows[0] for required in (
-        "`ReceiptOnly`", "one typed Receipt", "one retained Draft", "immutable Draft Revision",
-        "creation Event", "no Authoritative Commit", "no Author Action", "zero Project Activity",
-    )) or "ActivityBacked" in draft_rows[0]:
-        errors.append("Admission RefusedToDraft Receipt-only mapping drifted")
+    if re.search(r"^\|\s*`RefusedToDraft`\s*\|", visible_admission, flags=re.MULTILINE):
+        errors.append("Admission keeps the removed RefusedToDraft mapping")
     zero_row = re.findall(
         r"^\|\s*`NoEffect`, `Conflicted`, or `Refused`\s*\|.*$",
         visible_admission,
@@ -945,16 +925,8 @@ def author_admission_errors(admission_projection: str) -> list[str]:
     return errors
 
 
-CORE_DRAFT_RETRY_REFUSED_ROW = (
-    "| `DraftRetry` | `Refused` | `Unchanged` with exact current `Open` closure and no new "
-    "event | the exact source Draft |"
-)
-WEB_DRAFT_RETRY_REFUSED_ROW = (
-    "| `DraftRetry.Refused` with matched source | exact source remains open with no "
-    "lifecycle event | keep only controls permitted by that open source and current result |"
-)
 ARTIFACT_AUTHOR_EDIT_RESULTS = (
-    "authoritative applied, Proposal revised, refused to Draft, refused, conflicted, or no effect."
+    "authoritative applied, Proposal revised, refused, conflicted, or no effect."
 )
 
 
@@ -967,7 +939,7 @@ def core_author_edit_result_errors(core_projection: str) -> list[str]:
     else:
         variants = re.findall(r"^    (?:\| )?([A-Z][A-Za-z0-9]*) \{", unions[0],
                               flags=re.MULTILINE)
-        if variants != ["AuthoritativeApplied", "ProposalRevised", "RefusedToDraft",
+        if variants != ["AuthoritativeApplied", "ProposalRevised",
                         "Refused", "Conflicted", "NoEffect"]:
             errors.append("Core Author Edit exhaustive results drifted")
         if "| Refused { reason: AuthorEditRefusal }" not in unions[0]:
@@ -978,12 +950,8 @@ def core_author_edit_result_errors(core_projection: str) -> list[str]:
             "`Refused { reason: AuthorEditRefusal }`",
             "no Revision, Authoritative Commit, Author Action, Project Activity, or Draft",
         ),
-        "effect count": ("| `FreshEditorIntent` | any of the six effects |",),
-        "allocation": (
-            "| `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; "
-            "`DraftRetry` source is unchanged and creates no lifecycle event | 0 |",
-        ),
-        "retry disposition": (CORE_DRAFT_RETRY_REFUSED_ROW,),
+        "effect count": ("Each of the five effects is possible for each fresh editor intent.",),
+        "allocation": ("| `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | 0 |",),
     }
     for label, required in requirements.items():
         if any(value not in core for value in required):
@@ -991,19 +959,17 @@ def core_author_edit_result_errors(core_projection: str) -> list[str]:
     rows = re.findall(r"^\| `ApplyAuthorEdit.Refused` \|.*$", core, flags=re.MULTILINE)
     if len(rows) != 1:
         errors.append("Core ordinary Refused allocation count drifted")
-    if len(re.findall(r"^\| `DraftRetry` \| `Refused` \|", core, flags=re.MULTILINE)) != 1:
-        errors.append("Core ordinary Refused retry disposition drifted")
+    if "DraftRetry" in core or "RefusedToDraft" in core:
+        errors.append("Core keeps a removed Refused Edit Draft result")
     return errors
 
 
 def author_edit_result_summary_errors(web: str, protocol: str, artifact: str) -> list[str]:
     errors: list[str] = []
-    web_rows = re.findall(r"^\| `DraftRetry\.Refused`.*$", visible_markdown(web),
-                          flags=re.MULTILINE)
-    if web_rows != [WEB_DRAFT_RETRY_REFUSED_ROW]:
-        errors.append("Web DraftRetry ordinary Refused row drifted")
+    if "DraftRetry" in visible_markdown(web):
+        errors.append("Web keeps a removed DraftRetry row")
     protocol = visible_markdown(protocol)
-    if "all six Core outcomes remain possible" not in protocol or "five Core outcomes" in protocol:
+    if "all five Core outcomes remain possible" not in protocol or "six Core outcomes" in protocol:
         errors.append("protocol Author Edit outcome count drifted")
     if ARTIFACT_AUTHOR_EDIT_RESULTS not in " ".join(visible_markdown(artifact).split()):
         errors.append("Artifact Author Edit result summary drifted")
@@ -1068,11 +1034,8 @@ def policy_errors(
     if coverage != {
         "retained_synthetic_evidence": "legacy_single_owner_primitives_only",
         "legacy_evidence_policy_source": "docs/research/author-edit-batch-prerelease-policy-source.v1.json",
-        "structured_source_profile": "docs/foundation/refused-edit-input-release-1-profile.md",
-        "structured_source_evidence_owner": "https://github.com/FrankQDWang/StoryOS/issues/827",
-        "new_workload_qualified_by_legacy_measurements": False,
     }:
-        errors.append("legacy measurement coverage must not claim the new structured-source workload")
+        errors.append("legacy measurement coverage drifted")
     legacy_projection = deepcopy(policy)
     legacy_projection.pop("input_coverage", None)
     legacy_projection.setdefault("identity_binding", {})["editor_contract_revision"] = "storyos.editor-contract.release-1.v2"
@@ -1165,10 +1128,10 @@ def self_test() -> None:
         ("Invalid selection, unsupported intent shape, or target mismatch returns",
          "Invalid selection returns NoEffect",
          "Core ordinary Refused classification drifted"),
-        ("any of the six effects", "any of the five effects",
+        ("Each of the five effects", "Each of the six effects",
          "Core ordinary Refused effect count drifted"),
         (refusal_row, "", "Core ordinary Refused allocation drifted"),
-        (refusal_row, refusal_row.replace("| 0 | 0 | 0 |", "| 0 | 0 | exactly 1 Draft |"),
+        (refusal_row, refusal_row.replace("| 0 | 0 | 0 | 0 |", "| 0 | 0 | exactly 1 Draft | 0 |"),
          "Core ordinary Refused allocation drifted"),
         (refusal_row, refusal_row.replace("`DomainReceipt`", "no Receipt"),
          "Core ordinary Refused allocation drifted"),
@@ -1180,21 +1143,15 @@ def self_test() -> None:
             policy, evidence, candidate_metrics, response_schema, changed_projections
         ), old
     for path, old, new, expected in (
-        (PROJECTIONS[2], CORE_DRAFT_RETRY_REFUSED_ROW + "\n", "",
-         "Core ordinary Refused retry disposition drifted"),
-        (PROJECTIONS[2], CORE_DRAFT_RETRY_REFUSED_ROW,
-         CORE_DRAFT_RETRY_REFUSED_ROW.replace("`Unchanged` with exact current `Open` closure",
-                                              "`ClosedSuperseded`"),
-         "Core ordinary Refused retry disposition drifted"),
-        (PROJECTIONS[3], WEB_DRAFT_RETRY_REFUSED_ROW + "\n", "",
-         "Web DraftRetry ordinary Refused row drifted"),
-        (PROJECTIONS[3], WEB_DRAFT_RETRY_REFUSED_ROW,
-         WEB_DRAFT_RETRY_REFUSED_ROW.replace("exact source remains open with no lifecycle event",
-                                             "old source `ClosedSuperseded`"),
-         "Web DraftRetry ordinary Refused row drifted"),
-        (PROTOCOL_PATH, "all six Core outcomes", "all five Core outcomes",
+        (PROJECTIONS[2], "    | Refused { reason: AuthorEditRefusal }\n",
+         "    | RefusedToDraft { refused_edit_draft_id }\n    | Refused { reason: AuthorEditRefusal }\n",
+         "Core keeps a removed Refused Edit Draft result"),
+        (PROJECTIONS[3], "### 8.2 Editor decision matrix\n",
+         "### 8.2 Editor decision matrix\n\n| `DraftRetry.Refused` | open |\n",
+         "Web keeps a removed DraftRetry row"),
+        (PROTOCOL_PATH, "all five Core outcomes", "all six Core outcomes",
          "protocol Author Edit outcome count drifted"),
-        (ARTIFACT_PATH, "refused to Draft, refused, conflicted", "refused to Draft, conflicted",
+        (ARTIFACT_PATH, "Proposal revised, refused, conflicted", "Proposal revised, refused to Draft, refused, conflicted",
          "Artifact Author Edit result summary drifted"),
     ):
         text = projections[path.as_posix()]
@@ -1387,20 +1344,20 @@ def self_test() -> None:
     assert "outcome Query bootstrap drifted" in "\n".join(policy_errors(
         policy, evidence, candidate_metrics, response_schema, changed_projections))
     for old, new, expected_error in (
-        ("receipt_ref: DomainReceiptRef\n      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused",
+        ("receipt_ref: DomainReceiptRef\n      result: ProposalRevised | NoEffect | Conflicted | Refused",
          "receipt_ref: DomainReceiptRef\n      project_activity_position\n"
-         "      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused",
+         "      result: ProposalRevised | NoEffect | Conflicted | Refused",
          "ZeroAuthorityReceiptSettled shape drifted"),
         ("  | AppliedReceiptConverged {", "  | LostAppliedReceiptConverged {",
          "AppliedReceiptConverged shape drifted"),
         ("      receipt_ref: DomainReceiptRef\n      project_activity_position",
          "      project_activity_position", "AppliedReceiptSettled shape drifted"),
-        ("      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused\n      committed_at",
+        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
          "      committed_at", "ZeroAuthorityReceiptSettled shape drifted"),
-        ("      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused\n      committed_at",
+        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
          "      result: NoEffect | Conflicted | Refused\n      committed_at",
          "ZeroAuthorityReceiptSettled shape drifted"),
-        ("      receipt: DomainReceipt { result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused }",
+        ("      receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
          "      receipt: DomainReceipt { result: NoEffect | Conflicted | Refused }",
          "ApplyAuthorEditZeroAuthorityObservation shape drifted"),
         ("  | ZeroAuthorityReceiptSettled {",
@@ -1412,7 +1369,7 @@ def self_test() -> None:
         changed_projections[web] = changed_projections[web].replace(old, new, 1)
         assert expected_error in "\n".join(policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections))
-    zero_results = "ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"
+    zero_results = "ProposalRevised | NoEffect | Conflicted | Refused"
     for union_name, next_union, expected_error in (
         ("GroupSettlement", "AuthorSurfaceConvergence",
          "ZeroAuthorityReceiptSettled shape drifted"),
@@ -1433,19 +1390,12 @@ def self_test() -> None:
             )
             assert expected_error in "\n".join(policy_errors(
                 policy, evidence, candidate_metrics, response_schema, changed_projections))
-    draft_row = next(row for row in projections[web].splitlines()
-                     if row.startswith("| `RefusedToDraft` |"))
     for old, new in (
-        (draft_row, ""),
-        (draft_row, draft_row.replace("Author Action, Project Activity", "Project Activity")),
-        (draft_row, draft_row.replace("Project Activity, checkpoint", "checkpoint")),
-        ("`draft_revision_id`, and `creation_event_id`", "`draft_revision_id`"),
-        ("Fresh input preserves `FreshEditorIntent` provenance; retry replacement preserves",
-         "Fresh input preserves `DraftRetryReplacement` provenance; retry replacement preserves"),
-        ("`RefusedToDraft`, `Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
-         "`Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action"),
-        ("`ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, and `Refused` use",
-         "`ProposalRevised`, `NoEffect`, `Conflicted`, and `Refused` use"),
+        ("`refused_to_draft` counts as resolved, and the Journal never sends it.", ""),
+        ("`Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
+         "`Conflicted` or `NoEffect` result allocates no Author Action"),
+        ("`ProposalRevised`, `NoEffect`, `Conflicted`, and `Refused` use",
+         "`ProposalRevised`, `NoEffect`, and `Refused` use"),
     ):
         assert old in projections[web], old
         changed_projections = dict(projections)
@@ -1453,20 +1403,14 @@ def self_test() -> None:
         assert "Web Author Edit result mapping missing" in "\n".join(policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections)), old
     admission = AUTHOR_ADMISSION_PATH.as_posix()
-    draft_row = next(row for row in projections[admission].splitlines()
-                     if row.startswith("| `RefusedToDraft` |"))
-    for changed_row in (
-        "", draft_row.replace("`RefusedToDraft`", "`Refused`"),
-        draft_row.replace("`ReceiptOnly`", "`ActivityBacked { project_activity_position }`"),
-        draft_row.replace("one retained Draft", "no Draft"),
-        draft_row.replace("creation Event", "no event"),
-        draft_row.replace("no Author Action", "one Forward Author Action"),
-    ):
-        changed_projections = dict(projections)
-        changed_projections[admission] = projections[admission].replace(draft_row, changed_row, 1)
-        assert "Admission RefusedToDraft Receipt-only mapping drifted" in "\n".join(
-            policy_errors(policy, evidence, candidate_metrics, response_schema,
-                          changed_projections))
+    zero_row = next(row for row in projections[admission].splitlines()
+                    if row.startswith("| `NoEffect`, `Conflicted`, or `Refused` |"))
+    changed_projections = dict(projections)
+    changed_projections[admission] = projections[admission].replace(
+        zero_row, zero_row.replace("`NoEffect`, `Conflicted`, or `Refused`", "`RefusedToDraft`")
+        + "\n" + zero_row, 1)
+    assert "Admission keeps the removed RefusedToDraft mapping" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections))
     for old, new, expected_error in (
         ("    receipt_ref,\n", "", "Admission ReceiptSettled branch shape drifted"),
         ("      | ReceiptOnly,\n",

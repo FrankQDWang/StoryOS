@@ -18,8 +18,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec,
-    EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
+    EditorAdmission, LockedProject, MissingAdmission, ProfileSequences, ProjectCommand,
+    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
     settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
@@ -430,7 +430,6 @@ fn editor_classification<C: ProjectCommand<Applied = (), Plan = LoadedGeneration
             chapter_object_id: Some(loaded.chapter_id.clone()),
             expected_authoritative_revision_id: Some(expected_authoritative_revision_id.to_owned()),
             target_refs: Vec::new(),
-            writer: EditorWriter::Current,
         }),
         heads: ReceiptHeads {
             expected: head.clone(),

@@ -30,13 +30,9 @@ impl ProposalReader for PostgresProjectReader {
                         receipt.validation_receipt_id::text, receipt.result,
                         failure.conflict_id::text,
                         failure.condition_kind,
-                        revision.candidate_blocks::text,
-                        CASE WHEN proposal.source_run_id IS NOT NULL THEN jsonb_build_object(
+                        jsonb_build_object(
                           'kind','agent_run_decision','run_id',proposal.source_run_id::text,
-                          'decision_id',proposal.source_decision_id::text)
-                        ELSE jsonb_build_object('kind','refused_edit_draft','draft_id',proposal.source_draft_id::text,
-                          'draft_revision_id',proposal.source_draft_revision_id::text,
-                          'payload_digest',source_revision.payload_digest,'payload',source_revision.payload) END::text,
+                          'decision_id',proposal.source_decision_id::text)::text,
                         proposal.bundle_policy
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
@@ -64,16 +60,10 @@ impl ProposalReader for PostgresProjectReader {
                          receipt.proposal_revision_id) =
                         (revision.owner_user_id, revision.project_id, revision.proposal_id,
                          revision.revision_id)
-                   LEFT JOIN storyos.draft_artifacts AS source_draft ON
-                     (source_draft.owner_user_id,source_draft.project_id,source_draft.draft_id)=
-                     (proposal.owner_user_id,proposal.project_id,proposal.source_draft_id)
-                   LEFT JOIN storyos.draft_artifact_revisions AS source_revision ON
-                     (source_revision.owner_user_id,source_revision.project_id,source_revision.draft_id,source_revision.revision_id)=
-                     (proposal.owner_user_id,proposal.project_id,proposal.source_draft_id,proposal.source_draft_revision_id)
                   WHERE proposal.owner_user_id = $1::text::uuid
                     AND proposal.project_id = $2::text::uuid
                     AND proposal.proposal_id = $3::text::uuid
-                    AND (proposal.source_run_id IS NOT NULL OR source_draft.retention_state='retained')",
+                    AND proposal.source_run_id IS NOT NULL",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -135,19 +125,13 @@ impl ProposalReader for PostgresProjectReader {
                 operation_id: row.get(6),
                 operation_resolution: row.get(7),
                 operations,
-                bundle_policy: row.get(/*idx*/ 21),
+                bundle_policy: row.get(/*idx*/ 20),
                 chapter_id: row.get(8),
                 manuscript_block_id: row.get(9),
                 base_authoritative_revision_id: row.get(10),
                 reservation_state: row.get(11),
                 candidate_text: row.get(12),
-                candidate_blocks: row
-                    .get::<_, Option<String>>(19)
-                    .map(|value| {
-                        serde_json::from_str(&value).map_err(ProjectReadError::unavailable)
-                    })
-                    .transpose()?,
-                source: serde_json::from_str(&row.get::<_, String>(20))
+                source: serde_json::from_str(&row.get::<_, String>(/*idx*/ 19))
                     .map_err(ProjectReadError::unavailable)?,
                 validation_receipt_id: row.get(15),
                 validation_receipt_result: row.get(16),
@@ -199,7 +183,7 @@ async fn read_operations(
 ) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
     let rows = client
         .query(
-            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text, candidate_text
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_text
                FROM storyos.proposal_operations
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -216,17 +200,11 @@ async fn read_operations(
     rows.into_iter()
         .map(|row| {
             Ok(ProposalOperationRecord {
-                candidate_text: row.get(5),
+                candidate_text: row.get(/*idx*/ 4),
                 operation_id: row.get(0),
                 manuscript_block_id: row.get(1),
                 resolution: row.get(2),
                 reservation_state: row.get(3),
-                candidate_blocks: row
-                    .get::<_, Option<String>>(4)
-                    .map(|value| {
-                        serde_json::from_str(&value).map_err(ProjectReadError::unavailable)
-                    })
-                    .transpose()?,
             })
         })
         .collect()

@@ -1,7 +1,6 @@
 use storyos_application::{
-    AcceptProposalInput, ArchiveProjectInput, CloseEditorFlowDraftInput, CreateChapterInput,
-    CreateVolumeInput, DeleteChapterInput, DeleteVolumeInput,
-    ExpandRefusedEditDraftToProposalInput, RejectProposalOperationsInput,
+    AcceptProposalInput, ArchiveProjectInput, CreateChapterInput, CreateVolumeInput,
+    DeleteChapterInput, DeleteVolumeInput, RejectProposalOperationsInput,
     ReopenWithdrawnProposalInput, SetCurrentChapterInput, UpdateChapterInput,
     UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, WithdrawProposalInput,
 };
@@ -9,7 +8,7 @@ use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
 };
 use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGenerationInput};
-use storyos_core::{AssistanceAvailability, CreateChapterPlacement, OpenInlineProposalAnchor};
+use storyos_core::{AssistanceAvailability, CreateChapterPlacement};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -19,10 +18,6 @@ use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, a
 use super::agent_run::{
     CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, cancel_agent_run, create_agent_run, create_agent_run_call,
     park_run, pause_agent_run, seed_run,
-};
-use super::draft::{
-    CLOSE_EDITOR_FLOW_DRAFT, EXPAND_REFUSED_EDIT_DRAFT, close_editor_flow_draft, discard_call,
-    expand_refused_edit_draft, expansion_call, refused_edit_draft, refused_edit_expansion,
 };
 use super::project_session::{
     ARCHIVE_PROJECT, TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
@@ -467,70 +462,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             .get(/*idx*/ 0);
         withdrawal_records.push(records);
     }
-    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d00, "retained").await;
-    let changed = CloseEditorFlowDraftInput {
-        source_current_draft_revision_id: Uuid::now_v7().to_string(),
-        ..open.clone()
-    };
-    let (archived_scope, archived) =
-        refused_edit_draft(&store, &admin, /*base*/ 0x7d10, "archived").await;
-    for (scope, suffix, input) in [
-        (&scope, 0x7d09, open.clone()),
-        (&scope, 0x7d0a, open),
-        (&scope, 0x7d0b, changed),
-        (&archived_scope, 0x7d19, archived),
-    ] {
-        let call = discard_call(&store, scope, suffix, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, close_editor_flow_draft).await;
-        observed.push((CLOSE_EDITOR_FLOW_DRAFT.kind, outcome));
-    }
-    let (scope, open) = refused_edit_expansion(&store, &admin, /*base*/ 0x8e00, "retained").await;
-    let changed = ExpandRefusedEditDraftToProposalInput {
-        source_current_draft_revision_id: Uuid::now_v7().to_string(),
-        ..open.clone()
-    };
-    let missing_target_ref = Uuid::now_v7().to_string();
-    let missing_target = ExpandRefusedEditDraftToProposalInput {
-        target_ref: missing_target_ref.clone(),
-        anchor: OpenInlineProposalAnchor {
-            manuscript_block_id: missing_target_ref,
-            ..open.anchor.clone()
-        },
-        ..open.clone()
-    };
-    let (archived_scope, archived) =
-        refused_edit_expansion(&store, &admin, /*base*/ 0x8e10, "archived").await;
-    let mut expansion_records = Vec::new();
-    for (scope, suffix, input) in [
-        (&scope, 0x8e09, open.clone()),
-        (&scope, 0x8e0a, changed),
-        (&scope, 0x8e0b, missing_target),
-        (&archived_scope, 0x8e19, archived),
-    ] {
-        let call = expansion_call(&store, scope, suffix, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, expand_refused_edit_draft).await;
-        observed.push((EXPAND_REFUSED_EDIT_DRAFT.kind, outcome));
-        // The Proposals, superseding close events, and closed source Drafts of the Receipt.
-        let row = admin
-            .query_one(
-                "SELECT (SELECT count(*) FROM storyos.proposals AS proposal
-                           JOIN storyos.domain_receipts AS receipt
-                             ON receipt.result_payload->>'proposal_id' = proposal.proposal_id::text
-                          WHERE receipt.receipt_id = $1::text::uuid
-                            AND proposal.source_draft_id = $2::text::uuid),
-                        (SELECT count(*) FROM storyos.draft_close_events
-                          WHERE receipt_id = $1::text::uuid AND close_reason = 'superseded'),
-                        (SELECT count(*) FROM storyos.draft_artifacts AS draft
-                           JOIN storyos.draft_close_events AS event
-                             ON event.event_id = draft.close_event_id
-                          WHERE event.receipt_id = $1::text::uuid AND draft.closure = 'closed')",
-                &[&call.envelope.ids.receipt_id, &call.input.draft_id],
-            )
-            .await
-            .unwrap();
-        expansion_records.push([0, 1, 2].map(|index| row.get::<_, i64>(index)));
-    }
-
     let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
     for (suffix, expected_authoritative_revision_id) in [
         (0x750a, &generation.other_chapter_revision_id),
@@ -665,8 +596,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
     let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
-    let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
-    let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let invalid = ("invalid", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
@@ -734,17 +663,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("withdrawProposal", no_effect),
             ("withdrawProposal", refused),
             ("withdrawProposal", conflicted),
-            ("closeEditorFlowDraft", draft_closure_changed),
-            ("closeEditorFlowDraft", refused),
-            ("closeEditorFlowDraft", conflicted),
-            ("closeEditorFlowDraft", refused),
-            (
-                "expandRefusedEditDraftToProposal",
-                proposal_created_from_draft
-            ),
-            ("expandRefusedEditDraftToProposal", conflicted),
-            ("expandRefusedEditDraftToProposal", refused),
-            ("expandRefusedEditDraftToProposal", refused),
             ("completeReadyPartialProposal", conflicted),
             ("completeReadyPartialProposal", generation_completed),
             ("completeReadyPartialProposal", refused),
@@ -771,7 +689,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     assert_eq!(acceptance_records, vec![[1, 1], [1, 0], [1, 0], [1, 0]]);
     assert_eq!(rejection_records, vec![1; 4]);
     assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
-    assert_eq!(expansion_records, vec![[1, 1, 1], [0; 3], [0; 3], [0; 3]]);
 }
 
 /// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.
