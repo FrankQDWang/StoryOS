@@ -25,6 +25,13 @@ the [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-p
 - backup, restore, migration execution, and portability;
 - concrete cache eviction and retention periods.
 
+[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)
+removes the Refused Edit Draft and the Inline Proposal from Release 1. The Web
+shows neither of them, sends no Draft command, and never sends a stored Local
+Edit Journal record of a removed Draft path. The Server sections about the
+Refused Edit Draft, `DraftRetry`, the Draft commands, and the Inline Proposal
+Anchors stay until the Server tickets of ADR 0073 remove them.
+
 Tiptap and ProseMirror are reconstructible editor adapters. Their DOM,
 Selection, plugin state, Decorations, NodeViews, history branches, and
 document-wide integer positions are never Core truth.
@@ -776,8 +783,10 @@ in this order:
    one `RefusedEditDraft`. The Web editor sends no mixed edit: an author edit
    on a selection that crosses owners replaces only its First Owner Part
    ([ADR 0072](../adr/0072-replace-only-the-first-owner-part-of-a-crossing-author-edit.md)).
-   Thus this result comes only from a Draft retry or an earlier Local Edit
-   Journal record.
+   The Web sends no Draft retry, and it never sends a stored Local Edit Journal
+   record of a crossing edit or a Draft retry
+   ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
+   Thus no Web request gets this result.
 3. Validate the admitted edit payload before committing any unit.
    Invalid selection, unsupported intent shape, or target mismatch returns
    `Refused { reason: AuthorEditRefusal }`. It retains one typed Domain Receipt and
