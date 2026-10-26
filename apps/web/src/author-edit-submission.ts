@@ -490,6 +490,26 @@ async function settleAuthorEditResponse({
   });
   const freshBase = canonical.base_snapshot;
   const request = group.frozen_request_body;
+  const primitive = request.author_edit_units[0]?.normalized_primitives[0];
+  // A stored edge insertion of an earlier client next to an inline Proposal settles on the base that the Server
+  // shows after it. The Web no longer makes such a record (ADR 0073).
+  const edgeRecord = request.proposal_target === undefined
+    && request.author_edit_units.length === 1 && request.author_edit_units[0]?.normalized_primitives.length === 1
+    && primitive?.kind === "replace_block_selection" && primitive.from === primitive.to
+    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
+    && request.observed_ownership_partition === "mixed" && request.expected_proposal_head_revision_ids.length === 1
+    && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
+    && workspace.session.base_snapshot.observed_ownership_partition === "authoritative"
+    ? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).records.find(
+      (record) => record.completed_intent_record_id === group.ordered_coverage[0]?.intent_record_ref,
+    ) : undefined;
+  const anchor = edgeRecord?.proposal_anchors.length === 1 ? edgeRecord.proposal_anchors[0] : undefined;
+  const canonicalInlineEdgeProjection = anchor !== undefined && primitive?.kind === "replace_block_selection"
+    && anchor.manuscript_block_id === primitive.manuscript_block_id
+    && (primitive.from === anchor.from || primitive.from === anchor.to);
+  const recoveredCanonicalBase = durableQuery !== undefined && canonicalInlineEdgeProjection
+    && edgeRecord!.base_snapshot_id !== freshBase.snapshot_id
+    && JSON.stringify(freshBase) === JSON.stringify(workspace.session.base_snapshot);
   if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
@@ -498,15 +518,16 @@ async function settleAuthorEditResponse({
       canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
     )
     || !UUID.test(freshBase?.snapshot_id ?? "")
-    || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
+    || (freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id && !recoveredCanonicalBase)
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
     || freshBase.project_activity_position !== effect.project_activity_position
     || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id
     || JSON.stringify(freshBase.proposal_head_revision_ids)
-      !== JSON.stringify(request.expected_proposal_head_revision_ids)
+      !== JSON.stringify(canonicalInlineEdgeProjection ? [] : request.expected_proposal_head_revision_ids)
     || JSON.stringify(freshBase.target_refs)
       !== JSON.stringify(group.frozen_request_body.target_refs)
-    || freshBase.observed_ownership_partition !== request.observed_ownership_partition
+    || freshBase.observed_ownership_partition
+      !== (canonicalInlineEdgeProjection ? "authoritative" : request.observed_ownership_partition)
     || JSON.stringify(freshBase.materialized_revision)
       !== JSON.stringify(effect.authoritative_revision)
     || freshBase.materialized_payload_digest?.algorithm !== "sha256"

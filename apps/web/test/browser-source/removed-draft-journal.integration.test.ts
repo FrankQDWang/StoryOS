@@ -2,9 +2,14 @@ import { expect, it } from "vitest";
 
 import { appendAuthorEdit } from "../../src/editor-session.ts";
 import { freezeOneIntentSubmission, submitOnePendingAuthorEdit } from "../../src/author-edit-submission.ts";
-import { digestJournalValue, readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
+import { digestJournalValue, readJournalSnapshot, rebuildPendingProjection, validateJournalSnapshot }
+  from "../../src/local-edit-journal.ts";
+import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
+import { recoveryMaterial, recoveryPrefix } from "../../src/local-recovery-record.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
-import type { EditorWorkspace, JournalIntentRecord, JournalPayloadChain } from "../../src/editor-types.ts";
+import type { EditorWorkspace, JournalIntentRecord, JournalPayloadChain, JournalSubmissionGroup }
+  from "../../src/editor-types.ts";
 
 const PROPOSAL_HEAD = "018f0000-0000-7001-8000-000000000092";
 const DRAFT = "018f0000-0000-7001-8000-000000000090";
@@ -135,5 +140,42 @@ it("starts a new payload chain after a stored Draft retry of an earlier client, 
     const reopened = await test.reopen();
     expect(reopened.openedProjection).toMatchObject({ body: "Base!", save_state: "saving", unsettled_intent_count: 1 });
     expect((await freezeOneIntentSubmission(reopened)).covered_sequence_range).toEqual({ first: 2, last: 2 });
+  } finally { await test.close(); }
+});
+
+it("shows no local recovery text for a stored Draft retry group of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const frozen = await freezeOneIntentSubmission(test.workspace);
+    const material = recoveryMaterial(await validateJournalSnapshot(test.workspace,
+      await readJournalSnapshot(test.workspace)), frozen);
+    const retrySource = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: DRAFT,
+      source_current_draft_revision_id: DRAFT, source_draft_payload_digest: "a".repeat(64),
+      expected_source_draft_closure: "open", selected_payload_range: { kind: "exact_structured_range",
+        coordinate_profile: "storyos.draft-replacement.block-utf16.v1", from: { block_index: 0, offset: 0 },
+        to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } };
+    const body = { ...frozen.frozen_request_body,
+      retry_source: retrySource } as JournalSubmissionGroup["frozen_request_body"];
+    const group = { ...frozen, frozen_request_body: body,
+      frozen_request_digest: await digestApplyAuthorEdit(body, crypto),
+      settlement: { kind: "outcome_query_requires_reconfirmation", command_id: "018f0000-0000-7001-8000-000000000031",
+        author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+        reconfirmation_reason: "direct_edit_intent_unrecoverable", recovery_draft_ref: null } } as JournalSubmissionGroup;
+    const transaction = test.workspace.database.transaction(["intents", "submission_groups", "metadata"], "readwrite");
+    const [record] = await request(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
+    transaction.objectStore("intents").put({ ...record!, retry_source: retrySource });
+    transaction.objectStore("submission_groups").put(group);
+    // Another Editor Session of the Project kept the same group for manual re-entry.
+    transaction.objectStore("metadata").put({ key: `${recoveryPrefix}earlier-session:${group.journal_submission_group_id}`,
+      value: { ...material, group, disposition: "retained_for_manual_reentry" } });
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+    });
+    const workspace = await test.reopen();
+
+    expect(workspace.openedProjection).toMatchObject({ body: "Base", save_state: "saved", unsettled_intent_count: 0 });
+    expect(await readLocalRecovery(workspace)).toEqual([]);
   } finally { await test.close(); }
 });
