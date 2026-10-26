@@ -319,7 +319,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
     assert.equal(editRequest?.proposal_target?.proposal_id, second.proposalId);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-    // A selection from the Chapter text into the candidate changes only the Chapter text.
+    // A selection from the Chapter text into the candidate sends only a Chapter edit. The Server refuses each
+    // Chapter edit outside the edges of a pending inline Proposal, so the edit conflicts (ADR 0072, #1273).
     await editor.focus();
     await secondCandidate.evaluate((element) => {
       const range = document.createRange();
@@ -331,18 +332,18 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     });
     assert.equal(await secondCandidate.evaluate(() => window.getSelection()?.toString()), "the nar f");
     await page.keyboard.insertText("a ");
-    await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks[0]?.text)
-      .toBe("Guard a narrator voice in this passage.").catch((error) => {
+    await expect.poll(() => (editResponse as { effect?: { kind?: string; reason?: string } } | undefined)?.effect)
+      .toMatchObject({ kind: "conflicted", reason: "proposal_head_present" }).catch((error) => {
         throw new Error(`${error}\nChapter request and response: ${JSON.stringify({ editRequest, editResponse })}`);
       });
-    assert.equal(await proposalText(), "nar first owner");
     assert.equal(editRequest?.proposal_target, undefined);
-    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    assert.deepEqual(editRequest?.author_edit_units.flatMap((unit) => unit.normalized_primitives)
+      .map((primitive) => primitive.kind), ["replace_block_selection"]);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
+    assert.equal(await proposalText(), "nar first owner");
     assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
       WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
-    const firstOwnerBase = await getChapter({ ...options, chapterId });
     await page.reload();
-    await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(["Guard a narrator voice in this passage."]);
     await expect(page.locator(`[data-proposal-id="${second.proposalId}"]`)).toContainText("nar first owner");
     await expect(page.locator("[data-refused-edit-draft]")).toHaveCount(0);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-first-owner-edits.png") });
@@ -351,7 +352,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       .toBe("rejected");
     await page.reload();
     await expect(page.locator(`span[data-inline-proposal-id="${second.proposalId}"]`)).toHaveCount(0);
-    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, firstOwnerBase.chapter);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-rejected-reloaded.png") });
     for (const edge of ["start", "end"] as const) {
       await createInlineChapter(`Inline ${edge} edge Chapter`);
