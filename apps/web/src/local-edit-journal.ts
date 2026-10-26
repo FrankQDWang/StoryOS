@@ -28,6 +28,7 @@ import type { CapturedManuscriptEdit, ContiguousReplacementPrimitive } from "./m
 import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
 } from "./journal-working-set.ts";
+import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
 
 export const JOURNAL_DATABASE_VERSION = 5;
 /** The schema version that a read of this workspace accepts. Writes always need the current version. */
@@ -398,23 +399,6 @@ function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
   return group?.settlement?.kind === "zero_authority_receipt_settled"
     || group?.settlement?.kind === "outcome_query_rejected_no_admission"
     || group?.settlement?.kind === "outcome_query_requires_reconfirmation";
-}
-
-const isStructuredPrimitive = (primitive: { kind: string }) => primitive.kind === "replace_structured_selection";
-
-/** A stored record of a removed Draft path (ADR 0073). The Journal never sends it, and it is resolved. */
-export function isRemovedDraftRecord(record: JournalIntentRecord) {
-  return record.retry_source?.kind === "draft_retry"
-    || (record.author_edit_unit?.normalized_primitives ?? []).some(isStructuredPrimitive);
-}
-
-/** A stored group of a removed Draft path (ADR 0073). The Journal never sends it, and it is resolved. */
-export function isRemovedDraftGroup(group: JournalSubmissionGroup) {
-  const request = group.frozen_request_body;
-  return request.retry_source !== undefined
-    || request.author_edit_units.some((unit) => unit.normalized_primitives.some(isStructuredPrimitive))
-    || (group.settlement.kind === "zero_authority_receipt_settled"
-      && group.settlement.effect.kind === "refused_to_draft");
 }
 
 function closedReconciliation(group: JournalSubmissionGroup) {

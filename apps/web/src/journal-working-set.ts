@@ -1,6 +1,7 @@
 import type { EditorWorkspace, ValidatedJournalSnapshot, JournalSubmissionGroup,
   JournalIntentRecord, JournalPayloadChain }
   from "./editor-types.ts";
+import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
 
 export const MAX_WORKING_JOURNAL_ITEMS = 2400;
 const STORES = ["intents", "payload_chains", "submission_groups"] as const;
@@ -161,23 +162,52 @@ export async function retireCollectedJournalPrefix(
   }
   let recordCount = 0;
   const chainIds = new Set<string>();
-  for (const group of snapshot.groups) {
+  const removedGroups: JournalSubmissionGroup[] = [];
+  // A record or a group of a removed Draft path retires with the collected group after it (ADR 0073).
+  let position = 0;
+  const removedChains = new Set<string>();
+  const walkedRemovedGroups: JournalSubmissionGroup[] = [];
+  for (let index = 0; position < snapshot.records.length;) {
+    const group = snapshot.groups[index];
+    const record = snapshot.records[position]!;
+    if (group?.covered_sequence_range.first !== record.local_intent_sequence) {
+      if (!isRemovedDraftRecord(record)) break;
+      removedChains.add(record.payload_chain_ref);
+      position += 1;
+      continue;
+    }
+    const records = snapshot.records.slice(position, position + group.ordered_coverage.length);
+    const ids = new Set(records.map((item) => item.payload_chain_ref));
+    if (!equal(records.map((item) => item.local_intent_sequence),
+      group.ordered_coverage.map((item) => item.local_intent_sequence))) break;
+    index += 1;
+    if (isRemovedDraftGroup(group)) {
+      for (const id of ids) removedChains.add(id);
+      walkedRemovedGroups.push(group);
+      position += records.length;
+      continue;
+    }
     const fenceId = group.payload_collection?.collection_fence_id;
     if (!collectionProofMatches(group, fences.get(fenceId))) break;
-    const records = snapshot.records.slice(recordCount, recordCount + group.ordered_coverage.length);
-    const ids = new Set(records.map((record) => record.payload_chain_ref));
     const chains = [...ids].flatMap((id) => chainsById.get(id) ?? []);
-    if (records.some((record) => record.author_edit_unit !== undefined)
+    const end = position + records.length;
+    if (records.some((item) => item.author_edit_unit !== undefined)
       || chains.length !== ids.size
       || chains.some((chain) => chain.payload_collection?.collection_fence_id !== fenceId)
       || !equal(Reflect.get(fences.get(fenceId) as object, "collected_payload_chain_ids"), [...ids])
       || [...ids].some((id) => {
         const { first, last } = chainPositions.get(id)!;
-        return first < recordCount || last >= recordCount + records.length;
+        return first < position || last >= end;
+      })
+      || [...removedChains].some((id) => {
+        const { first, last } = chainPositions.get(id)!;
+        return first < recordCount || last >= end;
       })) break;
     prefix.push(group);
-    recordCount += records.length;
-    for (const id of ids) chainIds.add(id);
+    removedGroups.push(...walkedRemovedGroups.splice(0));
+    recordCount = position = end;
+    for (const id of [...ids, ...removedChains]) chainIds.add(id);
+    removedChains.clear();
   }
   if (prefix.length === 0) return false;
   const partitionId = workspace.partition.journal_partition_id;
@@ -215,7 +245,7 @@ export async function retireCollectedJournalPrefix(
       throw new Error("Local Edit Journal changed before working boundary advance");
     }
     const retired = [snapshot.records.slice(0, recordCount),
-      snapshot.payloadChains.filter((chain) => chainIds.has(chain.payload_chain_id)), prefix];
+      snapshot.payloadChains.filter((chain) => chainIds.has(chain.payload_chain_id)), [...prefix, ...removedGroups]];
     for (const [index, name] of STORES.entries()) {
       for (const row of retired[index]!) {
         const { working_set_partition_id: _working, ...retained } = row;

@@ -34,7 +34,6 @@ import {
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
   JOURNAL_DATABASE_VERSION,
   boundJournalRecord,
-  isRemovedDraftGroup,
   journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   recordTargetsCurrentBase,
@@ -42,6 +41,7 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "./local-edit-journal.ts";
+import { isRemovedDraftGroup } from "./removed-draft-path.ts";
 import {
   commitProtectedTransportSend,
   readAvailableCommandProof,

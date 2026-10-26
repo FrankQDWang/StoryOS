@@ -5,8 +5,9 @@ import { freezeOneIntentSubmission, submitOnePendingAuthorEdit } from "../../src
 import { digestJournalValue, readJournalSnapshot, rebuildPendingProjection, validateJournalSnapshot }
   from "../../src/local-edit-journal.ts";
 import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
-import { recoveryMaterial, recoveryPrefix } from "../../src/local-recovery-record.ts";
+import { readLocalRecovery, retainLocalRecovery } from "../../src/local-edit-recovery.ts";
+import { RECOVERY_PAGE_SIZE, recoveryKey, recoveryMaterial, recoveryPrefix, type LocalRecoveryMaterial }
+  from "../../src/local-recovery-record.ts";
 import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import type { EditorWorkspace, JournalIntentRecord, JournalPayloadChain, JournalSubmissionGroup }
   from "../../src/editor-types.ts";
@@ -56,6 +57,37 @@ const request = <T,>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) =
   value.onsuccess = () => resolve(value.result);
   value.onerror = () => reject(value.error);
 });
+
+const RETRY_SOURCE = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: DRAFT,
+  source_current_draft_revision_id: DRAFT, source_draft_payload_digest: "a".repeat(64),
+  expected_source_draft_closure: "open", selected_payload_range: { kind: "exact_structured_range",
+    coordinate_profile: "storyos.draft-replacement.block-utf16.v1", from: { block_index: 0, offset: 0 },
+    to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } } as const;
+const RECONFIRMATION = { kind: "outcome_query_requires_reconfirmation", command_id: "018f0000-0000-7001-8000-000000000031",
+  author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+  reconfirmation_reason: "direct_edit_intent_unrecoverable", recovery_draft_ref: null } as JournalSubmissionGroup["settlement"];
+
+/** Gives the frozen group as the Draft retry group that an earlier client stored. */
+async function earlierDraftRetryGroup(frozen: JournalSubmissionGroup, settlement: JournalSubmissionGroup["settlement"]) {
+  const body = { ...frozen.frozen_request_body,
+    retry_source: RETRY_SOURCE } as JournalSubmissionGroup["frozen_request_body"];
+  return { ...frozen, frozen_request_body: body, frozen_request_digest: await digestApplyAuthorEdit(body, crypto),
+    settlement } as JournalSubmissionGroup;
+}
+
+/** Stores the Draft retry group, its record, and the metadata rows. */
+async function storeEarlierRows(workspace: EditorWorkspace, group: JournalSubmissionGroup, rows: object[]) {
+  const transaction = workspace.database.transaction(["intents", "submission_groups", "metadata"], "readwrite");
+  const records = await request(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
+  const record = records.find((item) => item.local_intent_sequence === group.covered_sequence_range.first)!;
+  transaction.objectStore("intents").put({ ...record, retry_source: RETRY_SOURCE });
+  transaction.objectStore("submission_groups").put(group);
+  for (const row of rows) transaction.objectStore("metadata").put(row);
+  await new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
 
 /** Turns the one pending record into the crossing edit that an earlier client stored. */
 async function storeEarlierCrossingEdit(workspace: EditorWorkspace) {
@@ -124,11 +156,7 @@ it("starts a new payload chain after a stored Draft retry of an earlier client, 
     await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const transaction = test.workspace.database.transaction("intents", "readwrite");
     const [record] = await request(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
-    transaction.objectStore("intents").put({ ...record!, retry_source: { kind: "draft_retry",
-      source_draft_kind: "refused_edit", source_draft_id: DRAFT, source_current_draft_revision_id: DRAFT,
-      source_draft_payload_digest: "a".repeat(64), expected_source_draft_closure: "open",
-      selected_payload_range: { kind: "exact_structured_range", coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
-        from: { block_index: 0, offset: 0 }, to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } } });
+    transaction.objectStore("intents").put({ ...record!, retry_source: RETRY_SOURCE });
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error);
@@ -150,32 +178,52 @@ it("shows no local recovery text for a stored Draft retry group of an earlier cl
     const frozen = await freezeOneIntentSubmission(test.workspace);
     const material = recoveryMaterial(await validateJournalSnapshot(test.workspace,
       await readJournalSnapshot(test.workspace)), frozen);
-    const retrySource = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: DRAFT,
-      source_current_draft_revision_id: DRAFT, source_draft_payload_digest: "a".repeat(64),
-      expected_source_draft_closure: "open", selected_payload_range: { kind: "exact_structured_range",
-        coordinate_profile: "storyos.draft-replacement.block-utf16.v1", from: { block_index: 0, offset: 0 },
-        to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } };
-    const body = { ...frozen.frozen_request_body,
-      retry_source: retrySource } as JournalSubmissionGroup["frozen_request_body"];
-    const group = { ...frozen, frozen_request_body: body,
-      frozen_request_digest: await digestApplyAuthorEdit(body, crypto),
-      settlement: { kind: "outcome_query_requires_reconfirmation", command_id: "018f0000-0000-7001-8000-000000000031",
-        author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
-        reconfirmation_reason: "direct_edit_intent_unrecoverable", recovery_draft_ref: null } } as JournalSubmissionGroup;
-    const transaction = test.workspace.database.transaction(["intents", "submission_groups", "metadata"], "readwrite");
-    const [record] = await request(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
-    transaction.objectStore("intents").put({ ...record!, retry_source: retrySource });
-    transaction.objectStore("submission_groups").put(group);
+    const group = await earlierDraftRetryGroup(frozen, RECONFIRMATION);
     // Another Editor Session of the Project kept the same group for manual re-entry.
-    transaction.objectStore("metadata").put({ key: `${recoveryPrefix}earlier-session:${group.journal_submission_group_id}`,
-      value: { ...material, group, disposition: "retained_for_manual_reentry" } });
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error);
-    });
+    await storeEarlierRows(test.workspace, group, [{ key: `${recoveryPrefix}earlier-session:${group.journal_submission_group_id}`,
+      value: { ...material, group, disposition: "retained_for_manual_reentry" } }]);
     const workspace = await test.reopen();
 
     expect(workspace.openedProjection).toMatchObject({ body: "Base", save_state: "saved", unsettled_intent_count: 0 });
     expect(await readLocalRecovery(workspace)).toEqual([]);
+  } finally { await test.close(); }
+});
+
+it("reads a full page of local recovery after a retained Draft retry group of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const frozen = await freezeOneIntentSubmission(test.workspace);
+    const material: LocalRecoveryMaterial = { ...recoveryMaterial(await validateJournalSnapshot(test.workspace,
+      await readJournalSnapshot(test.workspace)), frozen), disposition: "retained_for_manual_reentry" };
+    const removed = await earlierDraftRetryGroup(frozen, RECONFIRMATION);
+    // Another Editor Session kept the Draft retry group first and then a full page of ordinary groups.
+    const retained = [removed, ...Array.from({ length: RECOVERY_PAGE_SIZE }, () => ({ ...frozen, settlement: RECONFIRMATION }))]
+      .map((group, index): LocalRecoveryMaterial => ({ ...material, group: { ...group,
+        journal_partition_id: "earlier-session", journal_submission_group_id: String(index).padStart(2, "0") } }));
+    await storeEarlierRows(test.workspace, removed, retained.map((item) => ({ key: recoveryKey(item), value: item })));
+    const workspace = await test.reopen();
+
+    const page = await readLocalRecovery(workspace);
+    expect(page).toEqual(retained.slice(1));
+    expect(await readLocalRecovery(workspace, page.at(-1))).toEqual([]);
+  } finally { await test.close(); }
+});
+
+it("keeps ordinary local recovery after an unsent Draft retry group of an earlier client", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const unsent = await freezeOneIntentSubmission(test.workspace);
+    await storeEarlierRows(test.workspace, await earlierDraftRetryGroup(unsent, unsent.settlement), []);
+    await appendAuthorEdit(test.workspace, { ...FIRST_APPEND_EDIT, createdAt: new Date().toISOString() });
+    const frozen = await freezeOneIntentSubmission(test.workspace);
+    await request(test.workspace.database.transaction("submission_groups", "readwrite").objectStore("submission_groups")
+      .put({ ...frozen, settlement: RECONFIRMATION }));
+    const workspace = await test.reopen();
+
+    await retainLocalRecovery(workspace, frozen.journal_submission_group_id);
+    expect((await readLocalRecovery(workspace)).map((item) => [item.group.journal_submission_group_id, item.disposition]))
+      .toEqual([[frozen.journal_submission_group_id, "retained_for_manual_reentry"]]);
   } finally { await test.close(); }
 });

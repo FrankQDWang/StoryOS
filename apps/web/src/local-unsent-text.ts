@@ -1,7 +1,7 @@
 import type { EditorBaseSnapshot, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace, JournalIntentRecord, JournalPartition, ValidatedJournalSnapshot } from "./editor-types.ts";
-import { JOURNAL_OBJECT_STORES, isRemovedDraftGroup, isRemovedDraftRecord, readJournalSnapshot,
-  validateJournalSnapshot } from "./local-edit-journal.ts";
+import { JOURNAL_OBJECT_STORES, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
+import { isRemovedDraftGroup, isRemovedDraftRecord } from "./removed-draft-path.ts";
 
 /** The unsent text of a Local Edit Journal that cannot upgrade (contract 3.2). */
 export interface LocalUnsentText {
