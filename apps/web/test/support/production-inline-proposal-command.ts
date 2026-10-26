@@ -344,7 +344,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.equal((await queryStoryOSPostgres(`SELECT count(*) FROM storyos.draft_artifacts
       WHERE project_id = '${projectId}'::uuid`)).trim(), "0");
     await page.reload();
-    await expect(page.locator(`[data-proposal-id="${second.proposalId}"]`)).toContainText("nar first owner");
+    await expect(secondCandidate).toHaveText("nar first owner");
     await expect(page.locator("[data-refused-edit-draft]")).toHaveCount(0);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-first-owner-edits.png") });
     await page.locator(`[data-proposal-reject="${second.proposalId}"]`).click();
