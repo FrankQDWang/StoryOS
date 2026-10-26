@@ -111,3 +111,29 @@ it("never sends a stored crossing edit or Draft Discard of an earlier client and
     expect((await readJournalSnapshot(workspace)).records).toHaveLength(2);
   } finally { await test.close(); }
 });
+
+it("starts a new payload chain after a stored Draft retry of an earlier client, so a reload replays only the new edit", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    // The stored Draft retry applied "!" in its payload chain. The Server never applied it.
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
+    const transaction = test.workspace.database.transaction("intents", "readwrite");
+    const [record] = await request(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
+    transaction.objectStore("intents").put({ ...record!, retry_source: { kind: "draft_retry",
+      source_draft_kind: "refused_edit", source_draft_id: DRAFT, source_current_draft_revision_id: DRAFT,
+      source_draft_payload_digest: "a".repeat(64), expected_source_draft_closure: "open",
+      selected_payload_range: { kind: "exact_structured_range", coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
+        from: { block_index: 0, offset: 0 }, to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } } });
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error);
+    });
+    const workspace = await test.reopen();
+    expect(workspace.openedProjection).toMatchObject({ body: "Base", save_state: "saved", unsettled_intent_count: 0 });
+
+    await appendAuthorEdit(workspace, { ...FIRST_APPEND_EDIT, createdAt: new Date().toISOString() });
+    const reopened = await test.reopen();
+    expect(reopened.openedProjection).toMatchObject({ body: "Base!", save_state: "saving", unsettled_intent_count: 1 });
+    expect((await freezeOneIntentSubmission(reopened)).covered_sequence_range).toEqual({ first: 2, last: 2 });
+  } finally { await test.close(); }
+});

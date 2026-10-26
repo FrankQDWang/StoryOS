@@ -245,27 +245,39 @@ it("does not show the refusal text of an earlier Proposal Revision", async () =>
 
 it("shows no inline Proposal, with no candidate, control, status, or unavailable line", async () => {
   const test = await openJournalAppendTestWorkspace();
-  const block = test.workspace.openedProjection.blocks[0]!;
-  const base = candidateFor(test.workspace);
-  const proposal = { ...base, kind: "inline_edit", candidate_text: "AS",
-    operations: base.operations.map((operation) => ({ ...operation, candidate_text: "AS" })),
-    anchors: [{ manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: base.base_authoritative_revision_id,
+  const workspace = test.workspace;
+  const block = workspace.openedProjection.blocks[0]!;
+  const shown = candidateFor(workspace);
+  const id = "018f0000-0000-7001-8000-000000000e10";
+  const inline = { ...shown, proposal_id: id, kind: "inline_edit", candidate_text: "AS",
+    operations: shown.operations.map((operation) => ({ ...operation, operation_id: id, candidate_text: "AS" })),
+    anchors: [{ manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: shown.base_authoritative_revision_id,
       manuscript_schema_version: 1, coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 1,
       boundary_profile: "exclusive-authoritative-edges.v1", base_slice_digest: `sha256:${"0".repeat(64)}` }] } as Proposal;
+  const inlineReads: string[] = [];
+  // The display reads both Proposals before it shows the block Proposal.
+  const transport = proposalTransport(workspace, shown, { proposals: [shown, inline], completeness: "complete" },
+    async (input) => {
+      const path = new URL(input instanceof Request ? input.url : input).pathname;
+      if (!path.endsWith(`/proposals/${id}`)) return jsonResponse({ code: "service_unavailable" }, 503);
+      inlineReads.push(id);
+      return jsonResponse({ ...proposalFixture, project_scope: workspace.partition.project_scope, proposal: inline });
+    });
+  const locator = (proposal: Proposal) => ({ proposalId: proposal.proposal_id, runId: proposal.source.run_id,
+    decisionId: proposal.source.decision_id });
   await withActEnvironment(async () => {
-    const shown = await display(test.workspace, proposal);
+    const tab = await renderTab(workspace, [locator(shown), locator(inline)], transport.fetchImpl);
     try {
-      await expect.poll(() => shown.sent.length + shown.tab.host.querySelectorAll("[data-manuscript-editor]").length)
-        .toBeGreaterThan(0);
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
-      const id = proposal.proposal_id;
-      expect({ card: shown.card(), status: shown.status(),
-        unavailable: shown.tab.host.querySelectorAll(`[data-proposal-unavailable="${id}"]`).length,
-        controls: shown.tab.host.querySelectorAll(`[data-proposal-accept="${id}"], [data-proposal-reject="${id}"]`).length,
-        failures: shown.tab.failures })
-        .toEqual({ card: null, status: null, unavailable: 0, controls: 0, failures: [] });
+      await expect.poll(() => tab.host.querySelector(`.block-proposal[data-proposal-id="${shown.proposal_id}"]`)
+        ?.getAttribute("data-proposal-eligibility")).toBe("eligible");
+      expect({ inlineReads: inlineReads.length > 0, card: tab.host.querySelector(`[data-proposal-id="${id}"]`),
+        status: tab.host.querySelector(`[data-proposal-decision="${id}"]`),
+        unavailable: tab.host.querySelector(`[data-proposal-unavailable="${id}"]`),
+        controls: tab.host.querySelectorAll(`[data-proposal-accept="${id}"], [data-proposal-reject="${id}"]`).length,
+        failures: tab.failures })
+        .toEqual({ inlineReads: true, card: null, status: null, unavailable: null, controls: 0, failures: [] });
     } finally {
-      await shown.tab.unmount(); await test.close();
+      await tab.unmount(); await test.close();
     }
   });
 });

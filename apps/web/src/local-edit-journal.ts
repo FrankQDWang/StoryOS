@@ -1574,6 +1574,8 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const retainedChains = new Set((snapshot.localRecovery ?? []).flatMap((item) => item.chains.map((chain) => chain.payload_chain_id)));
+  // A chain with a record of a removed Draft path holds text that the Server never applied (ADR 0073).
+  for (const record of snapshot.records) if (isRemovedDraftRecord(record)) retainedChains.add(record.payload_chain_ref);
   const activeChains = chains.filter((chain) => !retainedChains.has(chain.payload_chain_id));
   // Each run of records that follow a group has its own chain, so each later group collects alone (ADR 0065).
   const followerChain = followsGroup && lastRecord?.follows_submission_group !== undefined

@@ -200,7 +200,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             WITHDRAW,
             PRODUCTION_HOST,
             PHYSICAL_SCRIPT,
-            "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
+            "apps/web/test/browser-source/removed-draft-journal.integration.test.ts",
             CANDIDATE_EDIT,
             MULTI,
         ],
