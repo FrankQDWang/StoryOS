@@ -202,8 +202,6 @@
           "reopenRejectedOperations",
           "completeReadyPartialProposal",
           "continueProposalGeneration",
-          "expandRefusedEditDraftToProposal",
-          "closeEditorFlowDraft",
           "getArtifact",
           "undoLatestAuthorAction"
         ]
@@ -2142,7 +2140,6 @@
           "storyos.event.domain-receipt-settled.v1",
           "storyos.event.authoritative-author-edit-applied.v1",
           "storyos.event.proposal-author-edit-applied.v1",
-          "storyos.event.editor-flow-draft-closed.v1",
           "storyos.event.recovery-draft-created.v1"
         ],
         "no_effect": [],
@@ -2168,10 +2165,7 @@
         "typescript_client": true,
         "golden_wire_corpus": true
       },
-      "notes": "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, RefusedToDraft, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body.",
-      "artifact_creation_events": [
-        "storyos.event.refused-edit-draft-created.v1"
-      ]
+      "notes": "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body."
     },
     {
       "operation_id": "createReplacementProposal",
@@ -3253,180 +3247,6 @@
       }
     },
     {
-      "operation_id": "expandRefusedEditDraftToProposal",
-      "kind": "command",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions",
-      "shape": "draft:expand-to-proposal",
-      "semantic_owner": "core",
-      "wire_owner": "protocol",
-      "schemas": {
-        "request": "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
-        "response": "storyos.command.expand-refused-edit-draft-to-proposal.response.v1",
-        "request_source": "protocol",
-        "response_source": "protocol",
-        "semantic_source": "core"
-      },
-      "action_class": "explicit_editor_command",
-      "admission": "author_command",
-      "editor": {
-        "session": "required",
-        "writer_generation": "current",
-        "takeover": "no"
-      },
-      "idempotency": "header_and_admission_record",
-      "preconditions": [
-        "draft_scope_join",
-        "current_open_refused_edit_draft",
-        "exact_source_draft_revision_and_digest",
-        "whole_draft_payload",
-        "expected_target_revisions"
-      ],
-      "settlement": {
-        "mode": "sync",
-        "acknowledgements": [
-          "committed",
-          "requires_reconfirmation"
-        ],
-        "http_statuses": [
-          200,
-          400,
-          401,
-          403,
-          404,
-          405,
-          409,
-          412,
-          413,
-          415,
-          422,
-          428,
-          429,
-          503
-        ],
-        "settlement_query": null,
-        "operation_ref": null
-      },
-      "error_profile": "editor_command",
-      "activity": {
-        "success": [
-          "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.proposal-created-from-refused-edit-draft.v1",
-          "storyos.event.editor-flow-draft-closed.v1"
-        ],
-        "no_effect": [
-          "storyos.event.domain-receipt-settled.v1"
-        ],
-        "pre_admission": "none",
-        "visibility": "only after the durable transition or async settlement named by the operation"
-      },
-      "fixtures": {
-        "positive": "storyos.golden.expandRefusedEditDraftToProposal.positive.v1",
-        "negative": [
-          "storyos.golden.expandRefusedEditDraftToProposal.invalid.v1",
-          "storyos.golden.expandRefusedEditDraftToProposal.boundary.v1"
-        ]
-      },
-      "generated": {
-        "openapi_operation_id": "expandRefusedEditDraftToProposal",
-        "typescript_operation": "expandRefusedEditDraftToProposal",
-        "json_schema_ids": [
-          "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
-          "storyos.command.expand-refused-edit-draft-to-proposal.response.v1"
-        ],
-        "schema_catalog": "storyos.schema-catalog.v1",
-        "openapi": true,
-        "typescript_client": true,
-        "golden_wire_corpus": true
-      }
-    },
-    {
-      "operation_id": "closeEditorFlowDraft",
-      "kind": "command",
-      "method": "POST",
-      "path": "/api/v1/projects/{project_id}/drafts/{draft_id}/closures",
-      "shape": "draft:close",
-      "semantic_owner": "core",
-      "wire_owner": "protocol",
-      "schemas": {
-        "request": "storyos.command.close-editor-flow-draft.request.v1",
-        "response": "storyos.command.close-editor-flow-draft.response.v1",
-        "request_source": "protocol",
-        "response_source": "protocol",
-        "semantic_source": "core"
-      },
-      "action_class": "explicit_editor_command",
-      "admission": "author_command",
-      "editor": {
-        "session": "required",
-        "writer_generation": "current",
-        "takeover": "no"
-      },
-      "idempotency": "header_and_admission_record",
-      "preconditions": [
-        "draft_scope_join",
-        "current_open_refused_or_recovery_draft",
-        "exact_source_draft_revision_and_digest",
-        "close_reason_allowed"
-      ],
-      "settlement": {
-        "mode": "sync",
-        "acknowledgements": [
-          "committed",
-          "requires_reconfirmation"
-        ],
-        "http_statuses": [
-          200,
-          400,
-          401,
-          403,
-          404,
-          405,
-          409,
-          412,
-          413,
-          415,
-          422,
-          428,
-          429,
-          503
-        ],
-        "settlement_query": null,
-        "operation_ref": null
-      },
-      "error_profile": "editor_command",
-      "activity": {
-        "success": [
-          "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.editor-flow-draft-closed.v1"
-        ],
-        "no_effect": [
-          "storyos.event.domain-receipt-settled.v1"
-        ],
-        "pre_admission": "none",
-        "visibility": "only after the durable transition or async settlement named by the operation"
-      },
-      "fixtures": {
-        "positive": "storyos.golden.closeEditorFlowDraft.positive.v1",
-        "negative": [
-          "storyos.golden.closeEditorFlowDraft.invalid.v1",
-          "storyos.golden.closeEditorFlowDraft.boundary.v1"
-        ]
-      },
-      "generated": {
-        "openapi_operation_id": "closeEditorFlowDraft",
-        "typescript_operation": "closeEditorFlowDraft",
-        "json_schema_ids": [
-          "storyos.command.close-editor-flow-draft.request.v1",
-          "storyos.command.close-editor-flow-draft.response.v1"
-        ],
-        "schema_catalog": "storyos.schema-catalog.v1",
-        "openapi": true,
-        "typescript_client": true,
-        "golden_wire_corpus": true
-      }
-    },
-    {
       "operation_id": "undoLatestAuthorAction",
       "kind": "command",
       "method": "POST",
@@ -3487,7 +3307,6 @@
           "storyos.event.author-undo-routed.v1",
           "storyos.event.author-undo-settled.v1",
           "storyos.event.undo-acceptance-settled.v1",
-          "storyos.event.editor-flow-draft-reopened.v1",
           "storyos.event.proposal-reopened.v1",
           "storyos.event.proposal-operations-reopened.v1"
         ],
@@ -4818,81 +4637,6 @@
       }
     },
     {
-      "operation_id": "getRefusedEditDraft",
-      "kind": "query",
-      "method": "GET",
-      "path": "/api/v1/projects/{project_id}/refused-edit-drafts/{draft_id}",
-      "shape": "refused_edit_draft:read",
-      "semantic_owner": "artifact",
-      "wire_owner": "protocol",
-      "schemas": {
-        "request": "storyos.query.refused-edit-draft.request.v1",
-        "response": "storyos.query.refused-edit-draft.response.v1",
-        "request_source": "protocol",
-        "response_source": "protocol",
-        "semantic_source": "artifact"
-      },
-      "action_class": "none",
-      "admission": "query",
-      "editor": {
-        "session": "optional",
-        "writer_generation": "not-applicable",
-        "takeover": "no"
-      },
-      "idempotency": "none",
-      "preconditions": [
-        "exact_scope",
-        "retained_revision_digest",
-        "immutable_creation_source"
-      ],
-      "settlement": {
-        "mode": "read",
-        "acknowledgements": [],
-        "http_statuses": [
-          200,
-          400,
-          401,
-          403,
-          404,
-          405,
-          409,
-          413,
-          415,
-          422,
-          429,
-          503
-        ],
-        "settlement_query": null,
-        "operation_ref": null
-      },
-      "error_profile": "query_canonical",
-      "activity": {
-        "success": [],
-        "no_effect": [],
-        "pre_admission": "none",
-        "visibility": "only after the durable transition or async settlement named by the operation"
-      },
-      "fixtures": {
-        "positive": "storyos.golden.getRefusedEditDraft.positive.v1",
-        "negative": [
-          "storyos.golden.getRefusedEditDraft.invalid.v1",
-          "storyos.golden.getRefusedEditDraft.boundary.v1"
-        ]
-      },
-      "generated": {
-        "openapi_operation_id": "getRefusedEditDraft",
-        "typescript_operation": "getRefusedEditDraft",
-        "json_schema_ids": [
-          "storyos.query.refused-edit-draft.request.v1",
-          "storyos.query.refused-edit-draft.response.v1"
-        ],
-        "schema_catalog": "storyos.schema-catalog.v1",
-        "openapi": true,
-        "typescript_client": true,
-        "golden_wire_corpus": true
-      }
-    },
-    {
       "operation_id": "getArtifact",
       "kind": "query",
       "method": "GET",
@@ -4966,7 +4710,7 @@
         "typescript_client": true,
         "golden_wire_corpus": true
       },
-      "notes": "The Artifact projection covers retained RefusedEditDraft and RecoveryDraft revisions; there is no alternate Draft upload or browser-cache ingress."
+      "notes": "The Artifact projection covers retained RecoveryDraft revisions; there is no alternate Draft upload or browser-cache ingress."
     },
     {
       "operation_id": "getConversationMemory",
@@ -6153,52 +5897,6 @@
       "negative_fixture": "storyos.golden.storyos.event.proposal-author-edit-applied.v1.negative.v1"
     },
     {
-      "schema_id": "storyos.event.refused-edit-draft-created.v1",
-      "event_kind": "refused_edit_draft_created",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.artifact-lifecycle.v1",
-      "description": "Immutable CoreTransition creation fact returned by the exact-Scope Refused Edit Draft query; not a Project Activity entry.",
-      "positive_fixture": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
-      "record_shape": {
-        "creator": "core_transition",
-        "scope": "exact_project",
-        "source": "exact_command_admission_receipt",
-        "delivery": "getRefusedEditDraft",
-        "schema_path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-created.schema.json"
-      }
-    },
-    {
-      "schema_id": "storyos.event.editor-flow-draft-closed.v1",
-      "event_kind": "editor_flow_draft_closed",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.artifact-lifecycle.v1",
-      "description": "Immutable explicit abandoned Refused Edit Draft closure; not a Project Activity entry.",
-      "positive_fixture": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
-      "record_shape": {
-        "scope": "exact_project",
-        "source": "exact_command_admission_receipt_forward_action",
-        "delivery": "closeEditorFlowDraft_and_getRefusedEditDraft",
-        "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-closed.schema.json"
-      }
-    },
-    {
-      "schema_id": "storyos.event.editor-flow-draft-reopened.v1",
-      "event_kind": "editor_flow_draft_reopened",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.artifact-lifecycle.v1",
-      "description": "Reopens a retained source Draft only through the exact typed undo compensation.",
-      "positive_fixture": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
-      "record_shape": {
-        "scope": "exact_project",
-        "source": "exact_root_undo_handler_receipt_compensation",
-        "delivery": "undoLatestAuthorAction_and_getRefusedEditDraft",
-        "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json"
-      }
-    },
-    {
       "schema_id": "storyos.event.recovery-draft-created.v1",
       "event_kind": "recovery_draft_created",
       "semantic_owner": "core",
@@ -6359,15 +6057,6 @@
       "description": "Projects an ambiguous Proposal recovery condition without turning it into a Draft or Acceptance.",
       "positive_fixture": "storyos.golden.storyos.event.proposal-recovery-conflict-detected.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.proposal-recovery-conflict-detected.v1.negative.v1"
-    },
-    {
-      "schema_id": "storyos.event.proposal-created-from-refused-edit-draft.v1",
-      "event_kind": "proposal_created_from_refused_edit_draft",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.project-activity.v1",
-      "description": "",
-      "positive_fixture": "storyos.golden.storyos.event.proposal-created-from-refused-edit-draft.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.proposal-created-from-refused-edit-draft.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.author-undo-routed.v1",

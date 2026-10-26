@@ -42,19 +42,7 @@ def fail(message: str, errors: list[str]) -> None:
 
 def validate_event_profile(event: dict[str, Any], errors: list[str]) -> None:
     event_id = event.get("schema_id")
-    if event_id == "storyos.event.refused-edit-draft-created.v1":
-        expected_shape = {"creator": "core_transition", "scope": "exact_project", "source": "exact_command_admission_receipt", "delivery": "getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-created.schema.json"}
-        if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "refused_edit_draft_created" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
-            fail("Refused Edit creation must use its exact Core Artifact lifecycle contract", errors)
-    elif event_id == "storyos.event.editor-flow-draft-closed.v1":
-        expected_shape = {"scope": "exact_project", "source": "exact_command_admission_receipt_forward_action", "delivery": "closeEditorFlowDraft_and_getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-closed.schema.json"}
-        if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "editor_flow_draft_closed" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
-            fail("Draft Discard must use its exact Core Artifact lifecycle contract", errors)
-    elif event_id == "storyos.event.editor-flow-draft-reopened.v1":
-        expected_shape = {"scope": "exact_project", "source": "exact_root_undo_handler_receipt_compensation", "delivery": "undoLatestAuthorAction_and_getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json"}
-        if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "editor_flow_draft_reopened" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
-            fail("Draft Undo must use its exact Core Artifact lifecycle contract", errors)
-    elif event.get("wire_profile") != "storyos.project-activity.v1":
+    if event.get("wire_profile") != "storyos.project-activity.v1":
         fail(f"Event {event_id} must use the Release 1 Project Activity profile", errors)
 
 
@@ -732,22 +720,10 @@ def main() -> int:
         catalog.get("non_public_operations", []), owners, event_by_id, errors
     )
     if "--self-test" in sys.argv:
-        creation = event_by_id["storyos.event.refused-edit-draft-created.v1"]
-        for field, wrong in [("wire_profile", "storyos.project-activity.v1"), ("semantic_owner", "host"),
-                             ("event_kind", "draft_created"), ("record_shape", {"creator": "author"})]:
-            probe_errors: list[str] = []
-            validate_event_profile({**creation, field: wrong}, probe_errors)
-            assert probe_errors, f"Refused Edit creation corruption accepted: {field}"
-        closed = event_by_id["storyos.event.editor-flow-draft-closed.v1"]
-        for field, wrong in [("wire_profile", "storyos.project-activity.v1"), ("semantic_owner", "host"),
-                             ("event_kind", "draft_created"), ("record_shape", {"source": "latest_draft"})]:
-            probe_errors = []
-            validate_event_profile({**closed, field: wrong}, probe_errors)
-            assert probe_errors, f"Draft Discard association corruption accepted: {field}"
         other_draft = event_by_id["storyos.event.recovery-draft-created.v1"]
         probe_errors = []
         validate_event_profile({**other_draft, "wire_profile": "storyos.artifact-lifecycle.v1"}, probe_errors)
-        assert probe_errors, "The Refused Edit exception must not admit another Draft event"
+        assert probe_errors, "A Draft event must not use the Artifact lifecycle profile"
         producer = {"name": "fixture", "source": next(iter(owners)), "public_route": None, "public_events": [next(iter(event_by_id))]}
         fixture_errors: list[str] = []
         assert internal_event_references([producer], owners, event_by_id, fixture_errors) == set(producer["public_events"])
@@ -765,12 +741,9 @@ def main() -> int:
 
     referenced_events = set(internal_events)
     for operation in operations:
-        creation_events = operation.get("artifact_creation_events", [])
-        if creation_events:
-            if operation.get("operation_id") != "applyAuthorEdit" or creation_events != ["storyos.event.refused-edit-draft-created.v1"]:
-                fail("Only ApplyAuthorEdit owns this exact Refused Edit creation mapping", errors)
-            else:
-                referenced_events.update(creation_events)
+        # ADR 0073: Release 1 has no Artifact creation Event.
+        if "artifact_creation_events" in operation:
+            fail(f"operation {operation.get('operation_id')} must not declare Artifact creation Events", errors)
         activity = operation.get("activity", {})
         if isinstance(activity, dict):
             referenced_events.update(activity.get("success", []))
