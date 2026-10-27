@@ -52,7 +52,6 @@ pub fn parse_ordinary_passage_request(
         || [
             "Revise this passage:",
             "Revise these passages",
-            "Revise this phrase:",
             "Tighten this paragraph",
         ]
         .iter()

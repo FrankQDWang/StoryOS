@@ -22,7 +22,6 @@ pub struct AcceptProposal {
     pub selection_duplicate_free: bool,
     pub required_dependencies_met: bool,
     pub bundle_closure_complete: bool,
-    pub target_kind: AcceptanceTargetKind,
     pub base: AcceptanceBase,
     pub candidate_unaltered: bool,
 }
@@ -45,23 +44,13 @@ pub enum AcceptanceCondition {
     Invalid,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AcceptanceTargetKind {
-    Block,
-    Inline,
-}
-
 /// The Proposal Revision base compared with the current Chapter Head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AcceptanceBase {
     /// The base is the Chapter Head.
     ExactHead,
     /// The base is behind the Chapter Head.
-    EarlierHead {
-        target_blocks_present: bool,
-        /// The exact Inline Anchor proof of ADR 0063 maps the Anchor range to the Chapter Head.
-        inline_range_proven: bool,
-    },
+    EarlierHead { target_blocks_present: bool },
 }
 
 /// How an applied Acceptance found its target on the Chapter Head (ADR 0064).
@@ -69,8 +58,6 @@ pub enum AcceptanceBase {
 pub enum AcceptanceTargetResolution {
     ExactBase,
     BlockReplacement,
-    ProvenRange,
-    BaseBlockReplacement,
 }
 
 impl AcceptanceTargetResolution {
@@ -78,20 +65,13 @@ impl AcceptanceTargetResolution {
         match self {
             Self::ExactBase => "exact_base",
             Self::BlockReplacement => "block_replacement",
-            Self::ProvenRange => "proven_range",
-            Self::BaseBlockReplacement => "base_block_replacement",
         }
     }
 
     pub fn from_code(code: &str) -> Option<Self> {
-        [
-            Self::ExactBase,
-            Self::BlockReplacement,
-            Self::ProvenRange,
-            Self::BaseBlockReplacement,
-        ]
-        .into_iter()
-        .find(|resolution| resolution.code() == code)
+        [Self::ExactBase, Self::BlockReplacement]
+            .into_iter()
+            .find(|resolution| resolution.code() == code)
     }
 }
 
@@ -284,32 +264,14 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
     if !command.bundle_closure_complete {
         return TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure);
     }
-    let resolution = match (command.target_kind, command.base) {
-        (_, AcceptanceBase::ExactHead) => AcceptanceTargetResolution::ExactBase,
-        (
-            _,
-            AcceptanceBase::EarlierHead {
-                target_blocks_present: false,
-                ..
-            },
-        ) => return TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget),
-        (AcceptanceTargetKind::Block, AcceptanceBase::EarlierHead { .. }) => {
-            AcceptanceTargetResolution::BlockReplacement
-        }
-        (
-            AcceptanceTargetKind::Inline,
-            AcceptanceBase::EarlierHead {
-                inline_range_proven: true,
-                ..
-            },
-        ) => AcceptanceTargetResolution::ProvenRange,
-        (
-            AcceptanceTargetKind::Inline,
-            AcceptanceBase::EarlierHead {
-                inline_range_proven: false,
-                ..
-            },
-        ) => AcceptanceTargetResolution::BaseBlockReplacement,
+    let resolution = match command.base {
+        AcceptanceBase::ExactHead => AcceptanceTargetResolution::ExactBase,
+        AcceptanceBase::EarlierHead {
+            target_blocks_present: false,
+        } => return TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget),
+        AcceptanceBase::EarlierHead {
+            target_blocks_present: true,
+        } => AcceptanceTargetResolution::BlockReplacement,
     };
     if !command.candidate_unaltered {
         return TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate);

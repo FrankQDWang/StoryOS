@@ -223,18 +223,6 @@ pub(crate) async fn open_selected_proposal(
             produced.unwrap_or_default(),
         )
         .await?
-    } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
-        ProseOpening {
-            proposal_id: crate::open_inline_proposal::open_selected_inline_change(
-                client,
-                claim,
-                chapter_id,
-                decision_id,
-                text,
-            )
-            .await?,
-            locations: None,
-        }
     } else if produced.is_none()
         && matches!(stream, ProposalStream::Permitted)
         && stream_batch_plan(author_message).is_some()

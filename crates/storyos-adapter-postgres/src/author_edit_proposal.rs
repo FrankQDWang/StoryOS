@@ -1,8 +1,5 @@
 use storyos_application::{ApplyAuthorEditCommand, AuthorEditError};
-use storyos_core::{
-    AuthorEditPrimitive, AuthorEditRefusal, AuthorEditUnit, CurrentOwnershipFacts,
-    InlineEditDisposition, InlineInputOwner, classify_inline_input_owner,
-};
+use storyos_core::{AuthorEditPrimitive, CurrentOwnershipFacts};
 use tokio_postgres::Client;
 
 use super::author_edit::author_edit_database_error;
@@ -22,16 +19,6 @@ pub(super) struct ProposalEditContext {
     pub prior_revision_id: String,
     pub manuscript_block_id: String,
     pub base_authoritative_revision_id: String,
-    pub kind: String,
-    pub ranges: Vec<(u32, u32)>,
-    pub candidate_text: String,
-}
-
-pub(super) struct RoutedInlineAuthorEdit {
-    pub current_body: String,
-    pub author_edit_units: Vec<AuthorEditUnit>,
-    pub disposition: InlineEditDisposition,
-    pub proposal_context: Option<ProposalEditContext>,
 }
 
 pub(super) struct LoadedProposalHeads {
@@ -104,12 +91,9 @@ pub(super) async fn load_chapter_proposal_heads(
                 && row.get::<_, Option<String>>(6).as_deref() == Some(target.operation_id.as_str())
                 && row.get::<_, Option<String>>(7).as_deref() == Some("pending")
                 && row.get::<_, Option<String>>(8).as_deref() == Some("unresolved")
-                && matches!(kind.as_str(), "block_edit" | "inline_edit")
+                && kind == "block_edit"
         });
-        let inline_target = command.proposal_target.is_none()
-            && kind == "inline_edit"
-            && command.expected_proposal_head_revision_ids == [revision_id.clone()];
-        if explicit_target || inline_target {
+        if explicit_target {
             let candidate_text: String = row.get(2);
             selected = Some((
                 ProposalEditContext {
@@ -121,9 +105,6 @@ pub(super) async fn load_chapter_proposal_heads(
                     prior_revision_id: revision_id.clone(),
                     manuscript_block_id: manuscript_block_id.clone(),
                     base_authoritative_revision_id: row.get(4),
-                    kind: kind.clone(),
-                    ranges: Vec::new(),
-                    candidate_text: candidate_text.clone(),
                 },
                 candidate_text,
             ));
@@ -176,194 +157,16 @@ pub(super) async fn load_chapter_proposal_heads(
     }
     heads.sort();
     heads.dedup();
-    let (mut context, candidate_body) = match selected {
+    let (context, candidate_body) = match selected {
         Some((context, candidate)) => (Some(context), Some(candidate)),
         None => (None, None),
     };
-    if let Some(selected) = context.as_mut()
-        && selected.kind == "inline_edit"
-    {
-        selected.ranges = load_inline_ranges(
-            client,
-            command,
-            &selected.proposal_id,
-            &selected.prior_revision_id,
-        )
-        .await?;
-    }
     Ok(LoadedProposalHeads {
         ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: heads,
-            anchor_refs: context
-                .as_ref()
-                .map(|selected| {
-                    selected
-                        .ranges
-                        .iter()
-                        .map(|(from, to)| format!("{from}:{to}"))
-                        .collect()
-                })
-                .unwrap_or_default(),
             unresolved_reservation_refs: Vec::new(),
         },
         candidate_body,
         context,
     })
-}
-
-async fn load_inline_ranges(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
-    proposal_id: &str,
-    revision_id: &str,
-) -> Result<Vec<(u32, u32)>, AuthorEditError> {
-    let rows = client
-        .query(
-            "SELECT range_from, range_to
-               FROM storyos.proposal_anchors
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid
-                AND proposal_revision_id = storyos.proposal_anchor_set_revision(
-                      $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)
-              ORDER BY anchor_order",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &proposal_id,
-                &revision_id,
-            ],
-        )
-        .await
-        .map_err(author_edit_database_error)?;
-    rows.into_iter()
-        .map(|row| {
-            let from = u32::try_from(row.get::<_, i32>(0))
-                .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?;
-            let to = u32::try_from(row.get::<_, i32>(1))
-                .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?;
-            Ok((from, to))
-        })
-        .collect()
-}
-
-pub(super) fn route_inline_author_edit(
-    loaded: LoadedProposalHeads,
-    manuscript_body: String,
-    author_edit_units: Vec<AuthorEditUnit>,
-) -> Result<RoutedInlineAuthorEdit, AuthorEditRefusal> {
-    let LoadedProposalHeads {
-        candidate_body,
-        context,
-        ..
-    } = loaded;
-    let Some(context) = context else {
-        return Ok(RoutedInlineAuthorEdit {
-            current_body: candidate_body.unwrap_or(manuscript_body),
-            author_edit_units,
-            disposition: InlineEditDisposition::Unspecified,
-            proposal_context: None,
-        });
-    };
-    if context.kind != "inline_edit" || context.ranges.is_empty() {
-        return Ok(RoutedInlineAuthorEdit {
-            current_body: candidate_body.unwrap_or(manuscript_body),
-            author_edit_units,
-            disposition: InlineEditDisposition::Unspecified,
-            proposal_context: Some(context),
-        });
-    }
-    let Some((from, to)) = first_replace_range(&author_edit_units) else {
-        return Err(AuthorEditRefusal::UnsupportedIntentShape);
-    };
-    if context.operation_id.is_some() {
-        let candidate_to = u32::try_from(context.candidate_text.encode_utf16().count())
-            .map_err(|_| AuthorEditRefusal::InvalidSelection)?;
-        if classify_inline_input_owner(&[(0, candidate_to)], from, to) != InlineInputOwner::Proposal
-        {
-            return Err(AuthorEditRefusal::InvalidSelection);
-        }
-        return Ok(RoutedInlineAuthorEdit {
-            current_body: candidate_body.unwrap_or(manuscript_body),
-            author_edit_units,
-            disposition: InlineEditDisposition::Unspecified,
-            proposal_context: Some(context),
-        });
-    }
-    match classify_inline_input_owner(&context.ranges, from, to) {
-        InlineInputOwner::Proposal => {
-            let Some((anchor_from, _)) = context.ranges.first().copied() else {
-                return Err(AuthorEditRefusal::UnsupportedIntentShape);
-            };
-            Ok(RoutedInlineAuthorEdit {
-                current_body: candidate_body.unwrap_or(manuscript_body),
-                author_edit_units: remap_units(&author_edit_units, anchor_from)?,
-                disposition: InlineEditDisposition::Unspecified,
-                proposal_context: Some(context),
-            })
-        }
-        InlineInputOwner::Authoritative => Ok(RoutedInlineAuthorEdit {
-            current_body: manuscript_body,
-            author_edit_units,
-            disposition: InlineEditDisposition::AuthoritativeDespiteReservation,
-            proposal_context: Some(context),
-        }),
-        InlineInputOwner::Mixed => Err(AuthorEditRefusal::UnsupportedIntentShape),
-    }
-}
-
-fn first_replace_range(units: &[AuthorEditUnit]) -> Option<(u32, u32)> {
-    let unit = units.first()?;
-    match unit.normalized_primitives.first()? {
-        AuthorEditPrimitive::ReplaceSelection { from, to, .. } => Some((*from, *to)),
-        AuthorEditPrimitive::ReplaceBlockSelection { from, to, .. } => Some((*from, *to)),
-        _ => None,
-    }
-}
-
-fn remap_units(
-    units: &[AuthorEditUnit],
-    anchor_from: u32,
-) -> Result<Vec<AuthorEditUnit>, AuthorEditRefusal> {
-    units
-        .iter()
-        .map(|unit| {
-            let remapped = unit
-                .normalized_primitives
-                .iter()
-                .map(|primitive| match primitive {
-                    AuthorEditPrimitive::ReplaceSelection { from, to, text } => {
-                        Ok(AuthorEditPrimitive::ReplaceSelection {
-                            from: from
-                                .checked_sub(anchor_from)
-                                .ok_or(AuthorEditRefusal::InvalidSelection)?,
-                            to: to
-                                .checked_sub(anchor_from)
-                                .ok_or(AuthorEditRefusal::InvalidSelection)?,
-                            text: text.clone(),
-                        })
-                    }
-                    _ => Err(AuthorEditRefusal::UnsupportedIntentShape),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let from = unit
-                .selection_snapshot
-                .from
-                .checked_sub(anchor_from)
-                .ok_or(AuthorEditRefusal::InvalidSelection)?;
-            let to = unit
-                .selection_snapshot
-                .to
-                .checked_sub(anchor_from)
-                .ok_or(AuthorEditRefusal::InvalidSelection)?;
-            Ok(AuthorEditUnit {
-                normalized_primitives: remapped,
-                selection_snapshot: storyos_core::SelectionSnapshot {
-                    coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
-                    from,
-                    to,
-                },
-            })
-        })
-        .collect()
 }

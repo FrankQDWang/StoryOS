@@ -1,10 +1,7 @@
 //! The Proposal, Operation, and Chapter facts that one Acceptance classifies.
 
 use storyos_application::{AcceptProposalInput, ProjectCommandError, ProjectScope};
-use storyos_core::{
-    AcceptanceTargetResolution, ManuscriptBlock, OpenInlineProposalAnchor, ReplanAnchorFacts,
-    prove_replanned_inline_anchors,
-};
+use storyos_core::ManuscriptBlock;
 
 use crate::command_sequence::unavailable;
 
@@ -26,17 +23,10 @@ pub(super) struct LoadedProposal {
     receipt_candidate_text: Option<String>,
     /// The Revision base and the Validation Receipt base are the Chapter Head.
     pub(super) base_is_head: bool,
-    head_revision_id: Option<String>,
     /// The Validation Receipt base is the Revision base.
     pub(super) receipt_base_matches_revision: bool,
-    pub(super) kind: String,
     chapter_blocks: Vec<ManuscriptBlock>,
     manuscript_block_id: String,
-    /// The primary Anchor of an Inline Proposal and its Block on the Anchor base.
-    anchor: Option<OpenInlineProposalAnchor>,
-    base_block: Option<ManuscriptBlock>,
-    /// The Anchor range on the Chapter Head that the exact proof of ADR 0063 gives.
-    pub(super) proven_range: Option<(u32, u32)>,
 }
 
 pub(super) struct LoadedOperation {
@@ -79,50 +69,7 @@ impl LoadedProposal {
         revision_matches && receipt_matches
     }
 
-    pub(super) fn accepted_body(
-        &self,
-        selected_ids: &[String],
-        resolution: AcceptanceTargetResolution,
-    ) -> Result<String, ProjectCommandError> {
-        if self.kind != "inline_edit" {
-            return Ok(self.composed_block_body(selected_ids));
-        }
-        let Some(anchor) = &self.anchor else {
-            return Err(unavailable("inline Acceptance needs exact Anchors"));
-        };
-        let mut blocks = self.chapter_blocks.clone();
-        let Some(block) = blocks
-            .iter_mut()
-            .find(|block| block.manuscript_block_id == self.manuscript_block_id)
-        else {
-            return Err(unavailable("inline Acceptance needs its canonical Block"));
-        };
-        let (text, from, to) = match (resolution, self.proven_range, &self.base_block) {
-            (AcceptanceTargetResolution::ExactBase, _, _) => (&block.text, anchor.from, anchor.to),
-            (AcceptanceTargetResolution::ProvenRange, Some((from, to)), _) => {
-                (&block.text, from, to)
-            }
-            (AcceptanceTargetResolution::BaseBlockReplacement, _, Some(base)) => {
-                (&base.text, anchor.from, anchor.to)
-            }
-            (
-                AcceptanceTargetResolution::BlockReplacement
-                | AcceptanceTargetResolution::ProvenRange
-                | AcceptanceTargetResolution::BaseBlockReplacement,
-                _,
-                _,
-            ) => {
-                return Err(unavailable(
-                    "inline Acceptance has no target for its resolution",
-                ));
-            }
-        };
-        block.text = storyos_core::splice_utf16_range(text, from, to, &self.candidate_text)
-            .map_err(|error| unavailable(format!("{error:?}")))?;
-        Ok(crate::manuscript_block::persist_canonical_bytes(&blocks))
-    }
-
-    fn composed_block_body(&self, selected_ids: &[String]) -> String {
+    pub(super) fn accepted_body(&self, selected_ids: &[String]) -> String {
         let selected: std::collections::BTreeSet<&str> =
             selected_ids.iter().map(String::as_str).collect();
         if self.chapter_blocks.is_empty() {
@@ -144,74 +91,6 @@ impl LoadedProposal {
         }
         crate::manuscript_block::persist_canonical_bytes(&blocks)
     }
-
-    /// The stored Anchor matches its Block on the Anchor base.
-    fn anchor_matches_base(&self) -> bool {
-        let (Some(anchor), Some(block)) = (&self.anchor, &self.base_block) else {
-            return false;
-        };
-        let (from, to) = (anchor.from, anchor.to);
-        let units: Vec<u16> = block.text.encode_utf16().collect();
-        let (Ok(start), Ok(end)) = (usize::try_from(from), usize::try_from(to)) else {
-            return false;
-        };
-        let Some(slice) = units
-            .get(start..end)
-            .and_then(|range| String::from_utf16(range).ok())
-        else {
-            return false;
-        };
-        storyos_core::proposal_anchor_base_slice_digest(
-            &self.manuscript_block_id,
-            match block.block_kind {
-                storyos_core::ManuscriptBlockKind::Paragraph => "paragraph",
-                storyos_core::ManuscriptBlockKind::Heading => "heading",
-            },
-            /*manuscript_schema_version*/ 1,
-            storyos_core::PROSEMIRROR_TOKEN_UTF16_V1,
-            from,
-            to,
-            &slice,
-        ) == anchor.base_slice_digest
-    }
-
-    /// Prove the Anchor range of an Inline Proposal on the Chapter Head. Reservations of other
-    /// Proposals do not stop the proof at Acceptance (ADR 0064).
-    fn prove_inline_range(
-        &mut self,
-        base_blocks: &[ManuscriptBlock],
-    ) -> Result<(), ProjectCommandError> {
-        let Some(anchor) = self.anchor.clone() else {
-            return Ok(());
-        };
-        let block = |blocks: &[ManuscriptBlock]| {
-            blocks
-                .iter()
-                .find(|block| block.manuscript_block_id == anchor.manuscript_block_id)
-                .cloned()
-        };
-        self.base_block = block(base_blocks);
-        if !self.anchor_matches_base() {
-            return Err(unavailable(
-                "the Inline Anchor does not match its base Block",
-            ));
-        }
-        let Some(head_revision_id) = self.head_revision_id.as_deref() else {
-            return Ok(());
-        };
-        self.proven_range = prove_replanned_inline_anchors(
-            head_revision_id,
-            &[ReplanAnchorFacts {
-                current_block: block(&self.chapter_blocks),
-                base_block: self.base_block.clone(),
-                anchor,
-                other_reservations: Vec::new(),
-            }],
-        )
-        .ok()
-        .and_then(|proven| proven.first().map(|anchor| (anchor.from, anchor.to)));
-        Ok(())
-    }
 }
 
 pub(super) async fn load_proposal(
@@ -228,16 +107,12 @@ pub(super) async fn load_proposal(
                     chapter_head.current_revision_id::text, revision.validation,
                     COALESCE(receipt.base_authoritative_revision_id = chapter_head.current_revision_id
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
-                    proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
-                    proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
-                    anchor.base_slice_digest, proposal.bundle_policy,
+                    convert_from(payload.canonical_bytes, 'UTF8'),
+                    proposal.manuscript_block_id::text, proposal.bundle_policy,
                     receipt.manuscript_block_id::text,
                     COALESCE(receipt.base_authoritative_revision_id =
                       revision.base_authoritative_revision_id, false),
-                    condition.validation, condition.condition_kind,
-                    anchor.manuscript_block_id::text, anchor.base_authoritative_revision_id::text,
-                    anchor.manuscript_schema_version, anchor.coordinate_profile,
-                    anchor.boundary_profile, convert_from(base_payload.canonical_bytes, 'UTF8')
+                    condition.validation, condition.condition_kind
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -247,14 +122,6 @@ pub(super) async fn load_proposal(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-               LEFT JOIN LATERAL (
-                 SELECT operation.operation_id
-                   FROM storyos.proposal_operations AS operation
-                  WHERE (operation.owner_user_id, operation.project_id, operation.proposal_id) =
-                        (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
-                  ORDER BY operation.operation_id
-                  LIMIT 1
-               ) AS primary_operation ON true
                LEFT JOIN storyos.proposal_validation_conditions AS condition
                  ON (condition.owner_user_id, condition.project_id, condition.proposal_id,
                      condition.proposal_revision_id) =
@@ -276,21 +143,6 @@ pub(super) async fn load_proposal(
                  ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
                     (chapter_revision.owner_user_id, chapter_revision.project_id,
                      chapter_revision.payload_id)
-               LEFT JOIN storyos.proposal_anchors AS anchor
-                 ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id,
-                     anchor.operation_id, anchor.anchor_order) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
-                     primary_operation.operation_id, 1)
-                AND anchor.proposal_revision_id = storyos.proposal_anchor_set_revision(
-                      $1::text::uuid, $2::text::uuid, $3::text::uuid, revision.revision_id)
-               LEFT JOIN storyos.authoritative_revisions AS base_revision
-                 ON (base_revision.owner_user_id, base_revision.project_id,
-                     base_revision.manuscript_object_id, base_revision.revision_id) =
-                    (anchor.owner_user_id, anchor.project_id, proposal.chapter_id,
-                     anchor.base_authoritative_revision_id)
-               LEFT JOIN storyos.authoritative_payloads AS base_payload
-                 ON (base_payload.owner_user_id, base_payload.project_id, base_payload.payload_id) =
-                    (base_revision.owner_user_id, base_revision.project_id, base_revision.payload_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid",
@@ -307,7 +159,7 @@ pub(super) async fn load_proposal(
         return Ok(None);
     };
     let chapter_id: String = row.get(/*idx*/ 4);
-    let chapter_body: String = row.get::<_, Option<String>>(/*idx*/ 13).unwrap_or_default();
+    let chapter_body: String = row.get::<_, Option<String>>(/*idx*/ 12).unwrap_or_default();
     let current_head_revision_id: Option<String> = row.get(/*idx*/ 9);
     let operations = load_operations(
         client,
@@ -329,32 +181,27 @@ pub(super) async fn load_proposal(
         .map_err(unavailable)?,
         None => Vec::new(),
     };
-    let mut loaded = LoadedProposal {
+    let loaded = LoadedProposal {
         current_revision_id: row.get(/*idx*/ 0),
         generation: row.get(/*idx*/ 1),
         closure: row.get(/*idx*/ 2),
         candidate_text: row.get(/*idx*/ 3),
         chapter_id,
         operations,
-        bundle_policy: row.get(/*idx*/ 18),
+        bundle_policy: row.get(/*idx*/ 14),
         receipt_id: row.get(/*idx*/ 5),
         receipt_result: row.get(/*idx*/ 6),
         receipt_revision_id: row.get(/*idx*/ 7),
-        receipt_block_id: row.get(/*idx*/ 19),
+        receipt_block_id: row.get(/*idx*/ 15),
         receipt_candidate_text: row.get(/*idx*/ 8),
         validation: row.get(/*idx*/ 10),
         condition: row
-            .get::<_, Option<String>>(/*idx*/ 21)
-            .map(|validation| (validation, row.get(/*idx*/ 22))),
+            .get::<_, Option<String>>(/*idx*/ 17)
+            .map(|validation| (validation, row.get(/*idx*/ 18))),
         base_is_head: row.get(/*idx*/ 11),
-        head_revision_id: current_head_revision_id,
-        receipt_base_matches_revision: row.get(/*idx*/ 20),
-        kind: row.get(/*idx*/ 12),
+        receipt_base_matches_revision: row.get(/*idx*/ 16),
         chapter_blocks,
-        manuscript_block_id: row.get::<_, Option<String>>(/*idx*/ 14).unwrap_or_default(),
-        anchor: stored_anchor(&row)?,
-        base_block: None,
-        proven_range: None,
+        manuscript_block_id: row.get::<_, Option<String>>(/*idx*/ 13).unwrap_or_default(),
     };
     if crate::validation_history::unavailable_revisions(client, scope)
         .await
@@ -365,48 +212,7 @@ pub(super) async fn load_proposal(
             "the validation history of the Proposal Revision is unavailable",
         ));
     }
-    if loaded.kind == "inline_edit" {
-        let base_body = row.get::<_, Option<String>>(/*idx*/ 28);
-        let base_blocks = match (&loaded.anchor, base_body) {
-            _ if loaded.base_is_head => loaded.chapter_blocks.clone(),
-            (Some(anchor), Some(base_body)) => crate::manuscript_block::load_revision_blocks(
-                client,
-                scope.owner_user_id.as_ref(),
-                scope.project_id.as_ref(),
-                &loaded.chapter_id,
-                &anchor.base_authoritative_revision_id,
-                &base_body,
-            )
-            .await
-            .map_err(unavailable)?,
-            (None, _) | (Some(_), None) => Vec::new(),
-        };
-        loaded.prove_inline_range(&base_blocks)?;
-    }
     Ok(Some(loaded))
-}
-
-/// The primary Anchor of the Proposal Revision, when the Proposal has one.
-fn stored_anchor(
-    row: &tokio_postgres::Row,
-) -> Result<Option<OpenInlineProposalAnchor>, ProjectCommandError> {
-    let (Some(manuscript_block_id), Some(base_authoritative_revision_id)) = (
-        row.get::<_, Option<String>>(/*idx*/ 23),
-        row.get::<_, Option<String>>(/*idx*/ 24),
-    ) else {
-        return Ok(None);
-    };
-    let unsigned = |idx: usize| u32::try_from(row.get::<_, i32>(idx)).map_err(unavailable);
-    Ok(Some(OpenInlineProposalAnchor {
-        manuscript_block_id,
-        base_authoritative_revision_id,
-        manuscript_schema_version: unsigned(/*idx*/ 25)?,
-        coordinate_profile: row.get(/*idx*/ 26),
-        from: unsigned(/*idx*/ 15)?,
-        to: unsigned(/*idx*/ 16)?,
-        boundary_profile: row.get(/*idx*/ 27),
-        base_slice_digest: row.get(/*idx*/ 17),
-    }))
 }
 
 async fn load_operations(

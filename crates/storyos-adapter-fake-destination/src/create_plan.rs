@@ -3,9 +3,9 @@
 use storyos_application::{CreateRequest, DeclaredTarget};
 use storyos_core::DeclaredTargetKind;
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, INLINE_PROSE_CHANGE_TEXT, ModelOutput, NativeStreamItem,
-    OrdinaryPassageResolution, OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT,
-    STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState,
+    ADVISORY_TEXT, DecisionCandidate, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
+    OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
+    STREAM_SECOND_TEXT, StreamItemRole, StreamItemState,
 };
 
 use crate::prose_changes::{
@@ -49,14 +49,6 @@ fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResoluti
                 prose_changes: None,
             }),
         };
-    }
-    if author_message.starts_with("Revise this phrase:") {
-        return complete(
-            DecisionCandidate::ProseChange {
-                text: INLINE_PROSE_CHANGE_TEXT.to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        );
     }
     if author_message.starts_with("Revise this passage:")
         || author_message.starts_with("Revise these passages")

@@ -111,8 +111,6 @@ pub enum AcceptProposalRefusalReason {
 pub enum AcceptanceTargetResolution {
     ExactBase,
     BlockReplacement,
-    ProvenRange,
-    BaseBlockReplacement,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -5,8 +5,6 @@ pub const ADVISORY_TEXT: &str =
     "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 pub const PROSE_CHANGE_TEXT: &str = "Guard the narrator voice in this passage.";
 pub const SECOND_PROSE_CHANGE_TEXT: &str = "Keep the second block voice in this passage.";
-pub const INLINE_PROSE_CHANGE_TEXT: &str = "narrator tone";
-pub const INLINE_PROSE_CHANGE_SOURCE: &str = "narrator voice";
 pub const STREAM_FIRST_TEXT: &str = "Guard";
 pub const STREAM_SECOND_TEXT: &str = "Guard the narrator";
 

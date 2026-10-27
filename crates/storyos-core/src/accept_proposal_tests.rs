@@ -1,9 +1,8 @@
 use super::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
-    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
-    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
-    ProposalOperationSelection, ProposalSelectionIntent, accept_proposal,
-    classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
+    AcceptanceValidation, ProposalBundlePolicy, ProposalOperationSelection,
+    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 use crate::TransitionOutcome;
 
@@ -23,18 +22,15 @@ fn exact_eligible() -> AcceptProposal {
         selection_duplicate_free: true,
         required_dependencies_met: true,
         bundle_closure_complete: true,
-        target_kind: AcceptanceTargetKind::Block,
         base: AcceptanceBase::ExactHead,
         candidate_unaltered: true,
     }
 }
 
-fn earlier_base(kind: AcceptanceTargetKind) -> AcceptProposal {
+fn earlier_base() -> AcceptProposal {
     AcceptProposal {
-        target_kind: kind,
         base: AcceptanceBase::EarlierHead {
             target_blocks_present: true,
-            inline_range_proven: false,
         },
         ..exact_eligible()
     }
@@ -206,7 +202,7 @@ fn classifies_duplicate_dependency_and_bundle_selection_sets() {
 #[test]
 fn replaces_the_block_text_of_a_block_proposal_on_an_earlier_base() {
     assert_eq!(
-        accept_proposal(&earlier_base(AcceptanceTargetKind::Block)),
+        accept_proposal(&earlier_base()),
         TransitionOutcome::Applied(AcceptanceTargetResolution::BlockReplacement)
     );
 }
@@ -216,9 +212,8 @@ fn refuses_a_block_proposal_whose_target_block_is_missing() {
     let missing = AcceptProposal {
         base: AcceptanceBase::EarlierHead {
             target_blocks_present: false,
-            inline_range_proven: false,
         },
-        ..earlier_base(AcceptanceTargetKind::Block)
+        ..earlier_base()
     };
     assert_eq!(
         accept_proposal(&missing),
@@ -231,7 +226,7 @@ fn accepts_a_conflicted_block_revision_and_a_proposal_conflict_condition() {
     let conflicted = AcceptProposal {
         validation: AcceptanceValidation::Conflicted,
         validation_receipt: AcceptanceValidation::Conflicted,
-        ..earlier_base(AcceptanceTargetKind::Block)
+        ..earlier_base()
     };
     assert_eq!(
         accept_proposal(&conflicted),
@@ -239,7 +234,7 @@ fn accepts_a_conflicted_block_revision_and_a_proposal_conflict_condition() {
     );
     let with_condition = AcceptProposal {
         condition: AcceptanceCondition::ProposalConflict,
-        ..earlier_base(AcceptanceTargetKind::Block)
+        ..earlier_base()
     };
     assert_eq!(
         accept_proposal(&with_condition),
@@ -255,64 +250,13 @@ fn a_recovery_conflict_or_an_invalid_condition_keeps_acceptance_unavailable() {
     ] {
         let blocked = AcceptProposal {
             condition,
-            ..earlier_base(AcceptanceTargetKind::Block)
+            ..earlier_base()
         };
         assert_eq!(
             accept_proposal(&blocked),
             TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
         );
     }
-}
-
-#[test]
-fn resolves_an_inline_proposal_on_an_earlier_base_by_its_proven_range_or_base_block() {
-    let proven = AcceptProposal {
-        base: AcceptanceBase::EarlierHead {
-            target_blocks_present: true,
-            inline_range_proven: true,
-        },
-        ..earlier_base(AcceptanceTargetKind::Inline)
-    };
-    assert_eq!(
-        accept_proposal(&proven),
-        TransitionOutcome::Applied(AcceptanceTargetResolution::ProvenRange)
-    );
-    assert_eq!(
-        accept_proposal(&earlier_base(AcceptanceTargetKind::Inline)),
-        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
-    );
-    let missing = AcceptProposal {
-        base: AcceptanceBase::EarlierHead {
-            target_blocks_present: false,
-            inline_range_proven: false,
-        },
-        ..earlier_base(AcceptanceTargetKind::Inline)
-    };
-    assert_eq!(
-        accept_proposal(&missing),
-        TransitionOutcome::Refused(AcceptProposalRefusal::MissingTarget)
-    );
-}
-
-#[test]
-fn accepts_a_conflicted_inline_revision_and_a_proposal_conflict_condition() {
-    let conflicted = AcceptProposal {
-        validation: AcceptanceValidation::Conflicted,
-        validation_receipt: AcceptanceValidation::Conflicted,
-        ..earlier_base(AcceptanceTargetKind::Inline)
-    };
-    assert_eq!(
-        accept_proposal(&conflicted),
-        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
-    );
-    let with_condition = AcceptProposal {
-        condition: AcceptanceCondition::ProposalConflict,
-        ..earlier_base(AcceptanceTargetKind::Inline)
-    };
-    assert_eq!(
-        accept_proposal(&with_condition),
-        TransitionOutcome::Applied(AcceptanceTargetResolution::BaseBlockReplacement)
-    );
 }
 
 #[test]

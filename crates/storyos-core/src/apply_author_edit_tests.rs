@@ -9,12 +9,10 @@ fn command() -> ApplyAuthorEdit {
         expected_proposal_head_revision_ids: Vec::new(),
         current_ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: Vec::new(),
-            anchor_refs: Vec::new(),
             unresolved_reservation_refs: Vec::new(),
         },
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
-        inline_edit_disposition: InlineEditDisposition::Unspecified,
         author_edit_units: vec![AuthorEditUnit {
             normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
                 from: 1,
@@ -160,34 +158,6 @@ fn matching_proposal_heads_revise_the_candidate_without_authority() {
         apply_author_edit(&revise),
         TransitionOutcome::Applied(AuthorEditApplied::ProposalRevised {
             candidate_text: "Keep the narrator voice in this passage.".to_owned()
-        })
-    );
-}
-
-#[test]
-fn exclusive_edge_input_applies_to_authority_without_revising_the_candidate() {
-    let mut edge = command();
-    edge.current_body = "Guard the narrator voice in this passage.".to_owned();
-    edge.expected_proposal_head_revision_ids = vec!["proposal-revision".to_owned()];
-    edge.current_ownership.proposal_head_revision_ids = vec!["proposal-revision".to_owned()];
-    edge.observed_ownership_partition = "mixed".to_owned();
-    edge.inline_edit_disposition = InlineEditDisposition::AuthoritativeDespiteReservation;
-    let unit = &mut edge.author_edit_units[0];
-    unit.selection_snapshot.from = 0;
-    unit.selection_snapshot.to = 5;
-    let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
-        &mut unit.normalized_primitives[0]
-    else {
-        panic!("legacy command must use ReplaceSelection")
-    };
-    *from = 0;
-    *to = 5;
-    *text = "Keep".to_owned();
-
-    assert_eq!(
-        apply_author_edit(&edge),
-        TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied {
-            body: "Keep the narrator voice in this passage.".to_owned()
         })
     );
 }

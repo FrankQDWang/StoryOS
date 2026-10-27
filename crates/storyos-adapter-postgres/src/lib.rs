@@ -33,10 +33,6 @@ mod create_project_tests;
 mod recovery_visibility_proof_tests;
 
 #[cfg(test)]
-#[path = "proposal_anchor_binding_tests.rs"]
-mod proposal_anchor_binding_tests;
-
-#[cfg(test)]
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
 
@@ -126,7 +122,6 @@ mod agent_run_work;
 mod archive_project;
 mod author_edit;
 mod author_edit_admission_recovery;
-mod author_edit_inline;
 mod author_edit_outcome;
 mod author_edit_proposal;
 mod cancel_agent_run;
@@ -154,7 +149,6 @@ mod manuscript_search;
 mod manuscript_tree;
 mod model_registration;
 mod open_block_proposal;
-mod open_inline_proposal;
 mod open_proposal_list;
 mod ordinary_passage_targets;
 mod passage_collection;

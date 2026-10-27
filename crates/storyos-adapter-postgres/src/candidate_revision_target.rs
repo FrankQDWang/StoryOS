@@ -30,7 +30,7 @@ pub(crate) async fn load(
           WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
             AND proposal.chapter_id=$3::text::uuid AND proposal.proposal_id=$4::text::uuid
             AND operation.operation_id=$5::text::uuid AND head.current_revision_id=$6::text::uuid
-            AND proposal.kind IN ('block_edit','inline_edit') AND revision.closure='open'
+            AND proposal.kind = 'block_edit' AND revision.closure='open'
             AND revision.generation IN ('ready','ready_partial')
             AND operation.resolution='pending' AND operation.reservation_state='unresolved'
             AND operation.candidate_blocks IS NULL AND revision.candidate_blocks IS NULL

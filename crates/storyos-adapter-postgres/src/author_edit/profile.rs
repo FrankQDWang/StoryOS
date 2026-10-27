@@ -5,10 +5,8 @@ use storyos_application::{
     RevisionApplied,
 };
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use super::sequence::AuthorEditPlan;
-use crate::author_edit_proposal::{ProposalEditContext, append_proposal_revision_as};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, AppliedVariant, AuthoritativeRevision, CommandSpec, LockedProject,
@@ -37,15 +35,8 @@ pub(crate) enum AuthorEditSequences {
 
 /// The applied writes of an Author Edit.
 pub(crate) enum AuthorEditWrite<E> {
-    Revision(Box<RevisionEdit<E>>),
+    Revision(Box<RevisionWrite<E>>),
     Proposal { effect: E },
-}
-
-/// The applied writes of an Author Edit that creates an Authoritative Revision.
-pub(crate) struct RevisionEdit<E> {
-    pub(super) revision: RevisionWrite<E>,
-    /// The Inline Proposal whose candidate the edit also revises.
-    pub(super) inline: Option<ProposalEditContext>,
 }
 
 /// The applied value of an Author Edit settlement.
@@ -107,25 +98,12 @@ impl SettlementProfile for AuthorEditProfile {
         sequences: AuthorEditSequences,
         write: AuthorEditWrite<E>,
     ) -> Result<AuthorEditProfileApplied<E>, ProjectCommandError> {
-        let scope = &envelope.project_scope;
         match (sequences, write) {
-            (AuthorEditSequences::Revision(sequences), AuthorEditWrite::Revision(edit)) => {
-                let RevisionEdit { revision, inline } = *edit;
+            (AuthorEditSequences::Revision(sequences), AuthorEditWrite::Revision(revision)) => {
                 let applied = AuthoritativeRevision::persist(
-                    client, envelope, project, spec, variant, sequences, revision,
+                    client, envelope, project, spec, variant, sequences, *revision,
                 )
                 .await?;
-                if let Some(context) = inline {
-                    append_proposal_revision_as(
-                        client,
-                        scope,
-                        &context,
-                        &context.candidate_text,
-                        Uuid::now_v7().to_string(),
-                    )
-                    .await
-                    .map_err(project_error)?;
-                }
                 Ok(AuthorEditProfileApplied::Revision(applied))
             }
             (AuthorEditSequences::Proposal(sequence), AuthorEditWrite::Proposal { effect }) => {
