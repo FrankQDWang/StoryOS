@@ -392,11 +392,11 @@ The v1 producer cause is exhaustive:
 ProducerCause =
   AuthorCommandAdmission { author_command_admission_id }
   | EditorInputFence { editor_input_fence_id }
-  | AgentRunStep { run_step_id }
-  | ToolCall { tool_call_id }
+  | AgentRunDecision { run_id, decision_id }
 ```
 
-MCP servers and extensions produce through a ToolCall cause.
+`AgentRunDecision` is the AgentRun and the Agent Decision that produced the
+work. Release 1 has no MCP or extension producer cause.
 
 Author-command schema fragments below show the internal Core invocation shape.
 The Web Client forms a digest-covered command body without an
@@ -1089,7 +1089,7 @@ the enclosing Receipt also binds the command payload and prior/resulting Heads.
 
 `ReplanProposal` uses the exact fields in section 7.4 and returns
 `ProposalRevisionAppended.Replan`: one Forward action for an author cause and
-`CurrentProducerOwned` for an AgentRunStep or ToolCall cause. Rejection never
+`CurrentProducerOwned` for an `AgentRunDecision` cause. Rejection never
 means withdrawal. Supersession never rewrites Operation resolution. Reopen,
 replan, and continuation never reuse a prior Validation Receipt or Generation
 ID. `CompleteReadyPartialProposal` and the initial
@@ -1123,9 +1123,10 @@ evidence, not schema fields.
 `AppendProposalGenerationBatch`, `PauseProposalGeneration`, and
 `ValidateProposal` are not author commands. Their first domain attempts produce
 a `DomainReceipt`, `DomainReceipt`, and `ValidationReceipt` respectively.
-Generation batch admission uses the exact `AgentRunStep` or `ToolCall` cause;
-pause uses `EditorInputFence`; validation retains the exact cause of the command
-or committed transition that requested validation. None allocates an
+
+Generation batch admission uses the exact `AgentRunDecision` cause. Pause
+uses `EditorInputFence`. Validation keeps the exact cause of the command or
+committed transition that requested validation. None allocates an
 Authoritative Commit or Author Action. Exact duplicate batches and exact command
 retries return their existing Receipt; sequence gaps and digest mismatch settle
 as typed conflict without another Proposal Revision.

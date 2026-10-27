@@ -572,12 +572,11 @@ producer. Every Receipt separately links one exact exhaustive producer cause:
 ProducerCause =
   AuthorCommandAdmission { author_command_admission_id }
   | EditorInputFence { editor_input_fence_id }
-  | AgentRunStep { run_step_id }
-  | ToolCall { tool_call_id }
+  | AgentRunDecision { run_id, decision_id }
 ```
 
-MCP servers and extensions cause Core work only through `ToolCall`; models
-cause it only through a validated `AgentRunStep`. Browser events, Client
+Models cause Core work only through a validated `AgentRunDecision`. Release 1
+has no MCP or extension producer cause. Browser events, Client
 Sessions, local projections, journal entries, Artifacts, generic `System`
 actors, and raw external results are not producer-cause variants. A new variant
 is a coordinated contract change owned by the Manuscript/Proposal state

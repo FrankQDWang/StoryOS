@@ -595,14 +595,17 @@ meaning:
 
 `WithdrawProposal` and `ReplanProposal` each have one public operation and a
 closed request discriminator for their two Core-legal causes. The `author`
-profile is an explicit protected editor command: it requires the current
+profile is an explicit protected editor command. It requires the current
 Editor Session and writer generation, an `AuthorCommandAdmission`, its
 idempotency record, and the author-only `RequiresReconfirmation` recovery
-branch. The `current_producer` profile binds the exact current
-`AgentRunStep` or `ToolCall` producer cause: it has no Editor Session, writer
-generation, or `AuthorCommandAdmission` field or requirement, uses its own
-producer-cause idempotency record, and can settle only with the producer's
-committed result. The catalog's discriminated request/response schemas encode
+branch.
+
+The `current_producer` profile binds the exact `AgentRunDecision`
+producer cause. For `WithdrawProposal`, this is the producer of the Proposal.
+The profile has no Editor Session, writer generation, or
+`AuthorCommandAdmission` field or requirement. It uses its own producer-cause
+idempotency record. It can settle only with the committed result of the
+producer. The catalog's discriminated request/response schemas encode
 these profiles; it does not duplicate the Core state machine.
 
 All exact retries return the original typed settlement and event identities.

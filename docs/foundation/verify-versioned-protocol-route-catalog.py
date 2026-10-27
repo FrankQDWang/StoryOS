@@ -243,8 +243,13 @@ def validate_conditional_cause_profiles(
             if set(profile_settlement.get("acknowledgements", [])) != {"committed", "requires_reconfirmation"}:
                 fail(f"{prefix}: author cause acknowledgements are incomplete", errors)
         elif cause_name == "current_producer":
-            if profile.get("cause_binding") != "exact_current_proposal_revision_producer":
-                fail(f"{prefix}: current-producer cause binding must be exact current producer", errors)
+            expected_binding = (
+                "exact_proposal_producer"
+                if operation_id == "withdrawProposal"
+                else "exact_current_proposal_revision_producer"
+            )
+            if profile.get("cause_binding") != expected_binding:
+                fail(f"{prefix}: current-producer cause binding must be {expected_binding}", errors)
             if profile.get("action_class") != "producer_cause":
                 fail(f"{prefix}: current-producer cause must be producer_cause", errors)
             if profile.get("admission") != "none":
@@ -257,8 +262,8 @@ def validate_conditional_cause_profiles(
                 fail(f"{prefix}: current-producer cause must forbid RequiresReconfirmation", errors)
             if set(profile_settlement.get("acknowledgements", [])) != {"committed"}:
                 fail(f"{prefix}: current-producer cause must acknowledge only committed", errors)
-            if set(profile.get("producer_types", [])) != {"AgentRunStep", "ToolCall"}:
-                fail(f"{prefix}: current-producer cause must bind AgentRunStep/ToolCall", errors)
+            if set(profile.get("producer_types", [])) != {"AgentRunDecision"}:
+                fail(f"{prefix}: current-producer cause must bind AgentRunDecision", errors)
             if "admission" in str(profile.get("semantic_cause", "")):
                 fail(f"{prefix}: current-producer semantic cause must not mention an admission", errors)
     return profile_schema_ids
