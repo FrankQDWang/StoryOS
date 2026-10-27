@@ -47,3 +47,19 @@ _Avoid_: Flaky-test waiver, retry-until-green, silent skip, advisory result as c
 **Deterministic Test Scheduler**:
 The controlled virtual monotonic clock and explicit interleaving schedule used by deterministic state-machine, property, fault, mailbox, lease, fence, retry, and timeout gates. Time advances only through the recorded test schedule and is included in the Verification Evidence Bundle, so a seed reproduces the same recovery boundary. Real wall-clock sleeps, thread races, and network timing cannot determine a gate result; separately required recovery drills may measure their declared service profile without becoming synthetic performance thresholds.
 _Avoid_: Sleep-based test, scheduler race, accidental timeout, throughput benchmark as semantic gate
+
+**Check Evidence Line**:
+The one line that each check tier prints at the end of a local run. It gives the tier, the HEAD commit, the tree hash, the result, and the time. A pull request carries this line, and a reviewer compares its commit with the pull request head. Only the line of `make check` or `make check-full` is merge evidence ([ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
+_Avoid_: verification record, input fingerprint, cached result, admission receipt
+
+**Behavior Owner**:
+The one test layer that proves a behavior. The PostgreSQL adapter tests own the SQL semantics, and the HTTP tests own the wire contract. The browser-source tests own the Web Client, and the exact-dist journeys own an end-to-end path. A behavior has one owner, and another layer does not repeat its proof.
+_Avoid_: defence in depth, redundant coverage, cross-tier duplicate
+
+**Smoke Check**:
+An HTTP test that proves only that a route answers. The route exists, the authentication and the challenge apply, and the response has the declared shape. It does not prove the command semantics.
+_Avoid_: full route test, semantic test, happy path
+
+**Profile Probe**:
+The one command of each settlement profile whose HTTP test keeps the complete semantics: replay, refusal, conflict, and historical acknowledgement. The other commands of the profile keep only Smoke Checks.
+_Avoid_: penetration test, sample test, golden route

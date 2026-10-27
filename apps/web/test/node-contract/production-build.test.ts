@@ -28,18 +28,17 @@ async function run(command: string, args: readonly string[]) {
   return { code, stdout, stderr };
 }
 
-test("make web packages the production graph before Web tests", async () => {
-  const { code, stdout, stderr } = await run("make", ["-n", "web"]);
+test("make check packages the production graph before the Web tests that need it", async () => {
+  const { code, stdout, stderr } = await run("make", ["-n", "check"]);
   assert.equal(code, 0, stderr);
-  const commands = stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"));
-  const viteIndex = commands.findIndex((line) => line.includes("python3 scripts/package-release.py"));
-  const testIndex = commands.findIndex((line) => line.includes("scripts/verification_web_overlap.py"));
-  assert.ok(viteIndex >= 0, `make web must build the paired release package\n${stdout}`);
-  assert.ok(testIndex >= 0, `make web must run Vitest\n${stdout}`);
-  assert.ok(viteIndex < testIndex, "vite build must fail closed before Web tests");
+  // The tier runs its steps in one shell command, so the order is the order in the text.
+  const packageIndex = stdout.indexOf("python3 scripts/package-release.py");
+  const contractIndex = stdout.indexOf("--project node-contract test/node-contract/production-build.test.ts");
+  const phaseIndex = stdout.indexOf("python3 scripts/check-phases.py");
+  assert.ok(packageIndex >= 0, `make check must build the paired release package\n${stdout}`);
+  assert.ok(contractIndex >= 0, `make check must run the package contract files\n${stdout}`);
+  assert.ok(phaseIndex >= 0, `make check must run the shared phases\n${stdout}`);
+  assert.ok(packageIndex < contractIndex && packageIndex < phaseIndex, "vite build must fail closed before Web tests");
 });
 
 test("the Vite production build emits hashed Protected Web Client assets", async () => {
