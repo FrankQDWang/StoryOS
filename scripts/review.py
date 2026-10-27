@@ -17,7 +17,7 @@ ROUNDS = 3
 AXES = ("Standards", "Spec")
 # The same heading as the verdict comments of make review-round, so the two tools count the same rounds.
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
-HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`", re.M)
+HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a-f]{40})`)?", re.M)
 EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s")
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? #(\d+)", re.I)
@@ -86,12 +86,12 @@ def pull_request(pr):
 
 
 def rounds_of(pull):
-    """Map each round number to {axis: (result, head, comment URL)} from the verdict comments."""
+    """Map each round number to {axis: (result, head, comment URL, tree)} from the verdict comments."""
     rounds = {}
     for comment in pull["comments"]:
         if match := VERDICT.match(comment["body"]):
-            head = HEAD.search(comment["body"])
-            rounds.setdefault(int(match[2]), {})[match[1]] = (match[3], head and head[1], comment["url"])
+            head = HEAD.search(comment["body"]) or [None] * 3
+            rounds.setdefault(int(match[2]), {})[match[1]] = (match[3], head[1], comment["url"], head[2])
     return rounds
 
 
@@ -236,7 +236,7 @@ def link_verdicts(pr, pull):
     Only that section changes, and the PR body changes only when the links change."""
     body, rounds, section = pull["body"], rounds_of(pull), "## Review verdicts\n\n"
     for number, axes in sorted(rounds.items()):
-        head = next((head for _, head, _ in axes.values() if head), "unknown")
+        head = next((head for _, head, _, _ in axes.values() if head), "unknown")
         section += (f"- Round {number}, head `{head[:12]}`: "
                     + ", ".join(f"{axis} {axes[axis][0]} {axes[axis][2]}" for axis in AXES if axis in axes) + "\n")
     if match := LINKS.search(body):
@@ -260,9 +260,12 @@ def review(pr, wait):
     last = max((n for n, axes in rounds.items() if len(axes) == len(AXES)), default=0)
     number = last + 1
     previous = rounds.get(last, {})
-    if previous and all(result == "PASS" and round_head == head for result, round_head, _ in previous.values()):
-        raise Refused(f"Round {last} passed on the two axes, and the head {head} did not change. Only a blocking finding "
-                      "or a changed head starts a new round. Send the PR link and the verdict links to the coordinator session.")
+    tree = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{head}^{{tree}}"], cwd=ROOT,
+                          capture_output=True, text=True).stdout.strip()
+    if previous and all(result == "PASS" and (round_head == head or round_tree == tree)
+                        for result, round_head, _, round_tree in previous.values()):
+        raise Refused(f"Round {last} passed on the two axes, and the tree of the head {head} did not change. Only a blocking "
+                      "finding or a changed tree starts a new round. Send the PR link and the verdict links to the coordinator session.")
     if number > ROUNDS:
         raise Refused(LAST_ROUND.format(pr=pr))
     # A round with only one verdict comment runs again on the two axes. The newer comment of an axis counts.
@@ -287,7 +290,7 @@ def review(pr, wait):
     for axis, value in verdicts.items():
         result = "FAIL" if value["blocking"] else "PASS"
         post(pr, f"## {axis} review, round {number}: {result}\n\n"
-                 f"Head `{head}`.\n"
+                 f"Head `{head}`, tree `{tree}`.\n"
                  f"Reviewer: Codex plugin, new read-only thread `{value['thread']}`.\n"
                  f"Check Evidence Line: `{line}`.\n\n"
                  f"### Blocking\n\n{listed(value['blocking'])}\n\n"
@@ -295,9 +298,9 @@ def review(pr, wait):
                  f"### Evidence\n\n{listed(value['evidence'], numbered=False)}\n")
     results = link_verdicts(pr, pull_request(pr))[number]
     print(f"Round {number} of {ROUNDS} for PR {pr}. Request: {path}")
-    for axis, (result, _, url) in results.items():
+    for axis, (result, _, url, _) in results.items():
         print(f"{axis}: {result} {url}")
-    if all(result == "PASS" for result, _, _ in results.values()):
+    if all(result == "PASS" for result, _, _, _ in results.values()):
         print(f"Next: send the PR link and the verdict links to the coordinator session. {BASE_MERGE}")
     elif number < ROUNDS:
         print(f"Next: fix the blocking findings, commit, push, run make check, put its line in the PR body, "
