@@ -33,7 +33,7 @@ test("make check packages the production graph before the Web tests that need it
   assert.equal(code, 0, stderr);
   // The tier runs its steps in one shell command, so the order is the order in the text.
   const packageIndex = stdout.indexOf("python3 scripts/package-release.py");
-  const contractIndex = stdout.indexOf("--project node-contract test/node-contract/production-build.test.ts");
+  const contractIndex = stdout.indexOf("--project node-contract test/node-contract/");
   const phaseIndex = stdout.indexOf("python3 scripts/check-phases.py");
   assert.ok(packageIndex >= 0, `make check must build the paired release package\n${stdout}`);
   assert.ok(contractIndex >= 0, `make check must run the package contract files\n${stdout}`);
