@@ -8,10 +8,10 @@ use storyos_application::{
 };
 use storyos_core::{
     AcceptProposal as CoreAccept, AcceptProposalConflict, AcceptProposalInvalid,
-    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
-    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
-    ProposalOperationSelection, ProposalSelectionIntent, TransitionOutcome,
-    accept_proposal as classify_acceptance, classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
+    AcceptanceValidation, ProposalBundlePolicy, ProposalOperationSelection,
+    ProposalSelectionIntent, TransitionOutcome, accept_proposal as classify_acceptance,
+    classify_proposal_selection,
 };
 use tokio_postgres::Client;
 
@@ -144,11 +144,6 @@ impl ProjectCommand for AcceptProposal {
         };
         let receipt_named =
             loaded.receipt_id.as_deref() == Some(input.validation_receipt_id.as_str());
-        let target_kind = if loaded.kind == "inline_edit" {
-            AcceptanceTargetKind::Inline
-        } else {
-            AcceptanceTargetKind::Block
-        };
         let outcome = classify_acceptance(&CoreAccept {
             scope_matches: true,
             admission_valid: true,
@@ -179,14 +174,12 @@ impl ProjectCommand for AcceptProposal {
             selection_duplicate_free: selection.duplicate_free,
             required_dependencies_met: selection.required_dependencies_met,
             bundle_closure_complete: selection.bundle_closure_complete,
-            target_kind,
             base: if loaded.base_is_head {
                 AcceptanceBase::ExactHead
             } else {
                 AcceptanceBase::EarlierHead {
                     target_blocks_present: loaded
                         .target_blocks_present(&input.selected_operation_ids),
-                    inline_range_proven: loaded.proven_range.is_some(),
                 }
             },
             candidate_unaltered: loaded.candidate_unaltered(),
@@ -195,7 +188,7 @@ impl ProjectCommand for AcceptProposal {
             TransitionOutcome::Applied(resolution) => TransitionOutcome::Applied((
                 (),
                 AcceptedRevision {
-                    payload: loaded.accepted_body(&input.selected_operation_ids, resolution)?,
+                    payload: loaded.accepted_body(&input.selected_operation_ids),
                     chapter_id: loaded.chapter_id.clone(),
                     resolution,
                 },

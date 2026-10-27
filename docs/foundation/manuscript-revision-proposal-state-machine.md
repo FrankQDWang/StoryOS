@@ -29,8 +29,8 @@ the [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-p
 removes the Refused Edit Draft and the Inline Proposal from Release 1. The Web
 shows neither of them, sends no Draft command, and never sends a stored Local
 Edit Journal record of a removed Draft path. This contract has no Refused Edit
-Draft, no Draft retry, and no Draft command. The last Server ticket of ADR 0073
-removes the Inline Proposal Anchors.
+Draft, no Draft retry, and no Draft command. It also has no Inline Proposal and
+no Proposal Anchor.
 
 Tiptap and ProseMirror are reconstructible editor adapters. Their DOM,
 Selection, plugin state, Decorations, NodeViews, history branches, and
@@ -104,8 +104,8 @@ wire contracts so Rust and TypeScript do not cross JavaScript's exact-integer
 limit. A sequence never wraps or resets. Exhaustion fails closed and requires a
 versioned migration before further writes of that kind.
 
-`BlockTokenOffset` is zero-based and block-relative. An anchor satisfies
-`from <= to`; equality represents insertion at a point. Offset overflow, an
+`BlockTokenOffset` is zero-based and block-relative. A block-relative range
+satisfies `from <= to`. Equality represents insertion at a point. Offset overflow, an
 out-of-bounds range, or unsupported coordinate version is a typed conflict.
 
 ### 2.4 Audit time
@@ -232,7 +232,7 @@ replace the stable manuscript object or block identity.
 
 ### 5.1 Digest value
 
-The closed manuscript, Proposal, anchor, and Core-command boundaries use
+The closed manuscript, Proposal, and Core-command boundaries use
 SHA-256 over UTF-8 RFC 8785 JCS:
 
 ```text
@@ -250,7 +250,6 @@ initial profiles are:
 ```text
 storyos.manuscript-payload.jcs.v1
 storyos.proposal-revision-payload.jcs.v1
-storyos.proposal-anchor-base-slice.jcs.v1
 storyos.command.<command-kind>.jcs.v1
 ```
 
@@ -275,8 +274,7 @@ semantics.
 A Proposal Revision contains a nonempty ordered collection of stable
 `ProposalOperationId` values. Domain semantics, not visual diff hunks, define
 the order. Each incarnation records its exact target identities, base
-Revisions, preconditions, typed candidate payload, Anchors when applicable, and
-candidate/base digests.
+Revisions, preconditions, typed candidate payload, and candidate/base digests.
 
 Applied and rejected incarnations are frozen. A new Revision may edit only
 pending Operations. Reopening retains an Operation ID only when target and
@@ -286,35 +284,18 @@ A Proposal Growth appends one Revision to a pending `block_edit` Proposal
 ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)).
 The Revision revises the referenced candidate. It adds one pending Operation for
 each changed Joinable Block, with its reservation.
-The Proposal then has the bundle policy `atomic`. The growth writes no Anchor
-and no Author Action. A grown Proposal can grow again over the next adjacent
+The Proposal then has the bundle policy `atomic`. The growth writes no Author
+Action. A grown Proposal can grow again over the next adjacent
 Chapter block.
 
 ### 6.2 Inline Proposal Anchors
 
-Each `InlineEditProposal` Operation contains one or more ordered anchors:
-
-```text
-ProposalAnchor {
-  manuscript_block_id: ManuscriptBlockId
-  base_authoritative_revision_id: AuthoritativeRevisionId
-  manuscript_schema_version: SchemaVersion
-  coordinate_profile: "prosemirror-token-utf16.v1"
-  from: BlockTokenOffset
-  to: BlockTokenOffset
-  boundary_profile: "exclusive-authoritative-edges.v1"
-  base_slice_digest: DigestValue
-}
-```
-
-The base-slice digest covers the structural block identity and type, schema and
-coordinate versions, offsets, and exact base slice; it is not a visible-text
-hash. Both Proposal edges belong to adjacent Authoritative State, and only
-input strictly inside the range edits the Proposal. Multi-block Operations use
-ordered block-relative anchors, never one document-wide range.
-
-Each Anchor set belongs to the Proposal Revision that wrote it. A later Revision
-on the same base uses the nearest set in its parent chain (ADR 0063).
+Release 1 has no Inline Proposal and no Proposal Anchor
+([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
+Each Operation of a Block Proposal targets one complete Chapter Block by its
+`ManuscriptBlockId`. The dormant Anchor table stays in storage. Migration
+`0100_remove_inline_proposal.sql` refuses each stored Anchor row and each stored
+`inline_edit` Proposal.
 
 ### 6.3 Four orthogonal state axes
 
@@ -365,16 +346,15 @@ Thus the next read of that Revision shows the result of its validation, never
 rewrites Retention.
 
 A candidate edit and its Compensation at Author Undo validate against their own
-base. The same rule applies to the Proposal Revision of a flat edit at an Inline
-Anchor edge. A Chapter Head that moved after that base does not make these
-Revisions `conflicted` (ADR 0064).
+base. A Chapter Head that moved after that base does not make these Revisions
+`conflicted` (ADR 0064).
 
 ### 6.5 Validation and conflict
 
 Proposal Invalidity means an exact Proposal Revision violates its own schema,
 Operation contract, or domain invariants against its declared base. Proposal
 Conflict means an internally well-formed Revision can no longer prove its exact
-target, base, Anchor, or preconditions against current Authoritative State.
+target, base, or preconditions against current Authoritative State.
 
 Any of the following conflicts:
 
@@ -382,8 +362,6 @@ Any of the following conflicts:
 - any change to a referenced target Authoritative Revision, including a change
   outside the proposed range in the same Block;
 - unsupported schema, coordinate, boundary, or digest profile;
-- a deleted, ambiguous, inverted, or out-of-bounds Anchor;
-- a base-slice digest mismatch;
 - split, join, move, retype, or structural range reshaping;
 - another unresolved ownership reservation on the Block.
 
@@ -391,23 +369,8 @@ Core never silently maps, rebases, merges, or revalidates the old Revision
 against a changed Head. Acceptance does not map the old Revision either. It
 resolves each target on the current Chapter Head and replaces the target text
 (section 7.5). `ReplanProposal` appends a new Revision with current
-base Revisions, Anchors, digests, and preconditions, retaining an Operation ID
+base Revisions, digests, and preconditions, retaining an Operation ID
 only when semantic identity is proven unchanged.
-
-For an Inline Proposal, the Replan proves each Anchor on the expected
-Authoritative Revision. The Block keeps its identity, kind, schema, and
-coordinate profile. The base slice matches its digest. An exact comparison
-puts the complete range inside one unchanged run, and the slice text is equal.
-No other reservation is on the Block.
-
-The comparison takes the common prefix and suffix as unchanged runs, and an
-insertion inside the range slides out to an edge over equal characters. A
-coarse comparison gives no proof. With a proof, one transaction writes the new
-Revision, its Anchor set, and the Receipt. Without a proof, the Replan is
-refused with `unavailable_proof`, and the conflict stays.
-
-The ownership rule prevents a split, join, move, or deletion of a reserved
-Block, so the proof does not examine the neighbor Blocks (ADR 0063).
 
 ## 7. Command contracts
 
@@ -675,7 +638,7 @@ and [Fence Stale Writers and Resync across Replay Generations](https://github.co
 
 Core treats `observed_ownership_partition` as a stale-detection precondition,
 not a grant. At the first domain attempt it recomputes ownership from current
-Heads, Anchors, unresolved reservations, and the closed Direct Author Action
+Heads, unresolved reservations, and the closed Direct Author Action
 rules. The exhaustive result is:
 
 ```text
@@ -707,7 +670,7 @@ in this order:
 1. Validate these facts against the current facts: the exact expected
    Authoritative and Proposal Heads, writer generation, and editor contract.
    Also validate the current retained/open Proposal eligibility, target
-   Revisions, Anchors, reservations, and observed ownership precondition. Any stale, mismatched, missing, or failed exact proof returns
+   Revisions, reservations, and observed ownership precondition. Any stale, mismatched, missing, or failed exact proof returns
    `Conflicted`; it appends no Authoritative or Proposal Revision and allocates
    no Author Action.
 2. With all preconditions proven, recompute ownership from those current facts.
@@ -896,12 +859,6 @@ After current access validation, Acceptance executes in this order:
    - `exact_base`: the Revision base is the Chapter Head.
    - `block_replacement`: a Block Proposal whose target Block is on the
      Chapter Head. The candidate replaces all text of that Block.
-   - `proven_range`: an Inline Proposal whose Anchor range has the exact proof
-     of section 6.5 on the Chapter Head. The proof ignores reservations of
-     other Proposals. The candidate replaces only that range.
-   - `base_block_replacement`: an Inline Proposal without that proof whose
-     target Block is on the Chapter Head. The Block text becomes the Anchor
-     base Block text with the candidate at the stored range.
    - Missing target: a target Block is not on the Chapter Head. Return
      `Refused { missing_target }`, and change nothing.
    Revalidate permissions and preconditions.
@@ -1524,7 +1481,7 @@ Recovery trusts only validated durable Core facts:
 - current Proposal Heads, state axes, and Operation resolutions;
 - Domain, Validation, Acceptance, Undo, and Author Undo Receipts;
 - Proposal Generations, stream events, and Pause Fences;
-- Anchors, digests, schema/coordinate profiles, and durable outbox intent.
+- digests, schema/coordinate profiles, and durable outbox intent.
 
 An editor projection checkpoint is a cache keyed by every exact Head, digest,
 and contract version used to build it. A full match permits reuse; any mismatch
@@ -1578,7 +1535,7 @@ For a streaming Proposal:
   compatible checkpoint, and no ambiguous runtime-gate window;
 - ambiguity between a closed runtime gate and a durable fence creates a
   Proposal Recovery Conflict condition on the preserved Proposal surface;
-- missing sequences, digest mismatch, invalid Anchors, duplicate Block IDs, or
+- missing sequences, digest mismatch, duplicate Block IDs, or
   unsupported contracts select Proposal Safe Mode and disable Acceptance.
 
 Proposal Conflict and Proposal Recovery Conflict are conditions on a preserved

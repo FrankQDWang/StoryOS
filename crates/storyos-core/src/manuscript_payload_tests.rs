@@ -42,7 +42,6 @@ fn versioned_command() -> ApplyVersionedAuthorEdit {
         current_target_ownership: super::VersionedTargetOwnership::Chapter,
         current_ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: Vec::new(),
-            anchor_refs: Vec::new(),
             unresolved_reservation_refs: Vec::new(),
         },
         target_refs: vec!["manuscript:chapter".to_owned()],
@@ -140,7 +139,6 @@ fn split_command() -> ApplyVersionedAuthorEdit {
         current_target_ownership: super::VersionedTargetOwnership::Chapter,
         current_ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: Vec::new(),
-            anchor_refs: Vec::new(),
             unresolved_reservation_refs: Vec::new(),
         },
         target_refs: vec!["manuscript:chapter".to_owned()],

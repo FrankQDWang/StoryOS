@@ -41,15 +41,15 @@ One exhaustive StoryOS Core command-and-event change to a Proposal State Axis un
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
-The durable, versioned, block-relative address of an InlineEditProposal Operation, which Release 1 removes ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)). It binds a stable Manuscript Block, an exact base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. A multi-block Operation has ordered Anchors, and editor positions are only projections. Each Anchor belongs to the Anchor set of the Revision that wrote it ([ADR 0063](../adr/0063-bind-each-proposal-anchor-set-to-a-proposal-revision.md)). A Replan or a Replacing Acceptance finds the range on the Chapter Head only with an exact proof ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+A removed block-relative address of an Inline Proposal Operation. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), it bound a Manuscript Block, a base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. Release 1 has no Proposal Anchor: no command writes or reads one, and a stored Anchor row stops migration 0100.
 _Avoid_: Absolute editor position, DOM range, Decoration identity, visible-text match
 
 **Proposal Boundary Ownership**:
-Author input exactly at either edge of an InlineEditProposal Operation belongs to the adjacent Authoritative State as a Direct Author Action; only input strictly inside the Operation edits the Proposal. Extending a Proposal across an edge requires an explicit Proposal edit.
+A removed rule of the Inline Proposal. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), author input at an edge of an Inline Proposal Operation went to the adjacent Authoritative State. Release 1 has no Inline Proposal, so the rule has no effect.
 _Avoid_: Inclusive Proposal edge, implicit Proposal growth, cursor affinity as authority
 
 **Proposal Block Exclusivity**:
-A stable top-level manuscript block may contain at most one unresolved InlineEditProposal Operation across all Proposals. Another Proposal targeting that block waits until the existing Operation is resolved or withdrawn, while Direct Author Actions outside its exact range remain permitted.
+A removed rule of the Inline Proposal. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), a manuscript block held at most one unresolved Inline Proposal Operation. Release 1 has no Inline Proposal, so the rule has no effect.
 _Avoid_: Same-block Proposal concurrency, interval sharing, implicit Proposal merge
 
 **Proposal Structural Reshaping**:
@@ -73,7 +73,7 @@ A per-editor-session fallback used when the environment cannot uphold lossless P
 _Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
 
 **Proposal Recovery Conflict**:
-The fail-closed condition on a preserved Proposal surface in which durable Proposal Heads, stream sequences, Pause Fences, Anchors, digests, or an editor checkpoint cannot prove one unambiguous review projection. Agent replay and Acceptance remain disabled until explicit reconciliation; no cache or network order may fill the uncertainty. A separately preserved complete author intent may become a Recovery Draft, but the condition and Draft remain orthogonal.
+The fail-closed condition on a preserved Proposal surface. In it, the durable Proposal Heads, stream sequences, Pause Fences, digests, or editor checkpoint cannot prove one clear review projection. Agent replay and Acceptance stay disabled until an explicit reconciliation. No cache or network order can fill the uncertainty. A separately preserved complete author intent may become a Recovery Draft, but the condition and Draft remain orthogonal.
 _Avoid_: Best-effort replay, hidden repair, ordinary validation pending, Draft Artifact
 
 **Editor Support Profile**:
@@ -101,7 +101,7 @@ The condition in which an exact Proposal Revision violates its own schema, Opera
 _Avoid_: Proposal Conflict, creator error message, low confidence
 
 **Proposal Conflict**:
-The Core-produced `conflicted` condition on the validation axis of a well-formed Proposal Revision, separate from the Receipt or Event that finds it. It occurs when StoryOS cannot prove the exact target, base Revision, Anchor, or preconditions against current Authoritative State. Any change of a referenced target Revision causes it, also outside the proposed range, but a candidate edit validates against its own base. StoryOS never changes the old Revision or rebases it in place. It does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+The Core-produced `conflicted` condition on the validation axis of a well-formed Proposal Revision, separate from the Receipt or Event that finds it. It occurs when StoryOS cannot prove the exact target, base Revision, or preconditions against current Authoritative State. Any change of a referenced target Revision causes it, also outside the proposed range, but a candidate edit validates against its own base. StoryOS never changes the old Revision or rebases it in place. It does not stop a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
@@ -165,7 +165,7 @@ An explicit-editor-command Author Command Admission that applies a nonempty sele
 _Avoid_: Promotion, status flip, overwrite
 
 **Acceptance Attempt**:
-The first Core execution of one schema-valid, authorized Acceptance command after idempotency resolution, with all current eligibility, targets, Anchors, preconditions, and domain effects revalidated before commit. Every Attempt produces one immutable Acceptance Receipt, while an exact retry only returns that Receipt and is not another Attempt.
+The first Core execution of one schema-valid, authorized Acceptance command after idempotency resolution. Core validates again all current eligibility, targets, preconditions, and domain effects before commit. Every Attempt produces one immutable Acceptance Receipt, while an exact retry only returns that Receipt and is not another Attempt.
 _Avoid_: Acceptance retry, button click, Receipt lookup
 
 **Acceptance Result**:
@@ -173,7 +173,7 @@ The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflic
 _Avoid_: Success boolean, exception text, accepted Proposal state, unknown as failure
 
 **Replacing Acceptance**:
-An applied Acceptance of a Proposal Revision whose base is behind the Chapter Head. The candidate replaces the current text of each selected target. Thus author text that changed in that target after the Proposal base is replaced, and Author Undo of the Acceptance restores it. The Acceptance Receipt records the Chapter Head that the Acceptance applied to and its target resolution: `block_replacement`, `proven_range`, or `base_block_replacement`. When a target Block is not on the Chapter Head, the Acceptance is refused with `missing_target` ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
+An applied Acceptance of a Proposal Revision whose base is behind the Chapter Head. The candidate replaces the current text of each selected target. Thus author text that changed in that target after the Proposal base is replaced, and Author Undo of the Acceptance restores it. The Acceptance Receipt records the Chapter Head that the Acceptance applied to and its target resolution `block_replacement`. When a target Block is not on the Chapter Head, the Acceptance is refused with `missing_target` ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 _Avoid_: Rebase, merge, Replan, silent anchor repair
 
 **Receipt**:

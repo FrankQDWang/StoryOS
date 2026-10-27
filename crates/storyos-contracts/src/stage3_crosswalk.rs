@@ -64,9 +64,9 @@ const SUCCESSOR: &str =
     "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts";
 const CANCEL: &str =
     "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts";
-const INLINE: &str = "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts";
 const OPEN_BLOCK: &str =
     "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts";
+const REPLAN: &str = "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts";
 const MULTI: &str =
     "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts";
 const STREAM: &str =

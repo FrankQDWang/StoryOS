@@ -30,9 +30,7 @@ pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
-mod inline_anchor_proof;
 mod open_block_proposal;
-mod open_inline_proposal;
 mod pause_proposal_generation;
 mod project_archive;
 mod project_export;
@@ -57,10 +55,9 @@ mod withdraw_proposal;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
-    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetKind,
-    AcceptanceTargetResolution, AcceptanceValidation, ProposalBundlePolicy,
-    ProposalOperationSelection, ProposalSelectionFacts, ProposalSelectionIntent, accept_proposal,
-    classify_proposal_selection,
+    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
+    AcceptanceValidation, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
+    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use agent_run_control::{
     AgentRunLifecycle, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
@@ -136,12 +133,9 @@ pub use deployment_destination::{
 };
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
-    ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
-    INLINE_PROSE_CHANGE_TEXT, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
-    STREAM_SECOND_TEXT, requested_execution_capability, stream_batch_plan,
-};
-pub use inline_anchor_proof::{
-    InlineAnchorProofFailure, ReplanAnchorFacts, prove_replanned_inline_anchors,
+    ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, PROSE_CHANGE_TEXT,
+    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT,
+    requested_execution_capability, stream_batch_plan,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -177,12 +171,6 @@ pub use model_registration::{
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
-};
-pub use open_inline_proposal::{
-    EXCLUSIVE_AUTHORITATIVE_EDGES_V1, InlineInputOwner, InlineTargetBlock, OpenInlineProposal,
-    OpenInlineProposalAnchor, OpenInlineProposalConflict, OpenInlineProposalRefusal,
-    OpenInlineProposalResult, PROPOSAL_ANCHOR_BASE_SLICE_PROFILE, PROSEMIRROR_TOKEN_UTF16_V1,
-    classify_inline_input_owner, open_inline_proposal, proposal_anchor_base_slice_digest,
 };
 pub use pause_proposal_generation::{
     PauseProposalGeneration, PauseProposalGenerationRefusal, PauseProposalGenerationResult,
@@ -289,12 +277,6 @@ pub use withdraw_proposal::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum InlineEditDisposition {
-    Unspecified,
-    AuthoritativeDespiteReservation,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEdit {
     pub chapter_id: String,
     pub current_authoritative_revision_id: String,
@@ -304,14 +286,12 @@ pub struct ApplyAuthorEdit {
     pub current_ownership: CurrentOwnershipFacts,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
-    pub inline_edit_disposition: InlineEditDisposition,
     pub author_edit_units: Vec<AuthorEditUnit>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CurrentOwnershipFacts {
     pub proposal_head_revision_ids: Vec<String>,
-    pub anchor_refs: Vec<String>,
     pub unresolved_reservation_refs: Vec<String>,
 }
 
@@ -434,7 +414,6 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
         .current_ownership
         .proposal_head_revision_ids
         .is_empty()
-        && command.current_ownership.anchor_refs.is_empty()
         && command
             .current_ownership
             .unresolved_reservation_refs
@@ -446,12 +425,6 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
     };
     if command.observed_ownership_partition != current_partition {
         return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
-    }
-    if command.inline_edit_disposition == InlineEditDisposition::AuthoritativeDespiteReservation {
-        if current_partition != "mixed" || command.expected_proposal_head_revision_ids.is_empty() {
-            return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
-        }
-        return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
     }
     if current_partition == "authoritative" {
         return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);

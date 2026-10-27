@@ -164,12 +164,6 @@ fn contract_target_resolution(
         storyos_core::AcceptanceTargetResolution::BlockReplacement => {
             contracts::AcceptanceTargetResolution::BlockReplacement
         }
-        storyos_core::AcceptanceTargetResolution::ProvenRange => {
-            contracts::AcceptanceTargetResolution::ProvenRange
-        }
-        storyos_core::AcceptanceTargetResolution::BaseBlockReplacement => {
-            contracts::AcceptanceTargetResolution::BaseBlockReplacement
-        }
     }
 }
 

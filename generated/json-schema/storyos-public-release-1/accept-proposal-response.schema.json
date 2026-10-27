@@ -211,9 +211,7 @@
       "description": "How an applied Acceptance found its target on the Chapter Head.",
       "enum": [
         "exact_base",
-        "block_replacement",
-        "proven_range",
-        "base_block_replacement"
+        "block_replacement"
       ],
       "type": "string"
     },

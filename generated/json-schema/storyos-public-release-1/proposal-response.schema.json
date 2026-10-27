@@ -18,12 +18,6 @@
     "BlockProposalInspect": {
       "additionalProperties": false,
       "properties": {
-        "anchors": {
-          "items": {
-            "$ref": "#/$defs/ProposalAnchorInspect"
-          },
-          "type": "array"
-        },
         "base_authoritative_revision_id": {
           "format": "uuid",
           "type": "string"
@@ -57,7 +51,6 @@
         "kind": {
           "enum": [
             "block_edit",
-            "inline_edit",
             "reversal"
           ],
           "type": "string"
@@ -130,7 +123,6 @@
         "candidate_text",
         "source",
         "validation_receipt",
-        "anchors",
         "revision_comparison"
       ],
       "type": "object"
@@ -319,54 +311,6 @@
       "required": [
         "owner_user_id",
         "project_id"
-      ],
-      "type": "object"
-    },
-    "ProposalAnchorInspect": {
-      "additionalProperties": false,
-      "properties": {
-        "base_authoritative_revision_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "base_slice_digest": {
-          "type": "string"
-        },
-        "boundary_profile": {
-          "type": "string"
-        },
-        "coordinate_profile": {
-          "type": "string"
-        },
-        "from": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "manuscript_block_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "manuscript_schema_version": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "to": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "manuscript_block_id",
-        "base_authoritative_revision_id",
-        "manuscript_schema_version",
-        "coordinate_profile",
-        "from",
-        "to",
-        "boundary_profile",
-        "base_slice_digest"
       ],
       "type": "object"
     },

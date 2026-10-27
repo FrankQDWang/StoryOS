@@ -1,9 +1,8 @@
 use super::{
     ACCEPT, ADMITTED_TARGET, Binding, CANCEL, CANDIDATE_EDIT, CAPTURED_MEMORY, COMPACT, COMPARISON,
-    CONTINUE, CONTINUE_GENERATION, CREATE_RUN, EXPIRY, EvidenceClass, FAKE_DECISION, INLINE,
-    LOOKUP, MULTI, OPEN_BLOCK, PARTIAL, PHYSICAL_DRILL, PHYSICAL_SCRIPT, PRODUCTION_HOST, PROOF,
-    REJECT, RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE, UNDO, WITHDRAW,
-    WORKSPACE,
+    CONTINUE, CONTINUE_GENERATION, CREATE_RUN, EXPIRY, EvidenceClass, FAKE_DECISION, LOOKUP, MULTI,
+    OPEN_BLOCK, PARTIAL, PHYSICAL_DRILL, PHYSICAL_SCRIPT, PRODUCTION_HOST, PROOF, REJECT, REPLAN,
+    RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE, UNDO, WITHDRAW, WORKSPACE,
 };
 
 macro_rules! issue {
@@ -136,7 +135,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             STREAM,
             PARTIAL,
             CONTINUE_GENERATION,
-            INLINE,
             UNDO,
             COMPARISON,
             PRODUCTION_HOST,
@@ -194,9 +192,9 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("382"),
             issue!("879"),
         ],
-        evidence: INLINE,
+        evidence: OPEN_BLOCK,
         supporting_evidence: &[
-            OPEN_BLOCK,
+            REPLAN,
             WITHDRAW,
             PRODUCTION_HOST,
             PHYSICAL_SCRIPT,
@@ -278,7 +276,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             STREAM,
             PARTIAL,
             CONTINUE_GENERATION,
-            INLINE,
             PRODUCTION_HOST,
             OPEN_BLOCK,
             CANDIDATE_EDIT,
@@ -327,7 +324,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             PARTIAL,
             CONTINUE_GENERATION,
             MULTI,
-            INLINE,
             OPEN_BLOCK,
             FAKE_DECISION,
             WORKSPACE,
@@ -442,7 +438,6 @@ pub(super) const BINDINGS: &[Binding] = &[
             PARTIAL,
             CONTINUE_GENERATION,
             MULTI,
-            INLINE,
             COMPARISON,
             OPEN_BLOCK,
             CANDIDATE_EDIT,

@@ -158,9 +158,6 @@ struct AcceptanceFacts {
     lineage_drifted: bool,
     selected_operation_ids: Vec<String>,
     block_ids: Vec<String>,
-    /// The base of the accepted Revision after a replacing Inline Acceptance. Its Anchor set is
-    /// exact only on that base (ADR 0064).
-    replaced_inline_base: Option<String>,
 }
 
 async fn enrich(
@@ -189,10 +186,7 @@ async fn enrich(
                              ARRAY[]::text[]),
                     current_envelope.payload_digest,
                     convert_from(current_payload.canonical_bytes, 'UTF8'),
-                    prior_envelope.payload_digest,
-                    CASE WHEN proposal.kind = 'inline_edit'
-                          AND acceptance.target_resolution IN ('proven_range', 'base_block_replacement')
-                         THEN revision.base_authoritative_revision_id::text END
+                    prior_envelope.payload_digest
                FROM storyos.author_action_entries AS action
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -259,7 +253,6 @@ async fn enrich(
         lineage_drifted: row.get(/*idx*/ 5),
         selected_operation_ids: row.get(/*idx*/ 6),
         block_ids: row.get(/*idx*/ 7),
-        replaced_inline_base: row.get(/*idx*/ 11),
     };
     let current_envelope = row.get::<_, Option<String>>(/*idx*/ 8);
     let current_payload = row.get::<_, Option<String>>(/*idx*/ 9);
@@ -297,10 +290,6 @@ async fn link_after_compensation(
         } else {
             LinkMode::Reopen
         };
-        let base_revision_id = facts
-            .replaced_inline_base
-            .as_deref()
-            .unwrap_or(base_revision_id);
         Some(place_proposal(client, command, facts, base_revision_id, mode).await?)
     };
     insert_child(

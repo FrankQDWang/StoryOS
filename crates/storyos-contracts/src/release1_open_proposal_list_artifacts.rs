@@ -92,7 +92,7 @@ fn response_schema_bytes() -> Vec<u8> {
         for field in ["proposal_id", "revision_id"] {
             entry["properties"][field]["format"] = json!("uuid");
         }
-        entry["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit", "reversal"]);
+        entry["properties"]["kind"]["enum"] = json!(["block_edit", "reversal"]);
     }
     if let Some(variants) = schema["$defs"]
         .get_mut("OpenProposalSource")
@@ -217,7 +217,7 @@ fn list_fixture() -> Value {
             {
                 "proposal_id": "018f0000-0000-7001-8000-000000000c02",
                 "revision_id": "018f0000-0000-7001-8000-000000000c03",
-                "kind": "inline_edit",
+                "kind": "block_edit",
                 "source": {
                     "kind": "agent_run_decision",
                     "run_id": "018f0000-0000-7001-8000-000000000c04",

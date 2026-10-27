@@ -11,9 +11,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::profile::{
-    AuthorEditProfile, AuthorEditSelector, AuthorEditWrite, RevisionEdit, project_error,
-};
+use super::profile::{AuthorEditProfile, AuthorEditSelector, AuthorEditWrite, project_error};
 use super::replay::{AUTHOR_EDIT_REPLAY_EFFECT, check_replay_records, replayed_record};
 use super::{AuthorEditFault, ClassifiedAuthorEdit, classify_author_edit, fault_error};
 use crate::author_edit_proposal::{ProposalEditContext, append_proposal_revision_as};
@@ -424,23 +422,18 @@ impl ProjectCommand for AuthorEdit<'_> {
                         RevisionMembers::CopyFrom(plan.current_revision_id.clone()),
                     ),
                 };
-                Ok(AuthorEditWrite::Revision(Box::new(RevisionEdit {
-                    revision: RevisionWrite {
-                        effect: AuthorEditEffect {
-                            record,
-                            proposal_revision_id: None,
-                        },
-                        chapter_id: command.chapter_id.clone(),
-                        prior_revision_id: plan.current_revision_id,
-                        payload,
-                        members,
-                        disposition: crate::command_sequence::ActionDisposition::Forward,
-                        editor_session_id: command.editor_session_id.as_ref().to_owned(),
-                        writer_base: RevisionBase::Required,
+                Ok(AuthorEditWrite::Revision(Box::new(RevisionWrite {
+                    effect: AuthorEditEffect {
+                        record,
+                        proposal_revision_id: None,
                     },
-                    inline: plan
-                        .proposal_context
-                        .filter(|context| context.kind == "inline_edit"),
+                    chapter_id: command.chapter_id.clone(),
+                    prior_revision_id: plan.current_revision_id,
+                    payload,
+                    members,
+                    disposition: crate::command_sequence::ActionDisposition::Forward,
+                    editor_session_id: command.editor_session_id.as_ref().to_owned(),
+                    writer_base: RevisionBase::Required,
                 })))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {

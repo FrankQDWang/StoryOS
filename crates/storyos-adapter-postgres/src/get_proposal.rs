@@ -1,10 +1,8 @@
 use storyos_application::{
-    BlockProposalRecord, ProjectReadError, ProjectScope, ProposalAnchorRecord,
-    ProposalOperationRecord, ProposalReader,
+    BlockProposalRecord, ProjectReadError, ProjectScope, ProposalOperationRecord, ProposalReader,
 };
 use storyos_core::{
-    ExactRevisionTexts, ManuscriptBlock, ManuscriptBlockKind, RevisionComparisonAccess,
-    inspect_revision_comparison, proposal_anchor_base_slice_digest, utf16_slice,
+    ExactRevisionTexts, ManuscriptBlock, RevisionComparisonAccess, inspect_revision_comparison,
 };
 
 use super::{PostgresProjectReader, read_error, set_scope};
@@ -87,18 +85,6 @@ impl ProposalReader for PostgresProjectReader {
             crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
                 .await?;
         let operations = read_operations(&transaction, scope, proposal_id).await?;
-        let anchors = match row.as_ref() {
-            Some(row) if row.get::<_, String>(1) == "inline_edit" => {
-                read_inline_anchors(
-                    &transaction,
-                    scope,
-                    proposal_id,
-                    &row.get::<_, String>(/*idx*/ 2),
-                )
-                .await?
-            }
-            _ => Vec::new(),
-        };
         let base_block = match row.as_ref() {
             Some(row) => {
                 load_exact_base_block(
@@ -141,7 +127,6 @@ impl ProposalReader for PostgresProjectReader {
                     row.get::<_, Option<String>>(17),
                 ),
                 latest_acceptance_refusal,
-                anchors: anchors.clone(),
                 revision_comparison: bound_comparison(
                     &row.get::<_, String>(1),
                     &row.get::<_, String>(2),
@@ -149,7 +134,6 @@ impl ProposalReader for PostgresProjectReader {
                     &row.get::<_, String>(10),
                     &row.get::<_, String>(12),
                     base_block.as_ref(),
-                    &anchors,
                 ),
             })
         })
@@ -210,50 +194,6 @@ async fn read_operations(
         .collect()
 }
 
-async fn read_inline_anchors(
-    client: &impl tokio_postgres::GenericClient,
-    scope: &ProjectScope,
-    proposal_id: &str,
-    revision_id: &str,
-) -> Result<Vec<storyos_application::ProposalAnchorRecord>, ProjectReadError> {
-    let rows = client
-        .query(
-            "SELECT manuscript_block_id::text, base_authoritative_revision_id::text,
-                    manuscript_schema_version, coordinate_profile, range_from, range_to,
-                    boundary_profile, base_slice_digest
-               FROM storyos.proposal_anchors
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid
-                AND proposal_revision_id = storyos.proposal_anchor_set_revision(
-                      $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)
-              ORDER BY anchor_order",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &proposal_id,
-                &revision_id,
-            ],
-        )
-        .await
-        .map_err(read_error)?;
-    rows.into_iter()
-        .map(|row| {
-            Ok(storyos_application::ProposalAnchorRecord {
-                manuscript_block_id: row.get(0),
-                base_authoritative_revision_id: row.get(1),
-                manuscript_schema_version: u32::try_from(row.get::<_, i32>(2))
-                    .map_err(ProjectReadError::unavailable)?,
-                coordinate_profile: row.get(3),
-                from: u32::try_from(row.get::<_, i32>(4)).map_err(ProjectReadError::unavailable)?,
-                to: u32::try_from(row.get::<_, i32>(5)).map_err(ProjectReadError::unavailable)?,
-                boundary_profile: row.get(6),
-                base_slice_digest: row.get(7),
-            })
-        })
-        .collect()
-}
-
 async fn load_exact_base_block(
     client: &impl tokio_postgres::GenericClient,
     scope: &ProjectScope,
@@ -307,11 +247,9 @@ fn bound_comparison(
     base_revision_id: &str,
     candidate_text: &str,
     block: Option<&ManuscriptBlock>,
-    anchors: &[ProposalAnchorRecord],
 ) -> Option<storyos_core::RevisionComparison> {
     let base_text = match kind {
         "block_edit" | "reversal" => block?.text.clone(),
-        "inline_edit" => proven_inline_slice(base_revision_id, block?, anchors)?,
         _ => return None,
     };
     inspect_revision_comparison(
@@ -324,36 +262,4 @@ fn bound_comparison(
             candidate_text: candidate_text.to_owned(),
         },
     )
-}
-
-fn proven_inline_slice(
-    base_revision_id: &str,
-    block: &ManuscriptBlock,
-    anchors: &[ProposalAnchorRecord],
-) -> Option<String> {
-    let [anchor] = anchors else {
-        return None;
-    };
-    if anchor.base_authoritative_revision_id != base_revision_id
-        || anchor.manuscript_block_id != block.manuscript_block_id
-    {
-        return None;
-    }
-    let slice = utf16_slice(&block.text, anchor.from, anchor.to)?;
-    let digest = proposal_anchor_base_slice_digest(
-        &block.manuscript_block_id,
-        match block.block_kind {
-            ManuscriptBlockKind::Paragraph => "paragraph",
-            ManuscriptBlockKind::Heading => "heading",
-        },
-        anchor.manuscript_schema_version,
-        &anchor.coordinate_profile,
-        anchor.from,
-        anchor.to,
-        slice,
-    );
-    if digest != anchor.base_slice_digest {
-        return None;
-    }
-    Some(slice.to_owned())
 }

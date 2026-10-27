@@ -251,25 +251,11 @@ async fn classify_author_edit(
         });
     }
     if !uses_versioned_payload {
-        let routed = match super::author_edit_proposal::route_inline_author_edit(
-            loaded,
-            current_body,
-            command.author_edit_units.clone(),
-        ) {
-            Ok(routed) => routed,
-            Err(reason) => {
-                return Ok(ClassifiedAuthorEdit {
-                    result: TransitionOutcome::Refused(reason),
-                    successor_blocks: None,
-                    proposal_context: None,
-                });
-            }
-        };
         return Ok(ClassifiedAuthorEdit {
             result: apply_core_author_edit(&ApplyAuthorEdit {
                 chapter_id: command.chapter_id.clone(),
                 current_authoritative_revision_id: current_revision_id.to_owned(),
-                current_body: routed.current_body,
+                current_body: loaded.candidate_body.unwrap_or(current_body),
                 expected_authoritative_revision_id: command
                     .expected_authoritative_revision_id
                     .clone(),
@@ -279,11 +265,10 @@ async fn classify_author_edit(
                 current_ownership,
                 target_refs: command.target_refs.clone(),
                 observed_ownership_partition: command.observed_ownership_partition.clone(),
-                inline_edit_disposition: routed.disposition,
-                author_edit_units: routed.author_edit_units,
+                author_edit_units: command.author_edit_units.clone(),
             }),
             successor_blocks: None,
-            proposal_context: routed.proposal_context,
+            proposal_context: loaded.context,
         });
     }
     let blocks = crate::manuscript_block::load_or_upgrade_blocks(
@@ -296,14 +281,6 @@ async fn classify_author_edit(
     )
     .await
     .map_err(author_edit_database_error)?;
-    let current_target_ownership = super::author_edit_inline::load_inline_target_ownership(
-        client,
-        command,
-        loaded.context.as_ref(),
-        current_revision_id,
-    )
-    .await?
-    .unwrap_or(VersionedTargetOwnership::Chapter);
     Ok(
         match apply_versioned_author_edit(&ApplyVersionedAuthorEdit {
             chapter_id: command.chapter_id.clone(),
@@ -318,7 +295,7 @@ async fn classify_author_edit(
                 .expected_proposal_head_revision_ids
                 .clone(),
             current_ownership,
-            current_target_ownership,
+            current_target_ownership: VersionedTargetOwnership::Chapter,
             target_refs: command.target_refs.clone(),
             observed_ownership_partition: command.observed_ownership_partition.clone(),
             author_edit_units: command.author_edit_units.clone(),

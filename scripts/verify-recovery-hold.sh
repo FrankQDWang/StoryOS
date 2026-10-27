@@ -175,11 +175,6 @@ if [ "$recovery_drill" = "mixed" ]; then
   STORYOS_VITEST_FILE_ORDER=test/node-postgresql/recovery-archived-exports-http.integration.test.ts: \
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/recovery-archived-exports-http.integration.test.ts
-  STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
-  STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
-  STORYOS_VITEST_FILE_ORDER=test/node-postgresql/edit-inline-proposal-http.integration.test.ts: \
-  pnpm --dir apps/web exec vitest run --project node-postgresql \
-    test/node-postgresql/edit-inline-proposal-http.integration.test.ts
   STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
@@ -204,13 +199,7 @@ start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$prima
 # Both modes retain two single-Operation conditions and three partial-Acceptance histories.
 # A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so
 # they retain no condition (ADR 0064).
-# Mixed also retains the five Inline Replan conditions of the Inline Proposal HTTP test.
-# Mixed also retains the four conditions of its Inline Replan Undo cases.
-if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=11
-else
-  acceptance_condition_count=2
-fi
+acceptance_condition_count=2
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stage4_before=$(stage4_model_facts "$primary")
 assert_stage4_model_facts_present "$stage4_before"

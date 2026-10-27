@@ -249,7 +249,7 @@ export type AcceptProposalInvalidReason = "invalid_validation" | "altered_candid
 
 export type AcceptProposalConflictReason = "changed_head";
 
-export type AcceptanceTargetResolution = "exact_base" | "block_replacement" | "proven_range" | "base_block_replacement";
+export type AcceptanceTargetResolution = "exact_base" | "block_replacement";
 
 export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, target_resolution: AcceptanceTargetResolution, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
 
@@ -611,13 +611,11 @@ export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": 
 
 export type ProposalOperationInspect = { candidate_text: string, operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
 
-export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
-
 export type ReplacementSpanInspect = { base_from: number, base_to: number, candidate_from: number, candidate_to: number, base_text: string, candidate_text: string, };
 
 export type OptionalRevisionComparisonInspect = { "kind": "absent" } | { "kind": "present", base_authoritative_revision_id: string, candidate_revision_id: string, operation_id: string, spans: Array<ReplacementSpanInspect>, };
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, source_condition: ProposalSourceConditionInspect, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, operations: Array<ProposalOperationInspect>, bundle_policy: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, revision_comparison: OptionalRevisionComparisonInspect, };
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, source_condition: ProposalSourceConditionInspect, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, operations: Array<ProposalOperationInspect>, bundle_policy: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, revision_comparison: OptionalRevisionComparisonInspect, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 

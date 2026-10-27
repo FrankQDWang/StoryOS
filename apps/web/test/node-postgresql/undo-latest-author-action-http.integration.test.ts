@@ -1189,7 +1189,7 @@ test("undoLatestAuthorAction restores the Proposal before a Replan, also after t
 
     const moved = await openProposal(started.baseUrl, "c96332");
     const replanned = await conflictAndReplan(moved, "c96332");
-    // The Replan moved the base to the new Chapter head, so the Undo copies the source Anchor set.
+    // The Replan moved the base to the new Chapter head, so the Undo restores the source base.
     const movedBase = (await inspect(moved)).proposal.base_authoritative_revision_id;
     assert.notEqual(movedBase, replanned.beforeReplan.proposal.base_authoritative_revision_id);
     const movedAfter = await assertCompensatedAfterHeadMove(moved, replanned.session, replanned.sequence, "c96332");

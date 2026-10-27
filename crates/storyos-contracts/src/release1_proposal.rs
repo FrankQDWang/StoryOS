@@ -130,7 +130,6 @@ pub struct BlockProposalInspect {
     pub candidate_text: String,
     pub source: ProposalSourceInspect,
     pub validation_receipt: OptionalValidationReceiptInspect,
-    pub anchors: Vec<ProposalAnchorInspect>,
     pub revision_comparison: OptionalRevisionComparisonInspect,
 }
 
@@ -165,19 +164,6 @@ pub struct ProposalOperationInspect {
     pub manuscript_block_id: String,
     pub resolution: String,
     pub reservation_state: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ProposalAnchorInspect {
-    pub manuscript_block_id: String,
-    pub base_authoritative_revision_id: String,
-    pub manuscript_schema_version: u32,
-    pub coordinate_profile: String,
-    pub from: u32,
-    pub to: u32,
-    pub boundary_profile: String,
-    pub base_slice_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
