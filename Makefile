@@ -195,6 +195,11 @@ verify-status:
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
+.PHONY: review
+# One Codex review round on a pull request (ADR 0070). WAIT is the seconds to wait for the GitHub verify check.
+review:
+	@python3 scripts/review.py --pr "$(PR)" --wait "$(WAIT)"
+
 .PHONY: review-round wait-verify
 # The verification input fingerprint reads the environment, so the recipes remove CONTEXT, WAIT, KIND, and COMMENT.
 # KIND=sync records a moved main after a passed round. KIND=coordinator-fix COMMENT=<URL> records a coordinator review.
