@@ -136,7 +136,6 @@ Initial closed subtypes include:
 
 ```text
 ProposalKind
-├── InlineEditProposal
 ├── BlockEditProposal
 ├── CharacterChangeProposal
 ├── RelationshipChangeProposal
@@ -162,7 +161,7 @@ ResearchArtifactKind
 ```
 
 `RecoveryDraft` is the only Draft kind in the manuscript editor recovery flow.
-[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft. `PlanDraft` belongs to plan authoring
+[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft and `InlineEditProposal`. `PlanDraft` belongs to plan authoring
 and is not an alternative outcome for an Author Edit.
 
 One Candidate represents one independently reviewable semantic candidate. A batch of such candidates creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
