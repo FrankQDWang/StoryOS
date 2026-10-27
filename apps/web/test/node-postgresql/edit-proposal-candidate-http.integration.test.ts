@@ -317,6 +317,21 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       antiForgery: "",
       request: editRequest,
     };
+    const chapterBefore = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const wrong = structuredClone(editRequest);
+    wrong.correlation_id = id("c857");
+    wrong.completed_intent_record_id = id("c858");
+    wrong.proposal_target!.operation_id = id("c859");
+    const refused = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", wrong.command_schema,
+      await digestApplyAuthorEdit(wrong), id("c85a"), (antiForgery) => applyAuthorEdit({
+        ...editOptions, idempotencyKey: id("c85a"), antiForgery, request: wrong }));
+    assert.deepEqual(refused.effect, { kind: "refused", reason: "target_mismatch" });
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl })).chapter, chapterBefore.chapter);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId,
+      fetchImpl: prepared.fetchImpl })).proposal, opened.proposal);
     const stale = await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
       opened.proposal, opened.proposal.operation_id, id("c847"));
     const edited = await challenged(

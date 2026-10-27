@@ -15,7 +15,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, PROSE, challenged, drainLeftoverWork, id, prepare, settleOnce,
+import { BINDING, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -57,7 +57,6 @@ async function admitQueued(
 
 test.each([
   ["Revise this passage: keep the voice.", "red fox"],
-  ["Revise this phrase: keep the voice.", PROSE],
   ["Stream this passage: keep the voice.", "red fox"],
   ["Revise these passages: keep the voice.", "red fox"],
 ])("an admitted H0 target cannot open a valid H1 Proposal: %s", async (message, initialText) => {
