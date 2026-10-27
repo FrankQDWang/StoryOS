@@ -1,6 +1,6 @@
 # Executor protocol
 
-An executor is the session that implements one ticket for a coordinator session. These rules apply to each agent client, for example Claude Code and Codex. The commands of review and verification are in [Repository verification](verification.md). The Claim and the comment templates are in [Issue tracker](issue-tracker.md).
+An executor is the session that implements one ticket for a coordinator session. These rules apply to each agent client, for example Claude Code and Codex. The check tiers and the review rules are in [ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md). The Claim and the comment templates are in [Issue tracker](issue-tracker.md).
 
 ## Refresh-gate report
 
@@ -34,11 +34,11 @@ The coordinator approves a split of a ticket only for its size. The author decid
 
 ## After the review rounds
 
-When `main` moves after a passed round, or round 3 has open blocking findings, follow [After the review rounds](verification.md#after-the-review-rounds). Do not start a fourth round.
+When round 3 has open blocking findings, follow the coordinator fix procedure that `make review` prints when it refuses a fourth round. Do not start a fourth round.
 
-## Report after verify-local
+## Report after check-full
 
-When `make verify-local` exits and its result is available, report the result to the coordinator at once. Send the report before any change to the pull request: a push, a body edit, or a comment.
+When `make check-full` exits and its result is available, report the result to the coordinator at once. Send the report before any change to the pull request: a push, a body edit, or a comment.
 
 ## Final report
 
@@ -46,9 +46,9 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 
 - The pull request link.
 - The head SHA and the tree SHA.
-- The links of the two verdict comments of the last round, and each sync or coordinator fix record comment.
+- The links of the two verdict comments of the last round, and each coordinator review comment.
 - The result of the GitHub `verify` check.
-- The ID of each local report, for example of `make verify-policy` and `make verify-changed`.
+- The Check Evidence Line of the head.
 - The state of the worktree: clean or dirty.
 
 ## Cleanup
@@ -56,8 +56,8 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 Before the session ends, stop each process that you started:
 
 - Each background wait.
-- Each Codex broker and app server of a manual Codex call. `make review-round` stops the brokers of its own review jobs.
-- Each development or observation server.
+- Each Codex broker and app server of a manual Codex call. `make review` stops the brokers of its own review jobs.
+- Each development server.
 - Each disposable database.
 
 The author's own `ChatGPT.app` and `CodexCLI.app` processes are not yours. Keep them running.

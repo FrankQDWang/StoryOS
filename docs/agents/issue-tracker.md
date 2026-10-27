@@ -21,16 +21,6 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 - Publish StoryOS tickets as GitHub issues in `FrankQDWang/StoryOS`.
 - Fetch a ticket by reading its current body, labels, assignees, native dependencies, exact `main` baseline, and tracked contracts named by the body.
 
-For daily dependency inspection, use `python3 scripts/tracker_query.py <number>`.
-Add `--format json`, `--relation blocking`, or `--page 2` as needed. The query
-reads all native relationship pages, then prints at most eight related tickets
-within 16 KiB and 80 lines. It reports exact totals and omitted counts. Long titles
-are clipped with their character count. Unknown states stay unknown; a failed read
-returns nonzero with unknown dependency state. Concurrent page drift requires a
-fresh query; this is not a transactional tracker snapshot. Bodies remain available
-through the printed contract command. This summary does not replace the real
-execution-contract reads or the Claim rules below.
-
 ## Ticket sizing and execution
 
 These repository constraints preserve Matt ticket publication and add StoryOS review-size limits:
@@ -82,10 +72,10 @@ The steps below use Matt Pocock skill names, for example `to-spec`. Claude Code 
 
    An executor that a coordinator dispatched sends the [refresh-gate report](executor-protocol.md#refresh-gate-report) before the assignment. Then it waits for the reply.
 4. **Implement and integrate.** Each implementer uses the `tdd` skill at approved public seams, runs applicable repository checks, and merges the latest integration tip before reporting completion. The merger integrates the result; the coordinator records an Integration comment on the child: acceptance evidence, branch commit, integration commit and tree, command results, and any unresolved scope. Integration is provisional delivery, not final main acceptance.
-5. **Advance dependencies.** A native blocker can be satisfied for implementation by a closed accepted ticket or by complete Integration evidence in this specification. For the latter, verify the evidence commit is an ancestor of the current integration tip, required behavior is present, and the dependent contract permits integration delivery. Keep the native edge and child open until final PR delivery. Record the evidence in the dependent Claim. Product release, external acceptance, and explicit main-only gates still require their specified final evidence. Unknown, failed, or stale evidence blocks dispatch. The tracker query reports GitHub state; it does not infer integration readiness.
+5. **Advance dependencies.** A native blocker can be satisfied for implementation by a closed accepted ticket or by complete Integration evidence in this specification. For the latter, verify the evidence commit is an ancestor of the current integration tip, required behavior is present, and the dependent contract permits integration delivery. Keep the native edge and child open until final PR delivery. Record the evidence in the dependent Claim. Product release, external acceptance, and explicit main-only gates still require their specified final evidence. Unknown, failed, or stale evidence blocks dispatch. GitHub reports native state. It does not infer integration readiness.
 6. **Open the aggregate PR.** After the first child merges into integration, open a draft PR with the `pr` skill. Link the full parent and child titles and include `Closes #<issue>` for the specification and every delivered child. Maintain scope and evidence as integration advances. Do not add closing references for unmet product stage gates or other specifications.
-7. **Review the complete result.** Once all tickets are integrated, run separate read-only Standards and Spec reviews of the complete specification diff. Each reviewer runs in a new context of an agent tool that is different from the implementer's tool. When Claude Code implements, the current example is the Codex plugin. It uses one new read-only thread for each axis. When Codex implements, use a different agent tool or a separate Claude Code session. The `code-review` skill gives the two-axis structure. The executor writes and imports the two review records. Use one implementer to fix review findings. Follow [Candidate review and admission](verification.md#candidate-review-and-admission) for current required GitHub `verify`, review records, targeted checks, and any requested complete run. Refresh applicable evidence after fixes, then mark the PR ready. Required checks and independent reviews must pass before merge.
-8. **Resolve on main.** The coordinator, not an implementer, examines the review and verification evidence. Then it merges the aggregate PR with an ordinary merge commit. Then it synchronizes `main` and runs `make verify-tracker`. GitHub may close linked issues on merge; read back their native state. Closed state alone does not prove acceptance. Evaluate each child and every parent user story on the final main tree. Record one final Resolution per issue with PASS or FAIL, exact commit and tree, linked PR and requirement evidence, commands and results, and retained out-of-scope items. After verifying the final Resolution, explicitly close any issue that remains open and has passed acceptance. Reopen any auto-closed issue whose acceptance fails or is unverified. Parent acceptance includes all child evidence and must not claim another owner's acceptance. Refresh the current map after verified delivery.
+7. **Review the complete result.** Once all tickets are integrated, run separate read-only Standards and Spec reviews of the complete specification diff. Each reviewer runs in a new context of an agent tool that is different from the implementer's tool. When Claude Code implements, the current example is the Codex plugin. It uses one new read-only thread for each axis. When Codex implements, use a different agent tool or a separate Claude Code session. The `code-review` skill gives the two-axis structure. `make review PR=<number>` runs the two axes and posts the verdicts. Use one implementer to fix review findings. [ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md) gives the merge gate. Refresh applicable evidence after fixes, then mark the PR ready. Required checks and independent reviews must pass before merge.
+8. **Resolve on main.** The coordinator, not an implementer, examines the review and verification evidence. Then it merges the aggregate PR with an ordinary merge commit. Then it synchronizes `main`. GitHub may close linked issues on merge; read back their native state. Closed state alone does not prove acceptance. Evaluate each child and every parent user story on the final main tree. Record one final Resolution per issue with PASS or FAIL, exact commit and tree, linked PR and requirement evidence, commands and results, and retained out-of-scope items. After verifying the final Resolution, explicitly close any issue that remains open and has passed acceptance. Reopen any auto-closed issue whose acceptance fails or is unverified. Parent acceptance includes all child evidence and must not claim another owner's acceptance. Refresh the current map after verified delivery.
 9. **Retrospect and clean up.** Use the `retro` skill before clearing the work context. Record actionable environment findings in their owning tracker or contract. Remove implementation worktrees and temporary branches only after their work and evidence are retained. Preserve unrelated work and historical evidence.
 
 Ticket bodies contain Parent, What to build, observable acceptance criteria, and native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only where a wide refactor cannot remain a complete passing vertical slice.
@@ -94,7 +84,7 @@ Closed tickets retain their current contract and exact delivery evidence. Curren
 
 ### Comment templates
 
-Use these forms for the Claim of Delivery step 3, the Integration of step 4, and the Resolution of step 8. Replace each `<...>` field with its value. Keep each field line, and write `none` for an empty field. Write the comment in ASD-STE100. Before you post it, examine it with `python3 scripts/ste_text_guard.py message <file>`.
+Use these forms for the Claim of Delivery step 3, the Integration of step 4, and the Resolution of step 8. Replace each `<...>` field with its value. Keep each field line, and write `none` for an empty field. Write the comment in ASD-STE100.
 
 Claim:
 
@@ -126,7 +116,7 @@ Integration:
 
 | Check | Source | Result |
 |---|---|---|
-| `<command>` | `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
+| `<command>` | `<short SHA>` | <PASS or FAIL> |
 
 Integration is provisional delivery. The final Resolution records acceptance on `main`.
 ```
@@ -148,10 +138,8 @@ Resolution:
 | Check | Source | Result |
 |---|---|---|
 | GitHub `verify` | `<short SHA>` | <PASS or FAIL> |
-| `make verify-changed BASE=origin/main` | `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
-| Standards review (<agent tool>, read-only, new thread) | request `<request ID>` | [<PASS or FAIL>](<verdict comment URL>) |
-| Spec review (<agent tool>, read-only, new thread) | request `<request ID>` | [<PASS or FAIL>](<verdict comment URL>) |
-| `make verify-tracker` | `main` `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
+| `make check` or `make check-full` | `<short SHA>` | <PASS or FAIL> (`<Check Evidence Line>`) |
+| Standards review (<agent tool>, read-only, new thread) | head `<short SHA>` | [<PASS or FAIL>](<verdict comment URL>) |
+| Spec review (<agent tool>, read-only, new thread) | head `<short SHA>` | [<PASS or FAIL>](<verdict comment URL>) |
 
-Local evidence: `<path of the retained reports>`.
 ```

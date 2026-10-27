@@ -9,12 +9,12 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **Memory:** repository files and tracked design artifacts are the source of truth. Conversation history and agent client memory are supporting context only.
 - **Decisions:** record a spoken deployment, hosting, or vendor decision as an ADR in the same session. A premise that no ADR records is not a contract. ADR 0022 sets the current production topology.
 - **User changes:** preserve unrelated user changes exactly as you find them.
-- **Language:** write all repository text in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Research reports under `docs/research/` are evidence records, and the text guard does not examine them. Talk to the user in Simplified Chinese.
+- **Language:** write all repository text in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Research reports under `docs/research/` are evidence records. Talk to the user in Simplified Chinese.
 - **Glossary:** use the ubiquitous language of the glossary. [GLOSSARY.md](GLOSSARY.md) lists the design area files under `docs/glossary/` and tells how to find a term with `grep`. Read only the area files that you need.
 - **Domain:** before domain exploration or design, read [Domain docs](docs/agents/domain.md) for the glossary and ADR rules.
-- **Daily loop:** at task start, run `make verify-status BASE=origin/main`. After each product or test edit, follow the [Daily loop](docs/agents/verification.md#daily-loop) to run the smallest check that can fail on that edit.
+- **Daily loop:** after each product or test edit, run `make check-fast`. Before a pull request, run `make check` on a clean tree. [ADR 0070](docs/adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md) gives the three check tiers.
 - **Commands:** use the StoryOS-owned repository commands for format, lint, test, schema generation, and verification.
-- **Guards:** `make verify-policy` runs the ASD-STE100 text guard and the Rust literal guard. `make verify-status` shows the change size and module size advisory.
+- **Checks:** `make check-fast`, `make check`, and `make check-full` print one Check Evidence Line at the end. The pull request carries the line of `make check` or `make check-full`.
 
 ## Ticket delivery
 
@@ -25,9 +25,9 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **Pull request:** push the integration branch for one aggregate pull request. Implementation commits go to `main` only through that pull request.
 - **Executor:** an implementation session follows the [executor protocol](docs/agents/executor-protocol.md) from the refresh gate to the final report and cleanup.
 - **Merge:** the implementation session opens the PR. Only a coordinator session merges it, after it examines the evidence. Use an ordinary merge commit unless the specification requires another method.
-- **Merge gate:** merge only after the current required `verify` check and independent read-only Standards and Spec reviews pass. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for reviewers, targeted checks, and fresh evidence after a change.
-- **Complete run:** run `make verify-local` only when the ticket contract or an explicit request requires a complete local run. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for its order and its recovery.
-- **After merge:** synchronize `main`, run `make verify-tracker`, and record final evidence for every child and parent requirement as the issue tracker specifies.
+- **Merge gate:** merge only when the GitHub `verify` check passes, a Check Evidence Line of `make check` or `make check-full` names the pull request head, and the Codex review of `make review PR=<number>` passes ([ADR 0070](docs/adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
+- **Complete run:** run `make check-full` only when the ticket contract or an explicit request requires a complete local run.
+- **After merge:** synchronize `main`, and record final evidence for every child and parent requirement as the issue tracker specifies.
 
 ## Code change
 

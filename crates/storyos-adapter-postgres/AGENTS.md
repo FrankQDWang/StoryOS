@@ -12,11 +12,11 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 - Pass `&*client` when a `PooledClient` goes to a helper that takes `impl GenericClient`.
 - Set scope only with transaction-local `set_config(..., true)`. Session-level state would survive a settled transaction and reach the next checkout.
 - `storage_activation.rs` is the maintenance owner. It runs on its own admin connection that never enters the pool, so these rules do not apply to it.
-- `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text. It does not read `execute` or `query` calls with a non-literal statement. `make contracts` runs its self-test and `make verify-local` runs the check.
+- `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text. It does not read `execute` or `query` calls with a non-literal statement. `make check-fast` runs the check.
 
 ## Run one PostgreSQL test locally
 
-The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project read `STORYOS_TEST_DATABASE_URL`, `STORYOS_TEST_ADMIN_DATABASE_URL`, and `STORYOS_TEST_POSTGRES_CONTAINER`. Complete `make verify` sets them. For one test, use the command-owned database:
+The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project read `STORYOS_TEST_DATABASE_URL`, `STORYOS_TEST_ADMIN_DATABASE_URL`, and `STORYOS_TEST_POSTGRES_CONTAINER`. `make check` sets them. For one test, use the command-owned database:
 
 ```sh
 make release-package  # needs a clean worktree
@@ -25,4 +25,4 @@ scripts/dev-postgres.sh run cargo test -p storyos-adapter-postgres --test projec
 scripts/dev-postgres.sh run pnpm --dir apps/web exec vitest run --project node-postgresql test/node-postgresql/create-project-http.integration.test.ts
 ```
 
-Each `run` uses a new fixture and removes its database when the child exits. Run `verify-project-scope.sh` through `make verify` only; it owns the input oracles and the file order.
+Each `run` uses a new fixture and removes its database when the child exits. Run `verify-project-scope.sh` through `make check-full` only. It owns the input oracles and the file order.

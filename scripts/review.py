@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROMPT = ROOT / "docs/agents/review-prompt.md"
 ROUNDS = 3
 AXES = ("Standards", "Spec")
-# The same heading as the verdict comments of make review-round, so the two tools count the same rounds.
+# The heading of each verdict comment. The rounds of earlier pull requests use the same heading.
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a-f]{40})`)?", re.M)
 EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s")
