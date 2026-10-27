@@ -498,15 +498,7 @@ STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
 
 prepare_server_database "$container"
 prove_bound_request_path_activation
-echo "Running PostgreSQL Application and RLS tests"
-# `make contracts` builds these targets with `--workspace --all-features`. The same
-# selection reuses those artifacts. A package-only selection unifies dependency features
-# differently and recompiles storyos-adapter-postgres for each target. The `--lib` step
-# runs every ignored lib test in the workspace; today only storyos-adapter-postgres has them.
-cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
-cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
-cargo test --workspace --all-features --lib -- --ignored --nocapture
-python3 scripts/verification_shared.py run
+# make check runs the ignored PostgreSQL tests and the shared Web test phases one time before this script.
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
