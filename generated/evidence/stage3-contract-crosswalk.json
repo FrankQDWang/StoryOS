@@ -206,7 +206,6 @@
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
@@ -285,9 +284,9 @@
           "https://github.com/FrankQDWang/StoryOS/issues/382",
           "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
-        "evidence": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+        "evidence": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
           "scripts/verify-recovery-hold.sh",
@@ -411,7 +410,6 @@
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts"
@@ -460,7 +458,6 @@
           "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
@@ -616,7 +613,6 @@
           "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",

@@ -18,7 +18,7 @@
       }
     },
     {
-      "kind": "inline_edit",
+      "kind": "block_edit",
       "proposal_id": "018f0000-0000-7001-8000-000000000c02",
       "revision_id": "018f0000-0000-7001-8000-000000000c03",
       "source": {

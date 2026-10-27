@@ -270,7 +270,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-response.schema.json",
       "schema_id": "storyos.command.accept-proposal.response.v1",
-      "sha256": "sha256:0ac9fb4914c03da8425ed500491339709d85935ec0e3cc1d1ba8fb7a981123c2"
+      "sha256": "sha256:ca6a81f3fad6e06becf59608b0d4d9a596ef7d482c1feb0591f37d0c560eefb9"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/reject-proposal-operations-request.schema.json",
@@ -460,7 +460,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
-      "sha256": "sha256:9343074e1caae08b205ae058b48969dc50875f15fd01ad87da3446c1668e4dac"
+      "sha256": "sha256:f0c6b26d9f234f945f9ff4ed534c81069f93ea5017111f94d0436c92a3483f7e"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/chapter-open-proposals-request.schema.json",
@@ -470,7 +470,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/chapter-open-proposals-response.schema.json",
       "schema_id": "storyos.query.chapter-open-proposals.response.v1",
-      "sha256": "sha256:af549a2a2de1fec7c98f14d6175fb396da1d4cedd28f035ed392725a9c1208ff"
+      "sha256": "sha256:68dc448bae033f88848b352d937811fc229e4b07fad3be07a534a7c2926c33bf"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json",
