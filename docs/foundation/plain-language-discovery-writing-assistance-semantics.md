@@ -175,10 +175,9 @@ A durable Proposal lifecycle change occurs only through a path permitted by
 the exact current Core state and Web Editor control matrix. An author-owned
 `WithdrawProposal` begins from a fully displayed permitted surface as a
 protected `explicit_editor_command` and requires Author Command Admission and
-settlement. The exact `AgentRunStep` or `ToolCall` recorded as the current
-Proposal Revision’s producer may withdraw only through its separately governed
-producer cause, which must record `CurrentProducerWithdrew` and receives no
-Author Command Admission.
+settlement. The exact AgentRun and Agent Decision that produced the Proposal
+can withdraw it only through their own producer cause. That cause records
+`CurrentProducerWithdrew` and receives no Author Command Admission.
 
 An ordinary Proposal does not gain a withdraw control because the author or
 Agent calls stopping “abandonment.” A `ProposalRecoveryConflict` retains

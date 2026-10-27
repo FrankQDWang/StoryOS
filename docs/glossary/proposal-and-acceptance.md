@@ -177,7 +177,7 @@ An applied Acceptance of a Proposal Revision whose base is behind the Chapter He
 _Avoid_: Rebase, merge, Replan, silent anchor repair
 
 **Receipt**:
-An immutable Operational Record produced only by StoryOS Core for one validation or domain-command attempt, carrying one exact typed Receipt identity and exactly one `AuthorCommandAdmission | EditorInputFence | AgentRunStep | ToolCall` producer cause. Its exhaustive result names every allocated Authoritative Revision, Proposal Revision, Commit, Author Action, Draft Artifact, or Proposal condition; an exact retry returns the same identities. Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt identities remain distinct, and no Receipt has Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
+An immutable Operational Record that only StoryOS Core produces for one validation or domain-command attempt. It has one exact typed Receipt identity and exactly one `AuthorCommandAdmission | EditorInputFence | AgentRunDecision` producer cause. Its exhaustive result names every allocated Authoritative Revision, Proposal Revision, Commit, Author Action, Draft Artifact, or Proposal condition. An exact retry returns the same identities, and the Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt identities stay distinct. No Receipt has an Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
 _Avoid_: Generic receipt ID, Artifact, log text, producer assertion
 
 **Acceptance Receipt**:
