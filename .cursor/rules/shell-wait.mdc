@@ -9,21 +9,17 @@ Start a long repository command with `block_until_ms: 0`. Continue other work. T
 
 Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit. A pattern is valid only when that line cannot appear before the command ends.
 
-Require process exit and the structured report result when `make verify-local` is requested. Follow `docs/agents/verification.md` for targeted checks and merge review. A printed stage success, including transaction-control verification, is not the complete run result. `make verify` also runs the tracker check.
+Require process exit and the Check Evidence Line when `make check` or `make check-full` is requested. A printed step success, including transaction-control verification, is not the result of the run.
 
-These strings are not AwaitShell patterns:
-
-- `verify-stage1` is the contracts self-check. It can appear near 15 seconds.
-- `Error:` is an expected Storage Activation reject (`MissingOrInactive` / `IdentityMismatch`).
+`Error:` is not an AwaitShell pattern. It is an expected Storage Activation reject (`MissingOrInactive` / `IdentityMismatch`).
 
 Set the poll window from the command class:
 
 | Command | Typical duration |
 |---|---|
-| GitHub PR `verify` sentinel | about 16 seconds |
-| Dirty-tree `make verify` | fails in about 24 seconds |
-| Clean complete `make verify-local` | about 2.5 minutes |
-| One `verify-tracker` | tens of seconds |
-| Clean complete `make verify` | about 3 minutes |
+| GitHub PR `verify` check | about 2 minutes |
+| `make check-fast` | about 1 minute after a build |
+| Clean `make check` | about 10 minutes |
+| Clean `make check-full` | about 20 minutes |
 
-When a poll is required for a clean complete `make verify`, wait for process exit. Treat `verified parent #100` as the success line. Do not open a second long wait after a mid-run line.
+The Check Evidence Line is the last line of each tier, so it is a valid end pattern.

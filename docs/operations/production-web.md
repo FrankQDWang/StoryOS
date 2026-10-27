@@ -6,12 +6,12 @@ Use a clean checkout with the repository's pinned Rust, Node, and pnpm toolchain
 
 ```sh
 make release-package
-make verify
+make check-full
 ```
 
 The package is `target/release-package/`. It contains `storyos-server`, `storyos-worker`, `storyos-storage`, and `web/`, including the generated `manifest.json`. Transfer that directory as one unit. The default Server process runs the Worker loop. Operators may start `storyos-worker` alone. The manifest records the source commit and tree, client-contract and security-policy identities, and resource metadata and digests. The binary contains the matching manifest digest. Build outputs are not tracked source files.
 
-`make verify` is the local HTTP oracle. It builds one matching package, retains the source and exact-dist checks, and runs the real production Chrome journey through the existing Browser Mode provider on loopback HTTP. It records the installed Google Chrome Stable version. The journey checks direct production pages and API calls, Trusted Types, blocked embedding, Project creation and opening, manual save, reload recovery, old-writer fencing, and a new writer's save. Its PostgreSQL oracle checks exact receipts and final authority. It does not claim a Takeover UI or later Stage 2 acceptance. It does not open a public Host, obtain a certificate, or run the public-origin operator checklist.
+`make check-full` is the local HTTP oracle. It builds one matching package, retains the source and exact-dist checks, and runs the real production Chrome journey through the existing Browser Mode provider on loopback HTTP. It records the installed Google Chrome Stable version. The journey checks direct production pages and API calls, Trusted Types, blocked embedding, Project creation and opening, manual save, reload recovery, old-writer fencing, and a new writer's save. Its PostgreSQL oracle checks exact receipts and final authority. It does not claim a Takeover UI or later Stage 2 acceptance. It does not open a public Host, obtain a certificate, or run the public-origin operator checklist.
 
 ## Prepare the runtime
 
@@ -35,7 +35,7 @@ One packaged `storyos-server` binary has two profiles.
 
 ### Local HTTP profile
 
-Leave `STORYOS_PUBLIC_ORIGIN` unset. The Server derives the allowed Host and Origin from the bind address, prints an `http` Server URL, and issues `storyos_session` without `Secure`. This is the Mac development profile and the `make verify` oracle. A DNS name is not required.
+Leave `STORYOS_PUBLIC_ORIGIN` unset. The Server derives the allowed Host and Origin from the bind address, prints an `http` Server URL, and issues `storyos_session` without `Secure`. This is the Mac development profile and the `make check-full` oracle. A DNS name is not required.
 
 ### Public HTTPS profile
 
@@ -107,7 +107,7 @@ Caddy automatic HTTPS listens on port 80 and port 443 for those names, redirects
 
 ## Public-origin operator checklist
 
-Use this checklist after the public HTTPS profile is running behind the proxy. It is operator evidence against the printed origin. It is not a `make verify` journey and not a second Browser Mode harness. Do not add it to `make verify`. Do not record secrets, connection strings, or DNS API tokens in logs, screenshots, or archives.
+Use this checklist after the public HTTPS profile is running behind the proxy. It is operator evidence against the printed origin. It is not a `make check-full` journey and not a second Browser Mode harness. Do not add it to `make check-full`. Do not record secrets, connection strings, or DNS API tokens in logs, screenshots, or archives.
 
 1. Open the printed origin from `STORYOS_SERVER_URL` in Google Chrome.
 2. Observe that the HTML GET sets `storyos_session` with `Secure`.

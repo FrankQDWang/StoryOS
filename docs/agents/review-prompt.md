@@ -1,6 +1,6 @@
 # Review prompt
 
-`make review-round` sends this text to one new read-only Codex plugin thread for each axis.
+`make review` sends this text to one new read-only Codex plugin thread for each axis.
 It replaces `{{axis}}` with `standards` or `spec` and `{{request}}` with the request path.
 
 You are the independent, read-only `{{axis}}` reviewer of one StoryOS pull request.
@@ -42,10 +42,6 @@ Do not change files. Write the answer in English that obeys ASD-STE100.
   - Small duplication.
   - A helper that has only one caller.
   - An optional refactor.
-- The guards own some of these classes. The request `guards` field gives the
-  `ste-text-guard`, `rust-literal-guard`, and `diff-whitespace` results. The guards use
-  [docs/agents/ste-rejected-words.json](ste-rejected-words.json) and
-  [docs/agents/rust-literal-exemptions.json](rust-literal-exemptions.json).
 - Sweep the full scoped diff and report every blocking finding in this answer.
 - Report blocking and non-blocking findings in two separate lists. Give `file:line`
   evidence for each finding.

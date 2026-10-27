@@ -37,4 +37,4 @@ To find each entry that uses a term, use `grep -rn 'Project Scope' docs/glossary
 
 - Before you add a term, search all the area files. A term has one entry only.
 - Put a new term in the area file that owns its concept. If no area owns it, add a new area file and a row in the table above.
-- Keep the entry format. The text guard reads each `**Term**:` line in this file and in `docs/glossary/`.
+- Keep the entry format.

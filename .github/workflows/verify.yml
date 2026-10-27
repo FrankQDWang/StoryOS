@@ -22,19 +22,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 2
+          # The generated-contract check reads historical baseline commits, so the checkout has the full history.
+          fetch-depth: 0
           persist-credentials: false
-
-      # The generated-contract check reads these historical commits. The checkout has only two commits.
-      - name: Fetch the contract baseline commits
-        run: |
-          git fetch --no-tags --no-recurse-submodules --depth=1 origin \
-            bab4c0ac5ca3da20b01ea1d61783aaba414f493f \
-            8cf569e5e6962a022be510675382b2b7665a26f1 \
-            3468bdaaaa97ef05fd7c6e3f61836d20f1f76496 \
-            6fed2a853f4479de1d6b8c17efe2135c315fc7ca \
-            9a9471187984b6791ed35870fae80c5addeb85ef \
-            f03cebc0d4aa9baf0be131f686234e4907a5580c
 
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
