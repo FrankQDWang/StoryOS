@@ -1,7 +1,7 @@
 //! Reports positional opaque literal arguments that have no `/*param*/` comment.
 //! The guard checks only the added lines of the Rust files that changed after the merge base.
 //! It also reports each `tracing` form in the workspace crates that can record the `Display` or
-//! `Debug` text of a value (ADR 0047).
+//! `Debug` text of a value (ADR 0047). With `--tracing`, it runs only the tracing check (ADR 0070).
 
 mod finder;
 mod tracing_capture;
@@ -23,11 +23,15 @@ struct Exemptions {
 
 fn main() -> ExitCode {
     let arguments = std::env::args().skip(/*n*/ 1).collect::<Vec<_>>();
-    let [base] = arguments.as_slice() else {
-        eprintln!("usage: storyos-literal-guard <base-revision>");
-        return ExitCode::from(INVALID_INPUT);
+    let result = match arguments.as_slice() {
+        [mode] if mode == "--tracing" => tracing_only(),
+        [base] => run(base),
+        _ => {
+            eprintln!("usage: storyos-literal-guard <base-revision> | --tracing");
+            return ExitCode::from(INVALID_INPUT);
+        }
     };
-    match run(base) {
+    match result {
         Ok((0, 0)) => ExitCode::SUCCESS,
         Ok((literals, captures)) => {
             if literals > 0 {
@@ -129,6 +133,14 @@ fn run(base: &str) -> Result<(usize, usize), String> {
         proc_macro2::extra::invalidate_current_thread_spans();
     }
     Ok((count, tracing_captures(root)?))
+}
+
+fn tracing_only() -> Result<(usize, usize), String> {
+    let root = git(Path::new("."), &["rev-parse", "--show-toplevel"])?;
+    Ok((
+        /*literals*/ 0,
+        tracing_captures(Path::new(root.trim_end()))?,
+    ))
 }
 
 fn tracing_captures(root: &Path) -> Result<usize, String> {

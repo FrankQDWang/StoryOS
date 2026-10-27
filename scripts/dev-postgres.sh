@@ -23,6 +23,24 @@ case "${1:-}" in
     fi
     exec python3 "$repository_root/scripts/verification_resources.py" "$@"
     ;;
+  with)
+    # The check tiers use this form. It removes its own container when the command ends.
+    shift
+    if [ ! -x "$storage_bin" ]; then
+      echo "storyos-storage is missing; run python3 scripts/package-release.py first" >&2
+      exit 1
+    fi
+    container="storyos-check-$checkout_id-$$"
+    trap 'docker rm -fv "$container" >/dev/null 2>&1 || true' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    start_postgres "$container"
+    STORYOS_STORAGE_ADMIN_URL="$(postgres_admin_url "$container")" "$storage_bin" >/dev/null
+    set_runtime_password "$container"
+    load_controlled_fixture "$container"
+    eval "$(print_env)"
+    "$@"
+    ;;
   up)
     if [ "${2:-}" != "--interactive" ]; then
       echo "Use scripts/dev-postgres.sh run command...; manual sessions require up --interactive and down." >&2
@@ -49,7 +67,7 @@ case "${1:-}" in
     docker rm -fv "$container" >/dev/null 2>&1 || true
     ;;
   *)
-    echo "usage: scripts/dev-postgres.sh run command... | up | reload | env | down" >&2
+    echo "usage: scripts/dev-postgres.sh run command... | with command... | up | reload | env | down" >&2
     exit 1
     ;;
 esac

@@ -1,4 +1,48 @@
-.DEFAULT_GOAL := contracts
+.DEFAULT_GOAL := check
+
+# The three check tiers of ADR 0070. Each tier runs its steps in one shell, which stops at the first failure,
+# and scripts/check-evidence.sh prints the Check Evidence Line at the end.
+.PHONY: check-fast check check-full
+BASE ?= origin/main
+# These node-contract files need the release package, so make check runs them after it builds the package.
+CHECK_PACKAGE_CONTRACT_FILES = test/node-contract/protocol-http.integration.test.ts test/node-contract/production-build.test.ts
+CHECK_FAST_STEPS = cargo fmt --all -- --check; \
+	cargo clippy --workspace --all-targets --all-features -- -D warnings; \
+	pnpm install --frozen-lockfile; \
+	pnpm --dir apps/web run typecheck; \
+	pnpm --dir apps/web exec vitest run --project node-contract $(foreach file,$(CHECK_PACKAGE_CONTRACT_FILES),--exclude $(file)); \
+	cargo run --quiet --locked -p storyos-contracts -- check; \
+	python3 docs/foundation/verify-versioned-protocol-route-catalog.py; \
+	python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py; \
+	python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py; \
+	cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py; \
+	python3 scripts/verify-transaction-control-receivers.py; \
+	cargo run --quiet --locked -p storyos-literal-guard -- --tracing; \
+	git diff --check "$$(git merge-base $(BASE) HEAD)" --
+CHECK_STEPS = $(CHECK_FAST_STEPS); \
+	cargo test --workspace --all-targets --all-features; \
+	cargo test --workspace --doc --all-features; \
+	pnpm --dir apps/web exec vitest run --project browser-source; \
+	python3 scripts/package-release.py; \
+	pnpm --dir apps/web exec vitest run --project node-contract $(CHECK_PACKAGE_CONTRACT_FILES); \
+	scripts/dev-postgres.sh with sh -exc " \
+		cargo test --workspace --all-features --test project_scope -- --ignored --nocapture; \
+		cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture; \
+		cargo test --workspace --all-features --lib -- --ignored --nocapture; \
+		python3 scripts/check-phases.py"
+# STORYOS_WEB_TYPECHECKED=1 tells the project-scope script that the release package exists.
+CHECK_FULL_STEPS = $(CHECK_STEPS); \
+	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
+
+check-fast:
+	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FAST_STEPS)'
+
+check:
+	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_STEPS)'
+
+check-full:
+	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FULL_STEPS)'
+
 PUBLIC_CHECKS := verify-policy contracts web-typecheck release-package web-foundation web project-scope verify-tracker verify-pr verify-contract-inputs
 ifeq ($(STORYOS_VERIFICATION_RUN),)
 .PHONY: $(PUBLIC_CHECKS)
@@ -9,7 +53,6 @@ endif
 .PHONY: contracts generate-contracts project-scope release-package rust-literal-guard verify verify-local verify-local-steps verify-policy verify-policy-checks verify-policy-guards verify-policy-steps verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
-BASE ?= origin/main
 VERIFY_ARGS ?=
 # The seconds that review-round, wait-verify, and verify-local with a review request wait for the GitHub verify run.
 # The verification input fingerprint reads the environment, so the recipes remove WAIT and give it as an argument.
