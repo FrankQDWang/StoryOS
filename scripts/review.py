@@ -22,6 +22,7 @@ EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tr
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? #(\d+)", re.I)
 # The heading of the verdict links section, an optional blank line, and its own list lines. The text after them stays.
+# The last match is the section: an earlier match can be a quoted heading in the PR text.
 LINKS = re.compile(r"^## Review verdicts[ \t]*\r?\n(?:[ \t]*\r?\n)?(?:- Round [^\n]*(?:\n|\Z))*", re.M)
 TRANSIENT = re.compile(r"\bEOF\b|connection reset|HTTP 50[234]\b|TLS handshake timeout|SSL_ERROR|i/o timeout"
                        r"|proxyconnect|remote end hung up unexpectedly", re.I)
@@ -232,7 +233,7 @@ def link_verdicts(pr, pull):
         head = next((head for _, head, _, _ in axes.values() if head), "unknown")
         section += (f"- Round {number}, head `{head[:12]}`: "
                     + ", ".join(f"{axis} {axes[axis][0]} {axes[axis][2]}" for axis in AXES if axis in axes) + "\n")
-    if match := LINKS.search(body):
+    if match := next(reversed(list(LINKS.finditer(body))), None):
         rest = body[match.end():]
         new = body[:match.start()] + section + ("\n" if rest and not rest.startswith(("\n", "\r\n")) else "") + rest
     else:
