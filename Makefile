@@ -44,7 +44,10 @@ check-full:
 	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FULL_STEPS)'
 
 .PHONY: release-package generate-contracts
+# A fresh checkout has no Web dependencies, so the goal installs them and checks the types first.
 release-package:
+	pnpm install --frozen-lockfile
+	pnpm --dir apps/web run typecheck
 	python3 scripts/package-release.py
 
 generate-contracts:

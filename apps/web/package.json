@@ -5,12 +5,10 @@
   "scripts": {
     "build": "pnpm run typecheck && vite build",
     "dev": "vite",
-    "test:foundation": "make -C ../.. web-foundation",
     "typecheck": "pnpm run typecheck:production && pnpm run typecheck:node && pnpm run typecheck:browser",
     "typecheck:browser": "tsc --project tsconfig.browser.json",
     "typecheck:node": "tsc --project tsconfig.node.json",
-    "typecheck:production": "tsc --project tsconfig.json",
-    "verify:foundation": "pnpm run test:foundation"
+    "typecheck:production": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@tiptap/core": "3.27.3",
