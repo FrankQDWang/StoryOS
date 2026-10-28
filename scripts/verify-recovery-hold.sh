@@ -13,9 +13,6 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
-if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
-  exec python3 scripts/verification.py step recovery-drill -- sh "$repository_root/scripts/verify-recovery-hold.sh" "$@"
-fi
 
 suffix=$$
 network="storyos-recovery-net-$suffix"
@@ -194,7 +191,7 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
-  python3 scripts/verification.py step recovery-seed -- sh "$repository_root/scripts/seed-recovery-acceptance.sh"
+  sh "$repository_root/scripts/seed-recovery-acceptance.sh"
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
 # Both modes retain two single-Operation conditions and three partial-Acceptance histories.
 # A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so

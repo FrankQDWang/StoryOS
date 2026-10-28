@@ -2,9 +2,6 @@
 set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
-if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
-  exec python3 scripts/verification.py step recovery-seed -- sh "$0"
-fi
 before=$(docker exec "$STORYOS_TEST_POSTGRES_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U postgres \
   -c 'SELECT count(*) FROM storyos.proposal_validation_conditions')
 # These scenarios produce the two retained conditions, the applied partial-Acceptance histories,

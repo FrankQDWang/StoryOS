@@ -6,15 +6,13 @@ Put a new coding rule in this file and a new operating rule in `AGENTS.md`. Thes
 
 A uniform Rust style keeps boundaries, call sites, and reviews legible across the workspace.
 
-## Guard-owned rules
+## Format and lint
 
-`rustfmt.toml` and the Clippy lints in `Cargo.toml` own format, inline `format!` arguments, collapsed `if` statements, and method references. The guards in the [Daily loop](docs/agents/verification.md#daily-loop) own positional-literal comments and the size advisory.
+`rustfmt.toml` and the Clippy lints in `Cargo.toml` own format, inline `format!` arguments, collapsed `if` statements, and method references.
 
 ## Call sites
 
 - Give each call site a self-documenting shape, not `foo(false)` or `bar(None)`. Prefer an enum, a newtype, a method with a clear name, or a similar idiomatic shape to a `bool` or an ambiguous `Option` parameter.
-- When the API must keep a positional literal, put an exact `/*param_name*/` comment before an opaque `None`, boolean, or numeric argument. The name in the comment is the parameter name in the callee signature.
-- A sole non-self argument needs no comment when the method and parameter names are the same, for example `.enabled(false)` for `fn enabled(&self, enabled: bool)`. The [exemption list](docs/agents/rust-literal-exemptions.json) holds these methods for the literal guard.
 - Add a comment to a string or char literal only when it adds real clarity.
 
 ## API design
@@ -84,6 +82,8 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 
 ## Change size
 
-- Keep a change at or below 800 changed lines, unless the change is mechanical. Keep a complex logic change below 500 changed lines.
-- `make verify-status` shows a change above these limits in its `changeSize` advisory.
+- Count only the added lines. Deleted lines and mechanical changes, for example a generated artifact, do not count.
+- Keep a change at or below 800 added lines. Keep a complex logic change at or below 500 added lines.
+- A ticket that must add more than 800 lines declares the count and the reason in its body. The author approves it with the breakdown.
+- The reviewer judges the size. No script reports it.
 - Base the staging suggestion on the actual diff, dependencies, and affected call sites.

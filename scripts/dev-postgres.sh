@@ -16,12 +16,23 @@ print_env() {
 }
 
 case "${1:-}" in
-  run)
+  run | with)
+    # The check tiers use the with form. Each run uses a new container and removes it when the command ends.
     shift
-    if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
-      exec python3 "$repository_root/scripts/verification.py" step database-command -- "$0" run "$@"
+    if [ ! -x "$storage_bin" ]; then
+      echo "storyos-storage is missing; run python3 scripts/package-release.py first" >&2
+      exit 1
     fi
-    exec python3 "$repository_root/scripts/verification_resources.py" "$@"
+    container="storyos-check-$checkout_id-$$"
+    trap 'docker rm -fv "$container" >/dev/null 2>&1 || true' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    start_postgres "$container"
+    STORYOS_STORAGE_ADMIN_URL="$(postgres_admin_url "$container")" "$storage_bin" >/dev/null
+    set_runtime_password "$container"
+    load_controlled_fixture "$container"
+    eval "$(print_env)"
+    "$@"
     ;;
   up)
     if [ "${2:-}" != "--interactive" ]; then
@@ -49,7 +60,7 @@ case "${1:-}" in
     docker rm -fv "$container" >/dev/null 2>&1 || true
     ;;
   *)
-    echo "usage: scripts/dev-postgres.sh run command... | up | reload | env | down" >&2
+    echo "usage: scripts/dev-postgres.sh run|with command... | up | reload | env | down" >&2
     exit 1
     ;;
 esac

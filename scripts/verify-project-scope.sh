@@ -3,13 +3,6 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
-if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
-  exec python3 scripts/verification.py step project-scope -- sh "$repository_root/scripts/verify-project-scope.sh" "$@"
-fi
-
-timed_stage() {
-  PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/verification.py" step "$@"
-}
 
 # Accept only ripgrep status 0 (match) and 1 (no match); other statuses stop the script.
 search_source() {
@@ -110,13 +103,9 @@ record_google_chrome_version() {
 }
 
 verify_web_migration_guards
-python3 scripts/verification_shared.py plan >/dev/null
-if [ "${1:-}" = "--check-inputs" ]; then
-  exit 0
-fi
 record_google_chrome_version
 if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
-  make release-package
+  python3 scripts/package-release.py
 fi
 
 . "$repository_root/scripts/lib/exact-dist.sh"
@@ -509,15 +498,7 @@ STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
 
 prepare_server_database "$container"
 prove_bound_request_path_activation
-echo "Running PostgreSQL Application and RLS tests"
-# `make contracts` builds these targets with `--workspace --all-features`. The same
-# selection reuses those artifacts. A package-only selection unifies dependency features
-# differently and recompiles storyos-adapter-postgres for each target. The `--lib` step
-# runs every ignored lib test in the workspace; today only storyos-adapter-postgres has them.
-timed_stage postgres-scope -- cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
-timed_stage postgres-challenge -- cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
-timed_stage postgres-library -- cargo test --workspace --all-features --lib -- --ignored --nocapture
-python3 scripts/verification_shared.py run
+# make check runs the ignored PostgreSQL tests and the shared Web test phases one time before this script.
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
@@ -533,7 +514,7 @@ for path in apps/web/test/browser-exact-dist/*.test.ts; do
   exact_dist_ai_disabled_journey "$journey" || journeys="$journeys $journey"
 done
 # shellcheck disable=SC2086
-timed_stage exact-dist -- sh -c '
+sh -c '
   ai_disabled=$1
   shift
   env -u STORYOS_STAGE1_AUTHORITY_ORACLE STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
@@ -542,6 +523,6 @@ timed_stage exact-dist -- sh -c '
 ' exact-dist "$exact_dist_ai_disabled_journeys" $journeys
 stop_exact_dist_server
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
-STORYOS_RECOVERY_DRILL=fixture-only timed_stage recovery-fixture -- "$repository_root/scripts/verify-recovery-hold.sh"
+STORYOS_RECOVERY_DRILL=fixture-only "$repository_root/scripts/verify-recovery-hold.sh"
 echo "Running mixed empty and populated isolated Recovery Copy restore"
-STORYOS_RECOVERY_DRILL=mixed timed_stage recovery-mixed -- "$repository_root/scripts/verify-recovery-hold.sh"
+STORYOS_RECOVERY_DRILL=mixed "$repository_root/scripts/verify-recovery-hold.sh"

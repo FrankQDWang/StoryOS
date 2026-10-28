@@ -14,30 +14,12 @@ const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const teardown = fileURLToPath(new URL("../support/required-global-teardown.ts", import.meta.url));
 const require = createRequire(import.meta.url);
 const vitest = join(dirname(require.resolve("vitest/package.json")), "vitest.mjs");
-const managedProbe = `
-import json, sys
-from pathlib import Path
-sys.path.insert(0, str(Path(sys.argv[1]) / 'scripts'))
-from verification_tests import VerificationCommandTests, COMMAND
-case = VerificationCommandTests()
-case.setUp()
-try:
-    result = case.cli('run', '--', sys.executable, str(COMMAND), 'step',
-                      'required-oracle', '--', *sys.argv[2:])
-    report = case.report()
-    print(json.dumps({'exit': result.returncode, 'status': report['status'],
-                      'steps': [{'stage': step['stage'], 'status': step['status'],
-                                 'exit': step['exit_code']} for step in report['steps']],
-                      'oracle_error': 'STORYOS_REQUIRED_ORACLE_FAILED' in result.stderr}))
-finally:
-    case.doCleanups()
-`;
 
 test.each([
   { name: "required teardown fails", oracleFails: true, testFails: false, exit: 1 },
   { name: "required teardown passes", oracleFails: false, testFails: false, exit: 0 },
   { name: "ordinary test fails", oracleFails: false, testFails: true, exit: 1 },
-])("managed verification reports $name", async ({ oracleFails, testFails, exit }) => {
+])("vitest reports $name", async ({ oracleFails, testFails, exit }) => {
   const directory = await mkdtemp(join(tmpdir(), "storyos-required-teardown-"));
   try {
     await writeFile(join(directory, "vitest.config.mjs"),
@@ -49,13 +31,12 @@ test.each([
       "export default function setup() { return requiredGlobalTeardown(async () => {\n" +
       (oracleFails ? "throw new Error('STORYOS_REQUIRED_ORACLE_FAILED');\n" : "") +
       "}); }\n");
-    const result = await execute("python3", ["-c", managedProbe, repositoryRoot, process.execPath,
-      vitest, "run", "--root", directory, "--config", join(directory, "vitest.config.mjs")],
-    { cwd: repositoryRoot, timeout: 30_000 });
-    const status = exit === 0 ? "passed" : "failed";
-    assert.deepEqual(JSON.parse(result.stdout), {
-      exit, status, steps: [{ stage: "required-oracle", status, exit }], oracle_error: oracleFails,
-    });
+    // The check tiers stop at the first command that exits with a status other than 0.
+    const result = await execute(process.execPath, [vitest, "run", "--root", directory, "--config",
+      join(directory, "vitest.config.mjs")], { cwd: repositoryRoot, timeout: 30_000 })
+      .then(({ stderr }) => ({ code: 0, stderr }), (error: { code: number; stderr: string }) => error);
+    assert.deepEqual({ exit: result.code, oracle_error: result.stderr.includes("STORYOS_REQUIRED_ORACLE_FAILED") },
+      { exit, oracle_error: oracleFails });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -1,5 +1,4 @@
-# Source after setting repository_root. verify-project-scope.sh and verify-journey.sh
-# share this exact-dist procedure, so the two cannot diverge.
+# Source after setting repository_root. verify-project-scope.sh uses this exact-dist procedure.
 
 . "$repository_root/scripts/lib/controlled-postgres.sh"
 
