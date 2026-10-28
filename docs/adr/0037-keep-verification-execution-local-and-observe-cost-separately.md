@@ -1,4 +1,10 @@
+---
+status: superseded by ADR 0070
+---
+
 # Keep verification execution local and observe cost separately
+
+> Superseded on 2026-10-28 by [ADR 0070](0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md): one check command in three tiers and one Check Evidence Line replace the verification executors, the input fingerprints, the complete-run admission, and the observation stack.
 
 Keep Python and Make as the verification executors. First repair daily selection,
 complete-run admission, and recovery. Evaluate moon or cargo-nextest only after

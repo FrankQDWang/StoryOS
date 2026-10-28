@@ -1533,7 +1533,7 @@ identity/lifecycle/settlement, Core effects, editor recovery, versioned wire
 shapes, or deterministic gate selection owned by the linked contracts above. Those owners must close their assigned contracts and
 deterministic negative evidence through the map's approved dependency graph
 before the applicable implementation handoff. Independent dependency-ready
-owners follow the parallel [Issue tracker](../agents/issue-tracker.md) process.
+owners follow the parallel [Delivery](../agents/delivery.md) process.
 
 # Source Index
 
