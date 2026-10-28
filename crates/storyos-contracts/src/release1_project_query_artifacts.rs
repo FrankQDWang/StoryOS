@@ -29,7 +29,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
         &GET_PROJECT,
         &["server_derived_project_scope", "project_visibility"],
-        OperationCatalog::new("project:read", Owner::Release, Binding::PROJECT_QUERY),
+        OperationCatalog::new(
+            "project:read",
+            Owner::Release,
+            Binding::CURRENT_PROJECT_QUERY,
+        ),
     )],
     schemas: || {
         vec![

@@ -170,6 +170,7 @@ pub(super) enum ErrorProfile {
     AsyncCommand,
     SessionControl,
     QueryCanonical,
+    QueryCurrent,
     QueryProjection,
     QueryProtocol,
     Challenge,
@@ -194,6 +195,12 @@ impl Binding {
         Self::query(EditorRule::Unbound, ErrorProfile::QueryCanonical);
     pub(super) const CANONICAL_QUERY: Self =
         Self::query(EditorRule::Optional, ErrorProfile::QueryCanonical);
+    /// A path-only read of the current Project with no cursor, Snapshot binding, or body.
+    pub(super) const CURRENT_PROJECT_QUERY: Self =
+        Self::query(EditorRule::Unbound, ErrorProfile::QueryCurrent);
+    /// A path-only read of the current Chapter with no cursor, Snapshot binding, or body.
+    pub(super) const CURRENT_CHAPTER_QUERY: Self =
+        Self::query(EditorRule::Optional, ErrorProfile::QueryCurrent);
     pub(super) const PROJECTION_QUERY: Self =
         Self::query(EditorRule::Optional, ErrorProfile::QueryProjection);
     pub(super) const CHALLENGE: Self = Self {

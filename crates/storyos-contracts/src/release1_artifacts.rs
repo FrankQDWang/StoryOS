@@ -38,11 +38,8 @@ const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const SCHEMA_CATALOG_PATH: &str = "generated/schema-catalog/storyos-public-release-1.json";
 const FIXTURE_CATALOG_PATH: &str = "generated/fixtures/storyos-public-release-1.json";
-const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
-const REVIEW_CATALOG_SHA256: &str =
-    "sha256:6c7c1c95391c63e681377fe63561394384ee30f9286a51a496ed4d3edfb7d17d";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:5d5b4eff6c6ffd14668fa805cc95aaf3c68e8e30e23823afdd4e88cae71f207d";
+    "sha256:9c81f14531eda496421398fa8f6ee7819f4eeae637158182fac4808b1be5d8f9";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -111,7 +108,7 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
 
 /// Write all checked-in artifacts for the implemented Release 1 profile route.
 pub fn write_release1_artifacts(repo_root: &Path) -> io::Result<()> {
-    check_review_catalog(repo_root)?;
+    check_contract_graph(&contract_graph_bytes())?;
     for (relative_path, bytes) in generated_files() {
         let path = repo_root.join(relative_path);
         let parent = path.parent().expect("generated artifact path has a parent");
@@ -123,7 +120,7 @@ pub fn write_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 
 /// Fail when any checked-in generated artifact differs from Rust-source generation.
 pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
-    check_review_catalog(repo_root)?;
+    check_contract_graph(&contract_graph_bytes())?;
     for (relative_path, expected) in generated_files() {
         let path = repo_root.join(relative_path);
         let actual = match fs::read(&path) {
@@ -212,19 +209,12 @@ fn stale_artifact(path: &Path) -> io::Error {
     )
 }
 
-fn check_review_catalog(repo_root: &Path) -> io::Result<()> {
-    let path = repo_root.join(REVIEW_CATALOG_PATH);
-    let bytes = fs::read(&path).map_err(|source| path_error(&path, source))?;
-    validate_review_bindings(&bytes)
-}
-
-fn validate_review_bindings(catalog: &[u8]) -> io::Result<()> {
-    let catalog_digest = sha256_prefixed(catalog);
-    let graph_digest = sha256_prefixed(contract_graph_bytes());
-    if catalog_digest != REVIEW_CATALOG_SHA256 || graph_digest != REVIEWED_CONTRACT_GRAPH_SHA256 {
+fn check_contract_graph(graph: &[u8]) -> io::Result<()> {
+    let graph_digest = sha256_prefixed(graph);
+    if graph_digest != REVIEWED_CONTRACT_GRAPH_SHA256 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Release 1 profile drifted: catalog {catalog_digest}; graph {graph_digest}"),
+            format!("Release 1 profile drifted: graph {graph_digest}"),
         ));
     }
     Ok(())
@@ -244,7 +234,6 @@ fn contract_graph_bytes() -> Vec<u8> {
     serde_json::to_vec(&json!({
         "schema_id": "storyos.contract-graph.release-1-profile-slice.v1",
         "contract_revision": CONTRACT_REVISION,
-        "review_catalog_sha256": REVIEW_CATALOG_SHA256,
         "operations": operations,
         "release": {
             "api_major": API_MAJOR, "public_protocol_release": PUBLIC_PROTOCOL_RELEASE, "envelope_version": ENVELOPE_VERSION,

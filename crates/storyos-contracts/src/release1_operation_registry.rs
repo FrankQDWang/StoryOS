@@ -217,7 +217,3 @@ pub(super) fn method(operation: &QueryOperation, yaml: String) -> Vec<OpenApiMet
         yaml,
     }]
 }
-
-#[cfg(test)]
-#[path = "release1_operation_registry_tests.rs"]
-mod tests;

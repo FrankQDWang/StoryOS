@@ -69,12 +69,13 @@ impl Owner {
 }
 
 impl ErrorProfile {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::CommandSync,
         Self::EditorCommand,
         Self::AsyncCommand,
         Self::SessionControl,
         Self::QueryCanonical,
+        Self::QueryCurrent,
         Self::QueryProjection,
         Self::QueryProtocol,
         Self::Challenge,
@@ -175,6 +176,16 @@ impl ErrorProfile {
                 "rate_limited",
                 "upgrade_required",
                 "limit_exceeded",
+            ],
+            Self::QueryCurrent => &[
+                "invalid_request",
+                "invalid_session",
+                "operation_denied",
+                "resource_not_found",
+                "method_not_allowed",
+                "snapshot_not_ready",
+                "projection_not_ready",
+                "rate_limited",
             ],
             Self::QueryProjection => &[
                 "invalid_request",

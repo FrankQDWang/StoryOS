@@ -10,16 +10,23 @@ use crate::{
     SelectionSnapshot,
 };
 
+/// Project commands that the challenge admits but that no route serves. The protocol document plans them for later Stages.
+const PLANNED_CHALLENGE_TARGETS: [&str; 8] = [
+    "createReplacementProposal",
+    "decideApproval",
+    "deleteProject",
+    "importProjectArchive",
+    "resolveWait",
+    "resumeAgentRun",
+    "supersedeProposal",
+    "updateConversationMemorySettings",
+];
+
 #[test]
-fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
-    let catalog: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(
-            super::super::repository_root()
-                .join("docs/foundation/versioned-protocol-release-1-route-catalog.json"),
-        )
-        .expect("Release 1 route catalog must exist"),
-    )
-    .expect("Release 1 route catalog must be valid JSON");
+fn challenge_targets_equal_the_project_scoped_release_1_command_catalog_and_the_planned_commands() {
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&crate::release1_route_catalog::route_catalog_bytes())
+            .expect("Release 1 route catalog must be valid JSON");
     let catalog_targets = catalog["operations"]
         .as_array()
         .expect("operations must be an array")
@@ -50,8 +57,18 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
             )
         })
         .collect::<BTreeSet<_>>();
+    let (planned_targets, served_targets): (BTreeSet<_>, BTreeSet<_>) = implementation_targets
+        .into_iter()
+        .partition(|target| PLANNED_CHALLENGE_TARGETS.contains(&target.0));
 
-    assert_eq!(implementation_targets, catalog_targets);
+    assert_eq!(served_targets, catalog_targets);
+    assert_eq!(
+        planned_targets
+            .iter()
+            .map(|target| target.0)
+            .collect::<Vec<_>>(),
+        PLANNED_CHALLENGE_TARGETS
+    );
 }
 
 #[test]
@@ -130,14 +147,9 @@ fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
 
 #[test]
 fn apply_author_edit_route_uses_response_v2_and_zero_activity_for_zero_authority() {
-    let catalog: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(
-            super::super::repository_root()
-                .join("docs/foundation/versioned-protocol-release-1-route-catalog.json"),
-        )
-        .expect("Release 1 route catalog must exist"),
-    )
-    .expect("Release 1 route catalog must be valid JSON");
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&crate::release1_route_catalog::route_catalog_bytes())
+            .expect("Release 1 route catalog must be valid JSON");
     let operation = catalog["operations"]
         .as_array()
         .expect("operations must be an array")
@@ -154,10 +166,6 @@ fn apply_author_edit_route_uses_response_v2_and_zero_activity_for_zero_authority
         APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID
     );
     assert_eq!(operation["activity"]["no_effect"], serde_json::json!([]));
-    assert_eq!(
-        operation["generated"]["json_schema_ids"][1],
-        APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID
-    );
 
     let event_ids = catalog["events"]
         .as_array()

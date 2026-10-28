@@ -33,7 +33,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "canonical_snapshot",
         ],
-        OperationCatalog::new("chapter:read", Owner::Release, Binding::CANONICAL_QUERY),
+        OperationCatalog::new(
+            "chapter:read",
+            Owner::Release,
+            Binding::CURRENT_CHAPTER_QUERY,
+        ),
     )],
     schemas: || {
         vec![
