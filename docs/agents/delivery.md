@@ -13,7 +13,7 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 - The coordinator makes one integration branch for each specification from an exact `main` commit. During the specification, the coordinator can freeze `main`.
 - Each ticket has its own branch and worktree from the current tip of the integration branch. Two executors never change the same files at the same time.
-- The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, and it carries the evidence of [Check Evidence Line](#check-evidence-line) and [Codex review](#codex-review).
+- The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, so that `make review` finds the ticket. It carries the evidence of [Check Evidence Line](#check-evidence-line) and [Codex review](#codex-review).
 - After the last ticket merges, the coordinator opens one aggregate pull request from the integration branch to `main`. Its body has a `Closes #<issue>` line for the specification and for each delivered ticket. It has no closing reference for an unmet product stage gate or for another specification.
 - Implementation commits go to `main` only through the aggregate pull request. Each merge is an ordinary merge commit, unless the specification requires another method.
 - GitHub closes linked issues only for a pull request into the default branch. Thus a ticket issue stays open until the aggregate pull request merges.
@@ -163,7 +163,7 @@ Replace each `<...>` field. Write `none` for an empty field. Write the comment i
 - Contract: the current issue body and the current parent body
 - Baseline: `main` at `<full SHA>`, integration base `<full SHA>` on `<integration branch>`
 - Dependencies: <each blocker, its merge commit, and the ancestor check>
-- Delivery: a pull request into `<integration branch>` that closes #<issue>. The coordinator merges it.
+- Delivery: a pull request into `<integration branch>` for #<issue>. The coordinator merges it. The aggregate pull request closes the issue.
 ```
 
 ### Resolution
