@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, QueryOperation};
 use crate::release1_reject_proposal_operations::{AuthorUndoDisposition, BoundedAuthorNote};
 
 pub const WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID: &str =
@@ -13,7 +13,7 @@ pub const WITHDRAW_PROPOSAL_DIGEST_PROFILE: &str = "storyos.command.withdrawProp
 
 pub(super) const WITHDRAW_PROPOSAL: QueryOperation = QueryOperation {
     operation_id: "withdrawProposal",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
     request_schema: WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -41,7 +41,7 @@ pub(super) const WITHDRAW_PROPOSAL: QueryOperation = QueryOperation {
 };
 
 pub const WITHDRAW_PROPOSAL_PATH: &str = WITHDRAW_PROPOSAL.path;
-pub const WITHDRAW_PROPOSAL_METHOD: &str = WITHDRAW_PROPOSAL.method;
+pub const WITHDRAW_PROPOSAL_METHOD: &str = WITHDRAW_PROPOSAL.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

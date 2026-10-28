@@ -1,5 +1,6 @@
 //! Writes the TypeScript client function and declaration of each operation from its registry entry.
 
+use crate::release1::HttpMethod;
 use crate::release1_operation_registry::{ClientOverride, OperationKind, RegisteredOperation};
 
 /// The request digest function of a command, then the operation function, each after an empty line.
@@ -173,7 +174,7 @@ impl Shape {
         let mut shape = Self {
             id,
             kind,
-            method: operation.method,
+            method: operation.method.as_str(),
             path: operation.path,
             response_type: format!("{type_prefix}Response"),
             type_prefix,
@@ -185,7 +186,7 @@ impl Shape {
                 .collect(),
             has_body: match kind {
                 OperationKind::Command | OperationKind::Challenge => true,
-                OperationKind::Query => operation.method == "POST",
+                OperationKind::Query => operation.method == HttpMethod::Post,
                 OperationKind::Stream => false,
             },
             digest: (kind == OperationKind::Command).then(|| "canonicalJson(request)".to_owned()),

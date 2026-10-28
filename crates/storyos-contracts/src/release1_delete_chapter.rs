@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const DELETE_CHAPTER_REQUEST_SCHEMA_ID: &str = "storyos.command.delete-chapter.request.v1";
@@ -11,7 +11,7 @@ pub const DELETE_CHAPTER_DIGEST_PROFILE: &str = "storyos.command.deleteChapter.j
 
 pub(super) const DELETE_CHAPTER: QueryOperation = QueryOperation {
     operation_id: "deleteChapter",
-    method: "DELETE",
+    method: HttpMethod::Delete,
     path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
     request_schema: DELETE_CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: DELETE_CHAPTER_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const DELETE_CHAPTER: QueryOperation = QueryOperation {
 };
 
 pub const DELETE_CHAPTER_PATH: &str = DELETE_CHAPTER.path;
-pub const DELETE_CHAPTER_METHOD: &str = DELETE_CHAPTER.method;
+pub const DELETE_CHAPTER_METHOD: &str = DELETE_CHAPTER.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

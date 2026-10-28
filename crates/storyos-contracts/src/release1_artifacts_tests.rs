@@ -3,6 +3,7 @@ use super::{
     fixture_corpus_bytes, release1_protocol_profile,
 };
 use crate::digest::sha256_prefixed;
+use crate::release1::HttpMethod;
 use crate::release1_chapter_query_artifacts::{
     CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH,
 };
@@ -475,7 +476,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
                 .iter()
                 .flat_map(move |registered| {
                     let operation = registered.operation;
-                    let request = (operation.method != "GET").then_some(operation.request_schema);
+                    let request =
+                        (operation.method != HttpMethod::Get).then_some(operation.request_schema);
                     request
                         .into_iter()
                         .chain([operation.response_schema])
@@ -739,7 +741,7 @@ fn every_registered_operation_matches_its_generated_wire() {
                 .unwrap_or_else(|| panic!("OpenAPI must contain the path of {id}"));
             let method_key = format!(
                 "    {}:\n      operationId: {id}\n",
-                operation.method.to_ascii_lowercase()
+                operation.method.as_str().to_ascii_lowercase()
             );
             let path_item = &openapi[path_start + path_key.len()..];
             let path_item = &path_item[..path_item.find("\n  /").unwrap_or(path_item.len())];
@@ -762,7 +764,7 @@ fn every_registered_operation_matches_its_generated_wire() {
                     .collect::<Vec<_>>()
             };
             let request_references = references(&method_lines[..responses_at]);
-            if operation.method == "GET" {
+            if operation.method == HttpMethod::Get {
                 assert_eq!(request_references, Vec::<String>::new(), "{id}");
             } else {
                 assert_eq!(

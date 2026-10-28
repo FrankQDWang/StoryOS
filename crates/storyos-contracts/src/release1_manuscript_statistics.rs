@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const GET_STATISTICS_REQUEST_SCHEMA_ID: &str = "storyos.query.statistics.request.v1";
@@ -10,7 +10,7 @@ pub const GET_STATISTICS_RESPONSE_SCHEMA_ID: &str = "storyos.query.statistics.re
 
 pub(super) const GET_STATISTICS: QueryOperation = QueryOperation {
     operation_id: "getStatistics",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/manuscript/statistics",
     request_schema: GET_STATISTICS_REQUEST_SCHEMA_ID,
     response_schema: GET_STATISTICS_RESPONSE_SCHEMA_ID,
@@ -36,7 +36,7 @@ pub(super) const GET_STATISTICS: QueryOperation = QueryOperation {
 };
 
 pub const GET_STATISTICS_PATH: &str = GET_STATISTICS.path;
-pub const GET_STATISTICS_METHOD: &str = GET_STATISTICS.method;
+pub const GET_STATISTICS_METHOD: &str = GET_STATISTICS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]

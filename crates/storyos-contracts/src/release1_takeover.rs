@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{EditorWriterProjection, ProjectScope, QueryOperation};
+use crate::release1::{EditorWriterProjection, HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID: &str =
@@ -12,7 +12,7 @@ pub const TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const TAKE_OVER_PROJECT_WRITER: QueryOperation = QueryOperation {
     operation_id: "takeOverProjectWriter",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
     request_schema: TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
     response_schema: TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
@@ -40,7 +40,7 @@ pub(super) const TAKE_OVER_PROJECT_WRITER: QueryOperation = QueryOperation {
 };
 
 pub const TAKE_OVER_PROJECT_WRITER_PATH: &str = TAKE_OVER_PROJECT_WRITER.path;
-pub const TAKE_OVER_PROJECT_WRITER_METHOD: &str = TAKE_OVER_PROJECT_WRITER.method;
+pub const TAKE_OVER_PROJECT_WRITER_METHOD: &str = TAKE_OVER_PROJECT_WRITER.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

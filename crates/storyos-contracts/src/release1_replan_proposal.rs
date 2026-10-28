@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, QueryOperation};
 use crate::release1_reject_proposal_operations::AuthorUndoDisposition;
 
 pub const REPLAN_PROPOSAL_REQUEST_SCHEMA_ID: &str = "storyos.command.replan-proposal.request.v1";
@@ -11,7 +11,7 @@ pub const REPLAN_PROPOSAL_DIGEST_PROFILE: &str = "storyos.command.replanProposal
 
 pub(super) const REPLAN_PROPOSAL: QueryOperation = QueryOperation {
     operation_id: "replanProposal",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans",
     request_schema: REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: REPLAN_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const REPLAN_PROPOSAL: QueryOperation = QueryOperation {
 };
 
 pub const REPLAN_PROPOSAL_PATH: &str = REPLAN_PROPOSAL.path;
-pub const REPLAN_PROPOSAL_METHOD: &str = REPLAN_PROPOSAL.method;
+pub const REPLAN_PROPOSAL_METHOD: &str = REPLAN_PROPOSAL.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

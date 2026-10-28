@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const ARCHIVE_PROJECT_REQUEST_SCHEMA_ID: &str = "storyos.command.archive-project.request.v1";
@@ -11,7 +11,7 @@ pub const ARCHIVE_PROJECT_DIGEST_PROFILE: &str = "storyos.command.archiveProject
 
 pub(super) const ARCHIVE_PROJECT: QueryOperation = QueryOperation {
     operation_id: "archiveProject",
-    method: "PUT",
+    method: HttpMethod::Put,
     path: "/api/v1/projects/{project_id}/archival",
     request_schema: ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
     response_schema: ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const ARCHIVE_PROJECT: QueryOperation = QueryOperation {
 };
 
 pub const ARCHIVE_PROJECT_PATH: &str = ARCHIVE_PROJECT.path;
-pub const ARCHIVE_PROJECT_METHOD: &str = ARCHIVE_PROJECT.method;
+pub const ARCHIVE_PROJECT_METHOD: &str = ARCHIVE_PROJECT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

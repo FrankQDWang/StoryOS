@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_readable_export::ExportAcknowledgement;
 pub use crate::release1_selection_reference::{
     SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
@@ -17,7 +17,7 @@ pub const GET_AGENT_RUN_RESPONSE_SCHEMA_ID: &str = "storyos.query.agent-run.resp
 
 pub(super) const CREATE_AGENT_RUN: QueryOperation = QueryOperation {
     operation_id: "createAgentRun",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/agent-runs",
     request_schema: CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -45,7 +45,7 @@ pub(super) const CREATE_AGENT_RUN: QueryOperation = QueryOperation {
 
 pub(super) const GET_AGENT_RUN: QueryOperation = QueryOperation {
     operation_id: "getAgentRun",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/agent-runs/{run_id}",
     request_schema: GET_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -71,9 +71,9 @@ pub(super) const GET_AGENT_RUN: QueryOperation = QueryOperation {
 };
 
 pub const CREATE_AGENT_RUN_PATH: &str = CREATE_AGENT_RUN.path;
-pub const CREATE_AGENT_RUN_METHOD: &str = CREATE_AGENT_RUN.method;
+pub const CREATE_AGENT_RUN_METHOD: &str = CREATE_AGENT_RUN.method.as_str();
 pub const GET_AGENT_RUN_PATH: &str = GET_AGENT_RUN.path;
-pub const GET_AGENT_RUN_METHOD: &str = GET_AGENT_RUN.method;
+pub const GET_AGENT_RUN_METHOD: &str = GET_AGENT_RUN.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

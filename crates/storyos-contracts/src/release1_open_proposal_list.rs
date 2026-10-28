@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 
 pub const LIST_CHAPTER_OPEN_PROPOSALS_REQUEST_SCHEMA_ID: &str =
     "storyos.query.chapter-open-proposals.request.v1";
@@ -13,7 +13,7 @@ pub const OPEN_PROPOSAL_LIST_MAX_ENTRIES: usize = 64;
 
 pub(super) const LIST_CHAPTER_OPEN_PROPOSALS: QueryOperation = QueryOperation {
     operation_id: "listChapterOpenProposals",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/chapters/{chapter_id}/open-proposals",
     request_schema: LIST_CHAPTER_OPEN_PROPOSALS_REQUEST_SCHEMA_ID,
     response_schema: LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const LIST_CHAPTER_OPEN_PROPOSALS: QueryOperation = QueryOperation {
 };
 
 pub const LIST_CHAPTER_OPEN_PROPOSALS_PATH: &str = LIST_CHAPTER_OPEN_PROPOSALS.path;
-pub const LIST_CHAPTER_OPEN_PROPOSALS_METHOD: &str = LIST_CHAPTER_OPEN_PROPOSALS.method;
+pub const LIST_CHAPTER_OPEN_PROPOSALS_METHOD: &str = LIST_CHAPTER_OPEN_PROPOSALS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

@@ -1,4 +1,4 @@
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ pub const GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const GET_EXPORT_OPERATION: QueryOperation = QueryOperation {
     operation_id: "getExportOperation",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/exports/{export_id}",
     request_schema: GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
     response_schema: GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
@@ -37,7 +37,7 @@ pub(super) const GET_EXPORT_OPERATION: QueryOperation = QueryOperation {
 };
 
 pub const GET_EXPORT_OPERATION_PATH: &str = GET_EXPORT_OPERATION.path;
-pub const GET_EXPORT_OPERATION_METHOD: &str = GET_EXPORT_OPERATION.method;
+pub const GET_EXPORT_OPERATION_METHOD: &str = GET_EXPORT_OPERATION.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]

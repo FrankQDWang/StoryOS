@@ -253,7 +253,7 @@ fn operation_graph(
     preconditions: &[&str],
 ) -> Value {
     json!({
-        "operation_id": operation.operation_id, "kind": kind.as_str(), "method": operation.method,
+        "operation_id": operation.operation_id, "kind": kind.as_str(), "method": operation.method.as_str(),
         "path": operation.path, "request_schema": operation.request_schema,
         "response_schema": operation.response_schema, "preconditions": preconditions,
         "http_statuses": operation.responses.iter().map(|(status, _)| status).collect::<Vec<_>>(),

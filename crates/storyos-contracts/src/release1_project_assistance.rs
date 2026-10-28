@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID: &str =
@@ -18,7 +18,7 @@ pub const UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE: &str =
 
 pub(super) const GET_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
     operation_id: "getProjectAssistance",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/assistance",
     request_schema: GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
     response_schema: GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
@@ -45,7 +45,7 @@ pub(super) const GET_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
 
 pub(super) const UPDATE_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
     operation_id: "updateProjectAssistance",
-    method: "PUT",
+    method: HttpMethod::Put,
     path: "/api/v1/projects/{project_id}/assistance",
     request_schema: UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
     response_schema: UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
@@ -73,9 +73,9 @@ pub(super) const UPDATE_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
 };
 
 pub const GET_PROJECT_ASSISTANCE_PATH: &str = GET_PROJECT_ASSISTANCE.path;
-pub const GET_PROJECT_ASSISTANCE_METHOD: &str = GET_PROJECT_ASSISTANCE.method;
+pub const GET_PROJECT_ASSISTANCE_METHOD: &str = GET_PROJECT_ASSISTANCE.method.as_str();
 pub const UPDATE_PROJECT_ASSISTANCE_PATH: &str = UPDATE_PROJECT_ASSISTANCE.path;
-pub const UPDATE_PROJECT_ASSISTANCE_METHOD: &str = UPDATE_PROJECT_ASSISTANCE.method;
+pub const UPDATE_PROJECT_ASSISTANCE_METHOD: &str = UPDATE_PROJECT_ASSISTANCE.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]

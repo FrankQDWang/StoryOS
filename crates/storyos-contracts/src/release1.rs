@@ -51,9 +51,31 @@ pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.
 pub(super) const INVALID_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.invalid.v1";
 pub(super) const BOUNDARY_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.boundary.v1";
 
+/// The closed set of HTTP methods that a Release 1 operation can use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl HttpMethod {
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+        }
+    }
+}
+
 pub(super) struct QueryOperation {
     pub operation_id: &'static str,
-    pub method: &'static str,
+    pub method: HttpMethod,
     pub path: &'static str,
     pub request_schema: &'static str,
     pub response_schema: &'static str,
@@ -63,7 +85,7 @@ pub(super) struct QueryOperation {
 
 pub(super) const GET_PROTOCOL_PROFILE: QueryOperation = QueryOperation {
     operation_id: "getProtocolProfile",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/protocol",
     request_schema: PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
     response_schema: PROTOCOL_PROFILE_SCHEMA_ID,
@@ -79,7 +101,7 @@ pub(super) const GET_PROTOCOL_PROFILE: QueryOperation = QueryOperation {
 
 pub(super) const GET_PROJECT: QueryOperation = QueryOperation {
     operation_id: "getProject",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}",
     request_schema: PROJECT_REQUEST_SCHEMA_ID,
     response_schema: PROJECT_RESPONSE_SCHEMA_ID,
@@ -102,7 +124,7 @@ pub(super) const GET_PROJECT: QueryOperation = QueryOperation {
 
 pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
     operation_id: "getChapter",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
     request_schema: CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: CHAPTER_RESPONSE_SCHEMA_ID,
@@ -126,7 +148,7 @@ pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
 
 pub(super) const CREATE_PROJECT_COMMAND_CHALLENGE: QueryOperation = QueryOperation {
     operation_id: "createProjectCommandChallenge",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/anti-forgery-challenges",
     request_schema: PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
     response_schema: PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
@@ -154,7 +176,7 @@ pub(super) const CREATE_PROJECT_COMMAND_CHALLENGE: QueryOperation = QueryOperati
 
 pub(super) const CREATE_EDITOR_SESSION: QueryOperation = QueryOperation {
     operation_id: "createEditorSession",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/editor-sessions",
     request_schema: CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
     response_schema: CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
@@ -184,7 +206,7 @@ pub(super) const CREATE_EDITOR_SESSION: QueryOperation = QueryOperation {
 
 pub(super) const GET_EDITOR_SESSION: QueryOperation = QueryOperation {
     operation_id: "getEditorSession",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}",
     request_schema: GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
     response_schema: GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
@@ -211,17 +233,18 @@ pub(super) const GET_EDITOR_SESSION: QueryOperation = QueryOperation {
 
 /// Public route used by the generated client and StoryOS Server.
 pub const GET_PROTOCOL_PROFILE_PATH: &str = GET_PROTOCOL_PROFILE.path;
-pub const GET_PROTOCOL_PROFILE_METHOD: &str = GET_PROTOCOL_PROFILE.method;
+pub const GET_PROTOCOL_PROFILE_METHOD: &str = GET_PROTOCOL_PROFILE.method.as_str();
 pub const GET_PROJECT_PATH: &str = GET_PROJECT.path;
-pub const GET_PROJECT_METHOD: &str = GET_PROJECT.method;
+pub const GET_PROJECT_METHOD: &str = GET_PROJECT.method.as_str();
 pub const GET_CHAPTER_PATH: &str = GET_CHAPTER.path;
-pub const GET_CHAPTER_METHOD: &str = GET_CHAPTER.method;
+pub const GET_CHAPTER_METHOD: &str = GET_CHAPTER.method.as_str();
 pub const CREATE_PROJECT_COMMAND_CHALLENGE_PATH: &str = CREATE_PROJECT_COMMAND_CHALLENGE.path;
-pub const CREATE_PROJECT_COMMAND_CHALLENGE_METHOD: &str = CREATE_PROJECT_COMMAND_CHALLENGE.method;
+pub const CREATE_PROJECT_COMMAND_CHALLENGE_METHOD: &str =
+    CREATE_PROJECT_COMMAND_CHALLENGE.method.as_str();
 pub const CREATE_EDITOR_SESSION_PATH: &str = CREATE_EDITOR_SESSION.path;
-pub const CREATE_EDITOR_SESSION_METHOD: &str = CREATE_EDITOR_SESSION.method;
+pub const CREATE_EDITOR_SESSION_METHOD: &str = CREATE_EDITOR_SESSION.method.as_str();
 pub const GET_EDITOR_SESSION_PATH: &str = GET_EDITOR_SESSION.path;
-pub const GET_EDITOR_SESSION_METHOD: &str = GET_EDITOR_SESSION.method;
+pub const GET_EDITOR_SESSION_METHOD: &str = GET_EDITOR_SESSION.method.as_str();
 pub(super) const REQUIRED_CAPABILITIES: [&str; 15] = [
     "project_lifecycle",
     "volume_chapter_lifecycle",

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID: &str =
@@ -14,7 +14,7 @@ pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE: &str =
 
 pub(super) const EXPORT_HUMAN_READABLE_MANUSCRIPT: QueryOperation = QueryOperation {
     operation_id: "exportHumanReadableManuscript",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/manuscript/exports",
     request_schema: EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     response_schema: EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID,
@@ -41,7 +41,8 @@ pub(super) const EXPORT_HUMAN_READABLE_MANUSCRIPT: QueryOperation = QueryOperati
 };
 
 pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH: &str = EXPORT_HUMAN_READABLE_MANUSCRIPT.path;
-pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD: &str = EXPORT_HUMAN_READABLE_MANUSCRIPT.method;
+pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD: &str =
+    EXPORT_HUMAN_READABLE_MANUSCRIPT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

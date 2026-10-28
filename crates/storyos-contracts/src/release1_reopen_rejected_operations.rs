@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, QueryOperation};
 use crate::release1_reject_proposal_operations::AuthorUndoDisposition;
 
 pub const REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID: &str =
@@ -14,7 +14,7 @@ pub const REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE: &str =
 
 pub(super) const REOPEN_REJECTED_OPERATIONS: QueryOperation = QueryOperation {
     operation_id: "reopenRejectedOperations",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings",
     request_schema: REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
     response_schema: REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID,
@@ -42,7 +42,7 @@ pub(super) const REOPEN_REJECTED_OPERATIONS: QueryOperation = QueryOperation {
 };
 
 pub const REOPEN_REJECTED_OPERATIONS_PATH: &str = REOPEN_REJECTED_OPERATIONS.path;
-pub const REOPEN_REJECTED_OPERATIONS_METHOD: &str = REOPEN_REJECTED_OPERATIONS.method;
+pub const REOPEN_REJECTED_OPERATIONS_METHOD: &str = REOPEN_REJECTED_OPERATIONS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

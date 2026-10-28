@@ -414,7 +414,7 @@ fn operation_json(registered: &RegisteredOperation) -> Value {
     let mut entry = catalog.binding.json(&statuses);
     let fields = json!({
         "operation_id": operation.operation_id, "kind": registered.kind.as_str(),
-        "method": operation.method, "path": operation.path, "shape": catalog.shape,
+        "method": operation.method.as_str(), "path": operation.path, "shape": catalog.shape,
         "semantic_owner": catalog.semantic_owner, "wire_owner": WIRE_OWNER,
         "schemas": {
             "request": operation.request_schema, "response": operation.response_schema,

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, QueryOperation};
 
 pub const COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID: &str =
     "storyos.command.complete-ready-partial-proposal.request.v1";
@@ -19,7 +19,7 @@ pub const CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE: &str =
 
 pub(super) const COMPLETE_READY_PARTIAL_PROPOSAL: QueryOperation = QueryOperation {
     operation_id: "completeReadyPartialProposal",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions",
     request_schema: COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -48,7 +48,7 @@ pub(super) const COMPLETE_READY_PARTIAL_PROPOSAL: QueryOperation = QueryOperatio
 
 pub(super) const CONTINUE_PROPOSAL_GENERATION: QueryOperation = QueryOperation {
     operation_id: "continueProposalGeneration",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations",
     request_schema: CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
     response_schema: CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID,
@@ -76,9 +76,10 @@ pub(super) const CONTINUE_PROPOSAL_GENERATION: QueryOperation = QueryOperation {
 };
 
 pub const COMPLETE_READY_PARTIAL_PROPOSAL_PATH: &str = COMPLETE_READY_PARTIAL_PROPOSAL.path;
-pub const COMPLETE_READY_PARTIAL_PROPOSAL_METHOD: &str = COMPLETE_READY_PARTIAL_PROPOSAL.method;
+pub const COMPLETE_READY_PARTIAL_PROPOSAL_METHOD: &str =
+    COMPLETE_READY_PARTIAL_PROPOSAL.method.as_str();
 pub const CONTINUE_PROPOSAL_GENERATION_PATH: &str = CONTINUE_PROPOSAL_GENERATION.path;
-pub const CONTINUE_PROPOSAL_GENERATION_METHOD: &str = CONTINUE_PROPOSAL_GENERATION.method;
+pub const CONTINUE_PROPOSAL_GENERATION_METHOD: &str = CONTINUE_PROPOSAL_GENERATION.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

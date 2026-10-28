@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_author_edit::ApplyAuthorEditResponse;
 
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID: &str =
@@ -12,7 +12,7 @@ pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME: QueryOperation = QueryOperation {
     operation_id: "getApplyAuthorEditOutcome",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}",
     request_schema: GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     response_schema: GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
@@ -38,7 +38,8 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME: QueryOperation = QueryOperation 
 };
 
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH: &str = GET_APPLY_AUTHOR_EDIT_OUTCOME.path;
-pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD: &str = GET_APPLY_AUTHOR_EDIT_OUTCOME.method;
+pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD: &str =
+    GET_APPLY_AUTHOR_EDIT_OUTCOME.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID: &str =
@@ -13,7 +13,7 @@ pub const SET_CURRENT_CHAPTER_DIGEST_PROFILE: &str = "storyos.command.setCurrent
 
 pub(super) const SET_CURRENT_CHAPTER: QueryOperation = QueryOperation {
     operation_id: "setCurrentChapter",
-    method: "PUT",
+    method: HttpMethod::Put,
     path: "/api/v1/projects/{project_id}/current-chapter",
     request_schema: SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID,
@@ -41,7 +41,7 @@ pub(super) const SET_CURRENT_CHAPTER: QueryOperation = QueryOperation {
 };
 
 pub const SET_CURRENT_CHAPTER_PATH: &str = SET_CURRENT_CHAPTER.path;
-pub const SET_CURRENT_CHAPTER_METHOD: &str = SET_CURRENT_CHAPTER.method;
+pub const SET_CURRENT_CHAPTER_METHOD: &str = SET_CURRENT_CHAPTER.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

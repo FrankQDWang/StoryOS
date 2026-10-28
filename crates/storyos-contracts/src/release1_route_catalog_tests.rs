@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::sections::ERROR_SOURCE;
 use super::{Owner, Settlement, registered_operations, route_catalog_bytes};
-use crate::release1::REQUIRED_CAPABILITIES;
+use crate::release1::{HttpMethod, REQUIRED_CAPABILITIES};
 use crate::release1_operation_registry::OperationKind;
 
 pub(super) fn catalog() -> Value {
@@ -113,7 +113,7 @@ fn accepted_commands_name_their_own_registered_get_settlement_query() {
             .find(|registered| std::ptr::eq(registered.operation, *query))
             .unwrap_or_else(|| panic!("{} must be registered", query.operation_id));
         assert!(matches!(registered.kind, OperationKind::Query));
-        assert_eq!(query.method, "GET", "{}", query.operation_id);
+        assert_eq!(query.method, HttpMethod::Get, "{}", query.operation_id);
     }
     assert_unique(
         "settlement query",

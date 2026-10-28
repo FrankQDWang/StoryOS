@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const CREATE_CHAPTER_REQUEST_SCHEMA_ID: &str = "storyos.command.create-chapter.request.v1";
@@ -11,7 +11,7 @@ pub const CREATE_CHAPTER_DIGEST_PROFILE: &str = "storyos.command.createChapter.j
 
 pub(super) const CREATE_CHAPTER: QueryOperation = QueryOperation {
     operation_id: "createChapter",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
     request_schema: CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
@@ -40,7 +40,7 @@ pub(super) const CREATE_CHAPTER: QueryOperation = QueryOperation {
 };
 
 pub const CREATE_CHAPTER_PATH: &str = CREATE_CHAPTER.path;
-pub const CREATE_CHAPTER_METHOD: &str = CREATE_CHAPTER.method;
+pub const CREATE_CHAPTER_METHOD: &str = CREATE_CHAPTER.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

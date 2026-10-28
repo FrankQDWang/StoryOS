@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_agent_run::AgentRunStatus;
 use crate::release1_author_edit::DomainReceipt;
 
@@ -21,7 +21,7 @@ pub const STEER_AGENT_RUN_PATH: &str =
     "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs";
 pub(super) const STEER_AGENT_RUN: QueryOperation = QueryOperation {
     operation_id: "steerAgentRun",
-    method: "POST",
+    method: HttpMethod::Post,
     path: STEER_AGENT_RUN_PATH,
     request_schema: STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -100,7 +100,7 @@ const CONTROL_STATUSES: &[(u16, &str)] = &[
 
 pub(super) const PAUSE_AGENT_RUN: QueryOperation = QueryOperation {
     operation_id: "pauseAgentRun",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
     request_schema: PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -114,7 +114,7 @@ pub(super) const PAUSE_AGENT_RUN: QueryOperation = QueryOperation {
 
 pub(super) const CANCEL_AGENT_RUN: QueryOperation = QueryOperation {
     operation_id: "cancelAgentRun",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
     request_schema: CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -127,10 +127,10 @@ pub(super) const CANCEL_AGENT_RUN: QueryOperation = QueryOperation {
 };
 
 pub const PAUSE_AGENT_RUN_PATH: &str = PAUSE_AGENT_RUN.path;
-pub const PAUSE_AGENT_RUN_METHOD: &str = PAUSE_AGENT_RUN.method;
+pub const PAUSE_AGENT_RUN_METHOD: &str = PAUSE_AGENT_RUN.method.as_str();
 pub const CANCEL_AGENT_RUN_PATH: &str = CANCEL_AGENT_RUN.path;
-pub const CANCEL_AGENT_RUN_METHOD: &str = CANCEL_AGENT_RUN.method;
-pub const STEER_AGENT_RUN_METHOD: &str = STEER_AGENT_RUN.method;
+pub const CANCEL_AGENT_RUN_METHOD: &str = CANCEL_AGENT_RUN.method.as_str();
+pub const STEER_AGENT_RUN_METHOD: &str = STEER_AGENT_RUN.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

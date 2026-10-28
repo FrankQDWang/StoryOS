@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const UPDATE_CHAPTER_REQUEST_SCHEMA_ID: &str = "storyos.command.update-chapter.request.v1";
@@ -11,7 +11,7 @@ pub const UPDATE_CHAPTER_DIGEST_PROFILE: &str = "storyos.command.updateChapter.j
 
 pub(super) const UPDATE_CHAPTER: QueryOperation = QueryOperation {
     operation_id: "updateChapter",
-    method: "PATCH",
+    method: HttpMethod::Patch,
     path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
     request_schema: UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: UPDATE_CHAPTER_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const UPDATE_CHAPTER: QueryOperation = QueryOperation {
 };
 
 pub const UPDATE_CHAPTER_PATH: &str = UPDATE_CHAPTER.path;
-pub const UPDATE_CHAPTER_METHOD: &str = UPDATE_CHAPTER.method;
+pub const UPDATE_CHAPTER_METHOD: &str = UPDATE_CHAPTER.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID: &str = "storyos.query.manuscript-search.request.v1";
@@ -11,7 +11,7 @@ pub const SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const SEARCH_MANUSCRIPT: QueryOperation = QueryOperation {
     operation_id: "searchManuscript",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/queries/manuscript-search",
     request_schema: SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID,
     response_schema: SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
@@ -37,7 +37,7 @@ pub(super) const SEARCH_MANUSCRIPT: QueryOperation = QueryOperation {
 };
 
 pub const SEARCH_MANUSCRIPT_PATH: &str = SEARCH_MANUSCRIPT.path;
-pub const SEARCH_MANUSCRIPT_METHOD: &str = SEARCH_MANUSCRIPT.method;
+pub const SEARCH_MANUSCRIPT_METHOD: &str = SEARCH_MANUSCRIPT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
