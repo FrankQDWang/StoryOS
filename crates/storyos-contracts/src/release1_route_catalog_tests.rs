@@ -7,9 +7,6 @@ use super::{Owner, Settlement, registered_operations, route_catalog_bytes};
 use crate::release1::REQUIRED_CAPABILITIES;
 use crate::release1_operation_registry::OperationKind;
 
-/// The registry serves fewer statuses for these queries than their error profile names.
-const NARROWER_THAN_ERROR_PROFILE: [&str; 2] = ["getProject", "getChapter"];
-
 pub(super) fn catalog() -> Value {
     serde_json::from_slice(&route_catalog_bytes()).expect("route catalog must be JSON")
 }
@@ -238,7 +235,7 @@ fn error_profiles_use_stable_errors_and_served_statuses() {
             }
         }
     }
-    assert_eq!(narrower, NARROWER_THAN_ERROR_PROFILE);
+    assert_eq!(narrower, Vec::<&str>::new());
 }
 
 #[test]

@@ -144,6 +144,16 @@
       "upgrade_required",
       "limit_exceeded"
     ],
+    "query_current": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "snapshot_not_ready",
+      "projection_not_ready",
+      "rate_limited"
+    ],
     "query_projection": [
       "invalid_request",
       "invalid_session",
@@ -789,7 +799,7 @@
         "takeover": "none",
         "writer_generation": "none"
       },
-      "error_profile": "query_canonical",
+      "error_profile": "query_current",
       "fixtures": {
         "negative": [
           "storyos.golden.getProject.invalid.v1",
@@ -3320,7 +3330,7 @@
         "takeover": "no",
         "writer_generation": "not-applicable"
       },
-      "error_profile": "query_canonical",
+      "error_profile": "query_current",
       "fixtures": {
         "negative": [
           "storyos.golden.getChapter.invalid.v1",

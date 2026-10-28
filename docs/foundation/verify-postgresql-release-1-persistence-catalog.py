@@ -64,10 +64,11 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
         "database_schema_identity", "active_schema_version", "persisted_format_catalog_id", "migration_chain_id", "migration_chain_digest"
     }:
         fail(errors, "storage identity binding fields are incomplete")
+    if "route_catalog_sha256" in binding:
+        fail(errors, "protocol binding must not copy the route catalog digest; the storage build computes it from the generated route catalog")
+    if binding.get("source") != "generated/route-catalog/versioned-protocol-release-1-route-catalog.json":
+        fail(errors, "protocol binding source must be the generated Release 1 route catalog")
     if check_digests:
-        route_digest = "sha256:" + hashlib.sha256(normalized_file_bytes(ROUTE_CATALOG_PATH)).hexdigest()
-        if binding.get("route_catalog_sha256") != route_digest:
-            fail(errors, f"route catalog digest mismatch: expected {route_digest}")
         migration_copy = copy.deepcopy(catalog.get("migration_chain", {}))
         migration_copy.pop("digest_excludes", None)
         migration_digest = "sha256:" + hashlib.sha256(canonical_bytes(migration_copy)).hexdigest()

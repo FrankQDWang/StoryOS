@@ -7,7 +7,7 @@
 - Storage and isolation boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
 - Persistence family source of truth: [Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
 - Protocol boundary: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
-- Public route/Event source of truth: [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
+- Public route/Event source of truth: the generated [Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
 - Context and disclosure boundary: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Memory boundary: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md) and [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)

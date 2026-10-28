@@ -16,7 +16,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = ROOT / 'generated/json-schema/storyos-public-release-1'
-CATALOG = json.loads((ROOT / 'docs/foundation/versioned-protocol-release-1-route-catalog.json').read_text())
+CATALOG = json.loads((ROOT / 'generated/route-catalog/versioned-protocol-release-1-route-catalog.json').read_text())
 ROUTES = {entry['operation_id']: entry for entry in CATALOG['operations']}
 
 

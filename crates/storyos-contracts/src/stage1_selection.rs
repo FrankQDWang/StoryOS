@@ -4,6 +4,7 @@ pub(super) const BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f49
 pub(super) const BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
 pub(super) const ISSUE_BODY_SHA256: &str =
     "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6";
+/// The path of the hand-kept route catalog at `BASELINE_COMMIT`. The crosswalk reads it from Git history.
 pub(super) const ROUTE_CATALOG_PATH: &str =
     "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 pub(super) const PERSISTENCE_CATALOG_PATH: &str =

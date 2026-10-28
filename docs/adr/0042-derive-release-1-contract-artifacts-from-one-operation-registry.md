@@ -14,7 +14,7 @@ At `main` `6c69595c`, `release1_artifacts.rs` and `release1_fixture_corpus.rs` r
 
 ## Decision
 
-- The registry order is the order of the reviewed route catalog, `docs/foundation/versioned-protocol-release-1-route-catalog.json`. Modules sort by the catalog position of their first operation. Inside a module, operations follow the catalog order. A test enforces this order.
+- The registry order was the order of the hand-kept route catalog. Modules sorted by the catalog position of their first operation. Inside a module, operations followed the catalog order. ADR 0074 replaces this point: the registry order is the declared order of the registry, and the hand-kept catalog and its order test are removed.
 - Every generated artifact follows the registry order. The OpenAPI generator puts the method blocks that share one path under one path key, at the position of the first block. The TypeScript declaration file puts the shared domain types that no single operation owns first, and joins the type fragments with one blank line.
 - An operation that the reviewed contract graph does not contain declares this explicitly in its registry entry.
 - The change from the earlier orders changed the order of entries in the aggregate artifacts and the derived artifact digests once. The two protocol-profile golden fixtures changed only in their derived digest values. It did not change any schema file, any other fixture file, the set of entries in any artifact, `CONTRACT_REVISION`, the generated-client revision, or the Web Client contract revision. [ADR 0015](0015-adopt-typescript-and-vitest-browser-mode-for-the-protected-web-client.md) permits this deterministic digest drift. After that change, a refactor of the generator keeps `generated/` byte-identical.
@@ -27,5 +27,5 @@ At `main` `6c69595c`, `release1_artifacts.rs` and `release1_fixture_corpus.rs` r
 
 ## Consequences
 
-- A new operation changes its own artifacts module and adds one registry line at its route-catalog position.
-- A change of the route catalog order changes the generated order and the derived digests.
+- A new operation changes its own artifacts module and adds one registry line at its position in the declared registry order (ADR 0074).
+- A change of the registry order changes the generated order and the derived digests.
