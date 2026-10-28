@@ -18,6 +18,7 @@ mod sections;
 pub(super) const ROUTE_CATALOG_PATH: &str =
     "generated/route-catalog/versioned-protocol-release-1-route-catalog.json";
 const WIRE_OWNER: Owner = Owner::Protocol;
+const AUTHOR_RECOVERY_RULE: &str = "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only.";
 const DURABLE_VISIBILITY: &str =
     "only after the durable transition or async settlement named by the operation";
 
@@ -228,7 +229,7 @@ impl Binding {
         error_profile: ErrorProfile::CommandSync,
     };
     /// The rules of a command whose author and current-producer causes have their own profiles.
-    pub(super) const CONDITIONAL_BY_CAUSE: Self = Self {
+    const CONDITIONAL_BY_CAUSE: Self = Self {
         action_class: ActionClass::ConditionalByCause,
         admission: Admission::ConditionalByCause,
         editor: EditorRule::ConditionalByCause,
@@ -237,7 +238,7 @@ impl Binding {
         error_profile: ErrorProfile::EditorCommand,
     };
     /// The current-producer cause of a conditional command: no admission and no Editor Session.
-    pub(super) const CURRENT_PRODUCER_CAUSE: Self = Self {
+    const CURRENT_PRODUCER_CAUSE: Self = Self {
         action_class: ActionClass::ProducerCause,
         admission: Admission::None,
         editor: EditorRule::NotApplicable,
@@ -266,27 +267,27 @@ impl Binding {
     }
 }
 
-/// One cause profile of a command with the author and current-producer causes.
-pub(super) struct CauseProfile {
+/// The two causes of a conditional command. Each cause has its fixed admission and recovery rules.
+pub(super) struct CauseProfiles {
+    pub(super) author: AuthorCause,
+    pub(super) current_producer: CurrentProducerCause,
+}
+
+/// The cause of the author, through a protected Author Command Admission.
+pub(super) struct AuthorCause {
+    pub(super) semantic_payload: &'static str,
+    pub(super) request_schema: &'static str,
+    pub(super) response_schema: &'static str,
+}
+
+/// The cause of the exact current `AgentRunDecision` producer, with no admission or Editor Session.
+pub(super) struct CurrentProducerCause {
     pub(super) semantic_cause: &'static str,
     pub(super) semantic_payload: &'static str,
     pub(super) cause_binding: &'static str,
-    pub(super) producer_types: &'static [&'static str],
     pub(super) request_schema: &'static str,
     pub(super) response_schema: &'static str,
-    pub(super) binding: Binding,
-    pub(super) recovery: Recovery,
-}
-
-/// The `RequiresReconfirmation` rule of one cause profile.
-pub(super) enum Recovery {
-    Allowed(&'static str),
-    Forbidden(&'static str),
-}
-
-pub(super) struct CauseProfiles {
-    pub(super) author: CauseProfile,
-    pub(super) current_producer: CauseProfile,
+    pub(super) recovery_rule: &'static str,
 }
 
 /// The route catalog metadata of one registered operation.
@@ -320,6 +321,18 @@ impl OperationCatalog {
         }
     }
 
+    /// A command that its author and its current producer can both send.
+    pub(super) const fn conditional_by_cause(
+        shape: &'static str,
+        semantic_owner: Owner,
+        causes: &'static CauseProfiles,
+    ) -> Self {
+        Self {
+            causes: Some(causes),
+            ..Self::new(shape, semantic_owner, Binding::CONDITIONAL_BY_CAUSE)
+        }
+    }
+
     /// The Project Activity of a settled command; each kind maps to all of its Event schemas.
     pub(super) const fn activity(
         self,
@@ -347,13 +360,6 @@ impl OperationCatalog {
     pub(super) const fn action_coverage(self, action_coverage: &'static [&'static str]) -> Self {
         Self {
             action_coverage,
-            ..self
-        }
-    }
-
-    pub(super) const fn causes(self, causes: &'static CauseProfiles) -> Self {
-        Self {
-            causes: Some(causes),
             ..self
         }
     }
@@ -426,10 +432,7 @@ fn operation_json(registered: &RegisteredOperation) -> Value {
             "field": "cause", "values": ["author", "current_producer"],
             "semantic_owner": catalog.semantic_owner,
         });
-        entry["cause_profiles"] = json!({
-            "author": cause_json(&causes.author, &statuses),
-            "current_producer": cause_json(&causes.current_producer, &statuses),
-        });
+        entry["cause_profiles"] = cause_json(causes, &statuses);
     }
     if !catalog.query_proof.is_empty() {
         entry["query_proof"] = catalog
@@ -441,26 +444,35 @@ fn operation_json(registered: &RegisteredOperation) -> Value {
     entry
 }
 
-fn cause_json(cause: &CauseProfile, http_statuses: &[u16]) -> Value {
-    let (requires_reconfirmation, rule) = match cause.recovery {
-        Recovery::Allowed(rule) => ("allowed", rule),
-        Recovery::Forbidden(rule) => ("forbidden", rule),
+fn cause_json(causes: &CauseProfiles, http_statuses: &[u16]) -> Value {
+    let CauseProfiles {
+        author,
+        current_producer: producer,
+    } = causes;
+    let profile = |binding: Binding, fields: Value| {
+        let mut profile = binding.json(http_statuses);
+        extend(&mut profile, fields);
+        extend(
+            &mut profile,
+            json!({ "request_schema_source": WIRE_OWNER, "response_schema_source": WIRE_OWNER }),
+        );
+        profile
     };
-    let mut profile = cause.binding.json(http_statuses);
-    extend(
-        &mut profile,
-        json!({
-            "semantic_cause": cause.semantic_cause, "semantic_payload": cause.semantic_payload,
-            "cause_binding": cause.cause_binding,
-            "request_schema": cause.request_schema, "response_schema": cause.response_schema,
-            "request_schema_source": WIRE_OWNER, "response_schema_source": WIRE_OWNER,
-            "recovery": { "requires_reconfirmation": requires_reconfirmation, "rule": rule },
-        }),
-    );
-    if !cause.producer_types.is_empty() {
-        profile["producer_types"] = json!(cause.producer_types);
-    }
-    profile
+    json!({
+        "author": profile(Binding::EDITOR_COMMAND, json!({
+            "semantic_cause": "AuthorCommandAdmission { action_class: explicit_editor_command }",
+            "semantic_payload": author.semantic_payload,
+            "cause_binding": "protected_author_command_admission",
+            "request_schema": author.request_schema, "response_schema": author.response_schema,
+            "recovery": { "requires_reconfirmation": "allowed", "rule": AUTHOR_RECOVERY_RULE },
+        })),
+        "current_producer": profile(Binding::CURRENT_PRODUCER_CAUSE, json!({
+            "semantic_cause": producer.semantic_cause, "semantic_payload": producer.semantic_payload,
+            "cause_binding": producer.cause_binding, "producer_types": ["AgentRunDecision"],
+            "request_schema": producer.request_schema, "response_schema": producer.response_schema,
+            "recovery": { "requires_reconfirmation": "forbidden", "rule": producer.recovery_rule },
+        })),
+    })
 }
 
 fn extend(object: &mut Value, fields: Value) {

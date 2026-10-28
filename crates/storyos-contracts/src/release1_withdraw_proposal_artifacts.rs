@@ -5,7 +5,7 @@ use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_route_catalog::{
-    Binding, CauseProfile, CauseProfiles, OperationCatalog, Owner, Recovery,
+    AuthorCause, CauseProfiles, CurrentProducerCause, OperationCatalog, Owner,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 use crate::release1_withdraw_proposal::{
@@ -18,29 +18,18 @@ use crate::release1_withdraw_proposal::{
 };
 
 const CAUSES: CauseProfiles = CauseProfiles {
-    author: CauseProfile {
-        semantic_cause: "AuthorCommandAdmission { action_class: explicit_editor_command }",
+    author: AuthorCause {
         semantic_payload: "withdrawal_reason: AuthorWithdrew",
-        cause_binding: "protected_author_command_admission",
-        producer_types: &[],
         request_schema: "storyos.command.withdraw-proposal.author-cause.request.v1",
         response_schema: "storyos.command.withdraw-proposal.author-cause.response.v1",
-        binding: Binding::EDITOR_COMMAND,
-        recovery: Recovery::Allowed(
-            "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only.",
-        ),
     },
-    current_producer: CauseProfile {
+    current_producer: CurrentProducerCause {
         semantic_cause: "Exact producer of the Proposal: its source AgentRun and Decision",
         semantic_payload: "withdrawal_reason: CurrentProducerWithdrew",
         cause_binding: "exact_proposal_producer",
-        producer_types: &["AgentRunDecision"],
         request_schema: "storyos.command.withdraw-proposal.current-producer-cause.request.v1",
         response_schema: "storyos.command.withdraw-proposal.current-producer-cause.response.v1",
-        binding: Binding::CURRENT_PRODUCER_CAUSE,
-        recovery: Recovery::Forbidden(
-            "The request binds the exact producer of the Proposal, its source AgentRun and Decision, and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
-        ),
+        recovery_rule: "The request binds the exact producer of the Proposal, its source AgentRun and Decision, and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
     },
 };
 
@@ -53,12 +42,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_target_revisions",
             "author_or_exact_current_producer_cause",
         ],
-        OperationCatalog::new(
-            "proposal:withdraw",
-            Owner::Core,
-            Binding::CONDITIONAL_BY_CAUSE,
-        )
-        .causes(&CAUSES),
+        OperationCatalog::conditional_by_cause("proposal:withdraw", Owner::Core, &CAUSES),
     )],
     schemas: || {
         operation_schemas(
