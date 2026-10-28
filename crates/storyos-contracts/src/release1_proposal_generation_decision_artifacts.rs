@@ -17,6 +17,7 @@ use crate::release1_proposal_generation_decision::{
     ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
     ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -33,6 +34,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_target_revisions",
                 "explicit_editor_control",
             ],
+            OperationCatalog::new(
+                "proposal:generation-complete",
+                Owner::Core,
+                Binding::EDITOR_COMMAND,
+            ),
         ),
         RegisteredOperation::command(
             &CONTINUE_PROPOSAL_GENERATION,
@@ -47,6 +53,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_target_revisions",
                 "explicit_editor_control",
             ],
+            OperationCatalog::new(
+                "proposal:generation-continue",
+                Owner::Core,
+                Binding::EDITOR_COMMAND,
+            ),
         ),
     ],
     schemas: || {
@@ -80,13 +91,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 COMPLETE_FIXTURE_PATHS,
-                &COMPLETE_READY_PARTIAL_PROPOSAL,
                 [
                     |_| complete_fixture_bytes(),
                     |_| complete_invalid_fixture_bytes(),
@@ -95,7 +103,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 CONTINUE_FIXTURE_PATHS,
-                &CONTINUE_PROPOSAL_GENERATION,
                 [
                     |_| continue_fixture_bytes(),
                     |_| continue_invalid_fixture_bytes(),
@@ -187,33 +194,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ContinueProposalGenerationEffect::decl(&config),
         CompleteReadyPartialProposalResponse::decl(&config),
         ContinueProposalGenerationResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        "{}{}",
-        client_source(
-            "digestCompleteReadyPartialProposal",
-            "completeReadyPartialProposal",
-            COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE,
-            COMPLETE_READY_PARTIAL_PROPOSAL.path,
-        ),
-        client_source(
-            "digestContinueProposalGeneration",
-            "continueProposalGeneration",
-            CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE,
-            CONTINUE_PROPOSAL_GENERATION.path,
-        ),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestCompleteReadyPartialProposal(request: CompleteReadyPartialProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function completeReadyPartialProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: CompleteReadyPartialProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<CompleteReadyPartialProposalResponse>;\n",
-        "export declare function digestContinueProposalGeneration(request: ContinueProposalGenerationRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function continueProposalGeneration(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ContinueProposalGenerationRequest; idempotencyKey: string; antiForgery: string }): Promise<ContinueProposalGenerationResponse>;\n",
     )
 }
 
@@ -418,13 +398,4 @@ fn operation_openapi(
         path: operation.path,
         yaml,
     }
-}
-
-fn client_source(digest_name: &str, function_name: &str, profile: &str, path: &str) -> String {
-    let route = path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}")
-        .replace("{proposal_id}", "${encodeURIComponent(proposalId)}");
-    format!(
-        "\nexport async function {digest_name}(request, cryptoImpl = globalThis.crypto) {{\n  if (!request || typeof request !== \"object\") throw new TypeError(\"{digest_name} requires request\");\n  const canonical = canonicalJson(request);\n  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n  return {{ algorithm: \"sha256\", profile: \"{profile}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n\nexport async function {function_name}({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"{function_name} requires projectId\");\n  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"{function_name} requires proposalId\");\n  if (!request || typeof request !== \"object\") throw new TypeError(\"{function_name} requires request\");\n  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"{function_name} requires security bindings\");\n  return commandJson({{ ...options, method: \"POST\", path: `{route}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-    )
 }

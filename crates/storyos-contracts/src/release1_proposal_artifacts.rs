@@ -12,6 +12,7 @@ use crate::release1_proposal::{
     OptionalRevisionComparisonInspect, OptionalValidationReceiptInspect, ProposalOperationInspect,
     ProposalSourceConditionInspect, ProposalSourceInspect, ReplacementSpanInspect,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -22,6 +23,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "exact_revision_or_current_projection",
             "redaction_profile",
         ],
+        OperationCatalog::new("proposal:read", Owner::Core, Binding::CANONICAL_QUERY),
     )],
     schemas: || {
         operation_schemas(
@@ -33,12 +35,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_PROPOSAL,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -182,26 +181,6 @@ pub(super) fn typescript_type_declarations() -> String {
         BlockProposalInspect::decl(&config),
         GetProposalResponse::decl(&config),
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let path = GET_PROPOSAL
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}")
-        .replace("{proposal_id}", "${encodeURIComponent(proposalId)}");
-    format!(
-        concat!(
-            "\nexport async function getProposal({{ projectId, proposalId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProposal requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"getProposal requires proposalId\");\n",
-            "  return queryJson({{ ...options, path: `{path}` }});\n}}\n"
-        ),
-        path = path
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

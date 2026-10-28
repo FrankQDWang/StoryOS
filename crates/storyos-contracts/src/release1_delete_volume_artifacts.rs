@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_delete_volume::{
     DELETE_VOLUME, DELETE_VOLUME_DIGEST_PROFILE, DELETE_VOLUME_REQUEST_SCHEMA_ID,
     DELETE_VOLUME_RESPONSE_SCHEMA_ID, DeleteVolumeConflictReason, DeleteVolumeEffect,
@@ -10,6 +11,7 @@ use crate::release1_delete_volume::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_tree_revision",
             "child_chapter_policy",
         ],
+        OperationCatalog::new("volume:delete", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::VolumeDeleted], &[]),
     )],
     schemas: || {
         operation_schemas(
@@ -32,12 +36,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&DELETE_VOLUME, method_openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &DELETE_VOLUME,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -130,37 +131,6 @@ pub(super) fn typescript_type_declarations() -> String {
         DeleteVolumeRefusalReason::decl(&config),
         DeleteVolumeEffect::decl(&config),
         DeleteVolumeResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestDeleteVolume(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestDeleteVolume requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function deleteVolume({{ projectId, volumeId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"deleteVolume requires projectId\");\n",
-            "  if (typeof volumeId !== \"string\" || volumeId.length === 0) throw new TypeError(\"deleteVolume requires volumeId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"deleteVolume requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"deleteVolume requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"DELETE\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        DELETE_VOLUME_DIGEST_PROFILE,
-        DELETE_VOLUME
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{volume_id}", "${encodeURIComponent(volumeId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestDeleteVolume(request: DeleteVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function deleteVolume(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: DeleteVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<DeleteVolumeResponse>;\n",
     )
 }
 

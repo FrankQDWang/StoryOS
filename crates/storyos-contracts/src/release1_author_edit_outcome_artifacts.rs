@@ -10,9 +10,17 @@ use crate::release1_author_edit_outcome::{
     GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    operation_schemas,
+};
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
 };
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes, schema_value};
+
+const GET_APPLY_AUTHOR_EDIT_OUTCOME_VISIBILITY: &str = "returns the current durable outcome; completing an already-admitted command may append that command's Receipt and Activity; this Query allocates no new command identity";
+const GET_APPLY_AUTHOR_EDIT_OUTCOME_NOTES: &str = "The protected Web Client may call this exact named GET after the first applyAuthorEdit acknowledgement is absent. It uses the client-first idempotency key plus the original challenge nonce only as a protected header, never as a URL or response value. Committed reuses the exact Receipt-backed response-v2 settlement; Rejected requires an expired unconsumed challenge under the arbiter locks; RequiresReconfirmation is the terminal no-Receipt settlement for an expired, binding-changed, or unrecoverable open Admission; StillUnknown grants no retry or success and is not the durable Admission outcome_unknown condition. The route is not applyAuthorEdit.settlement_query and creates no Admission, Command, idempotency record, or nonce. When the Query observes a clean open Admission, the Server may complete the already-admitted direct_editor_action or append RequiresReconfirmation.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -25,7 +33,34 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "project_command_challenge_proof",
             "receipt_first_settlement_validation",
         ],
-    )],
+        OperationCatalog::new(
+            "apply-author-edit-outcome:read-by-idempotency-proof",
+            Owner::Admission,
+            Binding {
+                action_class: ActionClass::None,
+                admission: Admission::Query,
+                editor: EditorRule::BoundToOriginalAdmission,
+                idempotency: Idempotency::None,
+                settlement: Settlement::Read,
+                error_profile: ErrorProfile::QueryCanonical,
+            },
+        )
+        .visibility(GET_APPLY_AUTHOR_EDIT_OUTCOME_VISIBILITY)
+        .notes(GET_APPLY_AUTHOR_EDIT_OUTCOME_NOTES)
+        .query_proof(&[
+            ("identity", "apply_author_edit_idempotency_key"),
+            ("header", "X-StoryOS-Anti-Forgery"),
+            ("source", "original_project_command_challenge_nonce"),
+            ("url", "forbidden"),
+            ("response", "forbidden"),
+            ("consumption", "none"),
+            ("cache_control", "no-store"),
+        ]),
+    )
+    .client(ClientOverride::Source {
+        client: client_source,
+        declaration: "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;\n",
+    })],
     schemas: || {
         operation_schemas(
             &GET_APPLY_AUTHOR_EDIT_OUTCOME,
@@ -36,12 +71,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_APPLY_AUTHOR_EDIT_OUTCOME, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_APPLY_AUTHOR_EDIT_OUTCOME,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -110,7 +142,7 @@ pub(super) fn typescript_type_declarations() -> String {
     )
 }
 
-pub(super) fn typescript_client_source() -> String {
+fn client_source() -> String {
     let path = GET_APPLY_AUTHOR_EDIT_OUTCOME
         .path
         .replace("{project_id}", "${encodeURIComponent(projectId)}")
@@ -125,10 +157,6 @@ pub(super) fn typescript_client_source() -> String {
         ),
         path,
     )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;\n"
 }
 
 pub(super) fn openapi() -> String {

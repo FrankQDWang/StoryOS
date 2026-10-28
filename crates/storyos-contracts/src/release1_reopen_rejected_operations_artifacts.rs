@@ -12,6 +12,7 @@ use crate::release1_reopen_rejected_operations::{
     ReopenRejectedOperationsRefusalReason, ReopenRejectedOperationsRequest,
     ReopenRejectedOperationsResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -27,6 +28,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_target_revisions",
             "explicit_editor_control",
         ],
+        OperationCatalog::new(
+            "proposal:reopen-rejected-operations",
+            Owner::Core,
+            Binding::EDITOR_COMMAND,
+        ),
     )],
     schemas: || {
         operation_schemas(
@@ -38,12 +44,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&REOPEN_REJECTED_OPERATIONS, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &REOPEN_REJECTED_OPERATIONS,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -139,37 +142,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ReopenRejectedOperationsConflictReason::decl(&config),
         ReopenRejectedOperationsEffect::decl(&config),
         ReopenRejectedOperationsResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestReopenRejectedOperations(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestReopenRejectedOperations requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function reopenRejectedOperations({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"reopenRejectedOperations requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"reopenRejectedOperations requires proposalId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"reopenRejectedOperations requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"reopenRejectedOperations requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE,
-        REOPEN_REJECTED_OPERATIONS
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{proposal_id}", "${encodeURIComponent(proposalId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;\n",
     )
 }
 

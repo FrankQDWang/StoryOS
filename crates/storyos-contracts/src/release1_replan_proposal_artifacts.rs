@@ -10,7 +10,26 @@ use crate::release1_replan_proposal::{
     ReplanProposalInput, ReplanProposalRefusalReason, ReplanProposalRequest,
     ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult, ReplanSourceCondition,
 };
+use crate::release1_route_catalog::{
+    AuthorCause, CauseProfiles, CurrentProducerCause, OperationCatalog, Owner,
+};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const CAUSES: CauseProfiles = CauseProfiles {
+    author: AuthorCause {
+        semantic_payload: "explicit author ReplanProposal cause",
+        request_schema: "storyos.command.replan-proposal.author-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.author-cause.response.v1",
+    },
+    current_producer: CurrentProducerCause {
+        semantic_cause: "Exact current Proposal Revision producer: AgentRunDecision",
+        semantic_payload: "exact current producer ReplanProposal cause",
+        cause_binding: "exact_current_proposal_revision_producer",
+        request_schema: "storyos.command.replan-proposal.current-producer-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.current-producer-cause.response.v1",
+        recovery_rule: "The request binds the exact current AgentRunDecision producer and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
+    },
+};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -24,6 +43,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_current_target_revisions",
             "explicit_editor_control",
         ],
+        OperationCatalog::conditional_by_cause("proposal:replan", Owner::Core, &CAUSES),
     )],
     schemas: || {
         operation_schemas(
@@ -35,12 +55,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&REPLAN_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &REPLAN_PROPOSAL,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -137,37 +154,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ReplanProposalConflictReason::decl(&config),
         ReplanProposalEffect::decl(&config),
         ReplanProposalResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestReplanProposal(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestReplanProposal requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function replanProposal({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"replanProposal requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"replanProposal requires proposalId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"replanProposal requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"replanProposal requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        REPLAN_PROPOSAL_DIGEST_PROFILE,
-        REPLAN_PROPOSAL
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{proposal_id}", "${encodeURIComponent(proposalId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestReplanProposal(request: ReplanProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function replanProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReplanProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReplanProposalResponse>;\n",
     )
 }
 

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID: &str = "storyos.query.manuscript-tree.request.v1";
@@ -11,7 +11,7 @@ pub const GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const GET_MANUSCRIPT_TREE: QueryOperation = QueryOperation {
     operation_id: "getManuscriptTree",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/manuscript/tree",
     request_schema: GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     response_schema: GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
@@ -37,7 +37,7 @@ pub(super) const GET_MANUSCRIPT_TREE: QueryOperation = QueryOperation {
 };
 
 pub const GET_MANUSCRIPT_TREE_PATH: &str = GET_MANUSCRIPT_TREE.path;
-pub const GET_MANUSCRIPT_TREE_METHOD: &str = GET_MANUSCRIPT_TREE.method;
+pub const GET_MANUSCRIPT_TREE_METHOD: &str = GET_MANUSCRIPT_TREE.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

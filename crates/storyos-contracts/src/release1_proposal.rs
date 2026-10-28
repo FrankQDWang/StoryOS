@@ -2,14 +2,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 
 pub const GET_PROPOSAL_REQUEST_SCHEMA_ID: &str = "storyos.query.proposal.request.v1";
 pub const GET_PROPOSAL_RESPONSE_SCHEMA_ID: &str = "storyos.query.proposal.response.v1";
 
 pub(super) const GET_PROPOSAL: QueryOperation = QueryOperation {
     operation_id: "getProposal",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}",
     request_schema: GET_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: GET_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -35,7 +35,7 @@ pub(super) const GET_PROPOSAL: QueryOperation = QueryOperation {
 };
 
 pub const GET_PROPOSAL_PATH: &str = GET_PROPOSAL.path;
-pub const GET_PROPOSAL_METHOD: &str = GET_PROPOSAL.method;
+pub const GET_PROPOSAL_METHOD: &str = GET_PROPOSAL.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

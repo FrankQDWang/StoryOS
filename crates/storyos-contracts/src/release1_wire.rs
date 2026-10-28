@@ -60,7 +60,7 @@ pub(super) fn query_openapi(
     )).collect::<String>();
     format!(
         "    {}:\n      operationId: {}\n      summary: {summary}\n{parameters}      responses:\n{responses}",
-        operation.method.to_ascii_lowercase(),
+        operation.method.as_str().to_ascii_lowercase(),
         operation.operation_id,
     )
 }

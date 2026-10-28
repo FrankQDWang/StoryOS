@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 
 pub const GET_SNAPSHOT_REQUEST_SCHEMA_ID: &str = "storyos.query.snapshot.request.v1";
 pub const GET_SNAPSHOT_RESPONSE_SCHEMA_ID: &str = "storyos.query.snapshot.response.v1";
@@ -11,7 +11,7 @@ pub const ACTIVITY_STREAM_RESPONSE_SCHEMA_ID: &str = "storyos.stream.activity-st
 
 pub(super) const GET_SNAPSHOT: QueryOperation = QueryOperation {
     operation_id: "getSnapshot",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/snapshots/{snapshot_id}",
     request_schema: GET_SNAPSHOT_REQUEST_SCHEMA_ID,
     response_schema: GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
@@ -38,7 +38,7 @@ pub(super) const GET_SNAPSHOT: QueryOperation = QueryOperation {
 
 pub(super) const ACTIVITY_STREAM: QueryOperation = QueryOperation {
     operation_id: "activityStream",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/activity",
     request_schema: ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
     response_schema: ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
@@ -61,9 +61,9 @@ pub(super) const ACTIVITY_STREAM: QueryOperation = QueryOperation {
 };
 
 pub const GET_SNAPSHOT_PATH: &str = GET_SNAPSHOT.path;
-pub const GET_SNAPSHOT_METHOD: &str = GET_SNAPSHOT.method;
+pub const GET_SNAPSHOT_METHOD: &str = GET_SNAPSHOT.method.as_str();
 pub const ACTIVITY_STREAM_PATH: &str = ACTIVITY_STREAM.path;
-pub const ACTIVITY_STREAM_METHOD: &str = ACTIVITY_STREAM.method;
+pub const ACTIVITY_STREAM_METHOD: &str = ACTIVITY_STREAM.method.as_str();
 
 /// Closed `snapshot_kind` selected by the protocol SnapshotDescriptor.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

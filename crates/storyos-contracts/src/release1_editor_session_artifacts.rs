@@ -9,12 +9,19 @@ use crate::release1::{
     GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID, GetEditorSessionResponse, WEB_CLIENT_CONTRACT_REVISION,
 };
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    ClientOverride, GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple,
+    method,
+};
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
 };
 use crate::release1_wire::{
     canonical_u64_wire_schema, json_bytes, path_request_schema, query_openapi, schema_value,
     with_boundary_project_scope, without_project_scope,
 };
+
+const CREATE_EDITOR_SESSION_NOTES: &str = "Opening a session is a session Operational Record, not an author-owned Core command and not an Author Command Admission.";
 
 pub(super) const EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json";
@@ -50,7 +57,26 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "protected_client_session_binding",
                 "project_command_challenge",
             ],
-        ),
+            OperationCatalog::new(
+                "editor-session:open",
+                Owner::Editor,
+                Binding {
+                    action_class: ActionClass::SessionControl,
+                    admission: Admission::SessionControl,
+                    editor: EditorRule::NewSession,
+                    idempotency: Idempotency::HeaderAndOperationRecord,
+                    settlement: Settlement::Committed,
+                    error_profile: ErrorProfile::SessionControl,
+                },
+            )
+            .notes(CREATE_EDITOR_SESSION_NOTES),
+        )
+        .client(ClientOverride::DigestFields(&[
+            "client_contract_revision",
+            "command_schema",
+            "correlation_id",
+            "security_policy_revision",
+        ])),
         RegisteredOperation::query(
             &GET_EDITOR_SESSION,
             &[
@@ -58,6 +84,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "session_scope_join",
                 "protected_client_session_binding",
             ],
+            OperationCatalog::new(
+                "editor-session:read",
+                Owner::Editor,
+                Binding {
+                    action_class: ActionClass::None,
+                    admission: Admission::Query,
+                    editor: EditorRule::ObservedWriter,
+                    idempotency: Idempotency::None,
+                    settlement: Settlement::Read,
+                    error_profile: ErrorProfile::QueryCanonical,
+                },
+            ),
         ),
     ],
     schemas: || {
@@ -123,49 +161,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .map(|declaration| format!("export {declaration}"))
         .join("\n\n")
     },
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {{\n",
-                "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateEditorSession requires request\");\n",
-                "  const canonical = {{ client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision }};\n",
-                "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-                "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-                "  return {{ algorithm: \"sha256\", profile: \"storyos.command.createEditorSession.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-                "\nexport async function createEditorSession({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createEditorSession requires projectId\");\n",
-                "  if (!request || typeof request !== \"object\") throw new TypeError(\"createEditorSession requires request\");\n",
-                "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createEditorSession requires security bindings\");\n",
-                "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-                "\nexport async function getEditorSession({{ projectId, editorSessionId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
-                "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            CREATE_EDITOR_SESSION
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-            GET_EDITOR_SESSION
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}")
-                .replace(
-                    "{editor_session_id}",
-                    "${encodeURIComponent(editorSessionId)}"
-                ),
-        )
-    },
-    typescript_declarations: || {
-        concat!(
-            "export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-            "export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;\n",
-            "export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;\n",
-        )
-    },
     fixtures: || {
         [
             fixture_triple(
                 CREATE_EDITOR_SESSION_FIXTURE_PATHS,
-                &CREATE_EDITOR_SESSION,
                 [
                     |_| create_editor_session_fixture_bytes(),
                     |_| invalid_create_editor_session_fixture_bytes(),
@@ -174,7 +173,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 GET_EDITOR_SESSION_FIXTURE_PATHS,
-                &GET_EDITOR_SESSION,
                 [
                     |_| get_editor_session_fixture_bytes(),
                     |_| invalid_get_editor_session_fixture_bytes(),

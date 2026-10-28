@@ -1,18 +1,25 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_readable_export::{
-    EXPORT_HUMAN_READABLE_MANUSCRIPT, EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE,
-    EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
+    EXPORT_HUMAN_READABLE_MANUSCRIPT, EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID, ExportAcknowledgement,
     ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptInput,
     ExportHumanReadableManuscriptRefusalReason, ExportHumanReadableManuscriptRequest,
     ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
 };
+use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const EXPORT_HUMAN_READABLE_MANUSCRIPT_NOTES: &str = "This is the human-readable manuscript delivery required by the Release 1 editor baseline. It is separate from the portable Project Export Archive: output follows deterministic volume/chapter order and explicitly represents unavailable content; archive manifest, entry, and integrity semantics do not apply.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -23,6 +30,26 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "deterministic_volume_chapter_order",
             "unavailable_content_representation_profile",
         ],
+        OperationCatalog::new(
+            "manuscript-export:human-readable",
+            Owner::Release,
+            Binding {
+                action_class: ActionClass::ExplicitProjectCommand,
+                admission: Admission::AuthorCommandOrAsyncOperation,
+                editor: EditorRule::Optional,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::Accepted {
+                    query: &GET_HUMAN_READABLE_MANUSCRIPT_EXPORT,
+                    operation_ref: "human_readable_manuscript_export",
+                },
+                error_profile: ErrorProfile::AsyncCommand,
+            },
+        )
+        .activity(
+            &[ProjectActivityKind::HumanReadableManuscriptExportSettled],
+            &[],
+        )
+        .notes(EXPORT_HUMAN_READABLE_MANUSCRIPT_NOTES),
     )],
     schemas: || {
         operation_schemas(
@@ -34,12 +61,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&EXPORT_HUMAN_READABLE_MANUSCRIPT, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &EXPORT_HUMAN_READABLE_MANUSCRIPT,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -130,35 +154,6 @@ pub(super) fn typescript_type_declarations() -> String {
         HumanReadableManuscriptExportRef::decl(&config),
         ExportHumanReadableManuscriptEffect::decl(&config),
         ExportHumanReadableManuscriptResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestExportHumanReadableManuscript(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestExportHumanReadableManuscript requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function exportHumanReadableManuscript({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"exportHumanReadableManuscript requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"exportHumanReadableManuscript requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"exportHumanReadableManuscript requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE,
-        EXPORT_HUMAN_READABLE_MANUSCRIPT
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestExportHumanReadableManuscript(request: ExportHumanReadableManuscriptRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function exportHumanReadableManuscript(options: StoryOSQueryOptions & { projectId: string; request: ExportHumanReadableManuscriptRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportHumanReadableManuscriptResponse>;\n",
     )
 }
 

@@ -530,32 +530,32 @@ external effect.
 ### 7.1 Canonical Release 1 command routes
 
 Public Commands use resource-specific routes and schemas. StoryOS does not
-accept a generic `{ command_type, payload }` mutation endpoint. The complete
-machine-readable command, challenge, query, and stream catalog is the tracked
-[Release 1 route catalog](versioned-protocol-release-1-route-catalog.json),
-owned by this protocol specification. It is the only route inventory; product
-slice documents do not maintain a parallel list. The catalog's operation array
-is intentionally exhaustive and its count is derived by verification rather
-than fixed to the former illustrative route count.
+accept a generic `{ command_type, payload }` mutation endpoint. The
+machine-readable catalog of the served commands, challenges, queries, and
+streams is the generated [Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json).
+This protocol specification owns it. The Rust operation registry generates it
+([ADR 0074](../adr/0074-generate-the-route-catalog-from-the-operation-registry.md)).
+It is the only inventory of served routes. Product slice documents do not keep
+a parallel list. The catalog lists each served operation and no planned
+operation. [Section 7.1.2](#712-planned-operations-of-later-stages) lists the
+planned operations of later Stages.
 
 The catalog covers Project lifecycle, volume/chapter structure, one editor
 session and writer takeover, direct author editing, search and replacement,
 statistics, human-readable manuscript export, portable Project Export Archive
-import/export, Snapshot and resync, Proposal and Draft lifecycle, Agent-run
+export, Snapshot and resync, Proposal and Draft lifecycle, Agent-run
 control, and Project Activity.
 Each entry names one stable `operation_id`, method/path, resource/action shape,
 semantic owner, wire owner, request/response schema IDs, action/admission
 class, Editor Session and writer-generation rule, idempotency and
 preconditions, settlement/status profile, stable error profile, Project
-Activity mapping, positive/negative golden fixture IDs, and OpenAPI, JSON
-Schema, and TypeScript generated-operation coverage.
+Activity mapping, and positive/negative golden fixture IDs.
 The catalog's machine-readable `release1_capability_coverage` crosswalk is
 the acceptance-journey proof: it names every required Release 1 capability,
 maps it to existing operation IDs, and records action coverage where a generic
 resource update carries distinct actions such as volume/chapter rename and
-reorder. The verifier rejects an absent capability, operation, action mapping,
-or asynchronous settlement query rather than allowing a self-consistent but
-incomplete catalog.
+reorder. The registry tests of `storyos-contracts` reject an absent
+capability, operation, action mapping, or asynchronous settlement query.
 
 The only browser author-edit ingress is
 `POST /api/v1/projects/{project_id}/manuscript/author-edits`
@@ -566,6 +566,8 @@ classified into a Core Proposal. The Web Client never chooses an
 authoritative-vs-Proposal route. The separate `createReplacementProposal`
 operation is reserved for an Agent-produced inspectable Proposal from an exact
 plain-language Prose Change Request; it is not an alternate author-edit path.
+It is a planned operation of
+[section 7.1.2](#712-planned-operations-of-later-stages).
 
 The catalog also records the exact public exclusions. Internal
 `AppendProposalGenerationBatch`, `PauseProposalGeneration`, and
@@ -593,6 +595,10 @@ meaning:
 | `ContinueProposalGeneration` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-continuations` | synchronous generation-axis transition; a fresh generation ID is returned |
 | `UndoLatestAuthorAction` | Manuscript Revision and Proposal State Machine | `/author-actions/undo` | one unified newest-first frontier; compensation or reversal remains typed |
 
+`SupersedeProposal` is a planned operation of
+[section 7.1.2](#712-planned-operations-of-later-stages). The generated catalog
+does not list it.
+
 `WithdrawProposal` and `ReplanProposal` each have one public operation and a
 closed request discriminator for their two Core-legal causes. The `author`
 profile is an explicit protected editor command. It requires the current
@@ -614,8 +620,36 @@ All exact retries return the original typed settlement and event identities.
 `RequiresReconfirmation`. Every Release 1 editor command in the catalog
 excludes `Accepted` from its acknowledgement union; `Accepted` remains an
 asynchronous-operation acknowledgement for the catalogued long-running
-Agent-run, deletion, Proposal production, human-readable manuscript export,
-and portable Project Archive import/export operations.
+Agent-run, Proposal production, human-readable manuscript export, and portable
+Project Archive export operations, and for the planned Project deletion and
+Project Archive import operations.
+
+### 7.1.2 Planned operations of later Stages
+
+The generated route catalog lists only the served operations. The operations
+in this table are planned for later Stages. No route serves them in Release 1,
+and the generated catalog, the OpenAPI document, and the TypeScript client do
+not contain them. The other sections of this document give their contract.
+When a Stage serves one of these operations, that Stage adds it to the Rust
+operation registry, and the catalog gets it from the registry.
+
+| Planned operation | Kind | Planned method and path | Planned settlement | Semantic owner |
+| --- | --- | --- | --- | --- |
+| `deleteProject` | command | `DELETE /api/v1/projects/{project_id}` | async | deletion |
+| `createReplacementProposal` | command | `POST /api/v1/projects/{project_id}/manuscript/replacement-proposals` | async | assistance |
+| `supersedeProposal` | command | `POST /api/v1/projects/{project_id}/proposals/{proposal_id}/supersessions` | sync | core |
+| `resumeAgentRun` | command | `POST /api/v1/projects/{project_id}/agent-runs/{run_id}/resume` | sync | context |
+| `resolveWait` | command | `POST /api/v1/projects/{project_id}/waits/{wait_id}/resolutions` | sync | context |
+| `decideApproval` | command | `POST /api/v1/projects/{project_id}/approvals/{approval_id}/decisions` | sync | context |
+| `updateConversationMemorySettings` | command | `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings` | sync | memory |
+| `importProjectArchive` | command | `POST /api/v1/projects/{project_id}/imports` | async | storage |
+| `getArtifact` | query | `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` | read | artifact |
+| `getConversationMemory` | query | `GET /api/v1/projects/{project_id}/conversations/{conversation_id}/memory` | read | memory |
+| `getCommand` | query | `GET /api/v1/projects/{project_id}/commands/{command_id}` | read | admission |
+| `getReceipt` | query | `GET /api/v1/projects/{project_id}/receipts/{receipt_id}` | read | core |
+| `retrieveContext` | query | `POST /api/v1/projects/{project_id}/queries/retrieval` | read | context |
+| `queryHistory` | query | `POST /api/v1/projects/{project_id}/queries/history` | read | replay |
+| `getImportOperation` | query | `GET /api/v1/projects/{project_id}/imports/{import_id}` | read | storage |
 
 ### 7.2 Shared command metadata
 
@@ -850,12 +884,13 @@ domain result.
 Queries use resource-specific GET or bounded POST-search routes. A POST Query
 is safe by contract, creates no domain effect, and never shares an idempotency
 namespace with Commands. The complete Query, Snapshot, operation-status, and
-Project Activity inventory is the same [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json);
+Project Activity inventory is the same [Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json);
 there is no second query list here or in the AI-independent release contract.
-The catalog includes `getSnapshot`, `queryHistory`, `getImportOperation`,
-`getExportOperation`, and `getHumanReadableManuscriptExport`—the explicit
+The catalog includes `getSnapshot`, `getExportOperation`, and
+`getHumanReadableManuscriptExport`—the explicit
 status reads needed to settle asynchronous routes without treating process
-state as truth. The human-readable manuscript status read is not an alias for
+state as truth. `queryHistory` and `getImportOperation` are planned operations
+of [section 7.1.2](#712-planned-operations-of-later-stages). The human-readable manuscript status read is not an alias for
 the portable Project Export Archive status read.
 
 The Server assigns one `QueryId` when the first qualified evaluation begins.
@@ -2104,7 +2139,8 @@ an incomplete stream cannot become that result. Rejecting output does not undo
 earlier disclosure, cost, or hosted effects. StoryOS-controlled nested dispatch
 and later use of returned content still cross their own admission gates.
 
-The existing `decideApproval` route uses request/response v2 for a closed target:
+The planned `decideApproval` route of
+[section 7.1.2](#712-planned-operations-of-later-stages) uses request/response v2 for a closed target:
 `tool_call { tool_call_id, request_digest }` or
 `provider_hosted_operation { operation_id, model_attempt_id, request_digest }`.
 Scope and authority evidence bind the complete target. Neither variant approves
@@ -2145,7 +2181,8 @@ Creator, revision, digest, payload availability, and Project Scope contract.
 an opaque UUIDv7 settings revision, `use_enabled`, and `contribution_enabled`. Both values are
 required independent booleans; there is no Project-wide override or implicit
 inheritance. The release owner fixes defaults. `updateConversationMemorySettings`
-uses the catalogued conversation resource, ordinary author-command admission,
+(a planned operation of [section 7.1.2](#712-planned-operations-of-later-stages))
+uses the conversation resource, ordinary author-command admission,
 idempotency, and an exact expected settings revision. It sets both values as
 one atomic change. The previous semantic `updateContextControls` route, schemas,
 and Event are retired without an alias.
@@ -2239,8 +2276,8 @@ derives that release identity. A mismatch returns `upgrade_required` before a
 domain attempt, cursor advancement, or external effect.
 
 The Release 1 identity is the catalogued
-`storyos.compatibility.release-identity.v1` schema. The checked-in
-[route catalog](versioned-protocol-release-1-route-catalog.json) names its
+`storyos.compatibility.release-identity.v1` schema. The generated
+[route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json) names its
 required component fields and digests but does not invent deployment values.
 The protected Web Client, Server, Worker, contract graph, generated client,
 OpenAPI, JSON Schema catalog, and golden corpus all participate in one hard-cut
@@ -2514,15 +2551,14 @@ digest coverage descriptors, historical projections, and Protocol Limit
 Profiles. Generated artifacts are reviewed and checked in, but never edited as
 independent truth.
 
-The [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
-is the review manifest for the full planned public wire surface. It is limited to
-route placement, compatibility identity, schema naming, generated coverage,
-fixture identity, and Project Activity/Event mapping; its `owners` references
-point back to the semantic contracts and do not create a second domain owner.
-Current generation checks this manifest's digest and emits the implemented
-Rust subset; planned schema names are not proof of generated types or handlers.
-The eventual complete generator must regenerate the manifest from Rust rather
-than make it a second editable source of implemented DTOs.
+The Rust operation registry generates the
+[Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json).
+The catalog lists only the served operations and the Events that the code can
+persist. It is limited to route placement, compatibility identity, schema
+naming, fixture identity, and Project Activity/Event mapping; its `owners`
+references point back to the semantic contracts and do not create a second
+domain owner. The catalog is an output and not an editable source: the drift
+check fails when the file differs from the registry.
 
 The generator emits, from the same contract graph:
 
@@ -2531,10 +2567,12 @@ The generator emits, from the same contract graph:
 - JSON Schema 2020-12 for every public payload, Event, Artifact, archive,
   bridge, and exposed compatibility profile;
 - TypeScript client operations and types for the one active public release;
-- a schema catalog mapping every schema ID to its Rust owner and generated
-  artifact;
-- canonical positive and negative fixtures; and
-- the golden Application Wire Record and SSE frame corpus.
+  and
+- the golden Application Wire Record and SSE frame corpus with its canonical
+  positive and negative fixtures.
+
+The release identity digests the schema catalog and the fixture corpus. The
+generator writes no separate schema catalog or fixture manifest file.
 
 Core, Worker, Adapter, Provider, Tool, MCP, and App bridge Rust contracts are
 typed in the same source-of-truth crate where external or persisted, but are
@@ -2578,20 +2616,19 @@ does not claim original bytes.
 
 The eventual repository verification command must fail when:
 
-- the review-time verifier at
-  `docs/foundation/verify-versioned-protocol-route-catalog.py` cannot parse the
-  Release 1 catalog, finds a duplicate operation or method/path, finds a
-  missing schema/error/Event/fixture/generated-operation reference, finds a
-  broken semantic-owner source path or heading anchor, finds an invalid
-  Release 1 capability/journey mapping or missing settlement-query operation,
-  finds an inconsistent conditional-cause profile, or finds an editor command
-  that exposes `Accepted`;
+- the generated Release 1 route catalog differs from the operation registry,
+  or a registry test of `storyos-contracts` finds a duplicate operation or
+  method/path, a missing schema/error/Event/fixture reference, a broken
+  semantic-owner source path or heading anchor, an invalid Release 1
+  capability/journey mapping or missing settlement-query operation, an
+  inconsistent conditional-cause profile, or an editor command that exposes
+  `Accepted`;
 - a catalog operation's route, operation ID, request/response schema, error
   profile, Project Activity mapping, golden fixture, or generated OpenAPI/
   JSON-Schema/TypeScript coverage is not one-to-one and explicit; and
 
-- regenerating OpenAPI, JSON Schema, TypeScript, schema catalog, examples, or
-  golden corpus changes the worktree;
+- regenerating OpenAPI, JSON Schema, TypeScript, examples, or golden corpus
+  changes the worktree;
 - a public route, response, status, header, schema ID, discriminator, enum,
   limit, or error code lacks a Rust owner or generated representation;
 - OpenAPI and JSON Schema disagree on required, nullable, closed, or bounded
@@ -3022,7 +3059,7 @@ All rows bind the same-release profile; additive does not permit mixed releases.
 | none → `storyos.event.conversation-memory-settings-updated.v1` | Ledger; later Rust | planned Wire set | additive Event with closed revision meaning; security-sensitive | Stage 7 |
 | none → `storyos.event.memory-note-recorded.v1` and `storyos.event.memory-maintenance-settled.v1` | Ledger and internal-producer validator; later Rust | planned Wire set | additive Events; exact source/publication and closed outcomes; no public generation command | Stage 7 |
 | none → `storyos.artifact.memory-document.v1` and `storyos.artifact.memory-note.v1` | Ledger; later Rust | planned Wire set for content schemas | additive Tool Artifact payloads; existing envelope unchanged; source restrictions remain | Stage 7 |
-| current challenge target list and release/profile component digests | Rust `project_command_targets.rs`, `release1.rs`, `release1_artifacts.rs`; Ledger | current release profile, profile goldens, fixture manifest, OpenAPI metadata | breaking same-release hard cut; challenge/profile schema ids stay; implemented editor DTOs stay | Protocol now |
+| current challenge target list and release/profile component digests | Rust `project_command_targets.rs`, `release1.rs`, `release1_artifacts.rs`; Ledger | current release profile, profile goldens, OpenAPI metadata | breaking same-release hard cut; challenge/profile schema ids stay; implemented editor DTOs stay | Protocol now |
 | protocol revision/digest and operation mappings in persistence catalog | persistence catalog and its owning document | packaged catalog embedding; no DDL or migration output | breaking Storage Activation identity as stated above; table and migration-chain identities stay | Protocol references now; storage upgrade owner |
 
 The storage and retention owners receive the record and Event deltas above;

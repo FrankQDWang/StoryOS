@@ -1,4 +1,4 @@
-use crate::release1::{ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_snapshot::SnapshotDescriptor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ pub const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID: &str =
 
 pub(super) const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT: QueryOperation = QueryOperation {
     operation_id: "getHumanReadableManuscriptExport",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects/{project_id}/manuscript/exports/{export_id}",
     request_schema: GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
     response_schema: GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT: QueryOperation = QueryOpe
 pub const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_PATH: &str =
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.path;
 pub const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD: &str =
-    GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.method;
+    GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]

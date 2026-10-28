@@ -11,6 +11,7 @@ use crate::release1_open_proposal_list::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +22,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "bounded_open_proposal_list",
         ],
+        OperationCatalog::new(
+            "proposal:chapter-open-list",
+            Owner::Core,
+            Binding::CANONICAL_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(
@@ -32,12 +38,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&LIST_CHAPTER_OPEN_PROPOSALS, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &LIST_CHAPTER_OPEN_PROPOSALS,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -152,26 +155,6 @@ fn typescript_type_declarations() -> String {
         OpenProposalListCompleteness::decl(&config),
         ListChapterOpenProposalsResponse::decl(&config),
     )
-}
-
-fn typescript_client_source() -> String {
-    let path = LIST_CHAPTER_OPEN_PROPOSALS
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}")
-        .replace("{chapter_id}", "${encodeURIComponent(chapterId)}");
-    format!(
-        concat!(
-            "\nexport async function listChapterOpenProposals({{ projectId, chapterId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"listChapterOpenProposals requires projectId\");\n",
-            "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"listChapterOpenProposals requires chapterId\");\n",
-            "  return queryJson({{ ...options, path: `{path}` }});\n}}\n"
-        ),
-        path = path
-    )
-}
-
-fn typescript_declarations() -> &'static str {
-    "export declare function listChapterOpenProposals(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<ListChapterOpenProposalsResponse>;\n"
 }
 
 fn fixture_bytes() -> Vec<u8> {

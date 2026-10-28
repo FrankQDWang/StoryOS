@@ -4,12 +4,12 @@ use ts_rs::TS;
 
 use crate::release1::{
     APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-    AuthoritativeChapterRevision, DigestValue, ProjectScope, QueryOperation,
+    AuthoritativeChapterRevision, DigestValue, HttpMethod, ProjectScope, QueryOperation,
 };
 
 pub(super) const APPLY_AUTHOR_EDIT: QueryOperation = QueryOperation {
     operation_id: "applyAuthorEdit",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/manuscript/author-edits",
     request_schema: APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
     response_schema: APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
@@ -37,7 +37,7 @@ pub(super) const APPLY_AUTHOR_EDIT: QueryOperation = QueryOperation {
 };
 
 pub const APPLY_AUTHOR_EDIT_PATH: &str = APPLY_AUTHOR_EDIT.path;
-pub const APPLY_AUTHOR_EDIT_METHOD: &str = APPLY_AUTHOR_EDIT.method;
+pub const APPLY_AUTHOR_EDIT_METHOD: &str = APPLY_AUTHOR_EDIT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

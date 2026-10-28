@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
@@ -14,6 +15,7 @@ use crate::release1_project_assistance::{
     UpdateProjectAssistanceInput, UpdateProjectAssistanceNoEffectReason,
     UpdateProjectAssistanceRequest, UpdateProjectAssistanceResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         RegisteredOperation::query(
             &GET_PROJECT_ASSISTANCE,
             &["server_derived_project_scope", "project_visibility"],
+            OperationCatalog::new("project:assistance", Owner::Release, Binding::PROJECT_QUERY),
         ),
         RegisteredOperation::command(
             &UPDATE_PROJECT_ASSISTANCE,
@@ -29,6 +32,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_assistance_revision",
                 "project_active",
             ],
+            OperationCatalog::new(
+                "project:assistance",
+                Owner::Release,
+                Binding::PROJECT_COMMAND,
+            )
+            .activity(&[ProjectActivityKind::ProjectAssistanceUpdated], &[]),
         ),
     ],
     schemas: || {
@@ -50,13 +59,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_PROJECT_ASSISTANCE, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 GET_FIXTURE_PATHS,
-                &GET_PROJECT_ASSISTANCE,
                 [
                     |_| get_fixture_bytes(),
                     |_| get_invalid_fixture_bytes(),
@@ -65,7 +71,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 UPDATE_FIXTURE_PATHS,
-                &UPDATE_PROJECT_ASSISTANCE,
                 [
                     |_| update_fixture_bytes(),
                     |_| update_invalid_fixture_bytes(),
@@ -195,42 +200,6 @@ pub(super) fn typescript_type_declarations() -> String {
         UpdateProjectAssistanceConflictReason::decl(&config),
         UpdateProjectAssistanceEffect::decl(&config),
         UpdateProjectAssistanceResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function getProjectAssistance({{ projectId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProjectAssistance requires projectId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            "\nexport async function digestUpdateProjectAssistance(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestUpdateProjectAssistance requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function updateProjectAssistance({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"updateProjectAssistance requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"updateProjectAssistance requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"updateProjectAssistance requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"PUT\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        GET_PROJECT_ASSISTANCE
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE,
-        UPDATE_PROJECT_ASSISTANCE
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;\n",
-        "export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;\n",
     )
 }
 

@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_archive_project::{
     ARCHIVE_PROJECT, ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
     ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID, ArchiveProjectConflictReason, ArchiveProjectEffect,
@@ -10,6 +11,7 @@ use crate::release1_archive_project::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -20,6 +22,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_project_revision",
             "project_not_deleted",
         ],
+        OperationCatalog::new(
+            "project:archive",
+            Owner::Retention,
+            Binding::PROJECT_COMMAND,
+        )
+        .activity(&[ProjectActivityKind::ProjectArchivalChanged], &[]),
     )],
     schemas: || {
         operation_schemas(
@@ -31,12 +39,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&ARCHIVE_PROJECT, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &ARCHIVE_PROJECT,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -127,35 +132,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ArchiveProjectConflictReason::decl(&config),
         ArchiveProjectEffect::decl(&config),
         ArchiveProjectResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestArchiveProject(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestArchiveProject requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function archiveProject({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"archiveProject requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"archiveProject requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"archiveProject requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"PUT\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        ARCHIVE_PROJECT_DIGEST_PROFILE,
-        ARCHIVE_PROJECT
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;\n",
     )
 }
 

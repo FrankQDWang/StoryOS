@@ -2,9 +2,14 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
-    ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation, fixture_triple,
-    method, operation_schemas,
+    ClientOverride, ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation,
+    fixture_triple, method, operation_schemas,
+};
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
 };
 use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER, TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
@@ -13,11 +18,36 @@ use crate::release1_takeover::{
 };
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
+const TAKE_OVER_PROJECT_WRITER_NOTES: &str = "Both TakeoverApplied and TakeoverCompareFailed are Receipt-backed Project Activity outcomes; stale pre-admission observation has no Admission or Receipt.";
+
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation {
+        client: ClientOverride::None,
         operation: &TAKE_OVER_PROJECT_WRITER,
         kind: OperationKind::Command,
-        graph: ContractGraphEntry::Absent,
+        graph: ContractGraphEntry::Absent(&[
+            "server_derived_project_scope",
+            "session_scope_join",
+            "observed_writer_generation_current_before_admission",
+            "editor_contract_revision",
+        ]),
+        catalog: OperationCatalog::new(
+            "writer:takeover",
+            Owner::Editor,
+            Binding {
+                action_class: ActionClass::ExplicitEditorCommand,
+                admission: Admission::AuthorCommand,
+                editor: EditorRule::ExplicitTakeover,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::CommittedOrReconfirmation,
+                error_profile: ErrorProfile::EditorCommand,
+            },
+        )
+        .activity(
+            &[ProjectActivityKind::WriterTakeoverApplied],
+            &[ProjectActivityKind::WriterTakeoverCompareFailed],
+        )
+        .notes(TAKE_OVER_PROJECT_WRITER_NOTES),
     }],
     schemas: || {
         operation_schemas(
@@ -29,12 +59,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&TAKE_OVER_PROJECT_WRITER, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &TAKE_OVER_PROJECT_WRITER,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -106,39 +133,6 @@ pub(super) fn openapi() -> String {
     format!(
         "    post:\n      operationId: {}\n      summary: Take over the current Project writer generation\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: editor_session_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
         TAKE_OVER_PROJECT_WRITER.operation_id
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestTakeOverProjectWriter(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestTakeOverProjectWriter requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"storyos.command.takeOverProjectWriter.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function takeOverProjectWriter({{ projectId, editorSessionId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"takeOverProjectWriter requires projectId\");\n",
-            "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"takeOverProjectWriter requires editorSessionId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"takeOverProjectWriter requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"takeOverProjectWriter requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        TAKE_OVER_PROJECT_WRITER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace(
-                "{editor_session_id}",
-                "${encodeURIComponent(editorSessionId)}"
-            ),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;\n",
     )
 }
 

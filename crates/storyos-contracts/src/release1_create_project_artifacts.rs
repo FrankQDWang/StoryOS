@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_create_project::{
     CREATE_PROJECT, CREATE_PROJECT_CHALLENGE, CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
     CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID, CREATE_PROJECT_DIGEST_PROFILE,
@@ -9,9 +10,13 @@ use crate::release1_create_project::{
     CreateProjectRequest, CreateProjectResponse,
 };
 use crate::release1_operation_registry::{
-    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+    ClientOverride, OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple,
+    operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const CREATE_PROJECT_CHALLENGE_NOTES: &str = "Allocates only a prospective ProjectId and one challenge-bound idempotency record; it creates no Project, Admission, Receipt, or Core effect.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -25,6 +30,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "closed_create_project_schema",
                 "body_idempotency_key",
             ],
+            OperationCatalog::new(
+                "challenge:prospective-project",
+                Owner::Admission,
+                Binding::CHALLENGE,
+            )
+            .notes(CREATE_PROJECT_CHALLENGE_NOTES),
         ),
         RegisteredOperation::command(
             &CREATE_PROJECT,
@@ -36,7 +47,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "challenge_nonce_record",
                 "expected_absent_project",
             ],
-        ),
+            OperationCatalog::new("project:create", Owner::Release, Binding::PROJECT_COMMAND)
+                .activity(&[ProjectActivityKind::ProjectCreated], &[])
+                .notes("The only command admitted against a prospective Project Scope."),
+        )
+        .client(ClientOverride::NoDigest),
     ],
     schemas: || {
         [
@@ -63,13 +78,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 CHALLENGE_FIXTURE_PATHS,
-                &CREATE_PROJECT_CHALLENGE,
                 [
                     |_| challenge_fixture_bytes(),
                     |_| challenge_invalid_fixture_bytes(),
@@ -78,7 +90,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 FIXTURE_PATHS,
-                &CREATE_PROJECT,
                 [
                     |_| fixture_bytes(),
                     |_| invalid_fixture_bytes(),
@@ -233,25 +244,6 @@ fn command_openapi() -> String {
         ),
         CREATE_PROJECT.operation_id, request_schema, responses,
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function createProjectChallenge({{ request, ...options }} = {{}}) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectChallenge requires request\");\n",
-            "  return commandJson({{ ...options, path: \"{}\", body: request }});\n}}\n",
-            "\nexport async function createProject({{ request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProject requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createProject requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: \"{}\", body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        CREATE_PROJECT_CHALLENGE.path, CREATE_PROJECT.path,
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function createProjectChallenge(options: StoryOSQueryOptions & { request: CreateProjectChallengeRequest }): Promise<CreateProjectChallengeResponse>;\nexport declare function createProject(options: StoryOSQueryOptions & { request: CreateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateProjectResponse>;\n"
 }
 
 pub(super) fn challenge_fixture_bytes() -> Vec<u8> {

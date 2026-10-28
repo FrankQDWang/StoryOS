@@ -2,7 +2,11 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    operation_schemas,
+};
+use crate::release1_route_catalog::{
+    AuthorCause, CauseProfiles, CurrentProducerCause, OperationCatalog, Owner,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 use crate::release1_withdraw_proposal::{
@@ -14,6 +18,22 @@ use crate::release1_withdraw_proposal::{
     WithdrawProposalRequest, WithdrawProposalResponse, WithdrawalReceipt, WithdrawalReceiptResult,
 };
 
+const CAUSES: CauseProfiles = CauseProfiles {
+    author: AuthorCause {
+        semantic_payload: "withdrawal_reason: AuthorWithdrew",
+        request_schema: "storyos.command.withdraw-proposal.author-cause.request.v1",
+        response_schema: "storyos.command.withdraw-proposal.author-cause.response.v1",
+    },
+    current_producer: CurrentProducerCause {
+        semantic_cause: "Exact producer of the Proposal: its source AgentRun and Decision",
+        semantic_payload: "withdrawal_reason: CurrentProducerWithdrew",
+        cause_binding: "exact_proposal_producer",
+        request_schema: "storyos.command.withdraw-proposal.current-producer-cause.request.v1",
+        response_schema: "storyos.command.withdraw-proposal.current-producer-cause.response.v1",
+        recovery_rule: "The request binds the exact producer of the Proposal, its source AgentRun and Decision, and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
+    },
+};
+
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
         &WITHDRAW_PROPOSAL,
@@ -23,7 +43,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_target_revisions",
             "author_or_exact_current_producer_cause",
         ],
-    )],
+        OperationCatalog::conditional_by_cause("proposal:withdraw", Owner::Core, &CAUSES),
+    )
+    .client(ClientOverride::OptionalAntiForgery)],
     schemas: || {
         operation_schemas(
             &WITHDRAW_PROPOSAL,
@@ -34,12 +56,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&WITHDRAW_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &WITHDRAW_PROPOSAL,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -159,39 +178,6 @@ pub(super) fn typescript_type_declarations() -> String {
         WithdrawProposalNoEffectReason::decl(&config),
         WithdrawProposalEffect::decl(&config),
         WithdrawProposalResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestWithdrawProposal(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestWithdrawProposal requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function withdrawProposal({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"withdrawProposal requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"withdrawProposal requires proposalId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"withdrawProposal requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\") throw new TypeError(\"withdrawProposal requires an idempotency key\");\n",
-            "  const commandHeaders = {{ \"idempotency-key\": idempotencyKey }};\n",
-            "  if (typeof antiForgery === \"string\") commandHeaders[\"x-storyos-anti-forgery\"] = antiForgery;\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders }});\n}}\n",
-        ),
-        WITHDRAW_PROPOSAL_DIGEST_PROFILE,
-        WITHDRAW_PROPOSAL
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{proposal_id}", "${encodeURIComponent(proposalId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestWithdrawProposal(request: WithdrawProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery?: string }): Promise<WithdrawProposalResponse>;\n",
     )
 }
 

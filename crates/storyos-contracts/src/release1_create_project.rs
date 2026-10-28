@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, ProjectScope, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, ProjectScope, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID: &str =
@@ -15,7 +15,7 @@ pub const CREATE_PROJECT_DIGEST_PROFILE: &str = "storyos.command.createProject.j
 
 pub(super) const CREATE_PROJECT_CHALLENGE: QueryOperation = QueryOperation {
     operation_id: "createProjectChallenge",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/anti-forgery-challenges",
     request_schema: CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
     response_schema: CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
@@ -41,11 +41,11 @@ pub(super) const CREATE_PROJECT_CHALLENGE: QueryOperation = QueryOperation {
 };
 
 pub const CREATE_PROJECT_CHALLENGE_PATH: &str = CREATE_PROJECT_CHALLENGE.path;
-pub const CREATE_PROJECT_CHALLENGE_METHOD: &str = CREATE_PROJECT_CHALLENGE.method;
+pub const CREATE_PROJECT_CHALLENGE_METHOD: &str = CREATE_PROJECT_CHALLENGE.method.as_str();
 
 pub(super) const CREATE_PROJECT: QueryOperation = QueryOperation {
     operation_id: "createProject",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects",
     request_schema: CREATE_PROJECT_REQUEST_SCHEMA_ID,
     response_schema: CREATE_PROJECT_RESPONSE_SCHEMA_ID,
@@ -73,7 +73,7 @@ pub(super) const CREATE_PROJECT: QueryOperation = QueryOperation {
 };
 
 pub const CREATE_PROJECT_PATH: &str = CREATE_PROJECT.path;
-pub const CREATE_PROJECT_METHOD: &str = CREATE_PROJECT.method;
+pub const CREATE_PROJECT_METHOD: &str = CREATE_PROJECT.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

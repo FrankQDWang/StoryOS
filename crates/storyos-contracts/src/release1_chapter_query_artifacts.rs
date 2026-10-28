@@ -7,6 +7,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{
     json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
     without_project_scope,
@@ -32,6 +33,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "canonical_snapshot",
         ],
+        OperationCatalog::new(
+            "chapter:read",
+            Owner::Release,
+            Binding::CURRENT_CHAPTER_QUERY,
+        ),
     )],
     schemas: || {
         vec![
@@ -65,25 +71,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetChapterResponse::decl(&Config::default())),
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function getChapter({{ projectId, chapterId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
-                "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            GET_CHAPTER
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}")
-                .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;\n",
     fixtures: || {
         fixture_triple(
             CHAPTER_FIXTURE_PATHS,
-            &GET_CHAPTER,
             [
                 |_| chapter_fixture_bytes(),
                 |_| invalid_chapter_fixture_bytes(),

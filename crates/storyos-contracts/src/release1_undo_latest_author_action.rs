@@ -2,7 +2,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{AuthoritativeChapterRevision, ControlledProject, QueryOperation};
+use crate::release1::{
+    AuthoritativeChapterRevision, ControlledProject, HttpMethod, QueryOperation,
+};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID: &str =
@@ -14,7 +16,7 @@ pub const UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE: &str =
 
 pub(super) const UNDO_LATEST_AUTHOR_ACTION: QueryOperation = QueryOperation {
     operation_id: "undoLatestAuthorAction",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/author-actions/undo",
     request_schema: UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
     response_schema: UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
@@ -42,7 +44,7 @@ pub(super) const UNDO_LATEST_AUTHOR_ACTION: QueryOperation = QueryOperation {
 };
 
 pub const UNDO_LATEST_AUTHOR_ACTION_PATH: &str = UNDO_LATEST_AUTHOR_ACTION.path;
-pub const UNDO_LATEST_AUTHOR_ACTION_METHOD: &str = UNDO_LATEST_AUTHOR_ACTION.method;
+pub const UNDO_LATEST_AUTHOR_ACTION_METHOD: &str = UNDO_LATEST_AUTHOR_ACTION.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

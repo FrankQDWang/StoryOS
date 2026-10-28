@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const DELETE_VOLUME_REQUEST_SCHEMA_ID: &str = "storyos.command.delete-volume.request.v1";
@@ -11,7 +11,7 @@ pub const DELETE_VOLUME_DIGEST_PROFILE: &str = "storyos.command.deleteVolume.jcs
 
 pub(super) const DELETE_VOLUME: QueryOperation = QueryOperation {
     operation_id: "deleteVolume",
-    method: "DELETE",
+    method: HttpMethod::Delete,
     path: "/api/v1/projects/{project_id}/volumes/{volume_id}",
     request_schema: DELETE_VOLUME_REQUEST_SCHEMA_ID,
     response_schema: DELETE_VOLUME_RESPONSE_SCHEMA_ID,
@@ -39,7 +39,7 @@ pub(super) const DELETE_VOLUME: QueryOperation = QueryOperation {
 };
 
 pub const DELETE_VOLUME_PATH: &str = DELETE_VOLUME.path;
-pub const DELETE_VOLUME_METHOD: &str = DELETE_VOLUME.method;
+pub const DELETE_VOLUME_METHOD: &str = DELETE_VOLUME.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

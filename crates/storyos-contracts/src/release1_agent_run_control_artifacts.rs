@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_agent_run::AgentRunStatus;
 use crate::release1_agent_run_artifacts::SELECTION_REFERENCE_UUID_FIELDS;
 use crate::release1_agent_run_control::{
@@ -18,6 +19,7 @@ use crate::release1_agent_run_control::{
 use crate::release1_operation_registry::{
     OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -31,6 +33,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "nonterminal_run",
                 "bounded_author_input",
             ],
+            OperationCatalog::new(
+                "agent-run:steer",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunSteeringRetained], &[]),
         ),
         RegisteredOperation::command(
             &PAUSE_AGENT_RUN,
@@ -40,6 +48,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "current_run_state_pauseable",
                 "current_fence_generation",
             ],
+            OperationCatalog::new(
+                "agent-run:pause",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunPaused], &[]),
         ),
         RegisteredOperation::command(
             &CANCEL_AGENT_RUN,
@@ -49,6 +63,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "current_run_state_cancellable",
                 "current_fence_generation",
             ],
+            OperationCatalog::new(
+                "agent-run:cancel",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunCancelled], &[]),
         ),
     ],
     schemas: || {
@@ -75,13 +95,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 STEER_FIXTURE_PATHS,
-                &STEER_AGENT_RUN,
                 [
                     |_| steer_fixture_bytes(),
                     |_| steer_invalid_fixture_bytes(),
@@ -90,7 +107,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 PAUSE_FIXTURE_PATHS,
-                &PAUSE_AGENT_RUN,
                 [
                     |_| pause_fixture_bytes(),
                     |_| pause_invalid_fixture_bytes(),
@@ -99,7 +115,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 CANCEL_FIXTURE_PATHS,
-                &CANCEL_AGENT_RUN,
                 [
                     |_| cancel_fixture_bytes(),
                     |_| cancel_invalid_fixture_bytes(),
@@ -204,72 +219,6 @@ pub(super) fn typescript_type_declarations() -> String {
         SteerAgentRunRequest::decl(&config),
         SteerAgentRunEffect::decl(&config),
         SteerAgentRunResponse::decl(&config)
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let existing = format!(
-        concat!(
-            "\nexport async function digestPauseAgentRun(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestPauseAgentRun requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function pauseAgentRun({{ projectId, runId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"pauseAgentRun requires projectId\");\n",
-            "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"pauseAgentRun requires runId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"pauseAgentRun requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"pauseAgentRun requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-            "\nexport async function digestCancelAgentRun(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCancelAgentRun requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function cancelAgentRun({{ projectId, runId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"cancelAgentRun requires projectId\");\n",
-            "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"cancelAgentRun requires runId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"cancelAgentRun requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"cancelAgentRun requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        PAUSE_AGENT_RUN_DIGEST_PROFILE,
-        PAUSE_AGENT_RUN
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{run_id}", "${encodeURIComponent(runId)}"),
-        CANCEL_AGENT_RUN_DIGEST_PROFILE,
-        CANCEL_AGENT_RUN
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{run_id}", "${encodeURIComponent(runId)}"),
-    );
-    format!(
-        r#"
-export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {{
-  if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
-  const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return {{ algorithm: "sha256", profile: "{STEER_AGENT_RUN_DIGEST_PROFILE}", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") }};
-}}
-export async function steerAgentRun({{ projectId, runId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{
-  if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
-  return commandJson({{ ...options, path: `/api/v1/projects/${{encodeURIComponent(projectId)}}/agent-runs/${{encodeURIComponent(runId)}}/steering-inputs`, body: request, commandHeaders: {{ "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery }} }});
-}}
-{existing}"#
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestSteerAgentRun(request: SteerAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function steerAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: SteerAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<SteerAgentRunResponse>;\n",
-        "export declare function digestPauseAgentRun(request: PauseAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;\n",
-        "export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;\n",
     )
 }
 

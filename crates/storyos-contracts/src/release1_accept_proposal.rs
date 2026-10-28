@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::release1::{
-    AuthoritativeChapterRevision, ControlledProject, DigestValue, QueryOperation,
+    AuthoritativeChapterRevision, ControlledProject, DigestValue, HttpMethod, QueryOperation,
 };
 
 pub const ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID: &str = "storyos.command.accept-proposal.request.v1";
@@ -12,7 +12,7 @@ pub const ACCEPT_PROPOSAL_DIGEST_PROFILE: &str = "storyos.command.acceptProposal
 
 pub(super) const ACCEPT_PROPOSAL: QueryOperation = QueryOperation {
     operation_id: "acceptProposal",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
     request_schema: ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -40,7 +40,7 @@ pub(super) const ACCEPT_PROPOSAL: QueryOperation = QueryOperation {
 };
 
 pub const ACCEPT_PROPOSAL_PATH: &str = ACCEPT_PROPOSAL.path;
-pub const ACCEPT_PROPOSAL_METHOD: &str = ACCEPT_PROPOSAL.method;
+pub const ACCEPT_PROPOSAL_METHOD: &str = ACCEPT_PROPOSAL.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

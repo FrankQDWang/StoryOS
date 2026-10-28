@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, DigestValue, QueryOperation};
+use crate::release1::{ControlledProject, DigestValue, HttpMethod, QueryOperation};
 
 pub const REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID: &str =
     "storyos.command.reject-proposal-operations.request.v1";
@@ -13,7 +13,7 @@ pub const REJECT_PROPOSAL_OPERATIONS_DIGEST_PROFILE: &str =
 
 pub(super) const REJECT_PROPOSAL_OPERATIONS: QueryOperation = QueryOperation {
     operation_id: "rejectProposalOperations",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
     request_schema: REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
     response_schema: REJECT_PROPOSAL_OPERATIONS_RESPONSE_SCHEMA_ID,
@@ -41,7 +41,7 @@ pub(super) const REJECT_PROPOSAL_OPERATIONS: QueryOperation = QueryOperation {
 };
 
 pub const REJECT_PROPOSAL_OPERATIONS_PATH: &str = REJECT_PROPOSAL_OPERATIONS.path;
-pub const REJECT_PROPOSAL_OPERATIONS_METHOD: &str = REJECT_PROPOSAL_OPERATIONS.method;
+pub const REJECT_PROPOSAL_OPERATIONS_METHOD: &str = REJECT_PROPOSAL_OPERATIONS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

@@ -70,19 +70,19 @@ export async function getProtocolProfile(options = {}) {
 
 export async function createProjectChallenge({ request, ...options } = {}) {
   if (!request || typeof request !== "object") throw new TypeError("createProjectChallenge requires request");
-  return commandJson({ ...options, path: "/api/v1/anti-forgery-challenges", body: request });
+  return commandJson({ ...options, method: "POST", path: "/api/v1/anti-forgery-challenges", body: request });
 }
 
 export async function createProject({ request, idempotencyKey, antiForgery, ...options } = {}) {
   if (!request || typeof request !== "object") throw new TypeError("createProject requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("createProject requires security bindings");
-  return commandJson({ ...options, path: "/api/v1/projects", body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: "/api/v1/projects", body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function createProjectCommandChallenge({ projectId, request, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createProjectCommandChallenge requires projectId");
   if (!request || typeof request !== "object") throw new TypeError("createProjectCommandChallenge requires request");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/anti-forgery-challenges`, body: request });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/anti-forgery-challenges`, body: request });
 }
 
 export async function listProjects(options = {}) {
@@ -156,7 +156,7 @@ export async function createEditorSession({ projectId, request, idempotencyKey, 
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createEditorSession requires projectId");
   if (!request || typeof request !== "object") throw new TypeError("createEditorSession requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("createEditorSession requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function getEditorSession({ projectId, editorSessionId, ...options } = {}) {
@@ -178,7 +178,7 @@ export async function takeOverProjectWriter({ projectId, editorSessionId, reques
   if (typeof editorSessionId !== "string" || editorSessionId.length === 0) throw new TypeError("takeOverProjectWriter requires editorSessionId");
   if (!request || typeof request !== "object") throw new TypeError("takeOverProjectWriter requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("takeOverProjectWriter requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions/${encodeURIComponent(editorSessionId)}/takeovers`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions/${encodeURIComponent(editorSessionId)}/takeovers`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestCreateVolume(request, cryptoImpl = globalThis.crypto) {
@@ -303,7 +303,7 @@ export async function applyAuthorEdit({ projectId, request, idempotencyKey, anti
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("applyAuthorEdit requires projectId");
   if (!request || typeof request !== "object") throw new TypeError("applyAuthorEdit requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("applyAuthorEdit requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/manuscript/author-edits`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/manuscript/author-edits`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestAcceptProposal(request, cryptoImpl = globalThis.crypto) {
@@ -463,7 +463,7 @@ export async function createAgentRun({ projectId, request, idempotencyKey, antiF
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createAgentRun requires projectId");
   if (!request || typeof request !== "object") throw new TypeError("createAgentRun requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("createAgentRun requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function getAgentRun({ projectId, runId, modelAttemptId, ...options } = {}) {
@@ -475,13 +475,18 @@ export async function getAgentRun({ projectId, runId, modelAttemptId, ...options
 
 export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
-  const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return { algorithm: "sha256", profile: "storyos.command.steerAgentRun.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
 }
+
 export async function steerAgentRun({ projectId, runId, request, idempotencyKey, antiForgery, ...options } = {}) {
-  if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/steering-inputs`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("steerAgentRun requires projectId");
+  if (typeof runId !== "string" || runId.length === 0) throw new TypeError("steerAgentRun requires runId");
+  if (!request || typeof request !== "object") throw new TypeError("steerAgentRun requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires security bindings");
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/steering-inputs`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestPauseAgentRun(request, cryptoImpl = globalThis.crypto) {
@@ -497,7 +502,7 @@ export async function pauseAgentRun({ projectId, runId, request, idempotencyKey,
   if (typeof runId !== "string" || runId.length === 0) throw new TypeError("pauseAgentRun requires runId");
   if (!request || typeof request !== "object") throw new TypeError("pauseAgentRun requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("pauseAgentRun requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/pause`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/pause`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestCancelAgentRun(request, cryptoImpl = globalThis.crypto) {
@@ -513,7 +518,7 @@ export async function cancelAgentRun({ projectId, runId, request, idempotencyKey
   if (typeof runId !== "string" || runId.length === 0) throw new TypeError("cancelAgentRun requires runId");
   if (!request || typeof request !== "object") throw new TypeError("cancelAgentRun requires request");
   if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("cancelAgentRun requires security bindings");
-  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/cancel`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/cancel`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestExportProjectArchive(request, cryptoImpl = globalThis.crypto) {

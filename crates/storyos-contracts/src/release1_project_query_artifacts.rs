@@ -7,6 +7,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{
     json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
     without_project_scope,
@@ -28,6 +29,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
         &GET_PROJECT,
         &["server_derived_project_scope", "project_visibility"],
+        OperationCatalog::new(
+            "project:read",
+            Owner::Release,
+            Binding::CURRENT_PROJECT_QUERY,
+        ),
     )],
     schemas: || {
         vec![
@@ -61,23 +67,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetProjectResponse::decl(&Config::default())),
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function getProject({{ projectId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            GET_PROJECT
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;\n",
     fixtures: || {
         fixture_triple(
             PROJECT_FIXTURE_PATHS,
-            &GET_PROJECT,
             [
                 |_| project_fixture_bytes(),
                 |_| invalid_project_fixture_bytes(),

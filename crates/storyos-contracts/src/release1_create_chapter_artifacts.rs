@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_create_chapter::{
     CREATE_CHAPTER, CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     CREATE_CHAPTER_RESPONSE_SCHEMA_ID, CreateChapterConflictReason, CreateChapterEffect,
@@ -10,6 +11,7 @@ use crate::release1_create_chapter::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "project_active",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("chapter:create", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::ChapterCreated], &[]),
     )],
     schemas: || {
         operation_schemas(
@@ -32,12 +36,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&CREATE_CHAPTER, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &CREATE_CHAPTER,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -141,37 +142,6 @@ pub(super) fn typescript_type_declarations() -> String {
         CreateChapterRefusalReason::decl(&config),
         CreateChapterEffect::decl(&config),
         CreateChapterResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestCreateChapter(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateChapter requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function createChapter({{ projectId, volumeId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createChapter requires projectId\");\n",
-            "  if (typeof volumeId !== \"string\" || volumeId.length === 0) throw new TypeError(\"createChapter requires volumeId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createChapter requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createChapter requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        CREATE_CHAPTER_DIGEST_PROFILE,
-        CREATE_CHAPTER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{volume_id}", "${encodeURIComponent(volumeId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestCreateChapter(request: CreateChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function createChapter(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: CreateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateChapterResponse>;\n",
     )
 }
 

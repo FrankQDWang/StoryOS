@@ -18,8 +18,8 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
     events = route_catalog.get("events", [])
     operation_by_id = {operation.get("operation_id"): operation for operation in operations}
     event_by_id = {event.get("schema_id"): event for event in events}
-    if coverage.get("source") != "docs/foundation/versioned-protocol-release-1-route-catalog.json":
-        fail(errors, "route_coverage.source must be the checked-in Release 1 route catalog")
+    if coverage.get("source") != "generated/route-catalog/versioned-protocol-release-1-route-catalog.json":
+        fail(errors, "route_coverage.source must be the generated Release 1 route catalog")
     expected_settlement_fields = {
         "operation_id",
         "settlement.mode",
@@ -97,7 +97,7 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
         if operation.get("kind") in {"command", "challenge"} and operation.get("operation_id") in required:
             if operation.get("wire_owner") != wire_owner:
                 fail(errors, f"{operation.get('operation_id')}: route wire owner does not match canonical wire-history family owner")
-    projection_operations = {"searchManuscript", "retrieveContext"}
+    projection_operations = {"searchManuscript"}
     for operation_id in projection_operations:
         if not any(family_map.get(family_id, {}).get("authority_class") == "projection" for family_id in operation_owners.get(operation_id, set())):
             fail(errors, f"projection-bearing operation lacks a projection family: {operation_id}")

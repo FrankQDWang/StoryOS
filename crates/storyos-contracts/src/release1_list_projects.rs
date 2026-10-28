@@ -2,14 +2,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ProjectOpenState, ProjectScope, QueryOperation};
+use crate::release1::{HttpMethod, ProjectOpenState, ProjectScope, QueryOperation};
 
 pub const LIST_PROJECTS_REQUEST_SCHEMA_ID: &str = "storyos.query.project-list.request.v1";
 pub const LIST_PROJECTS_RESPONSE_SCHEMA_ID: &str = "storyos.query.project-list.response.v1";
 
 pub(super) const LIST_PROJECTS: QueryOperation = QueryOperation {
     operation_id: "listProjects",
-    method: "GET",
+    method: HttpMethod::Get,
     path: "/api/v1/projects",
     request_schema: LIST_PROJECTS_REQUEST_SCHEMA_ID,
     response_schema: LIST_PROJECTS_RESPONSE_SCHEMA_ID,
@@ -35,7 +35,7 @@ pub(super) const LIST_PROJECTS: QueryOperation = QueryOperation {
 };
 
 pub const LIST_PROJECTS_PATH: &str = LIST_PROJECTS.path;
-pub const LIST_PROJECTS_METHOD: &str = LIST_PROJECTS.method;
+pub const LIST_PROJECTS_METHOD: &str = LIST_PROJECTS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

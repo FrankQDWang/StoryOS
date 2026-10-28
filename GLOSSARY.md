@@ -21,7 +21,7 @@ To find each entry that uses a term, use `grep -rn 'Project Scope' docs/glossary
 | [Discovery writing, editor, and author commands](docs/glossary/editor-and-author-commands.md) | Discovery writing, the AI-independent editor, Author Edit, and Author Command Admission. |
 | [Instructions, context, and memory](docs/glossary/context-and-memory.md) | Author instructions, Agent Memory, Context Assembly, retrieval, and context projection. |
 | [Deployment, export, deletion, and recovery](docs/glossary/deployment-and-recovery.md) | The Foundation deployment, storage activation, Project export, restore, deletion, and recovery. |
-| [Commands, protocol, and Activity Stream](docs/glossary/protocol-and-activity.md) | Command acknowledgement, protocol profiles, wire records, the Project Activity Stream, and queries. |
+| [Commands, protocol, and Activity Stream](docs/glossary/protocol-and-activity.md) | Command acknowledgement, protocol profiles, wire records, the Project Activity Stream, queries, the Operation Registry, and the Route Catalog. |
 | [AgentRun, plan, retention, and budget](docs/glossary/agent-run.md) | AgentRun, triggers, Run lifecycle and events, holds and waits, plans, operational retention, and Run budgets. |
 | [Subrun](docs/glossary/subrun.md) | Subrun requests, lifecycle, Mailbox, results, and joins. |
 | [SkillPackage and Skill](docs/glossary/skill.md) | SkillPackage sources, installation, invocation, selection, and loading. |

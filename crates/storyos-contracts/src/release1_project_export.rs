@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_readable_export::ExportAcknowledgement;
 use crate::release1_snapshot::SnapshotDescriptor;
 
@@ -15,7 +15,7 @@ pub const EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE: &str =
 
 pub(super) const EXPORT_PROJECT_ARCHIVE: QueryOperation = QueryOperation {
     operation_id: "exportProjectArchive",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/exports",
     request_schema: EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
     response_schema: EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
@@ -42,7 +42,7 @@ pub(super) const EXPORT_PROJECT_ARCHIVE: QueryOperation = QueryOperation {
 };
 
 pub const EXPORT_PROJECT_ARCHIVE_PATH: &str = EXPORT_PROJECT_ARCHIVE.path;
-pub const EXPORT_PROJECT_ARCHIVE_METHOD: &str = EXPORT_PROJECT_ARCHIVE.method;
+pub const EXPORT_PROJECT_ARCHIVE_METHOD: &str = EXPORT_PROJECT_ARCHIVE.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]

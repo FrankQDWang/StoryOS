@@ -1,8 +1,9 @@
 use super::{
-    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, REVIEW_CATALOG_PATH, fixture_corpus_bytes,
-    release1_protocol_profile, validate_review_bindings,
+    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, check_contract_graph, contract_graph_bytes,
+    fixture_corpus_bytes, release1_protocol_profile,
 };
 use crate::digest::sha256_prefixed;
+use crate::release1::HttpMethod;
 use crate::release1_chapter_query_artifacts::{
     CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH,
 };
@@ -43,14 +44,8 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
     assert!(client.contains("export async function createEditorSession"));
     assert!(client.contains("export async function getEditorSession"));
     assert!(client.contains("x-storyos-anti-forgery"));
-    assert_eq!(
-        openapi.contains("operationId: applyAuthorEdit"),
-        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
-    );
-    assert_eq!(
-        client.contains("export async function applyAuthorEdit"),
-        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
-    );
+    assert!(openapi.contains("operationId: applyAuthorEdit"));
+    assert!(client.contains("export async function applyAuthorEdit"));
 }
 
 #[test]
@@ -481,7 +476,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
                 .iter()
                 .flat_map(move |registered| {
                     let operation = registered.operation;
-                    let request = (operation.method != "GET").then_some(operation.request_schema);
+                    let request =
+                        (operation.method != HttpMethod::Get).then_some(operation.request_schema);
                     request
                         .into_iter()
                         .chain([operation.response_schema])
@@ -689,37 +685,15 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
 }
 #[test]
-fn changed_review_catalog_contract_is_rejected() {
-    let mut bytes = std::fs::read(super::super::repository_root().join(REVIEW_CATALOG_PATH))
-        .expect("review catalog should exist");
-    bytes[0] = b' ';
-    assert!(validate_review_bindings(&bytes).is_err());
+fn changed_contract_graph_is_rejected() {
+    let mut graph = contract_graph_bytes();
+    assert!(check_contract_graph(&graph).is_ok());
+    graph[0] = b' ';
+    assert!(check_contract_graph(&graph).is_err());
 }
 
-/// Operations whose source HTTP statuses differ from the reviewed route catalog before this test existed.
-const KNOWN_HTTP_STATUS_DRIFT: [&str; 4] = [
-    "createProject",
-    "createProjectCommandChallenge",
-    "getProject",
-    "getChapter",
-];
-
-/// Operations whose contract-graph preconditions omit a reviewed route-catalog precondition.
-const KNOWN_PRECONDITION_DRIFT: [&str; 10] = [
-    "createEditorSession",
-    "applyAuthorEdit",
-    "acceptProposal",
-    "rejectProposalOperations",
-    "replanProposal",
-    "reopenRejectedOperations",
-    "completeReadyPartialProposal",
-    "continueProposalGeneration",
-    "undoLatestAuthorAction",
-    "getApplyAuthorEditOutcome",
-];
-
 #[test]
-fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() {
+fn every_registered_operation_matches_its_generated_wire() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
@@ -727,25 +701,10 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
     let openapi = text(OPENAPI_PATH);
     let client = text("generated/typescript/storyos-public-release-1/client.mjs");
     let declaration = text("generated/typescript/storyos-public-release-1/client.d.mts");
-    let fixture_catalog: serde_json::Value =
-        serde_json::from_slice(&generated["generated/fixtures/storyos-public-release-1.json"])
-            .expect("fixture catalog must be JSON");
-    let reviewed_catalog: serde_json::Value = serde_json::from_slice(include_bytes!(
-        "../../../docs/foundation/versioned-protocol-release-1-route-catalog.json"
-    ))
-    .expect("reviewed route catalog must be JSON");
-    let mut source_surfaces = Vec::new();
-    let mut reviewed_surfaces = Vec::new();
-    let mut http_status_drift = Vec::new();
-    let mut precondition_drift = Vec::new();
     let mut client_positions = Vec::new();
     let mut declaration_positions = Vec::new();
-    let schema_catalog: serde_json::Value = serde_json::from_slice(
-        &generated["generated/schema-catalog/storyos-public-release-1.json"],
-    )
-    .expect("schema catalog must be JSON");
-    let graph: serde_json::Value = serde_json::from_slice(&super::contract_graph_bytes())
-        .expect("contract graph must be JSON");
+    let graph: serde_json::Value =
+        serde_json::from_slice(&contract_graph_bytes()).expect("contract graph must be JSON");
     for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
         let schema_paths = (artifacts.schemas)()
             .into_iter()
@@ -754,41 +713,11 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
         for registered in artifacts.operations {
             let operation = registered.operation;
             let id = operation.operation_id;
-            let reviewed = reviewed_catalog["operations"]
-                .as_array()
-                .expect("reviewed operations must be an array")
-                .iter()
-                .find(|entry| entry["operation_id"] == id)
-                .unwrap_or_else(|| panic!("reviewed catalog must contain {id}"));
-            let negative = reviewed["fixtures"]["negative"]
-                .as_array()
-                .expect("negative fixture IDs must be an array");
-            source_surfaces.push(serde_json::json!({
-                "operation_id": id,
-                "kind": registered.kind.as_str(),
-                "method": operation.method,
-                "path": operation.path,
-                "request_schema": operation.request_schema,
-                "response_schema": operation.response_schema,
-                "fixtures": operation.fixtures,
-            }));
-            reviewed_surfaces.push(serde_json::json!({
-                    "operation_id": reviewed["operation_id"],
-                    "kind": reviewed["kind"],
-                    "method": reviewed["method"],
-                    "path": reviewed["path"],
-                    "request_schema": reviewed["schemas"]["request"],
-                    "response_schema": reviewed["schemas"]["response"],
-                    "fixtures": std::iter::once(&reviewed["fixtures"]["positive"]).chain(negative).collect::<Vec<_>>(),
-                }));
             let statuses = operation
                 .responses
                 .iter()
                 .map(|(status, _)| *status)
                 .collect::<Vec<_>>();
-            if serde_json::json!(statuses) != reviewed["settlement"]["http_statuses"] {
-                http_status_drift.push(id);
-            }
 
             let schema_ref = |schema_id: &str| {
                 schema_paths[schema_id]
@@ -812,7 +741,7 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                 .unwrap_or_else(|| panic!("OpenAPI must contain the path of {id}"));
             let method_key = format!(
                 "    {}:\n      operationId: {id}\n",
-                operation.method.to_ascii_lowercase()
+                operation.method.as_str().to_ascii_lowercase()
             );
             let path_item = &openapi[path_start + path_key.len()..];
             let path_item = &path_item[..path_item.find("\n  /").unwrap_or(path_item.len())];
@@ -835,7 +764,7 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                     .collect::<Vec<_>>()
             };
             let request_references = references(&method_lines[..responses_at]);
-            if operation.method == "GET" {
+            if operation.method == HttpMethod::Get {
                 assert_eq!(request_references, Vec::<String>::new(), "{id}");
             } else {
                 assert_eq!(
@@ -879,13 +808,6 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
 
             client_positions.push(client.find(&format!("export async function {id}(")));
             declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
-            assert!(
-                schema_catalog["implemented_operations"]
-                    .as_array()
-                    .expect("implemented operations must be an array")
-                    .contains(&serde_json::json!(id)),
-                "{id}"
-            );
             let graph_entry = graph["operations"]
                 .as_array()
                 .expect("contract graph operations must be an array")
@@ -897,41 +819,19 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                 ) => {
                     let graph_entry =
                         graph_entry.unwrap_or_else(|| panic!("contract graph must contain {id}"));
-                    assert_eq!(graph_entry["kind"], reviewed["kind"], "{id}");
+                    assert_eq!(graph_entry["kind"], registered.kind.as_str(), "{id}");
                     assert_eq!(
                         graph_entry["preconditions"],
                         serde_json::json!(preconditions),
                         "{id}"
                     );
-                    let reviewed_preconditions = reviewed["preconditions"]
-                        .as_array()
-                        .expect("reviewed preconditions must be an array");
-                    if !reviewed_preconditions
-                        .iter()
-                        .all(|precondition| preconditions.iter().any(|own| precondition == own))
-                    {
-                        precondition_drift.push(id);
-                    }
                 }
-                crate::release1_operation_registry::ContractGraphEntry::Absent => {
+                crate::release1_operation_registry::ContractGraphEntry::Absent(_) => {
                     assert!(graph_entry.is_none(), "{id}");
                 }
             }
-
-            let fixture_ids = fixture_catalog["fixtures"]
-                .as_array()
-                .expect("fixture catalog entries must be an array")
-                .iter()
-                .filter(|fixture| fixture["operation_id"] == id)
-                .filter_map(|fixture| fixture["fixture_id"].as_str())
-                .filter(|fixture_id| !fixture_id.starts_with("storyos.golden.storyos.event."))
-                .collect::<Vec<_>>();
-            assert_eq!(fixture_ids, operation.fixtures, "{id}");
         }
     }
-    assert_eq!(source_surfaces, reviewed_surfaces);
-    assert_eq!(http_status_drift, KNOWN_HTTP_STATUS_DRIFT);
-    assert_eq!(precondition_drift, KNOWN_PRECONDITION_DRIFT);
     for positions in [client_positions, declaration_positions] {
         assert!(positions.iter().all(Option::is_some));
         assert!(

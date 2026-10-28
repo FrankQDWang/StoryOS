@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1::{ControlledProject, HttpMethod, QueryOperation};
 use crate::release1_author_edit::DomainReceipt;
 
 pub const CREATE_VOLUME_REQUEST_SCHEMA_ID: &str = "storyos.command.create-volume.request.v1";
@@ -11,7 +11,7 @@ pub const CREATE_VOLUME_DIGEST_PROFILE: &str = "storyos.command.createVolume.jcs
 
 pub(super) const CREATE_VOLUME: QueryOperation = QueryOperation {
     operation_id: "createVolume",
-    method: "POST",
+    method: HttpMethod::Post,
     path: "/api/v1/projects/{project_id}/volumes",
     request_schema: CREATE_VOLUME_REQUEST_SCHEMA_ID,
     response_schema: CREATE_VOLUME_RESPONSE_SCHEMA_ID,
@@ -40,7 +40,7 @@ pub(super) const CREATE_VOLUME: QueryOperation = QueryOperation {
 };
 
 pub const CREATE_VOLUME_PATH: &str = CREATE_VOLUME.path;
-pub const CREATE_VOLUME_METHOD: &str = CREATE_VOLUME.method;
+pub const CREATE_VOLUME_METHOD: &str = CREATE_VOLUME.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
