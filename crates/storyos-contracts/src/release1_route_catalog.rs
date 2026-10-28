@@ -482,5 +482,8 @@ fn extend(object: &mut Value, fields: Value) {
 }
 
 #[cfg(test)]
+#[path = "release1_route_catalog_rule_tests.rs"]
+mod rule_tests;
+#[cfg(test)]
 #[path = "release1_route_catalog_tests.rs"]
 mod tests;

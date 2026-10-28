@@ -10,19 +10,19 @@ use crate::release1_operation_registry::OperationKind;
 /// The registry serves fewer statuses for these queries than their error profile names.
 const NARROWER_THAN_ERROR_PROFILE: [&str; 2] = ["getProject", "getChapter"];
 
-fn catalog() -> Value {
+pub(super) fn catalog() -> Value {
     serde_json::from_slice(&route_catalog_bytes()).expect("route catalog must be JSON")
 }
 
-fn array(value: &Value) -> &Vec<Value> {
+pub(super) fn array(value: &Value) -> &Vec<Value> {
     value.as_array().expect("catalog value must be an array")
 }
 
-fn text(value: &Value) -> &str {
+pub(super) fn text(value: &Value) -> &str {
     value.as_str().expect("catalog value must be a string")
 }
 
-fn assert_unique<'a>(label: &str, values: impl IntoIterator<Item = &'a str>) {
+pub(super) fn assert_unique<'a>(label: &str, values: impl IntoIterator<Item = &'a str>) {
     let mut seen = BTreeSet::new();
     let duplicates = values
         .into_iter()
