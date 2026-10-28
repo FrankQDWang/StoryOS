@@ -23,7 +23,7 @@ APPLY_AUTHOR_EDIT_OUTCOME_SCHEMA_PATH = (
     ROOT
     / "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json"
 )
-ROUTE_CATALOG_PATH = ROOT / "docs/foundation/versioned-protocol-release-1-route-catalog.json"
+ROUTE_CATALOG_PATH = ROOT / "generated/route-catalog/versioned-protocol-release-1-route-catalog.json"
 TYPESCRIPT_CLIENT_PATH = ROOT / "generated/typescript/storyos-public-release-1/client.d.mts"
 AUTHOR_ADMISSION_PATH = ROOT / "docs/foundation/author-command-admission.md"
 PROTOCOL_PATH = ROOT / "docs/foundation/versioned-command-query-artifact-event-protocol.md"
@@ -664,7 +664,7 @@ def apply_author_edit_outcome_contract_errors(
         errors.append("outcome Query route identity drifted")
     elif hashlib.sha256(json.dumps(
             routes[0], sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "fffab8a342d2c5dca324a09d40c71dae228a850f2cc342d0646905702bd07b0c":
+    ).encode()).hexdigest() != "01d5564db6d6b3100d55fa49869fe8de8af5ae1377a0939291904aaca315fdb6":
         errors.append("outcome Query route proof drifted")
     for alias, expected_client_shape in (
         ("ApplyAuthorEditRejectionReason",

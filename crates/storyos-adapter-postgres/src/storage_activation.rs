@@ -356,6 +356,14 @@ pub(crate) fn packaged_catalog() -> Result<serde_json::Value, StorageActivationE
 pub(crate) fn packaged_identity(
     catalog: &serde_json::Value,
 ) -> Result<PackagedIdentity, StorageActivationError> {
+    identity(catalog, ROUTE_CATALOG_JSON)
+}
+
+/// The route catalog digest comes from the generated route catalog, not from a copy in the persistence catalog.
+fn identity(
+    catalog: &serde_json::Value,
+    route_catalog: &str,
+) -> Result<PackagedIdentity, StorageActivationError> {
     let schema = &catalog["schema_identity"];
     let binding = &schema["protocol_binding"];
     Ok(PackagedIdentity {
@@ -370,7 +378,7 @@ pub(crate) fn packaged_identity(
         active_schema_version: required_str(schema, "active_schema_version")?,
         public_release: required_str(binding, "public_release")?,
         route_catalog_id: required_str(binding, "route_catalog_id")?,
-        route_catalog_sha256: required_str(binding, "route_catalog_sha256")?,
+        route_catalog_sha256: lf_sha256(route_catalog),
     })
 }
 
@@ -381,8 +389,8 @@ fn required_str(value: &serde_json::Value, key: &str) -> Result<String, StorageA
         .ok_or_else(|| refused(StorageActivationRefusal::CatalogChecksumMismatch))
 }
 
-fn lf_sha256(sql: &str) -> String {
-    let normalized = sql.replace("\r\n", "\n").replace('\r', "\n");
+fn lf_sha256(text: &str) -> String {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     Sha256::digest(normalized.as_bytes()).iter().fold(
         String::from("sha256:"),
         |mut encoded, byte| {
@@ -402,3 +410,7 @@ fn unavailable(
 ) -> StorageActivationError {
     StorageActivationError::Unavailable(source.into())
 }
+
+#[cfg(test)]
+#[path = "storage_activation_tests.rs"]
+mod tests;

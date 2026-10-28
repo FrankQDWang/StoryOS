@@ -13,7 +13,10 @@ fn main() {
         .expect("adapter crate must live at crates/<name>");
     let catalog_path =
         repo_root.join("docs/foundation/postgresql-release-1-persistence-catalog.json");
+    let route_catalog_path =
+        repo_root.join("generated/route-catalog/versioned-protocol-release-1-route-catalog.json");
     println!("cargo:rerun-if-changed={}", catalog_path.display());
+    println!("cargo:rerun-if-changed={}", route_catalog_path.display());
     println!(
         "cargo:rerun-if-changed={}/migrations",
         manifest_dir.display()
@@ -66,6 +69,18 @@ fn main() {
         catalog_include.display().to_string().replace('\\', "/")
     )
     .expect("write catalog include");
+    let route_catalog_include = route_catalog_path
+        .canonicalize()
+        .expect("canonicalize generated route catalog");
+    writeln!(
+        rust,
+        "pub const ROUTE_CATALOG_JSON: &str = include_str!(\"{}\");",
+        route_catalog_include
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    )
+    .expect("write route catalog include");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(out_dir.join("embedded_bootstrap.rs"), rust).expect("write embedded bootstrap");

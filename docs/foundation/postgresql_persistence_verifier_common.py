@@ -16,7 +16,7 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = ROOT / "docs/foundation/postgresql-release-1-persistence-catalog.json"
-ROUTE_CATALOG_PATH = ROOT / "docs/foundation/versioned-protocol-release-1-route-catalog.json"
+ROUTE_CATALOG_PATH = ROOT / "generated/route-catalog/versioned-protocol-release-1-route-catalog.json"
 STORAGE_CONTRACT_PATH = ROOT / "docs/foundation/postgresql-project-storage-isolation-and-migration-contract.md"
 ACTIVE_SCHEMA = "storyos.persistence.release-1.v3"
 PROJECT_SCOPE_PROFILE = "project_forced_rls"
