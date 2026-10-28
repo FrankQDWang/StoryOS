@@ -67,23 +67,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetProjectResponse::decl(&Config::default())),
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function getProject({{ projectId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            GET_PROJECT
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;\n",
     fixtures: || {
         fixture_triple(
             PROJECT_FIXTURE_PATHS,
-            &GET_PROJECT,
             [
                 |_| project_fixture_bytes(),
                 |_| invalid_project_fixture_bytes(),

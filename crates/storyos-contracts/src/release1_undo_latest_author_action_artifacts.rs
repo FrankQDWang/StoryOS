@@ -36,12 +36,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&UNDO_LATEST_AUTHOR_ACTION, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &UNDO_LATEST_AUTHOR_ACTION,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -135,35 +132,6 @@ pub(super) fn typescript_type_declarations() -> String {
         UndoLatestAuthorActionUnavailableReason::decl(&config),
         UndoLatestAuthorActionEffect::decl(&config),
         UndoLatestAuthorActionResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestUndoLatestAuthorAction(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestUndoLatestAuthorAction requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function undoLatestAuthorAction({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"undoLatestAuthorAction requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"undoLatestAuthorAction requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"undoLatestAuthorAction requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
-        UNDO_LATEST_AUTHOR_ACTION
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestUndoLatestAuthorAction(request: UndoLatestAuthorActionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { projectId: string; request: UndoLatestAuthorActionRequest; idempotencyKey: string; antiForgery: string }): Promise<UndoLatestAuthorActionResponse>;\n",
     )
 }
 

@@ -36,23 +36,21 @@ const RELEASE_PROFILE_MODULE_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.mjs";
 const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
-const SCHEMA_CATALOG_PATH: &str = "generated/schema-catalog/storyos-public-release-1.json";
-const FIXTURE_CATALOG_PATH: &str = "generated/fixtures/storyos-public-release-1.json";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:9c81f14531eda496421398fa8f6ee7819f4eeae637158182fac4808b1be5d8f9";
+    "sha256:4e8f222b10b34707f2e39cda35e6d82b7f9826e1a8fb2223954359188852ed1f";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
 #[path = "release1_fixture_corpus.rs"]
 mod release1_fixture_corpus;
-use release1_fixture_corpus::{
-    fixture_catalog_bytes, fixture_corpus_bytes, generated_fixture_files,
-};
+use release1_fixture_corpus::{fixture_corpus_bytes, generated_fixture_files};
+
+#[path = "release1_typescript_client.rs"]
+mod release1_typescript_client;
 
 struct Release1ArtifactAssembly {
     openapi: Vec<u8>,
     schemas: Vec<GeneratedSchema>,
-    schema_catalog: Vec<u8>,
     typescript_client: Vec<u8>,
     typescript_declaration: Vec<u8>,
     release_profile_declaration: Vec<u8>,
@@ -65,7 +63,6 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
         .iter()
         .flat_map(|artifacts| (artifacts.schemas)())
         .collect::<Vec<_>>();
-    let schema_catalog = schema_catalog_bytes(&schemas);
     let typescript_client = typescript_client_bytes();
     let typescript_declaration = typescript_declaration_bytes();
     let release_profile_declaration = release_profile_declaration_bytes();
@@ -82,7 +79,7 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let mut profile = protocol_profile(ArtifactDigests {
         contract_graph: sha256_prefixed(contract_graph.as_slice()),
         openapi: sha256_prefixed(openapi.as_slice()),
-        json_schema_catalog: sha256_prefixed(schema_catalog.as_slice()),
+        json_schema_catalog: sha256_prefixed(schema_catalog_bytes(&schemas)),
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
@@ -91,7 +88,6 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     Release1ArtifactAssembly {
         openapi,
         schemas,
-        schema_catalog,
         typescript_client,
         typescript_declaration,
         release_profile_declaration,
@@ -141,7 +137,6 @@ fn generated_files() -> Vec<GeneratedFile> {
     let Release1ArtifactAssembly {
         openapi,
         schemas,
-        schema_catalog,
         typescript_client,
         typescript_declaration,
         release_profile_declaration,
@@ -187,8 +182,6 @@ fn generated_files() -> Vec<GeneratedFile> {
             RELEASE_PROFILE_DECLARATION_PATH,
             release_profile_declaration,
         ),
-        (SCHEMA_CATALOG_PATH, schema_catalog),
-        (FIXTURE_CATALOG_PATH, fixture_catalog_bytes(&profile)),
         (ROUTE_CATALOG_PATH, route_catalog_bytes()),
     ]);
     generated.extend(generated_fixture_files(&profile));
@@ -290,6 +283,8 @@ fn openapi_bytes() -> Vec<u8> {
     ).into_bytes()
 }
 
+/// The release identity digests this schema catalog. The generator does not write it, because
+/// no reader needs the file.
 fn schema_catalog_bytes(schemas: &[GeneratedSchema]) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
@@ -350,9 +345,8 @@ fn typescript_client_bytes() -> Vec<u8> {
         ),
         GENERATED_CLIENT_REVISION,
     );
-    let operations = RELEASE1_OPERATIONS
-        .iter()
-        .map(|artifacts| (artifacts.typescript_client)())
+    let operations = registered_operations()
+        .map(release1_typescript_client::client_source)
         .collect::<String>();
     (preamble + &operations).into_bytes()
 }
@@ -380,9 +374,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
         )
         .collect::<Vec<_>>()
         .join("\n\n");
-    let functions = RELEASE1_OPERATIONS
-        .iter()
-        .map(|artifacts| (artifacts.typescript_declarations)())
+    let functions = registered_operations()
+        .map(release1_typescript_client::declaration_source)
         .collect::<String>();
     format!(
         concat!(

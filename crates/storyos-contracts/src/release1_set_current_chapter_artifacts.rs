@@ -41,12 +41,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&SET_CURRENT_CHAPTER, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &SET_CURRENT_CHAPTER,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -141,35 +138,6 @@ pub(super) fn typescript_type_declarations() -> String {
         SetCurrentChapterRefusalReason::decl(&config),
         SetCurrentChapterEffect::decl(&config),
         SetCurrentChapterResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestSetCurrentChapter(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestSetCurrentChapter requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function setCurrentChapter({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"setCurrentChapter requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"setCurrentChapter requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"setCurrentChapter requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"PUT\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        SET_CURRENT_CHAPTER_DIGEST_PROFILE,
-        SET_CURRENT_CHAPTER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestSetCurrentChapter(request: SetCurrentChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function setCurrentChapter(options: StoryOSQueryOptions & { projectId: string; request: SetCurrentChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<SetCurrentChapterResponse>;\n",
     )
 }
 

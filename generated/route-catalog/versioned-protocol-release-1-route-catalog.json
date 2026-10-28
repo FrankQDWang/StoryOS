@@ -31,11 +31,9 @@
       "one operation mapping"
     ],
     "generated_outputs": {
-      "fixture_manifest": "generated/fixtures/storyos-public-release-1.json",
       "golden_wire_corpus": "generated/golden-wire/storyos-public-release-1/",
       "json_schema_2020_12": "generated/json-schema/storyos-public-release-1/",
       "openapi_3_1": "generated/openapi/storyos-public-release-1.yaml",
-      "schema_catalog": "generated/schema-catalog/storyos-public-release-1.json",
       "typescript_client_and_types": "generated/typescript/storyos-public-release-1/"
     },
     "no_fixed_operation_count": true,
@@ -150,6 +148,17 @@
       "operation_denied",
       "resource_not_found",
       "method_not_allowed",
+      "snapshot_not_ready",
+      "projection_not_ready",
+      "rate_limited"
+    ],
+    "query_current_chapter": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "snapshot_expired",
       "snapshot_not_ready",
       "projection_not_ready",
       "rate_limited"
@@ -3330,7 +3339,7 @@
         "takeover": "no",
         "writer_generation": "not-applicable"
       },
-      "error_profile": "query_current",
+      "error_profile": "query_current_chapter",
       "fixtures": {
         "negative": [
           "storyos.golden.getChapter.invalid.v1",
@@ -3365,6 +3374,7 @@
           403,
           404,
           405,
+          409,
           429,
           503
         ],

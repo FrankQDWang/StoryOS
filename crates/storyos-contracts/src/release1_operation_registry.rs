@@ -10,8 +10,6 @@ pub(super) struct OperationArtifacts {
     pub(super) schemas: fn() -> Vec<GeneratedSchema>,
     pub(super) openapi: fn() -> Vec<OpenApiMethod>,
     pub(super) typescript_types: fn() -> String,
-    pub(super) typescript_client: fn() -> String,
-    pub(super) typescript_declarations: fn() -> &'static str,
     pub(super) fixtures: fn() -> Vec<FixtureMembership>,
 }
 
@@ -20,6 +18,7 @@ pub(super) struct RegisteredOperation {
     pub(super) kind: OperationKind,
     pub(super) graph: ContractGraphEntry,
     pub(super) catalog: OperationCatalog,
+    pub(super) client: ClientOverride,
 }
 
 impl RegisteredOperation {
@@ -66,8 +65,34 @@ impl RegisteredOperation {
             kind,
             graph: ContractGraphEntry::Preconditions(preconditions),
             catalog,
+            client: ClientOverride::None,
         }
     }
+
+    pub(super) const fn client(self, client: ClientOverride) -> Self {
+        Self { client, ..self }
+    }
+}
+
+/// The one TypeScript client behavior of an operation that its method, path, and kind do not give.
+#[derive(Clone, Copy)]
+pub(super) enum ClientOverride {
+    None,
+    /// `getProtocolProfile`: the response type is not `<Operation>Response`.
+    ResponseType(&'static str),
+    /// `createProject`: the client exports no request digest function.
+    NoDigest,
+    /// `createEditorSession`: the request digest covers only these request fields.
+    DigestFields(&'static [&'static str]),
+    /// `withdrawProposal`: the current-producer cause sends no anti-forgery header.
+    OptionalAntiForgery,
+    /// `getAgentRun`, `getStatistics`: one optional query parameter.
+    OptionalQueryParameter(&'static str),
+    /// `getApplyAuthorEditOutcome`, `activityStream`: header and query bindings that no path gives.
+    Source {
+        client: fn() -> String,
+        declaration: &'static str,
+    },
 }
 
 pub(super) enum ContractGraphEntry {
@@ -84,7 +109,7 @@ impl ContractGraphEntry {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) enum OperationKind {
     Query,
     Command,
@@ -119,9 +144,6 @@ pub(super) struct OpenApiMethod {
 #[derive(Clone, Copy)]
 pub(super) struct FixtureMembership {
     pub(super) path: &'static str,
-    pub(super) fixture_id: &'static str,
-    pub(super) classification: &'static str,
-    pub(super) operation_id: &'static str,
     pub(super) bytes: fn(&Release1ProtocolProfile) -> Vec<u8>,
 }
 
@@ -191,24 +213,15 @@ pub(super) fn operation_schemas(
 
 pub(super) fn fixture_triple(
     paths: [&'static str; 3],
-    operation: &QueryOperation,
     producers: [fn(&Release1ProtocolProfile) -> Vec<u8>; 3],
 ) -> [FixtureMembership; 3] {
     let [positive, invalid, boundary] = producers;
     [
-        ("positive", paths[0], operation.fixtures[0], positive),
-        ("invalid", paths[1], operation.fixtures[1], invalid),
-        ("boundary", paths[2], operation.fixtures[2], boundary),
+        (paths[0], positive),
+        (paths[1], invalid),
+        (paths[2], boundary),
     ]
-    .map(
-        |(classification, path, fixture_id, bytes)| FixtureMembership {
-            path,
-            fixture_id,
-            classification,
-            operation_id: operation.operation_id,
-            bytes,
-        },
-    )
+    .map(|(path, bytes)| FixtureMembership { path, bytes })
 }
 
 pub(super) fn method(operation: &QueryOperation, yaml: String) -> Vec<OpenApiMethod> {

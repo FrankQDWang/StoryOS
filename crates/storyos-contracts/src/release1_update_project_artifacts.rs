@@ -34,12 +34,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&UPDATE_PROJECT, method_openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &UPDATE_PROJECT,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -133,35 +130,6 @@ pub(super) fn typescript_type_declarations() -> String {
         UpdateProjectConflictReason::decl(&config),
         UpdateProjectEffect::decl(&config),
         UpdateProjectResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestUpdateProject(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestUpdateProject requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function updateProject({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"updateProject requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"updateProject requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"updateProject requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"PATCH\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        UPDATE_PROJECT_DIGEST_PROFILE,
-        UPDATE_PROJECT
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestUpdateProject(request: UpdateProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function updateProject(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectResponse>;\n",
     )
 }
 

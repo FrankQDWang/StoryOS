@@ -4,7 +4,7 @@ status: accepted
 
 # Generate the Route Catalog From the Operation Registry
 
-The repository cleanup specification of phase 2 ([#1298](https://github.com/FrankQDWang/StoryOS/issues/1298)) owns this ADR. The author approved its ticket graph on 2026-10-28. Ticket [#1299](https://github.com/FrankQDWang/StoryOS/issues/1299) adds the generated Route Catalog beside the hand-kept catalog. Ticket [#1300](https://github.com/FrankQDWang/StoryOS/issues/1300) moves the readers and removes the hand-kept catalog and its Python verifier. This ADR partly supersedes [ADR 0042](0042-derive-release-1-contract-artifacts-from-one-operation-registry.md).
+The repository cleanup specification of phase 2 ([#1298](https://github.com/FrankQDWang/StoryOS/issues/1298)) owns this ADR. The author approved its ticket graph on 2026-10-28. Ticket [#1299](https://github.com/FrankQDWang/StoryOS/issues/1299) adds the generated Route Catalog beside the hand-kept catalog. Ticket [#1300](https://github.com/FrankQDWang/StoryOS/issues/1300) moves the readers and removes the hand-kept catalog and its Python verifier. Ticket [#1301](https://github.com/FrankQDWang/StoryOS/issues/1301) generates the TypeScript client from the registry and removes the outputs that nothing reads. This ADR partly supersedes [ADR 0042](0042-derive-release-1-contract-artifacts-from-one-operation-registry.md).
 
 ## Context
 
@@ -30,7 +30,7 @@ ADR 0042 took the registry order from the position of each operation in the hand
   - An Accepted command that names its own registered GET settlement query.
   - Cause profiles only on a conditional command, a synchronous settlement for each editor command, and Project Activity only on a command.
   - Capability coverage of the required set with served operations only.
-  - Error profiles that name only the stable errors of the protocol document. The served status codes of each operation include the status of each code of its error profile. Thus `getProject` and `getChapter` use the `query_current` profile, which names only their served status codes.
+  - Error profiles that name only the stable errors of the protocol document. The served status codes of each operation include the status of each code of its error profile. Thus `getProject` uses the `query_current` profile. `getChapter` serves `409 snapshot_expired`, so it uses the `query_current_chapter` profile, which adds `snapshot_expired` (ticket #1301).
   - An owner source that resolves to a heading of a tracked document.
   - Known owners, complete schema sources, and non-empty preconditions for each operation.
   - An Activity mapping for each Event, and an Event for each Activity reference.
@@ -39,6 +39,9 @@ ADR 0042 took the registry order from the position of each operation in the hand
   - The one Author Edit ingress with its independent outcome query and its query proof.
 - **Only one catalog.** Ticket #1300 removed the hand-kept catalog, its Python verifier and the `make check-fast` step of that verifier, and the pinned catalog digest of the generator. The contract graph no longer holds a catalog digest, so the generator pins only the contract graph digest. Each reader of the catalog reads the generated file: the persistence catalog verifier, the Author Edit batch policy verifier, and the reference-model prototype. The Stage 1 crosswalk reads the catalog of its baseline commit from Git history, so it keeps the historical path.
 - **Storage identity digest.** The persistence catalog holds no copy of the route catalog digest. The build of `storyos-adapter-postgres` embeds the generated catalog, and storage activation computes the `route_catalog_sha256` field of the activation identity from it. The identity fields and the `identity_mismatch` refusal do not change.
+- **Generated TypeScript client.** One generic writer in `release1_typescript_client.rs` writes the client function and the declaration of each `RegisteredOperation` from its method, path, path parameters, and kind. `OperationArtifacts` holds no client template or declaration string. A `ClientOverride` on the registry entry gives the one behavior that these facts do not give. The exported names, parameters, and types do not change, and `client.d.mts` stays byte-identical.
+- **One client byte change.** This is an exception to the byte-identical refactor rule of ADR 0042. The generic writer changed `client.mjs` once: each `commandJson` call names the registry method, `digestSteerAgentRun` uses the common form, and `steerAgentRun` uses the common input checks. Thus an empty `projectId` or `runId`, or a request that is not an object, now gives a `TypeError` before the request, as in each other command. The derived digests changed as ADR 0015 permits. After this change, a refactor of the generator again keeps `generated/` byte-identical.
+- **Removed outputs.** The generator no longer writes the schema catalog and the fixture catalog under `generated/`, because nothing read them. The release identity still digests the schema catalog and the fixture corpus, so `json_schema_catalog_digest` and the schema catalog ID `storyos.schema-catalog.v1` of the archive manifest stay.
 - **Persistence route coverage.** The persistence catalog maps only served operations to its table families. A family with no served operation is `internal_only` until a Stage serves an operation of that family.
 
 ## Considered options

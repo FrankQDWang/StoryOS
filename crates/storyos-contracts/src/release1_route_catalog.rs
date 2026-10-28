@@ -171,6 +171,7 @@ pub(super) enum ErrorProfile {
     SessionControl,
     QueryCanonical,
     QueryCurrent,
+    QueryCurrentChapter,
     QueryProjection,
     QueryProtocol,
     Challenge,
@@ -200,7 +201,7 @@ impl Binding {
         Self::query(EditorRule::Unbound, ErrorProfile::QueryCurrent);
     /// A path-only read of the current Chapter with no cursor, Snapshot binding, or body.
     pub(super) const CURRENT_CHAPTER_QUERY: Self =
-        Self::query(EditorRule::Optional, ErrorProfile::QueryCurrent);
+        Self::query(EditorRule::Optional, ErrorProfile::QueryCurrentChapter);
     pub(super) const PROJECTION_QUERY: Self =
         Self::query(EditorRule::Optional, ErrorProfile::QueryProjection);
     pub(super) const CHALLENGE: Self = Self {

@@ -32,12 +32,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&LIST_PROJECTS, method_openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &LIST_PROJECTS,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -125,17 +122,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ProjectListItem::decl(&config),
         ListProjectsResponse::decl(&config),
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        "\nexport async function listProjects(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n",
-        LIST_PROJECTS.path,
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function listProjects(options: StoryOSQueryOptions): Promise<ListProjectsResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

@@ -71,25 +71,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetChapterResponse::decl(&Config::default())),
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function getChapter({{ projectId, chapterId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
-                "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            GET_CHAPTER
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}")
-                .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;\n",
     fixtures: || {
         fixture_triple(
             CHAPTER_FIXTURE_PATHS,
-            &GET_CHAPTER,
             [
                 |_| chapter_fixture_bytes(),
                 |_| invalid_chapter_fixture_bytes(),

@@ -6,27 +6,27 @@ use crate::release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
     AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptCacheInspect,
-    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-    CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
-    ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
-    ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
-    ConversationSelection, CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest,
-    CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability,
-    GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
-    GetAgentRunRequest, GetAgentRunResponse, HostControlInspect, InstructionBinding,
-    OptionalActiveCompactionInspect, OptionalCompactionInstallInspect, OptionalContinuationInspect,
-    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
-    OptionalOpenedProposalInspect, OptionalOriginalResultRetrievalInspect,
-    OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
-    OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
-    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
-    SelectionReferenceInspect, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
+    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
+    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
+    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
+    DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
+    InstructionBinding, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{
-    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+    ClientOverride, OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple,
+    operation_schemas,
 };
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
@@ -70,7 +70,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             &["run_scope_join", "run_projection_watermark_or_snapshot"],
             OperationCatalog::new("agent-run:read", Owner::Context, Binding::PROJECTION_QUERY)
                 .notes(GET_AGENT_RUN_NOTES),
-        ),
+        )
+        .client(ClientOverride::OptionalQueryParameter("model_attempt_id")),
     ],
     schemas: || {
         [
@@ -91,13 +92,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 CREATE_FIXTURE_PATHS,
-                &CREATE_AGENT_RUN,
                 [
                     |_| create_fixture_bytes(),
                     |_| create_invalid_fixture_bytes(),
@@ -106,7 +104,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 GET_FIXTURE_PATHS,
-                &GET_AGENT_RUN,
                 [
                     |_| get_fixture_bytes(),
                     |_| get_invalid_fixture_bytes(),
@@ -477,45 +474,6 @@ pub(super) fn typescript_type_declarations() -> String {
         OptionalOriginalResultRetrievalInspect::decl(&config),
         UnknownCreateSuccessorDisposition::decl(&config),
         OptionalUnknownCreateSuccessorInspect::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestCreateAgentRun(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateAgentRun requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function createAgentRun({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createAgentRun requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createAgentRun requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createAgentRun requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-            "\nexport async function getAgentRun({{ projectId, runId, modelAttemptId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getAgentRun requires projectId\");\n",
-            "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"getAgentRun requires runId\");\n",
-            "  const query = modelAttemptId == null || modelAttemptId === \"\" ? \"\" : `?model_attempt_id=${{encodeURIComponent(modelAttemptId)}}`;\n",
-            "  return queryJson({{ ...options, path: `{}${{query}}` }});\n}}\n",
-        ),
-        CREATE_AGENT_RUN_DIGEST_PROFILE,
-        CREATE_AGENT_RUN
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_AGENT_RUN
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{run_id}", "${encodeURIComponent(runId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;\n",
-        "export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;\n",
     )
 }
 

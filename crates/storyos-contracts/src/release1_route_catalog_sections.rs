@@ -69,13 +69,14 @@ impl Owner {
 }
 
 impl ErrorProfile {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 11] = [
         Self::CommandSync,
         Self::EditorCommand,
         Self::AsyncCommand,
         Self::SessionControl,
         Self::QueryCanonical,
         Self::QueryCurrent,
+        Self::QueryCurrentChapter,
         Self::QueryProjection,
         Self::QueryProtocol,
         Self::Challenge,
@@ -183,6 +184,17 @@ impl ErrorProfile {
                 "operation_denied",
                 "resource_not_found",
                 "method_not_allowed",
+                "snapshot_not_ready",
+                "projection_not_ready",
+                "rate_limited",
+            ],
+            Self::QueryCurrentChapter => &[
+                "invalid_request",
+                "invalid_session",
+                "operation_denied",
+                "resource_not_found",
+                "method_not_allowed",
+                "snapshot_expired",
                 "snapshot_not_ready",
                 "projection_not_ready",
                 "rate_limited",
@@ -354,8 +366,6 @@ pub(super) fn catalog_sections() -> Value {
                 "openapi_3_1": "generated/openapi/storyos-public-release-1.yaml",
                 "json_schema_2020_12": "generated/json-schema/storyos-public-release-1/",
                 "typescript_client_and_types": "generated/typescript/storyos-public-release-1/",
-                "schema_catalog": "generated/schema-catalog/storyos-public-release-1.json",
-                "fixture_manifest": "generated/fixtures/storyos-public-release-1.json",
                 "golden_wire_corpus": "generated/golden-wire/storyos-public-release-1/",
             },
             "no_fixed_operation_count": true,

@@ -6,7 +6,8 @@ use crate::release1::{
     Release1CompatibilityIdentity, Release1ProtocolProfile,
 };
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    ClientOverride, GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple,
+    method,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{json_bytes, query_openapi, schema_value};
@@ -35,7 +36,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         &["active_public_release_profile"],
         OperationCatalog::new("protocol:profile", Owner::Protocol, Binding::PROTOCOL_QUERY)
             .notes(GET_PROTOCOL_PROFILE_NOTES),
-    )],
+    )
+    .client(ClientOverride::ResponseType("Release1ProtocolProfile"))],
     schemas: || {
         vec![
             GeneratedSchema {
@@ -69,13 +71,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             Release1ProtocolProfile::decl(&config),
         )
     },
-    typescript_client: || {
-        format!(
-            "\nexport async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n",
-            GET_PROTOCOL_PROFILE.path,
-        )
-    },
-    typescript_declarations: || "export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;\n",
     fixtures: || {
         fixture_triple(
             [
@@ -83,7 +78,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 INVALID_PROFILE_PATH,
                 BOUNDARY_PROFILE_PATH,
             ],
-            &GET_PROTOCOL_PROFILE,
             [
                 golden_profile_bytes,
                 invalid_profile_bytes,
