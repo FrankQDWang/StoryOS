@@ -2567,10 +2567,12 @@ The generator emits, from the same contract graph:
 - JSON Schema 2020-12 for every public payload, Event, Artifact, archive,
   bridge, and exposed compatibility profile;
 - TypeScript client operations and types for the one active public release;
-- a schema catalog mapping every schema ID to its Rust owner and generated
-  artifact;
-- canonical positive and negative fixtures; and
-- the golden Application Wire Record and SSE frame corpus.
+  and
+- the golden Application Wire Record and SSE frame corpus with its canonical
+  positive and negative fixtures.
+
+The release identity digests the schema catalog and the fixture corpus. The
+generator writes no separate schema catalog or fixture manifest file.
 
 Core, Worker, Adapter, Provider, Tool, MCP, and App bridge Rust contracts are
 typed in the same source-of-truth crate where external or persisted, but are
@@ -2625,8 +2627,8 @@ The eventual repository verification command must fail when:
   profile, Project Activity mapping, golden fixture, or generated OpenAPI/
   JSON-Schema/TypeScript coverage is not one-to-one and explicit; and
 
-- regenerating OpenAPI, JSON Schema, TypeScript, schema catalog, examples, or
-  golden corpus changes the worktree;
+- regenerating OpenAPI, JSON Schema, TypeScript, examples, or golden corpus
+  changes the worktree;
 - a public route, response, status, header, schema ID, discriminator, enum,
   limit, or error code lacks a Rust owner or generated representation;
 - OpenAPI and JSON Schema disagree on required, nullable, closed, or bounded
@@ -3057,7 +3059,7 @@ All rows bind the same-release profile; additive does not permit mixed releases.
 | none → `storyos.event.conversation-memory-settings-updated.v1` | Ledger; later Rust | planned Wire set | additive Event with closed revision meaning; security-sensitive | Stage 7 |
 | none → `storyos.event.memory-note-recorded.v1` and `storyos.event.memory-maintenance-settled.v1` | Ledger and internal-producer validator; later Rust | planned Wire set | additive Events; exact source/publication and closed outcomes; no public generation command | Stage 7 |
 | none → `storyos.artifact.memory-document.v1` and `storyos.artifact.memory-note.v1` | Ledger; later Rust | planned Wire set for content schemas | additive Tool Artifact payloads; existing envelope unchanged; source restrictions remain | Stage 7 |
-| current challenge target list and release/profile component digests | Rust `project_command_targets.rs`, `release1.rs`, `release1_artifacts.rs`; Ledger | current release profile, profile goldens, fixture manifest, OpenAPI metadata | breaking same-release hard cut; challenge/profile schema ids stay; implemented editor DTOs stay | Protocol now |
+| current challenge target list and release/profile component digests | Rust `project_command_targets.rs`, `release1.rs`, `release1_artifacts.rs`; Ledger | current release profile, profile goldens, OpenAPI metadata | breaking same-release hard cut; challenge/profile schema ids stay; implemented editor DTOs stay | Protocol now |
 | protocol revision/digest and operation mappings in persistence catalog | persistence catalog and its owning document | packaged catalog embedding; no DDL or migration output | breaking Storage Activation identity as stated above; table and migration-chain identities stay | Protocol references now; storage upgrade owner |
 
 The storage and retention owners receive the record and Event deltas above;

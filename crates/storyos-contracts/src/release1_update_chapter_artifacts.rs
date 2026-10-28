@@ -36,12 +36,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&UPDATE_CHAPTER, method_openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &UPDATE_CHAPTER,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -138,37 +135,6 @@ pub(super) fn typescript_type_declarations() -> String {
         UpdateChapterRefusalReason::decl(&config),
         UpdateChapterEffect::decl(&config),
         UpdateChapterResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestUpdateChapter(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestUpdateChapter requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function updateChapter({{ projectId, chapterId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"updateChapter requires projectId\");\n",
-            "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"updateChapter requires chapterId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"updateChapter requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"updateChapter requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"PATCH\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        UPDATE_CHAPTER_DIGEST_PROFILE,
-        UPDATE_CHAPTER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestUpdateChapter(request: UpdateChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function updateChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string; request: UpdateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateChapterResponse>;\n",
     )
 }
 

@@ -10,7 +10,8 @@ use crate::release1_author_edit_outcome::{
     GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    operation_schemas,
 };
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
@@ -55,7 +56,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ("consumption", "none"),
             ("cache_control", "no-store"),
         ]),
-    )],
+    )
+    .client(ClientOverride::Source {
+        client: client_source,
+        declaration: "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;\n",
+    })],
     schemas: || {
         operation_schemas(
             &GET_APPLY_AUTHOR_EDIT_OUTCOME,
@@ -66,12 +71,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_APPLY_AUTHOR_EDIT_OUTCOME, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_APPLY_AUTHOR_EDIT_OUTCOME,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -140,7 +142,7 @@ pub(super) fn typescript_type_declarations() -> String {
     )
 }
 
-pub(super) fn typescript_client_source() -> String {
+fn client_source() -> String {
     let path = GET_APPLY_AUTHOR_EDIT_OUTCOME
         .path
         .replace("{project_id}", "${encodeURIComponent(projectId)}")
@@ -155,10 +157,6 @@ pub(super) fn typescript_client_source() -> String {
         ),
         path,
     )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;\n"
 }
 
 pub(super) fn openapi() -> String {

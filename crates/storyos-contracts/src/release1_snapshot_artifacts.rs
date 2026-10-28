@@ -4,7 +4,8 @@ use ts_rs::{Config, TS};
 
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    operation_schemas,
 };
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
@@ -56,7 +57,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 },
             )
             .notes(ACTIVITY_STREAM_NOTES),
-        ),
+        )
+        .client(ClientOverride::Source {
+            client: activity_stream_client_source,
+            declaration: "export declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;\n",
+        }),
     ],
     schemas: || {
         [
@@ -93,13 +98,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         methods
     },
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 SNAPSHOT_FIXTURE_PATHS,
-                &GET_SNAPSHOT,
                 [
                     |_| snapshot_fixture_bytes(),
                     |_| snapshot_invalid_fixture_bytes(),
@@ -108,7 +110,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 ACTIVITY_STREAM_FIXTURE_PATHS,
-                &ACTIVITY_STREAM,
                 [
                     |_| activity_stream_fixture_bytes(),
                     |_| activity_stream_invalid_fixture_bytes(),
@@ -330,21 +331,12 @@ pub(super) fn typescript_type_declarations() -> String {
     )
 }
 
-pub(super) fn typescript_client_source() -> String {
-    let snapshot_path = GET_SNAPSHOT
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}")
-        .replace("{snapshot_id}", "${encodeURIComponent(snapshotId)}");
-    let activity_path = ACTIVITY_STREAM
+fn activity_stream_client_source() -> String {
+    let path = ACTIVITY_STREAM
         .path
         .replace("{project_id}", "${encodeURIComponent(projectId)}");
     format!(
         concat!(
-            "\nexport async function getSnapshot({{ projectId, snapshotId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getSnapshot requires projectId\");\n",
-            "  if (typeof snapshotId !== \"string\" || snapshotId.length === 0) throw new TypeError(\"getSnapshot requires snapshotId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n",
-            "}}\n",
             "\nexport async function activityStream({{ projectId, snapshotId, protocolRelease, lastEventId, ...options }} = {{}}) {{\n",
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"activityStream requires projectId\");\n",
             "  if (typeof snapshotId !== \"string\" || typeof protocolRelease !== \"string\") throw new TypeError(\"activityStream requires snapshot bindings\");\n",
@@ -353,12 +345,8 @@ pub(super) fn typescript_client_source() -> String {
             "  return queryText({{ ...options, path: `{}?snapshot_id=${{encodeURIComponent(snapshotId)}}&protocol_release=${{encodeURIComponent(protocolRelease)}}`, queryHeaders: headers }});\n",
             "}}\n",
         ),
-        snapshot_path, activity_path,
+        path,
     )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: string; snapshotId: string }): Promise<GetSnapshotResponse>;\nexport declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;\n"
 }
 
 pub(super) fn snapshot_openapi() -> String {

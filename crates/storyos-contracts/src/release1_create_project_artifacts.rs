@@ -10,7 +10,8 @@ use crate::release1_create_project::{
     CreateProjectRequest, CreateProjectResponse,
 };
 use crate::release1_operation_registry::{
-    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+    ClientOverride, OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple,
+    operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
@@ -49,7 +50,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             OperationCatalog::new("project:create", Owner::Release, Binding::PROJECT_COMMAND)
                 .activity(&[ProjectActivityKind::ProjectCreated], &[])
                 .notes("The only command admitted against a prospective Project Scope."),
-        ),
+        )
+        .client(ClientOverride::NoDigest),
     ],
     schemas: || {
         [
@@ -76,13 +78,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         [
             fixture_triple(
                 CHALLENGE_FIXTURE_PATHS,
-                &CREATE_PROJECT_CHALLENGE,
                 [
                     |_| challenge_fixture_bytes(),
                     |_| challenge_invalid_fixture_bytes(),
@@ -91,7 +90,6 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             ),
             fixture_triple(
                 FIXTURE_PATHS,
-                &CREATE_PROJECT,
                 [
                     |_| fixture_bytes(),
                     |_| invalid_fixture_bytes(),
@@ -246,25 +244,6 @@ fn command_openapi() -> String {
         ),
         CREATE_PROJECT.operation_id, request_schema, responses,
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function createProjectChallenge({{ request, ...options }} = {{}}) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectChallenge requires request\");\n",
-            "  return commandJson({{ ...options, path: \"{}\", body: request }});\n}}\n",
-            "\nexport async function createProject({{ request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProject requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createProject requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: \"{}\", body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        CREATE_PROJECT_CHALLENGE.path, CREATE_PROJECT.path,
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function createProjectChallenge(options: StoryOSQueryOptions & { request: CreateProjectChallengeRequest }): Promise<CreateProjectChallengeResponse>;\nexport declare function createProject(options: StoryOSQueryOptions & { request: CreateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateProjectResponse>;\n"
 }
 
 pub(super) fn challenge_fixture_bytes() -> Vec<u8> {

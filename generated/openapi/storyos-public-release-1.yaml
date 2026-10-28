@@ -1230,7 +1230,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Current Project
+          description: Current Chapter
           content:
             application/json:
               schema:
@@ -1245,6 +1245,8 @@ paths:
           description: Resource unavailable
         '405':
           description: Method not allowed
+        '409':
+          description: Snapshot expired
         '429':
           description: Rate limited
         '503':

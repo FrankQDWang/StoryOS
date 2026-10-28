@@ -38,12 +38,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_MANUSCRIPT_TREE, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_MANUSCRIPT_TREE,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -146,19 +143,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ManuscriptVolumeNode::decl(&config),
         GetManuscriptTreeResponse::decl(&config),
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let path = GET_MANUSCRIPT_TREE
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}");
-    format!(
-        "\nexport async function getManuscriptTree({{ projectId, ...options }} = {{}}) {{\n  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getManuscriptTree requires projectId\");\n  return queryJson({{ ...options, path: `{path}` }});\n}}\n"
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getManuscriptTree(options: StoryOSQueryOptions & { projectId: string }): Promise<GetManuscriptTreeResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

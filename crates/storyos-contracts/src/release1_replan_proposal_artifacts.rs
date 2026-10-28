@@ -55,12 +55,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&REPLAN_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &REPLAN_PROPOSAL,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -157,37 +154,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ReplanProposalConflictReason::decl(&config),
         ReplanProposalEffect::decl(&config),
         ReplanProposalResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestReplanProposal(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestReplanProposal requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function replanProposal({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"replanProposal requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"replanProposal requires proposalId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"replanProposal requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"replanProposal requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        REPLAN_PROPOSAL_DIGEST_PROFILE,
-        REPLAN_PROPOSAL
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{proposal_id}", "${encodeURIComponent(proposalId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestReplanProposal(request: ReplanProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function replanProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReplanProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReplanProposalResponse>;\n",
     )
 }
 

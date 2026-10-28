@@ -57,12 +57,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&APPLY_AUTHOR_EDIT, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &APPLY_AUTHOR_EDIT,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -82,9 +79,6 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json",
     "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
 ];
-
-// This is true only in the layer that adds the public Server route.
-pub(super) const IS_IMPLEMENTED: bool = true;
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema_bytes::<ApplyAuthorEditRequest>(
@@ -168,41 +162,6 @@ pub(super) fn apply_u64_wire_constraints(schema: &mut Value, canonical_u64: &Val
         {
             revised["properties"]["author_action_sequence"] = canonical_u64.clone();
         }
-    }
-}
-
-pub(super) fn typescript_client_source() -> String {
-    if !IS_IMPLEMENTED {
-        return String::new();
-    }
-    format!(
-        concat!(
-            "\nexport async function digestApplyAuthorEdit(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestApplyAuthorEdit requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"storyos.command.applyAuthorEdit.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function applyAuthorEdit({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"applyAuthorEdit requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"applyAuthorEdit requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"applyAuthorEdit requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        APPLY_AUTHOR_EDIT
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    if IS_IMPLEMENTED {
-        concat!(
-            "export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-            "export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;\n",
-        )
-    } else {
-        ""
     }
 }
 

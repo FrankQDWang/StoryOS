@@ -43,14 +43,8 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
     assert!(client.contains("export async function createEditorSession"));
     assert!(client.contains("export async function getEditorSession"));
     assert!(client.contains("x-storyos-anti-forgery"));
-    assert_eq!(
-        openapi.contains("operationId: applyAuthorEdit"),
-        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
-    );
-    assert_eq!(
-        client.contains("export async function applyAuthorEdit"),
-        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
-    );
+    assert!(openapi.contains("operationId: applyAuthorEdit"));
+    assert!(client.contains("export async function applyAuthorEdit"));
 }
 
 #[test]
@@ -705,15 +699,8 @@ fn every_registered_operation_matches_its_generated_wire() {
     let openapi = text(OPENAPI_PATH);
     let client = text("generated/typescript/storyos-public-release-1/client.mjs");
     let declaration = text("generated/typescript/storyos-public-release-1/client.d.mts");
-    let fixture_catalog: serde_json::Value =
-        serde_json::from_slice(&generated["generated/fixtures/storyos-public-release-1.json"])
-            .expect("fixture catalog must be JSON");
     let mut client_positions = Vec::new();
     let mut declaration_positions = Vec::new();
-    let schema_catalog: serde_json::Value = serde_json::from_slice(
-        &generated["generated/schema-catalog/storyos-public-release-1.json"],
-    )
-    .expect("schema catalog must be JSON");
     let graph: serde_json::Value =
         serde_json::from_slice(&contract_graph_bytes()).expect("contract graph must be JSON");
     for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
@@ -819,13 +806,6 @@ fn every_registered_operation_matches_its_generated_wire() {
 
             client_positions.push(client.find(&format!("export async function {id}(")));
             declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
-            assert!(
-                schema_catalog["implemented_operations"]
-                    .as_array()
-                    .expect("implemented operations must be an array")
-                    .contains(&serde_json::json!(id)),
-                "{id}"
-            );
             let graph_entry = graph["operations"]
                 .as_array()
                 .expect("contract graph operations must be an array")
@@ -848,16 +828,6 @@ fn every_registered_operation_matches_its_generated_wire() {
                     assert!(graph_entry.is_none(), "{id}");
                 }
             }
-
-            let fixture_ids = fixture_catalog["fixtures"]
-                .as_array()
-                .expect("fixture catalog entries must be an array")
-                .iter()
-                .filter(|fixture| fixture["operation_id"] == id)
-                .filter_map(|fixture| fixture["fixture_id"].as_str())
-                .filter(|fixture_id| !fixture_id.starts_with("storyos.golden.storyos.event."))
-                .collect::<Vec<_>>();
-            assert_eq!(fixture_ids, operation.fixtures, "{id}");
         }
     }
     for positions in [client_positions, declaration_positions] {

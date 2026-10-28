@@ -42,12 +42,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&ACCEPT_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &ACCEPT_PROPOSAL,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -149,37 +146,6 @@ pub(super) fn typescript_type_declarations() -> String {
         AcceptanceTargetResolution::decl(&config),
         AcceptProposalEffect::decl(&config),
         AcceptProposalResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestAcceptProposal(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestAcceptProposal requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function acceptProposal({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"acceptProposal requires projectId\");\n",
-            "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"acceptProposal requires proposalId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"acceptProposal requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"acceptProposal requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        ACCEPT_PROPOSAL_DIGEST_PROFILE,
-        ACCEPT_PROPOSAL
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{proposal_id}", "${encodeURIComponent(proposalId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestAcceptProposal(request: AcceptProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function acceptProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: AcceptProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<AcceptProposalResponse>;\n",
     )
 }
 

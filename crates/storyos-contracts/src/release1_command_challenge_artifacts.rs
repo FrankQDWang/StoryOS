@@ -67,24 +67,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             CreateProjectCommandChallengeResponse::decl(&config),
         )
     },
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
-                "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
-                "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
-            ),
-            CREATE_PROJECT_COMMAND_CHALLENGE
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function createProjectCommandChallenge(options: StoryOSQueryOptions & { projectId: string; request: CreateProjectCommandChallengeRequest }): Promise<CreateProjectCommandChallengeResponse>;\n",
     fixtures: || {
         fixture_triple(
             CHALLENGE_FIXTURE_PATHS,
-            &CREATE_PROJECT_COMMAND_CHALLENGE,
             [
                 |_| challenge_fixture_bytes(),
                 |_| invalid_challenge_fixture_bytes(),

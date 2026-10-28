@@ -9,7 +9,8 @@ use crate::release1_manuscript_statistics::{
     ManuscriptTotals,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
@@ -26,7 +27,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             Owner::Release,
             Binding::PROJECTION_QUERY,
         ),
-    )],
+    )
+    .client(ClientOverride::OptionalQueryParameter("required_watermark"))],
     schemas: || {
         operation_schemas(
             &GET_STATISTICS,
@@ -37,12 +39,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_STATISTICS, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_STATISTICS,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -166,25 +165,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ManuscriptTotals::decl(&config),
         GetStatisticsResponse::decl(&config),
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let path = GET_STATISTICS
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}");
-    format!(
-        concat!(
-            "\nexport async function getStatistics({{ projectId, requiredWatermark, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getStatistics requires projectId\");\n",
-            "  const query = requiredWatermark == null || requiredWatermark === \"\" ? \"\" : `?required_watermark=${{encodeURIComponent(requiredWatermark)}}`;\n",
-            "  return queryJson({{ ...options, path: `{path}${{query}}` }});\n}}\n"
-        ),
-        path = path
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getStatistics(options: StoryOSQueryOptions & { projectId: string; requiredWatermark?: string | null }): Promise<GetStatisticsResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

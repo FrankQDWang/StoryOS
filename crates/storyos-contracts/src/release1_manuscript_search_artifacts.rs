@@ -42,12 +42,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&SEARCH_MANUSCRIPT, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &SEARCH_MANUSCRIPT,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -168,25 +165,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ManuscriptSearchCompleteness::decl(&config),
         SearchManuscriptResponse::decl(&config),
     )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let path = SEARCH_MANUSCRIPT
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}");
-    format!(
-        concat!(
-            "\nexport async function searchManuscript({{ projectId, request, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"searchManuscript requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"searchManuscript requires request\");\n",
-            "  return queryPostJson({{ ...options, path: `{path}`, body: request }});\n}}\n"
-        ),
-        path = path
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function searchManuscript(options: StoryOSQueryOptions & { projectId: string; request: SearchManuscriptRequest }): Promise<SearchManuscriptResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

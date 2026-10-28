@@ -35,12 +35,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&DELETE_CHAPTER, method_openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &DELETE_CHAPTER,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -133,37 +130,6 @@ pub(super) fn typescript_type_declarations() -> String {
         DeleteChapterRefusalReason::decl(&config),
         DeleteChapterEffect::decl(&config),
         DeleteChapterResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestDeleteChapter(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestDeleteChapter requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function deleteChapter({{ projectId, chapterId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"deleteChapter requires projectId\");\n",
-            "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"deleteChapter requires chapterId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"deleteChapter requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"deleteChapter requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"DELETE\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        DELETE_CHAPTER_DIGEST_PROFILE,
-        DELETE_CHAPTER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestDeleteChapter(request: DeleteChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function deleteChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string; request: DeleteChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<DeleteChapterResponse>;\n",
     )
 }
 

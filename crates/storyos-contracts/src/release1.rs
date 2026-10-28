@@ -106,7 +106,17 @@ pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
     path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
     request_schema: CHAPTER_REQUEST_SCHEMA_ID,
     response_schema: CHAPTER_RESPONSE_SCHEMA_ID,
-    responses: GET_PROJECT.responses,
+    responses: &[
+        (200, "Current Chapter"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (409, "Snapshot expired"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
     fixtures: &[
         "storyos.golden.getChapter.positive.v1",
         "storyos.golden.getChapter.invalid.v1",

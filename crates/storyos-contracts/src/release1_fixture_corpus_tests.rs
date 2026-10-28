@@ -2,8 +2,10 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
-use super::{FIXTURE_CATALOG_PATH, FIXTURE_DIGEST_PLACEHOLDER, release1_protocol_profile};
+use super::release1_fixture_corpus::fixture_corpus_membership;
+use super::{FIXTURE_DIGEST_PLACEHOLDER, release1_protocol_profile};
 use crate::digest::sha256_prefixed;
+use crate::release1_operation_registry::RELEASE1_OPERATIONS;
 
 const INCOMPLETE_FIXTURE_CORPUS_DIGEST: &str =
     "sha256:ae4c01ee1cd84dc779177dcae27abd1e1856fe3b0608848938027d024f4d4071";
@@ -18,27 +20,13 @@ const PREVIOUSLY_OMITTED_OPERATIONS: [&str; 6] = [
 ];
 
 #[test]
-fn fixture_corpus_digest_covers_every_declared_catalog_fixture() {
+fn fixture_corpus_digest_covers_every_golden_wire_fixture() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<BTreeMap<_, _>>();
-    let catalog: Value = serde_json::from_slice(&generated[FIXTURE_CATALOG_PATH])
-        .expect("fixture catalog must be JSON");
-    let digest_paths = catalog["digest_scope"]["paths"]
-        .as_array()
-        .expect("digest_scope.paths must be an array")
+    let digest_paths = fixture_corpus_membership()
         .iter()
-        .map(|path| path.as_str().expect("digest path must be a string"))
-        .collect::<Vec<_>>();
-    let fixture_paths = catalog["fixtures"]
-        .as_array()
-        .expect("fixture catalog entries must be an array")
-        .iter()
-        .map(|fixture| {
-            fixture["path"]
-                .as_str()
-                .expect("fixture path must be a string")
-        })
+        .map(|entry| entry.path)
         .collect::<Vec<_>>();
     let mut golden_paths = generated
         .keys()
@@ -47,36 +35,32 @@ fn fixture_corpus_digest_covers_every_declared_catalog_fixture() {
         .collect::<Vec<_>>();
     let mut declared_paths = digest_paths.clone();
 
-    assert_eq!(digest_paths, fixture_paths);
     declared_paths.sort_unstable();
     golden_paths.sort_unstable();
     assert_eq!(declared_paths, golden_paths);
 
-    let published = catalog["corpus_digest"]
-        .as_str()
-        .expect("fixture catalog must publish corpus_digest");
-    assert_eq!(
-        published,
-        release1_protocol_profile()
-            .release_identity
-            .fixture_corpus_digest
-    );
+    let published = release1_protocol_profile()
+        .release_identity
+        .fixture_corpus_digest;
+    let published = published.as_str();
     assert_ne!(published, INCOMPLETE_FIXTURE_CORPUS_DIGEST);
 
     let reconstructed = reconstruct_fixture_corpus_digest(&generated, &digest_paths, published);
     assert_eq!(reconstructed, published);
 
     for operation_id in PREVIOUSLY_OMITTED_OPERATIONS {
-        let operation_paths = catalog["fixtures"]
-            .as_array()
-            .expect("fixture catalog entries must be an array")
+        let artifacts = RELEASE1_OPERATIONS
             .iter()
-            .filter(|fixture| fixture["operation_id"] == operation_id)
-            .map(|fixture| {
-                fixture["path"]
-                    .as_str()
-                    .expect("fixture path must be a string")
+            .find(|artifacts| {
+                artifacts
+                    .operations
+                    .iter()
+                    .any(|registered| registered.operation.operation_id == operation_id)
             })
+            .unwrap_or_else(|| panic!("{operation_id} must be registered"));
+        let operation_paths = (artifacts.fixtures)()
+            .into_iter()
+            .map(|entry| entry.path)
             .collect::<Vec<_>>();
         assert_eq!(operation_paths.len(), 3, "{operation_id}");
         for path in operation_paths {

@@ -37,12 +37,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_EXPORT_OPERATION, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &GET_EXPORT_OPERATION,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -118,26 +115,6 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!("export {}", GetExportOperationResponse::decl(&config),)
-}
-
-pub(super) fn typescript_client_source() -> String {
-    let path = GET_EXPORT_OPERATION
-        .path
-        .replace("{project_id}", "${encodeURIComponent(projectId)}")
-        .replace("{export_id}", "${encodeURIComponent(exportId)}");
-    format!(
-        concat!(
-            "\nexport async function getExportOperation({{ projectId, exportId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getExportOperation requires projectId\");\n",
-            "  if (typeof exportId !== \"string\" || exportId.length === 0) throw new TypeError(\"getExportOperation requires exportId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n"
-        ),
-        path
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    "export declare function getExportOperation(options: StoryOSQueryOptions & { projectId: string; exportId: string }): Promise<GetExportOperationResponse>;\n"
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {

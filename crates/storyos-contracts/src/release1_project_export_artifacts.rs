@@ -7,10 +7,10 @@ use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_project_export::{
-    EXPORT_PROJECT_ARCHIVE, EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
-    EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID, EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
-    ExportProjectArchiveEffect, ExportProjectArchiveInput, ExportProjectArchiveRefusalReason,
-    ExportProjectArchiveRequest, ExportProjectArchiveResponse, ProjectExportRef,
+    EXPORT_PROJECT_ARCHIVE, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
+    EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID, ExportProjectArchiveEffect,
+    ExportProjectArchiveInput, ExportProjectArchiveRefusalReason, ExportProjectArchiveRequest,
+    ExportProjectArchiveResponse, ProjectExportRef,
 };
 use crate::release1_project_export_query::GET_EXPORT_OPERATION;
 use crate::release1_route_catalog::{
@@ -55,12 +55,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&EXPORT_PROJECT_ARCHIVE, openapi()),
     typescript_types: typescript_type_declarations,
-    typescript_client: typescript_client_source,
-    typescript_declarations,
     fixtures: || {
         fixture_triple(
             FIXTURE_PATHS,
-            &EXPORT_PROJECT_ARCHIVE,
             [
                 |_| fixture_bytes(),
                 |_| invalid_fixture_bytes(),
@@ -150,35 +147,6 @@ pub(super) fn typescript_type_declarations() -> String {
         ProjectExportRef::decl(&config),
         ExportProjectArchiveEffect::decl(&config),
         ExportProjectArchiveResponse::decl(&config),
-    )
-}
-
-pub(super) fn typescript_client_source() -> String {
-    format!(
-        concat!(
-            "\nexport async function digestExportProjectArchive(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestExportProjectArchive requires request\");\n",
-            "  const canonical = canonicalJson(request);\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"{}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function exportProjectArchive({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"exportProjectArchive requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"exportProjectArchive requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"exportProjectArchive requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        ),
-        EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
-        EXPORT_PROJECT_ARCHIVE
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-    )
-}
-
-pub(super) fn typescript_declarations() -> &'static str {
-    concat!(
-        "export declare function digestExportProjectArchive(request: ExportProjectArchiveRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function exportProjectArchive(options: StoryOSQueryOptions & { projectId: string; request: ExportProjectArchiveRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportProjectArchiveResponse>;\n",
     )
 }
 

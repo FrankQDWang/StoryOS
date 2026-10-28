@@ -30,7 +30,7 @@ ADR 0042 took the registry order from the position of each operation in the hand
   - An Accepted command that names its own registered GET settlement query.
   - Cause profiles only on a conditional command, a synchronous settlement for each editor command, and Project Activity only on a command.
   - Capability coverage of the required set with served operations only.
-  - Error profiles that name only the stable errors of the protocol document. The served status codes of each operation include the status of each code of its error profile. Thus `getProject` and `getChapter` use the `query_current` profile, which names only their served status codes.
+  - Error profiles that name only the stable errors of the protocol document. The served status codes of each operation include the status of each code of its error profile. Thus `getProject` uses the `query_current` profile. `getChapter` serves `409 snapshot_expired`, so it uses the `query_current_chapter` profile, which adds `snapshot_expired` (ticket #1301).
   - An owner source that resolves to a heading of a tracked document.
   - Known owners, complete schema sources, and non-empty preconditions for each operation.
   - An Activity mapping for each Event, and an Event for each Activity reference.
