@@ -7,7 +7,7 @@
 - Exact planning tree: `29753b24816dcfd3b778309836531bc25f998ed1`
 - Product goal: [GOAL.md](../../GOAL.md)
 - Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
-- Issue execution rules: [Issue-Tracker Execution Contract](../agents/issue-tracker.md)
+- Issue execution rules: [Delivery](../agents/delivery.md)
 
 This document owns the Release 1 editor-first delivery baseline, the author
 journeys that make each stage meaningful, the explicit exclusions that keep
@@ -345,7 +345,7 @@ the complete editable Proposal experience.
 
 **Entry condition.** Stage 1 has passed its author journey and mandatory
 evidence on one exact main. A later implementation issue may be created only
-from that resulting main through the approved [Issue tracker](../agents/issue-tracker.md) process; this document
+from that resulting main through the approved [Delivery](../agents/delivery.md) process; this document
 does not create it.
 
 **Author journey S2-JRN-001.**

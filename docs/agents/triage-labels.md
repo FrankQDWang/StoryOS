@@ -11,4 +11,4 @@ Use these tracker labels when an upstream skill names a triage role.
 | `wontfix` | `wontfix` | Will not be implemented. |
 
 A readiness label does not satisfy a dependency or product release gate. Use the
-[issue tracker](issue-tracker.md) to decide execution readiness.
+[Delivery](delivery.md) to decide execution readiness.

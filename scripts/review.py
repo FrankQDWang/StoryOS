@@ -21,7 +21,10 @@ HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a
 EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s")
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? #(\d+)", re.I)
-LINKS = re.compile(r"^## Review verdicts\r?\n.*?(?=^## |\Z)", re.M | re.S)
+# The heading of the verdict links section, an optional blank line, and its own list lines. The text after them stays.
+LINKS = re.compile(r"^## Review verdicts[ \t]*\r?\n(?:[ \t]*\r?\n)?(?:- Round [^\n]*(?:\n|\Z))*", re.M)
+# A fence line of a code block, and the text after its marker. A quoted section heading in a code block is not the section.
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$", re.M)
 TRANSIENT = re.compile(r"\bEOF\b|connection reset|HTTP 50[234]\b|TLS handshake timeout|SSL_ERROR|i/o timeout"
                        r"|proxyconnect|remote end hung up unexpectedly", re.I)
 # The total seconds that one GitHub call retries a transient network failure.
@@ -30,11 +33,6 @@ RETRY = 60
 POLL = 20
 CODEX_WAIT_MS = 600000
 CODEX_WAITS = 6
-INPUTS = """- The request gives the base and head commits, the Check Evidence Line, the scoped diff command, the
-  pull request body, and the bodies of the issues that the pull request closes.
-- The working tree is at the head commit. Review the scoped diff.
-- Compare the commit of the Check Evidence Line with the head. A line that does not name the head is
-  missing required evidence."""
 BROKER = "openai-codex/codex/.*/scripts/app-server-broker.mjs"
 LAST_ROUND = f"""PR {{pr}} had {ROUNDS} review rounds, and a fourth round is not permitted.
 Send the open blocking findings to the coordinator session. The coordinator can accept a small fix:
@@ -196,8 +194,7 @@ def request(pr, number, pull, line, directory):
              f"- Base: `{pull['baseRefName']}` at `{base}`",
              f"- Head: `{head}`",
              f"- Check Evidence Line: `{line}`",
-             f"- Scoped diff: `git diff {base}...{head}`",
-             "- The request has no `guards` field. Wording findings stay non-blocking.\n",
+             f"- Scoped diff: `git diff {base}...{head}`\n",
              f"# Pull request\n\n{pull['body']}"]
     for issue in sorted({i["number"] for i in pull["closingIssuesReferences"]} | {int(n) for n in CLOSES.findall(pull["body"])}):
         value = gh_json("issue", "view", str(issue), "--json", "number,title,body")
@@ -208,11 +205,9 @@ def request(pr, number, pull, line, directory):
 
 
 def prompt(axis, path):
-    """The review prompt of one axis with the inputs of this request in place of the request JSON inputs."""
+    """The review prompt of one axis, without the introduction for the maintainer."""
     text = PROMPT.read_text().replace("{{axis}}", axis).replace("{{request}}", str(path))
-    intro, inputs = text[text.index("You are the independent"):].split("\n## Inputs\n", 1)
-    axes, rules = inputs[inputs.index("- Standards axis:"):].split("\n## Rules\n", 1)
-    return f"{intro}\n## Inputs\n\n{INPUTS}\n{axes}\n## Rules\n{rules}"
+    return text[text.index("You are the independent"):]
 
 
 def listed(items, numbered=True):
@@ -230,17 +225,33 @@ def post(pr, body):
     return run(["gh", "pr", "comment", str(pr), "--body", body], done=posted).strip()
 
 
+def verdicts_section(body):
+    """The first match of the verdict links section outside the fenced code blocks of the PR body."""
+    fenced, opening = [], None
+    for fence in FENCE.finditer(body):
+        if opening is None:
+            opening = fence
+        elif fence[1][0] == opening[1][0] and len(fence[1]) >= len(opening[1]) and not fence[2].strip():
+            fenced.append((opening.start(), fence.end()))
+            opening = None
+    if opening is not None:
+        fenced.append((opening.start(), len(body)))
+    return next((match for match in LINKS.finditer(body)
+                 if not any(start <= match.start() < end for start, end in fenced)), None)
+
+
 def link_verdicts(pr, pull):
     """Link the verdict comments from the `## Review verdicts` section of the PR body, and return the rounds.
 
-    Only that section changes, and the PR body changes only when the links change."""
+    Only the list lines of that section change, and the PR body changes only when the links change."""
     body, rounds, section = pull["body"], rounds_of(pull), "## Review verdicts\n\n"
     for number, axes in sorted(rounds.items()):
         head = next((head for _, head, _, _ in axes.values() if head), "unknown")
         section += (f"- Round {number}, head `{head[:12]}`: "
                     + ", ".join(f"{axis} {axes[axis][0]} {axes[axis][2]}" for axis in AXES if axis in axes) + "\n")
-    if match := LINKS.search(body):
-        new = body[:match.start()] + section + ("\n" if match.end() < len(body) else "") + body[match.end():]
+    if match := verdicts_section(body):
+        rest = body[match.end():]
+        new = body[:match.start()] + section + ("\n" if rest and not rest.startswith(("\n", "\r\n")) else "") + rest
     else:
         new = body + ("\n" if body.endswith("\n") else "\n\n") + section
     if rounds and new != body:
