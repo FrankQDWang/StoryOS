@@ -6,7 +6,7 @@ status: accepted
 
 On 2026-10-04 the author accepted this decision. Each Release 1 artifacts module in `storyos-contracts` declares one `OperationArtifacts` value: its operations with their contract-graph kind and preconditions, and the functions that produce its JSON Schemas, OpenAPI method blocks, TypeScript fragments, and golden-wire fixtures. One registry, `RELEASE1_OPERATIONS`, lists these values. The generator iterates the registry to produce the OpenAPI document, the JSON Schema catalog, the implemented-operation list, the contract graph, the TypeScript client and declarations, and the fixture corpus. The Rust generator stays the only owner of the checked-in artifacts.
 
-[ADR 0074](0074-generate-the-route-catalog-from-the-operation-registry.md) partly supersedes this ADR. The registry order is now the declared order of the registry, and the generator writes the route catalog from the registry.
+[ADR 0074](0074-generate-the-route-catalog-from-the-operation-registry.md) partly supersedes this ADR. The registry order is now the declared order of the registry, and the generator writes the route catalog from the registry. The generator writes the TypeScript client functions and declarations from the registry entries, and it no longer writes the schema catalog or the fixture catalog. ADR 0074 records the one change of the client bytes that this needed.
 
 ## Context
 
