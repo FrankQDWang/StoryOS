@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_create_chapter::{
     CREATE_CHAPTER, CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     CREATE_CHAPTER_RESPONSE_SCHEMA_ID, CreateChapterConflictReason, CreateChapterEffect,
@@ -10,6 +11,7 @@ use crate::release1_create_chapter::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "project_active",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("chapter:create", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::ChapterCreated], &[]),
     )],
     schemas: || {
         operation_schemas(

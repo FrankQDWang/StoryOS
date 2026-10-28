@@ -11,10 +11,16 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_wire::{
     canonical_u64_wire_schema, json_bytes, path_request_schema, query_openapi, schema_value,
     with_boundary_project_scope, without_project_scope,
 };
+
+const CREATE_EDITOR_SESSION_NOTES: &str = "Opening a session is a session Operational Record, not an author-owned Core command and not an Author Command Admission.";
 
 pub(super) const EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json";
@@ -50,6 +56,19 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "protected_client_session_binding",
                 "project_command_challenge",
             ],
+            OperationCatalog::new(
+                "editor-session:open",
+                Owner::Editor,
+                Binding {
+                    action_class: ActionClass::SessionControl,
+                    admission: Admission::SessionControl,
+                    editor: EditorRule::NewSession,
+                    idempotency: Idempotency::HeaderAndOperationRecord,
+                    settlement: Settlement::Committed,
+                    error_profile: ErrorProfile::SessionControl,
+                },
+            )
+            .notes(CREATE_EDITOR_SESSION_NOTES),
         ),
         RegisteredOperation::query(
             &GET_EDITOR_SESSION,
@@ -58,6 +77,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "session_scope_join",
                 "protected_client_session_binding",
             ],
+            OperationCatalog::new(
+                "editor-session:read",
+                Owner::Editor,
+                Binding {
+                    action_class: ActionClass::None,
+                    admission: Admission::Query,
+                    editor: EditorRule::ObservedWriter,
+                    idempotency: Idempotency::None,
+                    settlement: Settlement::Read,
+                    error_profile: ErrorProfile::QueryCanonical,
+                },
+            ),
         ),
     ],
     schemas: || {

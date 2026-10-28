@@ -1,9 +1,11 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_update_volume::{
     UPDATE_VOLUME, UPDATE_VOLUME_DIGEST_PROFILE, UPDATE_VOLUME_REQUEST_SCHEMA_ID,
     UPDATE_VOLUME_RESPONSE_SCHEMA_ID, UpdateVolumeConflictReason, UpdateVolumeEffect,
@@ -20,6 +22,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "volume_scope_join",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("volume:update", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::VolumeUpdated], &[])
+            .action_coverage(&["rename", "reorder"]),
     )],
     schemas: || {
         operation_schemas(

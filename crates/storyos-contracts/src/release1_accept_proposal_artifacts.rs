@@ -11,7 +11,10 @@ use crate::release1_accept_proposal::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const ACCEPT_PROPOSAL_NOTES: &str = "Acceptance is the explicit author command; it never automatically replans or replaces validation.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -26,6 +29,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_target_revisions",
             "acceptance_admission",
         ],
+        OperationCatalog::new("proposal:accept", Owner::Core, Binding::EDITOR_COMMAND)
+            .notes(ACCEPT_PROPOSAL_NOTES),
     )],
     schemas: || {
         operation_schemas(

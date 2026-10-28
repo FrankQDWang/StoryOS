@@ -9,6 +9,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{json_bytes, schema_value};
 
 pub(super) const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
@@ -33,6 +34,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "route_method_schema_digest_match",
             "closed_command_schema",
         ],
+        OperationCatalog::new(
+            "challenge:project-command",
+            Owner::Admission,
+            Binding::CHALLENGE,
+        )
+        .notes("Creates no Admission, Receipt, domain Attempt, or authority."),
     )],
     schemas: || {
         vec![

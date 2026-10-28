@@ -913,7 +913,7 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                         precondition_drift.push(id);
                     }
                 }
-                crate::release1_operation_registry::ContractGraphEntry::Absent => {
+                crate::release1_operation_registry::ContractGraphEntry::Absent(_) => {
                     assert!(graph_entry.is_none(), "{id}");
                 }
             }

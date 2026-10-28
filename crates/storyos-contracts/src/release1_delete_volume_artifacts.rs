@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_delete_volume::{
     DELETE_VOLUME, DELETE_VOLUME_DIGEST_PROFILE, DELETE_VOLUME_REQUEST_SCHEMA_ID,
     DELETE_VOLUME_RESPONSE_SCHEMA_ID, DeleteVolumeConflictReason, DeleteVolumeEffect,
@@ -10,6 +11,7 @@ use crate::release1_delete_volume::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_tree_revision",
             "child_chapter_policy",
         ],
+        OperationCatalog::new("volume:delete", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::VolumeDeleted], &[]),
     )],
     schemas: || {
         operation_schemas(

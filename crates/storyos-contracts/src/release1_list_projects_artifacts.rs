@@ -9,12 +9,18 @@ use crate::release1_list_projects::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
         &LIST_PROJECTS,
         &["server_derived_user"],
+        OperationCatalog::new(
+            "project:collection-read",
+            Owner::Release,
+            Binding::PROJECT_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(

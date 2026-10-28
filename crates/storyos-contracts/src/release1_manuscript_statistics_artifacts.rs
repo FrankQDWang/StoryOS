@@ -11,6 +11,7 @@ use crate::release1_manuscript_statistics::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -20,6 +21,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "server_derived_project_scope",
             "canonical_snapshot_or_projection_watermark",
         ],
+        OperationCatalog::new(
+            "manuscript:statistics",
+            Owner::Release,
+            Binding::PROJECTION_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(

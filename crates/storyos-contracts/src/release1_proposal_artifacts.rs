@@ -12,6 +12,7 @@ use crate::release1_proposal::{
     OptionalRevisionComparisonInspect, OptionalValidationReceiptInspect, ProposalOperationInspect,
     ProposalSourceConditionInspect, ProposalSourceInspect, ReplacementSpanInspect,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -22,6 +23,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "exact_revision_or_current_projection",
             "redaction_profile",
         ],
+        OperationCatalog::new("proposal:read", Owner::Core, Binding::CANONICAL_QUERY),
     )],
     schemas: || {
         operation_schemas(

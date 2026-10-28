@@ -2,9 +2,14 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation, fixture_triple,
     method, operation_schemas,
+};
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
 };
 use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER, TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
@@ -13,11 +18,35 @@ use crate::release1_takeover::{
 };
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
+const TAKE_OVER_PROJECT_WRITER_NOTES: &str = "Both TakeoverApplied and TakeoverCompareFailed are Receipt-backed Project Activity outcomes; stale pre-admission observation has no Admission or Receipt.";
+
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation {
         operation: &TAKE_OVER_PROJECT_WRITER,
         kind: OperationKind::Command,
-        graph: ContractGraphEntry::Absent,
+        graph: ContractGraphEntry::Absent(&[
+            "server_derived_project_scope",
+            "session_scope_join",
+            "observed_writer_generation_current_before_admission",
+            "editor_contract_revision",
+        ]),
+        catalog: OperationCatalog::new(
+            "writer:takeover",
+            Owner::Editor,
+            Binding {
+                action_class: ActionClass::ExplicitEditorCommand,
+                admission: Admission::AuthorCommand,
+                editor: EditorRule::ExplicitTakeover,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::CommittedOrReconfirmation,
+                error_profile: ErrorProfile::EditorCommand,
+            },
+        )
+        .activity(
+            &[ProjectActivityKind::WriterTakeoverApplied],
+            &[ProjectActivityKind::WriterTakeoverCompareFailed],
+        )
+        .notes(TAKE_OVER_PROJECT_WRITER_NOTES),
     }],
     schemas: || {
         operation_schemas(

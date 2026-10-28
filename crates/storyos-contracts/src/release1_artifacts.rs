@@ -21,6 +21,7 @@ use crate::release1_operation_registry::{
     ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
     RegisteredOperation,
 };
+use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
@@ -191,6 +192,7 @@ fn generated_files() -> Vec<GeneratedFile> {
         ),
         (SCHEMA_CATALOG_PATH, schema_catalog),
         (FIXTURE_CATALOG_PATH, fixture_catalog_bytes(&profile)),
+        (ROUTE_CATALOG_PATH, route_catalog_bytes()),
     ]);
     generated.extend(generated_fixture_files(&profile));
     generated
@@ -236,7 +238,7 @@ fn contract_graph_bytes() -> Vec<u8> {
                 registered.kind,
                 preconditions,
             )),
-            ContractGraphEntry::Absent => None,
+            ContractGraphEntry::Absent(_) => None,
         })
         .collect::<Vec<_>>();
     serde_json::to_vec(&json!({

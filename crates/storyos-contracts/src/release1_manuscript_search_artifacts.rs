@@ -11,7 +11,10 @@ use crate::release1_manuscript_search::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+const SEARCH_MANUSCRIPT_NOTES: &str = "Search selection is a read projection. A direct current visible replacement uses ApplyAuthorEdit; selected multi-match or cross-location replacement remains an author-edit classification input and cannot choose a proposal route.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -22,6 +25,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "projection_watermark_if_required",
             "redaction_profile",
         ],
+        OperationCatalog::new(
+            "manuscript:search",
+            Owner::Release,
+            Binding::PROJECTION_QUERY,
+        )
+        .notes(SEARCH_MANUSCRIPT_NOTES),
     )],
     schemas: || {
         operation_schemas(

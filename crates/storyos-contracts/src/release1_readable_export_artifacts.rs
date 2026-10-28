@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
@@ -12,7 +13,14 @@ use crate::release1_readable_export::{
     ExportHumanReadableManuscriptRefusalReason, ExportHumanReadableManuscriptRequest,
     ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
 };
+use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const EXPORT_HUMAN_READABLE_MANUSCRIPT_NOTES: &str = "This is the human-readable manuscript delivery required by the Release 1 editor baseline. It is separate from the portable Project Export Archive: output follows deterministic volume/chapter order and explicitly represents unavailable content; archive manifest, entry, and integrity semantics do not apply.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -23,6 +31,26 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "deterministic_volume_chapter_order",
             "unavailable_content_representation_profile",
         ],
+        OperationCatalog::new(
+            "manuscript-export:human-readable",
+            Owner::Release,
+            Binding {
+                action_class: ActionClass::ExplicitProjectCommand,
+                admission: Admission::AuthorCommandOrAsyncOperation,
+                editor: EditorRule::Optional,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::Accepted {
+                    query: &GET_HUMAN_READABLE_MANUSCRIPT_EXPORT,
+                    operation_ref: "human_readable_manuscript_export",
+                },
+                error_profile: ErrorProfile::AsyncCommand,
+            },
+        )
+        .activity(
+            &[ProjectActivityKind::HumanReadableManuscriptExportSettled],
+            &[],
+        )
+        .notes(EXPORT_HUMAN_READABLE_MANUSCRIPT_NOTES),
     )],
     schemas: || {
         operation_schemas(

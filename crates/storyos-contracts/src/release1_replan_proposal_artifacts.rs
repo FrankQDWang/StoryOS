@@ -10,7 +10,37 @@ use crate::release1_replan_proposal::{
     ReplanProposalInput, ReplanProposalRefusalReason, ReplanProposalRequest,
     ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult, ReplanSourceCondition,
 };
+use crate::release1_route_catalog::{
+    Binding, CauseProfile, CauseProfiles, OperationCatalog, Owner, Recovery,
+};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const CAUSES: CauseProfiles = CauseProfiles {
+    author: CauseProfile {
+        semantic_cause: "AuthorCommandAdmission { action_class: explicit_editor_command }",
+        semantic_payload: "explicit author ReplanProposal cause",
+        cause_binding: "protected_author_command_admission",
+        producer_types: &[],
+        request_schema: "storyos.command.replan-proposal.author-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.author-cause.response.v1",
+        binding: Binding::EDITOR_COMMAND,
+        recovery: Recovery::Allowed(
+            "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only.",
+        ),
+    },
+    current_producer: CauseProfile {
+        semantic_cause: "Exact current Proposal Revision producer: AgentRunDecision",
+        semantic_payload: "exact current producer ReplanProposal cause",
+        cause_binding: "exact_current_proposal_revision_producer",
+        producer_types: &["AgentRunDecision"],
+        request_schema: "storyos.command.replan-proposal.current-producer-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.current-producer-cause.response.v1",
+        binding: Binding::CURRENT_PRODUCER_CAUSE,
+        recovery: Recovery::Forbidden(
+            "The request binds the exact current AgentRunDecision producer and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
+        ),
+    },
+};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -24,6 +54,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_current_target_revisions",
             "explicit_editor_control",
         ],
+        OperationCatalog::new(
+            "proposal:replan",
+            Owner::Core,
+            Binding::CONDITIONAL_BY_CAUSE,
+        )
+        .causes(&CAUSES),
     )],
     schemas: || {
         operation_schemas(

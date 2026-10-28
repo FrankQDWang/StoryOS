@@ -1,0 +1,4198 @@
+{
+  "api_root": "/api/v1",
+  "catalog_id": "storyos.public.route-catalog.release-1.v1",
+  "compatibility_profile": "storyos.public.same-release.v1",
+  "contract_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
+  "coverage_contract": {
+    "every_operation_has": [
+      "one operation_id",
+      "one method/path",
+      "one request schema ID",
+      "one response schema ID",
+      "one semantic owner",
+      "one wire owner",
+      "one resource/action shape",
+      "one admission/idempotency/precondition profile",
+      "one settlement/status profile",
+      "one error profile",
+      "one Project Activity mapping",
+      "one positive and at least one negative golden fixture",
+      "one OpenAPI operation",
+      "one TypeScript generated operation",
+      "request/response JSON Schema IDs",
+      "conditional cause profiles when the operation has multiple legal causes"
+    ],
+    "every_public_event_has": [
+      "one Event schema ID",
+      "one stable event_kind",
+      "one semantic owner",
+      "one Project Activity wire profile",
+      "one positive and one negative golden fixture",
+      "one operation mapping"
+    ],
+    "generated_outputs": {
+      "fixture_manifest": "generated/fixtures/storyos-public-release-1.json",
+      "golden_wire_corpus": "generated/golden-wire/storyos-public-release-1/",
+      "json_schema_2020_12": "generated/json-schema/storyos-public-release-1/",
+      "openapi_3_1": "generated/openapi/storyos-public-release-1.yaml",
+      "schema_catalog": "generated/schema-catalog/storyos-public-release-1.json",
+      "typescript_client_and_types": "generated/typescript/storyos-public-release-1/"
+    },
+    "no_fixed_operation_count": true,
+    "non_public_events_are_explicit": true,
+    "uniqueness": [
+      "operation_id",
+      "method+path",
+      "OpenAPI operation ID",
+      "TypeScript operation name",
+      "all request/response/cause JSON Schema IDs",
+      "all operation and Event fixture IDs",
+      "Event schema ID",
+      "event_kind",
+      "positive fixture ID",
+      "accepted settlement-query operation ID"
+    ]
+  },
+  "error_profiles": {
+    "async_command": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "idempotency_conflict",
+      "command_in_progress",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "precondition_required",
+      "rate_limited",
+      "outcome_unknown",
+      "upgrade_required",
+      "limit_exceeded"
+    ],
+    "challenge": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "idempotency_conflict",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "precondition_required",
+      "rate_limited",
+      "upgrade_required"
+    ],
+    "command_sync": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "domain_conflict",
+      "idempotency_conflict",
+      "command_in_progress",
+      "precondition_failed",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "precondition_required",
+      "rate_limited",
+      "outcome_unknown",
+      "upgrade_required",
+      "historical_acknowledgement_unavailable",
+      "limit_exceeded"
+    ],
+    "editor_command": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "domain_conflict",
+      "idempotency_conflict",
+      "command_in_progress",
+      "precondition_failed",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "precondition_required",
+      "rate_limited",
+      "outcome_unknown",
+      "snapshot_not_ready",
+      "projection_not_ready",
+      "upgrade_required",
+      "limit_exceeded"
+    ],
+    "query_canonical": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "activity_cursor_too_old",
+      "cursor_scope_mismatch",
+      "snapshot_expired",
+      "snapshot_not_ready",
+      "projection_not_ready",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "rate_limited",
+      "upgrade_required",
+      "limit_exceeded"
+    ],
+    "query_projection": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "cursor_scope_mismatch",
+      "snapshot_expired",
+      "snapshot_not_ready",
+      "projection_not_ready",
+      "payload_too_large",
+      "unsupported_media_type",
+      "unprocessable_content",
+      "rate_limited",
+      "upgrade_required",
+      "limit_exceeded"
+    ],
+    "query_protocol": [
+      "invalid_request",
+      "method_not_allowed",
+      "rate_limited",
+      "upgrade_required"
+    ],
+    "session_control": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "idempotency_conflict",
+      "command_in_progress",
+      "precondition_failed",
+      "unprocessable_content",
+      "precondition_required",
+      "rate_limited",
+      "outcome_unknown",
+      "upgrade_required",
+      "historical_acknowledgement_unavailable"
+    ],
+    "stream": [
+      "invalid_request",
+      "invalid_session",
+      "operation_denied",
+      "resource_not_found",
+      "method_not_allowed",
+      "activity_cursor_too_old",
+      "cursor_scope_mismatch",
+      "snapshot_expired",
+      "snapshot_not_ready",
+      "rate_limited",
+      "upgrade_required"
+    ]
+  },
+  "error_source": "docs/foundation/versioned-command-query-artifact-event-protocol.md#11-problem-details-and-stable-errors",
+  "events": [
+    {
+      "description": "",
+      "event_kind": "authoritative_author_edit_applied",
+      "negative_fixture": "storyos.golden.storyos.event.authoritative-author-edit-applied.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.authoritative-author-edit-applied.v1.positive.v1",
+      "schema_id": "storyos.event.authoritative-author-edit-applied.v1",
+      "semantic_owner": "core",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "writer_takeover_applied",
+      "negative_fixture": "storyos.golden.storyos.event.writer-takeover-applied.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.writer-takeover-applied.v1.positive.v1",
+      "schema_id": "storyos.event.writer-takeover-applied.v1",
+      "semantic_owner": "editor",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "writer_takeover_compare_failed",
+      "negative_fixture": "storyos.golden.storyos.event.writer-takeover-compare-failed.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.writer-takeover-compare-failed.v1.positive.v1",
+      "schema_id": "storyos.event.writer-takeover-compare-failed.v1",
+      "semantic_owner": "editor",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "project_created",
+      "negative_fixture": "storyos.golden.storyos.event.project-created.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-created.v1.positive.v1",
+      "schema_id": "storyos.event.project-created.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "project_updated",
+      "negative_fixture": "storyos.golden.storyos.event.project-updated.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-updated.v1.positive.v1",
+      "schema_id": "storyos.event.project-updated.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "project_archival_changed",
+      "negative_fixture": "storyos.golden.storyos.event.project-archival-changed.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-archival-changed.v1.positive.v1",
+      "schema_id": "storyos.event.project-archival-changed.v1",
+      "semantic_owner": "retention",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "project_assistance_updated",
+      "negative_fixture": "storyos.golden.storyos.event.project-assistance-updated.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-assistance-updated.v1.positive.v1",
+      "schema_id": "storyos.event.project-assistance-updated.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "Historical create Activity. The order field is the stored storage key.",
+      "event_kind": "volume_created",
+      "negative_fixture": "storyos.golden.storyos.event.volume-created.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.volume-created.v1.positive.v1",
+      "schema_id": "storyos.event.volume-created.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "New create Activity. The order field is Canonical Sibling Order.",
+      "event_kind": "volume_created",
+      "negative_fixture": "storyos.golden.storyos.event.volume-created.v2.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.volume-created.v2.positive.v1",
+      "schema_id": "storyos.event.volume-created.v2",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "volume_updated",
+      "negative_fixture": "storyos.golden.storyos.event.volume-updated.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.volume-updated.v1.positive.v1",
+      "schema_id": "storyos.event.volume-updated.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "Historical create Activity. The order field is the stored storage key.",
+      "event_kind": "chapter_created",
+      "negative_fixture": "storyos.golden.storyos.event.chapter-created.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.chapter-created.v1.positive.v1",
+      "schema_id": "storyos.event.chapter-created.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "New create Activity. The order field is Canonical Sibling Order.",
+      "event_kind": "chapter_created",
+      "negative_fixture": "storyos.golden.storyos.event.chapter-created.v2.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.chapter-created.v2.positive.v1",
+      "schema_id": "storyos.event.chapter-created.v2",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "chapter_updated",
+      "negative_fixture": "storyos.golden.storyos.event.chapter-updated.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.chapter-updated.v1.positive.v1",
+      "schema_id": "storyos.event.chapter-updated.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "current_chapter_set",
+      "negative_fixture": "storyos.golden.storyos.event.current-chapter-set.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.current-chapter-set.v1.positive.v1",
+      "schema_id": "storyos.event.current-chapter-set.v1",
+      "semantic_owner": "core",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "chapter_deleted",
+      "negative_fixture": "storyos.golden.storyos.event.chapter-deleted.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.chapter-deleted.v1.positive.v1",
+      "schema_id": "storyos.event.chapter-deleted.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "volume_deleted",
+      "negative_fixture": "storyos.golden.storyos.event.volume-deleted.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.volume-deleted.v1.positive.v1",
+      "schema_id": "storyos.event.volume-deleted.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "Human-readable manuscript export settled from a deterministic volume/chapter source order; unavailable content is represented by the export profile.",
+      "event_kind": "human_readable_manuscript_export_settled",
+      "negative_fixture": "storyos.golden.storyos.event.human-readable-manuscript-export-settled.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.human-readable-manuscript-export-settled.v1.positive.v1",
+      "schema_id": "storyos.event.human-readable-manuscript-export-settled.v1",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "project_export_settled",
+      "negative_fixture": "storyos.golden.storyos.event.project-export-settled.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.project-export-settled.v1.positive.v1",
+      "schema_id": "storyos.event.project-export-settled.v1",
+      "semantic_owner": "storage",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "agent_run_created",
+      "negative_fixture": "storyos.golden.storyos.event.agent-run-created.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.agent-run-created.v1.positive.v1",
+      "schema_id": "storyos.event.agent-run-created.v1",
+      "semantic_owner": "context",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "Ordered author input retained for the next safe decision.",
+      "event_kind": "agent_run_steering_retained",
+      "negative_fixture": "storyos.golden.storyos.event.agent-run-steering-retained.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.agent-run-steering-retained.v1.positive.v1",
+      "schema_id": "storyos.event.agent-run-steering-retained.v1",
+      "semantic_owner": "context",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "agent_run_paused",
+      "negative_fixture": "storyos.golden.storyos.event.agent-run-paused.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.agent-run-paused.v1.positive.v1",
+      "schema_id": "storyos.event.agent-run-paused.v1",
+      "semantic_owner": "context",
+      "wire_profile": "storyos.project-activity.v1"
+    },
+    {
+      "description": "",
+      "event_kind": "agent_run_cancelled",
+      "negative_fixture": "storyos.golden.storyos.event.agent-run-cancelled.v1.negative.v1",
+      "positive_fixture": "storyos.golden.storyos.event.agent-run-cancelled.v1.positive.v1",
+      "schema_id": "storyos.event.agent-run-cancelled.v1",
+      "semantic_owner": "context",
+      "wire_profile": "storyos.project-activity.v1"
+    }
+  ],
+  "non_public_events": [
+    {
+      "name": "AuthorActionRecorded",
+      "public_schema": null,
+      "reason": "Core-only Author Action ordering evidence; public Receipt and Activity projections expose only the permitted resulting action identity and sequence.",
+      "source": "core"
+    }
+  ],
+  "non_public_operations": [
+    {
+      "name": "AppendProposalGenerationBatch",
+      "public_route": null,
+      "reason": "AgentRunDecision producer; internal Proposal generation contract, not a browser-selected public route.",
+      "source": "core"
+    },
+    {
+      "name": "PauseProposalGeneration",
+      "public_route": null,
+      "reason": "EditorInputFence safety transition; internal coordination, not the explicit ContinueProposalGeneration route.",
+      "source": "core"
+    },
+    {
+      "name": "ValidateProposal",
+      "public_route": null,
+      "reason": "Validation attempt is an internal Core/producer operation; its ValidationReceipt is exposed through Proposal/Receipt queries and Project Activity.",
+      "source": "core"
+    },
+    {
+      "name": "ToolMCPSkillAndAppExecution",
+      "public_route": null,
+      "reason": "Host/Worker/Adapter/bridge surfaces are not Release 1 public /api/v1 mutations.",
+      "source": "context"
+    },
+    {
+      "name": "ProviderEmbeddingResearchDispatch",
+      "public_route": null,
+      "reason": "External attempts use internal manifest-before-egress boundaries and are not author-selectable public routes.",
+      "source": "context"
+    },
+    {
+      "name": "RecordMemoryNote",
+      "public_route": null,
+      "reason": "Author-requested ToolCall records a Note Artifact, not an immediate Memory publication.",
+      "source": "memory"
+    },
+    {
+      "name": "MaintainProjectMemory",
+      "public_route": null,
+      "reason": "Bounded extraction/consolidation uses existing jobs and publishes through the storage-owned atomic gate.",
+      "source": "memory"
+    }
+  ],
+  "operations": [
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_protocol",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getProtocolProfile.invalid.v1",
+          "storyos.golden.getProtocolProfile.boundary.v1"
+        ],
+        "positive": "storyos.golden.getProtocolProfile.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "notes": "Project-free profile discovery; no Project Scope or session authority is returned.",
+      "operation_id": "getProtocolProfile",
+      "path": "/api/v1/protocol",
+      "preconditions": [
+        "active_public_release_profile"
+      ],
+      "schemas": {
+        "request": "storyos.query.protocol-profile.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.protocol-profile.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "protocol"
+      },
+      "semantic_owner": "protocol",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          405,
+          409,
+          429
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "protocol:profile",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "challenge",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "challenge",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createProjectChallenge.invalid.v1",
+          "storyos.golden.createProjectChallenge.boundary.v1"
+        ],
+        "positive": "storyos.golden.createProjectChallenge.positive.v1"
+      },
+      "idempotency": "body_key_and_challenge",
+      "kind": "challenge",
+      "method": "POST",
+      "notes": "Allocates only a prospective ProjectId and one challenge-bound idempotency record; it creates no Project, Admission, Receipt, or Core effect.",
+      "operation_id": "createProjectChallenge",
+      "path": "/api/v1/anti-forgery-challenges",
+      "preconditions": [
+        "server_derived_user",
+        "prospective_project_scope",
+        "strict_origin",
+        "protected_client_session_binding",
+        "closed_create_project_schema",
+        "body_idempotency_key"
+      ],
+      "schemas": {
+        "request": "storyos.challenge.create-project-anti-forgery-challenge.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.challenge.create-project-anti-forgery-challenge.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "admission"
+      },
+      "semantic_owner": "admission",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          428,
+          429
+        ],
+        "mode": "challenge",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "challenge:prospective-project",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-created.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createProject.invalid.v1",
+          "storyos.golden.createProject.boundary.v1"
+        ],
+        "positive": "storyos.golden.createProject.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "The only command admitted against a prospective Project Scope.",
+      "operation_id": "createProject",
+      "path": "/api/v1/projects",
+      "preconditions": [
+        "server_derived_user",
+        "prospective_project_scope",
+        "strict_origin",
+        "protected_client_session_binding",
+        "challenge_nonce_record",
+        "expected_absent_project"
+      ],
+      "schemas": {
+        "request": "storyos.command.create-project.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.create-project.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:create",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "challenge",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "challenge",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createProjectCommandChallenge.invalid.v1",
+          "storyos.golden.createProjectCommandChallenge.boundary.v1"
+        ],
+        "positive": "storyos.golden.createProjectCommandChallenge.positive.v1"
+      },
+      "idempotency": "body_key_and_challenge",
+      "kind": "challenge",
+      "method": "POST",
+      "notes": "Creates no Admission, Receipt, domain Attempt, or authority.",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "/api/v1/projects/{project_id}/anti-forgery-challenges",
+      "preconditions": [
+        "server_derived_project_scope",
+        "strict_origin",
+        "protected_client_session_binding",
+        "route_method_schema_digest_match",
+        "closed_command_schema"
+      ],
+      "schemas": {
+        "request": "storyos.challenge.project-command-anti-forgery-challenge.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.challenge.project-command-anti-forgery-challenge.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "admission"
+      },
+      "semantic_owner": "admission",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "challenge",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "challenge:project-command",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.listProjects.invalid.v1",
+          "storyos.golden.listProjects.boundary.v1"
+        ],
+        "positive": "storyos.golden.listProjects.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listProjects",
+      "path": "/api/v1/projects",
+      "preconditions": [
+        "server_derived_user"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-list.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-list.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:collection-read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getProject.invalid.v1",
+          "storyos.golden.getProject.boundary.v1"
+        ],
+        "positive": "storyos.golden.getProject.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProject",
+      "path": "/api/v1/projects/{project_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "schemas": {
+        "request": "storyos.query.project.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-updated.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.updateProject.invalid.v1",
+          "storyos.golden.updateProject.boundary.v1"
+        ],
+        "positive": "storyos.golden.updateProject.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PATCH",
+      "operation_id": "updateProject",
+      "path": "/api/v1/projects/{project_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "expected_project_revision",
+        "project_active"
+      ],
+      "schemas": {
+        "request": "storyos.command.update-project.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.update-project.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:update",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getProjectAssistance.invalid.v1",
+          "storyos.golden.getProjectAssistance.boundary.v1"
+        ],
+        "positive": "storyos.golden.getProjectAssistance.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProjectAssistance",
+      "path": "/api/v1/projects/{project_id}/assistance",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "schemas": {
+        "request": "storyos.query.project-assistance.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.project-assistance.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:assistance",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-assistance-updated.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.updateProjectAssistance.invalid.v1",
+          "storyos.golden.updateProjectAssistance.boundary.v1"
+        ],
+        "positive": "storyos.golden.updateProjectAssistance.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PUT",
+      "operation_id": "updateProjectAssistance",
+      "path": "/api/v1/projects/{project_id}/assistance",
+      "preconditions": [
+        "server_derived_project_scope",
+        "expected_assistance_revision",
+        "project_active"
+      ],
+      "schemas": {
+        "request": "storyos.command.update-project-assistance.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.update-project-assistance.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:assistance",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-archival-changed.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.archiveProject.invalid.v1",
+          "storyos.golden.archiveProject.boundary.v1"
+        ],
+        "positive": "storyos.golden.archiveProject.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PUT",
+      "operation_id": "archiveProject",
+      "path": "/api/v1/projects/{project_id}/archival",
+      "preconditions": [
+        "server_derived_project_scope",
+        "expected_project_revision",
+        "project_not_deleted"
+      ],
+      "schemas": {
+        "request": "storyos.command.archive-project.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.archive-project.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "retention"
+      },
+      "semantic_owner": "retention",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:archive",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "session_control",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "session_control",
+      "editor": {
+        "session": "new",
+        "takeover": "no",
+        "writer_generation": "returned_projection"
+      },
+      "error_profile": "session_control",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createEditorSession.invalid.v1",
+          "storyos.golden.createEditorSession.boundary.v1"
+        ],
+        "positive": "storyos.golden.createEditorSession.positive.v1"
+      },
+      "idempotency": "header_and_operation_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "Opening a session is a session Operational Record, not an author-owned Core command and not an Author Command Admission.",
+      "operation_id": "createEditorSession",
+      "path": "/api/v1/projects/{project_id}/editor-sessions",
+      "preconditions": [
+        "server_derived_project_scope",
+        "strict_origin",
+        "protected_client_session_binding",
+        "project_command_challenge"
+      ],
+      "schemas": {
+        "request": "storyos.command.create-editor-session.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.create-editor-session.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "editor"
+      },
+      "semantic_owner": "editor",
+      "settlement": {
+        "acknowledgements": [
+          "committed"
+        ],
+        "http_statuses": [
+          200,
+          201,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "editor-session:open",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "observed"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getEditorSession.invalid.v1",
+          "storyos.golden.getEditorSession.boundary.v1"
+        ],
+        "positive": "storyos.golden.getEditorSession.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getEditorSession",
+      "path": "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "session_scope_join",
+        "protected_client_session_binding"
+      ],
+      "schemas": {
+        "request": "storyos.query.editor-session.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.editor-session.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "editor"
+      },
+      "semantic_owner": "editor",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "editor-session:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [
+          "storyos.event.writer-takeover-compare-failed.v1"
+        ],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.writer-takeover-applied.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "explicit",
+        "writer_generation": "observed"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.takeOverProjectWriter.invalid.v1",
+          "storyos.golden.takeOverProjectWriter.boundary.v1"
+        ],
+        "positive": "storyos.golden.takeOverProjectWriter.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "Both TakeoverApplied and TakeoverCompareFailed are Receipt-backed Project Activity outcomes; stale pre-admission observation has no Admission or Receipt.",
+      "operation_id": "takeOverProjectWriter",
+      "path": "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
+      "preconditions": [
+        "server_derived_project_scope",
+        "session_scope_join",
+        "observed_writer_generation_current_before_admission",
+        "editor_contract_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.take-over-project-writer.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.take-over-project-writer.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "editor"
+      },
+      "semantic_owner": "editor",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "writer:takeover",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.volume-created.v1",
+          "storyos.event.volume-created.v2"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createVolume.invalid.v1",
+          "storyos.golden.createVolume.boundary.v1"
+        ],
+        "positive": "storyos.golden.createVolume.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "createVolume",
+      "path": "/api/v1/projects/{project_id}/volumes",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "expected_tree_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.create-volume.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.create-volume.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          201,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "volume:create",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "action_coverage": [
+        "rename",
+        "reorder"
+      ],
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.volume-updated.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.updateVolume.invalid.v1",
+          "storyos.golden.updateVolume.boundary.v1"
+        ],
+        "positive": "storyos.golden.updateVolume.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PATCH",
+      "operation_id": "updateVolume",
+      "path": "/api/v1/projects/{project_id}/volumes/{volume_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "volume_scope_join",
+        "expected_tree_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.update-volume.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.update-volume.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "volume:update",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.volume-deleted.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.deleteVolume.invalid.v1",
+          "storyos.golden.deleteVolume.boundary.v1"
+        ],
+        "positive": "storyos.golden.deleteVolume.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "DELETE",
+      "operation_id": "deleteVolume",
+      "path": "/api/v1/projects/{project_id}/volumes/{volume_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "volume_scope_join",
+        "expected_tree_revision",
+        "child_chapter_policy"
+      ],
+      "schemas": {
+        "request": "storyos.command.delete-volume.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.delete-volume.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "volume:delete",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.chapter-created.v1",
+          "storyos.event.chapter-created.v2"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createChapter.invalid.v1",
+          "storyos.golden.createChapter.boundary.v1"
+        ],
+        "positive": "storyos.golden.createChapter.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "createChapter",
+      "path": "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+      "preconditions": [
+        "server_derived_project_scope",
+        "volume_scope_join",
+        "project_active",
+        "expected_tree_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.create-chapter.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.create-chapter.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          201,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "chapter:create",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "action_coverage": [
+        "rename",
+        "reorder"
+      ],
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.chapter-updated.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.updateChapter.invalid.v1",
+          "storyos.golden.updateChapter.boundary.v1"
+        ],
+        "positive": "storyos.golden.updateChapter.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PATCH",
+      "operation_id": "updateChapter",
+      "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "chapter_scope_join",
+        "expected_tree_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.update-chapter.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.update-chapter.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "chapter:update",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.chapter-deleted.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "takeover": "none",
+        "writer_generation": "none"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.deleteChapter.invalid.v1",
+          "storyos.golden.deleteChapter.boundary.v1"
+        ],
+        "positive": "storyos.golden.deleteChapter.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "DELETE",
+      "operation_id": "deleteChapter",
+      "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "chapter_scope_join",
+        "expected_tree_revision"
+      ],
+      "schemas": {
+        "request": "storyos.command.delete-chapter.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.delete-chapter.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "chapter:delete",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.current-chapter-set.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.setCurrentChapter.invalid.v1",
+          "storyos.golden.setCurrentChapter.boundary.v1"
+        ],
+        "positive": "storyos.golden.setCurrentChapter.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "PUT",
+      "operation_id": "setCurrentChapter",
+      "path": "/api/v1/projects/{project_id}/current-chapter",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "expected_current_chapter",
+        "expected_authoritative_head"
+      ],
+      "schemas": {
+        "request": "storyos.command.set-current-chapter.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.set-current-chapter.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project:set-current-chapter",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "direct_editor_action",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.authoritative-author-edit-applied.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.applyAuthorEdit.invalid.v1",
+          "storyos.golden.applyAuthorEdit.boundary.v1"
+        ],
+        "positive": "storyos.golden.applyAuthorEdit.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body.",
+      "operation_id": "applyAuthorEdit",
+      "path": "/api/v1/projects/{project_id}/manuscript/author-edits",
+      "preconditions": [
+        "server_derived_project_scope",
+        "strict_origin",
+        "protected_client_session_binding",
+        "project_command_challenge",
+        "editor_session_writer_generation",
+        "expected_authoritative_head"
+      ],
+      "schemas": {
+        "request": "storyos.command.apply-author-edit.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.apply-author-edit.response.v2",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "manuscript:apply-author-edit",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.acceptProposal.invalid.v1",
+          "storyos.golden.acceptProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.acceptProposal.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "Acceptance is the explicit author command; it never automatically replans or replaces validation.",
+      "operation_id": "acceptProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "current_open_ready_proposal_revision",
+        "valid_validation_receipt",
+        "selected_pending_operations",
+        "expected_target_revisions",
+        "acceptance_admission"
+      ],
+      "schemas": {
+        "request": "storyos.command.accept-proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.accept-proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:accept",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.rejectProposalOperations.invalid.v1",
+          "storyos.golden.rejectProposalOperations.boundary.v1"
+        ],
+        "positive": "storyos.golden.rejectProposalOperations.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "rejectProposalOperations",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "current_open_ready_proposal_revision",
+        "selected_pending_operations",
+        "expected_target_revisions",
+        "explicit_editor_control"
+      ],
+      "schemas": {
+        "request": "storyos.command.reject-proposal-operations.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.reject-proposal-operations.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:reject-operations",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "conditional_by_cause",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "conditional_by_cause",
+      "cause_discriminator": {
+        "field": "cause",
+        "semantic_owner": "core",
+        "values": [
+          "author",
+          "current_producer"
+        ]
+      },
+      "cause_profiles": {
+        "author": {
+          "action_class": "explicit_editor_command",
+          "admission": "author_command",
+          "cause_binding": "protected_author_command_admission",
+          "editor": {
+            "session": "required",
+            "takeover": "no",
+            "writer_generation": "current"
+          },
+          "error_profile": "editor_command",
+          "idempotency": "header_and_admission_record",
+          "recovery": {
+            "requires_reconfirmation": "allowed",
+            "rule": "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only."
+          },
+          "request_schema": "storyos.command.withdraw-proposal.author-cause.request.v1",
+          "request_schema_source": "protocol",
+          "response_schema": "storyos.command.withdraw-proposal.author-cause.response.v1",
+          "response_schema_source": "protocol",
+          "semantic_cause": "AuthorCommandAdmission { action_class: explicit_editor_command }",
+          "semantic_payload": "withdrawal_reason: AuthorWithdrew",
+          "settlement": {
+            "acknowledgements": [
+              "committed",
+              "requires_reconfirmation"
+            ],
+            "http_statuses": [
+              200,
+              400,
+              401,
+              403,
+              404,
+              405,
+              409,
+              412,
+              413,
+              415,
+              422,
+              428,
+              429,
+              503
+            ],
+            "mode": "sync",
+            "operation_ref": null,
+            "settlement_query": null
+          }
+        },
+        "current_producer": {
+          "action_class": "producer_cause",
+          "admission": "none",
+          "cause_binding": "exact_proposal_producer",
+          "editor": {
+            "session": "not-applicable",
+            "takeover": "no",
+            "writer_generation": "not-applicable"
+          },
+          "error_profile": "editor_command",
+          "idempotency": "header_and_producer_cause_record",
+          "producer_types": [
+            "AgentRunDecision"
+          ],
+          "recovery": {
+            "requires_reconfirmation": "forbidden",
+            "rule": "The request binds the exact producer of the Proposal, its source AgentRun and Decision, and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission."
+          },
+          "request_schema": "storyos.command.withdraw-proposal.current-producer-cause.request.v1",
+          "request_schema_source": "protocol",
+          "response_schema": "storyos.command.withdraw-proposal.current-producer-cause.response.v1",
+          "response_schema_source": "protocol",
+          "semantic_cause": "Exact producer of the Proposal: its source AgentRun and Decision",
+          "semantic_payload": "withdrawal_reason: CurrentProducerWithdrew",
+          "settlement": {
+            "acknowledgements": [
+              "committed"
+            ],
+            "http_statuses": [
+              200,
+              400,
+              401,
+              403,
+              404,
+              405,
+              409,
+              412,
+              413,
+              415,
+              422,
+              428,
+              429,
+              503
+            ],
+            "mode": "sync",
+            "operation_ref": null,
+            "settlement_query": null
+          }
+        }
+      },
+      "editor": {
+        "session": "conditional_by_cause",
+        "takeover": "conditional_by_cause",
+        "writer_generation": "conditional_by_cause"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.withdrawProposal.invalid.v1",
+          "storyos.golden.withdrawProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.withdrawProposal.positive.v1"
+      },
+      "idempotency": "conditional_by_cause",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "withdrawProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
+      "preconditions": [
+        "proposal_scope_join",
+        "current_open_proposal_revision",
+        "expected_target_revisions",
+        "author_or_exact_current_producer_cause"
+      ],
+      "schemas": {
+        "request": "storyos.command.withdraw-proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.withdraw-proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "conditional_by_cause"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "conditional_by_cause",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:withdraw",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "conditional_by_cause",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "conditional_by_cause",
+      "cause_discriminator": {
+        "field": "cause",
+        "semantic_owner": "core",
+        "values": [
+          "author",
+          "current_producer"
+        ]
+      },
+      "cause_profiles": {
+        "author": {
+          "action_class": "explicit_editor_command",
+          "admission": "author_command",
+          "cause_binding": "protected_author_command_admission",
+          "editor": {
+            "session": "required",
+            "takeover": "no",
+            "writer_generation": "current"
+          },
+          "error_profile": "editor_command",
+          "idempotency": "header_and_admission_record",
+          "recovery": {
+            "requires_reconfirmation": "allowed",
+            "rule": "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only."
+          },
+          "request_schema": "storyos.command.replan-proposal.author-cause.request.v1",
+          "request_schema_source": "protocol",
+          "response_schema": "storyos.command.replan-proposal.author-cause.response.v1",
+          "response_schema_source": "protocol",
+          "semantic_cause": "AuthorCommandAdmission { action_class: explicit_editor_command }",
+          "semantic_payload": "explicit author ReplanProposal cause",
+          "settlement": {
+            "acknowledgements": [
+              "committed",
+              "requires_reconfirmation"
+            ],
+            "http_statuses": [
+              200,
+              400,
+              401,
+              403,
+              404,
+              405,
+              409,
+              412,
+              413,
+              415,
+              422,
+              428,
+              429,
+              503
+            ],
+            "mode": "sync",
+            "operation_ref": null,
+            "settlement_query": null
+          }
+        },
+        "current_producer": {
+          "action_class": "producer_cause",
+          "admission": "none",
+          "cause_binding": "exact_current_proposal_revision_producer",
+          "editor": {
+            "session": "not-applicable",
+            "takeover": "no",
+            "writer_generation": "not-applicable"
+          },
+          "error_profile": "editor_command",
+          "idempotency": "header_and_producer_cause_record",
+          "producer_types": [
+            "AgentRunDecision"
+          ],
+          "recovery": {
+            "requires_reconfirmation": "forbidden",
+            "rule": "The request binds the exact current AgentRunDecision producer and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission."
+          },
+          "request_schema": "storyos.command.replan-proposal.current-producer-cause.request.v1",
+          "request_schema_source": "protocol",
+          "response_schema": "storyos.command.replan-proposal.current-producer-cause.response.v1",
+          "response_schema_source": "protocol",
+          "semantic_cause": "Exact current Proposal Revision producer: AgentRunDecision",
+          "semantic_payload": "exact current producer ReplanProposal cause",
+          "settlement": {
+            "acknowledgements": [
+              "committed"
+            ],
+            "http_statuses": [
+              200,
+              400,
+              401,
+              403,
+              404,
+              405,
+              409,
+              412,
+              413,
+              415,
+              422,
+              428,
+              429,
+              503
+            ],
+            "mode": "sync",
+            "operation_ref": null,
+            "settlement_query": null
+          }
+        }
+      },
+      "editor": {
+        "session": "conditional_by_cause",
+        "takeover": "conditional_by_cause",
+        "writer_generation": "conditional_by_cause"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.replanProposal.invalid.v1",
+          "storyos.golden.replanProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.replanProposal.positive.v1"
+      },
+      "idempotency": "conditional_by_cause",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "replanProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "exact_conflict_or_recovery_conflict_source",
+        "expected_current_proposal_head",
+        "expected_current_target_revisions",
+        "explicit_editor_control"
+      ],
+      "schemas": {
+        "request": "storyos.command.replan-proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.replan-proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "conditional_by_cause"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "conditional_by_cause",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:replan",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.reopenWithdrawnProposal.invalid.v1",
+          "storyos.golden.reopenWithdrawnProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.reopenWithdrawnProposal.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings",
+      "preconditions": [
+        "proposal_scope_join",
+        "current_closure_withdrawn",
+        "exact_withdrawal_event_ref",
+        "expected_target_revisions"
+      ],
+      "schemas": {
+        "request": "storyos.command.reopen-withdrawn-proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.reopen-withdrawn-proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:reopen-withdrawn",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.reopenRejectedOperations.invalid.v1",
+          "storyos.golden.reopenRejectedOperations.boundary.v1"
+        ],
+        "positive": "storyos.golden.reopenRejectedOperations.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "reopenRejectedOperations",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "current_open_ready_proposal_revision",
+        "selected_rejected_operations",
+        "matching_rejection_event_refs",
+        "expected_target_revisions",
+        "explicit_editor_control"
+      ],
+      "schemas": {
+        "request": "storyos.command.reopen-rejected-operations.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.reopen-rejected-operations.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:reopen-rejected-operations",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.completeReadyPartialProposal.invalid.v1",
+          "storyos.golden.completeReadyPartialProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.completeReadyPartialProposal.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "current_ready_partial_generation",
+        "expected_candidate_digest",
+        "last_applied_stream_seq",
+        "expected_target_revisions",
+        "explicit_editor_control"
+      ],
+      "schemas": {
+        "request": "storyos.command.complete-ready-partial-proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.complete-ready-partial-proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:generation-complete",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.continueProposalGeneration.invalid.v1",
+          "storyos.golden.continueProposalGeneration.boundary.v1"
+        ],
+        "positive": "storyos.golden.continueProposalGeneration.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "continueProposalGeneration",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "current_generation_ready_partial_or_ready",
+        "prior_generation_id",
+        "expected_candidate_digest",
+        "selected_pending_operations",
+        "expected_target_revisions",
+        "explicit_editor_control"
+      ],
+      "schemas": {
+        "request": "storyos.command.continue-proposal-generation.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.continue-proposal-generation.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:generation-continue",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_editor_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "current"
+      },
+      "error_profile": "editor_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.undoLatestAuthorAction.invalid.v1",
+          "storyos.golden.undoLatestAuthorAction.boundary.v1"
+        ],
+        "positive": "storyos.golden.undoLatestAuthorAction.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "/api/v1/projects/{project_id}/author-actions/undo",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "author_undo_frontier_exact",
+        "expected_authoritative_head"
+      ],
+      "schemas": {
+        "request": "storyos.command.undo-latest-author-action.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.undo-latest-author-action.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "author-action:undo",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "agent_run_start",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.agent-run-created.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "producer_cause",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "async_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.createAgentRun.invalid.v1",
+          "storyos.golden.createAgentRun.boundary.v1"
+        ],
+        "positive": "storyos.golden.createAgentRun.positive.v1"
+      },
+      "idempotency": "header_and_operation_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "Stage 3 planned v2: closed conversation selection new or existing with exact conversation_id; atomic new identity/settings and Run admission; accepted response and getAgentRun return conversation_id and captured memory_settings_revision; exact retries reuse all identities. See protocol section 13.9. Foreground admission serializes with settings changes.",
+      "operation_id": "createAgentRun",
+      "path": "/api/v1/projects/{project_id}/agent-runs",
+      "preconditions": [
+        "server_derived_project_scope",
+        "operation_requirement",
+        "working_target_or_explicit_not_applicable",
+        "capability_and_destination_grant"
+      ],
+      "schemas": {
+        "request": "storyos.command.create-agent-run.request.v2",
+        "request_source": "protocol",
+        "response": "storyos.command.create-agent-run.response.v2",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [
+          "accepted"
+        ],
+        "http_statuses": [
+          202,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "async",
+        "operation_ref": {
+          "id_source": "operation_ref",
+          "kind": "agent_run"
+        },
+        "settlement_query": "/api/v1/projects/{project_id}/agent-runs/{run_id}",
+        "settlement_query_operation_id": "getAgentRun"
+      },
+      "shape": "agent-run:create",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_projection",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getAgentRun.invalid.v1",
+          "storyos.golden.getAgentRun.boundary.v1"
+        ],
+        "positive": "storyos.golden.getAgentRun.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "notes": "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation/hosted-operation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.",
+      "operation_id": "getAgentRun",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}",
+      "preconditions": [
+        "run_scope_join",
+        "run_projection_watermark_or_snapshot"
+      ],
+      "schemas": {
+        "request": "storyos.query.agent-run.request.v2",
+        "request_source": "protocol",
+        "response": "storyos.query.agent-run.response.v2",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "agent-run:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "agent_run_control",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.agent-run-steering-retained.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "producer_cause",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.steerAgentRun.invalid.v1",
+          "storyos.golden.steerAgentRun.boundary.v1"
+        ],
+        "positive": "storyos.golden.steerAgentRun.positive.v1"
+      },
+      "idempotency": "header_and_operation_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "steerAgentRun",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
+      "preconditions": [
+        "server_derived_project_scope",
+        "run_scope_join",
+        "exact_conversation",
+        "nonterminal_run",
+        "bounded_author_input"
+      ],
+      "schemas": {
+        "request": "storyos.command.steer-agent-run.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.steer-agent-run.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [
+          "committed"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "agent-run:steer",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "agent_run_control",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.agent-run-paused.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "producer_cause",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.pauseAgentRun.invalid.v1",
+          "storyos.golden.pauseAgentRun.boundary.v1"
+        ],
+        "positive": "storyos.golden.pauseAgentRun.positive.v1"
+      },
+      "idempotency": "header_and_operation_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "pauseAgentRun",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
+      "preconditions": [
+        "server_derived_project_scope",
+        "run_scope_join",
+        "current_run_state_pauseable",
+        "current_fence_generation"
+      ],
+      "schemas": {
+        "request": "storyos.command.pause-agent-run.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.pause-agent-run.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [
+          "committed"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "agent-run:pause",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "agent_run_control",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.agent-run-cancelled.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "producer_cause",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "command_sync",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.cancelAgentRun.invalid.v1",
+          "storyos.golden.cancelAgentRun.boundary.v1"
+        ],
+        "positive": "storyos.golden.cancelAgentRun.positive.v1"
+      },
+      "idempotency": "header_and_operation_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "cancelAgentRun",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+      "preconditions": [
+        "server_derived_project_scope",
+        "run_scope_join",
+        "current_run_state_cancellable",
+        "current_fence_generation"
+      ],
+      "schemas": {
+        "request": "storyos.command.cancel-agent-run.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.cancel-agent-run.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [
+          "committed"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "sync",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "agent-run:cancel",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.project-export-settled.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command_or_async_operation",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "async_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.exportProjectArchive.invalid.v1",
+          "storyos.golden.exportProjectArchive.boundary.v1"
+        ],
+        "positive": "storyos.golden.exportProjectArchive.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "operation_id": "exportProjectArchive",
+      "path": "/api/v1/projects/{project_id}/exports",
+      "preconditions": [
+        "server_derived_project_scope",
+        "consistent_source_snapshot",
+        "archive_path_profile",
+        "integrity_protection_before_completion"
+      ],
+      "schemas": {
+        "request": "storyos.command.export-project-archive.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.export-project-archive.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "storage"
+      },
+      "semantic_owner": "storage",
+      "settlement": {
+        "acknowledgements": [
+          "accepted"
+        ],
+        "http_statuses": [
+          202,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "async",
+        "operation_ref": {
+          "id_source": "operation_ref",
+          "kind": "project_export"
+        },
+        "settlement_query": "/api/v1/projects/{project_id}/exports/{export_id}",
+        "settlement_query_operation_id": "getExportOperation"
+      },
+      "shape": "project-archive:export",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "explicit_project_command",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [
+          "storyos.event.human-readable-manuscript-export-settled.v1"
+        ],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "author_command_or_async_operation",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "async_command",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.exportHumanReadableManuscript.invalid.v1",
+          "storyos.golden.exportHumanReadableManuscript.boundary.v1"
+        ],
+        "positive": "storyos.golden.exportHumanReadableManuscript.positive.v1"
+      },
+      "idempotency": "header_and_admission_record",
+      "kind": "command",
+      "method": "POST",
+      "notes": "This is the human-readable manuscript delivery required by the Release 1 editor baseline. It is separate from the portable Project Export Archive: output follows deterministic volume/chapter order and explicitly represents unavailable content; archive manifest, entry, and integrity semantics do not apply.",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "/api/v1/projects/{project_id}/manuscript/exports",
+      "preconditions": [
+        "server_derived_project_scope",
+        "consistent_source_snapshot",
+        "deterministic_volume_chapter_order",
+        "unavailable_content_representation_profile"
+      ],
+      "schemas": {
+        "request": "storyos.command.export-human-readable-manuscript.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.command.export-human-readable-manuscript.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [
+          "accepted"
+        ],
+        "http_statuses": [
+          202,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "mode": "async",
+        "operation_ref": {
+          "id_source": "operation_ref",
+          "kind": "human_readable_manuscript_export"
+        },
+        "settlement_query": "/api/v1/projects/{project_id}/manuscript/exports/{export_id}",
+        "settlement_query_operation_id": "getHumanReadableManuscriptExport"
+      },
+      "shape": "manuscript-export:human-readable",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getManuscriptTree.invalid.v1",
+          "storyos.golden.getManuscriptTree.boundary.v1"
+        ],
+        "positive": "storyos.golden.getManuscriptTree.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getManuscriptTree",
+      "path": "/api/v1/projects/{project_id}/manuscript/tree",
+      "preconditions": [
+        "server_derived_project_scope",
+        "canonical_snapshot",
+        "tree_scope_join"
+      ],
+      "schemas": {
+        "request": "storyos.query.manuscript-tree.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.manuscript-tree.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "manuscript-tree:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getChapter.invalid.v1",
+          "storyos.golden.getChapter.boundary.v1"
+        ],
+        "positive": "storyos.golden.getChapter.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getChapter",
+      "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "chapter_scope_join",
+        "canonical_snapshot"
+      ],
+      "schemas": {
+        "request": "storyos.query.chapter.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.chapter.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "chapter:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_projection",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getStatistics.invalid.v1",
+          "storyos.golden.getStatistics.boundary.v1"
+        ],
+        "positive": "storyos.golden.getStatistics.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getStatistics",
+      "path": "/api/v1/projects/{project_id}/manuscript/statistics",
+      "preconditions": [
+        "server_derived_project_scope",
+        "canonical_snapshot_or_projection_watermark"
+      ],
+      "schemas": {
+        "request": "storyos.query.statistics.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.statistics.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "manuscript:statistics",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getProposal.invalid.v1",
+          "storyos.golden.getProposal.boundary.v1"
+        ],
+        "positive": "storyos.golden.getProposal.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getProposal",
+      "path": "/api/v1/projects/{project_id}/proposals/{proposal_id}",
+      "preconditions": [
+        "proposal_scope_join",
+        "exact_revision_or_current_projection",
+        "redaction_profile"
+      ],
+      "schemas": {
+        "request": "storyos.query.proposal.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.proposal.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.listChapterOpenProposals.invalid.v1",
+          "storyos.golden.listChapterOpenProposals.boundary.v1"
+        ],
+        "positive": "storyos.golden.listChapterOpenProposals.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listChapterOpenProposals",
+      "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}/open-proposals",
+      "preconditions": [
+        "server_derived_project_scope",
+        "chapter_scope_join",
+        "bounded_open_proposal_list"
+      ],
+      "schemas": {
+        "request": "storyos.query.chapter-open-proposals.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.chapter-open-proposals.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "semantic_owner": "core",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "proposal:chapter-open-list",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "returns the current durable outcome; completing an already-admitted command may append that command's Receipt and Activity; this Query allocates no new command identity"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "required",
+        "takeover": "no",
+        "writer_generation": "bound-to-original-admission-when-present"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getApplyAuthorEditOutcome.invalid.v1",
+          "storyos.golden.getApplyAuthorEditOutcome.boundary.v1"
+        ],
+        "positive": "storyos.golden.getApplyAuthorEditOutcome.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "notes": "The protected Web Client may call this exact named GET after the first applyAuthorEdit acknowledgement is absent. It uses the client-first idempotency key plus the original challenge nonce only as a protected header, never as a URL or response value. Committed reuses the exact Receipt-backed response-v2 settlement; Rejected requires an expired unconsumed challenge under the arbiter locks; RequiresReconfirmation is the terminal no-Receipt settlement for an expired, binding-changed, or unrecoverable open Admission; StillUnknown grants no retry or success and is not the durable Admission outcome_unknown condition. The route is not applyAuthorEdit.settlement_query and creates no Admission, Command, idempotency record, or nonce. When the Query observes a clean open Admission, the Server may complete the already-admitted direct_editor_action or append RequiresReconfirmation.",
+      "operation_id": "getApplyAuthorEditOutcome",
+      "path": "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "sensitive_safe_read_origin",
+        "protected_client_session_binding",
+        "idempotency_key",
+        "project_command_challenge_proof",
+        "receipt_first_settlement_validation"
+      ],
+      "query_proof": {
+        "cache_control": "no-store",
+        "consumption": "none",
+        "header": "X-StoryOS-Anti-Forgery",
+        "identity": "apply_author_edit_idempotency_key",
+        "response": "forbidden",
+        "source": "original_project_command_challenge_nonce",
+        "url": "forbidden"
+      },
+      "schemas": {
+        "request": "storyos.query.apply-author-edit-outcome.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.apply-author-edit-outcome.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "admission"
+      },
+      "semantic_owner": "admission",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "apply-author-edit-outcome:read-by-idempotency-proof",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getSnapshot.invalid.v1",
+          "storyos.golden.getSnapshot.boundary.v1"
+        ],
+        "positive": "storyos.golden.getSnapshot.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "notes": "Expired or unavailable Snapshot returns snapshot_expired and a safe resync query; the Server never mixes page boundaries.",
+      "operation_id": "getSnapshot",
+      "path": "/api/v1/projects/{project_id}/snapshots/{snapshot_id}",
+      "preconditions": [
+        "snapshot_scope_join",
+        "snapshot_signature",
+        "snapshot_lifecycle_available"
+      ],
+      "schemas": {
+        "request": "storyos.query.snapshot.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.snapshot.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "replay"
+      },
+      "semantic_owner": "replay",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "snapshot:read",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "sse",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "stream",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.activityStream.invalid.v1",
+          "storyos.golden.activityStream.boundary.v1"
+        ],
+        "positive": "storyos.golden.activityStream.positive.v1"
+      },
+      "idempotency": "stream_cursor",
+      "kind": "stream",
+      "method": "GET",
+      "notes": "SSE id is a scoped cursor, not Event identity or a bearer capability; replay-floor misses return activity_cursor_too_old before stream start.",
+      "operation_id": "activityStream",
+      "path": "/api/v1/projects/{project_id}/activity",
+      "preconditions": [
+        "server_derived_project_scope",
+        "snapshot_binding_or_last_event_id",
+        "activity_profile",
+        "replay_generation",
+        "filter_digest",
+        "reauthorize_on_connect"
+      ],
+      "schemas": {
+        "request": "storyos.stream.activity-stream.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.stream.activity-stream.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "replay"
+      },
+      "semantic_owner": "replay",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          429,
+          503
+        ],
+        "mode": "stream",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project-activity:sse",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_projection",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.searchManuscript.invalid.v1",
+          "storyos.golden.searchManuscript.boundary.v1"
+        ],
+        "positive": "storyos.golden.searchManuscript.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "POST",
+      "notes": "Search selection is a read projection. A direct current visible replacement uses ApplyAuthorEdit; selected multi-match or cross-location replacement remains an author-edit classification input and cannot choose a proposal route.",
+      "operation_id": "searchManuscript",
+      "path": "/api/v1/projects/{project_id}/queries/manuscript-search",
+      "preconditions": [
+        "server_derived_project_scope",
+        "bounded_search_query",
+        "projection_watermark_if_required",
+        "redaction_profile"
+      ],
+      "schemas": {
+        "request": "storyos.query.manuscript-search.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.manuscript-search.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "manuscript:search",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getExportOperation.invalid.v1",
+          "storyos.golden.getExportOperation.boundary.v1"
+        ],
+        "positive": "storyos.golden.getExportOperation.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getExportOperation",
+      "path": "/api/v1/projects/{project_id}/exports/{export_id}",
+      "preconditions": [
+        "export_scope_join",
+        "export_operation_visibility",
+        "redaction_profile"
+      ],
+      "schemas": {
+        "request": "storyos.query.export-operation.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.export-operation.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "storage"
+      },
+      "semantic_owner": "storage",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "project-archive:export-status",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "negative": [
+          "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
+          "storyos.golden.getHumanReadableManuscriptExport.boundary.v1"
+        ],
+        "positive": "storyos.golden.getHumanReadableManuscriptExport.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "notes": "This is the exact asynchronous settlement/status query for exportHumanReadableManuscript. It is not getExportOperation, whose shape and owner remain the portable Project Export Archive contract.",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "/api/v1/projects/{project_id}/manuscript/exports/{export_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "export_scope_join",
+        "export_operation_visibility",
+        "deterministic_order_profile",
+        "unavailable_content_representation_profile"
+      ],
+      "schemas": {
+        "request": "storyos.query.human-readable-manuscript-export.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.human-readable-manuscript-export.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "semantic_owner": "release",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "manuscript-export:human-readable-status",
+      "wire_owner": "protocol"
+    }
+  ],
+  "owners": {
+    "admission": "docs/foundation/author-command-admission.md#3-exact-admission-bindings",
+    "artifact": "docs/foundation/artifact-domain-model.md#1-purpose",
+    "assistance": "docs/foundation/plain-language-discovery-writing-assistance-semantics.md#4-prose-change-request-and-proposal-handoff",
+    "context": "docs/foundation/context-assembly-retrieval-and-outbound-disclosure-semantics.md#15-required-verification-scenarios",
+    "core": "docs/foundation/manuscript-revision-proposal-state-machine.md#13-normative-commands-events-and-records",
+    "deletion": "docs/adr/0011-require-explicit-project-deletion-settlement.md",
+    "editor": "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md#22-one-current-writer-generation-per-project",
+    "memory": "docs/foundation/fiction-memory-and-research-provenance-semantics.md#11-author-interaction",
+    "protocol": "docs/foundation/versioned-command-query-artifact-event-protocol.md#16-rust-source-generation-and-verification-contract",
+    "release": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md#3-complete-acceptance-journey",
+    "replay": "docs/adr/0009-require-snapshot-resync-at-replay-generation-boundaries.md",
+    "retention": "docs/foundation/run-event-mailbox-snapshot-retention-and-archival-semantics.md#10-explicit-project-deletion-lifecycle",
+    "storage": "docs/foundation/postgresql-project-storage-isolation-and-migration-contract.md#1-scope-and-authority"
+  },
+  "public_release": "storyos.public.release.1",
+  "release1_capability_coverage": {
+    "capabilities": [
+      {
+        "capability_id": "project_lifecycle",
+        "journey": "Project lifecycle",
+        "required_operations": [
+          "createProject",
+          "listProjects",
+          "getProject",
+          "updateProject",
+          "archiveProject",
+          "getProjectAssistance",
+          "updateProjectAssistance"
+        ]
+      },
+      {
+        "capability_id": "volume_chapter_lifecycle",
+        "journey": "Volume/chapter create, rename, reorder, and remove",
+        "operation_actions": {
+          "createChapter": [
+            "create"
+          ],
+          "createVolume": [
+            "create"
+          ],
+          "deleteChapter": [
+            "remove"
+          ],
+          "deleteVolume": [
+            "remove"
+          ],
+          "updateChapter": [
+            "rename",
+            "reorder"
+          ],
+          "updateVolume": [
+            "rename",
+            "reorder"
+          ]
+        },
+        "required_operations": [
+          "createVolume",
+          "updateVolume",
+          "deleteVolume",
+          "createChapter",
+          "updateChapter",
+          "deleteChapter"
+        ]
+      },
+      {
+        "capability_id": "chapter_navigation",
+        "journey": "Chapter navigation and manuscript tree",
+        "required_operations": [
+          "getManuscriptTree",
+          "getChapter",
+          "setCurrentChapter"
+        ]
+      },
+      {
+        "capability_id": "manuscript_search",
+        "journey": "Bounded manuscript search",
+        "required_operations": [
+          "searchManuscript"
+        ]
+      },
+      {
+        "capability_id": "direct_author_edit",
+        "journey": "Direct author editing through the single ownership-classifying ingress",
+        "operation_actions": {
+          "applyAuthorEdit": [
+            "direct_author_edit"
+          ]
+        },
+        "required_operations": [
+          "applyAuthorEdit"
+        ]
+      },
+      {
+        "capability_id": "acknowledgement_loss_outcome_query",
+        "journey": "Read one exact Apply Author Edit outcome after a missing acknowledgement",
+        "required_operations": [
+          "getApplyAuthorEditOutcome"
+        ]
+      },
+      {
+        "capability_id": "single_match_replace",
+        "journey": "Single current visible-match replacement",
+        "operation_actions": {
+          "applyAuthorEdit": [
+            "single_current_visible_match_replace"
+          ]
+        },
+        "required_operations": [
+          "applyAuthorEdit"
+        ]
+      },
+      {
+        "capability_id": "multi_match_cross_location_proposal",
+        "journey": "Selected multi-match or cross-location replacement as a Core Proposal",
+        "operation_actions": {
+          "applyAuthorEdit": [
+            "selected_multi_match_replace",
+            "cross_location_replace"
+          ]
+        },
+        "required_operations": [
+          "applyAuthorEdit"
+        ]
+      },
+      {
+        "capability_id": "manuscript_statistics",
+        "journey": "Manuscript and chapter statistics",
+        "required_operations": [
+          "getStatistics"
+        ]
+      },
+      {
+        "capability_id": "human_readable_manuscript_export",
+        "journey": "Human-readable manuscript export in deterministic volume/chapter order",
+        "required_operations": [
+          "exportHumanReadableManuscript",
+          "getHumanReadableManuscriptExport"
+        ]
+      },
+      {
+        "capability_id": "portable_project_archive",
+        "journey": "Versioned portable Project Export Archive import/export",
+        "required_operations": [
+          "exportProjectArchive",
+          "getExportOperation"
+        ]
+      },
+      {
+        "capability_id": "editor_session_takeover",
+        "journey": "Editor Session and writer-generation takeover",
+        "required_operations": [
+          "createEditorSession",
+          "getEditorSession",
+          "takeOverProjectWriter"
+        ]
+      },
+      {
+        "capability_id": "snapshot_resync",
+        "journey": "Snapshot and replay-generation resynchronization",
+        "required_operations": [
+          "getSnapshot",
+          "activityStream"
+        ]
+      },
+      {
+        "capability_id": "proposal_draft_lifecycle",
+        "journey": "Proposal and Draft lifecycle",
+        "required_operations": [
+          "applyAuthorEdit",
+          "getProposal",
+          "listChapterOpenProposals",
+          "acceptProposal",
+          "rejectProposalOperations",
+          "withdrawProposal",
+          "replanProposal",
+          "reopenWithdrawnProposal",
+          "reopenRejectedOperations",
+          "completeReadyPartialProposal",
+          "continueProposalGeneration",
+          "undoLatestAuthorAction"
+        ]
+      },
+      {
+        "capability_id": "project_activity",
+        "journey": "Project Activity observation",
+        "required_operations": [
+          "activityStream",
+          "getSnapshot"
+        ]
+      }
+    ],
+    "required_capability_ids": [
+      "project_lifecycle",
+      "volume_chapter_lifecycle",
+      "chapter_navigation",
+      "manuscript_search",
+      "direct_author_edit",
+      "single_match_replace",
+      "multi_match_cross_location_proposal",
+      "manuscript_statistics",
+      "human_readable_manuscript_export",
+      "portable_project_archive",
+      "editor_session_takeover",
+      "snapshot_resync",
+      "proposal_draft_lifecycle",
+      "project_activity",
+      "acknowledgement_loss_outcome_query"
+    ]
+  },
+  "release_identity": {
+    "components": [
+      "Protected Web Client",
+      "StoryOS Server",
+      "StoryOS Worker",
+      "Rust contract graph",
+      "generated TypeScript client/types",
+      "OpenAPI",
+      "JSON Schema catalog",
+      "fixture/golden wire corpus"
+    ],
+    "mismatch_boundary": "before domain attempt, cursor advancement, or external effect",
+    "mismatch_code": "upgrade_required",
+    "required_fields": [
+      "api_major",
+      "public_protocol_release",
+      "envelope_profile",
+      "contract_graph_revision",
+      "contract_graph_digest",
+      "web_client_contract_revision",
+      "server_contract_revision",
+      "worker_contract_revision",
+      "generated_client_revision",
+      "openapi_digest",
+      "json_schema_catalog_digest",
+      "typescript_artifact_digest",
+      "fixture_corpus_digest",
+      "activity_profile",
+      "limit_profile_revision"
+    ],
+    "schema_id": "storyos.compatibility.release-identity.v1"
+  },
+  "source_of_truth": "StoryOS-owned Rust operation registry; semantic meaning stays with each named owner"
+}

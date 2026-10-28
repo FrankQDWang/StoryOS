@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_archive_project::{
     ARCHIVE_PROJECT, ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
     ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID, ArchiveProjectConflictReason, ArchiveProjectEffect,
@@ -10,6 +11,7 @@ use crate::release1_archive_project::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -20,6 +22,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_project_revision",
             "project_not_deleted",
         ],
+        OperationCatalog::new(
+            "project:archive",
+            Owner::Retention,
+            Binding::PROJECT_COMMAND,
+        )
+        .activity(&[ProjectActivityKind::ProjectArchivalChanged], &[]),
     )],
     schemas: || {
         operation_schemas(

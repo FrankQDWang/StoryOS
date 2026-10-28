@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
@@ -10,6 +11,11 @@ use crate::release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID, EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
     ExportProjectArchiveEffect, ExportProjectArchiveInput, ExportProjectArchiveRefusalReason,
     ExportProjectArchiveRequest, ExportProjectArchiveResponse, ProjectExportRef,
+};
+use crate::release1_project_export_query::GET_EXPORT_OPERATION;
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -22,6 +28,22 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "archive_path_profile",
             "integrity_protection_before_completion",
         ],
+        OperationCatalog::new(
+            "project-archive:export",
+            Owner::Storage,
+            Binding {
+                action_class: ActionClass::ExplicitProjectCommand,
+                admission: Admission::AuthorCommandOrAsyncOperation,
+                editor: EditorRule::Optional,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::Accepted {
+                    query: &GET_EXPORT_OPERATION,
+                    operation_ref: "project_export",
+                },
+                error_profile: ErrorProfile::AsyncCommand,
+            },
+        )
+        .activity(&[ProjectActivityKind::ProjectExportSettled], &[]),
     )],
     schemas: || {
         operation_schemas(

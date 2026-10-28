@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
@@ -14,6 +15,7 @@ use crate::release1_project_assistance::{
     UpdateProjectAssistanceInput, UpdateProjectAssistanceNoEffectReason,
     UpdateProjectAssistanceRequest, UpdateProjectAssistanceResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +23,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         RegisteredOperation::query(
             &GET_PROJECT_ASSISTANCE,
             &["server_derived_project_scope", "project_visibility"],
+            OperationCatalog::new("project:assistance", Owner::Release, Binding::PROJECT_QUERY),
         ),
         RegisteredOperation::command(
             &UPDATE_PROJECT_ASSISTANCE,
@@ -29,6 +32,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_assistance_revision",
                 "project_active",
             ],
+            OperationCatalog::new(
+                "project:assistance",
+                Owner::Release,
+                Binding::PROJECT_COMMAND,
+            )
+            .activity(&[ProjectActivityKind::ProjectAssistanceUpdated], &[]),
         ),
     ],
     schemas: || {
