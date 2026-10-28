@@ -11,6 +11,7 @@ use crate::release1_open_proposal_list::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +22,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "bounded_open_proposal_list",
         ],
+        OperationCatalog::new(
+            "proposal:chapter-open-list",
+            Owner::Core,
+            Binding::CANONICAL_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(

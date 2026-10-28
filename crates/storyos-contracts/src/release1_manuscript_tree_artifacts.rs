@@ -11,6 +11,7 @@ use crate::release1_manuscript_tree::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -21,6 +22,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "canonical_snapshot",
             "tree_scope_join",
         ],
+        OperationCatalog::new(
+            "manuscript-tree:read",
+            Owner::Release,
+            Binding::CANONICAL_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(

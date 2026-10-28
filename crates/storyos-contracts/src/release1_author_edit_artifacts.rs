@@ -2,6 +2,7 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1::{APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID};
 use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
@@ -12,7 +13,13 @@ use crate::release1_author_edit::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+const APPLY_AUTHOR_EDIT_NOTES: &str = "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -25,6 +32,20 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "editor_session_writer_generation",
             "expected_authoritative_head",
         ],
+        OperationCatalog::new(
+            "manuscript:apply-author-edit",
+            Owner::Core,
+            Binding {
+                action_class: ActionClass::DirectEditorAction,
+                admission: Admission::AuthorCommand,
+                editor: EditorRule::CurrentWriter,
+                idempotency: Idempotency::HeaderAndAdmissionRecord,
+                settlement: Settlement::CommittedOrReconfirmation,
+                error_profile: ErrorProfile::EditorCommand,
+            },
+        )
+        .activity(&[ProjectActivityKind::AuthoritativeAuthorEditApplied], &[])
+        .notes(APPLY_AUTHOR_EDIT_NOTES),
     )],
     schemas: || {
         operation_schemas(

@@ -4,6 +4,7 @@ use ts_rs::{Config, TS};
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
     UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID, UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
@@ -23,6 +24,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "author_undo_frontier_exact",
             "expected_authoritative_head",
         ],
+        OperationCatalog::new("author-action:undo", Owner::Core, Binding::EDITOR_COMMAND),
     )],
     schemas: || {
         let [request, response] = operation_schemas(

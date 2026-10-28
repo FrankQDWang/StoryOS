@@ -1,9 +1,11 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_update_chapter::{
     UPDATE_CHAPTER, UPDATE_CHAPTER_DIGEST_PROFILE, UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
     UPDATE_CHAPTER_RESPONSE_SCHEMA_ID, UpdateChapterConflictReason, UpdateChapterEffect,
@@ -20,6 +22,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("chapter:update", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::ChapterUpdated], &[])
+            .action_coverage(&["rename", "reorder"]),
     )],
     schemas: || {
         operation_schemas(

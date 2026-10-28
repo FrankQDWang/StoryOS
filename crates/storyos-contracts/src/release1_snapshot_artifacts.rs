@@ -6,6 +6,10 @@ use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_snapshot::{
     ACTIVITY_STREAM, ACTIVITY_STREAM_REQUEST_SCHEMA_ID, ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
     ActivityStreamRequest, CanonicalSnapshotMaps, GET_SNAPSHOT, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
@@ -13,6 +17,9 @@ use crate::release1_snapshot::{
     SnapshotKind,
 };
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+const GET_SNAPSHOT_NOTES: &str = "Expired or unavailable Snapshot returns snapshot_expired and a safe resync query; the Server never mixes page boundaries.";
+const ACTIVITY_STREAM_NOTES: &str = "SSE id is a scoped cursor, not Event identity or a bearer capability; replay-floor misses return activity_cursor_too_old before stream start.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -23,6 +30,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "snapshot_signature",
                 "snapshot_lifecycle_available",
             ],
+            OperationCatalog::new("snapshot:read", Owner::Replay, Binding::CANONICAL_QUERY)
+                .notes(GET_SNAPSHOT_NOTES),
         ),
         RegisteredOperation::stream(
             &ACTIVITY_STREAM,
@@ -34,6 +43,19 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "filter_digest",
                 "reauthorize_on_connect",
             ],
+            OperationCatalog::new(
+                "project-activity:sse",
+                Owner::Replay,
+                Binding {
+                    action_class: ActionClass::None,
+                    admission: Admission::Sse,
+                    editor: EditorRule::Optional,
+                    idempotency: Idempotency::StreamCursor,
+                    settlement: Settlement::Stream,
+                    error_profile: ErrorProfile::Stream,
+                },
+            )
+            .notes(ACTIVITY_STREAM_NOTES),
         ),
     ],
     schemas: || {

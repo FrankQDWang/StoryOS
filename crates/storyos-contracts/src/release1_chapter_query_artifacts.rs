@@ -7,6 +7,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{
     json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
     without_project_scope,
@@ -32,6 +33,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "canonical_snapshot",
         ],
+        OperationCatalog::new("chapter:read", Owner::Release, Binding::CANONICAL_QUERY),
     )],
     schemas: || {
         vec![

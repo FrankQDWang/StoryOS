@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_create_project::{
     CREATE_PROJECT, CREATE_PROJECT_CHALLENGE, CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
     CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID, CREATE_PROJECT_DIGEST_PROFILE,
@@ -11,7 +12,10 @@ use crate::release1_create_project::{
 use crate::release1_operation_registry::{
     OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const CREATE_PROJECT_CHALLENGE_NOTES: &str = "Allocates only a prospective ProjectId and one challenge-bound idempotency record; it creates no Project, Admission, Receipt, or Core effect.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -25,6 +29,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "closed_create_project_schema",
                 "body_idempotency_key",
             ],
+            OperationCatalog::new(
+                "challenge:prospective-project",
+                Owner::Admission,
+                Binding::CHALLENGE,
+            )
+            .notes(CREATE_PROJECT_CHALLENGE_NOTES),
         ),
         RegisteredOperation::command(
             &CREATE_PROJECT,
@@ -36,6 +46,9 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "challenge_nonce_record",
                 "expected_absent_project",
             ],
+            OperationCatalog::new("project:create", Owner::Release, Binding::PROJECT_COMMAND)
+                .activity(&[ProjectActivityKind::ProjectCreated], &[])
+                .notes("The only command admitted against a prospective Project Scope."),
         ),
     ],
     schemas: || {

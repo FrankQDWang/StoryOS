@@ -10,7 +10,26 @@ use crate::release1_replan_proposal::{
     ReplanProposalInput, ReplanProposalRefusalReason, ReplanProposalRequest,
     ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult, ReplanSourceCondition,
 };
+use crate::release1_route_catalog::{
+    AuthorCause, CauseProfiles, CurrentProducerCause, OperationCatalog, Owner,
+};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+const CAUSES: CauseProfiles = CauseProfiles {
+    author: AuthorCause {
+        semantic_payload: "explicit author ReplanProposal cause",
+        request_schema: "storyos.command.replan-proposal.author-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.author-cause.response.v1",
+    },
+    current_producer: CurrentProducerCause {
+        semantic_cause: "Exact current Proposal Revision producer: AgentRunDecision",
+        semantic_payload: "exact current producer ReplanProposal cause",
+        cause_binding: "exact_current_proposal_revision_producer",
+        request_schema: "storyos.command.replan-proposal.current-producer-cause.request.v1",
+        response_schema: "storyos.command.replan-proposal.current-producer-cause.response.v1",
+        recovery_rule: "The request binds the exact current AgentRunDecision producer and never fabricates an Editor Session, writer generation, or AuthorCommandAdmission.",
+    },
+};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -24,6 +43,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_current_target_revisions",
             "explicit_editor_control",
         ],
+        OperationCatalog::conditional_by_cause("proposal:replan", Owner::Core, &CAUSES),
     )],
     schemas: || {
         operation_schemas(

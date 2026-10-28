@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_agent_run::AgentRunStatus;
 use crate::release1_agent_run_artifacts::SELECTION_REFERENCE_UUID_FIELDS;
 use crate::release1_agent_run_control::{
@@ -18,6 +19,7 @@ use crate::release1_agent_run_control::{
 use crate::release1_operation_registry::{
     OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -31,6 +33,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "nonterminal_run",
                 "bounded_author_input",
             ],
+            OperationCatalog::new(
+                "agent-run:steer",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunSteeringRetained], &[]),
         ),
         RegisteredOperation::command(
             &PAUSE_AGENT_RUN,
@@ -40,6 +48,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "current_run_state_pauseable",
                 "current_fence_generation",
             ],
+            OperationCatalog::new(
+                "agent-run:pause",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunPaused], &[]),
         ),
         RegisteredOperation::command(
             &CANCEL_AGENT_RUN,
@@ -49,6 +63,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "current_run_state_cancellable",
                 "current_fence_generation",
             ],
+            OperationCatalog::new(
+                "agent-run:cancel",
+                Owner::Context,
+                Binding::AGENT_RUN_CONTROL,
+            )
+            .activity(&[ProjectActivityKind::AgentRunCancelled], &[]),
         ),
     ],
     schemas: || {

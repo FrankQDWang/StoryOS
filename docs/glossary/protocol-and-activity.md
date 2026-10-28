@@ -63,3 +63,11 @@ _Avoid_: Live Project read in a command acknowledgement, manuscript text, whole 
 **Historical acknowledgement unavailable**:
 The explicit Problem for a known pre-capture command whose complete original acknowledgement cannot be proved. It is not command failure, and it is not a license to present live state as the old reply.
 _Avoid_: Generic network error, fabricated success, live-state backfill
+
+**Operation Registry**:
+The one Rust list in `storyos-contracts` of the public operations that the StoryOS Server serves. Each entry holds the route, the kind, the schemas, the status codes, the fixtures, the contract-graph preconditions, and the Route Catalog metadata of its operations. Its declared order is the order of every generated contract artifact.
+_Avoid_: Hand-kept route list, planned operation, second copy of a route fact
+
+**Route Catalog**:
+The generated JSON description of the Release 1 public protocol: the served operations with their owners, admission, idempotency, settlement, error profile, and Project Activity mapping, and the Events that the code can persist. The generator writes it from the Operation Registry. It lists no planned operation and no Event without a producer.
+_Avoid_: Reviewed catalog, hand-kept catalog, protocol plan, Event wish list

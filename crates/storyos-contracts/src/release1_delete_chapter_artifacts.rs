@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_delete_chapter::{
     DELETE_CHAPTER, DELETE_CHAPTER_DIGEST_PROFILE, DELETE_CHAPTER_REQUEST_SCHEMA_ID,
     DELETE_CHAPTER_RESPONSE_SCHEMA_ID, DeleteChapterConflictReason, DeleteChapterEffect,
@@ -10,6 +11,7 @@ use crate::release1_delete_chapter::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -20,6 +22,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "chapter_scope_join",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("chapter:delete", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::ChapterDeleted], &[]),
     )],
     schemas: || {
         operation_schemas(

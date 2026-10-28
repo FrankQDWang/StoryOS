@@ -7,6 +7,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{
     json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
     without_project_scope,
@@ -28,6 +29,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
         &GET_PROJECT,
         &["server_derived_project_scope", "project_visibility"],
+        OperationCatalog::new("project:read", Owner::Release, Binding::PROJECT_QUERY),
     )],
     schemas: || {
         vec![

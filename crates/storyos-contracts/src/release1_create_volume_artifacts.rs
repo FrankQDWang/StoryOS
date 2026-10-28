@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_create_volume::{
     CREATE_VOLUME, CREATE_VOLUME_DIGEST_PROFILE, CREATE_VOLUME_REQUEST_SCHEMA_ID,
     CREATE_VOLUME_RESPONSE_SCHEMA_ID, CreateVolumeConflictReason, CreateVolumeEffect,
@@ -9,6 +10,7 @@ use crate::release1_create_volume::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -19,6 +21,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "project_active",
             "expected_tree_revision",
         ],
+        OperationCatalog::new("volume:create", Owner::Release, Binding::PROJECT_COMMAND)
+            .activity(&[ProjectActivityKind::VolumeCreated], &[]),
     )],
     schemas: || {
         operation_schemas(

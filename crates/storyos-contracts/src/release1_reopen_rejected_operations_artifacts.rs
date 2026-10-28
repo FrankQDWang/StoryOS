@@ -12,6 +12,7 @@ use crate::release1_reopen_rejected_operations::{
     ReopenRejectedOperationsRefusalReason, ReopenRejectedOperationsRequest,
     ReopenRejectedOperationsResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -27,6 +28,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_target_revisions",
             "explicit_editor_control",
         ],
+        OperationCatalog::new(
+            "proposal:reopen-rejected-operations",
+            Owner::Core,
+            Binding::EDITOR_COMMAND,
+        ),
     )],
     schemas: || {
         operation_schemas(

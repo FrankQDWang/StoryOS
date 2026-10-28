@@ -2,6 +2,7 @@
 
 use crate::Release1ProtocolProfile;
 use crate::release1::QueryOperation;
+use crate::release1_route_catalog::OperationCatalog;
 
 /// The generated wire surface of one artifacts module.
 pub(super) struct OperationArtifacts {
@@ -18,54 +19,69 @@ pub(super) struct RegisteredOperation {
     pub(super) operation: &'static QueryOperation,
     pub(super) kind: OperationKind,
     pub(super) graph: ContractGraphEntry,
+    pub(super) catalog: OperationCatalog,
 }
 
 impl RegisteredOperation {
     pub(super) const fn query(
         operation: &'static QueryOperation,
         preconditions: &'static [&'static str],
+        catalog: OperationCatalog,
     ) -> Self {
-        Self::graphed(operation, OperationKind::Query, preconditions)
+        Self::graphed(operation, OperationKind::Query, preconditions, catalog)
     }
 
     pub(super) const fn command(
         operation: &'static QueryOperation,
         preconditions: &'static [&'static str],
+        catalog: OperationCatalog,
     ) -> Self {
-        Self::graphed(operation, OperationKind::Command, preconditions)
+        Self::graphed(operation, OperationKind::Command, preconditions, catalog)
     }
 
     pub(super) const fn stream(
         operation: &'static QueryOperation,
         preconditions: &'static [&'static str],
+        catalog: OperationCatalog,
     ) -> Self {
-        Self::graphed(operation, OperationKind::Stream, preconditions)
+        Self::graphed(operation, OperationKind::Stream, preconditions, catalog)
     }
 
     pub(super) const fn challenge(
         operation: &'static QueryOperation,
         preconditions: &'static [&'static str],
+        catalog: OperationCatalog,
     ) -> Self {
-        Self::graphed(operation, OperationKind::Challenge, preconditions)
+        Self::graphed(operation, OperationKind::Challenge, preconditions, catalog)
     }
 
     const fn graphed(
         operation: &'static QueryOperation,
         kind: OperationKind,
         preconditions: &'static [&'static str],
+        catalog: OperationCatalog,
     ) -> Self {
         Self {
             operation,
             kind,
             graph: ContractGraphEntry::Preconditions(preconditions),
+            catalog,
         }
     }
 }
 
 pub(super) enum ContractGraphEntry {
     Preconditions(&'static [&'static str]),
-    /// The reviewed contract graph has no entry for this operation.
-    Absent,
+    /// The reviewed contract graph has no entry for this operation; the route catalog lists these preconditions.
+    Absent(&'static [&'static str]),
+}
+
+impl ContractGraphEntry {
+    pub(super) fn preconditions(&self) -> &'static [&'static str] {
+        match self {
+            Self::Preconditions(preconditions) | Self::Absent(preconditions) => preconditions,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -109,7 +125,7 @@ pub(super) struct FixtureMembership {
     pub(super) bytes: fn(&Release1ProtocolProfile) -> Vec<u8>,
 }
 
-/// Modules sort by the reviewed route-catalog position of their first operation.
+/// The declared order of the registry; every generated artifact, the route catalog too, follows it.
 pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_protocol_profile_artifacts::ARTIFACTS,
     &crate::release1_create_project_artifacts::ARTIFACTS,

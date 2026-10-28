@@ -12,6 +12,7 @@ use crate::release1_reopen_withdrawn_proposal::{
     ReopenWithdrawnProposalRefusalReason, ReopenWithdrawnProposalRequest,
     ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt, ReopenWithdrawnReceiptResult,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -23,6 +24,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "exact_withdrawal_event_ref",
             "expected_target_revisions",
         ],
+        OperationCatalog::new(
+            "proposal:reopen-withdrawn",
+            Owner::Core,
+            Binding::EDITOR_COMMAND,
+        ),
     )],
     schemas: || {
         operation_schemas(

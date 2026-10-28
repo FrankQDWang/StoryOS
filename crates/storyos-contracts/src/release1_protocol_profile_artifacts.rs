@@ -8,7 +8,11 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{json_bytes, query_openapi, schema_value};
+
+const GET_PROTOCOL_PROFILE_NOTES: &str =
+    "Project-free profile discovery; no Project Scope or session authority is returned.";
 
 const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/protocol-profile-request.schema.json";
@@ -29,6 +33,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
         &GET_PROTOCOL_PROFILE,
         &["active_public_release_profile"],
+        OperationCatalog::new("protocol:profile", Owner::Protocol, Binding::PROTOCOL_QUERY)
+            .notes(GET_PROTOCOL_PROFILE_NOTES),
     )],
     schemas: || {
         vec![

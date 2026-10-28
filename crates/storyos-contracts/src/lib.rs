@@ -65,6 +65,7 @@ mod release1_reopen_withdrawn_proposal;
 mod release1_reopen_withdrawn_proposal_artifacts;
 mod release1_replan_proposal;
 mod release1_replan_proposal_artifacts;
+mod release1_route_catalog;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
 mod release1_set_current_chapter_artifacts;

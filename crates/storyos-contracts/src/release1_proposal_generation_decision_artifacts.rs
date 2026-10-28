@@ -17,6 +17,7 @@ use crate::release1_proposal_generation_decision::{
     ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
     ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -33,6 +34,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_target_revisions",
                 "explicit_editor_control",
             ],
+            OperationCatalog::new(
+                "proposal:generation-complete",
+                Owner::Core,
+                Binding::EDITOR_COMMAND,
+            ),
         ),
         RegisteredOperation::command(
             &CONTINUE_PROPOSAL_GENERATION,
@@ -47,6 +53,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "expected_target_revisions",
                 "explicit_editor_control",
             ],
+            OperationCatalog::new(
+                "proposal:generation-continue",
+                Owner::Core,
+                Binding::EDITOR_COMMAND,
+            ),
         ),
     ],
     schemas: || {

@@ -10,6 +10,7 @@ use crate::release1_project_export_query::{
     GET_EXPORT_OPERATION, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
@@ -20,6 +21,11 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "export_operation_visibility",
             "redaction_profile",
         ],
+        OperationCatalog::new(
+            "project-archive:export-status",
+            Owner::Storage,
+            Binding::CANONICAL_QUERY,
+        ),
     )],
     schemas: || {
         operation_schemas(

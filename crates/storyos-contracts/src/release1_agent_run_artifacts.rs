@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
@@ -27,7 +28,14 @@ use crate::release1_agent_run::{
 use crate::release1_operation_registry::{
     OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
+use crate::release1_route_catalog::{
+    ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
+    Owner, Settlement,
+};
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
+
+const CREATE_AGENT_RUN_NOTES: &str = "Stage 3 planned v2: closed conversation selection new or existing with exact conversation_id; atomic new identity/settings and Run admission; accepted response and getAgentRun return conversation_id and captured memory_settings_revision; exact retries reuse all identities. See protocol section 13.9. Foreground admission serializes with settings changes.";
+const GET_AGENT_RUN_NOTES: &str = "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation/hosted-operation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -39,10 +47,29 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
                 "working_target_or_explicit_not_applicable",
                 "capability_and_destination_grant",
             ],
+            OperationCatalog::new(
+                "agent-run:create",
+                Owner::Context,
+                Binding {
+                    action_class: ActionClass::AgentRunStart,
+                    admission: Admission::ProducerCause,
+                    editor: EditorRule::Optional,
+                    idempotency: Idempotency::HeaderAndOperationRecord,
+                    settlement: Settlement::Accepted {
+                        query: &GET_AGENT_RUN,
+                        operation_ref: "agent_run",
+                    },
+                    error_profile: ErrorProfile::AsyncCommand,
+                },
+            )
+            .activity(&[ProjectActivityKind::AgentRunCreated], &[])
+            .notes(CREATE_AGENT_RUN_NOTES),
         ),
         RegisteredOperation::query(
             &GET_AGENT_RUN,
             &["run_scope_join", "run_projection_watermark_or_snapshot"],
+            OperationCatalog::new("agent-run:read", Owner::Context, Binding::PROJECTION_QUERY)
+                .notes(GET_AGENT_RUN_NOTES),
         ),
     ],
     schemas: || {

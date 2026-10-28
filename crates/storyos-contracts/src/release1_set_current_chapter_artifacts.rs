@@ -1,9 +1,11 @@
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_set_current_chapter::{
     SET_CURRENT_CHAPTER, SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
     SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID, SetCurrentChapterConflictReason,
@@ -22,6 +24,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "expected_current_chapter",
             "expected_authoritative_head",
         ],
+        OperationCatalog::new(
+            "project:set-current-chapter",
+            Owner::Core,
+            Binding::EDITOR_COMMAND,
+        )
+        .activity(&[ProjectActivityKind::CurrentChapterSet], &[]),
     )],
     schemas: || {
         operation_schemas(

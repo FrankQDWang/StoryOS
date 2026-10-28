@@ -11,7 +11,10 @@ use crate::release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
     GetHumanReadableManuscriptExportResponse,
 };
+use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
+
+const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_NOTES: &str = "This is the exact asynchronous settlement/status query for exportHumanReadableManuscript. It is not getExportOperation, whose shape and owner remain the portable Project Export Archive contract.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -23,6 +26,12 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             "deterministic_order_profile",
             "unavailable_content_representation_profile",
         ],
+        OperationCatalog::new(
+            "manuscript-export:human-readable-status",
+            Owner::Release,
+            Binding::CANONICAL_QUERY,
+        )
+        .notes(GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_NOTES),
     )],
     schemas: || {
         operation_schemas(
