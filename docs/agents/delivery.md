@@ -28,7 +28,7 @@ A ticket body has Parent, What to build, observable acceptance criteria, and its
 
 ### 2. Dispatch
 
-The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip. Unknown or failed evidence blocks the dispatch. Run independent ready tickets in parallel.
+The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch. Run independent ready tickets in parallel.
 
 The brief of an executor names the ticket, the integration branch and its tip, the files to read, and the items that earlier tickets gave to this ticket.
 
