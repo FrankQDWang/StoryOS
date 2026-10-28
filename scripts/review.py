@@ -22,8 +22,9 @@ EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tr
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? #(\d+)", re.I)
 # The heading of the verdict links section, an optional blank line, and its own list lines. The text after them stays.
-# The last match is the section: an earlier match can be a quoted heading in the PR text.
 LINKS = re.compile(r"^## Review verdicts[ \t]*\r?\n(?:[ \t]*\r?\n)?(?:- Round [^\n]*(?:\n|\Z))*", re.M)
+# An opening or closing line of a fenced code block. A quoted section heading in a code block is not the section.
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})", re.M)
 TRANSIENT = re.compile(r"\bEOF\b|connection reset|HTTP 50[234]\b|TLS handshake timeout|SSL_ERROR|i/o timeout"
                        r"|proxyconnect|remote end hung up unexpectedly", re.I)
 # The total seconds that one GitHub call retries a transient network failure.
@@ -224,6 +225,21 @@ def post(pr, body):
     return run(["gh", "pr", "comment", str(pr), "--body", body], done=posted).strip()
 
 
+def verdicts_section(body):
+    """The first match of the verdict links section outside the fenced code blocks of the PR body."""
+    fenced, opening = [], None
+    for fence in FENCE.finditer(body):
+        if opening is None:
+            opening = fence
+        elif fence[1][0] == opening[1][0] and len(fence[1]) >= len(opening[1]):
+            fenced.append((opening.start(), fence.end()))
+            opening = None
+    if opening is not None:
+        fenced.append((opening.start(), len(body)))
+    return next((match for match in LINKS.finditer(body)
+                 if not any(start <= match.start() < end for start, end in fenced)), None)
+
+
 def link_verdicts(pr, pull):
     """Link the verdict comments from the `## Review verdicts` section of the PR body, and return the rounds.
 
@@ -233,7 +249,7 @@ def link_verdicts(pr, pull):
         head = next((head for _, head, _, _ in axes.values() if head), "unknown")
         section += (f"- Round {number}, head `{head[:12]}`: "
                     + ", ".join(f"{axis} {axes[axis][0]} {axes[axis][2]}" for axis in AXES if axis in axes) + "\n")
-    if match := next(reversed(list(LINKS.finditer(body))), None):
+    if match := verdicts_section(body):
         rest = body[match.end():]
         new = body[:match.start()] + section + ("\n" if rest and not rest.startswith(("\n", "\r\n")) else "") + rest
     else:
