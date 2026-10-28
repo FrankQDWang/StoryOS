@@ -233,8 +233,8 @@ The tracked Release 1 catalog and verifier inputs are:
 
 - [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
   and its checked-in verifier/self-test;
-- [Versioned Protocol Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
-  and its checked-in verifier/self-test; and
+- the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
+  and the registry tests of `storyos-contracts`; and
 - the source contracts, generated outputs, golden wire corpus, and exact
   same-release identity owned by `OWN-PROTO` and `OWN-PG`.
 
@@ -1174,8 +1174,8 @@ This contract consumes the exact-baseline versions of:
 - the owner contracts listed in section 4;
 - [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
   with [its verifier](verify-postgresql-release-1-persistence-catalog.py); and
-- [Versioned Protocol Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
-  with [its verifier](verify-versioned-protocol-route-catalog.py).
+- the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
+  with the registry tests of `storyos-contracts`.
 
 Historical implementation and prototype evidence retains its original claim
 ceiling. The accepted source identity and the planning audit in the companion
