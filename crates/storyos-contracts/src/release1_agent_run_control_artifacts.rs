@@ -17,7 +17,7 @@ use crate::release1_agent_run_control::{
     SteerAgentRunRequest, SteerAgentRunResponse,
 };
 use crate::release1_operation_registry::{
-    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+    FixtureMembership, OpenApiMethod, OperationArtifacts, RegisteredOperation, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
@@ -95,35 +95,20 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                STEER_FIXTURE_PATHS,
-                [
-                    |_| steer_fixture_bytes(),
-                    |_| steer_invalid_fixture_bytes(),
-                    |_| steer_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                PAUSE_FIXTURE_PATHS,
-                [
-                    |_| pause_fixture_bytes(),
-                    |_| pause_invalid_fixture_bytes(),
-                    |_| pause_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                CANCEL_FIXTURE_PATHS,
-                [
-                    |_| cancel_fixture_bytes(),
-                    |_| cancel_invalid_fixture_bytes(),
-                    |_| cancel_boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: STEER_FIXTURE_PATH,
+            bytes: |_| steer_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: PAUSE_FIXTURE_PATH,
+            bytes: |_| pause_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: CANCEL_FIXTURE_PATH,
+            bytes: |_| cancel_fixture_bytes(),
+        },
+    ],
 };
 
 pub(super) const PAUSE_REQUEST_SCHEMA_PATH: &str =
@@ -134,16 +119,10 @@ pub(super) const CANCEL_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/cancel-agent-run-request.schema.json";
 pub(super) const CANCEL_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/cancel-agent-run-response.schema.json";
-pub(super) const PAUSE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/pause-agent-run.json",
-    "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json",
-];
-pub(super) const CANCEL_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json",
-    "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json",
-];
+pub(super) const PAUSE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/pause-agent-run.json";
+pub(super) const CANCEL_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json";
 
 pub(super) fn pause_request_schema_bytes() -> Vec<u8> {
     request_schema_bytes::<PauseAgentRunRequest>(
@@ -233,26 +212,6 @@ pub(super) fn pause_fixture_bytes() -> Vec<u8> {
     ))
 }
 
-pub(super) fn pause_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = control_fixture(
-        PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-        "pauseAgentRun",
-        PAUSE_AGENT_RUN_DIGEST_PROFILE,
-        "018f0000-0000-7001-8000-000000000b01",
-        AgentRunStatus::Paused,
-        "1",
-    );
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("effect");
-    json_bytes(&value)
-}
-
-pub(super) fn pause_boundary_fixture_bytes() -> Vec<u8> {
-    pause_fixture_bytes()
-}
-
 pub(super) fn cancel_fixture_bytes() -> Vec<u8> {
     json_bytes(&control_fixture(
         CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
@@ -262,26 +221,6 @@ pub(super) fn cancel_fixture_bytes() -> Vec<u8> {
         AgentRunStatus::Cancelled,
         "1",
     ))
-}
-
-pub(super) fn cancel_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = control_fixture(
-        CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
-        "cancelAgentRun",
-        CANCEL_AGENT_RUN_DIGEST_PROFILE,
-        "018f0000-0000-7001-8000-000000000b11",
-        AgentRunStatus::Cancelled,
-        "1",
-    );
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("effect");
-    json_bytes(&value)
-}
-
-pub(super) fn cancel_boundary_fixture_bytes() -> Vec<u8> {
-    cancel_fixture_bytes()
 }
 
 fn request_schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8> {
@@ -474,11 +413,8 @@ pub(super) const STEER_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/steer-agent-run-request.schema.json";
 pub(super) const STEER_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/steer-agent-run-response.schema.json";
-pub(super) const STEER_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/steer-agent-run.json",
-    "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json",
-];
+pub(super) const STEER_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/steer-agent-run.json";
 pub(super) fn steer_request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<SteerAgentRunRequest>(
         STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -514,14 +450,5 @@ pub(super) fn steer_fixture_bytes() -> Vec<u8> {
     value["receipt"]["command_digest"]["profile"] = json!(STEER_AGENT_RUN_DIGEST_PROFILE);
     value["receipt"]["result"] = json!("no_effect");
     value["effect"] = json!({"kind": "retained", "run_id": "018f0000-0000-7001-8000-000000000b01", "steering_input_id": "018f0000-0000-7001-8000-000000000b02", "input_position": "1"});
-    json_bytes(&value)
-}
-pub(super) fn steer_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value: Value =
-        serde_json::from_slice(&steer_fixture_bytes()).expect("control fixture is JSON");
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("effect");
     json_bytes(&value)
 }

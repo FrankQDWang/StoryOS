@@ -29,11 +29,7 @@ pub(super) const GET_SNAPSHOT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getSnapshot.positive.v1",
-        "storyos.golden.getSnapshot.invalid.v1",
-        "storyos.golden.getSnapshot.boundary.v1",
-    ],
+    fixture: "storyos.golden.getSnapshot.positive.v1",
 };
 
 pub(super) const ACTIVITY_STREAM: QueryOperation = QueryOperation {
@@ -53,11 +49,7 @@ pub(super) const ACTIVITY_STREAM: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.activityStream.positive.v1",
-        "storyos.golden.activityStream.invalid.v1",
-        "storyos.golden.activityStream.boundary.v1",
-    ],
+    fixture: "storyos.golden.activityStream.positive.v1",
 };
 
 pub const GET_SNAPSHOT_PATH: &str = GET_SNAPSHOT.path;

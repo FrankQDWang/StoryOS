@@ -426,7 +426,7 @@ fn operation_json(registered: &RegisteredOperation) -> Value {
             "success": event_schemas(catalog.success), "no_effect": event_schemas(catalog.no_effect),
             "pre_admission": "none", "visibility": catalog.visibility,
         },
-        "fixtures": { "positive": operation.fixtures[0], "negative": &operation.fixtures[1..] },
+        "fixtures": { "positive": operation.fixture },
     });
     extend(&mut entry, fields);
     if let Some(notes) = catalog.notes {

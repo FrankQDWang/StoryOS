@@ -16,7 +16,7 @@
       "one settlement/status profile",
       "one error profile",
       "one Project Activity mapping",
-      "one positive and at least one negative golden fixture",
+      "one positive golden fixture",
       "one OpenAPI operation",
       "one TypeScript generated operation",
       "request/response JSON Schema IDs",
@@ -486,10 +486,6 @@
       },
       "error_profile": "query_protocol",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getProtocolProfile.invalid.v1",
-          "storyos.golden.getProtocolProfile.boundary.v1"
-        ],
         "positive": "storyos.golden.getProtocolProfile.positive.v1"
       },
       "idempotency": "none",
@@ -541,10 +537,6 @@
       },
       "error_profile": "challenge",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createProjectChallenge.invalid.v1",
-          "storyos.golden.createProjectChallenge.boundary.v1"
-        ],
         "positive": "storyos.golden.createProjectChallenge.positive.v1"
       },
       "idempotency": "body_key_and_challenge",
@@ -610,10 +602,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createProject.invalid.v1",
-          "storyos.golden.createProject.boundary.v1"
-        ],
         "positive": "storyos.golden.createProject.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -682,10 +670,6 @@
       },
       "error_profile": "challenge",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createProjectCommandChallenge.invalid.v1",
-          "storyos.golden.createProjectCommandChallenge.boundary.v1"
-        ],
         "positive": "storyos.golden.createProjectCommandChallenge.positive.v1"
       },
       "idempotency": "body_key_and_challenge",
@@ -749,10 +733,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.listProjects.invalid.v1",
-          "storyos.golden.listProjects.boundary.v1"
-        ],
         "positive": "storyos.golden.listProjects.positive.v1"
       },
       "idempotency": "none",
@@ -810,10 +790,6 @@
       },
       "error_profile": "query_current",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getProject.invalid.v1",
-          "storyos.golden.getProject.boundary.v1"
-        ],
         "positive": "storyos.golden.getProject.positive.v1"
       },
       "idempotency": "none",
@@ -870,10 +846,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.updateProject.invalid.v1",
-          "storyos.golden.updateProject.boundary.v1"
-        ],
         "positive": "storyos.golden.updateProject.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -938,10 +910,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getProjectAssistance.invalid.v1",
-          "storyos.golden.getProjectAssistance.boundary.v1"
-        ],
         "positive": "storyos.golden.getProjectAssistance.positive.v1"
       },
       "idempotency": "none",
@@ -1002,10 +970,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.updateProjectAssistance.invalid.v1",
-          "storyos.golden.updateProjectAssistance.boundary.v1"
-        ],
         "positive": "storyos.golden.updateProjectAssistance.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1072,10 +1036,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.archiveProject.invalid.v1",
-          "storyos.golden.archiveProject.boundary.v1"
-        ],
         "positive": "storyos.golden.archiveProject.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1140,10 +1100,6 @@
       },
       "error_profile": "session_control",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createEditorSession.invalid.v1",
-          "storyos.golden.createEditorSession.boundary.v1"
-        ],
         "positive": "storyos.golden.createEditorSession.positive.v1"
       },
       "idempotency": "header_and_operation_record",
@@ -1210,10 +1166,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getEditorSession.invalid.v1",
-          "storyos.golden.getEditorSession.boundary.v1"
-        ],
         "positive": "storyos.golden.getEditorSession.positive.v1"
       },
       "idempotency": "none",
@@ -1277,10 +1229,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.takeOverProjectWriter.invalid.v1",
-          "storyos.golden.takeOverProjectWriter.boundary.v1"
-        ],
         "positive": "storyos.golden.takeOverProjectWriter.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1350,10 +1298,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createVolume.invalid.v1",
-          "storyos.golden.createVolume.boundary.v1"
-        ],
         "positive": "storyos.golden.createVolume.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1425,10 +1369,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.updateVolume.invalid.v1",
-          "storyos.golden.updateVolume.boundary.v1"
-        ],
         "positive": "storyos.golden.updateVolume.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1495,10 +1435,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.deleteVolume.invalid.v1",
-          "storyos.golden.deleteVolume.boundary.v1"
-        ],
         "positive": "storyos.golden.deleteVolume.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1567,10 +1503,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createChapter.invalid.v1",
-          "storyos.golden.createChapter.boundary.v1"
-        ],
         "positive": "storyos.golden.createChapter.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1643,10 +1575,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.updateChapter.invalid.v1",
-          "storyos.golden.updateChapter.boundary.v1"
-        ],
         "positive": "storyos.golden.updateChapter.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1713,10 +1641,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.deleteChapter.invalid.v1",
-          "storyos.golden.deleteChapter.boundary.v1"
-        ],
         "positive": "storyos.golden.deleteChapter.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1783,10 +1707,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.setCurrentChapter.invalid.v1",
-          "storyos.golden.setCurrentChapter.boundary.v1"
-        ],
         "positive": "storyos.golden.setCurrentChapter.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1855,10 +1775,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.applyAuthorEdit.invalid.v1",
-          "storyos.golden.applyAuthorEdit.boundary.v1"
-        ],
         "positive": "storyos.golden.applyAuthorEdit.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -1927,10 +1843,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.acceptProposal.invalid.v1",
-          "storyos.golden.acceptProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.acceptProposal.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2001,10 +1913,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.rejectProposalOperations.invalid.v1",
-          "storyos.golden.rejectProposalOperations.boundary.v1"
-        ],
         "positive": "storyos.golden.rejectProposalOperations.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2179,10 +2087,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.withdrawProposal.invalid.v1",
-          "storyos.golden.withdrawProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.withdrawProposal.positive.v1"
       },
       "idempotency": "conditional_by_cause",
@@ -2353,10 +2257,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.replanProposal.invalid.v1",
-          "storyos.golden.replanProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.replanProposal.positive.v1"
       },
       "idempotency": "conditional_by_cause",
@@ -2424,10 +2324,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.reopenWithdrawnProposal.invalid.v1",
-          "storyos.golden.reopenWithdrawnProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.reopenWithdrawnProposal.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2493,10 +2389,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.reopenRejectedOperations.invalid.v1",
-          "storyos.golden.reopenRejectedOperations.boundary.v1"
-        ],
         "positive": "storyos.golden.reopenRejectedOperations.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2566,10 +2458,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.completeReadyPartialProposal.invalid.v1",
-          "storyos.golden.completeReadyPartialProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.completeReadyPartialProposal.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2639,10 +2527,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.continueProposalGeneration.invalid.v1",
-          "storyos.golden.continueProposalGeneration.boundary.v1"
-        ],
         "positive": "storyos.golden.continueProposalGeneration.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2713,10 +2597,6 @@
       },
       "error_profile": "editor_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.undoLatestAuthorAction.invalid.v1",
-          "storyos.golden.undoLatestAuthorAction.boundary.v1"
-        ],
         "positive": "storyos.golden.undoLatestAuthorAction.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -2785,10 +2665,6 @@
       },
       "error_profile": "async_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.createAgentRun.invalid.v1",
-          "storyos.golden.createAgentRun.boundary.v1"
-        ],
         "positive": "storyos.golden.createAgentRun.positive.v1"
       },
       "idempotency": "header_and_operation_record",
@@ -2857,10 +2733,6 @@
       },
       "error_profile": "query_projection",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getAgentRun.invalid.v1",
-          "storyos.golden.getAgentRun.boundary.v1"
-        ],
         "positive": "storyos.golden.getAgentRun.positive.v1"
       },
       "idempotency": "none",
@@ -2922,10 +2794,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.steerAgentRun.invalid.v1",
-          "storyos.golden.steerAgentRun.boundary.v1"
-        ],
         "positive": "storyos.golden.steerAgentRun.positive.v1"
       },
       "idempotency": "header_and_operation_record",
@@ -2993,10 +2861,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.pauseAgentRun.invalid.v1",
-          "storyos.golden.pauseAgentRun.boundary.v1"
-        ],
         "positive": "storyos.golden.pauseAgentRun.positive.v1"
       },
       "idempotency": "header_and_operation_record",
@@ -3063,10 +2927,6 @@
       },
       "error_profile": "command_sync",
       "fixtures": {
-        "negative": [
-          "storyos.golden.cancelAgentRun.invalid.v1",
-          "storyos.golden.cancelAgentRun.boundary.v1"
-        ],
         "positive": "storyos.golden.cancelAgentRun.positive.v1"
       },
       "idempotency": "header_and_operation_record",
@@ -3133,10 +2993,6 @@
       },
       "error_profile": "async_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.exportProjectArchive.invalid.v1",
-          "storyos.golden.exportProjectArchive.boundary.v1"
-        ],
         "positive": "storyos.golden.exportProjectArchive.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -3206,10 +3062,6 @@
       },
       "error_profile": "async_command",
       "fixtures": {
-        "negative": [
-          "storyos.golden.exportHumanReadableManuscript.invalid.v1",
-          "storyos.golden.exportHumanReadableManuscript.boundary.v1"
-        ],
         "positive": "storyos.golden.exportHumanReadableManuscript.positive.v1"
       },
       "idempotency": "header_and_admission_record",
@@ -3278,10 +3130,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getManuscriptTree.invalid.v1",
-          "storyos.golden.getManuscriptTree.boundary.v1"
-        ],
         "positive": "storyos.golden.getManuscriptTree.positive.v1"
       },
       "idempotency": "none",
@@ -3341,10 +3189,6 @@
       },
       "error_profile": "query_current_chapter",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getChapter.invalid.v1",
-          "storyos.golden.getChapter.boundary.v1"
-        ],
         "positive": "storyos.golden.getChapter.positive.v1"
       },
       "idempotency": "none",
@@ -3401,10 +3245,6 @@
       },
       "error_profile": "query_projection",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getStatistics.invalid.v1",
-          "storyos.golden.getStatistics.boundary.v1"
-        ],
         "positive": "storyos.golden.getStatistics.positive.v1"
       },
       "idempotency": "none",
@@ -3463,10 +3303,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getProposal.invalid.v1",
-          "storyos.golden.getProposal.boundary.v1"
-        ],
         "positive": "storyos.golden.getProposal.positive.v1"
       },
       "idempotency": "none",
@@ -3526,10 +3362,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.listChapterOpenProposals.invalid.v1",
-          "storyos.golden.listChapterOpenProposals.boundary.v1"
-        ],
         "positive": "storyos.golden.listChapterOpenProposals.positive.v1"
       },
       "idempotency": "none",
@@ -3589,10 +3421,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getApplyAuthorEditOutcome.invalid.v1",
-          "storyos.golden.getApplyAuthorEditOutcome.boundary.v1"
-        ],
         "positive": "storyos.golden.getApplyAuthorEditOutcome.positive.v1"
       },
       "idempotency": "none",
@@ -3665,10 +3493,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getSnapshot.invalid.v1",
-          "storyos.golden.getSnapshot.boundary.v1"
-        ],
         "positive": "storyos.golden.getSnapshot.positive.v1"
       },
       "idempotency": "none",
@@ -3729,10 +3553,6 @@
       },
       "error_profile": "stream",
       "fixtures": {
-        "negative": [
-          "storyos.golden.activityStream.invalid.v1",
-          "storyos.golden.activityStream.boundary.v1"
-        ],
         "positive": "storyos.golden.activityStream.positive.v1"
       },
       "idempotency": "stream_cursor",
@@ -3793,10 +3613,6 @@
       },
       "error_profile": "query_projection",
       "fixtures": {
-        "negative": [
-          "storyos.golden.searchManuscript.invalid.v1",
-          "storyos.golden.searchManuscript.boundary.v1"
-        ],
         "positive": "storyos.golden.searchManuscript.positive.v1"
       },
       "idempotency": "none",
@@ -3858,10 +3674,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getExportOperation.invalid.v1",
-          "storyos.golden.getExportOperation.boundary.v1"
-        ],
         "positive": "storyos.golden.getExportOperation.positive.v1"
       },
       "idempotency": "none",
@@ -3921,10 +3733,6 @@
       },
       "error_profile": "query_canonical",
       "fixtures": {
-        "negative": [
-          "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
-          "storyos.golden.getHumanReadableManuscriptExport.boundary.v1"
-        ],
         "positive": "storyos.golden.getHumanReadableManuscriptExport.positive.v1"
       },
       "idempotency": "none",

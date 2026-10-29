@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
@@ -35,28 +35,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/proposal-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/proposal-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-proposal.json",
-    "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-proposal.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -185,22 +175,6 @@ pub(super) fn typescript_type_declarations() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&proposal_fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = proposal_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("proposal");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = proposal_fixture();
-    boundary["proposal"]["validation"] = json!("pending");
-    boundary["proposal"]["validation_receipt"] = json!({ "kind": "absent" });
-    json_bytes(&boundary)
 }
 
 fn proposal_fixture() -> Value {

@@ -27,11 +27,7 @@ pub(super) const LIST_PROJECTS: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.listProjects.positive.v1",
-        "storyos.golden.listProjects.invalid.v1",
-        "storyos.golden.listProjects.boundary.v1",
-    ],
+    fixture: "storyos.golden.listProjects.positive.v1",
 };
 
 pub const LIST_PROJECTS_PATH: &str = LIST_PROJECTS.path;

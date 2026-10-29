@@ -131,7 +131,7 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         .build(&response_schema)
         .expect("prospective Project challenge response schema must compile");
     let positive: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_FIXTURE_PATHS[0]],
+        &generated[crate::release1_create_project_artifacts::CHALLENGE_FIXTURE_PATH],
     )
     .expect("positive challenge fixture must be JSON");
     assert!(response_validator.is_valid(&positive));
@@ -143,16 +143,15 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         &positive,
         "/canonical_command_digest",
     );
-    let boundary: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_FIXTURE_PATHS[2]],
-    )
-    .expect("boundary challenge fixture must be JSON");
+    let mut boundary = positive.clone();
+    boundary["expires_at"] = serde_json::json!("1970-01-01T00:00:00.000Z");
     assert!(response_validator.is_valid(&boundary));
-    let invalid_fixture: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_FIXTURE_PATHS[1]],
-    )
-    .expect("invalid challenge fixture must be JSON");
-    let mut invalid_responses = vec![invalid_fixture];
+    let mut invalid = positive.clone();
+    invalid
+        .as_object_mut()
+        .expect("challenge fixture is an object")
+        .remove("prospective_project_id");
+    let mut invalid_responses = vec![invalid];
     for (pointer, value) in [
         ("/prospective_project_id", serde_json::json!("not-a-uuid")),
         (

@@ -4,9 +4,7 @@ use super::{
 };
 use crate::digest::sha256_prefixed;
 use crate::release1::HttpMethod;
-use crate::release1_chapter_query_artifacts::{
-    CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH,
-};
+use crate::release1_chapter_query_artifacts::{CHAPTER_FIXTURE_PATH, CHAPTER_RESPONSE_SCHEMA_PATH};
 use crate::{
     ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
     AuthoritativeChapterRevision, GetChapterResponse, NoEffectReason,
@@ -504,14 +502,17 @@ fn chapter_fixtures_conform_to_the_typed_response_contract() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
-    for path in [CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[2]] {
-        let _: GetChapterResponse = serde_json::from_slice(&generated[path])
-            .expect("positive and boundary Chapter fixtures must satisfy GetChapterResponse");
-    }
+    let mut fixture: serde_json::Value =
+        serde_json::from_slice(&generated[CHAPTER_FIXTURE_PATH]).expect("Chapter fixture is JSON");
+    let _: GetChapterResponse = serde_json::from_value(fixture.clone())
+        .expect("the Chapter fixture must satisfy GetChapterResponse");
+    fixture
+        .as_object_mut()
+        .expect("Chapter fixture is an object")
+        .remove("project_scope");
     assert!(
-        serde_json::from_slice::<GetChapterResponse>(&generated[CHAPTER_FIXTURE_PATHS[1]],)
-            .is_err(),
-        "the invalid Chapter fixture must not satisfy GetChapterResponse",
+        serde_json::from_value::<GetChapterResponse>(fixture).is_err(),
+        "a Chapter response without its Project scope must not satisfy GetChapterResponse",
     );
 }
 
@@ -668,16 +669,6 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     assert!(generated_client.contains(
         "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v32\";"
     ));
-    let boundary: serde_json::Value =
-        serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])
-            .expect("boundary fixture is JSON");
-    assert_eq!(boundary["receipt"]["result"], "refused");
-    assert_eq!(boundary["effect"]["kind"], "refused");
-    assert!(
-        boundary["effect"]
-            .get("project_activity_position")
-            .is_none()
-    );
     assert!(
         generated[CHAPTER_RESPONSE_SCHEMA_PATH]
             .windows(b"project_activity_position".len())

@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
@@ -43,26 +43,16 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/human-readable-manuscript-export-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/human-readable-manuscript-export-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json",
-    "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -126,21 +116,6 @@ pub(super) fn typescript_type_declarations() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&export_fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = export_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("source_snapshot");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = export_fixture();
-    boundary["manuscript_utf8"] = json!("\n");
-    json_bytes(&boundary)
 }
 
 fn export_fixture() -> Value {

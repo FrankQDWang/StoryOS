@@ -32,11 +32,7 @@ pub(super) const TAKE_OVER_PROJECT_WRITER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.takeOverProjectWriter.positive.v1",
-        "storyos.golden.takeOverProjectWriter.invalid.v1",
-        "storyos.golden.takeOverProjectWriter.boundary.v1",
-    ],
+    fixture: "storyos.golden.takeOverProjectWriter.positive.v1",
 };
 
 pub const TAKE_OVER_PROJECT_WRITER_PATH: &str = TAKE_OVER_PROJECT_WRITER.path;

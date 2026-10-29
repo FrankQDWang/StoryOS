@@ -39,11 +39,7 @@ pub(super) const COMPLETE_READY_PARTIAL_PROPOSAL: QueryOperation = QueryOperatio
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.completeReadyPartialProposal.positive.v1",
-        "storyos.golden.completeReadyPartialProposal.invalid.v1",
-        "storyos.golden.completeReadyPartialProposal.boundary.v1",
-    ],
+    fixture: "storyos.golden.completeReadyPartialProposal.positive.v1",
 };
 
 pub(super) const CONTINUE_PROPOSAL_GENERATION: QueryOperation = QueryOperation {
@@ -68,11 +64,7 @@ pub(super) const CONTINUE_PROPOSAL_GENERATION: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.continueProposalGeneration.positive.v1",
-        "storyos.golden.continueProposalGeneration.invalid.v1",
-        "storyos.golden.continueProposalGeneration.boundary.v1",
-    ],
+    fixture: "storyos.golden.continueProposalGeneration.positive.v1",
 };
 
 pub const COMPLETE_READY_PARTIAL_PROPOSAL_PATH: &str = COMPLETE_READY_PARTIAL_PROPOSAL.path;

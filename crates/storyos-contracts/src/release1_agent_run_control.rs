@@ -26,11 +26,7 @@ pub(super) const STEER_AGENT_RUN: QueryOperation = QueryOperation {
     request_schema: STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
     responses: CONTROL_STATUSES,
-    fixtures: &[
-        "storyos.golden.steerAgentRun.positive.v1",
-        "storyos.golden.steerAgentRun.invalid.v1",
-        "storyos.golden.steerAgentRun.boundary.v1",
-    ],
+    fixture: "storyos.golden.steerAgentRun.positive.v1",
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -105,11 +101,7 @@ pub(super) const PAUSE_AGENT_RUN: QueryOperation = QueryOperation {
     request_schema: PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     responses: CONTROL_STATUSES,
-    fixtures: &[
-        "storyos.golden.pauseAgentRun.positive.v1",
-        "storyos.golden.pauseAgentRun.invalid.v1",
-        "storyos.golden.pauseAgentRun.boundary.v1",
-    ],
+    fixture: "storyos.golden.pauseAgentRun.positive.v1",
 };
 
 pub(super) const CANCEL_AGENT_RUN: QueryOperation = QueryOperation {
@@ -119,11 +111,7 @@ pub(super) const CANCEL_AGENT_RUN: QueryOperation = QueryOperation {
     request_schema: CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
     response_schema: CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
     responses: CONTROL_STATUSES,
-    fixtures: &[
-        "storyos.golden.cancelAgentRun.positive.v1",
-        "storyos.golden.cancelAgentRun.invalid.v1",
-        "storyos.golden.cancelAgentRun.boundary.v1",
-    ],
+    fixture: "storyos.golden.cancelAgentRun.positive.v1",
 };
 
 pub const PAUSE_AGENT_RUN_PATH: &str = PAUSE_AGENT_RUN.path;

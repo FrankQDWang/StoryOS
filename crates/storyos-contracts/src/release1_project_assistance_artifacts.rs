@@ -3,7 +3,7 @@ use ts_rs::{Config, TS};
 
 use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_project_assistance::{
     GET_PROJECT_ASSISTANCE, GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
@@ -59,27 +59,16 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_PROJECT_ASSISTANCE, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                GET_FIXTURE_PATHS,
-                [
-                    |_| get_fixture_bytes(),
-                    |_| get_invalid_fixture_bytes(),
-                    |_| get_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                UPDATE_FIXTURE_PATHS,
-                [
-                    |_| update_fixture_bytes(),
-                    |_| update_invalid_fixture_bytes(),
-                    |_| update_boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: GET_FIXTURE_PATH,
+            bytes: |_| get_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: UPDATE_FIXTURE_PATH,
+            bytes: |_| update_fixture_bytes(),
+        },
+    ],
 };
 
 pub(super) const GET_REQUEST_SCHEMA_PATH: &str =
@@ -90,16 +79,10 @@ pub(super) const UPDATE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/update-project-assistance-request.schema.json";
 pub(super) const UPDATE_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/update-project-assistance-response.schema.json";
-pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-project-assistance.json",
-    "generated/golden-wire/storyos-public-release-1/get-project-assistance.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-project-assistance.boundary.json",
-];
-pub(super) const UPDATE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/update-project-assistance.json",
-    "generated/golden-wire/storyos-public-release-1/update-project-assistance.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/update-project-assistance.boundary.json",
-];
+pub(super) const GET_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
+pub(super) const UPDATE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/update-project-assistance.json";
 
 pub(super) fn get_request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -207,34 +190,8 @@ pub(super) fn get_fixture_bytes() -> Vec<u8> {
     json_bytes(&get_fixture())
 }
 
-pub(super) fn get_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = get_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("assistance");
-    json_bytes(&value)
-}
-
-pub(super) fn get_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&get_fixture())
-}
-
 pub(super) fn update_fixture_bytes() -> Vec<u8> {
-    json_bytes(&update_fixture("2026-09-16T03:00:00.000Z"))
-}
-
-pub(super) fn update_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = update_fixture("2026-09-16T03:00:00.000Z");
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("assistance");
-    json_bytes(&value)
-}
-
-pub(super) fn update_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&update_fixture("1970-01-01T00:00:00.000Z"))
+    json_bytes(&update_fixture())
 }
 
 fn constrain_binding(schema: &mut Value) {
@@ -280,7 +237,7 @@ fn get_fixture() -> Value {
     })
 }
 
-fn update_fixture(created_at: &str) -> Value {
+fn update_fixture() -> Value {
     json!({
         "schema_id": UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
         "correlation_id": "018f0000-0000-7001-8000-000000000921",
@@ -316,7 +273,7 @@ fn update_fixture(created_at: &str) -> Value {
             "artifact_lifecycle_event_refs": [],
             "condition_refs": [],
             "result": "authoritative_applied",
-            "created_at": created_at
+            "created_at": "2026-09-16T03:00:00.000Z"
         },
         "project": {
             "project_id": "018f0000-0000-7001-8000-000000000201",

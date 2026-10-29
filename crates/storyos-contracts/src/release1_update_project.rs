@@ -31,11 +31,7 @@ pub(super) const UPDATE_PROJECT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.updateProject.positive.v1",
-        "storyos.golden.updateProject.invalid.v1",
-        "storyos.golden.updateProject.boundary.v1",
-    ],
+    fixture: "storyos.golden.updateProject.positive.v1",
 };
 
 pub const UPDATE_PROJECT_PATH: &str = UPDATE_PROJECT.path;
