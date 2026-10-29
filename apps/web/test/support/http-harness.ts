@@ -89,7 +89,7 @@ export function serverForFile(extraEnv: Readonly<Record<string, string>> = {}): 
 
 type Client = typeof client;
 type CommandOptions = { baseUrl: string; projectId: string; idempotencyKey: string; antiForgery?: string; request: unknown };
-type ProjectCommandId = {
+export type ProjectCommandId = {
   [K in keyof Client]: `digest${Capitalize<K & string>}` extends keyof Client
     ? Client[K] extends (options: infer Options) => Promise<unknown>
       ? Options extends CommandOptions ? K : never
@@ -113,6 +113,7 @@ export interface Delivered<Op extends ProjectCommandId> {
 /** One project command with a solved Command Challenge. Each `send` uses the same idempotency key and nonce. */
 export interface Challenged<Op extends ProjectCommandId> {
   readonly key: string;
+  readonly nonce: string;
   send(options?: { request?: CommandRequest<Op>; session?: string; fetchImpl?: typeof fetch }): Promise<Delivered<Op>>;
 }
 
@@ -204,6 +205,7 @@ export class TestProject {
     const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
     return {
       key,
+      nonce: challenge.nonce,
       send: async (options = {}) => {
         let body = "";
         const inner = options.fetchImpl ?? this.server.fetch(options.session ?? this.session);
@@ -230,6 +232,15 @@ export class TestProject {
   async send<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>): Promise<Sent<Op>> {
     const command = await this.challenge(operation, input);
     return { ...await command.send(), command };
+  }
+
+  /** Sends the command once with a fresh key and a nonce that no Command Challenge issued. */
+  async sendUnchallenged<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>,
+    session = this.session): Promise<CommandResponse<Op>> {
+    const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
+    return send({ ...input.path, baseUrl: this.baseUrl, projectId: this.projectId,
+      fetchImpl: this.server.fetch(session), idempotencyKey: this.key(), antiForgery: "0".repeat(64),
+      request: input.request });
   }
 
   /** Solves the Command Challenge as this session and sends the command once from another session. */
