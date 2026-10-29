@@ -3,10 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
-  createAgentRun,
   createChapter,
   createVolume,
-  digestCreateAgentRun,
   digestCreateChapter,
   digestCreateVolume,
   digestExportHumanReadableManuscript,
@@ -28,8 +26,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, challenged, runWorker, startServer } from "../support/http-harness.ts";
-
+import { BINDING, USER_A, challenged, postRun, runRequest, runWorker, startServer } from "../support/http-harness.ts";
 
 function id(suffix: string): string {
   return `018f0000-0000-7001-8000-0000000a48${suffix}`;
@@ -94,25 +91,8 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
     );
     if (chapter.effect.kind !== "authoritative_applied") throw new Error("the chapter must apply");
 
-    const runRequest = {
-      command_schema: "storyos.command.create-agent-run.request.v2" as const,
-      create_agent_run_input: {
-        conversation: { kind: "new" as const },
-        author_message: { text: message },
-        working_target: { kind: "current_chapter" as const, chapter_id: chapter.effect.chapter_id },
-        instruction: { kind: "absent" as const },
-        cause: { kind: "author_request" as const },
-        ...BINDING,
-        correlation_id: id("15"),
-      },
-    };
-    const run = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs", runRequest.command_schema,
-      await digestCreateAgentRun(runRequest), id("05"),
-      (antiForgery) => createAgentRun({
-        ...command, idempotencyKey: id("05"), antiForgery, request: runRequest,
-      }),
-    );
+    const request = runRequest(chapter.effect.chapter_id, id("15"), message);
+    const run = await postRun(baseUrl, fetchImpl, projectId, id("05"), request);
     if (run.effect.kind !== "admitted") throw new Error("the AgentRun must admit");
     const runId = run.effect.run_id;
     const exportRequest = {

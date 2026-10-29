@@ -12,8 +12,7 @@ import { BINDING, id, drainLeftoverWork, challenged, prepare,
 import { zipStoreFiles } from "../support/archive.ts";
 import { queryStoryOSPostgres, sessionFetch, requireStoryOSProtocolError, stopStoryOSServer } from "../support/node-integration.ts";
 import { TestServer, UUID_V7, archivedTables, createStory, freshNamespace, openProposal, openedProposal, problemOf,
-  rejection, startServer,
-} from "../support/http-harness.ts";
+  rejection, startServer, waitFor } from "../support/http-harness.ts";
 import type { CommandInput } from "../support/http-harness.ts";
 
 test("Acceptance retains a stale-writer refusal without changing Proposal validity", async () => {
@@ -137,13 +136,9 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
       FOR EACH ROW EXECUTE FUNCTION storyos.test_refusal_pause();`);
     const rejected = assert.rejects(() => acceptProposal({ ...reloaded, request, idempotencyKey: raceKey, antiForgery: "0".repeat(64) }),
       (error) => requireStoryOSProtocolError(error).status === 422);
-    const waiting = async (queryFragment: string) => {
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (await queryStoryOSPostgres(`SELECT count(*) FROM pg_stat_activity WHERE usename = 'storyos_runtime'
-          AND wait_event_type = 'Lock' AND query LIKE '%${queryFragment}%'`) !== "0") return;
-      }
-      throw new Error(`expected blocked query: ${queryFragment}`);
-    };
+    const waiting = (queryFragment: string) => waitFor(() => queryStoryOSPostgres(`SELECT count(*) FROM pg_stat_activity
+      WHERE usename = 'storyos_runtime' AND wait_event_type = 'Lock' AND query LIKE '%${queryFragment}%'`),
+    (count) => count !== "0", { attempts: 100, intervalMs: 0 });
     try {
       await waiting("INSERT INTO storyos.acceptance_refusals");
       const competing = assert.rejects(() => acceptProposal({ ...reloaded, request, idempotencyKey: raceKey, antiForgery: raceNonce }),

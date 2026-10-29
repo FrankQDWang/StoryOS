@@ -5,15 +5,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, digestSteerAgentRun,
-  getAgentRun, getChapter, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createEditorSession, digestCreateEditorSession, digestSteerAgentRun, getAgentRun, getChapter, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference, SteerAgentRunRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, operations, prepare, readProposal, revisions, sendAuthorEdit,
-  settleOnce } from "../support/acceptance.ts";
+import { BINDING, challenged, drainLeftoverWork, id, operations, prepare, readProposal, revisions, sendAuthorEdit } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { runWorker, serverForFile } from "../support/http-harness.ts";
+import { postRun, runWorker, serverForFile, settleRun } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -63,19 +61,10 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
         : { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" }, cause: { kind: "author_request" }, ...BINDING, correlation_id: key },
   };
-  const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
-    body.command_schema, await digestCreateAgentRun(body), key, (antiForgery) => createAgentRun({ baseUrl: started.baseUrl,
-      projectId, fetchImpl, request: body, antiForgery, idempotencyKey: key }));
+  const created = await postRun(started.baseUrl, fetchImpl, projectId, key, body);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   const options = { baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl };
-  const settle = async () => {
-    let run = await getAgentRun(options);
-    for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
-      await settleOnce();
-      run = await getAgentRun(options);
-    }
-    return run;
-  };
+  const settle = () => settleRun(started.baseUrl, { projectId, fetchImpl }, created.effect.run_id);
   const steerAfterDecision = async (message: string, steerKey: string, added: SelectionReference[]) => {
     const directory = await mkdtemp(join(tmpdir(), "storyos-grow-again-"));
     const hold = join(directory, "decision");

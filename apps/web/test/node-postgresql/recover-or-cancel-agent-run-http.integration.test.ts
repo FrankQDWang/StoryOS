@@ -12,7 +12,6 @@ import {
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
   activityStream,
-  getAgentRun,
   getChapter,
   getManuscriptTree,
   getProposal,
@@ -23,7 +22,6 @@ import {
 import type {
   CancelAgentRunRequest,
   CreateAgentRunRequest,
-  GetAgentRunResponse,
   PauseAgentRunRequest,
   UpdateProjectAssistanceRequest,
   WithdrawProposalRequest,
@@ -37,7 +35,6 @@ import {
 } from "../support/node-integration.ts";
 import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, postRun, prepare,
   problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
-
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
   return {

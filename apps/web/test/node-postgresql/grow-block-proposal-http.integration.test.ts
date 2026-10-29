@@ -2,15 +2,14 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "vitest";
-import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, getAgentRun,
-  getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, candidateTextReference, challenged, drainLeftoverWork, id, operations, prepare, readProposal,
   revisions, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { serverForFile } from "../support/http-harness.ts";
+import { serverForFile, settleRun } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -64,11 +63,7 @@ async function request(started: Started, seeded: Seeded, text: string, key: stri
       antiForgery: (nonce = antiForgery), idempotencyKey: key }));
   const created = await repeat();
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  let run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
-    await settleOnce();
-    run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  }
+  const run = await settleRun(started.baseUrl, { projectId, fetchImpl }, created.effect.run_id);
   return { run, created, repeat };
 }
 

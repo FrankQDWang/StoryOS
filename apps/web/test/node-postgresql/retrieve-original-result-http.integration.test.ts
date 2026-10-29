@@ -19,7 +19,7 @@ import {
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, id, inspectRun, prepare, settleHeld, settleOnce,
-  startServer } from "../support/http-harness.ts";
+  startServer, waitFor } from "../support/http-harness.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
@@ -199,14 +199,10 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
     const created = await admitRun(started.baseUrl, prepared, id("a311"), "SCRIPT:retrieve-complete");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: hold });
-    let held: GetAgentRunResponse | undefined;
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      held = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
-      if (held.status === "claimed" && held.model_attempt.kind === "present"
-        && held.original_result_retrieval.kind === "absent") break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    if (held?.model_attempt.kind !== "present") throw new Error("expected the original Attempt");
+    const held = await waitFor(() => inspectRun(started.baseUrl, prepared, created.effect.run_id),
+      (run) => run.status === "claimed" && run.model_attempt.kind === "present"
+        && run.original_result_retrieval.kind === "absent");
+    if (held.model_attempt.kind !== "present") throw new Error("expected the original Attempt");
     const originalAttemptId = held.model_attempt.model_attempt_id;
     const request: CancelAgentRunRequest = {
       command_schema: "storyos.command.cancel-agent-run.request.v1",

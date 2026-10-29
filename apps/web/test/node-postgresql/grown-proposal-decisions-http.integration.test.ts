@@ -2,18 +2,17 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "vitest";
-import { acceptProposal, createAgentRun, createEditorSession, digestAcceptProposal, digestCreateAgentRun,
-  digestCreateEditorSession, digestUndoLatestAuthorAction, digestWithdrawProposal, getAgentRun, getChapter,
-  getEditorSession, getProposal, undoLatestAuthorAction, withdrawProposal,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { acceptProposal, createEditorSession, digestAcceptProposal, digestCreateEditorSession,
+  digestUndoLatestAuthorAction, digestWithdrawProposal, getChapter, getEditorSession, getProposal,
+  undoLatestAuthorAction, withdrawProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse,
   GetProposalResponse, SelectionReference, UndoLatestAuthorActionRequest, WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, USER_A, admitProse, candidateTextReference, challenged, drainLeftoverWork, id, prepare,
-  readProposal, reviseCandidate, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
+  readProposal, reviseCandidate, sendAuthorEdit } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { serverForFile } from "../support/http-harness.ts";
+import { postRun, serverForFile, settleRun } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -63,16 +62,9 @@ async function request(started: Started, seeded: Seeded, text: string, key: stri
         : { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" }, cause: { kind: "author_request" }, ...BINDING, correlation_id: key },
   };
-  const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
-    body.command_schema, await digestCreateAgentRun(body), key,
-    (antiForgery) => createAgentRun({ baseUrl: started.baseUrl, projectId, fetchImpl, request: body, antiForgery,
-      idempotencyKey: key }));
+  const created = await postRun(started.baseUrl, fetchImpl, projectId, key, body);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  let run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
-    await settleOnce();
-    run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  }
+  const run = await settleRun(started.baseUrl, { projectId, fetchImpl }, created.effect.run_id);
   return run;
 }
 

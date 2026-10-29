@@ -155,7 +155,8 @@ export async function postRun(baseUrl: string, fetchImpl: typeof fetch, projectI
 }
 
 /** Admits one AgentRun with this author message on the Current Chapter of a prepared Project. */
-export async function admitRun(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, key: string,
+export async function admitRun(baseUrl: string,
+  prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch; readonly chapterId: string }, key: string,
   text: string, conversation: Conversation = { kind: "new" }) {
   const created = await postRun(baseUrl, prepared.fetchImpl, prepared.projectId, key,
     runRequest(prepared.chapterId, id(key.slice(-4)), text, conversation));
@@ -168,6 +169,19 @@ export async function inspectRun(baseUrl: string, prepared: { projectId: string;
   runId: string, modelAttemptId?: string): Promise<GetAgentRunResponse> {
   return getAgentRun({ baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
     ...(modelAttemptId === undefined ? {} : { modelAttemptId }) });
+}
+
+const SETTLED_RUN = ["completed", "refused", "cancelled", "paused"];
+
+/** Runs Worker passes, at most eight, until `done` holds for the AgentRun. By default `done` is a settled status. */
+export async function settleRun(baseUrl: string, prepared: { projectId: string; fetchImpl: typeof fetch },
+  runId: string, done = (run: GetAgentRunResponse) => SETTLED_RUN.includes(run.status)): Promise<GetAgentRunResponse> {
+  let run = await inspectRun(baseUrl, prepared, runId);
+  for (let pass = 0; pass < 8 && !done(run); pass += 1) {
+    await settleOnce();
+    run = await inspectRun(baseUrl, prepared, runId);
+  }
+  return run;
 }
 
 /** The content of the selected context item of this source class. */

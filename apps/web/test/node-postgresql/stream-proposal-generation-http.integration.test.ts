@@ -4,10 +4,8 @@ import { test } from "vitest";
 
 import {
   applyAuthorEdit,
-  createAgentRun,
   createEditorSession,
   digestApplyAuthorEdit,
-  digestCreateAgentRun,
   digestCreateEditorSession,
   getAgentRun,
   getEditorSession,
@@ -16,14 +14,13 @@ import {
 import type {
   ApplyAuthorEditRequest,
   CreateEditorSessionRequest,
-  GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce, serverForFile,
-  streamRequest } from "../support/http-harness.ts";
+import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, freshNamespace, id, postRun, prepare, serverForFile,
+  settleOnce, streamRequest, waitForOpenedProposal } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -37,38 +34,9 @@ async function admitStream(
   chapterId: string,
   key: string,
 ) {
-  const request = streamRequest(chapterId, id(key.slice(-4)));
-  const created = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }),
-  );
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, streamRequest(chapterId, id(key.slice(-4))));
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   return created.effect.run_id;
-}
-
-async function waitForOpened(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  runId: string,
-  match: (value: GetProposalResponse) => boolean,
-): Promise<GetProposalResponse> {
-  let last = "";
-  for (let attempt = 0; attempt < 250; attempt += 1) {
-    const queried = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });
-    last = `${queried.status}:${queried.decision.kind}`;
-    if (queried.decision.kind === "prose_change" && queried.decision.opened_proposal.kind === "present") {
-      const current = await getProposal({
-        baseUrl, projectId, proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl,
-      });
-      last = `${last}:${current.proposal.generation}:${current.proposal.candidate_text}`;
-      if (match(current)) return current;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error(`streamed Proposal inspect timed out (${last})`);
 }
 
 test("Worker applies contiguous canonical batches and completes one streamed candidate", async () => {
@@ -110,8 +78,7 @@ test("first author input fences the admitted Head and late batches stay ineligib
   const prepared = await prepare(started.baseUrl, id(`${ns}41`), "Fence Novel", ns);
   const runId = await admitStream(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id(`${ns}51`));
   await settleOnce();
-  const opened = await waitForOpened(
-    started.baseUrl, prepared.fetchImpl, prepared.projectId, runId,
+  const opened = await waitForOpenedProposal(started.baseUrl, prepared, runId,
     (current) => current.proposal.generation === "generating" && current.proposal.candidate_text === FIRST,
   );
   assert.notEqual(opened.proposal.candidate_text, SECOND);

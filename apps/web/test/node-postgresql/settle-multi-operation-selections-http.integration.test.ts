@@ -6,11 +6,36 @@ import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter,
-  createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
-  digestCreateAgentRun, digestCreateChapter,
-  digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations,
-  reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, setCurrentChapter, digestSetCurrentChapter,
+  acceptProposal,
+  applyAuthorEdit,
+  cancelAgentRun,
+  createChapter,
+  createEditorSession,
+  digestAcceptProposal,
+  digestApplyAuthorEdit,
+  digestCancelAgentRun,
+  digestCreateChapter,
+  digestCreateEditorSession,
+  digestExportProjectArchive,
+  digestReopenRejectedOperations,
+  reopenRejectedOperations,
+  steerAgentRun,
+  digestSteerAgentRun,
+  exportProjectArchive,
+  getAgentRun,
+  getChapter,
+  getExportOperation,
+  getManuscriptTree,
+  getEditorSession,
+  getProposal,
+  pauseAgentRun,
+  digestPauseAgentRun,
+  deleteChapter,
+  digestDeleteChapter,
+  rejectProposalOperations,
+  digestRejectProposalOperations,
+  setCurrentChapter,
+  digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest,
@@ -23,7 +48,7 @@ import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
 } from "../support/acceptance.ts";
-import { heldWorker, problemCode, startServer } from "../support/http-harness.ts";
+import { heldWorker, postRun, problemCode, runRequest, settleRun, startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -142,36 +167,13 @@ async function admitPassages(
   target?: CreateAgentRunRequest["create_agent_run_input"]["working_target"],
   conversation?: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
 ) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: conversation ?? { kind: "new" },
-      author_message: { text },
-      working_target: target ?? { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
-    }),
-  );
+  const request = runRequest(chapterId, id(key.slice(-4)), text, conversation);
+  if (target !== undefined) request.create_agent_run_input.working_target = target;
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, request);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await beforeSettle?.();
-  let run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  if (settle) {
-    for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
-      await settleOnce();
-      run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-    }
-  }
-  return run;
+  return settle ? settleRun(baseUrl, { projectId, fetchImpl }, created.effect.run_id)
+    : getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
 async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.", secondTitle = "Second target") {
@@ -442,11 +444,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
         assert.equal(problemCode(error), "steering_reference_limit");
         return true;
       });
-    let run = await getAgentRun(options);
-    for (let attempt = 0; attempt < 8 && run.status !== "completed"; attempt++) {
-      await settleOnce();
-      run = await getAgentRun(options);
-    }
+    const run = await settleRun(started.baseUrl, setup, queued.run_id, (current) => current.status === "completed");
     assert.equal(run.status, "completed");
     assert.deepEqual(run.context.selection_references, [
       { reference: initial, manuscript_block_ids: first!.current_revision.blocks.map((block) => block.manuscript_block_id),
@@ -1173,7 +1171,6 @@ test("acceptProposal refuses incomplete atomic Bundle closure then applies the c
     await stopRealServer(started.server);
   }
 });
-
 
 test.each(["pending", "rejected"])("AI revises only the secondary candidate with a %s sibling", async (sibling) => {
   const started = await startServer();

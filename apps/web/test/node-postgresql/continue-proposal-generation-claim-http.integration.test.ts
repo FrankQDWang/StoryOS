@@ -7,14 +7,11 @@ import {
   applyAuthorEdit,
   completeReadyPartialProposal,
   continueProposalGeneration,
-  createAgentRun,
   createEditorSession,
   digestApplyAuthorEdit,
   digestCompleteReadyPartialProposal,
   digestContinueProposalGeneration,
-  digestCreateAgentRun,
   digestCreateEditorSession,
-  getAgentRun,
   getChapter,
   getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -23,13 +20,12 @@ import type {
   CompleteReadyPartialProposalRequest,
   ContinueProposalGenerationRequest,
   CreateEditorSessionRequest,
-  GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   queryStoryOSPostgres,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce, serverForFile,
-  streamRequest } from "../support/http-harness.ts";
+import { BINDING, PROSE, challenged, drainLeftoverWork, freshNamespace, id, postRun, prepare, serverForFile,
+  settleOnce, streamRequest, waitForOpenedProposal } from "../support/http-harness.ts";
 import type { Started } from "../support/acceptance.ts";
 
 const started = serverForFile();
@@ -114,36 +110,11 @@ test("Worker claims a Continue successor and writes the next batch into the new 
     chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
   });
   const request = streamRequest(prepared.chapterId, id(`${ns}12`));
-  const created = await challenged(
-    started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), id(`${ns}31`),
-    (antiForgery) => createAgentRun({
-      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id(`${ns}31`), antiForgery, request,
-    }),
-  );
+  const created = await postRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, id(`${ns}31`), request);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await settleOnce();
-  let opened: GetProposalResponse | undefined;
-  for (let attempt = 0; attempt < 250; attempt += 1) {
-    const queried = await getAgentRun({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      runId: created.effect.run_id, fetchImpl: prepared.fetchImpl,
-    });
-    if (queried.decision.kind === "prose_change" && queried.decision.opened_proposal.kind === "present") {
-      const current = await getProposal({
-        baseUrl: started.baseUrl, projectId: prepared.projectId,
-        proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-      });
-      if (current.proposal.generation === "generating" && current.proposal.candidate_text === FIRST) {
-        opened = current;
-        break;
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  if (!opened) throw new Error("streamed Proposal did not reach the first batch");
+  const opened = await waitForOpenedProposal(started.baseUrl, prepared, created.effect.run_id,
+    (current) => current.proposal.generation === "generating" && current.proposal.candidate_text === FIRST);
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     ...BINDING, correlation_id: id(`${ns}61`),
@@ -325,36 +296,11 @@ async function pausedProposal(started: Started, title: string) {
     chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
   });
   const request = streamRequest(prepared.chapterId, id(`${ns}12`));
-  const created = await challenged(
-    started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), id(`${ns}31`),
-    (antiForgery) => createAgentRun({
-      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id(`${ns}31`), antiForgery, request,
-    }),
-  );
+  const created = await postRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, id(`${ns}31`), request);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await settleOnce();
-  let opened: GetProposalResponse | undefined;
-  for (let attempt = 0; attempt < 250; attempt += 1) {
-    const queried = await getAgentRun({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      runId: created.effect.run_id, fetchImpl: prepared.fetchImpl,
-    });
-    if (queried.decision.kind === "prose_change" && queried.decision.opened_proposal.kind === "present") {
-      const current = await getProposal({
-        baseUrl: started.baseUrl, projectId: prepared.projectId,
-        proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-      });
-      if (current.proposal.generation === "generating" && current.proposal.candidate_text === FIRST) {
-        opened = current;
-        break;
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  if (!opened) throw new Error("streamed Proposal did not reach the first batch");
+  const opened = await waitForOpenedProposal(started.baseUrl, prepared, created.effect.run_id,
+    (current) => current.proposal.generation === "generating" && current.proposal.candidate_text === FIRST);
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     ...BINDING, correlation_id: id(`${ns}61`),

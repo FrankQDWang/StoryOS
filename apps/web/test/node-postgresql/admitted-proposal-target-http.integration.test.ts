@@ -4,17 +4,23 @@ import { randomBytes } from "node:crypto";
 import { test } from "vitest";
 
 import {
-  applyAuthorEdit, createAgentRun, createEditorSession, deleteChapter,
-  digestApplyAuthorEdit, digestCreateAgentRun, digestCreateEditorSession,
-  digestDeleteChapter, getAgentRun, getChapter, getProposal,
+  applyAuthorEdit,
+  createEditorSession,
+  deleteChapter,
+  digestApplyAuthorEdit,
+  digestCreateEditorSession,
+  digestDeleteChapter,
+  getAgentRun,
+  getChapter,
+  getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest,
+  ApplyAuthorEditRequest,
+  CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, runWorker, settleOnce,
-  startServer } from "../support/http-harness.ts";
+import { BINDING, admitRun, challenged, drainLeftoverWork, id, prepare, runWorker, settleOnce, startServer } from "../support/http-harness.ts";
 
 async function withProject(
   title: string,
@@ -33,22 +39,7 @@ async function admitQueued(
   baseUrl: string, fetchImpl: typeof fetch, projectId: string,
   chapterId: string, key: string, message = "Revise this passage: keep the voice.",
 ): Promise<string> {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" }, author_message: { text: message },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" }, cause: { kind: "author_request" }, ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const admitted = await challenged(
-    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }),
-  );
-  if (admitted.effect.kind !== "admitted") throw new Error("expected admitted Run");
-  return admitted.effect.run_id;
+  return (await admitRun(baseUrl, { projectId, fetchImpl, chapterId }, key, message)).effect.run_id;
 }
 
 test.each([

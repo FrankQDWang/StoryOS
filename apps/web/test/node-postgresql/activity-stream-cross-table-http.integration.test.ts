@@ -3,14 +3,22 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
-  activityStream, applyAuthorEdit, createAgentRun, createChapter, createEditorSession,
-  createVolume, digestApplyAuthorEdit, digestCreateAgentRun,
-  digestCreateChapter, digestCreateEditorSession, digestCreateVolume, digestUpdateProjectAssistance,
-  getEditorSession, getManuscriptTree, updateProjectAssistance,
+  activityStream,
+  applyAuthorEdit,
+  createChapter,
+  createEditorSession,
+  createVolume,
+  digestApplyAuthorEdit,
+  digestCreateChapter,
+  digestCreateEditorSession,
+  digestCreateVolume,
+  digestUpdateProjectAssistance,
+  getEditorSession,
+  getManuscriptTree,
+  updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
-  CreateAgentRunRequest,
   CreateChapterRequest,
   CreateVolumeRequest,
   GetEditorSessionResponse,

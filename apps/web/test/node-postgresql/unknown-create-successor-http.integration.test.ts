@@ -23,8 +23,6 @@ import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, heldWorker, i
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
-
-
 function successor(response: GetAgentRunResponse) {
   if (response.unknown_create_successor.kind !== "present") {
     throw new Error("expected unknown-create successor");
@@ -456,11 +454,8 @@ test("cancellation during the successor stream aborts the successor once", async
     const created = await admitRun(started.baseUrl, prepared, id("ab11"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: hold });
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (await roles(prepared.projectId, created.effect.run_id) === "1 1 1 1") break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
+    assert.equal(await waitFor(() => roles(prepared.projectId, created.effect.run_id),
+      (counts) => counts === "1 1 1 1"), "1 1 1 1");
     const request: CancelAgentRunRequest = {
       command_schema: "storyos.command.cancel-agent-run.request.v1",
       cancel_agent_run_input: { ...BINDING, correlation_id: id("ab21") },

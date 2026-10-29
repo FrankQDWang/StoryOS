@@ -3,9 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
-  createAgentRun,
   createVolume,
-  digestCreateAgentRun,
   digestCreateVolume,
   digestExportHumanReadableManuscript,
   exportHumanReadableManuscript,
@@ -22,7 +20,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, challenged, startServer } from "../support/http-harness.ts";
+import { BINDING, USER_A, challenged, postRun, runRequest, startServer } from "../support/http-harness.ts";
 
 function id(suffix: string): string {
   return `018f0000-0000-7001-8000-0000000a49${suffix}`;
@@ -87,24 +85,8 @@ test("each command settlement writes one span with its identifiers and outcome",
     assert.equal((await admit()).command_id, admitted.command_id);
     exportIds = [admitted.command_id, admitted.command_id];
 
-    const runRequest = {
-      command_schema: "storyos.command.create-agent-run.request.v2" as const,
-      create_agent_run_input: {
-        conversation: { kind: "new" as const },
-        author_message: { text: message },
-        working_target: { kind: "current_chapter" as const, chapter_id: id("21") },
-        instruction: { kind: "absent" as const },
-        cause: { kind: "author_request" as const },
-        ...BINDING,
-        correlation_id: id("15"),
-      },
-    };
-    await assert.rejects(
-      challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
-        runRequest.command_schema, await digestCreateAgentRun(runRequest), id("05"),
-        (antiForgery) => createAgentRun({
-          baseUrl, projectId, fetchImpl, idempotencyKey: id("05"), antiForgery, request: runRequest,
-        })),
+    const request = runRequest(id("21"), id("15"), message);
+    await assert.rejects(postRun(baseUrl, fetchImpl, projectId, id("05"), request),
       (error) => requireStoryOSProtocolError(error).status === 422,
     );
   } finally {

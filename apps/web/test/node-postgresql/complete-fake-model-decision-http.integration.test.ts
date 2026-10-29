@@ -10,7 +10,6 @@ import {
   createProjectCommandChallenge,
   digestCreateAgentRun,
   digestUpdateProjectAssistance,
-  getAgentRun,
   getProject,
   getProjectAssistance,
   updateProjectAssistance,
@@ -28,7 +27,7 @@ import {
   withChallengeBudget,
 } from "../support/node-integration.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
-  inspectRun, postRun, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+  inspectRun, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";

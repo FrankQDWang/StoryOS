@@ -6,8 +6,6 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import {
-  createAgentRun,
-  digestCreateAgentRun,
   getAgentRun,
   type CreateAgentRunRequest,
   type GetAgentRunResponse,
@@ -18,8 +16,8 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, attempt, challenged, drainLeftoverWork, id, inspectRun, prepare, produced, selected,
-  settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { USER_A, admitRun, attempt, drainLeftoverWork, id, inspectRun, prepare, produced, selected, settleHeld,
+  settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const FIRST = "Help with this passage.";
 const EXPIRING = `${FIRST} SCRIPT:reference-expires`;
@@ -34,37 +32,7 @@ async function admit(
   conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
   settle = true,
 ) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl,
-    prepared.fetchImpl,
-    prepared.projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({
-      baseUrl,
-      projectId: prepared.projectId,
-      fetchImpl: prepared.fetchImpl,
-      idempotencyKey: key,
-      antiForgery,
-      request,
-    }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+  const created = await admitRun(baseUrl, prepared, key, text, conversation);
   if (settle) await settleOnce();
   return created;
 }
