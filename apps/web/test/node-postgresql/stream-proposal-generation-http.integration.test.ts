@@ -1,6 +1,5 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
 import { test } from "vitest";
 
 import {
@@ -26,16 +25,12 @@ import {
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 import {
-  BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  BINDING, PROSE, USER_A, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce,
+  startServer,
+} from "../support/http-harness.ts";
 
 const FIRST = "Guard";
 const SECOND = "Guard the narrator";
-
-function freshNs(): string {
-  return randomBytes(4).toString("hex");
-}
 
 function streamRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
   return {
@@ -94,10 +89,10 @@ async function waitForOpened(
 }
 
 test("Worker applies contiguous canonical batches and completes one streamed candidate", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
-    const ns = freshNs();
+    const ns = freshNamespace();
     const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Stream Novel", ns);
     const runId = await admitStream(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id(`${ns}31`));
     await drainLeftoverWork();
@@ -132,10 +127,10 @@ test("Worker applies contiguous canonical batches and completes one streamed can
 });
 
 test("first author input fences the admitted Head and late batches stay ineligible", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
-    const ns = freshNs();
+    const ns = freshNamespace();
     const prepared = await prepare(started.baseUrl, id(`${ns}41`), "Fence Novel", ns);
     const runId = await admitStream(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id(`${ns}51`));
     await settleOnce();

@@ -1,6 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { test } from "vitest";
 
 import {
@@ -30,16 +30,13 @@ import {
   queryStoryOSPostgres,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
+import type { StoryOSServer } from "../support/node-integration.ts";
 import {
-  BINDING, PROSE, challenged, drainLeftoverWork, id, prepare, settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  BINDING, PROSE, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce,
+  startServer,
+} from "../support/http-harness.ts";
 
 const FIRST = "Guard";
-
-function freshNs(): string {
-  return randomBytes(4).toString("hex");
-}
 
 function candidateDigest(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -126,10 +123,10 @@ async function assemblyCount(runId: string): Promise<string> {
 }
 
 test("Worker claims a Continue successor and writes the next batch into the new Generation", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
-    const ns = freshNs();
+    const ns = freshNamespace();
     const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Claim Novel", ns);
     const before = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -341,9 +338,9 @@ test("Worker claims a Continue successor and writes the next batch into the new 
 
 /** Streams the first batch of one Proposal, fences the Generation with an Author Edit, and returns the paused
  * ready_partial Proposal. */
-async function pausedProposal(started: Awaited<ReturnType<typeof startRealServer>>, title: string) {
+async function pausedProposal(started: StoryOSServer, title: string) {
   await drainLeftoverWork();
-  const ns = freshNs();
+  const ns = freshNamespace();
   const prepared = await prepare(started.baseUrl, id(`${ns}11`), title, ns);
   const before = await getChapter({
     baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -433,7 +430,7 @@ async function pausedProposal(started: Awaited<ReturnType<typeof startRealServer
 }
 
 test("continue opens a fresh generation without accepting the candidate", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const { ns, prepared, before, session, paused } = await pausedProposal(started, "Continue Novel");
     const facts = await generationFacts(paused.proposal.proposal_id);
@@ -528,7 +525,7 @@ test("continue opens a fresh generation without accepting the candidate", async 
 });
 
 test("complete keeps the partial candidate ready without accepting its content", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const { ns, prepared, before, session, paused } = await pausedProposal(started, "Complete Novel");
     assert.equal(paused.proposal.candidate_text, FIRST);

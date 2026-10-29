@@ -1,8 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
@@ -13,18 +11,16 @@ import {
 import type {
   ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
+import { queryStoryOSPostgres as queryPostgres,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, settleOnce,
-  startRealServer } from "../support/acceptance.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+import { BINDING, challenged, drainLeftoverWork, id, prepare, runWorker, settleOnce,
+  startServer } from "../support/http-harness.ts";
 
 async function withProject(
   title: string,
   exercise: (project: Awaited<ReturnType<typeof prepare>> & { baseUrl: string; ns: string }) => Promise<void>,
 ) {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -113,10 +109,7 @@ test.each([
     await authorEdit(initialText, 0, "a");
     const h0 = await getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl });
     const runId = await admitQueued(baseUrl, fetchImpl, projectId, chapterId, id(`${ns}b2`), message);
-    await runStoryOSWorker({ repositoryRoot,
-      workerBinary: join(repositoryRoot, "target", "release-package", "storyos-worker"),
-      args: ["--claim-only"], extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" },
-    });
+    await runWorker(["--claim-only"], { STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
     await authorEdit("!", initialText.length, "c");
     const h1 = await getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl });
     assert.notEqual(h1.chapter.current_revision.revision_id, h0.chapter.current_revision.revision_id);
@@ -190,11 +183,7 @@ test("a historical single-Block Run reclaims and opens one H0 Proposal", async (
        WHERE project_id = '${projectId}'::uuid
          AND run_id = '${runId}'::uuid;
     `);
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary: join(repositoryRoot, "target", "release-package", "storyos-worker"),
-      args: ["--claim-only"], extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" },
-    });
+    await runWorker(["--claim-only"], { STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
     await settleOnce();
     await settleOnce();
     const run = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });

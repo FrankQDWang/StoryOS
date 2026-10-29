@@ -1,25 +1,16 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
   cancelAgentRun,
   createAgentRun,
-  createChapter,
-  createProject,
-  createProjectChallenge,
   createProjectCommandChallenge,
-  createVolume,
   digestCancelAgentRun,
   digestCreateAgentRun,
-  digestCreateChapter,
-  digestCreateVolume,
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
   activityStream,
@@ -39,31 +30,15 @@ import type {
   UpdateProjectAssistanceRequest,
   WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
-  runStoryOSWorker,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
-import { admitProse } from "../support/acceptance.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
-const execFileAsync = promisify(execFile);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
-
-function id(suffix: string): string {
-  return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
-}
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, prepare, problemCode, settleHeld,
+  settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 function runRequest(
   conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
@@ -99,117 +74,6 @@ function cancelRequest(correlationId: string): CancelAgentRunRequest {
   };
 }
 
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-b": "018f0000-0000-7001-8000-000000000101" },
-  });
-}
-
-async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-    ...(extraEnv === undefined ? {} : { extraEnv }),
-  });
-}
-
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const env = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  }
-  const held = execFileAsync(bin("storyos-worker"), ["--once"], {
-    cwd: repositoryRoot,
-    env,
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void held.catch(() => undefined);
-  return held;
-}
-
-async function drainLeftoverWork() {
-  for (let attempt = 0; attempt < 16; attempt += 1) {
-    const leftover = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.agent_runs
-       WHERE status IN ('queued', 'claimed') OR (status = 'cancelled' AND wakeup_pending);
-    `);
-    if (leftover === "0") return;
-    await settleOnce();
-  }
-  throw new Error("leftover AgentRun work did not drain");
-}
-
-async function challenged<T>(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  method: string,
-  route: string,
-  schema: string,
-  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
-  key: string,
-  send: (antiForgery: string) => Promise<T>,
-): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
-}
-
-async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {
-  const fetchImpl = browserFetch(baseUrl, "session-a");
-  const createRequest = {
-    command_schema: "storyos.command.create-project.request.v1" as const,
-    create_project_input: { title, ...BINDING, correlation_id: id(`${ns}0`) },
-    idempotency_key: createKey,
-  };
-  const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-  await createProject({
-    baseUrl,
-    fetchImpl,
-    idempotencyKey: createKey,
-    antiForgery: created.nonce,
-    request: {
-      command_schema: createRequest.command_schema,
-      prospective_project_id: created.prospective_project_id,
-      create_project_input: createRequest.create_project_input,
-    },
-  });
-  const projectId = created.prospective_project_id;
-  const assistance = {
-    command_schema: "storyos.command.update-project-assistance.request.v1" as const,
-    update_project_assistance_input: {
-      availability: "available" as const,
-      expected_assistance_revision: "0",
-      ...BINDING,
-      correlation_id: id(`${ns}1`),
-    },
-  };
-  await challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance", assistance.command_schema, await digestUpdateProjectAssistance(assistance), id(`${ns}2`), (antiForgery) => updateProjectAssistance({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}2`), antiForgery, request: assistance }));
-  const volume = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(`${ns}3`) },
-  };
-  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
-  if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
-  const volumeId = createdVolume.effect.volume_id;
-  const chapter = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
-  };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
-  if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
-  return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
-}
-
 async function postRun(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -243,29 +107,12 @@ async function postPause(
   correlationId: string,
 ) {
   const request = pauseRequest(correlationId);
-  const digest = await digestPauseAgentRun(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: key,
-    },
-  }));
-  const response = await pauseAgentRun({
-    baseUrl,
-    projectId,
-    runId,
-    fetchImpl,
-    idempotencyKey: key,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, response };
+  let nonce = "";
+  const response = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", request.command_schema, await digestPauseAgentRun(request),
+    key, (antiForgery) => pauseAgentRun({ baseUrl, projectId, runId, fetchImpl, idempotencyKey: key,
+      antiForgery: (nonce = antiForgery), request }));
+  return { nonce, response };
 }
 
 async function cancelChallenge(
@@ -323,19 +170,6 @@ async function inspectRun(
   return getAgentRun({ baseUrl, projectId, runId, fetchImpl });
 }
 
-async function waitFor(
-  probe: () => Promise<GetAgentRunResponse>,
-  match: (value: GetAgentRunResponse) => boolean,
-): Promise<GetAgentRunResponse> {
-  let last: GetAgentRunResponse | undefined;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    last = await probe();
-    if (match(last)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`hold inspect timed out: status=${last?.status ?? "none"} decision=${last?.decision.kind ?? "none"}`);
-}
-
 function activityEvent(body: string, eventKind: string) {
   return body.split("\n\n").map((block) => {
     const data = block.split("\n").find((line) => line.startsWith("data:"));
@@ -346,18 +180,8 @@ function activityEvent(body: string, eventKind: string) {
   }).find((event) => event?.event_kind === eventKind);
 }
 
-function problemCode(error: unknown): string | undefined {
-  const protocol = requireStoryOSProtocolError(error);
-  if (protocol.responseBody === undefined) return undefined;
-  try {
-    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
-  } catch {
-    return undefined;
-  }
-}
-
 test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run immutable", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c111"), "Recover Cancel Novel", "c2");
@@ -375,7 +199,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
       runId: created.effect.run_id,
       fetchImpl: prepared.fetchImpl,
       idempotencyKey: id("c141"),
-      antiForgery: paused.challenge.nonce,
+      antiForgery: paused.nonce,
       request: pauseRequest(id("c142")),
     });
     assert.equal(pauseReplay.command_id, paused.response.command_id);
@@ -487,7 +311,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
 
 test("a rate-limited cancellation Challenge completes before a Worker is held", async () => {
   const dispatchHold = join(tmpdir(), "storyos-s3-17-rate-limit.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -544,7 +368,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
 test("cancellation fences late Worker output and does not hide a Proposal", async () => {
   const dispatchHold = join(tmpdir(), "storyos-s3-17-dispatch.hold");
   const decisionHold = join(tmpdir(), "storyos-s3-17-decision.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   const workers: Array<Promise<void>> = [];
   try {
     await drainLeftoverWork();
@@ -683,7 +507,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
 
 test("a Pause before the Cancel still sends one Abort for the in-flight Attempt", async () => {
   const dispatchHold = join(tmpdir(), "storyos-g03-pause-cancel.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -722,7 +546,7 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
 });
 
 test("current producer withdraw closes the Proposal with zero author actions", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("1309e8f00211"), "Producer Withdraw Novel", "e8f3");

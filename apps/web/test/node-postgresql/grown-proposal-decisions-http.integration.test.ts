@@ -11,9 +11,10 @@ import type { AcceptProposalRequest, CreateAgentRunRequest, CreateEditorSessionR
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { BINDING, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, reviseCandidate, sendAuthorEdit,
-  settleOnce, startRealServer,
+  settleOnce,
 } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
+import { startServer } from "../support/http-harness.ts";
 
 // ADR 0071: the author accepts, withdraws, and undoes around a grown Proposal as one unit.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came."];
@@ -128,7 +129,7 @@ async function acceptOperations(started: Started, seeded: Seeded, proposal: Prop
 }
 
 test("accept all of a grown Proposal applies each Operation, and a part of it is refused", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const seeded = await seedChapter(started);
@@ -148,7 +149,7 @@ test("accept all of a grown Proposal applies each Operation, and a part of it is
 });
 
 test("a withdrawal closes all of a grown Proposal in one step", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const seeded = await seedChapter(started);
@@ -173,7 +174,7 @@ test("a withdrawal closes all of a grown Proposal in one step", async () => {
 });
 
 test("after a growth, Author Undo of an earlier candidate edit is a Barrier", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const seeded = await seedChapter(started);
@@ -200,7 +201,7 @@ test("after a growth, Author Undo of an earlier candidate edit is a Barrier", as
 });
 
 test("the reads show the joinable blocks of a crossing selection and the atomic bundle of the growth", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const seeded = await seedChapter(started);
@@ -217,7 +218,7 @@ const undoRoute = "/api/v1/projects/{project_id}/author-actions/undo";
 const acceptRoute = "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances";
 
 test("undo acceptance requires a reversal proposal when the authoritative head has drifted", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id(`1309e1${randomBytes(2).toString("hex")}`), "Undo Acceptance Reversal Novel", "e4");

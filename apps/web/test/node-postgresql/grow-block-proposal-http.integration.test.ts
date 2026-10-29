@@ -7,9 +7,10 @@ import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreate
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce, startRealServer,
+import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce,
 } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
+import { startServer } from "../support/http-harness.ts";
 
 // ADR 0071: one reply revises the referenced candidate and grows its Proposal over adjacent Chapter blocks.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came.", "Dawn broke."];
@@ -119,7 +120,7 @@ function operations(proposal: Proposal) {
 }
 
 test.each(["all", "part"])("a selection from the candidate into %s of the next Block grows the Proposal", async (cover) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -150,7 +151,7 @@ test.each(["all", "part"])("a selection from the candidate into %s of the next B
 });
 
 test("a selection from the Block above into the candidate grows the Proposal upward", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -165,7 +166,7 @@ test("a selection from the Block above into the candidate grows the Proposal upw
 });
 
 test("a Block that another pending Proposal reserves does not join", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -181,7 +182,7 @@ test("a Block that another pending Proposal reserves does not join", async () =>
 });
 
 test.each(["grow_unjoinable", "grow_gap"])("a %s reply is refused and the Proposal does not change", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");

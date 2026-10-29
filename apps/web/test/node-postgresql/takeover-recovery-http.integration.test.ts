@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
@@ -16,25 +14,15 @@ import {
 import type {
   ApplyAuthorEditRequest, CreateEditorSessionResponse, DigestValue, GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { BINDING, USER_A, createEmpty, startServer, waitFor } from "../support/http-harness.ts";
 import {
-  createEmptyProject,
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch,
-  startStoryOSServer,
   stopStoryOSServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const BINDINGS = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
 const AUTHOR_EDIT_ROUTE = "/api/v1/projects/{project_id}/manuscript/author-edits";
 
 type Schedule = "concurrent" | "server-cut";
@@ -43,9 +31,7 @@ type Schedule = "concurrent" | "server-cut";
 interface Host { baseUrl: string; server: ChildProcess; fetchImpl: typeof fetch }
 
 async function startHost(): Promise<Host> {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot, serverBinary, sessions: { "session-a": USER_A },
-  });
+  const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A } });
   return { baseUrl, server, fetchImpl: sessionFetch(baseUrl, "session-a") };
 }
 
@@ -65,7 +51,7 @@ async function openSession(host: Host, projectId: string, id: (n: number) => str
   n: number): Promise<CreateEditorSessionResponse> {
   const request = {
     command_schema: "storyos.command.create-editor-session.request.v1" as const,
-    ...BINDINGS, correlation_id: id(n),
+    ...BINDING, correlation_id: id(n),
   };
   const nonce = await challenge(host, projectId, "/api/v1/projects/{project_id}/editor-sessions",
     request.command_schema, await digestCreateEditorSession(request), id(n + 1));
@@ -77,15 +63,12 @@ async function openSession(host: Host, projectId: string, id: (n: number) => str
 
 /** Creates a Project with one Chapter so that no other test shares its writer state. */
 async function createChapterProject(host: Host, id: (n: number) => string): Promise<string> {
-  const projectId = await createEmptyProject({
-    baseUrl: host.baseUrl, fetchImpl: host.fetchImpl, createKey: id(1), correlationId: id(2),
-    title: "Takeover Recovery Novel",
-  });
+  const { projectId } = await createEmpty(host.baseUrl, "session-a", id(1), "Takeover Recovery Novel", id(2));
   const command = { baseUrl: host.baseUrl, projectId, fetchImpl: host.fetchImpl };
   const volumeRequest = {
     command_schema: "storyos.command.create-volume.request.v1" as const,
     create_volume_input: {
-      title: "Volume A", expected_tree_revision: "1", ...BINDINGS, correlation_id: id(3),
+      title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(3),
     },
   };
   const volume = await createVolume({
@@ -97,7 +80,7 @@ async function createChapterProject(host: Host, id: (n: number) => string): Prom
   const chapterRequest = {
     command_schema: "storyos.command.create-chapter.request.v1" as const,
     create_chapter_input: {
-      title: "Chapter A", expected_tree_revision: "2", ...BINDINGS, correlation_id: id(5),
+      title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(5),
     },
   };
   const chapter = await createChapter({
@@ -115,7 +98,7 @@ function editRequest(session: GetEditorSessionResponse | CreateEditorSessionResp
   if (session.writer.kind !== "current_writer") throw new Error("the edit needs the current writer");
   const from = session.base_snapshot.materialized_revision.body.length;
   return {
-    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDINGS,
+    command_schema: "storyos.command.apply-author-edit.request.v1", ...BINDING,
     correlation_id: id(n), editor_session_id: session.editor_session.editor_session_id,
     writer_generation: session.writer.writer_generation, chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
@@ -148,12 +131,9 @@ async function holdChapterHead(projectId: string, chapterId: string): Promise<()
 }
 
 async function waitForAdmittedCoreOnHeadLock(): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (await queryPostgres(`SELECT count(*) FROM pg_stat_activity WHERE usename = 'storyos_runtime'
-      AND wait_event_type = 'Lock' AND query LIKE 'SELECT head.current_revision_id::text,%'
-      AND query LIKE '%FROM storyos.author_command_admissions AS admission%'`) !== "0") return;
-  }
-  throw new Error("the admitted Author Edit did not wait for the Chapter Head lock");
+  await waitFor(() => queryPostgres(`SELECT count(*) FROM pg_stat_activity WHERE usename = 'storyos_runtime'
+    AND wait_event_type = 'Lock' AND query LIKE 'SELECT head.current_revision_id::text,%'
+    AND query LIKE '%FROM storyos.author_command_admissions AS admission%'`), (waiting) => waiting !== "0");
 }
 
 async function authority(projectId: string): Promise<{ commits: number; admissions: number }> {
@@ -180,7 +160,7 @@ async function proveTakeoverRefusesAdmittedRecovery(schedule: Schedule): Promise
     const oldNonce = await challenge(host, projectId, AUTHOR_EDIT_ROUTE, oldRequest.command_schema,
       await digestApplyAuthorEdit(oldRequest), id(23));
     const takeoverRequest = {
-      command_schema: "storyos.command.take-over-project-writer.request.v1" as const, ...BINDINGS,
+      command_schema: "storyos.command.take-over-project-writer.request.v1" as const, ...BINDING,
       correlation_id: id(30), editor_session_id: observer.editor_session.editor_session_id,
       observed_writer_generation: writer.writer.writer_generation,
       editor_contract_revision: "storyos.editor-contract.release-1.v3",

@@ -1,11 +1,8 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
@@ -28,13 +25,12 @@ import {
   drainLeftoverWork,
   id,
   prepare,
+  settleHeld,
   settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  startServer,
+  waitFor,
+} from "../support/http-harness.ts";
 
-const execFileAsync = promisify(execFile);
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const workerBin = join(repositoryRoot, "target/release-package/storyos-worker");
 const FIRST = "Help with this passage.";
 const EXPIRING = `${FIRST} SCRIPT:reference-expires`;
 const UNUSABLE = `${FIRST} SCRIPT:reference-unusable`;
@@ -81,35 +77,6 @@ async function admit(
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   if (settle) await settleOnce();
   return created;
-}
-
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const env = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  }
-  const settled = execFileAsync(workerBin, ["--once"], {
-    cwd: repositoryRoot,
-    env,
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void settled.catch(() => undefined);
-  return settled;
-}
-
-async function waitFor(
-  probe: () => Promise<GetAgentRunResponse>,
-  match: (value: GetAgentRunResponse) => boolean,
-): Promise<GetAgentRunResponse> {
-  let last: GetAgentRunResponse | undefined;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    last = await probe();
-    if (match(last)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  const state = last?.reference_recovery.kind ?? "none";
-  throw new Error(`hold inspect timed out: status=${last?.status ?? "none"} recovery=${state}`);
 }
 
 async function recoveryCount(projectId: string, runId: string) {
@@ -199,7 +166,7 @@ async function confirmByProbe(
 }
 
 test("confirmed reference expiry rebuilds eligible context and keeps the old run", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   const hold = join(tmpdir(), `storyos-fake-expiry-${process.pid}`);
   try {
     await drainLeftoverWork();

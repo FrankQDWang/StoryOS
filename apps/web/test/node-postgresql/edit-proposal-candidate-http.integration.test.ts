@@ -4,25 +4,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
 import {
   applyAuthorEdit,
-  createAgentRun,
-  createChapter,
   createEditorSession,
-  createProject,
-  createProjectChallenge,
-  createProjectCommandChallenge,
-  createVolume,
   digestApplyAuthorEdit,
-  digestCreateAgentRun,
-  digestCreateChapter,
   digestCreateEditorSession,
-  digestCreateVolume,
   digestUndoLatestAuthorAction,
-  digestUpdateProjectAssistance,
   pauseAgentRun, digestPauseAgentRun, steerAgentRun, digestSteerAgentRun,
   getAgentRun,
   getApplyAuthorEditOutcome,
@@ -30,174 +19,21 @@ import {
   getEditorSession,
   getProposal,
   undoLatestAuthorAction,
-  updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
-  CreateAgentRunRequest,
   CreateEditorSessionRequest,
   UndoLatestAuthorActionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
-  runStoryOSWorker,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
+import { BINDING, UUID_V7, admitProse, challenged, drainLeftoverWork, id, prepare, settleOnce,
+  startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
-const PROSE = "Guard the narrator voice in this passage.";
-const REVISED = "Keep the narrator voice in this passage.";
-
-function id(suffix: string): string {
-  return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
-}
-
-function runRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text: "Revise this passage: keep the voice." },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
-
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-b": id("2") },
-  });
-}
-
-async function settleOnce() {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-  });
-}
-
-async function drainLeftoverWork() {
-  for (let attempt = 0; attempt < 16; attempt += 1) {
-    const leftover = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.agent_runs
-       WHERE status IN ('queued', 'claimed');
-    `);
-    if (leftover === "0") return;
-    await settleOnce();
-  }
-  throw new Error("leftover AgentRun work did not drain");
-}
-
-async function challenged<T>(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  method: string,
-  route: string,
-  schema: string,
-  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
-  key: string,
-  send: (antiForgery: string) => Promise<T>,
-): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
-}
-
-async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {
-  const fetchImpl = browserFetch(baseUrl, "session-a");
-  const createRequest = {
-    command_schema: "storyos.command.create-project.request.v1" as const,
-    create_project_input: { title, ...BINDING, correlation_id: id(`${ns}0`) },
-    idempotency_key: createKey,
-  };
-  const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-  await createProject({
-    baseUrl,
-    fetchImpl,
-    idempotencyKey: createKey,
-    antiForgery: created.nonce,
-    request: {
-      command_schema: createRequest.command_schema,
-      prospective_project_id: created.prospective_project_id,
-      create_project_input: createRequest.create_project_input,
-    },
-  });
-  const projectId = created.prospective_project_id;
-  const assistance = {
-    command_schema: "storyos.command.update-project-assistance.request.v1" as const,
-    update_project_assistance_input: {
-      availability: "available" as const,
-      expected_assistance_revision: "0",
-      ...BINDING,
-      correlation_id: id(`${ns}1`),
-    },
-  };
-  await challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance", assistance.command_schema, await digestUpdateProjectAssistance(assistance), id(`${ns}2`), (antiForgery) => updateProjectAssistance({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}2`), antiForgery, request: assistance }));
-  const volume = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(`${ns}3`) },
-  };
-  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
-  if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
-  const volumeId = createdVolume.effect.volume_id;
-  const chapter = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
-  };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
-  if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
-  return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
-}
-
-async function admitProse(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  chapterId: string,
-  key: string,
-) {
-  const request = runRequest(chapterId, id(key.slice(-4)));
-  const created = await challenged(
-    baseUrl,
-    fetchImpl,
-    projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  await settleOnce();
-  return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-}
 
 function assertEmptyBaseComparison(
   proposal: Awaited<ReturnType<typeof getProposal>>["proposal"],
@@ -221,7 +57,7 @@ function assertEmptyBaseComparison(
 }
 
 test("applyAuthorEdit revises one Proposal candidate in place and Root Undo restores it", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c811"), "Edit Proposal Novel", "c82");
@@ -547,7 +383,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
 
 
 test("a long shared prefix keeps an exact comparison after a candidate edit and a restart", async () => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("cc11"), "Long prefix comparison", "cc2");
@@ -604,7 +440,7 @@ test("a long shared prefix keeps an exact comparison after a candidate edit and 
     });
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl: reloadedFetch })).proposal, revised.proposal);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl: reloadedFetch })).chapter, chapter.chapter);
@@ -612,7 +448,7 @@ test("a long shared prefix keeps an exact comparison after a candidate edit and 
 }, 120_000);
 
 test("a fresh instruction revises the exact pending candidate through the real Worker", async () => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("ca11"), "AI candidate revision", "ca2");
@@ -692,7 +528,7 @@ test("a fresh instruction revises the exact pending candidate through the real W
       { source_version: chapter.chapter.current_revision.revision_id, content: chapter.chapter.current_revision.body },
       { source_version: before.proposal.revision_id, content: before.proposal.candidate_text }]);
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl: reloadedFetch })).proposal, revised.proposal);
     await settleOnce();
@@ -704,7 +540,7 @@ test("a fresh instruction revises the exact pending candidate through the real W
 
 
 test("guidance after a candidate Decision revises that Run's exact output and preserves history", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   const directory = await mkdtemp(join(tmpdir(), "storyos-candidate-guidance-"));
   const hold = join(directory, "decision");
   let worker: Promise<void> | undefined;
@@ -720,8 +556,7 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
       before.proposal, before.proposal.operation_id, id("cb41"));
     const options = { baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl };
     await writeFile(hold, "hold");
-    worker = runStoryOSWorker({ repositoryRoot, workerBinary: bin("storyos-worker"), args: ["--once"],
-      extraEnv: { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold } });
+    worker = settleOnce({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold });
     await expect.poll(async () => (await getAgentRun(options)).decision.kind).toBe("prose_change");
     const held = await getAgentRun(options);
     assert.equal(held.status, "claimed");
@@ -779,7 +614,7 @@ test.each(["What would make this sharper?", "This feels slow", "Which wording sh
   "Revise these passages: invoke a tool.",
   "Revise these passages: keep it. SCRIPT:incomplete",
   "SCRIPT:invalid", "Please invoke a tool on this passage."])("candidate discussion or refusal does not revise: %s", async (text) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");

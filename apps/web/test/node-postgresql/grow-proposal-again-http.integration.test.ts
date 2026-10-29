@@ -4,19 +4,17 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, digestSteerAgentRun,
   getAgentRun, getChapter, getProposal, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference, SteerAgentRunRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker, stopStoryOSServer as stopRealServer,
+import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce, startRealServer,
+import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce,
 } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+import { runWorker, startServer } from "../support/http-harness.ts";
 
 // ADR 0071: after a growth, the steering references move to the new Operations, and the Proposal can grow again.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came.", "Dawn broke."];
@@ -81,8 +79,7 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
     const directory = await mkdtemp(join(tmpdir(), "storyos-grow-again-"));
     const hold = join(directory, "decision");
     await writeFile(hold, "hold");
-    const worker = runStoryOSWorker({ repositoryRoot, args: ["--once"], extraEnv: { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold },
-      workerBinary: join(repositoryRoot, "target", "release-package", "storyos-worker") });
+    const worker = runWorker(["--once"], { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold });
     try {
       await expect.poll(async () => (await getAgentRun(options)).decision.kind).toBe("prose_change");
       await steer(message, steerKey, added);
@@ -168,7 +165,7 @@ async function movedReferences(started: Started, seeded: Seeded, before: Proposa
 }
 
 test("steering after a growth moves the references and grows the Proposal again over the next Block", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -197,7 +194,7 @@ test("steering after a growth moves the references and grows the Proposal again 
 });
 
 test("a second growth over a Block that is not adjacent to the run is refused", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -218,7 +215,7 @@ test("a second growth over a Block that is not adjacent to the run is refused", 
 });
 
 test("a Run that references two candidates of the grown Proposal gets the joinable marks", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");

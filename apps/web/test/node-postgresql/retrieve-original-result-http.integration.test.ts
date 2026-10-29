@@ -1,11 +1,8 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
@@ -31,13 +28,11 @@ import {
   drainLeftoverWork,
   id,
   prepare,
+  settleHeld,
   settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  startServer,
+} from "../support/http-harness.ts";
 
-const execFileAsync = promisify(execFile);
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const workerBin = join(repositoryRoot, "target/release-package/storyos-worker");
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
 async function admit(
@@ -80,21 +75,6 @@ async function admit(
   return created;
 }
 
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const env = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  }
-  const settled = execFileAsync(workerBin, ["--once"], {
-    cwd: repositoryRoot,
-    env,
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void settled.catch(() => undefined);
-  return settled;
-}
-
 async function inspect(
   baseUrl: string,
   prepared: Awaited<ReturnType<typeof prepare>>,
@@ -126,7 +106,7 @@ async function attemptCounts(projectId: string, runId: string) {
 }
 
 test("a retained complete result settles once and a repeat keeps that identity", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a101"), "Retrieve Complete Novel", "a1");
@@ -218,7 +198,7 @@ test("a retained complete result settles once and a repeat keeps that identity",
 });
 
 test("missing, unsupported, unbounded, foreign, incomplete, and unknown results stay unresolved", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a201"), "Retrieve Unknown Novel", "a2");
@@ -276,7 +256,7 @@ test("missing, unsupported, unbounded, foreign, incomplete, and unknown results 
 
 test("a cancelled Run reconciles the late result as evidence only", async () => {
   const hold = join(tmpdir(), "storyos-s3-23-dispatch.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();

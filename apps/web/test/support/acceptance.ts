@@ -11,7 +11,7 @@ import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive
   CreateEditorSessionRequest, RejectProposalOperationsRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
-  sessionFetch as browserFetch, startStoryOSServer, withChallengeBudget } from "./node-integration.ts";
+  sessionFetch as browserFetch, withChallengeBudget } from "./node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -28,7 +28,8 @@ export function id(suffix: string): string {
   return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
 }
 
-function runRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
+/** A new prose AgentRun on the Current Chapter. */
+export function runRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
   return {
     command_schema: "storyos.command.create-agent-run.request.v2",
     create_agent_run_input: {
@@ -43,22 +44,18 @@ function runRequest(chapterId: string, correlationId: string): CreateAgentRunReq
   };
 }
 
-export async function startRealServer(bind = "127.0.0.1:0") {
-  return startStoryOSServer({
-    bind,
+/** Runs one packaged Worker process with these arguments to its exit. */
+export async function runWorker(args: readonly string[], extraEnv?: Readonly<Record<string, string>>) {
+  await runStoryOSWorker({
     repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-c": USER_A, "session-b": "018f0000-0000-7001-8000-00000000000b" },
+    workerBinary: bin("storyos-worker"),
+    args,
+    ...(extraEnv === undefined ? {} : { extraEnv }),
   });
 }
 
 export async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-    ...(extraEnv === undefined ? {} : { extraEnv }),
-  });
+  await runWorker(["--once"], extraEnv);
 }
 
 /** Settles the AgentRun and export work that earlier files left. The Worker claims export work first. */
@@ -340,7 +337,8 @@ export async function seedAcceptanceCondition(baseUrl: string, fetchImpl: typeof
   return { conflictRef, receiptId: invalid.receipt.receipt_id };
 }
 
-export type Started = Awaited<ReturnType<typeof startRealServer>>;
+/** A started Server. */
+export type Started = { readonly baseUrl: string };
 
 /** A valid Block Proposal Revision on the Chapter Head H0. */
 export async function openedBlockProposal(started: Started, ns: string) {

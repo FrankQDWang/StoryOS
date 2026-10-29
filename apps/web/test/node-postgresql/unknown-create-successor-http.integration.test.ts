@@ -5,7 +5,6 @@ import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
@@ -30,14 +29,15 @@ import {
   challenged,
   drainLeftoverWork,
   id,
+  packaged,
   prepare,
+  settleHeld,
   settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  startServer,
+  waitFor,
+} from "../support/http-harness.ts";
 
-const execFileAsync = promisify(execFile);
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const workerBin = join(repositoryRoot, "target/release-package/storyos-worker");
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
 async function admit(
@@ -88,19 +88,8 @@ function workerEnv(extraEnv: Readonly<Record<string, string>>) {
   return env;
 }
 
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const settled = execFileAsync(workerBin, ["--once"], {
-    cwd: repositoryRoot,
-    env: workerEnv(extraEnv),
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void settled.catch(() => undefined);
-  return settled;
-}
-
 function heldWorker(extraEnv: Readonly<Record<string, string>>) {
-  const child: ChildProcess = execFile(workerBin, ["--once"], {
+  const child: ChildProcess = execFile(packaged("storyos-worker"), ["--once"], {
     cwd: repositoryRoot,
     env: workerEnv(extraEnv),
     timeout: 60_000,
@@ -124,21 +113,6 @@ async function inspect(
     runId,
     fetchImpl: prepared.fetchImpl,
   });
-}
-
-async function poll(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  runId: string,
-  ready: (response: GetAgentRunResponse) => boolean,
-) {
-  let held: GetAgentRunResponse | undefined;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    held = await inspect(baseUrl, prepared, runId);
-    if (ready(held)) return held;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`worker did not reach the hold: ${held?.status ?? "missing"}`);
 }
 
 function successor(response: GetAgentRunResponse) {
@@ -195,7 +169,7 @@ function assertClosedSuccessor(found: ReturnType<typeof successor>) {
 }
 
 test("one successor shares the invocation and a restart does not add another", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a401"), "Successor Once Novel", "a4");
@@ -286,7 +260,7 @@ test("one successor shares the invocation and a restart does not add another", a
 });
 
 test("missing and unsupported lookup still permit one successor", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a501"), "Successor Lookup Novel", "a5");
@@ -315,7 +289,7 @@ test("missing and unsupported lookup still permit one successor", async () => {
 });
 
 test("failed gates pause and a restart keeps that pause", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a601"), "Successor Pause Novel", "a6");
@@ -361,7 +335,7 @@ test("failed gates pause and a restart keeps that pause", async () => {
 
 test("cancellation after the fence prohibits the successor", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-fence.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -369,7 +343,7 @@ test("cancellation after the fence prohibits the successor", async () => {
     const created = await admit(started.baseUrl, prepared, id("a711"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspect(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return found.kind === "present" && found.disposition === "fenced"
         && found.successor_model_attempt_id == null;
@@ -432,7 +406,7 @@ test("cancellation after the fence prohibits the successor", async () => {
 
 test("a crash after the fence resumes the same successor once", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-crash.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: ReturnType<typeof heldWorker> | undefined;
   let projectId = "";
   try {
@@ -442,7 +416,7 @@ test("a crash after the fence resumes the same successor once", async () => {
     const created = await admit(started.baseUrl, prepared, id("a811"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = heldWorker({ STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspect(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return found.kind === "present" && found.disposition === "fenced"
         && found.successor_model_attempt_id == null;
@@ -494,7 +468,7 @@ test("a crash after the fence resumes the same successor once", async () => {
 
 test("a late predecessor updates evidence and usage only", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-late.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -502,7 +476,7 @@ test("a late predecessor updates evidence and usage only", async () => {
     const created = await admit(started.baseUrl, prepared, id("a911"), "SCRIPT:successor-late");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_SUCCESSOR_LATE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspect(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return response.status === "claimed" && found.kind === "present"
         && found.successor_model_attempt_id != null
@@ -564,7 +538,7 @@ test("a late predecessor updates evidence and usage only", async () => {
 
 test("cancellation during the successor stream aborts the successor once", async () => {
   const hold = join(tmpdir(), "storyos-g03-successor-stream.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();

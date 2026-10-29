@@ -7,17 +7,17 @@ import { acceptProposal, createEditorSession, digestAcceptProposal, digestCreate
   digestTakeOverProjectWriter, getProposal, takeOverProjectWriter, digestExportProjectArchive, exportProjectArchive, getExportOperation,
   getChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, id, startRealServer, drainLeftoverWork, challenged, prepare,
+import { BINDING, id, drainLeftoverWork, challenged, prepare,
   admitProse, reviseCandidate, seedAcceptanceCondition, settleOnce, USER_A } from "../support/acceptance.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { queryStoryOSPostgres, sessionFetch, requireStoryOSProtocolError, stopStoryOSServer } from "../support/node-integration.ts";
 import { TestServer, UUID_V7, archivedTables, createStory, freshNamespace, openProposal, openedProposal, problemOf,
-  rejection,
+  rejection, startServer,
 } from "../support/http-harness.ts";
 import type { CommandInput } from "../support/http-harness.ts";
 
 test("Acceptance retains a stale-writer refusal without changing Proposal validity", async () => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const project = await prepare(started.baseUrl, id("f7300111"), "Refusal Evidence Novel", "e1");
@@ -109,7 +109,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
     await assert.rejects(send, (error) => requireStoryOSProtocolError(error).status === 409);
     assert.deepEqual(JSON.parse(await state()), { ...empty, refusals: 1 });
     await stopStoryOSServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloaded = { ...options, baseUrl: started.baseUrl, fetchImpl: sessionFetch(started.baseUrl, "session-a") };
     assert.deepEqual((await getProposal(reloaded)).proposal, refused.proposal);
     const accepted = await challenged(started.baseUrl, reloaded.fetchImpl, project.projectId, "POST",

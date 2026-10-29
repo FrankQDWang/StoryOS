@@ -1,11 +1,9 @@
 // Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  activityStream, applyAuthorEdit, createEditorSession, createProjectCommandChallenge,
+  activityStream, applyAuthorEdit, createEditorSession,
   digestApplyAuthorEdit, digestCreateEditorSession, getEditorSession,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -13,29 +11,16 @@ import type {
   DigestValue,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { USER_A, challenged, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-  });
-}
 
 function canonicalJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJson);
@@ -109,21 +94,13 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
     correlation_id: "018f0000-0000-7001-8000-000000000360",
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: "018f0000-0000-7001-8000-000000000361",
-    },
-  }));
-  const session = await createEditorSession({
-    baseUrl, projectId: PROJECT_A, request,
-    idempotencyKey: "018f0000-0000-7001-8000-000000000361",
-    antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-  });
+  const session = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest,
+    "018f0000-0000-7001-8000-000000000361", (antiForgery) => createEditorSession({
+      baseUrl, projectId: PROJECT_A, request,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000361",
+      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }));
   if (session.writer.kind !== "current_writer") {
     throw new Error("the fixture did not create the current writer");
   }
@@ -131,7 +108,7 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
 }
 
 test("activityStream replays a complete applied Event and Last-Event-ID resumes exclusively", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     const writer = await loadCurrentWriter(baseUrl);
     if (writer.writer.kind !== "current_writer") {
@@ -164,20 +141,12 @@ test("activityStream replays a complete applied Event and Last-Event-ID resumes 
     };
     const authorEditKey = "018f0000-0000-7001-8000-000000000365";
     const authorEditDigest = await digestApplyAuthorEdit(authorEditRequest);
-    const authorEditChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: authorEditRequest.command_schema,
-        canonical_command_digest: authorEditDigest,
-        idempotency_key: authorEditKey,
-      },
-    }));
-    const applied = await applyAuthorEdit({
-      baseUrl, projectId: PROJECT_A, request: authorEditRequest, idempotencyKey: authorEditKey,
-      antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-    });
+    const applied = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", authorEditRequest.command_schema, authorEditDigest,
+      authorEditKey, (antiForgery) => applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request: authorEditRequest, idempotencyKey: authorEditKey,
+        antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+      }));
     if (applied.effect.kind !== "authoritative_applied") {
       throw new Error("the fixture Author Edit was not authoritative");
     }

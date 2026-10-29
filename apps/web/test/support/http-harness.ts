@@ -10,16 +10,18 @@ import { afterAll, beforeAll } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse, DigestValue, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, USER_A, admitProse, drainLeftoverWork, id, settleOnce } from "./acceptance.ts";
+import { BINDING, PROSE, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, runRequest, runWorker,
+  settleOnce } from "./acceptance.ts";
 import { zipStoreFiles } from "./archive.ts";
 import { createEmptyProject, queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch, startStoryOSServer,
   stopStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 import type { StoryOSServer } from "./node-integration.ts";
 
-export { BINDING, USER_A, drainLeftoverWork, id, settleOnce };
+export { BINDING, PROSE, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, runRequest, runWorker, settleOnce };
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const packaged = (name: string) =>
+/** The path of one binary of the release package. */
+export const packaged = (name: string) =>
   join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
 const execFileAsync = promisify(execFile);
 
@@ -33,7 +35,35 @@ export function freshNamespace(): string {
 
 // Server
 
-/** One packaged Server. `session-a` and `session-c` are User A, and `session-b` is User B. */
+/** The sessions of a test Server: `session-a` and `session-c` are User A, and `session-b` is User B. */
+export const SESSIONS: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A };
+
+/** Starts one packaged Server process. */
+export function startServer(options: {
+  bind?: string;
+  extraEnv?: Readonly<Record<string, string>>;
+  sessions?: Readonly<Record<string, string>>;
+} = {}): Promise<StoryOSServer> {
+  return startStoryOSServer({
+    ...(options.bind === undefined ? {} : { bind: options.bind }),
+    repositoryRoot,
+    serverBinary: packaged("storyos-server"),
+    sessions: options.sessions ?? SESSIONS,
+    ...(options.extraEnv === undefined ? {} : { extraEnv: options.extraEnv }),
+  });
+}
+
+/** Stops the Server process and starts a new one on the same address. */
+export async function restartServer(started: StoryOSServer, options: {
+  extraEnv?: Readonly<Record<string, string>>;
+  sessions?: Readonly<Record<string, string>>;
+} = {}): Promise<StoryOSServer> {
+  const url = new URL(started.baseUrl);
+  await stopStoryOSServer(started.server);
+  return startServer({ ...options, bind: `${url.hostname}:${url.port}` });
+}
+
+/** One packaged Server. */
 export class TestServer {
   private readonly extraEnv: Readonly<Record<string, string>>;
   private current: StoryOSServer | undefined;
@@ -49,12 +79,7 @@ export class TestServer {
   }
 
   async start(): Promise<void> {
-    this.current = await startStoryOSServer({
-      repositoryRoot,
-      serverBinary: packaged("storyos-server"),
-      sessions: { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A },
-      extraEnv: this.extraEnv,
-    });
+    this.current = await startServer({ extraEnv: this.extraEnv });
   }
 
   get baseUrl(): string {
@@ -269,6 +294,14 @@ export interface TestStory extends TestProject {
   readonly chapterIds: readonly string[];
 }
 
+/** Creates one empty Project of the session with this idempotency key and correlation ID. */
+export async function createEmpty(baseUrl: string, session: string, idempotencyKey: string, title: string,
+  correlationId: string): Promise<{ fetchImpl: typeof fetch; projectId: string }> {
+  const fetchImpl = sessionFetch(baseUrl, session);
+  const projectId = await createEmptyProject({ baseUrl, fetchImpl, createKey: idempotencyKey, correlationId, title });
+  return { fetchImpl, projectId };
+}
+
 export async function createProject(server: TestServer, options: { title: string; session?: string }): Promise<TestProject> {
   const session = options.session ?? "session-a";
   const keys = new Keys();
@@ -458,20 +491,24 @@ export interface Problem {
   readonly body: string;
 }
 
+/** The problem code of a refused protocol call, or `undefined` when its body has no code. */
+export function problemCode(refused: unknown): string | undefined {
+  const body = requireStoryOSProtocolError(refused).responseBody;
+  if (body === undefined) return undefined;
+  try {
+    return (JSON.parse(body) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Waits for a refused protocol call and reads its problem. */
 export async function problemOf(call: Promise<unknown>): Promise<Problem> {
   const error = await call.then(
     () => assert.fail("expected a refused response"),
     (refused: unknown) => requireStoryOSProtocolError(refused),
   );
-  const body = error.responseBody ?? "";
-  let code: string | undefined;
-  try {
-    code = (JSON.parse(body) as { code?: string }).code;
-  } catch {
-    code = undefined;
-  }
-  return { status: error.status, code, body };
+  return { status: error.status, code: problemCode(error), body: error.responseBody ?? "" };
 }
 
 // Worker settlement

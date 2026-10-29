@@ -1,11 +1,9 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
+  applyAuthorEdit, createEditorSession, digestApplyAuthorEdit,
   digestCreateEditorSession, digestTakeOverProjectWriter, getEditorSession, getSnapshot,
   takeOverProjectWriter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -14,31 +12,18 @@ import type {
   CreateEditorSessionResponse,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { USER_A, challenged, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const DIGEST_HEX = /^[0-9a-f]{64}$/;
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-  });
-}
 
 async function manuscriptAuthority() {
   return JSON.parse(await queryPostgres(`SELECT json_build_object(
@@ -68,20 +53,12 @@ async function openEditorSession(
     correlation_id: correlationId,
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
-  return createEditorSession({
-    baseUrl, projectId: PROJECT_A, request, idempotencyKey,
-    antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-  });
+  return challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest, idempotencyKey,
+    (antiForgery) => createEditorSession({
+      baseUrl, projectId: PROJECT_A, request, idempotencyKey,
+      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }));
 }
 
 async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
@@ -111,7 +88,7 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
 }
 
 test("an observer takeOverProjectWriter fences the prior writer and refuses its Author Edit", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     const writer = await loadCurrentWriter(baseUrl);
     if (writer.writer.kind !== "current_writer") {
@@ -141,25 +118,18 @@ test("an observer takeOverProjectWriter fences the prior writer and refuses its 
     };
     const takeoverKey = "018f0000-0000-7001-8000-000000000333";
     const takeoverDigest = await digestTakeOverProjectWriter(takeoverRequest);
-    const takeoverChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template:
-          "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
-        command_schema: takeoverRequest.command_schema,
-        canonical_command_digest: takeoverDigest,
-        idempotency_key: takeoverKey,
-      },
-    }));
     const takeoverOptions = {
       baseUrl, projectId: PROJECT_A,
       editorSessionId: observer.editor_session.editor_session_id,
       request: takeoverRequest, idempotencyKey: takeoverKey,
-      antiForgery: takeoverChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      fetchImpl: browserFetch(baseUrl, "session-a"),
     };
-    const takeover = await takeOverProjectWriter(takeoverOptions);
-    assert.deepEqual(await takeOverProjectWriter(takeoverOptions), takeover);
+    let takeoverNonce = "";
+    const takeover = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+      "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
+      takeoverRequest.command_schema, takeoverDigest, takeoverKey,
+      (antiForgery) => takeOverProjectWriter({ ...takeoverOptions, antiForgery: (takeoverNonce = antiForgery) }));
+    assert.deepEqual(await takeOverProjectWriter({ ...takeoverOptions, antiForgery: takeoverNonce }), takeover);
     if (takeover.result.kind !== "takeover_applied") {
       throw new Error("the fixture takeover did not apply");
     }
@@ -282,20 +252,12 @@ test("an observer takeOverProjectWriter fences the prior writer and refuses its 
     };
     const staleKey = "018f0000-0000-7001-8000-000000000337";
     const staleDigest = await digestApplyAuthorEdit(staleRequest);
-    const staleChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: staleRequest.command_schema,
-        canonical_command_digest: staleDigest,
-        idempotency_key: staleKey,
-      },
-    }));
-    await assert.rejects(applyAuthorEdit({
-      baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
-      antiForgery: staleChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => {
+    await assert.rejects(challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", staleRequest.command_schema, staleDigest, staleKey,
+      (antiForgery) => applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
+        antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+      })), (error) => {
       const protocolError = requireStoryOSProtocolError(error);
       return protocolError.status === 412
         && Reflect.get(JSON.parse(protocolError.responseBody ?? "{}"), "code")

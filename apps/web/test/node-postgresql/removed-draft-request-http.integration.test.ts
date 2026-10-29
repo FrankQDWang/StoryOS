@@ -7,7 +7,8 @@ import type { ApplyAuthorEditRequest } from "../../../../generated/typescript/st
 import { queryStoryOSPostgres as queryPostgres, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { PROSE, USER_A, authorEditRequest, challenged, drainLeftoverWork, id, openedBlockProposal,
-  startRealServer } from "../support/acceptance.ts";
+} from "../support/acceptance.ts";
+import { startServer } from "../support/http-harness.ts";
 
 // ADR 0073: an earlier client can still send these Refused Edit Draft shapes.
 type EarlierClientRequest = Omit<ApplyAuthorEditRequest, "author_edit_units"> & Record<string, unknown>
@@ -23,7 +24,7 @@ async function retainedState(projectId: string) {
 }
 
 test("an earlier crossing edit or Draft retry gets invalid_request_shape and changes no record", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const opened = await openedBlockProposal(started, "be1");

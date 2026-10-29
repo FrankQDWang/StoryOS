@@ -24,7 +24,8 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, re
 import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
-  startRealServer } from "../support/acceptance.ts";
+} from "../support/acceptance.ts";
+import { startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -216,7 +217,7 @@ async function collectionSetup(baseUrl: string, ns: string, secondText = "A lant
 }
 
 test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request produces three exact locations across two Chapters%s", async (script) => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -264,7 +265,7 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
         .find((operation) => operation.operation_id === outcome.operation_id)?.candidate_text, location.candidate_text);
     }
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
     assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
@@ -276,7 +277,7 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
 });
 
 test("ordinary clarification keeps the Conversation and resolves fresh targets with continuation", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -308,7 +309,7 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
 });
 
 test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reservation"])("collection refuses %s before destination dispatch", async (boundary) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const ns = randomBytes(3).toString("hex");
     const setup = await collectionSetup(started.baseUrl, ns, boundary === "over_budget" ? "a".repeat(32_000) : undefined);
@@ -365,7 +366,7 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
 });
 
 test.each(["current", "stale", "empty", "reversed"])("a %s selection reference declares its covered blocks or blocks the Context Assembly", async (base) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -409,7 +410,7 @@ test.each(["current", "stale", "empty", "reversed"])("a %s selection reference d
 });
 
 test("guidance adds its distinct references to the Run up to eight references", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -462,7 +463,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
 });
 
 test("one request produces explained exact locations and keeps them after restart", async () => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -491,7 +492,7 @@ test("one request produces explained exact locations and keeps them after restar
     const after = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     assert.deepEqual(after.chapter, before.chapter);
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
     assert.deepEqual(reloaded.decision, run.decision);
@@ -506,7 +507,7 @@ test("one request produces explained exact locations and keeps them after restar
 test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
-  let started = await startRealServer();
+  let started = await startServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof execFile> | undefined;
   let exited: Promise<void> | undefined;
@@ -595,7 +596,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
       }
       const address = new URL(started.baseUrl);
       await stopRealServer(started.server);
-      started = await startRealServer(`${address.hostname}:${address.port}`);
+      started = await startServer({ bind: `${address.hostname}:${address.port}` });
     }
     unlinkSync(hold);
     if (child) { await exited; child = undefined; }
@@ -633,7 +634,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
 });
 
 test.each(["undeclared_location", "stale_location_base"])("scalar requests do not enter the typed script %s", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -657,7 +658,7 @@ test.each(["undeclared_location", "stale_location_base"])("scalar requests do no
 
 test.each(["malformed_locations", "undeclared_location", "stale_location_base", "oversized_explanation", "incomplete", "unselected"])(
   "unusable typed output %s retains evidence without candidates", async (script) => {
-    const started = await startRealServer();
+    const started = await startServer();
     try {
       await drainLeftoverWork();
       const ns = randomBytes(3).toString("hex");
@@ -680,7 +681,7 @@ test.each(["malformed_locations", "undeclared_location", "stale_location_base", 
 
 // ADR 0061: a reply can change a subset of the declared target blocks.
 test.each(["chapter", "collection"])("a %s reply that changes only the last target opens a Proposal for that block only", async (scope) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -710,7 +711,7 @@ test.each(["chapter", "collection"])("a %s reply that changes only the last targ
 });
 
 test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Proposal", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -726,7 +727,7 @@ test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Propos
 });
 
 test.each(["", " SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -812,7 +813,7 @@ function acceptRequest(
 }
 
 test("acceptProposal applies a reversed multi-operation set without using array order as authority", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820111"), "Multi Operation Novel", "f3822");
@@ -868,7 +869,7 @@ test("acceptProposal applies a reversed multi-operation set without using array 
 for (const history of ["retained", "legacy_overwritten", "collection"]) {
 test(`partial Acceptance preserves ${history} evidence and replaces the remaining Operation text`, async () => {
   const ns = randomBytes(3).toString("hex");
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const collection = history === "collection" ? await collectionSetup(started.baseUrl, ns) : undefined;
@@ -921,7 +922,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       }),
     ), /Controlled acknowledgement loss/);
     const address = new URL(started.baseUrl);
-    started = await startRealServer(`${address.hostname}:${address.port}`);
+    started = await startServer({ bind: `${address.hostname}:${address.port}` });
     const fetchImpl = browserFetch(started.baseUrl, "session-a");
     const firstAccepted = await acceptProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -1126,7 +1127,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
 }
 
 test("acceptProposal refuses incomplete atomic Bundle closure then applies the closed set", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820211"), "Bundle Operation Novel", "f3824");
@@ -1182,7 +1183,7 @@ test("acceptProposal refuses incomplete atomic Bundle closure then applies the c
 
 
 test.each(["pending", "rejected"])("AI revises only the secondary candidate with a %s sibling", async (sibling) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1223,7 +1224,7 @@ test.each(["pending", "rejected"])("AI revises only the secondary candidate with
 });
 
 test("a candidate reference sends its exact range and a stale candidate reference blocks the assembly", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1275,7 +1276,7 @@ test("a candidate reference sends its exact range and a stale candidate referenc
 });
 
 test("each candidate reference keeps the text of its Operation and a Chapter reference does not hide it", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1308,7 +1309,7 @@ test("each candidate reference keeps the text of its Operation and a Chapter ref
 });
 
 test("a candidate reference of a removed Chapter becomes unavailable in Context Inspect", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1368,7 +1369,7 @@ async function rejectFirstOperation(baseUrl: string, ns: string) {
 }
 
 test("reopenRejectedOperations classifies one selected Operation of a two-operation Proposal", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");

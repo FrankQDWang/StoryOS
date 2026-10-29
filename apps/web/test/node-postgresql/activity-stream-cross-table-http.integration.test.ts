@@ -1,12 +1,10 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
   activityStream, applyAuthorEdit, createAgentRun, createChapter, createEditorSession,
-  createProjectCommandChallenge, createVolume, digestApplyAuthorEdit, digestCreateAgentRun,
+  createVolume, digestApplyAuthorEdit, digestCreateAgentRun,
   digestCreateChapter, digestCreateEditorSession, digestCreateVolume, digestUpdateProjectAssistance,
   getEditorSession, getManuscriptTree, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -20,21 +18,14 @@ import type {
   UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { BINDING, USER_A, challenged, createEmpty, startServer } from "../support/http-harness.ts";
 import {
-  createEmptyProject,
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const VOLUME_CORRELATION = "018f0000-0000-7001-8000-000000000e50";
 const VOLUME_KEY = "018f0000-0000-7001-8000-000000000e51";
 const EDIT_CORRELATION = "018f0000-0000-7001-8000-000000000e52";
@@ -43,14 +34,6 @@ const EDIT_INTENT = "018f0000-0000-7001-8000-000000000e54";
 const EDIT_KEY = "018f0000-0000-7001-8000-000000000e55";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-  });
-}
 
 function canonicalJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJson);
@@ -117,21 +100,13 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
     correlation_id: "018f0000-0000-7001-8000-000000000e56",
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: "018f0000-0000-7001-8000-000000000e57",
-    },
-  }));
-  const session = await createEditorSession({
-    baseUrl, projectId: PROJECT_A, request,
-    idempotencyKey: "018f0000-0000-7001-8000-000000000e57",
-    antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-  });
+  const session = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest,
+    "018f0000-0000-7001-8000-000000000e57", (antiForgery) => createEditorSession({
+      baseUrl, projectId: PROJECT_A, request,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000e57",
+      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }));
   if (session.writer.kind !== "current_writer") {
     throw new Error("the fixture did not create the current writer");
   }
@@ -154,24 +129,16 @@ async function postVolume(
     },
   };
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/volumes",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: VOLUME_KEY,
-    },
-  }));
-  return createVolume({
-    baseUrl, projectId: PROJECT_A, request, idempotencyKey: VOLUME_KEY,
-    antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-  });
+  return challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/volumes", request.command_schema, digest, VOLUME_KEY,
+    (antiForgery) => createVolume({
+      baseUrl, projectId: PROJECT_A, request, idempotencyKey: VOLUME_KEY,
+      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }));
 }
 
 test("activityStream delivers a payload-table Event then an Author Edit in position order", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     const writer = await loadCurrentWriter(baseUrl);
     if (writer.writer.kind !== "current_writer") {
@@ -214,20 +181,12 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       }],
     };
     const authorEditDigest = await digestApplyAuthorEdit(authorEditRequest);
-    const authorEditChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: authorEditRequest.command_schema,
-        canonical_command_digest: authorEditDigest,
-        idempotency_key: EDIT_KEY,
-      },
-    }));
-    const applied = await applyAuthorEdit({
-      baseUrl, projectId: PROJECT_A, request: authorEditRequest, idempotencyKey: EDIT_KEY,
-      antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-    });
+    const applied = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", authorEditRequest.command_schema, authorEditDigest,
+      EDIT_KEY, (antiForgery) => applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request: authorEditRequest, idempotencyKey: EDIT_KEY,
+        antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+      }));
     if (applied.effect.kind !== "authoritative_applied") {
       throw new Error("the fixture Author Edit was not authoritative");
     }
@@ -353,39 +312,8 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
   }
 });
 
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
-
 function activityId(suffix: string): string {
   return `018f0000-0000-7001-8000-00000000${suffix}`;
-}
-
-async function challenged<T>(options: {
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  projectId: string;
-  method: string;
-  route: string;
-  schema: string;
-  digest: DigestValue;
-  key: string;
-  send: (antiForgery: string) => Promise<T>;
-}): Promise<T> {
-  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
-    baseUrl: options.baseUrl,
-    projectId: options.projectId,
-    fetchImpl: options.fetchImpl,
-    request: {
-      method: options.method,
-      route_template: options.route,
-      command_schema: options.schema,
-      canonical_command_digest: options.digest,
-      idempotency_key: options.key,
-    },
-  }));
-  return options.send(challenge.nonce);
 }
 
 /** Makes assistance available and adds one Volume and one Chapter. */
@@ -402,26 +330,22 @@ async function prepareRunProject(
       availability: "available", expected_assistance_revision: "0", ...BINDING, correlation_id: key(0),
     },
   };
-  await challenged({
-    baseUrl, fetchImpl, projectId, method: "PUT",
-    route: "/api/v1/projects/{project_id}/assistance",
-    schema: assistance.command_schema, digest: await digestUpdateProjectAssistance(assistance), key: key(1),
-    send: (antiForgery) => updateProjectAssistance({
+  await challenged(baseUrl, fetchImpl, projectId, "PUT",
+    "/api/v1/projects/{project_id}/assistance",
+    assistance.command_schema, await digestUpdateProjectAssistance(assistance), key(1),
+    (antiForgery) => updateProjectAssistance({
       baseUrl, projectId, fetchImpl, idempotencyKey: key(1), antiForgery, request: assistance,
-    }),
-  });
+    }));
   const volume: CreateVolumeRequest = {
     command_schema: "storyos.command.create-volume.request.v1",
     create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: key(2) },
   };
-  const createdVolume = await challenged({
-    baseUrl, fetchImpl, projectId, method: "POST",
-    route: "/api/v1/projects/{project_id}/volumes",
-    schema: volume.command_schema, digest: await digestCreateVolume(volume), key: key(3),
-    send: (antiForgery) => createVolume({
+  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/volumes",
+    volume.command_schema, await digestCreateVolume(volume), key(3),
+    (antiForgery) => createVolume({
       baseUrl, projectId, fetchImpl, idempotencyKey: key(3), antiForgery, request: volume,
-    }),
-  });
+    }));
   if (createdVolume.effect.kind !== "authoritative_applied") {
     throw new Error("Create Volume must apply");
   }
@@ -430,14 +354,12 @@ async function prepareRunProject(
     command_schema: "storyos.command.create-chapter.request.v1",
     create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: key(4) },
   };
-  const createdChapter = await challenged({
-    baseUrl, fetchImpl, projectId, method: "POST",
-    route: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-    schema: chapter.command_schema, digest: await digestCreateChapter(chapter), key: key(5),
-    send: (antiForgery) => createChapter({
+  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+    chapter.command_schema, await digestCreateChapter(chapter), key(5),
+    (antiForgery) => createChapter({
       baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: key(5), antiForgery, request: chapter,
-    }),
-  });
+    }));
   if (createdChapter.effect.kind !== "authoritative_applied") {
     throw new Error("Create Chapter must apply");
   }
@@ -470,28 +392,20 @@ async function postRun(
   key: string,
   request: CreateAgentRunRequest,
 ) {
-  const admitted = await challenged({
-    baseUrl, fetchImpl, projectId, method: "POST",
-    route: "/api/v1/projects/{project_id}/agent-runs",
-    schema: request.command_schema, digest: await digestCreateAgentRun(request), key,
-    send: (antiForgery) => createAgentRun({
+  const admitted = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/agent-runs",
+    request.command_schema, await digestCreateAgentRun(request), key,
+    (antiForgery) => createAgentRun({
       baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
-    }),
-  });
+    }));
   return { admitted };
 }
 
 test("implemented assistance and Run Events replay from a retained public cursor", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
-    const fetchImpl = browserFetch(started.baseUrl, "session-a");
-    const first = {
-      fetchImpl,
-      projectId: await createEmptyProject({
-        baseUrl: started.baseUrl, fetchImpl, createKey: "018f0000-0000-7001-8000-00001309f730",
-        correlationId: activityId("f731"), title: "Activity Novel",
-      }),
-    };
+    const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-00001309f730",
+      "Activity Novel", activityId("f731"));
     const tree = await getManuscriptTree({
       baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl,
     });

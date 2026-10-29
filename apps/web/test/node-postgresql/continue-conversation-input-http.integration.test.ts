@@ -26,8 +26,8 @@ import {
   id,
   prepare,
   settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+  startServer,
+} from "../support/http-harness.ts";
 
 const FIRST = "Help with this passage.";
 const CORRECTION = "I changed my mind: keep the voice.";
@@ -129,7 +129,7 @@ async function rewriteChapter(projectId: string, chapterId: string, body: string
 }
 
 test.each([FIRST, "Compact active context between calls."])("ordered guidance is consumed by the same active Run with exact replay: %s", async (original) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = original.startsWith("Compact") ? "d6" : "d4";
@@ -170,7 +170,7 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
 });
 
 test("author messages are limited by characters, not UTF-8 bytes", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d911"), "Long Message Novel", "d92");
@@ -206,7 +206,7 @@ test("author messages are limited by characters, not UTF-8 bytes", async () => {
 });
 
 test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
@@ -236,7 +236,7 @@ test("guidance after a visible stream keeps the Proposal bound to its original D
 });
 
 test("continuation consumes an eligible prior binding and keeps current input inspectable", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c411"), "Continue Novel", "c42");
@@ -335,7 +335,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
 });
 
 test("createAgentRun admits a Working Target at the item limit and blocks one above it before dispatch", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const prepared = await prepare(started.baseUrl, id("1309ac30"), "Limit Novel", "c2");
     const chapterId = prepared.chapterId;
@@ -389,7 +389,7 @@ test("createAgentRun admits a Working Target at the item limit and blocks one ab
 });
 
 test("Run settings stay captured when a legacy current revision is restored or evidence is unavailable", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const project = await prepare(started.baseUrl, id("1309da00"), "Captured Memory", "d0");
     const created = await admitQueued(started.baseUrl, project, id("da11"), FIRST);

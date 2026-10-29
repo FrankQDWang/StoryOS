@@ -7,7 +7,8 @@ import { applyAuthorEdit, createEditorSession, createProjectCommandChallenge, di
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ApplyAuthorEditRequest, CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, USER_A, UUID_V7, authorEditRequest, challenged, id, prepare, startRealServer } from "../support/acceptance.ts";
+import { BINDING, USER_A, UUID_V7, authorEditRequest, challenged, id, prepare } from "../support/acceptance.ts";
+import { startServer } from "../support/http-harness.ts";
 import { TEST_CHALLENGE_SECRET, queryStoryOSPostgres, requireStoryOSProtocolError, stopStoryOSServer,
 } from "../support/node-integration.ts";
 
@@ -58,7 +59,7 @@ async function issuedUnderSharedRevision(projectId: string, key: string, expired
 }
 
 test("A repeated Author Edit Challenge request across a rate policy revision returns the original Challenge", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const { baseUrl } = started;
     const prepared = await prepare(baseUrl, id("b60011"), "Repeated Challenge Novel", "b602");

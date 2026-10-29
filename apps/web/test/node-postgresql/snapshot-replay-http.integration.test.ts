@@ -1,57 +1,36 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  activityStream, createEditorSession, createProjectCommandChallenge, digestCreateEditorSession,
+  activityStream, createEditorSession, digestCreateEditorSession,
   getChapter, getEditorSession, getManuscriptTree, getSnapshot, searchManuscript,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetEditorSessionResponse, SearchManuscriptRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { TestServer, appliedVolume, createChapterInput, createProject, createVolumeInput, deleteChapterInput,
-  deleteVolumeInput, problemOf, serverForFile, updateChapterInput, updateVolumeInput,
+import { TestServer, USER_A, UUID_V7, appliedVolume, challenged, createChapterInput, createProject, createVolumeInput,
+  deleteChapterInput, deleteVolumeInput, problemCode, problemOf, serverForFile, startServer, updateChapterInput,
+  updateVolumeInput,
 } from "../support/http-harness.ts";
 import type { CommandResponse } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UNKNOWN_SNAPSHOT = "018f0000-0000-7001-8000-000000000250";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SEARCH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 // The Canonical Sibling Order and historical acknowledgement tests use this Server. The other tests start their
 // own Server.
 const fileServer = serverForFile();
 
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-  });
-}
-function problemCode(error: unknown): unknown {
-  const responseBody = requireStoryOSProtocolError(error).responseBody;
-  assert.ok(responseBody);
-  return Reflect.get(JSON.parse(responseBody), "code");
-}
 
 function sanitizedProtocolFailure(error: unknown, status: number, sensitive: RegExp): boolean {
   const protocolError = requireStoryOSProtocolError(error);
@@ -86,21 +65,13 @@ async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionRes
     correlation_id: "018f0000-0000-7001-8000-000000000201",
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/editor-sessions",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: "018f0000-0000-7001-8000-000000000202",
-    },
-  }));
-  const session = await createEditorSession({
-    baseUrl, projectId: PROJECT_A, request,
-    idempotencyKey: "018f0000-0000-7001-8000-000000000202",
-    antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-  });
+  const session = await challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest,
+    "018f0000-0000-7001-8000-000000000202", (antiForgery) => createEditorSession({
+      baseUrl, projectId: PROJECT_A, request,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000202",
+      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }));
   if (session.writer.kind !== "current_writer") {
     throw new Error("the fixture did not create the current writer");
   }
@@ -108,7 +79,7 @@ async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionRes
 }
 
 test("getSnapshot and activityStream use the Editor Session Snapshot identity at the public HTTP boundary", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     const session = await ensureCurrentWriter(baseUrl);
     const snapshotId = session.base_snapshot.snapshot_id;
