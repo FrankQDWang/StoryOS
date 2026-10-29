@@ -23,8 +23,8 @@ import type {
   UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { PROJECT_A, USER_A, USER_B, UUID_V7, challenged, createEmpty, freshNamespace, id, problemCode,
-  sanitizedProtocolFailure, startServer } from "../support/http-harness.ts";
+import { PROJECT_A, USER_A, USER_B, UUID_V7, challenged, createEmpty, freshNamespace, id, issueChallenge,
+  problemCode, sanitizedProtocolFailure, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
@@ -161,19 +161,8 @@ async function archive(
   idempotencyKey: string,
   request: ArchiveProjectRequest,
 ) {
-  const digest = await digestArchiveProject(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "PUT",
-      route_template: "/api/v1/projects/{project_id}/archival",
-      command_schema: "storyos.command.archive-project.request.v1",
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
+  const challenge = await issueChallenge(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/archival",
+    request.command_schema, await digestArchiveProject(request), idempotencyKey);
   const archived = await archiveProject({
     baseUrl,
     projectId,

@@ -6,21 +6,28 @@ import { once } from "node:events";
 import { test } from "vitest";
 
 import {
-  applyAuthorEdit, createChapter, createEditorSession, createProjectCommandChallenge,
-  createVolume, digestApplyAuthorEdit, digestCreateChapter, digestCreateEditorSession,
-  digestCreateVolume, digestTakeOverProjectWriter, getApplyAuthorEditOutcome, getEditorSession,
+  applyAuthorEdit,
+  createChapter,
+  createEditorSession,
+  createVolume,
+  digestApplyAuthorEdit,
+  digestCreateChapter,
+  digestCreateEditorSession,
+  digestCreateVolume,
+  digestTakeOverProjectWriter,
+  getApplyAuthorEditOutcome,
+  getEditorSession,
   takeOverProjectWriter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest, CreateEditorSessionResponse, DigestValue, GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, USER_A, createEmpty, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, USER_A, createEmpty, issueChallenge, startServer, waitFor } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch,
   stopStoryOSServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const AUTHOR_EDIT_ROUTE = "/api/v1/projects/{project_id}/manuscript/author-edits";
@@ -37,14 +44,8 @@ async function startHost(): Promise<Host> {
 
 async function challenge(host: Host, projectId: string, route: string, schema: string,
   digest: DigestValue, idempotencyKey: string): Promise<string> {
-  const issued = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl: host.baseUrl, projectId, fetchImpl: host.fetchImpl,
-    request: {
-      method: "POST", route_template: route, command_schema: schema,
-      canonical_command_digest: digest, idempotency_key: idempotencyKey,
-    },
-  }));
-  return issued.nonce;
+  return (await issueChallenge(host.baseUrl, host.fetchImpl, projectId, "POST", route, schema, digest,
+    idempotencyKey)).nonce;
 }
 
 async function openSession(host: Host, projectId: string, id: (n: number) => string,

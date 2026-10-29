@@ -5,20 +5,21 @@ import { test } from "vitest";
 import { promisify } from "node:util";
 
 import {
-  applyAuthorEdit, createProjectCommandChallenge, digestApplyAuthorEdit,
-  getApplyAuthorEditOutcome, getEditorSession,
+  applyAuthorEdit,
+  digestApplyAuthorEdit,
+  getApplyAuthorEditOutcome,
+  getEditorSession,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
   GetEditorSessionResponse,
   StoryOSQueryOptions,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A as USER, restartServer, startServer } from "../support/http-harness.ts";
+import { USER_A as USER, issueChallenge, restartServer, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const PROJECT = "018f0000-0000-7001-8000-000000000002";
@@ -110,16 +111,9 @@ async function issueAuthorEditChallenge(
   request: ApplyAuthorEditRequest,
   idempotencyKey: string,
 ) {
-  return withChallengeBudget(PROJECT, async () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT, fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-      command_schema: request.command_schema,
-      canonical_command_digest: await digestApplyAuthorEdit(request),
-      idempotency_key: idempotencyKey,
-    },
-  }));
+  return issueChallenge(baseUrl, browserFetch(baseUrl, SESSION_HANDLE), PROJECT, "POST",
+    "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+    await digestApplyAuthorEdit(request), idempotencyKey);
 }
 
 function outcomeOptions(

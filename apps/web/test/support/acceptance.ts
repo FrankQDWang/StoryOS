@@ -75,6 +75,25 @@ export async function drainLeftoverWork() {
   throw new Error("leftover AgentRun or export work did not drain");
 }
 
+/** Issues one Command Challenge for this command inside the Challenge rate budget. */
+export function issueChallenge(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  method: string,
+  route: string,
+  schema: string,
+  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
+  key: string,
+) {
+  return withChallengeBudget(projectId, () => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
+  }));
+}
+
 export async function challenged<T>(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -86,13 +105,7 @@ export async function challenged<T>(
   key: string,
   send: (antiForgery: string) => Promise<T>,
 ): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
+  return send((await issueChallenge(baseUrl, fetchImpl, projectId, method, route, schema, digest, key)).nonce);
 }
 
 export async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {

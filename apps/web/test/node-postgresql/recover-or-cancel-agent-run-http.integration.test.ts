@@ -31,10 +31,9 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, postRun, prepare,
-  problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, issueChallenge,
+  postRun, prepare, problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
   return {
@@ -89,19 +88,8 @@ async function cancelChallenge(
   correlationId: string,
 ) {
   const request = cancelRequest(correlationId);
-  const digest = await digestCancelAgentRun(request);
-  return withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: key,
-    },
-  }));
+  return issueChallenge(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+    request.command_schema, await digestCancelAgentRun(request), key);
 }
 
 async function postCancel(
