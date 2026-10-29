@@ -11,7 +11,10 @@ import { BINDING, id, startRealServer, drainLeftoverWork, challenged, prepare,
   admitProse, reviseCandidate, seedAcceptanceCondition, settleOnce, USER_A } from "../support/acceptance.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { queryStoryOSPostgres, sessionFetch, requireStoryOSProtocolError, stopStoryOSServer } from "../support/node-integration.ts";
-import { TestServer, UUID_V7, createStory, freshNamespace, openProposal } from "../support/http-harness.ts";
+import { TestServer, UUID_V7, archivedTables, createStory, freshNamespace, openProposal, openedProposal, problemOf,
+  rejection,
+} from "../support/http-harness.ts";
+import type { CommandInput } from "../support/http-harness.ts";
 
 test("Acceptance retains a stale-writer refusal without changing Proposal validity", async () => {
   let started = await startRealServer();
@@ -442,6 +445,116 @@ test("replanProposal appends a pending Revision bound to the current Head", asyn
     assert.equal(reloaded.base_authoritative_revision_id, before.current_revision.revision_id);
     assert.deepEqual(reloaded.source_condition, { kind: "absent" });
     assert.deepEqual(await chapter(), before);
+  } finally {
+    await server.stop();
+  }
+});
+
+test("reopenRejectedOperations appends a pending Revision without rewriting Rejection", async () => {
+  const server = await TestServer.start();
+  try {
+    const proposal = await openedProposal(server, "Reopen Proposal Novel");
+    const { story, opened, before, editorSessionId } = proposal;
+    const rejected = (await story.send("rejectProposalOperations", rejection(proposal))).response;
+    assert.equal(rejected.effect.kind, "resolved");
+    if (rejected.effect.kind !== "resolved") throw new Error("expected rejected");
+    const resolutionEventId = rejected.effect.resolution_event_refs[0] ?? "";
+    const afterReject = await proposal.inspect();
+    assert.equal(afterReject.operation_resolution, "rejected");
+    assert.equal(afterReject.revision_id, opened.revision_id);
+    const reopening = (options: { rejectionEventId?: string } = {}): CommandInput<"reopenRejectedOperations"> => ({
+      request: {
+        command_schema: "storyos.command.reopen-rejected-operations.request.v1",
+        reopen_rejected_operations_input: {
+          proposal_revision_id: opened.revision_id,
+          selected_rejected_operation_ids: [opened.operation_id],
+          rejection_event_refs: [options.rejectionEventId ?? resolutionEventId],
+          expected_target_revisions: [before.current_revision.revision_id],
+          editor_session_id: editorSessionId,
+          ...story.binding(),
+        },
+      }, path: { proposalId: opened.proposal_id } });
+    const unavailableProof = await story.send("reopenRejectedOperations",
+      reopening({ rejectionEventId: story.key() }));
+    assert.deepEqual(unavailableProof.response.effect, { kind: "refused", reason: "unavailable_proof" });
+    assert.equal((await proposal.inspect()).operation_resolution, "rejected");
+    const reopenInput = reopening();
+    const reopen = await story.challenge("reopenRejectedOperations", reopenInput);
+    await queryStoryOSPostgres(`CREATE FUNCTION storyos.test_reopen_failure() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'reopen fault'; END $$;
+      CREATE TRIGGER test_reopen_failure BEFORE INSERT ON storyos.proposal_operation_reopenings
+      FOR EACH ROW EXECUTE FUNCTION storyos.test_reopen_failure();`);
+    try {
+      assert.equal((await problemOf(reopen.send())).status, 503);
+      assert.equal((await proposal.inspect()).operation_resolution, "rejected");
+    } finally {
+      await queryStoryOSPostgres(`DROP TRIGGER test_reopen_failure ON storyos.proposal_operation_reopenings;
+        DROP FUNCTION storyos.test_reopen_failure();`);
+    }
+    const reopened = (await reopen.send()).response;
+    assert.equal(reopened.effect.kind, "resolved");
+    assert.equal(reopened.receipt.result, "resolved");
+    if (reopened.effect.kind !== "resolved") throw new Error("expected resolved");
+    assert.equal(reopened.effect.undo_disposition, "forward");
+    assert.equal(reopened.effect.prior_resolution, "rejected");
+    assert.equal(reopened.effect.resulting_resolution, "pending");
+    assert.equal(reopened.effect.resulting_validation, "pending");
+    assert.deepEqual(reopened.effect.operation_ids, [opened.operation_id]);
+    assert.deepEqual(reopened.effect.rejection_event_refs, [resolutionEventId]);
+    assert.match(reopened.effect.author_action_sequence, /^\d+$/);
+    assert.equal(reopened.effect.state_event_refs.length, 1);
+    const reopenEventId = reopened.effect.state_event_refs[0] ?? "";
+    assert.match(reopenEventId, UUID_V7);
+    assert.notEqual(reopened.effect.resulting_proposal_revision_id, opened.revision_id);
+    assert.equal(reopened.receipt.source_proposal_revision_id, opened.revision_id);
+    assert.equal(reopened.receipt.resulting_proposal_revision_id, reopened.effect.resulting_proposal_revision_id);
+    assert.deepEqual(reopened.receipt.authoritative_commit_ids, []);
+    assert.deepEqual((await reopen.send()).response, reopened);
+    const inspected = await proposal.inspect();
+    assert.equal(inspected.operation_resolution, "pending");
+    assert.equal(inspected.reservation_state, "unresolved");
+    assert.equal(inspected.validation, "pending");
+    assert.equal(inspected.revision_id, reopened.effect.resulting_proposal_revision_id);
+    assert.deepEqual(inspected.validation_receipt, { kind: "absent" });
+    assert.deepEqual(await proposal.chapter(), before);
+    const foreign = await problemOf(story.as("session-b").send("reopenRejectedOperations", reopenInput));
+    assert.ok(foreign.status === 404 && !foreign.body.includes(USER_A));
+    // The request names the source Proposal Revision, which is not the current Revision now.
+    const refused = await story.send("reopenRejectedOperations", reopening());
+    assert.deepEqual(refused.response.effect, { kind: "refused", reason: "stale_proposal_revision" });
+
+    const scope = { owner_user_id: USER_A, project_id: story.projectId, proposal_id: opened.proposal_id };
+    const archived = await archivedTables(story);
+    assert.deepEqual(archived("proposal_operation_resolutions"), [{
+      ...scope,
+      resolution_event_id: resolutionEventId,
+      proposal_revision_id: opened.revision_id,
+      operation_id: opened.operation_id,
+      prior_resolution: "pending",
+      resulting_resolution: "rejected",
+      rejection_receipt_id: rejected.receipt.receipt_id,
+      author_action_sequence: Number(rejected.effect.author_action_sequence),
+    }]);
+    assert.deepEqual(archived("proposal_operation_reopenings"), [{
+      ...scope,
+      reopen_event_id: reopenEventId,
+      source_proposal_revision_id: opened.revision_id,
+      resulting_proposal_revision_id: reopened.effect.resulting_proposal_revision_id,
+      operation_id: opened.operation_id,
+      rejection_event_id: resolutionEventId,
+      prior_resolution: "rejected",
+      resulting_resolution: "pending",
+      reopen_receipt_id: reopened.receipt.receipt_id,
+      author_action_sequence: Number(reopened.effect.author_action_sequence),
+      preserved_generation: reopened.effect.preserved_generation,
+      preserved_closure: reopened.effect.preserved_closure,
+    }]);
+    await server.restart();
+    const reloaded = await proposal.inspect();
+    assert.equal(reloaded.operation_resolution, "pending");
+    assert.equal(reloaded.validation, "pending");
+    assert.equal(reloaded.revision_id, reopened.effect.resulting_proposal_revision_id);
+    assert.deepEqual(await proposal.chapter(), before);
   } finally {
     await server.stop();
   }

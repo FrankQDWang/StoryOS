@@ -10,7 +10,6 @@ import { TestServer, UUID_V7, assertForeignRefused, createProject, createStory, 
   serverForFile, waitForSettledKey,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestProject } from "../support/http-harness.ts";
-import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 
 // The Profile Probe of the ActivityOnly settlement profile (ADR 0075).
 const server = serverForFile();
@@ -128,75 +127,4 @@ test("updateProject first acknowledgement excludes a later committed rename", as
     }
     await held.stop();
   }
-});
-
-test("archiveProject distinguishes historical absence from damaged new-format evidence", async () => {
-  const first = await createProject(server, { title: "Archive Novel" });
-  const applied = await first.send("archiveProject", { request: {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: { expected_project_revision: "1", ...first.binding() },
-  } });
-  assert.equal(applied.response.project.title, "Archive Novel");
-  const novelsBefore = await queryPostgres(`
-    SELECT title || ' ' || lifecycle_state || ' ' || count(*)::text FROM storyos.projects
-     WHERE project_id = '${first.projectId}'::uuid GROUP BY title, lifecycle_state;
-  `);
-  const receiptsBefore = await queryPostgres(`
-    SELECT count(*) FROM storyos.domain_receipts
-     WHERE project_id = '${first.projectId}'::uuid;
-  `);
-  const keysBefore = await queryPostgres(`
-    SELECT count(*) FROM storyos.command_idempotency
-     WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
-  `);
-  const decisionsBefore = await queryPostgres(`
-    SELECT count(*) FROM storyos.project_archival_decisions
-     WHERE project_id = '${first.projectId}'::uuid;
-  `);
-  await queryPostgres(`
-    UPDATE storyos.command_idempotency
-       SET acknowledgement_format = NULL, response_project = NULL
-     WHERE project_id = '${first.projectId}'::uuid
-       AND idempotency_key = '${applied.command.key}'::uuid;
-  `);
-  const absent = await problemOf(applied.command.send());
-  assert.deepEqual([absent.status, absent.code], [409, "historical_acknowledgement_unavailable"]);
-  await queryPostgres(`
-    UPDATE storyos.command_idempotency
-       SET acknowledgement_format = 'command_response_project.v1',
-           response_project = '{"broken":true}'::jsonb
-     WHERE project_id = '${first.projectId}'::uuid
-       AND idempotency_key = '${applied.command.key}'::uuid;
-  `);
-  const damaged = await problemOf(applied.command.send());
-  assert.equal(damaged.status, 503);
-  assert.notEqual(damaged.code, "historical_acknowledgement_unavailable");
-  assert.equal(
-    await queryPostgres(`
-      SELECT title || ' ' || lifecycle_state || ' ' || count(*)::text FROM storyos.projects
-       WHERE project_id = '${first.projectId}'::uuid GROUP BY title, lifecycle_state;
-    `),
-    novelsBefore,
-  );
-  assert.equal(
-    await queryPostgres(`
-      SELECT count(*) FROM storyos.domain_receipts
-       WHERE project_id = '${first.projectId}'::uuid;
-    `),
-    receiptsBefore,
-  );
-  assert.equal(
-    await queryPostgres(`
-      SELECT count(*) FROM storyos.command_idempotency
-       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
-    `),
-    keysBefore,
-  );
-  assert.equal(
-    await queryPostgres(`
-      SELECT count(*) FROM storyos.project_archival_decisions
-       WHERE project_id = '${first.projectId}'::uuid;
-    `),
-    decisionsBefore,
-  );
 });

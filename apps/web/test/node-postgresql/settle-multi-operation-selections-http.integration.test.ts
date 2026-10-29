@@ -1067,6 +1067,17 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       const archivedAttempts = JSON.parse(new TextDecoder().decode(files.get("canonical/model_attempts.json")));
       const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`));
       assert.deepEqual(archivedAttempts, storedAttempts);
+      // The archive keeps each Acceptance Receipt row. The second Acceptance replaced its Block on the first head.
+      const archivedAcceptances = JSON.parse(new TextDecoder().decode(files.get("canonical/acceptance_receipts.json")))
+        .sort((left: { acceptance_receipt_id: string }, right: { acceptance_receipt_id: string }) =>
+          left.acceptance_receipt_id.localeCompare(right.acceptance_receipt_id));
+      assert.deepEqual(archivedAcceptances, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record)
+        ORDER BY acceptance_receipt_id::text)::text FROM storyos.acceptance_receipts AS record
+        WHERE project_id='${prepared.projectId}'::uuid;`)));
+      if (firstAccepted.effect.kind !== "applied") throw new Error("expected applied");
+      const firstHead = firstAccepted.effect.authoritative_revision.revision_id;
+      assert.ok(archivedAcceptances.some((row: { applied_authoritative_revision_id: string; target_resolution: string }) =>
+        row.applied_authoritative_revision_id === firstHead && row.target_resolution === "block_replacement"));
       const originalOutput = archivedAttempts.find((attempt: { run_id: string }) => attempt.run_id === queried.run_id).payload;
       assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), collection ? [null, null, null] : [null, null]);
       assert.deepEqual(originalOutput.decision.locations, queried.decision.kind === "prose_change"
