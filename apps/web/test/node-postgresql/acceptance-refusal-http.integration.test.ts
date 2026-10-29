@@ -5,11 +5,13 @@ import { once } from "node:events";
 import { test } from "vitest";
 import { acceptProposal, createEditorSession, digestAcceptProposal, digestCreateEditorSession,
   digestTakeOverProjectWriter, getProposal, takeOverProjectWriter, digestExportProjectArchive, exportProjectArchive, getExportOperation,
+  getChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, id, startRealServer, drainLeftoverWork, challenged, prepare,
   admitProse, reviseCandidate, settleOnce, USER_A } from "../support/acceptance.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { queryStoryOSPostgres, sessionFetch, requireStoryOSProtocolError, stopStoryOSServer } from "../support/node-integration.ts";
+import { TestServer, createStory, freshNamespace, openProposal } from "../support/http-harness.ts";
 
 test("Acceptance retains a stale-writer refusal without changing Proposal validity", async () => {
   let started = await startRealServer();
@@ -208,5 +210,60 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
 
   } finally {
     await stopStoryOSServer(started.server);
+  }
+});
+
+// The recovery seed runs this test: it retains one altered-candidate Acceptance condition. No Rust adapter test
+// alters a stored candidate, so this test changes the row with SQL.
+test("acceptProposal retains altered_candidate across reload and refuses another attempt until revision", async () => {
+  const server = await TestServer.start();
+  try {
+    await drainLeftoverWork();
+    const story = await createStory(server, { title: "Altered Acceptance Novel", assistance: true });
+    const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+      chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
+    const before = await chapter();
+    const opened = await openProposal(story);
+    const { session, revised } = await reviseCandidate(story.baseUrl, story.fetchImpl, story.projectId, opened,
+      freshNamespace());
+    const proposal = revised.proposal;
+    if (proposal.validation_receipt.kind !== "present") throw new Error("expected a Validation Receipt");
+    const tampered = "Tampered narrator voice.";
+    await queryStoryOSPostgres(`UPDATE storyos.proposal_revisions SET candidate_text = '${tampered}'
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${story.projectId}'::uuid
+        AND revision_id = '${proposal.revision_id}'::uuid`);
+    const acceptance = { request: {
+      command_schema: "storyos.command.accept-proposal.request.v1" as const,
+      accept_proposal_input: {
+        proposal_revision_id: proposal.revision_id,
+        validation_receipt_id: proposal.validation_receipt.validation_receipt_id,
+        selected_operation_ids: [proposal.operation_id],
+        expected_authoritative_revision_id: before.current_revision.revision_id,
+        editor_session_id: session.editor_session.editor_session_id,
+        ...story.binding(),
+      },
+    }, path: { proposalId: proposal.proposal_id } };
+    const failed = await story.send("acceptProposal", acceptance);
+    assert.deepEqual(failed.response.effect, { kind: "invalid", reason: "altered_candidate" });
+    assert.deepEqual(failed.response.receipt.condition_refs, []);
+    const comparison = proposal.revision_comparison;
+    const expected = { ...proposal, validation: "invalid", condition_refs: [], candidate_text: tampered,
+      revision_comparison: comparison.kind === "present" ? { ...comparison, spans: [{ base_from: 0, base_to: 0,
+        candidate_from: 0, candidate_to: tampered.length, base_text: "", candidate_text: tampered }] } : comparison };
+    const inspect = async () => (await getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
+      proposalId: proposal.proposal_id, fetchImpl: story.fetchImpl })).proposal;
+    assert.deepEqual(await inspect(), expected);
+    const replayed = await Promise.all([0, 1].map(() => failed.command.send()));
+    for (const replay of replayed) assert.deepEqual(replay, { response: failed.response, body: failed.body });
+
+    const refused = await story.send("acceptProposal", { ...acceptance, request: { ...acceptance.request,
+      accept_proposal_input: { ...acceptance.request.accept_proposal_input, ...story.binding() } } });
+    assert.deepEqual(refused.response.effect, { kind: "refused", reason: "not_eligible" });
+    await server.restart();
+    assert.deepEqual(await inspect(), expected);
+    assert.deepEqual(await chapter(), before);
+    assert.equal((await inspect()).operation_resolution, "pending");
+  } finally {
+    await server.stop();
   }
 });

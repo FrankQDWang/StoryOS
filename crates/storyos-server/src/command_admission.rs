@@ -627,3 +627,7 @@ pub(super) fn structure_title(title: &str) -> Result<String, ApiError> {
     }
     Ok(title.to_owned())
 }
+
+#[cfg(test)]
+#[path = "command_admission_tests.rs"]
+mod tests;
