@@ -33,11 +33,7 @@ pub(super) const EXPORT_HUMAN_READABLE_MANUSCRIPT: QueryOperation = QueryOperati
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.exportHumanReadableManuscript.positive.v1",
-        "storyos.golden.exportHumanReadableManuscript.invalid.v1",
-        "storyos.golden.exportHumanReadableManuscript.boundary.v1",
-    ],
+    fixture: "storyos.golden.exportHumanReadableManuscript.positive.v1",
 };
 
 pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH: &str = EXPORT_HUMAN_READABLE_MANUSCRIPT.path;

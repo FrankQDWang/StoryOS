@@ -48,8 +48,6 @@ pub const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
     "storyos.command.apply-author-edit.response.v2";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
-pub(super) const INVALID_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.invalid.v1";
-pub(super) const BOUNDARY_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.boundary.v1";
 
 /// The closed set of HTTP methods that a Release 1 operation can use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,7 +78,7 @@ pub(super) struct QueryOperation {
     pub request_schema: &'static str,
     pub response_schema: &'static str,
     pub responses: &'static [(u16, &'static str)],
-    pub fixtures: &'static [&'static str],
+    pub fixture: &'static str,
 }
 
 pub(super) const GET_PROTOCOL_PROFILE: QueryOperation = QueryOperation {
@@ -96,7 +94,7 @@ pub(super) const GET_PROTOCOL_PROFILE: QueryOperation = QueryOperation {
         (409, "Active release conflict"),
         (429, "Rate limited"),
     ],
-    fixtures: &[POSITIVE_FIXTURE_ID, INVALID_FIXTURE_ID, BOUNDARY_FIXTURE_ID],
+    fixture: POSITIVE_FIXTURE_ID,
 };
 
 pub(super) const GET_PROJECT: QueryOperation = QueryOperation {
@@ -115,11 +113,7 @@ pub(super) const GET_PROJECT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getProject.positive.v1",
-        "storyos.golden.getProject.invalid.v1",
-        "storyos.golden.getProject.boundary.v1",
-    ],
+    fixture: "storyos.golden.getProject.positive.v1",
 };
 
 pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
@@ -139,11 +133,7 @@ pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getChapter.positive.v1",
-        "storyos.golden.getChapter.invalid.v1",
-        "storyos.golden.getChapter.boundary.v1",
-    ],
+    fixture: "storyos.golden.getChapter.positive.v1",
 };
 
 pub(super) const CREATE_PROJECT_COMMAND_CHALLENGE: QueryOperation = QueryOperation {
@@ -167,11 +157,7 @@ pub(super) const CREATE_PROJECT_COMMAND_CHALLENGE: QueryOperation = QueryOperati
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createProjectCommandChallenge.positive.v1",
-        "storyos.golden.createProjectCommandChallenge.invalid.v1",
-        "storyos.golden.createProjectCommandChallenge.boundary.v1",
-    ],
+    fixture: "storyos.golden.createProjectCommandChallenge.positive.v1",
 };
 
 pub(super) const CREATE_EDITOR_SESSION: QueryOperation = QueryOperation {
@@ -197,11 +183,7 @@ pub(super) const CREATE_EDITOR_SESSION: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createEditorSession.positive.v1",
-        "storyos.golden.createEditorSession.invalid.v1",
-        "storyos.golden.createEditorSession.boundary.v1",
-    ],
+    fixture: "storyos.golden.createEditorSession.positive.v1",
 };
 
 pub(super) const GET_EDITOR_SESSION: QueryOperation = QueryOperation {
@@ -224,11 +206,7 @@ pub(super) const GET_EDITOR_SESSION: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getEditorSession.positive.v1",
-        "storyos.golden.getEditorSession.invalid.v1",
-        "storyos.golden.getEditorSession.boundary.v1",
-    ],
+    fixture: "storyos.golden.getEditorSession.positive.v1",
 };
 
 /// Public route used by the generated client and StoryOS Server.

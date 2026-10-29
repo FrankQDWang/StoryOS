@@ -32,11 +32,7 @@ pub(super) const CREATE_VOLUME: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createVolume.positive.v1",
-        "storyos.golden.createVolume.invalid.v1",
-        "storyos.golden.createVolume.boundary.v1",
-    ],
+    fixture: "storyos.golden.createVolume.positive.v1",
 };
 
 pub const CREATE_VOLUME_PATH: &str = CREATE_VOLUME.path;

@@ -31,11 +31,7 @@ pub(super) const ARCHIVE_PROJECT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.archiveProject.positive.v1",
-        "storyos.golden.archiveProject.invalid.v1",
-        "storyos.golden.archiveProject.boundary.v1",
-    ],
+    fixture: "storyos.golden.archiveProject.positive.v1",
 };
 
 pub const ARCHIVE_PROJECT_PATH: &str = ARCHIVE_PROJECT.path;

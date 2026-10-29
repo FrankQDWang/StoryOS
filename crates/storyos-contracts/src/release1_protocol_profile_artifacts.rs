@@ -6,7 +6,7 @@ use crate::release1::{
     Release1CompatibilityIdentity, Release1ProtocolProfile,
 };
 use crate::release1_operation_registry::{
-    ClientOverride, GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple,
+    ClientOverride, FixtureMembership, GeneratedSchema, OperationArtifacts, RegisteredOperation,
     method,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
@@ -23,12 +23,6 @@ pub(super) const RESPONSE_SCHEMA_PATH: &str =
 
 const GOLDEN_PROFILE_PATH: &str =
     "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json";
-
-const INVALID_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json";
-
-const BOUNDARY_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -71,21 +65,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             Release1ProtocolProfile::decl(&config),
         )
     },
-    fixtures: || {
-        fixture_triple(
-            [
-                GOLDEN_PROFILE_PATH,
-                INVALID_PROFILE_PATH,
-                BOUNDARY_PROFILE_PATH,
-            ],
-            [
-                golden_profile_bytes,
-                invalid_profile_bytes,
-                boundary_profile_bytes,
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: GOLDEN_PROFILE_PATH,
+        bytes: golden_profile_bytes,
+    }],
 };
 
 fn protocol_profile_request_schema() -> Value {
@@ -103,20 +86,4 @@ fn protocol_profile_schema() -> Value {
 
 fn golden_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
     json_bytes(&serde_json::to_value(profile).expect("protocol profile should serialize"))
-}
-
-fn invalid_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut invalid = serde_json::to_value(profile).expect("protocol profile should serialize");
-    invalid
-        .as_object_mut()
-        .expect("protocol profile should be an object")
-        .remove("release_identity");
-    json_bytes(&invalid)
-}
-
-fn boundary_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut boundary = profile.clone();
-    boundary.release_identity.generated_client_revision =
-        "storyos.typescript-client.release-0.v1".to_owned();
-    golden_profile_bytes(&boundary)
 }

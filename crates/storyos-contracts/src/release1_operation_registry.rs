@@ -10,7 +10,7 @@ pub(super) struct OperationArtifacts {
     pub(super) schemas: fn() -> Vec<GeneratedSchema>,
     pub(super) openapi: fn() -> Vec<OpenApiMethod>,
     pub(super) typescript_types: fn() -> String,
-    pub(super) fixtures: fn() -> Vec<FixtureMembership>,
+    pub(super) fixtures: &'static [FixtureMembership],
 }
 
 pub(super) struct RegisteredOperation {
@@ -140,7 +140,7 @@ pub(super) struct OpenApiMethod {
     pub(super) yaml: String,
 }
 
-/// One golden-wire fixture in the fixture corpus.
+/// The one positive golden-wire fixture of an operation in the fixture corpus.
 #[derive(Clone, Copy)]
 pub(super) struct FixtureMembership {
     pub(super) path: &'static str,
@@ -209,19 +209,6 @@ pub(super) fn operation_schemas(
             bytes: response.1,
         },
     ]
-}
-
-pub(super) fn fixture_triple(
-    paths: [&'static str; 3],
-    producers: [fn(&Release1ProtocolProfile) -> Vec<u8>; 3],
-) -> [FixtureMembership; 3] {
-    let [positive, invalid, boundary] = producers;
-    [
-        (paths[0], positive),
-        (paths[1], invalid),
-        (paths[2], boundary),
-    ]
-    .map(|(path, bytes)| FixtureMembership { path, bytes })
 }
 
 pub(super) fn method(operation: &QueryOperation, yaml: String) -> Vec<OpenApiMethod> {

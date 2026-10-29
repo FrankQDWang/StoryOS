@@ -30,20 +30,21 @@ test("a compatible Release 1 profile exposes protected application state", () =>
 
 type BlockedCase = readonly [string, () => readonly [unknown, ProtocolBlockedState]];
 const blockedCases: BlockedCase[] = [
-  ["a missing compatibility identity fails closed with an inspectable message", () => [
-    fixture<unknown>("get-protocol-profile.invalid.json"),
-    blocked("protocol_identity_missing", [
+  ["a missing compatibility identity fails closed with an inspectable message", () => {
+    const { release_identity: _, ...profile } = compatible();
+    return [profile, blocked("protocol_identity_missing", [
       { path: "profile.release_identity", expected: "object", received: undefined },
-    ]),
-  ]],
-  ["a stale generated-client identity requires an upgrade before protected state", () => [
-    fixture<Release1ProtocolProfile>("get-protocol-profile.boundary.json"),
-    blocked("protocol_upgrade_required", [{
+    ])];
+  }],
+  ["a stale generated-client identity requires an upgrade before protected state", () => {
+    const profile = compatible();
+    profile.release_identity.generated_client_revision = "storyos.typescript-client.release-0.v1";
+    return [profile, blocked("protocol_upgrade_required", [{
       path: "profile.release_identity.generated_client_revision",
       expected: RELEASE_1_PROTOCOL_PROFILE.release_identity.generated_client_revision,
       received: "storyos.typescript-client.release-0.v1",
-    }]),
-  ]],
+    }])];
+  }],
   ["a missing required capability keeps the client outside protected state", () => {
     const profile = compatible();
     profile.required_capabilities = profile.required_capabilities.filter(

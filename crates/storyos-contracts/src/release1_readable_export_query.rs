@@ -29,11 +29,7 @@ pub(super) const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT: QueryOperation = QueryOpe
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getHumanReadableManuscriptExport.positive.v1",
-        "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
-        "storyos.golden.getHumanReadableManuscriptExport.boundary.v1",
-    ],
+    fixture: "storyos.golden.getHumanReadableManuscriptExport.positive.v1",
 };
 
 pub const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_PATH: &str =

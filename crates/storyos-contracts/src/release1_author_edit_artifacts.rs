@@ -11,7 +11,7 @@ use crate::release1_author_edit::{
     DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
@@ -57,28 +57,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&APPLY_AUTHOR_EDIT, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/apply-author-edit.json",
-    "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/apply-author-edit.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema_bytes::<ApplyAuthorEditRequest>(
@@ -207,29 +197,6 @@ pub(super) fn fixture() -> Value {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut value = fixture();
-    value["receipt"]["resulting_heads"] = value["receipt"]["prior_heads"].clone();
-    value["receipt"]["authoritative_revision_ids"] = json!([]);
-    value["receipt"]["authoritative_commit_ids"] = json!([]);
-    value["receipt"]["author_action_sequence"] = Value::Null;
-    value["receipt"]["result"] = json!("refused");
-    value["effect"] = json!({
-        "kind": "refused",
-        "reason": "invalid_selection"
-    });
-    json_bytes(&value)
 }
 
 fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8> {

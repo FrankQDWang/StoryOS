@@ -7,7 +7,7 @@ use crate::release1_list_projects::{
     ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{U64_WIRE, json_bytes};
@@ -32,28 +32,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&LIST_PROJECTS, method_openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-list-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-list-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/list-projects.json",
-    "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/list-projects.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -150,19 +140,6 @@ pub(super) fn fixture_bytes() -> Vec<u8> {
             "open": {"kind": "empty"}
         }),
     ]))
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = list_fixture(Vec::new());
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("owner_user_id");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&list_fixture(Vec::new()))
 }
 
 fn list_fixture(projects: Vec<Value>) -> Value {

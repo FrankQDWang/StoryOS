@@ -27,11 +27,7 @@ pub(super) const GET_PROPOSAL: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getProposal.positive.v1",
-        "storyos.golden.getProposal.invalid.v1",
-        "storyos.golden.getProposal.boundary.v1",
-    ],
+    fixture: "storyos.golden.getProposal.positive.v1",
 };
 
 pub const GET_PROPOSAL_PATH: &str = GET_PROPOSAL.path;

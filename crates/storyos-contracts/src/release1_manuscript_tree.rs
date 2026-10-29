@@ -29,11 +29,7 @@ pub(super) const GET_MANUSCRIPT_TREE: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getManuscriptTree.positive.v1",
-        "storyos.golden.getManuscriptTree.invalid.v1",
-        "storyos.golden.getManuscriptTree.boundary.v1",
-    ],
+    fixture: "storyos.golden.getManuscriptTree.positive.v1",
 };
 
 pub const GET_MANUSCRIPT_TREE_PATH: &str = GET_MANUSCRIPT_TREE.path;

@@ -28,11 +28,7 @@ pub(super) const GET_STATISTICS: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Projection not ready"),
     ],
-    fixtures: &[
-        "storyos.golden.getStatistics.positive.v1",
-        "storyos.golden.getStatistics.invalid.v1",
-        "storyos.golden.getStatistics.boundary.v1",
-    ],
+    fixture: "storyos.golden.getStatistics.positive.v1",
 };
 
 pub const GET_STATISTICS_PATH: &str = GET_STATISTICS.path;

@@ -9,7 +9,7 @@ use crate::release1_manuscript_search::{
     SearchManuscriptRequest, SearchManuscriptResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
@@ -42,28 +42,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&SEARCH_MANUSCRIPT, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-search-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-search-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/search-manuscript.json",
-    "generated/golden-wire/storyos-public-release-1/search-manuscript.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/search-manuscript.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/search-manuscript.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     let mut schema = serde_json::to_value(schema_for!(SearchManuscriptRequest))
@@ -169,22 +159,6 @@ pub(super) fn typescript_type_declarations() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&search_fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = search_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("source_snapshot");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = search_fixture();
-    boundary["completeness"] = json!("truncated");
-    boundary["page_count"] = json!("500");
-    json_bytes(&boundary)
 }
 
 fn search_fixture() -> Value {

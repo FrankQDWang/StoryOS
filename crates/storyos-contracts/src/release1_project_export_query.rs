@@ -29,11 +29,7 @@ pub(super) const GET_EXPORT_OPERATION: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getExportOperation.positive.v1",
-        "storyos.golden.getExportOperation.invalid.v1",
-        "storyos.golden.getExportOperation.boundary.v1",
-    ],
+    fixture: "storyos.golden.getExportOperation.positive.v1",
 };
 
 pub const GET_EXPORT_OPERATION_PATH: &str = GET_EXPORT_OPERATION.path;

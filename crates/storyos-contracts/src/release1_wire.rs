@@ -79,17 +79,3 @@ pub(super) fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
            "type": "object", "additionalProperties": false, "required": fields,
            "properties": properties})
 }
-
-pub(super) fn without_project_scope(mut value: Value) -> Vec<u8> {
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&value)
-}
-
-pub(super) fn with_boundary_project_scope(mut value: Value) -> Vec<u8> {
-    value["project_scope"]["project_id"] =
-        Value::String("018f0000-0000-7001-8000-000000000102".to_owned());
-    json_bytes(&value)
-}

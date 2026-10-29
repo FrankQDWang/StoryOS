@@ -34,11 +34,7 @@ pub(super) const REOPEN_REJECTED_OPERATIONS: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.reopenRejectedOperations.positive.v1",
-        "storyos.golden.reopenRejectedOperations.invalid.v1",
-        "storyos.golden.reopenRejectedOperations.boundary.v1",
-    ],
+    fixture: "storyos.golden.reopenRejectedOperations.positive.v1",
 };
 
 pub const REOPEN_REJECTED_OPERATIONS_PATH: &str = REOPEN_REJECTED_OPERATIONS.path;

@@ -36,11 +36,7 @@ pub(super) const CREATE_AGENT_RUN: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createAgentRun.positive.v1",
-        "storyos.golden.createAgentRun.invalid.v1",
-        "storyos.golden.createAgentRun.boundary.v1",
-    ],
+    fixture: "storyos.golden.createAgentRun.positive.v1",
 };
 
 pub(super) const GET_AGENT_RUN: QueryOperation = QueryOperation {
@@ -63,11 +59,7 @@ pub(super) const GET_AGENT_RUN: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getAgentRun.positive.v1",
-        "storyos.golden.getAgentRun.invalid.v1",
-        "storyos.golden.getAgentRun.boundary.v1",
-    ],
+    fixture: "storyos.golden.getAgentRun.positive.v1",
 };
 
 pub const CREATE_AGENT_RUN_PATH: &str = CREATE_AGENT_RUN.path;

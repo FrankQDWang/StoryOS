@@ -9,7 +9,7 @@ use crate::release1_open_proposal_list::{
     OpenProposalSource,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::json_bytes;
@@ -38,28 +38,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&LIST_CHAPTER_OPEN_PROPOSALS, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-open-proposals-request.schema.json";
 const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-open-proposals-response.schema.json";
-const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json",
-    "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.boundary.json",
-];
+const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/list-chapter-open-proposals.json";
 
 fn request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -159,21 +149,6 @@ fn typescript_type_declarations() -> String {
 
 fn fixture_bytes() -> Vec<u8> {
     json_bytes(&list_fixture())
-}
-
-fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = list_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("completeness");
-    json_bytes(&value)
-}
-
-fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = list_fixture();
-    boundary["proposals"] = json!([]);
-    json_bytes(&boundary)
 }
 
 fn list_fixture() -> Value {

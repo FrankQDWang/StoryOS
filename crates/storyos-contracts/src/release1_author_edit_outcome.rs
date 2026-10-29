@@ -30,11 +30,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME: QueryOperation = QueryOperation 
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getApplyAuthorEditOutcome.positive.v1",
-        "storyos.golden.getApplyAuthorEditOutcome.invalid.v1",
-        "storyos.golden.getApplyAuthorEditOutcome.boundary.v1",
-    ],
+    fixture: "storyos.golden.getApplyAuthorEditOutcome.positive.v1",
 };
 
 pub const GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH: &str = GET_APPLY_AUTHOR_EDIT_OUTCOME.path;
