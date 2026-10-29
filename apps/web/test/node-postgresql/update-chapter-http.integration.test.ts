@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/create-chapter-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 

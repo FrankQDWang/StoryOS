@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/delete-volume-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
