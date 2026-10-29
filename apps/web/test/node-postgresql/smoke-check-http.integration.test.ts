@@ -18,12 +18,7 @@ import { queryStoryOSPostgres } from "../support/node-integration.ts";
 // schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path. A read that
 // is bound to the latest Project Snapshot also proves its expired-Snapshot answer.
 const server = serverForFile();
-// The Worker claims export work before AgentRun work, so the table settles its exports before a later file runs.
-afterAll(async () => {
-  for (let attempt = 0; attempt < 16 && await unsettledExports() !== "0"; attempt += 1) await settleOnce();
-  assert.equal(await unsettledExports(), "0");
-  await drainLeftoverWork();
-});
+afterAll(() => drainLeftoverWork());
 
 const CATALOG = (JSON.parse(readFileSync(new URL(
   "../../../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json", import.meta.url), "utf8")) as {
@@ -33,12 +28,6 @@ const RESPONSE_SCHEMA = new Map(CATALOG.map((operation) => [operation.operation_
 const NONCE = /^[0-9a-f]{64}$/;
 
 // Fixtures
-
-function unsettledExports(): Promise<string> {
-  return queryStoryOSPostgres(`
-    SELECT (SELECT count(*) FROM storyos.project_export_operations WHERE settled_result IS NULL)
-         + (SELECT count(*) FROM storyos.human_readable_manuscript_export_operations WHERE settled_result IS NULL)`);
-}
 
 function digest(text: string): string {
   return createHash("sha256").update(text).digest("hex");

@@ -105,17 +105,18 @@ async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
   });
 }
 
+/** Settles the AgentRun and export work that earlier files left. The Worker claims export work first. */
 async function drainLeftoverWork() {
   for (let attempt = 0; attempt < 16; attempt += 1) {
     const leftover = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.agent_runs
-       WHERE status IN ('queued', 'claimed');
+      SELECT ((SELECT count(*) FROM storyos.agent_runs WHERE status IN ('queued', 'claimed'))
+       + (SELECT count(*) FROM storyos.project_export_operations WHERE settled_result IS NULL)
+       + (SELECT count(*) FROM storyos.human_readable_manuscript_export_operations WHERE settled_result IS NULL))::text;
     `);
     if (leftover === "0") return;
     await settleOnce();
   }
-  throw new Error("leftover AgentRun work did not drain");
+  throw new Error("leftover AgentRun or export work did not drain");
 }
 
 async function challenged<T>(
