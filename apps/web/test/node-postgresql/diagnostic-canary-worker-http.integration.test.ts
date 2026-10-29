@@ -1,6 +1,5 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/diagnostic-canary-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
@@ -26,14 +25,11 @@ import {
 } from "../support/diagnostic-canary.ts";
 import {
   createEmptyProject,
-  runStoryOSWorkerStderr,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, challenged, packaged } from "../support/http-harness.ts";
+import { BINDING, USER_A, challenged, runWorker, startServer } from "../support/http-harness.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
 function id(suffix: string): string {
   return `018f0000-0000-7001-8000-0000000a48${suffix}`;
@@ -44,9 +40,7 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
   const message = canary("author-message");
   const applicationName = canary("database").replaceAll("-", "_");
   const databaseUrl = canaryDatabaseUrl(applicationName);
-  const { baseUrl, server, stderr: serverStderr } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary: packaged("storyos-server"),
+  const { baseUrl, server, stderr: serverStderr } = await startServer({
     sessions: { "session-a": USER_A },
     databaseUrl,
     extraEnv: { STORYOS_LOG: "debug" },
@@ -139,13 +133,7 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
       const settledRun = (await getAgentRun({ ...command, runId })).status === "completed";
       const settledExport = (await getHumanReadableManuscriptExport({ ...command, exportId })).status !== "in_progress";
       if (settledRun && settledExport) break;
-      workerStderr += await runStoryOSWorkerStderr({
-        repositoryRoot,
-        workerBinary: packaged("storyos-worker"),
-        args: ["--once"],
-        databaseUrl,
-        extraEnv: { STORYOS_LOG: "debug" },
-      });
+      workerStderr += await runWorker(["--once"], { databaseUrl, extraEnv: { STORYOS_LOG: "debug" } });
     }
     assert.equal((await getAgentRun({ ...command, runId })).status, "completed");
   } finally {

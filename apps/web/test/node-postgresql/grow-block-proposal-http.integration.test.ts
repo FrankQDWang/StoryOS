@@ -2,13 +2,13 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "vitest";
-import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, getAgentRun, getChapter,
-  getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, getAgentRun,
+  getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce,
-} from "../support/acceptance.ts";
+import { BINDING, candidateTextReference, challenged, drainLeftoverWork, id, operations, prepare, readProposal,
+  revisions, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
 import { startServer } from "../support/http-harness.ts";
 
@@ -80,28 +80,12 @@ async function openProposal(started: Started, seeded: Seeded, key: string, block
   return readProposal(started, seeded, run.decision.opened_proposal.proposal_id);
 }
 
-async function readProposal(started: Started, seeded: Seeded, proposalId: string) {
-  return (await getProposal({ baseUrl: started.baseUrl, projectId: seeded.projectId, proposalId,
-    fetchImpl: seeded.fetchImpl })).proposal;
-}
-
-function candidateReference(proposal: Proposal): SelectionReference {
-  return { kind: "proposal_candidate_text", chapter_id: proposal.chapter_id, proposal_id: proposal.proposal_id,
-    operation_id: proposal.operation_id, revision_id: proposal.revision_id,
-    coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: 4 };
-}
-
 function chapterReference(chapter: GetChapterResponse["chapter"], start: [number, number], end: [number, number]): SelectionReference {
   const point = ([block, offset]: [number, number]) => ({
     manuscript_block_id: chapter.current_revision.blocks[block]!.manuscript_block_id, offset });
   return { kind: "chapter_text", chapter_id: chapter.chapter_id,
     base_authoritative_revision_id: chapter.current_revision.revision_id,
     coordinate_profile: "storyos.editor.utf16-code-unit.v1", start: point(start), end: point(end) };
-}
-
-async function revisions(proposalId: string) {
-  return queryPostgres(`SELECT count(*)::text || ' ' || (SELECT bundle_policy FROM storyos.proposals
-    WHERE proposal_id = '${proposalId}'::uuid) FROM storyos.proposal_revisions WHERE proposal_id = '${proposalId}'::uuid;`);
 }
 
 /** The Operations of a grown Proposal: the revised candidate, and each joined Block with its full new text. */
@@ -114,11 +98,6 @@ function grownOperations(before: Proposal, seeded: Seeded, joined: number[]) {
   ].map((operation) => ({ ...operation, resolution: "pending", reservation_state: "unresolved" }));
 }
 
-function operations(proposal: Proposal) {
-  return proposal.operations.map(({ manuscript_block_id, candidate_text, resolution, reservation_state }) =>
-    ({ manuscript_block_id, candidate_text, resolution, reservation_state }));
-}
-
 test.each(["all", "part"])("a selection from the candidate into %s of the next Block grows the Proposal", async (cover) => {
   const started = await startServer();
   try {
@@ -127,7 +106,7 @@ test.each(["all", "part"])("a selection from the candidate into %s of the next B
     const seeded = await seedChapter(started, ns, 3);
     const before = await openProposal(started, seeded, id(`${ns}61`));
     assert.equal(await revisions(before.proposal_id), "1 none");
-    const grown = await request(started, seeded, GROW, id(`${ns}71`), [candidateReference(before),
+    const grown = await request(started, seeded, GROW, id(`${ns}71`), [candidateTextReference(before),
       chapterReference(seeded.chapter, [1, 0], [1, cover === "all" ? SENTENCES[1]!.length : 4])]);
     const after = await readProposal(started, seeded, before.proposal_id);
     assert.deepEqual(operations(after), grownOperations(before, seeded, [1]));
@@ -158,7 +137,7 @@ test("a selection from the Block above into the candidate grows the Proposal upw
     const seeded = await seedChapter(started, ns, 2);
     const before = await openProposal(started, seeded, id(`${ns}61`), "last");
     await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
-      candidateReference(before)]);
+      candidateTextReference(before)]);
     const after = await readProposal(started, seeded, before.proposal_id);
     assert.deepEqual(operations(after), grownOperations(before, seeded, [0]));
     assert.equal(await revisions(before.proposal_id), "2 atomic");
@@ -175,7 +154,7 @@ test("a Block that another pending Proposal reserves does not join", async () =>
     const before = await openProposal(started, seeded, id(`${ns}62`));
     assert.equal(before.manuscript_block_id, seeded.chapter.current_revision.blocks[1]!.manuscript_block_id);
     await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
-      candidateReference(before), chapterReference(seeded.chapter, [2, 0], [2, 4])]);
+      candidateTextReference(before), chapterReference(seeded.chapter, [2, 0], [2, 4])]);
     assert.deepEqual(operations(await readProposal(started, seeded, before.proposal_id)), grownOperations(before, seeded, [2]));
     assert.deepEqual(await readProposal(started, seeded, reserved.proposal_id), reserved);
   } finally { await stopRealServer(started.server); }
@@ -189,7 +168,7 @@ test.each(["grow_unjoinable", "grow_gap"])("a %s reply is refused and the Propos
     const seeded = await seedChapter(started, ns, 4);
     const before = await openProposal(started, seeded, id(`${ns}61`));
     const { run } = await request(started, seeded, `make these lines one tight scene. SCRIPT:${script}`, id(`${ns}71`),
-      [candidateReference(before), chapterReference(seeded.chapter, [1, 0], [2, 4])]);
+      [candidateTextReference(before), chapterReference(seeded.chapter, [1, 0], [2, 4])]);
     assert.deepEqual(run.decision, { kind: "absent" });
     assert.deepEqual(await readProposal(started, seeded, before.proposal_id), before);
     assert.equal(await revisions(before.proposal_id), "1 none");

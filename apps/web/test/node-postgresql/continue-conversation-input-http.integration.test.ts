@@ -4,13 +4,14 @@ import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createAgentRun,
   digestCancelAgentRun,
-  digestCreateAgentRun,
-  getAgentRun, getProposal, steerAgentRun, digestSteerAgentRun, pauseAgentRun, digestPauseAgentRun,
+  getAgentRun,
+  getProposal,
+  steerAgentRun,
+  digestSteerAgentRun,
+  pauseAgentRun,
+  digestPauseAgentRun,
   type CancelAgentRunRequest,
-  type CreateAgentRunRequest,
-  type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
@@ -18,64 +19,16 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import {
-  BINDING,
-  USER_A,
-  challenged,
-  drainLeftoverWork,
-  id,
-  prepare,
-  settleOnce,
-  startServer,
-} from "../support/http-harness.ts";
+import { BINDING, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, prepare, produced,
+  rewriteChapter, selected, settleOnce, startServer } from "../support/http-harness.ts";
 
 const FIRST = "Help with this passage.";
 const CORRECTION = "I changed my mind: keep the voice.";
 const FULL = "Submit the complete current request. Keep the voice.";
 const EDITED = "Edited passage text.";
 
-async function admitQueued(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  key: string,
-  text: string,
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
-) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl,
-    prepared.fetchImpl,
-    prepared.projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({
-      baseUrl,
-      projectId: prepared.projectId,
-      fetchImpl: prepared.fetchImpl,
-      idempotencyKey: key,
-      antiForgery,
-      request,
-    }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  return created;
-}
-async function admit(...args: Parameters<typeof admitQueued>) {
-  const created = await admitQueued(...args);
+async function admit(...args: Parameters<typeof admitRun>) {
+  const created = await admitRun(...args);
   await settleOnce();
   return created;
 }
@@ -97,36 +50,6 @@ async function retain(baseUrl: string, prepared: Awaited<ReturnType<typeof prepa
       return retained;
     });
 }
-async function inspect(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, runId: string): Promise<GetAgentRunResponse> {
-  return getAgentRun({ baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl });
-}
-function selected(queried: GetAgentRunResponse, sourceClass: string) {
-  return queried.context.selected.find((item) => item.source_class === sourceClass)?.content;
-}
-function attempt(queried: GetAgentRunResponse) {
-  if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
-  return queried.model_attempt;
-}
-function produced(queried: GetAgentRunResponse) {
-  if (queried.decision.kind !== "advisory" || queried.decision.continuation.kind !== "present") {
-    throw new Error("expected produced continuation");
-  }
-  return queried.decision.continuation.continuation_binding_id;
-}
-async function rewriteChapter(projectId: string, chapterId: string, body: string) {
-  await queryPostgres(`
-    UPDATE storyos.authoritative_payloads AS payload
-       SET canonical_bytes = convert_to(${body}, 'UTF8')
-      FROM storyos.authoritative_heads AS head
-      JOIN storyos.authoritative_revisions AS revision
-        ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id)
-         = (head.owner_user_id, head.project_id, head.manuscript_object_id, head.current_revision_id)
-     WHERE (payload.owner_user_id, payload.project_id, payload.payload_id)
-         = (revision.owner_user_id, revision.project_id, revision.payload_id)
-       AND head.project_id = '${projectId}'::uuid
-       AND head.manuscript_object_id = '${chapterId}'::uuid;
-  `);
-}
 
 test.each([FIRST, "Compact active context between calls."])("ordered guidance is consumed by the same active Run with exact replay: %s", async (original) => {
   const started = await startServer();
@@ -134,7 +57,7 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
     await drainLeftoverWork();
     const ns = original.startsWith("Compact") ? "d6" : "d4";
     const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Guidance Novel", `${ns}2`);
-    const created = await admitQueued(started.baseUrl, prepared, id(`${ns}32`), original);
+    const created = await admitRun(started.baseUrl, prepared, id(`${ns}32`), original);
     const runId = created.effect.run_id;
     if (original === FIRST) {
       const request = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
@@ -144,14 +67,14 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
         await digestPauseAgentRun(request), id("d461"), (antiForgery) => pauseAgentRun({
           baseUrl: started.baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
           request, idempotencyKey: id("d461"), antiForgery }));
-      assert.equal((await inspect(started.baseUrl, prepared, runId)).status, "paused");
+      assert.equal((await inspectRun(started.baseUrl, prepared, runId)).status, "paused");
     }
     const corrections = original.startsWith("Compact") ? [CORRECTION] : [CORRECTION, "Keep the ending open."];
     for (const [index, text] of corrections.entries()) {
       await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`${ns}5${index}`), String(index + 1));
     }
     await settleOnce();
-    const queried = await inspect(started.baseUrl, prepared, runId);
+    const queried = await inspectRun(started.baseUrl, prepared, runId);
     assert.equal(queried.status, "completed");
     assert.equal(queried.conversation_id, created.conversation_id);
     assert.deepEqual(queried.steering_inputs.map((item) => [item.input_position, item.author_message, item.model_attempt_id !== null]),
@@ -183,9 +106,9 @@ test("author messages are limited by characters, not UTF-8 bytes", async () => {
         schema_id: "storyos.problem.v1", code: "idempotency_binding_conflict", message });
       return true;
     };
-    await assert.rejects(() => admitQueued(started.baseUrl, prepared, id("d931"), over),
+    await assert.rejects(() => admitRun(started.baseUrl, prepared, id("d931"), over),
       conflict("The createAgentRun binding conflicts."));
-    const created = await admitQueued(started.baseUrl, prepared, id("d932"), within);
+    const created = await admitRun(started.baseUrl, prepared, id("d932"), within);
     const runId = created.effect.run_id;
     const request = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
       steer_agent_run_input: { conversation_id: created.conversation_id, author_message: { text: over },
@@ -199,7 +122,7 @@ test("author messages are limited by characters, not UTF-8 bytes", async () => {
       conflict("The AgentRun control binding conflicts."));
     await retain(started.baseUrl, prepared, runId, created.conversation_id, within, id("d950"), "1");
     await settleOnce();
-    assert.equal(selected(await inspect(started.baseUrl, prepared, runId), "author_instruction"), `${within}\n${within}`);
+    assert.equal(selected(await inspectRun(started.baseUrl, prepared, runId), "author_instruction"), `${within}\n${within}`);
   } finally {
     await stopRealServer(started.server);
   }
@@ -210,9 +133,9 @@ test("guidance after a visible stream keeps the Proposal bound to its original D
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
-    const created = await admitQueued(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
+    const created = await admitRun(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
     await settleOnce();
-    const original = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const original = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
     const proposalId = original.decision.opened_proposal.proposal_id;
     const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
@@ -241,7 +164,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c411"), "Continue Novel", "c42");
     const first = await admit(started.baseUrl, prepared, id("c431"), FIRST);
-    const firstInspect = await inspect(started.baseUrl, prepared, first.effect.run_id);
+    const firstInspect = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     const firstBinding = produced(firstInspect);
     assert.equal(firstInspect.status, "completed");
     assert.equal(attempt(firstInspect).input_mapping, "none");
@@ -253,7 +176,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    const secondInspect = await inspect(started.baseUrl, prepared, second.effect.run_id);
+    const secondInspect = await inspectRun(started.baseUrl, prepared, second.effect.run_id);
     assert.equal(second.conversation_id, first.conversation_id);
     assert.equal(second.effect.project_agent_id, first.effect.project_agent_id);
     assert.equal(attempt(secondInspect).input_mapping, "incremental");
@@ -265,18 +188,18 @@ test("continuation consumes an eligible prior binding and keeps current input in
     assert.equal(selected(secondInspect, "author_instruction"), CORRECTION);
     assert.equal(selected(secondInspect, "working_target"), EDITED);
     assert.equal(secondInspect.evidence.some((item) => item.kind === "stored_reference" && item.reference_id === firstBinding), true);
-    const afterEdit = await inspect(started.baseUrl, prepared, first.effect.run_id);
+    const afterEdit = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(selected(afterEdit, "author_instruction"), FIRST);
     assert.equal(selected(afterEdit, "working_target"), "");
     const other = await admit(started.baseUrl, prepared, id("c435"), FIRST);
     assert.notEqual(other.conversation_id, first.conversation_id);
     assert.equal(other.effect.project_agent_id, first.effect.project_agent_id);
-    assert.equal(attempt(await inspect(started.baseUrl, prepared, other.effect.run_id)).input_mapping, "none");
+    assert.equal(attempt(await inspectRun(started.baseUrl, prepared, other.effect.run_id)).input_mapping, "none");
     const full = await admit(started.baseUrl, prepared, id("c437"), FULL, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    const fullInspect = await inspect(started.baseUrl, prepared, full.effect.run_id);
+    const fullInspect = await inspectRun(started.baseUrl, prepared, full.effect.run_id);
     assert.equal(attempt(fullInspect).input_mapping, "full");
     assert.equal(attempt(fullInspect).prior_continuation.kind, "absent");
     assert.deepEqual(attempt(fullInspect).known_prior_continuation, {
@@ -293,7 +216,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    const staleInspect = await inspect(started.baseUrl, prepared, stale.effect.run_id);
+    const staleInspect = await inspectRun(started.baseUrl, prepared, stale.effect.run_id);
     assert.equal(attempt(staleInspect).input_mapping, "new_transport");
     assert.equal(attempt(staleInspect).prior_continuation.kind, "absent");
     await queryPostgres(`
@@ -306,16 +229,16 @@ test("continuation consumes an eligible prior binding and keeps current input in
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    assert.equal(attempt(await inspect(started.baseUrl, prepared, restricted.effect.run_id)).input_mapping, "new_transport");
+    assert.equal(attempt(await inspectRun(started.baseUrl, prepared, restricted.effect.run_id)).input_mapping, "new_transport");
     await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
     const blocked = await admit(started.baseUrl, prepared, id("c43d"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    const blockedInspect = await inspect(started.baseUrl, prepared, blocked.effect.run_id);
+    const blockedInspect = await inspectRun(started.baseUrl, prepared, blocked.effect.run_id);
     assert.equal(blockedInspect.status, "refused");
     assert.deepEqual(blockedInspect.decision, { kind: "execution_refused", capability: "blocked_context" });
-    const original = await inspect(started.baseUrl, prepared, first.effect.run_id);
+    const original = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(original.status, "completed");
     assert.equal(selected(original, "author_instruction"), FIRST);
     assert.equal(produced(original), firstBinding);
@@ -342,9 +265,9 @@ test("createAgentRun admits a Working Target at the item limit and blocks one ab
     const setChapterLength = (length: number) =>
       rewriteChapter(prepared.projectId, chapterId, `repeat('a', ${length})`);
     await setChapterLength(32001);
-    const created = await admitQueued(started.baseUrl, prepared, id("c32"), FIRST);
+    const created = await admitRun(started.baseUrl, prepared, id("c32"), FIRST);
     if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-    const queried = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(queried.context.sufficiency.kind, "blocked");
     if (queried.context.sufficiency.kind !== "blocked") throw new Error("expected blocked");
     assert.deepEqual(queried.context.sufficiency.reasons, [{
@@ -375,9 +298,9 @@ test("createAgentRun admits a Working Target at the item limit and blocks one ab
     assert.equal(assembly, "blocked true true 0");
 
     await setChapterLength(32000);
-    const atLimit = await admitQueued(started.baseUrl, prepared, id("c34"), FIRST);
+    const atLimit = await admitRun(started.baseUrl, prepared, id("c34"), FIRST);
     if (atLimit.effect.kind !== "admitted") throw new Error("expected admitted");
-    const admitted = await inspect(started.baseUrl, prepared, atLimit.effect.run_id);
+    const admitted = await inspectRun(started.baseUrl, prepared, atLimit.effect.run_id);
     assert.equal(admitted.context.sufficiency.kind, "complete");
     assert.deepEqual(
       admitted.context.selected.map((item) => [item.source_class, item.token_count]),
@@ -392,7 +315,7 @@ test("Run settings stay captured when a legacy current revision is restored or e
   const started = await startServer();
   try {
     const project = await prepare(started.baseUrl, id("1309da00"), "Captured Memory", "d0");
-    const created = await admitQueued(started.baseUrl, project, id("da11"), FIRST);
+    const created = await admitRun(started.baseUrl, project, id("da11"), FIRST);
     const options = { baseUrl: started.baseUrl, fetchImpl: project.fetchImpl, projectId: project.projectId };
     const original = await getAgentRun({ ...options, runId: created.effect.run_id });
     const cancel: CancelAgentRunRequest = {
@@ -416,7 +339,7 @@ test("Run settings stay captured when a legacy current revision is restored or e
         FROM storyos.conversation_memory_settings AS settings
        WHERE project_id = '${project.projectId}'::uuid;
     `);
-    const next = await admitQueued(started.baseUrl, project, id("da15"), FIRST,
+    const next = await admitRun(started.baseUrl, project, id("da15"), FIRST,
       { kind: "existing", conversation_id: original.conversation_id });
     const current = await getAgentRun({ ...options, runId: next.effect.run_id });
     assert.equal(next.memory_settings_revision, id("da14"));

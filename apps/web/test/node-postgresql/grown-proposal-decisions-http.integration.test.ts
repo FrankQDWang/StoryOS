@@ -10,9 +10,8 @@ import type { AcceptProposalRequest, CreateAgentRunRequest, CreateEditorSessionR
   GetProposalResponse, SelectionReference, UndoLatestAuthorActionRequest, WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, reviseCandidate, sendAuthorEdit,
-  settleOnce,
-} from "../support/acceptance.ts";
+import { BINDING, USER_A, admitProse, candidateTextReference, challenged, drainLeftoverWork, id, prepare,
+  readProposal, reviseCandidate, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
 import { startServer } from "../support/http-harness.ts";
 
@@ -52,11 +51,6 @@ async function readChapter(started: Started, seeded: { projectId: string; chapte
   return (await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter;
 }
 
-async function readProposal(started: Started, seeded: Seeded, proposalId: string) {
-  return (await getProposal({ baseUrl: started.baseUrl, projectId: seeded.projectId, proposalId,
-    fetchImpl: seeded.fetchImpl })).proposal;
-}
-
 /** Sends one Agent request and settles its Run. */
 async function request(started: Started, seeded: Seeded, text: string, key: string, references?: SelectionReference[]) {
   const { projectId, fetchImpl, chapterId } = seeded;
@@ -89,12 +83,6 @@ async function openProposal(started: Started, seeded: Seeded) {
   return { run, proposal: await readProposal(started, seeded, run.decision.opened_proposal.proposal_id) };
 }
 
-function candidateReference(proposal: Proposal): SelectionReference {
-  return { kind: "proposal_candidate_text", chapter_id: proposal.chapter_id, proposal_id: proposal.proposal_id,
-    operation_id: proposal.operation_id, revision_id: proposal.revision_id,
-    coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: 4 };
-}
-
 /** A reference from the start of the second Block to its end. */
 function secondBlockReference(chapter: Chapter): SelectionReference {
   const block = chapter.current_revision.blocks[1]!.manuscript_block_id;
@@ -107,7 +95,7 @@ function secondBlockReference(chapter: Chapter): SelectionReference {
 /** Grows the Proposal over the second Block and returns the growth Run and the grown Proposal. */
 async function grow(started: Started, seeded: Seeded, before: Proposal) {
   const run = await request(started, seeded, GROW, id(`${seeded.ns}71`),
-    [candidateReference(before), secondBlockReference(seeded.chapter)]);
+    [candidateTextReference(before), secondBlockReference(seeded.chapter)]);
   const grown = await readProposal(started, seeded, before.proposal_id);
   assert.deepEqual(grown.operations.map((operation) => operation.manuscript_block_id),
     seeded.chapter.current_revision.blocks.slice(0, 2).map((block) => block.manuscript_block_id));

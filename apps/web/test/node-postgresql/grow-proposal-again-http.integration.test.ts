@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreateEditorSession, digestSteerAgentRun,
-  getAgentRun, getChapter, getProposal, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+  getAgentRun, getChapter, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference, SteerAgentRunRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce,
-} from "../support/acceptance.ts";
+import { BINDING, challenged, drainLeftoverWork, id, operations, prepare, readProposal, revisions, sendAuthorEdit,
+  settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
 import { runWorker, startServer } from "../support/http-harness.ts";
 
@@ -79,7 +79,7 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
     const directory = await mkdtemp(join(tmpdir(), "storyos-grow-again-"));
     const hold = join(directory, "decision");
     await writeFile(hold, "hold");
-    const worker = runWorker(["--once"], { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold });
+    const worker = runWorker(["--once"], { extraEnv: { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold } });
     try {
       await expect.poll(async () => (await getAgentRun(options)).decision.kind).toBe("prose_change");
       await steer(message, steerKey, added);
@@ -101,11 +101,6 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
   return { settle, steerAfterDecision };
 }
 
-async function readProposal(started: Started, seeded: Seeded, proposalId: string) {
-  return (await getProposal({ baseUrl: started.baseUrl, projectId: seeded.projectId, proposalId,
-    fetchImpl: seeded.fetchImpl })).proposal;
-}
-
 function candidateReference(proposal: Proposal, operationId: string, revisionId: string, end: number): SelectionReference {
   return { kind: "proposal_candidate_text", chapter_id: proposal.chapter_id, proposal_id: proposal.proposal_id,
     operation_id: operationId, revision_id: revisionId, coordinate_profile: "storyos.editor.utf16-code-unit.v1",
@@ -118,16 +113,6 @@ function chapterReference(chapter: Chapter, start: [number, number], end: [numbe
   return { kind: "chapter_text", chapter_id: chapter.chapter_id,
     base_authoritative_revision_id: chapter.current_revision.revision_id,
     coordinate_profile: "storyos.editor.utf16-code-unit.v1", start: point(start), end: point(end) };
-}
-
-async function revisions(proposalId: string) {
-  return queryPostgres(`SELECT count(*)::text || ' ' || (SELECT bundle_policy FROM storyos.proposals
-    WHERE proposal_id = '${proposalId}'::uuid) FROM storyos.proposal_revisions WHERE proposal_id = '${proposalId}'::uuid;`);
-}
-
-function operations(proposal: Proposal) {
-  return proposal.operations.map(({ manuscript_block_id, candidate_text, resolution, reservation_state }) =>
-    ({ manuscript_block_id, candidate_text, resolution, reservation_state }));
 }
 
 /** The pending Operations with their Block and candidate text, in Block order. */

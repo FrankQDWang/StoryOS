@@ -17,18 +17,14 @@ import type {
   ApplyAuthorEditEffect,
   ArchiveProjectRequest,
   CreateEditorSessionRequest,
-  CreateEditorSessionResponse,
   CreateProjectChallengeRequest,
   CreateProjectCommandChallengeRequest,
-  DigestValue,
   DomainReceiptResult,
-  GetApplyAuthorEditOutcomeResponse,
-  GetEditorSessionResponse,
   UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { USER_A, USER_B, UUID_V7, challenged, createEmpty, freshNamespace, id, problemCode, startServer,
-} from "../support/http-harness.ts";
+import { PROJECT_A, USER_A, USER_B, UUID_V7, challenged, createEmpty, freshNamespace, id, problemCode,
+  sanitizedProtocolFailure, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
@@ -37,7 +33,6 @@ import {
   withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
 const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
 const UNKNOWN_CHAPTER = "018f0000-0000-7001-8000-00000000ffff";
@@ -104,15 +99,6 @@ function httpGet(
 
 function protocolFailure(error: unknown, status: number): boolean {
   return requireStoryOSProtocolError(error).status === status;
-}
-
-function sanitizedProtocolFailure(
-  error: unknown,
-  status: number,
-  sensitive: RegExp,
-): boolean {
-  const protocolError = requireStoryOSProtocolError(error);
-  return protocolError.status === status && !sensitive.test(protocolError.responseBody ?? "");
 }
 
 function createChallengeRequest(
@@ -1270,7 +1256,7 @@ test("createProject replays its creation evidence after rename and restart", asy
     await assert.rejects(submitCreate(), (error) => {
       const problem = requireStoryOSProtocolError(error);
       return problem.status === 503
-        && JSON.parse(problem.responseBody ?? "{}").code === "project_store_unavailable";
+        && problemCode(error) === "project_store_unavailable";
     });
     assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), counts);
     assert.deepEqual((await getProject({ baseUrl, fetchImpl, projectId })).project, current.project);
@@ -1281,7 +1267,7 @@ test("createProject replays its creation evidence after rename and restart", asy
     await assert.rejects(submitCreate(), (error) => {
       const problem = requireStoryOSProtocolError(error);
       return problem.status === 409
-        && JSON.parse(problem.responseBody ?? "{}").code === "idempotency_binding_conflict";
+        && problemCode(error) === "idempotency_binding_conflict";
     });
     assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), {
       projects: 1, receipts: 1, admissions: 1, activities: 0,

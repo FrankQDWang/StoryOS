@@ -109,7 +109,7 @@ test.each([
     await authorEdit(initialText, 0, "a");
     const h0 = await getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl });
     const runId = await admitQueued(baseUrl, fetchImpl, projectId, chapterId, id(`${ns}b2`), message);
-    await runWorker(["--claim-only"], { STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
+    await runWorker(["--claim-only"], { extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" } });
     await authorEdit("!", initialText.length, "c");
     const h1 = await getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl });
     assert.notEqual(h1.chapter.current_revision.revision_id, h0.chapter.current_revision.revision_id);
@@ -183,7 +183,7 @@ test("a historical single-Block Run reclaims and opens one H0 Proposal", async (
        WHERE project_id = '${projectId}'::uuid
          AND run_id = '${runId}'::uuid;
     `);
-    await runWorker(["--claim-only"], { STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
+    await runWorker(["--claim-only"], { extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" } });
     await settleOnce();
     await settleOnce();
     const run = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });

@@ -18,18 +18,8 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import {
-  BINDING,
-  USER_A,
-  challenged,
-  drainLeftoverWork,
-  id,
-  prepare,
-  settleHeld,
-  settleOnce,
-  startServer,
-  waitFor,
-} from "../support/http-harness.ts";
+import { BINDING, USER_A, attempt, challenged, drainLeftoverWork, id, inspectRun, prepare, produced, selected,
+  settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const FIRST = "Help with this passage.";
 const EXPIRING = `${FIRST} SCRIPT:reference-expires`;
@@ -88,38 +78,9 @@ async function recoveryCount(projectId: string, runId: string) {
   `);
 }
 
-async function inspect(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  runId: string,
-): Promise<GetAgentRunResponse> {
-  return getAgentRun({
-    baseUrl,
-    projectId: prepared.projectId,
-    runId,
-    fetchImpl: prepared.fetchImpl,
-  });
-}
-
-function attempt(queried: GetAgentRunResponse) {
-  if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
-  return queried.model_attempt;
-}
-
-function produced(queried: GetAgentRunResponse) {
-  if (queried.decision.kind !== "advisory" || queried.decision.continuation.kind !== "present") {
-    throw new Error("expected produced continuation");
-  }
-  return queried.decision.continuation.continuation_binding_id;
-}
-
 function recovery(queried: GetAgentRunResponse) {
   if (queried.reference_recovery.kind !== "present") throw new Error("expected reference recovery");
   return queried.reference_recovery;
-}
-
-function selected(queried: GetAgentRunResponse, sourceClass: string) {
-  return queried.context.selected.find((item) => item.source_class === sourceClass)?.content;
 }
 
 async function setBinding(projectId: string, bindingId: string, patch: string) {
@@ -158,7 +119,7 @@ async function confirmByProbe(
     kind: "existing",
     conversation_id: conversationId,
   });
-  const probeInspect = await inspect(baseUrl, prepared, probe.effect.run_id);
+  const probeInspect = await inspectRun(baseUrl, prepared, probe.effect.run_id);
   assert.equal(probeInspect.status, "refused");
   assert.equal(probeInspect.model_attempt.kind, "absent");
   assert.equal((await rejectedCreates(prepared.projectId, probe.effect.run_id)).split(" ")[0], "1");
@@ -172,7 +133,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e7c8"), "Expiry Novel", "e42");
     const first = await admit(started.baseUrl, prepared, id("e431"), EXPIRING);
-    const firstInspect = await inspect(started.baseUrl, prepared, first.effect.run_id);
+    const firstInspect = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     const firstBinding = produced(firstInspect);
     assert.equal(firstInspect.status, "completed");
     assert.equal(firstInspect.reference_recovery.kind, "absent");
@@ -181,7 +142,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
       kind: "existing",
       conversation_id: first.conversation_id,
     });
-    const rebuiltInspect = await inspect(started.baseUrl, prepared, rebuilt.effect.run_id);
+    const rebuiltInspect = await inspectRun(started.baseUrl, prepared, rebuilt.effect.run_id);
     const rebuiltRecovery = recovery(rebuiltInspect);
     assert.equal(rebuilt.conversation_id, first.conversation_id);
     assert.equal(rebuilt.effect.project_agent_id, first.effect.project_agent_id);
@@ -208,13 +169,13 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
       continuation_binding_id: firstBinding,
     });
     assert.equal(selected(rebuiltInspect, "author_instruction"), CORRECTION);
-    const predecessor = await inspect(started.baseUrl, prepared, first.effect.run_id);
+    const predecessor = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(predecessor.status, "completed");
     assert.equal(selected(predecessor, "author_instruction"), EXPIRING);
     assert.equal(produced(predecessor), firstBinding);
 
     const restartFirst = await admit(started.baseUrl, prepared, id("e449"), EXPIRING);
-    const restartBinding = produced(await inspect(started.baseUrl, prepared, restartFirst.effect.run_id));
+    const restartBinding = produced(await inspectRun(started.baseUrl, prepared, restartFirst.effect.run_id));
     await confirmByProbe(started.baseUrl, prepared, id("e461"), restartFirst.conversation_id, restartBinding);
     writeFileSync(hold, "hold");
     const restart = await admit(started.baseUrl, prepared, id("e44b"), CORRECTION, {
@@ -223,7 +184,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     }, false);
     const restartWorker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: hold });
     const held = await waitFor(
-      () => inspect(started.baseUrl, prepared, restart.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, restart.effect.run_id),
       (current) => current.status === "claimed" && current.reference_recovery.kind === "present",
     );
     const heldRecovery = recovery(held);
@@ -233,15 +194,15 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(await recoveryCount(prepared.projectId, restart.effect.run_id), "1");
     unlinkSync(hold);
     await restartWorker;
-    const resumed = await inspect(started.baseUrl, prepared, restart.effect.run_id);
+    const resumed = await inspectRun(started.baseUrl, prepared, restart.effect.run_id);
     assert.equal(resumed.status, "completed");
     assert.equal(recovery(resumed).recovery_id, heldRecovery.recovery_id);
     assert.equal(recovery(resumed).model_invocation_id, heldRecovery.model_invocation_id);
     assert.equal(await recoveryCount(prepared.projectId, restart.effect.run_id), "1");
-    assert.equal((await inspect(started.baseUrl, prepared, restartFirst.effect.run_id)).status, "completed");
+    assert.equal((await inspectRun(started.baseUrl, prepared, restartFirst.effect.run_id)).status, "completed");
 
     const unknownFirst = await admit(started.baseUrl, prepared, id("e435"), FIRST);
-    const unknownBinding = produced(await inspect(started.baseUrl, prepared, unknownFirst.effect.run_id));
+    const unknownBinding = produced(await inspectRun(started.baseUrl, prepared, unknownFirst.effect.run_id));
     await queryPostgres(`
       UPDATE storyos.model_attempts
          SET dispatch_state = 'uncertain'
@@ -252,7 +213,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
       kind: "existing",
       conversation_id: unknownFirst.conversation_id,
     });
-    const unknownInspect = await inspect(started.baseUrl, prepared, unknown.effect.run_id);
+    const unknownInspect = await inspectRun(started.baseUrl, prepared, unknown.effect.run_id);
     assert.equal(unknownInspect.status, "refused");
     assert.deepEqual(unknownInspect.decision, {
       kind: "execution_refused",
@@ -263,13 +224,13 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(recovery(unknownInspect).opaque_reused, false);
 
     const budgetFirst = await admit(started.baseUrl, prepared, id("e439"), EXPIRING);
-    const budgetBinding = produced(await inspect(started.baseUrl, prepared, budgetFirst.effect.run_id));
+    const budgetBinding = produced(await inspectRun(started.baseUrl, prepared, budgetFirst.effect.run_id));
     await setBinding(prepared.projectId, budgetBinding, '{"budget_exhausted":true}');
     const budget = await admit(started.baseUrl, prepared, id("e43b"), CORRECTION, {
       kind: "existing",
       conversation_id: budgetFirst.conversation_id,
     });
-    const budgetInspect = await inspect(started.baseUrl, prepared, budget.effect.run_id);
+    const budgetInspect = await inspectRun(started.baseUrl, prepared, budget.effect.run_id);
     assert.equal(budgetInspect.status, "refused");
     assert.deepEqual(budgetInspect.decision, {
       kind: "execution_refused",
@@ -280,7 +241,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(recovery(budgetInspect).block_reason, "budget_insufficient");
 
     const boundaryFirst = await admit(started.baseUrl, prepared, id("e43d"), UNUSABLE);
-    const boundaryBinding = produced(await inspect(started.baseUrl, prepared, boundaryFirst.effect.run_id));
+    const boundaryBinding = produced(await inspectRun(started.baseUrl, prepared, boundaryFirst.effect.run_id));
     await confirmByProbe(started.baseUrl, prepared, id("e463"), boundaryFirst.conversation_id, boundaryBinding);
     await setBinding(
       prepared.projectId,
@@ -291,7 +252,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
       kind: "existing",
       conversation_id: boundaryFirst.conversation_id,
     });
-    const boundaryInspect = await inspect(started.baseUrl, prepared, boundary.effect.run_id);
+    const boundaryInspect = await inspectRun(started.baseUrl, prepared, boundary.effect.run_id);
     assert.equal(boundaryInspect.status, "refused");
     assert.deepEqual(boundaryInspect.decision, {
       kind: "execution_refused",
@@ -302,14 +263,14 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(boundaryInspect.model_attempt.kind, "absent");
 
     const copyFirst = await admit(started.baseUrl, prepared, id("e441"), EXPIRING);
-    const copyBinding = produced(await inspect(started.baseUrl, prepared, copyFirst.effect.run_id));
+    const copyBinding = produced(await inspectRun(started.baseUrl, prepared, copyFirst.effect.run_id));
     await confirmByProbe(started.baseUrl, prepared, id("e465"), copyFirst.conversation_id, copyBinding);
     await setBinding(prepared.projectId, copyBinding, '{"covered_copy_restricted":true}');
     const copied = await admit(started.baseUrl, prepared, id("e443"), CORRECTION, {
       kind: "existing",
       conversation_id: copyFirst.conversation_id,
     });
-    const copyInspect = await inspect(started.baseUrl, prepared, copied.effect.run_id);
+    const copyInspect = await inspectRun(started.baseUrl, prepared, copied.effect.run_id);
     const copyRecovery = recovery(copyInspect);
     assert.equal(copyInspect.status, "completed");
     assert.equal(copyRecovery.disposition, "rebuilt");
@@ -320,7 +281,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(selected(copyInspect, "author_instruction"), CORRECTION);
 
     const missingFirst = await admit(started.baseUrl, prepared, id("e445"), EXPIRING);
-    const missingBinding = produced(await inspect(started.baseUrl, prepared, missingFirst.effect.run_id));
+    const missingBinding = produced(await inspectRun(started.baseUrl, prepared, missingFirst.effect.run_id));
     await confirmByProbe(started.baseUrl, prepared, id("e467"), missingFirst.conversation_id, missingBinding);
     await queryPostgres(`
       UPDATE storyos.authoritative_payloads AS payload
@@ -338,7 +299,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
       kind: "existing",
       conversation_id: missingFirst.conversation_id,
     });
-    const missingInspect = await inspect(started.baseUrl, prepared, missing.effect.run_id);
+    const missingInspect = await inspectRun(started.baseUrl, prepared, missing.effect.run_id);
     assert.equal(missingInspect.status, "refused");
     assert.equal(recovery(missingInspect).disposition, "blocked");
     assert.equal(recovery(missingInspect).block_reason, "required_input_missing");

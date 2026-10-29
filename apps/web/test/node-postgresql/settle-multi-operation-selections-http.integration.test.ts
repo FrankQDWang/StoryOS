@@ -2,11 +2,9 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { test, vi } from "vitest";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter,
   createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
@@ -25,7 +23,7 @@ import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
 } from "../support/acceptance.ts";
-import { startServer } from "../support/http-harness.ts";
+import { heldWorker, problemCode, startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -441,7 +439,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
       (error: unknown) => {
         const protocol = requireStoryOSProtocolError(error);
         assert.equal(protocol.status, 413);
-        assert.equal(JSON.parse(protocol.responseBody ?? "{}").code, "steering_reference_limit");
+        assert.equal(problemCode(error), "steering_reference_limit");
         return true;
       });
     let run = await getAgentRun(options);
@@ -509,7 +507,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
   const terminal = phase === "cancelled" || phase === "paused";
   let started = await startServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
-  let child: ReturnType<typeof execFile> | undefined;
+  let child: ReturnType<typeof heldWorker>["child"] | undefined;
   let exited: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -529,14 +527,9 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
         proposal.proposal.operations[1]!.operation_id, id(`${ns}43`), "revise the candidate consistently.");
       admitted = await getAgentRun({ baseUrl: started.baseUrl, projectId, fetchImpl, runId: fresh.created.effect.run_id });
     }
-    const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
     writeFileSync(hold, "hold");
-    child = execFile(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"], {
-      cwd: repositoryRoot, env: { ...process.env, STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
-        [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold },
-      timeout: 60_000, killSignal: "SIGKILL",
-    });
-    exited = new Promise<void>((resolve) => child!.once("exit", () => resolve()));
+    ({ child, exited } = heldWorker({
+      [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold }));
     let held = admitted;
     await vi.waitUntil(async () => {
       held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
@@ -1046,7 +1039,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
     if (history === "legacy_overwritten") {
       await assert.rejects(() => archive(), (error) => {
         const problem = requireStoryOSProtocolError(error);
-        return problem.status === 422 && JSON.parse(problem.responseBody ?? "null").code === "invalid_provenance";
+        return problem.status === 422 && problemCode(error) === "invalid_provenance";
       });
       assert.deepEqual(await retainedHistory(), unchangedHistory);
     } else {

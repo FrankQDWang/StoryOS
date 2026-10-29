@@ -8,7 +8,7 @@ import { applyAuthorEdit, createEditorSession, createProjectCommandChallenge, di
 import type { ApplyAuthorEditRequest, CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, USER_A, UUID_V7, authorEditRequest, challenged, id, prepare } from "../support/acceptance.ts";
-import { startServer } from "../support/http-harness.ts";
+import { problemCode, startServer } from "../support/http-harness.ts";
 import { TEST_CHALLENGE_SECRET, queryStoryOSPostgres, requireStoryOSProtocolError, stopStoryOSServer,
 } from "../support/node-integration.ts";
 
@@ -108,7 +108,7 @@ test("A repeated Author Edit Challenge request across a rate policy revision ret
       antiForgery: expired.nonce, request: expiredRequest }), (error) => {
       const protocolError = requireStoryOSProtocolError(error);
       return protocolError.status === 422
-        && JSON.parse(protocolError.responseBody ?? "").code === "challenge_invalid";
+        && problemCode(error) === "challenge_invalid";
     });
     const { correlation_id: correlationId, ...outcome } = await getApplyAuthorEditOutcome({ baseUrl, projectId,
       idempotencyKey: expiredKey, antiForgery: expired.nonce, fetchImpl });

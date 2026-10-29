@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
-  applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
-  digestCreateEditorSession, digestTakeOverProjectWriter, getApplyAuthorEditOutcome,
-  getChapter, getEditorSession, getManuscriptTree, getSnapshot, takeOverProjectWriter,
+  applyAuthorEdit,
+  createProjectCommandChallenge,
+  digestApplyAuthorEdit,
+  digestTakeOverProjectWriter,
+  getApplyAuthorEditOutcome,
+  getChapter,
+  getEditorSession,
+  getManuscriptTree,
+  getSnapshot,
+  takeOverProjectWriter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
-  CreateEditorSessionResponse,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, challenged, startServer } from "../support/http-harness.ts";
+import { PROJECT_A, USER_A, challenged, manuscriptAuthority, openEditorSession, problemCode, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
@@ -21,51 +27,14 @@ import {
   withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const DIGEST_HEX = /^[0-9a-f]{64}$/;
-
-async function manuscriptAuthority() {
-  return JSON.parse(await queryPostgres(`SELECT json_build_object(
-    'author_edit_activities', (SELECT count(*) FROM storyos.project_activity_events
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
-    'actions', (SELECT count(*) FROM storyos.author_action_entries
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
-    'commits', (SELECT count(*) FROM storyos.authoritative_commits
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
-    'apply_admissions', (SELECT count(*) FROM storyos.author_command_admissions
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
-        AND command_kind = 'applyAuthorEdit'),
-    'takeover_payloads', (SELECT count(*) FROM storyos.project_activity_event_payloads
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid)
-  )::text`));
-}
 
 async function canonicalSnapshots(): Promise<Record<string, unknown>> {
   return JSON.parse(await queryPostgres(`SELECT jsonb_object_agg(
     snapshot_id::text, to_jsonb(snapshot))::text FROM storyos.project_snapshots AS snapshot
     WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid`));
-}
-
-async function openEditorSession(
-  baseUrl: string,
-  correlationId: string,
-  idempotencyKey: string,
-): Promise<CreateEditorSessionResponse> {
-  const request = {
-    command_schema: "storyos.command.create-editor-session.request.v1",
-    client_contract_revision: "storyos.web-client.release-1.v3",
-    security_policy_revision: "storyos.web-security-policy.release-1.v1",
-    correlation_id: correlationId,
-  };
-  const digest = await digestCreateEditorSession(request);
-  return challenged(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
-    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest, idempotencyKey,
-    (antiForgery) => createEditorSession({
-      baseUrl, projectId: PROJECT_A, request, idempotencyKey,
-      antiForgery, fetchImpl: browserFetch(baseUrl, "session-a"),
-    }));
 }
 
 async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
@@ -367,8 +336,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       })), (error) => {
       const protocolError = requireStoryOSProtocolError(error);
       return protocolError.status === 412
-        && Reflect.get(JSON.parse(protocolError.responseBody ?? "{}"), "code")
-          === "editor_writer_stale";
+        && problemCode(error) === "editor_writer_stale";
     });
     assert.deepEqual(await manuscriptAuthority(), authorityAfterFence);
   } finally {

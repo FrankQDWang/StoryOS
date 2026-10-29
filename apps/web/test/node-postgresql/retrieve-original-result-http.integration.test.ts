@@ -7,12 +7,9 @@ import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createAgentRun,
   digestCancelAgentRun,
-  digestCreateAgentRun,
   getAgentRun,
   type CancelAgentRunRequest,
-  type CreateAgentRunRequest,
   type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
@@ -21,72 +18,10 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import {
-  BINDING,
-  USER_A,
-  challenged,
-  drainLeftoverWork,
-  id,
-  prepare,
-  settleHeld,
-  settleOnce,
-  startServer,
-} from "../support/http-harness.ts";
+import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, id, inspectRun, prepare, settleHeld, settleOnce,
+  startServer } from "../support/http-harness.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
-
-async function admit(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  key: string,
-  text: string,
-) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl,
-    prepared.fetchImpl,
-    prepared.projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({
-      baseUrl,
-      projectId: prepared.projectId,
-      fetchImpl: prepared.fetchImpl,
-      idempotencyKey: key,
-      antiForgery,
-      request,
-    }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  return created;
-}
-
-async function inspect(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  runId: string,
-) {
-  return getAgentRun({
-    baseUrl,
-    projectId: prepared.projectId,
-    runId,
-    fetchImpl: prepared.fetchImpl,
-  });
-}
 
 function retrieval(response: GetAgentRunResponse) {
   if (response.original_result_retrieval.kind !== "present") {
@@ -110,9 +45,9 @@ test("a retained complete result settles once and a repeat keeps that identity",
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a101"), "Retrieve Complete Novel", "a1");
-    const created = await admit(started.baseUrl, prepared, id("a111"), "SCRIPT:retrieve-complete");
+    const created = await admitRun(started.baseUrl, prepared, id("a111"), "SCRIPT:retrieve-complete");
     await settleOnce();
-    const first = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const first = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = retrieval(first);
     assert.equal(first.status, "completed");
     assert.equal(first.usage.kind, "unknown");
@@ -163,7 +98,7 @@ test("a retained complete result settles once and a repeat keeps that identity",
          AND run_id = '${created.effect.run_id}'::uuid
          AND attempt_role = 'retrieval';
     `), "stored_reference provider_report provider_opaque declared_read_only");
-    const again = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const again = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(retrieval(again).reconciliation_id, found.reconciliation_id);
     await queryPostgres(`
       UPDATE storyos.agent_runs
@@ -172,7 +107,7 @@ test("a retained complete result settles once and a repeat keeps that identity",
          AND run_id = '${created.effect.run_id}'::uuid;
     `);
     await settleOnce();
-    const repeated = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const repeated = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(repeated.status, "completed");
     assert.equal(retrieval(repeated).reconciliation_id, found.reconciliation_id);
     assert.equal(retrieval(repeated).retrieval_attempt_id, found.retrieval_attempt_id);
@@ -214,9 +149,9 @@ test("missing, unsupported, unbounded, foreign, incomplete, and unknown results 
       ["SCRIPT:retrieve-unknown", "unknown_result", "1"],
     ] as const;
     for (const [index, [script, reason, retrievalCount]] of cases.entries()) {
-      const created = await admit(started.baseUrl, prepared, id(`a2b${index}`), script);
+      const created = await admitRun(started.baseUrl, prepared, id(`a2b${index}`), script);
       await settleOnce();
-      const inspected = await inspect(started.baseUrl, prepared, created.effect.run_id);
+      const inspected = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       const found = retrieval(inspected);
       assert.equal(inspected.status, "waiting", script);
       assert.equal(inspected.decision.kind, "absent", script);
@@ -240,7 +175,7 @@ test("missing, unsupported, unbounded, foreign, incomplete, and unknown results 
            AND run_id = '${created.effect.run_id}'::uuid
            AND attempt_role = 'decision';
       `), "false", script);
-      const reloaded = await inspect(started.baseUrl, prepared, created.effect.run_id);
+      const reloaded = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       assert.equal(retrieval(reloaded).reconciliation_id, found.reconciliation_id, script);
       await queryPostgres(`
         UPDATE storyos.agent_runs
@@ -261,12 +196,12 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a301"), "Retrieve Fence Novel", "a3");
-    const created = await admit(started.baseUrl, prepared, id("a311"), "SCRIPT:retrieve-complete");
+    const created = await admitRun(started.baseUrl, prepared, id("a311"), "SCRIPT:retrieve-complete");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: hold });
     let held: GetAgentRunResponse | undefined;
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      held = await inspect(started.baseUrl, prepared, created.effect.run_id);
+      held = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       if (held.status === "claimed" && held.model_attempt.kind === "present"
         && held.original_result_retrieval.kind === "absent") break;
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -300,7 +235,7 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
     unlinkSync(hold);
     await worker;
     await settleOnce();
-    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = retrieval(after);
     assert.equal(after.status, "cancelled");
     assert.equal(after.decision.kind, "absent");
@@ -355,7 +290,7 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
       }),
     );
     assert.equal(repeated.effect.kind, "no_effect");
-    const reloaded = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const reloaded = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(retrieval(reloaded).reconciliation_id, found.reconciliation_id);
     assert.equal(await attemptCounts(prepared.projectId, created.effect.run_id), "1 1");
   } finally {

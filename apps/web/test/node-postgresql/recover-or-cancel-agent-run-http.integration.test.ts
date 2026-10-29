@@ -7,10 +7,8 @@ import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createAgentRun,
   createProjectCommandChallenge,
   digestCancelAgentRun,
-  digestCreateAgentRun,
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
   activityStream,
@@ -37,28 +35,9 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, prepare, problemCode, settleHeld,
-  settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, postRun, prepare, problemCode,
+  runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-function runRequest(
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
-  chapterId: string,
-  correlationId: string,
-  text = "Help with this passage.",
-): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
   return {
@@ -74,16 +53,6 @@ function cancelRequest(correlationId: string): CancelAgentRunRequest {
   };
 }
 
-async function postRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  key: string,
-  request: CreateAgentRunRequest,
-) {
-  return challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema, await digestCreateAgentRun(request), key, (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
-}
-
 async function admit(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -93,7 +62,7 @@ async function admit(
   text = "Help with this passage.",
   conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
 ) {
-  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(conversation, chapterId, id(key.slice(-4)), text));
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(chapterId, id(key.slice(-4)), text, conversation));
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   return created;
 }

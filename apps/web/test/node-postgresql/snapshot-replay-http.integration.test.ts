@@ -9,10 +9,9 @@ import {
 import type { GetEditorSessionResponse, SearchManuscriptRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { TestServer, USER_A, UUID_V7, appliedVolume, challenged, createChapterInput, createProject, createVolumeInput,
-  deleteChapterInput, deleteVolumeInput, problemCode, problemOf, serverForFile, startServer, updateChapterInput,
-  updateVolumeInput,
-} from "../support/http-harness.ts";
+import { PROJECT_A, TestServer, USER_A, UUID_V7, appliedVolume, challenged, createChapterInput, createProject,
+  createVolumeInput, deleteChapterInput, deleteVolumeInput, problemCode, problemOf, sanitizedProtocolFailure,
+  serverForFile, startServer, updateChapterInput, updateVolumeInput } from "../support/http-harness.ts";
 import type { CommandResponse } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
@@ -21,7 +20,6 @@ import {
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 
-const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const UNKNOWN_SNAPSHOT = "018f0000-0000-7001-8000-000000000250";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -31,11 +29,6 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 // own Server.
 const fileServer = serverForFile();
 
-
-function sanitizedProtocolFailure(error: unknown, status: number, sensitive: RegExp): boolean {
-  const protocolError = requireStoryOSProtocolError(error);
-  return protocolError.status === status && !sensitive.test(protocolError.responseBody ?? "");
-}
 
 function hasProblem(error: unknown, status: number, code: string): boolean {
   const protocolError = requireStoryOSProtocolError(error);

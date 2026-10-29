@@ -8,7 +8,7 @@ import { queryStoryOSPostgres as queryPostgres, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { PROSE, USER_A, authorEditRequest, challenged, drainLeftoverWork, id, openedBlockProposal,
 } from "../support/acceptance.ts";
-import { startServer } from "../support/http-harness.ts";
+import { problemCode, startServer } from "../support/http-harness.ts";
 
 // ADR 0073: an earlier client can still send these Refused Edit Draft shapes.
 type EarlierClientRequest = Omit<ApplyAuthorEditRequest, "author_edit_units"> & Record<string, unknown>
@@ -63,7 +63,7 @@ test("an earlier crossing edit or Draft retry gets invalid_request_shape and cha
           projectId, fetchImpl, request, idempotencyKey: key, antiForgery }).then(
           (response) => ({ status: 200, code: response.effect.kind }),
           (error: unknown) => { const protocol = requireStoryOSProtocolError(error);
-            return { status: protocol.status, code: JSON.parse(String(protocol.responseBody)).code }; }));
+            return { status: protocol.status, code: problemCode(error) }; }));
       assert.deepEqual(refused, { status: 422, code: "invalid_request_shape" });
     }
     assert.equal(await retainedState(projectId), before);

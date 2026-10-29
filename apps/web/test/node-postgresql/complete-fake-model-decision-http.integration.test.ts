@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
@@ -25,14 +24,12 @@ import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, USER_A, USER_B, UUID_V7, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
-  packaged, prepare, problemCode, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, PROSE, USER_A, UUID_V7, challenged, createEmpty, drainLeftoverWork, freshNamespace, id, postRun,
+  prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 const CLARIFICATION = "Which wording should stay in this sentence?";
@@ -47,35 +44,6 @@ const REFUSALS = [
   ["Please run an eval on this.", "eval"],
 ] as const;
 
-function runRequest(
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
-  chapterId: string,
-  correlationId: string,
-  text: string,
-): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
-
-async function postRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  key: string,
-  request: CreateAgentRunRequest,
-) {
-  return challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema, await digestCreateAgentRun(request), key, (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
-}
 
 async function inspectRun(
   baseUrl: string,
@@ -96,7 +64,7 @@ async function admit(
   text: string,
   conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
 ) {
-  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(conversation, chapterId, id(key.slice(-4)), text));
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(chapterId, id(key.slice(-4)), text, conversation));
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   return created;
 }
@@ -558,12 +526,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     assert.equal(boundInit.updated.assistance.availability, "available");
 
     await stopRealServer(started.server);
-    started = await startStoryOSServer({
-      repositoryRoot,
-      serverBinary: packaged("storyos-server"),
-      sessions: { "session-a": USER_A, "session-b": USER_B },
-      modelDestination: null,
-    });
+    started = await startServer({ modelDestination: null });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const restartedResponse = await updateProjectAssistance({
       baseUrl: started.baseUrl,
@@ -668,16 +631,11 @@ test("createAgentRun exact retry replays in a deployment that offers no model de
   try {
     const first = await prepare(started.baseUrl, id(`${ns}e1a0`), "No Destination Novel", `${ns}e1b`);
     const { chapterId } = first;
-    const request = runRequest({ kind: "new" }, chapterId, id(`${ns}e1a2`), "Help with this passage.");
+    const request = runRequest(chapterId, id(`${ns}e1a2`), "Help with this passage.");
     const created = await postRunWithChallenge(started.baseUrl, first.fetchImpl, first.projectId, id(`${ns}e1a3`), request);
 
     await stopRealServer(started.server);
-    started = await startStoryOSServer({
-      repositoryRoot,
-      serverBinary: packaged("storyos-server"),
-      sessions: { "session-a": USER_A, "session-b": USER_B },
-      modelDestination: null,
-    });
+    started = await startServer({ modelDestination: null });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const replay = await createAgentRun({
       baseUrl: started.baseUrl,
@@ -694,7 +652,7 @@ test("createAgentRun exact retry replays in a deployment that offers no model de
         restartedFetch,
         first.projectId,
         id(`${ns}e1a4`),
-        runRequest({ kind: "new" }, chapterId, id(`${ns}e1a5`), "Help with this passage."),
+        runRequest(chapterId, id(`${ns}e1a5`), "Help with this passage."),
       ),
       (error) => requireStoryOSProtocolError(error).status === 422
         && problemCode(error) === "assistance_unavailable",

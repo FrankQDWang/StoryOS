@@ -9,7 +9,7 @@ import { queryStoryOSPostgres, sessionFetch, stopStoryOSServer } from "./node-in
 
 const SESSION = "session-a";
 const SERVER = { sessions: { [SESSION]: USER_A }, extraEnv: { STORYOS_WORKER: "0" } };
-const EXPIRED_LEASE = { STORYOS_EXPORT_LEASE_TTL_SECS: "0" };
+const EXPIRED_LEASE = { extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" } };
 
 /** One export command of the export process cuts, with its fixed identifiers. */
 export interface ExportFamily<Request extends { command_schema: string }> {

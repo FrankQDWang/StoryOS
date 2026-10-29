@@ -1,6 +1,5 @@
 // Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
@@ -30,12 +29,10 @@ import {
 import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, challenged, packaged } from "../support/http-harness.ts";
+import { BINDING, USER_A, challenged, startServer } from "../support/http-harness.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
 function id(suffix: string): string {
   return `018f0000-0000-7001-8000-0000000a47${suffix}`;
@@ -49,9 +46,7 @@ test("the Diagnostic Projection of HTTP requests holds no author text and no sec
   const applicationName = canary("database").replaceAll("-", "_");
   const databaseUrl = canaryDatabaseUrl(applicationName);
   let editCommandId = "";
-  const { baseUrl, server, stderr } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary: packaged("storyos-server"),
+  const { baseUrl, server, stderr } = await startServer({
     sessions: { "session-a": USER_A },
     databaseUrl,
     extraEnv: { STORYOS_LOG: "debug", STORYOS_CHALLENGE_SECRET: secret },

@@ -22,7 +22,6 @@ import type {
   ApplyAuthorEditRequest,
   CompleteReadyPartialProposalRequest,
   ContinueProposalGenerationRequest,
-  CreateAgentRunRequest,
   CreateEditorSessionRequest,
   GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -31,30 +30,13 @@ import {
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 import type { StoryOSServer } from "../support/node-integration.ts";
-import {
-  BINDING, PROSE, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce,
-  startServer,
-} from "../support/http-harness.ts";
+import { BINDING, PROSE, challenged, drainLeftoverWork, freshNamespace, id, prepare, settleOnce, startServer,
+  streamRequest } from "../support/http-harness.ts";
 
 const FIRST = "Guard";
 
 function candidateDigest(text: string): string {
   return createHash("sha256").update(text).digest("hex");
-}
-
-function streamRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text: "Stream this passage: keep the voice." },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
 }
 
 async function generationFacts(proposalId: string): Promise<{

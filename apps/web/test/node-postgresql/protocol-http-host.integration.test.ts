@@ -8,11 +8,8 @@ import { test } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { USER_A, USER_B, packaged, startServer } from "../support/http-harness.ts";
-import {
-  startStoryOSServer,
-  stopStoryOSServer,
-} from "../support/node-integration.ts";
+import { USER_A, USER_B, startServer } from "../support/http-harness.ts";
+import { stopStoryOSServer } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const webRoot = join(repositoryRoot, "target/release-package/web");
@@ -78,8 +75,7 @@ test("ready production responses use the validated snapshot after its directory 
     const script = readdirSync(join(root, "assets")).find((name) => name.endsWith(".js"));
     assert.ok(script);
     const expected = [readFileSync(join(root, "index.html")), readFileSync(join(root, "assets", script))];
-    const { baseUrl, server } = await startStoryOSServer({ repositoryRoot, serverBinary: packaged("storyos-server"),
-      webRoot: root });
+    const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A }, webRoot: root });
     try {
       renameSync(root, join(temporary, "moved"));
       const actual = [];

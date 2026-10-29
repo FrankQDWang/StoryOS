@@ -8,58 +8,17 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
-  DigestValue,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, challenged, startServer } from "../support/http-harness.ts";
+import { PROJECT_A, USER_A, challenged, eventPayloadDigest, parseSseFrames, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 
-const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-function canonicalJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.keys(value).sort().map((key) => [key, canonicalJson(Reflect.get(value, key))]),
-    );
-  }
-  return value;
-}
-
-async function eventPayloadDigest(payload: unknown): Promise<DigestValue> {
-  const digest = new Uint8Array(await crypto.subtle.digest(
-    "SHA-256", new TextEncoder().encode(JSON.stringify(canonicalJson(payload))),
-  ));
-  return {
-    algorithm: "sha256",
-    profile: "storyos.event-payload.jcs.v1",
-    value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  };
-}
-
-interface SseFrame {
-  data: unknown;
-  event: string;
-  id: string;
-}
-
-function parseSseFrames(body: string): SseFrame[] {
-  return body.split("\n\n").filter((block) => block.trim().length > 0).map((block) => {
-    const frame = { id: "", event: "", data: null };
-    for (const line of block.split("\n")) {
-      if (line.startsWith("id:")) frame.id = line.slice(3).trim();
-      if (line.startsWith("event:")) frame.event = line.slice(6).trim();
-      if (line.startsWith("data:")) frame.data = JSON.parse(line.slice(5).trim());
-    }
-    return frame;
-  });
-}
 
 async function manuscriptAuthority() {
   return JSON.parse(await queryPostgres(`SELECT json_build_object(

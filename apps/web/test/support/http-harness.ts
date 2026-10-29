@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,14 +11,15 @@ import { afterAll, beforeAll } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse, DigestValue, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, PROSE, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, runRequest, runWorker,
-  settleOnce } from "./acceptance.ts";
+import { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, postRun,
+  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, streamRequest } from "./acceptance.ts";
 import { zipStoreFiles } from "./archive.ts";
 import { createEmptyProject, queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch, startStoryOSServer,
   stopStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 import type { StoryOSServer } from "./node-integration.ts";
 
-export { BINDING, PROSE, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, runRequest, runWorker, settleOnce };
+export { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, postRun,
+  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, streamRequest };
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 /** The path of one binary of the release package. */
@@ -26,6 +28,8 @@ export const packaged = (name: string) =>
 const execFileAsync = promisify(execFile);
 
 export const USER_B = "018f0000-0000-7001-8000-000000000101";
+/** Project A of User A in the shared database fixture. */
+export const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 export const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 /** A fresh namespace of 8 hex digits, so that the keys of a test do not collide with the keys of another run. */
@@ -38,26 +42,17 @@ export function freshNamespace(): string {
 /** The sessions of a test Server: `session-a` and `session-c` are User A, and `session-b` is User B. */
 export const SESSIONS: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B, "session-c": USER_A };
 
+/** The options of `startServer`. The default sessions are `SESSIONS`. */
+export type ServerOptions = Omit<Parameters<typeof startStoryOSServer>[0], "repositoryRoot" | "serverBinary">;
+
 /** Starts one packaged Server process. */
-export function startServer(options: {
-  bind?: string;
-  extraEnv?: Readonly<Record<string, string>>;
-  sessions?: Readonly<Record<string, string>>;
-} = {}): Promise<StoryOSServer> {
-  return startStoryOSServer({
-    ...(options.bind === undefined ? {} : { bind: options.bind }),
-    repositoryRoot,
-    serverBinary: packaged("storyos-server"),
-    sessions: options.sessions ?? SESSIONS,
-    ...(options.extraEnv === undefined ? {} : { extraEnv: options.extraEnv }),
-  });
+export function startServer(options: ServerOptions = {}): Promise<StoryOSServer> {
+  return startStoryOSServer({ ...options, repositoryRoot, serverBinary: packaged("storyos-server"),
+    sessions: options.sessions ?? SESSIONS });
 }
 
 /** Stops the Server process and starts a new one on the same address. */
-export async function restartServer(started: StoryOSServer, options: {
-  extraEnv?: Readonly<Record<string, string>>;
-  sessions?: Readonly<Record<string, string>>;
-} = {}): Promise<StoryOSServer> {
+export async function restartServer(started: StoryOSServer, options: Omit<ServerOptions, "bind"> = {}): Promise<StoryOSServer> {
   const url = new URL(started.baseUrl);
   await stopStoryOSServer(started.server);
   return startServer({ ...options, bind: `${url.hostname}:${url.port}` });
@@ -502,6 +497,12 @@ export function problemCode(refused: unknown): string | undefined {
   }
 }
 
+/** True when the refusal has this status and its body does not match `sensitive`. */
+export function sanitizedProtocolFailure(error: unknown, status: number, sensitive: RegExp): boolean {
+  const protocolError = requireStoryOSProtocolError(error);
+  return protocolError.status === status && !sensitive.test(protocolError.responseBody ?? "");
+}
+
 /** Waits for a refused protocol call and reads its problem. */
 export async function problemOf(call: Promise<unknown>): Promise<Problem> {
   const error = await call.then(
@@ -509,6 +510,87 @@ export async function problemOf(call: Promise<unknown>): Promise<Problem> {
     (refused: unknown) => requireStoryOSProtocolError(refused),
   );
   return { status: error.status, code: problemCode(error), body: error.responseBody ?? "" };
+}
+
+// Fixture Project A
+
+/** The counts of the Author Edit authority records of Project A. */
+export async function manuscriptAuthority() {
+  return JSON.parse(await queryStoryOSPostgres(`SELECT json_build_object(
+    'author_edit_activities', (SELECT count(*) FROM storyos.project_activity_events
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+    'actions', (SELECT count(*) FROM storyos.author_action_entries
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+    'commits', (SELECT count(*) FROM storyos.authoritative_commits
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+    'apply_admissions', (SELECT count(*) FROM storyos.author_command_admissions
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+        AND command_kind = 'applyAuthorEdit'),
+    'takeover_payloads', (SELECT count(*) FROM storyos.project_activity_event_payloads
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid)
+  )::text`));
+}
+
+/** Opens one Editor Session of `session-a` on Project A. */
+export async function openEditorSession(baseUrl: string, correlationId: string,
+  idempotencyKey: string): Promise<CreateEditorSessionResponse> {
+  const request = {
+    command_schema: "storyos.command.create-editor-session.request.v1",
+    client_contract_revision: "storyos.web-client.release-1.v3",
+    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    correlation_id: correlationId,
+  };
+  const digest = await client.digestCreateEditorSession(request);
+  return challenged(baseUrl, sessionFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+    "/api/v1/projects/{project_id}/editor-sessions", request.command_schema, digest, idempotencyKey,
+    (antiForgery) => client.createEditorSession({
+      baseUrl, projectId: PROJECT_A, request, idempotencyKey,
+      antiForgery, fetchImpl: sessionFetch(baseUrl, "session-a"),
+    }));
+}
+
+// Activity streams
+
+/** One Server-Sent Event frame. */
+export interface SseFrame {
+  data: unknown;
+  event: string;
+  id: string;
+}
+
+/** Splits a Server-Sent Events body into its frames. */
+export function parseSseFrames(body: string): SseFrame[] {
+  return body.split("\n\n").filter((block) => block.trim().length > 0).map((block) => {
+    const frame = { id: "", event: "", data: null };
+    for (const line of block.split("\n")) {
+      if (line.startsWith("id:")) frame.id = line.slice(3).trim();
+      if (line.startsWith("event:")) frame.event = line.slice(6).trim();
+      if (line.startsWith("data:")) frame.data = JSON.parse(line.slice(5).trim());
+    }
+    return frame;
+  });
+}
+
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalJson(Reflect.get(value, key))]),
+    );
+  }
+  return value;
+}
+
+/** The digest of an event payload in the `storyos.event-payload.jcs.v1` profile. */
+export async function eventPayloadDigest(payload: unknown): Promise<DigestValue> {
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(JSON.stringify(canonicalJson(payload))),
+  ));
+  return {
+    algorithm: "sha256",
+    profile: "storyos.event-payload.jcs.v1",
+    value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+  };
 }
 
 // Worker settlement
@@ -545,11 +627,23 @@ export async function waitForSettledKey(project: TestProject, key: string): Prom
 
 /** Starts one Worker pass that a test holds through `extraEnv`. The returned promise settles when the pass exits. */
 export function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const env = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  const settled = execFileAsync(packaged("storyos-worker"), ["--once"], {
-    cwd: repositoryRoot, env, timeout: 60_000, killSignal: "SIGKILL",
-  }).then(() => undefined);
+  const settled = execFileAsync(packaged("storyos-worker"), ["--once"], heldWorkerOptions(extraEnv)).then(() => undefined);
   void settled.catch(() => undefined);
   return settled;
+}
+
+/** Starts one Worker pass that a test holds through `extraEnv`, and gives its process so that the test can kill it. */
+export function heldWorker(extraEnv: Readonly<Record<string, string>>): { child: ChildProcess; exited: Promise<void> } {
+  const child = execFile(packaged("storyos-worker"), ["--once"], heldWorkerOptions(extraEnv));
+  const exited = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.once("error", () => resolve());
+  });
+  return { child, exited };
+}
+
+function heldWorkerOptions(extraEnv: Readonly<Record<string, string>>) {
+  const env = { ...process.env, ...extraEnv };
+  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  return { cwd: repositoryRoot, env, timeout: 60_000, killSignal: "SIGKILL" as const };
 }
