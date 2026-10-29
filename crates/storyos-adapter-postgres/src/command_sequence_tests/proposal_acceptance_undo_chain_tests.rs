@@ -1,7 +1,9 @@
 //! Author Undo of a Proposal candidate edit after the Undo of a later Acceptance (ADR 0068).
 //! Each Undo takes the current Author Undo Frontier, as the Web Client does.
 
-use storyos_application::{AcceptProposalInput, EditorSessionId, UndoLatestAuthorActionSettlement};
+use storyos_application::{
+    AcceptProposalInput, EditorSessionId, UndoLatestAuthorActionSettlement, UndoRecords,
+};
 use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -13,7 +15,8 @@ use super::agent_run::seed_run;
 use super::proposal_decision_undo_chain::{conflict_and_replan, head_state};
 use super::proposal_undo_chain::{compensated, edit, on, undo_call};
 use super::secondary_operation::{
-    TwoOperationProposal, proposal_head, proposal_head_revision, two_operation_proposal,
+    PRIMARY_TEXT, SECONDARY_TEXT, TwoOperationProposal, chapter_blocks, proposal_head,
+    proposal_head_revision, two_operation_proposal,
 };
 use super::support::{issued, run_without_foreign_keys, stores};
 use super::undo::{latest_forward, undo};
@@ -462,5 +465,242 @@ async fn author_undo_restores_a_replan_after_the_undo_of_an_acceptance_of_its_ed
             operation_candidates(&admin, &proposal).await,
         ),
         ((edited, replanned), before_replan, before)
+    );
+}
+
+/// The kind, the head candidate, and the head Validation Receipt result of one Proposal, and the
+/// resolution, the reservation state, and the candidate of each Operation, primary first.
+type ProposalContents = (String, String, Option<String>, Vec<[String; 3]>);
+
+async fn proposal_contents(admin: &Client, proposal_id: &str) -> ProposalContents {
+    let head = admin
+        .query_one(
+            "SELECT proposal.kind, revision.candidate_text, receipt.result
+               FROM storyos.proposals AS proposal
+               JOIN storyos.proposal_heads AS head ON head.proposal_id = proposal.proposal_id
+               JOIN storyos.proposal_revisions AS revision
+                 ON (revision.proposal_id, revision.revision_id) =
+                    (head.proposal_id, head.current_revision_id)
+               LEFT JOIN storyos.validation_receipts AS receipt
+                 ON (receipt.proposal_id, receipt.proposal_revision_id) =
+                    (revision.proposal_id, revision.revision_id)
+              WHERE proposal.proposal_id = $1::text::uuid",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap();
+    let operations = admin
+        .query(
+            "SELECT resolution, reservation_state, candidate_text
+               FROM storyos.proposal_operations
+              WHERE proposal_id = $1::text::uuid ORDER BY operation_id",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| std::array::from_fn(|idx| row.get(idx)))
+        .collect();
+    (head.get(0), head.get(1), head.get(2), operations)
+}
+
+/// An open Proposal of `kind` whose Operations are pending and unresolved, with a valid
+/// Validation Receipt.
+fn pending_contents(kind: &str, candidate: &str, candidates: [&str; 2]) -> ProposalContents {
+    (
+        kind.to_owned(),
+        candidate.to_owned(),
+        Some("valid".to_owned()),
+        candidates
+            .iter()
+            .map(|text| ["pending", "unresolved", text].map(str::to_owned))
+            .collect(),
+    )
+}
+
+/// The outcome kind of an applied Author Undo and the Proposal that it placed.
+fn placed_proposal(settled: &UndoLatestAuthorActionSettlement) -> (&'static str, String) {
+    match &settled.outcome {
+        TransitionOutcome::Applied(applied) => match &applied.records {
+            UndoRecords::Revision {
+                proposal_id: Some(proposal_id),
+                ..
+            } => ("compensated", proposal_id.clone()),
+            UndoRecords::ReversalRequired { proposal_id, .. } => {
+                ("reversal_required", proposal_id.clone())
+            }
+            other => panic!("the Undo must place a Proposal, got {other:?}"),
+        },
+        other => panic!("the Undo must apply, got {other:?}"),
+    }
+}
+
+/// The Undo of an Acceptance keeps the accepted Revision and its Commit, and reopens the same
+/// Proposal with its candidates and a Validation Receipt. A new Acceptance then applies again.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_undo_of_an_acceptance_reopens_the_proposal_for_a_new_acceptance() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut proposal = two_operation_proposal(&store, &admin, /*base*/ 0x8b00).await;
+    let before = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
+    accept(
+        &store,
+        &admin,
+        &mut proposal,
+        &[0, 1],
+        /*suffix*/ 0x8b09,
+    )
+    .await;
+    let accepted = proposal.chapter_revision_id.clone();
+    let undone = undo_latest(&store, &admin, &mut proposal, /*suffix*/ 0x8b0a)
+        .await
+        .unwrap();
+    let history = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.authoritative_revisions
+                      WHERE revision_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE resulting_revision_id = $1::text::uuid)",
+            &[&accepted],
+        )
+        .await
+        .map(|row| [row.get::<_, i64>(/*idx*/ 0), row.get(/*idx*/ 1)])
+        .unwrap();
+    let reopened = proposal_contents(&admin, &proposal.proposal_id).await;
+    let restored = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
+    accept(
+        &store,
+        &admin,
+        &mut proposal,
+        &[0, 1],
+        /*suffix*/ 0x8b0b,
+    )
+    .await;
+    let applied_acceptances: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.acceptance_receipts
+              WHERE proposal_id = $1::text::uuid AND result = 'authoritative_applied'",
+            &[&proposal.proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    let mut reaccepted = before.clone();
+    reaccepted[0].1 = PRIMARY_TEXT.to_owned();
+    reaccepted[1].1 = SECONDARY_TEXT.to_owned();
+    assert_eq!(
+        (
+            placed_proposal(&undone),
+            history,
+            reopened,
+            restored,
+            chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await,
+            applied_acceptances,
+        ),
+        (
+            ("compensated", proposal.proposal_id.clone()),
+            [1, 1],
+            pending_contents("block_edit", PRIMARY_TEXT, [PRIMARY_TEXT, SECONDARY_TEXT]),
+            before,
+            reaccepted,
+            2,
+        )
+    );
+}
+
+/// When the accepted lineage drifted, the Undo of the Acceptance derives a new pending Proposal
+/// with the accepted candidates and restores the Chapter. When the Chapter head drifted back,
+/// the Undo requires a Reversal Proposal whose candidates are the texts before the Acceptance.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_drifted_acceptance_undo_places_a_derived_or_a_reversal_proposal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut drifted = derivable_proposal(&store, &admin, /*base*/ 0x8b20).await;
+    let before = chapter_blocks(&store, &drifted.scope, &drifted.chapter_id).await;
+    let accepted = proposal_head_revision(&admin, &drifted.proposal_id).await;
+    accept(
+        &store,
+        &admin,
+        &mut drifted,
+        &[0, 1],
+        /*suffix*/ 0x8b29,
+    )
+    .await;
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.proposal_revisions SET closure = 'withdrawn'
+              WHERE revision_id = '{accepted}'::uuid"
+        ),
+    )
+    .await;
+    let derived = placed_proposal(
+        &undo_latest(&store, &admin, &mut drifted, /*suffix*/ 0x8b2a)
+            .await
+            .unwrap(),
+    );
+    let derived_state = (
+        derived.1 != drifted.proposal_id,
+        proposal_contents(&admin, &derived.1).await,
+        chapter_blocks(&store, &drifted.scope, &drifted.chapter_id).await,
+    );
+
+    let mut reversed = derivable_proposal(&store, &admin, /*base*/ 0x8b40).await;
+    let prior_blocks = chapter_blocks(&store, &reversed.scope, &reversed.chapter_id).await;
+    let prior = reversed.chapter_revision_id.clone();
+    accept(
+        &store,
+        &admin,
+        &mut reversed,
+        &[0, 1],
+        /*suffix*/ 0x8b49,
+    )
+    .await;
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.authoritative_heads SET current_revision_id = '{prior}'
+              WHERE current_revision_id = '{accepted}'",
+            accepted = reversed.chapter_revision_id,
+        ),
+    )
+    .await;
+    reversed.chapter_revision_id = prior;
+    let reversal = placed_proposal(
+        &undo_latest(&store, &admin, &mut reversed, /*suffix*/ 0x8b4a)
+            .await
+            .unwrap(),
+    );
+
+    assert_eq!(
+        (
+            (derived.0, derived_state),
+            (reversal.0, proposal_contents(&admin, &reversal.1).await),
+        ),
+        (
+            (
+                "compensated",
+                (
+                    true,
+                    pending_contents("block_edit", PRIMARY_TEXT, [PRIMARY_TEXT, SECONDARY_TEXT]),
+                    before,
+                ),
+            ),
+            (
+                "reversal_required",
+                pending_contents(
+                    "reversal",
+                    &prior_blocks[0].1,
+                    [&prior_blocks[0].1, &prior_blocks[1].1],
+                ),
+            ),
+        )
     );
 }

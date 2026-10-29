@@ -1,8 +1,9 @@
 //! Acceptance and Author Undo of an Author Edit of a secondary Proposal Operation.
 
 use storyos_application::{
-    AcceptProposalInput, AuthorEditProposalTarget, ChapterId, EditorSessionId, OpenChapter,
-    ProjectScope, UndoLatestAuthorActionInput, open_chapter,
+    AcceptProposalInput, AuthorEditProposalTarget, AuthorEditSettlement,
+    AuthorEditSettlementEffect, ChapterId, EditorSessionId, OpenChapter, ProjectScope,
+    UndoLatestAuthorActionInput, open_chapter,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot, TransitionOutcome};
 use tokio_postgres::Client;
@@ -15,8 +16,8 @@ use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal};
 use super::support::{issued, run_without_foreign_keys, stores, two_chapter_writer};
 use super::undo::{edit_in_chapter_of, issued_undo, latest_forward, resulting_revision, undo};
 
-const PRIMARY_TEXT: &str = "Primary candidate";
-const SECONDARY_TEXT: &str = "Secondary candidate";
+pub(super) const PRIMARY_TEXT: &str = "Primary candidate";
+pub(super) const SECONDARY_TEXT: &str = "Secondary candidate";
 
 /// A new Project whose Chapter B has two Blocks, and one valid Proposal with one pending
 /// Operation for each Block. The Block of the Proposal is the first Block.
@@ -149,6 +150,103 @@ pub(super) async fn two_operation_proposal(
     }
 }
 
+/// The two-operation fixture without its secondary Operation, so that only the first Block of
+/// Chapter B is reserved. `operations[1]` keeps the id of the second Block.
+pub(super) async fn one_operation_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> TwoOperationProposal {
+    let proposal = two_operation_proposal(store, admin, base).await;
+    admin
+        .execute(
+            "DELETE FROM storyos.proposal_operations WHERE operation_id = $1::text::uuid",
+            &[&proposal.operations[1].0],
+        )
+        .await
+        .unwrap();
+    proposal
+}
+
+/// The text that `edit_block` inserts at the start of a Block.
+pub(super) const BLOCK_EDIT: &str = "Again ";
+
+/// One versioned Author Edit that inserts `BLOCK_EDIT` at the start of the Block of
+/// `operations[block]` on the Chapter head of `proposal`. The edit acknowledges
+/// `acknowledged_heads`, and observes the `mixed` partition when it acknowledges a head.
+pub(super) async fn edit_block(
+    store: &PostgresProjectReader,
+    proposal: &TwoOperationProposal,
+    block: usize,
+    suffix: u16,
+    local_intent_sequence: u64,
+    acknowledged_heads: Vec<String>,
+) -> AuthorEditSettlement {
+    let block_id = proposal.operations[block].1.clone();
+    let command = adjusted_edit_command(
+        store,
+        &proposal.scope,
+        NamedEdit {
+            editor_session_id: &proposal.editor_session_id,
+            chapter_id: &proposal.chapter_id,
+            expected_revision_id: &proposal.chapter_revision_id,
+            suffix: &format!("{suffix:04x}"),
+            local_intent_sequence,
+            text: "",
+            proposal_target: None,
+        },
+        |command| {
+            command.observed_ownership_partition = if acknowledged_heads.is_empty() {
+                "authoritative"
+            } else {
+                "mixed"
+            }
+            .to_owned();
+            command.expected_proposal_head_revision_ids = acknowledged_heads;
+            command.author_edit_units = vec![AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceBlockSelection {
+                    manuscript_block_id: block_id,
+                    from: 0,
+                    to: 0,
+                    text: BLOCK_EDIT.to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                    from: 0,
+                    to: 0,
+                },
+            }];
+        },
+    )
+    .await;
+    store.apply_author_edit(&command).await.unwrap()
+}
+
+/// The one-operation fixture after a versioned edit of its unreserved second Block. The Chapter
+/// head of the result is the edited Revision, and the Proposal keeps its earlier base, which this
+/// returns too.
+pub(super) async fn earlier_base_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (TwoOperationProposal, String) {
+    let mut proposal = one_operation_proposal(store, admin, base).await;
+    let edited = edit_block(
+        store,
+        &proposal,
+        /*block*/ 1,
+        base + 7,
+        /*local_intent_sequence*/ 3,
+        Vec::new(),
+    )
+    .await;
+    let AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } = edited.effect else {
+        panic!("the edit of the unreserved Block must apply, got {edited:?}");
+    };
+    let earlier = std::mem::replace(&mut proposal.chapter_revision_id, ids.revision_id);
+    (proposal, earlier)
+}
+
 /// Prepends `Edited ` to the candidate of the secondary Operation through one Author Edit.
 pub(super) async fn edit_secondary_candidate(
     store: &PostgresProjectReader,
@@ -210,7 +308,7 @@ pub(super) async fn edit_operation_candidate(
 }
 
 /// The id and the text of each Block of the current Chapter head, in Block order.
-async fn chapter_blocks(
+pub(super) async fn chapter_blocks(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     chapter_id: &str,

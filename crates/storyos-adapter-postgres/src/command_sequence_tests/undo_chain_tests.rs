@@ -2,10 +2,12 @@
 //! Author Undo Frontier and the current Chapter Head, as the Web Client does.
 
 use storyos_application::{
-    EditorSessionId, ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
-    UndoRecords,
+    AcceptProposalInput, EditorSessionId, ProjectScope, UndoLatestAuthorActionInput,
+    UndoLatestAuthorActionSettlement, UndoRecords,
 };
-use storyos_core::{TransitionOutcome, UndoLatestAuthorActionUnavailable};
+use storyos_core::{
+    AcceptanceTargetResolution, TransitionOutcome, UndoLatestAuthorActionUnavailable,
+};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -15,6 +17,9 @@ use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal};
 use super::agent_run::seed_run;
 use super::proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, pending_proposal, reject_proposal_operations,
+};
+use super::secondary_operation::{
+    PRIMARY_TEXT, chapter_blocks, earlier_base_proposal, proposal_head,
 };
 use super::support::{issued, stores, two_chapter_writer};
 use super::undo::{
@@ -315,5 +320,94 @@ async fn author_undo_compensates_an_acceptance_after_the_undo_of_a_later_edit() 
             chapter_content(&admin, &session).await
         ),
         (second, acceptance, before)
+    );
+}
+
+/// An Acceptance on an earlier base replaces the target Block of the current head and records
+/// that head. Its Undo restores that head, not the base of the Proposal.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_of_an_earlier_base_acceptance_restores_the_head_that_it_replaced() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (proposal, _earlier) = earlier_base_proposal(&store, &admin, /*base*/ 0x8ae0).await;
+    let head = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
+    let (proposal_revision_id, validation_receipt_id) =
+        proposal_head(&admin, &proposal.proposal_id).await;
+    let call = issued(
+        &store,
+        &proposal.scope,
+        /*suffix*/ 0x8ae9,
+        &ACCEPT_PROPOSAL,
+        AcceptProposalInput {
+            editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
+            proposal_id: proposal.proposal_id.clone(),
+            proposal_revision_id,
+            validation_receipt_id,
+            selected_operation_ids: vec![proposal.operations[0].0.clone()],
+            expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
+        },
+    )
+    .await;
+    let resolution = match accept_proposal(&store, &call).await.unwrap().outcome {
+        TransitionOutcome::Applied(applied) => applied.effect,
+        other => panic!("the Acceptance must apply, got {other:?}"),
+    };
+    let receipt = admin
+        .query_one(
+            "SELECT acceptance.applied_authoritative_revision_id::text,
+                    acceptance.target_resolution, domain.prior_heads::text[]
+               FROM storyos.acceptance_receipts AS acceptance
+               JOIN storyos.domain_receipts AS domain
+                 ON domain.receipt_id = acceptance.acceptance_receipt_id
+              WHERE acceptance.acceptance_receipt_id = $1::text::uuid",
+            &[&call.envelope.ids.receipt_id],
+        )
+        .await
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, String>(/*idx*/ 1),
+                row.get::<_, Vec<String>>(/*idx*/ 2),
+            )
+        })
+        .unwrap();
+    let accepted = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
+    let acceptance = latest_forward(&admin, &proposal.scope).await;
+    let undone = compensated(
+        undo_latest(
+            &store,
+            &admin,
+            &proposal.scope,
+            &proposal.editor_session_id,
+            /*suffix*/ 0x8aea,
+        )
+        .await,
+    );
+
+    let mut replaced = head.clone();
+    replaced[0].1 = PRIMARY_TEXT.to_owned();
+    let expected_head = proposal.chapter_revision_id.clone();
+    assert_eq!(
+        (
+            resolution,
+            receipt,
+            accepted,
+            undone.0,
+            chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await,
+        ),
+        (
+            AcceptanceTargetResolution::BlockReplacement,
+            (
+                expected_head.clone(),
+                "block_replacement".to_owned(),
+                vec![expected_head],
+            ),
+            replaced,
+            acceptance,
+            head,
+        )
     );
 }
