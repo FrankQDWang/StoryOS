@@ -42,6 +42,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 
 ## Tests
 
+- Prove a behavior only at its Behavior Owner ([ADR 0075](docs/adr/0075-prove-each-behavior-at-one-behavior-owner.md)). Do not prove it again at another test layer.
 - Add a test only for a realistic observable regression, a non-trivial invariant or boundary, or a concrete bug. A code change or a coverage increase alone is not a reason for a test.
 - Prefer existing coverage at the public behavior boundary.
 - A change to Agent Loop behavior, tool execution, authorization, recovery, or other user-visible Agent semantics requires integration tests at the public boundary.
