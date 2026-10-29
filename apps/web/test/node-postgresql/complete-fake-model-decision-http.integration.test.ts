@@ -27,8 +27,8 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, USER_A, UUID_V7, challenged, createEmpty, drainLeftoverWork, freshNamespace, id, postRun,
-  prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
+  inspectRun, postRun, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -43,31 +43,6 @@ const REFUSALS = [
   ["Please start a subrun now.", "subrun"],
   ["Please run an eval on this.", "eval"],
 ] as const;
-
-
-async function inspectRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  runId: string,
-  modelAttemptId?: string,
-): Promise<GetAgentRunResponse> {
-  return getAgentRun({ baseUrl, projectId, runId, fetchImpl, ...(modelAttemptId === undefined ? {} : { modelAttemptId }) });
-}
-
-async function admit(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  chapterId: string,
-  key: string,
-  text: string,
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
-) {
-  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(chapterId, id(key.slice(-4)), text, conversation));
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  return created;
-}
 
 function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
   if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
@@ -130,9 +105,9 @@ test("Worker completes one Host-fake advisory Decision", async () => {
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e111"), "Fake Decision Novel", "e2");
-    const created = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e131"), "Help with this passage.");
+    const created = await admitRun(started.baseUrl, prepared, id("e131"), "Help with this passage.");
     await settleOnce();
-    const queried = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(queried.status, "completed");
     assert.equal(queried.context.destination_io.kind, "host_fake");
     assert.equal(queried.context.destination_context_manifest.kind, "present");
@@ -154,31 +129,29 @@ test("Worker completes one Host-fake advisory Decision", async () => {
     assert.equal(queried.items[0]?.state, "complete");
     assert.equal(queried.items[0]?.phase, "complete");
     assert.equal(queried.usage.kind, "unknown");
-    const matched = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, queried.model_attempt.model_attempt_id);
+    const matched = await inspectRun(started.baseUrl, prepared, created.effect.run_id, queried.model_attempt.model_attempt_id);
     assert.equal(matched.status, "completed");
-    const second = await admit(
+    const second = await admitRun(
       started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      prepared.chapterId,
+      prepared,
       id("e133"),
       "Help with this passage.",
       { kind: "existing", conversation_id: created.conversation_id },
     );
     await settleOnce();
-    const secondInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, second.effect.run_id);
+    const secondInspect = await inspectRun(started.baseUrl, prepared, second.effect.run_id);
     if (secondInspect.model_attempt.kind !== "present") throw new Error("expected second attempt");
     const foreignAttemptId = secondInspect.model_attempt.model_attempt_id;
     await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, foreignAttemptId),
+      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, foreignAttemptId),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
     await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, id("dead")),
+      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, id("dead")),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
     await assert.rejects(
-      () => inspectRun(started.baseUrl, browserFetch(started.baseUrl, "session-b"), prepared.projectId, created.effect.run_id),
+      () => inspectRun(started.baseUrl, { projectId: prepared.projectId, fetchImpl: browserFetch(started.baseUrl, "session-b") }, created.effect.run_id),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
@@ -198,18 +171,16 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
     const prepared = await prepare(started.baseUrl, id("e141"), "Refuse Novel", "e5");
     let conversationId: string | undefined;
     for (const [index, [text, capability]] of REFUSALS.entries()) {
-      const created = await admit(
+      const created = await admitRun(
         started.baseUrl,
-        prepared.fetchImpl,
-        prepared.projectId,
-        prepared.chapterId,
+        prepared,
         id(`e5${index}`),
         text,
         conversationId === undefined ? { kind: "new" } : { kind: "existing", conversation_id: conversationId },
       );
       conversationId = created.conversation_id;
       await settleOnce();
-      const queried = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+      const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       assert.equal(queried.status, "refused");
       assert.deepEqual(queried.decision, { kind: "execution_refused", capability });
       assert.equal(queried.model_attempt.kind, "absent");
@@ -229,9 +200,9 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
          AND head.project_id = '${blocked.projectId}'::uuid
          AND head.manuscript_object_id = '${blocked.chapterId}'::uuid;
     `);
-    const createdBlocked = await admit(started.baseUrl, blocked.fetchImpl, blocked.projectId, blocked.chapterId, id("e181"), "Help with this passage.");
+    const createdBlocked = await admitRun(started.baseUrl, blocked, id("e181"), "Help with this passage.");
     await settleOnce();
-    const refused = await inspectRun(started.baseUrl, blocked.fetchImpl, blocked.projectId, createdBlocked.effect.run_id);
+    const refused = await inspectRun(started.baseUrl, blocked, createdBlocked.effect.run_id);
     assert.equal(refused.status, "refused");
     assert.deepEqual(refused.decision, { kind: "execution_refused", capability: "blocked_context" });
     assert.equal(refused.model_attempt.kind, "absent");
@@ -249,9 +220,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e191"), "Hold Novel", "ea");
-    const prose = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb11"), "Revise this passage: keep the voice.");
+    const prose = await admitRun(started.baseUrl, prepared, id("eb11"), "Revise this passage: keep the voice.");
     await settleOnce();
-    const proseInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, prose.effect.run_id);
+    const proseInspect = await inspectRun(started.baseUrl, prepared, prose.effect.run_id);
     assert.equal(proseInspect.status, "completed");
     assert.equal(proseInspect.decision.kind, "prose_change");
     if (proseInspect.decision.kind !== "prose_change") throw new Error("expected prose");
@@ -261,9 +232,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(proseInspect.decision.authoritative, false);
     assert.equal(proseInspect.decision.continuation.kind, "present");
 
-    const clarification = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb13"), "Which wording should I keep? The first clause.");
+    const clarification = await admitRun(started.baseUrl, prepared, id("eb13"), "Which wording should I keep? The first clause.");
     await settleOnce();
-    const clarified = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, clarification.effect.run_id);
+    const clarified = await inspectRun(started.baseUrl, prepared, clarification.effect.run_id);
     assert.equal(clarified.status, "completed");
     assert.equal(clarified.decision.kind, "clarification");
     if (clarified.decision.kind !== "clarification") throw new Error("expected clarification");
@@ -273,10 +244,10 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(clarified.decision.continuation.kind, "absent");
 
     writeFileSync(dispatchHold, "hold");
-    const dispatchRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb15"), "Help with this passage.");
+    const dispatchRun = await admitRun(started.baseUrl, prepared, id("eb15"), "Help with this passage.");
     const dispatchWorker = settleOnce({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     const beforeDecision = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     assert.equal(beforeDecision.decision.kind, "absent");
@@ -285,19 +256,19 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     unlinkSync(dispatchHold);
     await dispatchWorker;
     writeFileSync(streamHold, "hold");
-    const streamRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb16"), "Help with this passage.");
+    const streamRun = await admitRun(started.baseUrl, prepared, id("eb16"), "Help with this passage.");
     const streamWorker = settleOnce({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: streamHold });
     const beforeDecisionCut = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, streamRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, streamRun.effect.run_id),
       (current) => current.items.length > 0 && current.decision.kind === "absent",
     );
     assert.equal(beforeDecisionCut.status, "claimed");
     unlinkSync(streamHold);
     await streamWorker;
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, streamRun.effect.run_id)).status, "completed");
-    const unselected = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb18"), "SCRIPT:unselected");
+    assert.equal((await inspectRun(started.baseUrl, prepared, streamRun.effect.run_id)).status, "completed");
+    const unselected = await admitRun(started.baseUrl, prepared, id("eb18"), "SCRIPT:unselected");
     await settleOnce();
-    const unselectedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, unselected.effect.run_id);
+    const unselectedInspect = await inspectRun(started.baseUrl, prepared, unselected.effect.run_id);
     assert.equal(unselectedInspect.status, "completed");
     assert.equal(unselectedInspect.decision.kind, "absent");
     assert.equal(unselectedInspect.items[0]?.state, "complete");
@@ -315,17 +286,15 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     ] as const;
     let scriptIndex = 0;
     for (const [text, state, role] of scriptCases) {
-      const scripted = await admit(
+      const scripted = await admitRun(
         started.baseUrl,
-        prepared.fetchImpl,
-        prepared.projectId,
-        prepared.chapterId,
+        prepared,
         id(`ec1${scriptIndex}`),
         text,
       );
       scriptIndex += 1;
       await settleOnce();
-      const inspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, scripted.effect.run_id);
+      const inspect = await inspectRun(started.baseUrl, prepared, scripted.effect.run_id);
       assert.equal(inspect.status, "completed");
       assert.equal(inspect.decision.kind, "absent");
       assert.equal(inspect.items[0]?.state, state);
@@ -337,16 +306,16 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     }
 
     writeFileSync(decisionHold, "hold");
-    const decisionRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb17"), "Help with this passage.");
+    const decisionRun = await admitRun(started.baseUrl, prepared, id("eb17"), "Help with this passage.");
     const decisionWorker = settleOnce({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     const beforeContinuation = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, decisionRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, decisionRun.effect.run_id),
       (current) => current.decision.kind === "advisory" && current.decision.continuation.kind === "absent",
     );
     assert.equal(beforeContinuation.status, "claimed");
     unlinkSync(decisionHold);
     await decisionWorker;
-    const afterDecision = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, decisionRun.effect.run_id);
+    const afterDecision = await inspectRun(started.baseUrl, prepared, decisionRun.effect.run_id);
     assert.equal(afterDecision.status, "completed");
     assert.equal(afterDecision.decision.kind, "advisory");
     if (afterDecision.decision.kind !== "advisory") throw new Error("expected advisory");

@@ -9,11 +9,13 @@ import { acceptProposal, createAgentRun, createEditorSession, digestAcceptPropos
 import type { AcceptProposalRequest, CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse,
   GetProposalResponse, SelectionReference, UndoLatestAuthorActionRequest, WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, USER_A, admitProse, candidateTextReference, challenged, drainLeftoverWork, id, prepare,
   readProposal, reviseCandidate, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { startServer } from "../support/http-harness.ts";
+import { serverForFile } from "../support/http-harness.ts";
+
+const started = serverForFile();
 
 // ADR 0071: the author accepts, withdraws, and undoes around a grown Proposal as one unit.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came."];
@@ -117,133 +119,116 @@ async function acceptOperations(started: Started, seeded: Seeded, proposal: Prop
 }
 
 test("accept all of a grown Proposal applies each Operation, and a part of it is refused", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const seeded = await seedChapter(started);
-    const { proposal: before } = await openProposal(started, seeded);
-    const { grown } = await grow(started, seeded, before);
-    const operationIds = grown.operations.map((operation) => operation.operation_id);
-    const part = await acceptOperations(started, seeded, grown, [grown.operation_id], `${seeded.ns}81`);
-    assert.deepEqual(part.effect, { kind: "refused", reason: "incomplete_bundle_closure" });
-    const all = await acceptOperations(started, seeded, grown, [...operationIds].sort(), `${seeded.ns}82`);
-    assert.equal(all.effect.kind, "applied");
-    assert.deepEqual((await readChapter(started, seeded)).current_revision.blocks.map((block) => block.text),
-      [...grown.operations.map((operation) => operation.candidate_text), SENTENCES[2]]);
-    assert.deepEqual((await readProposal(started, seeded, grown.proposal_id)).operations
-      .map(({ resolution, reservation_state }) => ({ resolution, reservation_state })),
-      operationIds.map(() => ({ resolution: "applied", reservation_state: "resolved" })));
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const seeded = await seedChapter(started);
+  const { proposal: before } = await openProposal(started, seeded);
+  const { grown } = await grow(started, seeded, before);
+  const operationIds = grown.operations.map((operation) => operation.operation_id);
+  const part = await acceptOperations(started, seeded, grown, [grown.operation_id], `${seeded.ns}81`);
+  assert.deepEqual(part.effect, { kind: "refused", reason: "incomplete_bundle_closure" });
+  const all = await acceptOperations(started, seeded, grown, [...operationIds].sort(), `${seeded.ns}82`);
+  assert.equal(all.effect.kind, "applied");
+  assert.deepEqual((await readChapter(started, seeded)).current_revision.blocks.map((block) => block.text),
+    [...grown.operations.map((operation) => operation.candidate_text), SENTENCES[2]]);
+  assert.deepEqual((await readProposal(started, seeded, grown.proposal_id)).operations
+    .map(({ resolution, reservation_state }) => ({ resolution, reservation_state })),
+    operationIds.map(() => ({ resolution: "applied", reservation_state: "resolved" })));
 });
 
 test("a withdrawal closes all of a grown Proposal in one step", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const seeded = await seedChapter(started);
-    const { proposal: before } = await openProposal(started, seeded);
-    const { grown } = await grow(started, seeded, before);
-    const key = `${seeded.ns}81`;
-    const body: WithdrawProposalRequest = { command_schema: "storyos.command.withdraw-proposal.request.v1",
-      withdraw_proposal_input: { cause: "author", proposal_revision_id: grown.revision_id, expected_closure: "open",
-        expected_target_revisions: [seeded.chapter.current_revision.revision_id],
-        withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
-        editor_session_id: seeded.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(`${key}1`) } };
-    const withdrawn = await challenged(started.baseUrl, seeded.fetchImpl, seeded.projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals", body.command_schema,
-      await digestWithdrawProposal(body), id(`${key}2`), (antiForgery) => withdrawProposal({ baseUrl: started.baseUrl,
-        projectId: seeded.projectId, proposalId: grown.proposal_id, fetchImpl: seeded.fetchImpl,
-        idempotencyKey: id(`${key}2`), antiForgery, request: body }));
-    assert.equal(withdrawn.effect.kind, "resolved");
-    // The Operations stay pending and keep their reservations, as for each withdrawn Proposal.
-    assert.deepEqual(await readProposal(started, seeded, grown.proposal_id), { ...grown, closure: "withdrawn" });
-    assert.deepEqual(await readChapter(started, seeded), seeded.chapter);
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const seeded = await seedChapter(started);
+  const { proposal: before } = await openProposal(started, seeded);
+  const { grown } = await grow(started, seeded, before);
+  const key = `${seeded.ns}81`;
+  const body: WithdrawProposalRequest = { command_schema: "storyos.command.withdraw-proposal.request.v1",
+    withdraw_proposal_input: { cause: "author", proposal_revision_id: grown.revision_id, expected_closure: "open",
+      expected_target_revisions: [seeded.chapter.current_revision.revision_id],
+      withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
+      editor_session_id: seeded.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(`${key}1`) } };
+  const withdrawn = await challenged(started.baseUrl, seeded.fetchImpl, seeded.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals", body.command_schema,
+    await digestWithdrawProposal(body), id(`${key}2`), (antiForgery) => withdrawProposal({ baseUrl: started.baseUrl,
+      projectId: seeded.projectId, proposalId: grown.proposal_id, fetchImpl: seeded.fetchImpl,
+      idempotencyKey: id(`${key}2`), antiForgery, request: body }));
+  assert.equal(withdrawn.effect.kind, "resolved");
+  // The Operations stay pending and keep their reservations, as for each withdrawn Proposal.
+  assert.deepEqual(await readProposal(started, seeded, grown.proposal_id), { ...grown, closure: "withdrawn" });
+  assert.deepEqual(await readChapter(started, seeded), seeded.chapter);
 });
 
 test("after a growth, Author Undo of an earlier candidate edit is a Barrier", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const seeded = await seedChapter(started);
-    const { proposal: opened } = await openProposal(started, seeded);
-    const edited = await sendAuthorEdit(started, { prepared: seeded, session: seeded.session }, { kind: "replace_selection", from: 0, to: 4, text: "Hold" },
-      { kind: "targeted", proposal: opened }, "4", `${seeded.ns}65`);
-    assert.equal(edited.effect.kind, "proposal_revised");
-    const before = await readProposal(started, seeded, opened.proposal_id);
-    const { grown } = await grow(started, seeded, before);
-    const session = await getEditorSession({ baseUrl: started.baseUrl, projectId: seeded.projectId,
-      fetchImpl: seeded.fetchImpl, editorSessionId: seeded.session.editor_session.editor_session_id });
-    const key = `${seeded.ns}91`;
-    const body: UndoLatestAuthorActionRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
-      undo_latest_author_action_input: { expected_author_undo_frontier_sequence: session.author_undo_frontier_sequence!,
-        expected_authoritative_revision_id: seeded.chapter.current_revision.revision_id,
-        editor_session_id: seeded.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(`${key}1`) } };
-    const undone = await challenged(started.baseUrl, seeded.fetchImpl, seeded.projectId, "POST",
-      "/api/v1/projects/{project_id}/author-actions/undo", body.command_schema, await digestUndoLatestAuthorAction(body),
-      id(`${key}2`), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: seeded.projectId,
-        fetchImpl: seeded.fetchImpl, idempotencyKey: id(`${key}2`), antiForgery, request: body }));
-    assert.deepEqual(undone.effect, { kind: "unavailable", reason: "barrier" });
-    assert.deepEqual(await readProposal(started, seeded, grown.proposal_id), grown);
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const seeded = await seedChapter(started);
+  const { proposal: opened } = await openProposal(started, seeded);
+  const edited = await sendAuthorEdit(started, { prepared: seeded, session: seeded.session }, { kind: "replace_selection", from: 0, to: 4, text: "Hold" },
+    { kind: "targeted", proposal: opened }, "4", `${seeded.ns}65`);
+  assert.equal(edited.effect.kind, "proposal_revised");
+  const before = await readProposal(started, seeded, opened.proposal_id);
+  const { grown } = await grow(started, seeded, before);
+  const session = await getEditorSession({ baseUrl: started.baseUrl, projectId: seeded.projectId,
+    fetchImpl: seeded.fetchImpl, editorSessionId: seeded.session.editor_session.editor_session_id });
+  const key = `${seeded.ns}91`;
+  const body: UndoLatestAuthorActionRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+    undo_latest_author_action_input: { expected_author_undo_frontier_sequence: session.author_undo_frontier_sequence!,
+      expected_authoritative_revision_id: seeded.chapter.current_revision.revision_id,
+      editor_session_id: seeded.session.editor_session.editor_session_id, ...BINDING, correlation_id: id(`${key}1`) } };
+  const undone = await challenged(started.baseUrl, seeded.fetchImpl, seeded.projectId, "POST",
+    "/api/v1/projects/{project_id}/author-actions/undo", body.command_schema, await digestUndoLatestAuthorAction(body),
+    id(`${key}2`), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: seeded.projectId,
+      fetchImpl: seeded.fetchImpl, idempotencyKey: id(`${key}2`), antiForgery, request: body }));
+  assert.deepEqual(undone.effect, { kind: "unavailable", reason: "barrier" });
+  assert.deepEqual(await readProposal(started, seeded, grown.proposal_id), grown);
 });
 
 test("the reads show the joinable blocks of a crossing selection and the atomic bundle of the growth", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const seeded = await seedChapter(started);
-    const { run: opening, proposal: before } = await openProposal(started, seeded);
-    assert.equal("joinable_block_ids" in opening.context, false);
-    assert.equal(before.bundle_policy, "none");
-    const { run, grown } = await grow(started, seeded, before);
-    assert.equal(grown.bundle_policy, "atomic");
-    assert.deepEqual(run.context.joinable_block_ids, [seeded.chapter.current_revision.blocks[1]!.manuscript_block_id]);
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const seeded = await seedChapter(started);
+  const { run: opening, proposal: before } = await openProposal(started, seeded);
+  assert.equal("joinable_block_ids" in opening.context, false);
+  assert.equal(before.bundle_policy, "none");
+  const { run, grown } = await grow(started, seeded, before);
+  assert.equal(grown.bundle_policy, "atomic");
+  assert.deepEqual(run.context.joinable_block_ids, [seeded.chapter.current_revision.blocks[1]!.manuscript_block_id]);
 });
 
 const undoRoute = "/api/v1/projects/{project_id}/author-actions/undo";
 const acceptRoute = "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances";
 
 test("undo acceptance requires a reversal proposal when the authoritative head has drifted", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id(`1309e1${randomBytes(2).toString("hex")}`), "Undo Acceptance Reversal Novel", "e4");
-    const accepted = await acceptOpened(started.baseUrl, prepared, "ec");
-    await queryPostgres(`UPDATE storyos.authoritative_heads SET current_revision_id = '${accepted.beforeRevision}'::uuid
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
-        AND manuscript_object_id = '${prepared.chapterId}'::uuid
-        AND current_revision_id = '${accepted.chapterRevision}'::uuid`);
-    const undone = await sendUndo(started.baseUrl, prepared, accepted.sessionId, accepted.frontier,
-      accepted.beforeRevision, id("e196"), id("e197"));
-    assert.equal(undone.effect.kind, "reversal_required");
-    assert.equal(undone.receipt.result, "proposal_revised");
-    if (undone.effect.kind !== "reversal_required") throw new Error("expected reversal");
-    assert.equal(undone.effect.source_sequence, accepted.frontier);
-    assert.equal(undone.proposal_id, undone.effect.proposal_id);
-    assert.deepEqual(await undoLatestAuthorAction({
-      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id("e197"), antiForgery: undone.nonce, request: undone.request,
-    }), undone.response);
-    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
-    assert.equal(chapter.chapter.current_revision.revision_id, accepted.beforeRevision);
-    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.author_action_entries
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
-        AND compensated_source_sequence = ${accepted.frontier}
-        AND disposition = 'compensation'`), "0");
-    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.authoritative_revisions
-      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
-        AND revision_id = '${accepted.chapterRevision}'::uuid`), "1");
-    const reversal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: undone.effect.proposal_id, fetchImpl: prepared.fetchImpl });
-    assert.equal(reversal.proposal.kind, "reversal");
-    assert.equal(reversal.proposal.operation_resolution, "pending");
-    assert.equal(reversal.proposal.candidate_text, accepted.beforeBody);
-  } finally {
-    await stopRealServer(started.server);
-  }
+  await drainLeftoverWork();
+  const prepared = await prepare(started.baseUrl, id(`1309e1${randomBytes(2).toString("hex")}`), "Undo Acceptance Reversal Novel", "e4");
+  const accepted = await acceptOpened(started.baseUrl, prepared, "ec");
+  await queryPostgres(`UPDATE storyos.authoritative_heads SET current_revision_id = '${accepted.beforeRevision}'::uuid
+    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+      AND manuscript_object_id = '${prepared.chapterId}'::uuid
+      AND current_revision_id = '${accepted.chapterRevision}'::uuid`);
+  const undone = await sendUndo(started.baseUrl, prepared, accepted.sessionId, accepted.frontier,
+    accepted.beforeRevision, id("e196"), id("e197"));
+  assert.equal(undone.effect.kind, "reversal_required");
+  assert.equal(undone.receipt.result, "proposal_revised");
+  if (undone.effect.kind !== "reversal_required") throw new Error("expected reversal");
+  assert.equal(undone.effect.source_sequence, accepted.frontier);
+  assert.equal(undone.proposal_id, undone.effect.proposal_id);
+  assert.deepEqual(await undoLatestAuthorAction({
+    baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+    idempotencyKey: id("e197"), antiForgery: undone.nonce, request: undone.request,
+  }), undone.response);
+  const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+    chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+  assert.equal(chapter.chapter.current_revision.revision_id, accepted.beforeRevision);
+  assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.author_action_entries
+    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+      AND compensated_source_sequence = ${accepted.frontier}
+      AND disposition = 'compensation'`), "0");
+  assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.authoritative_revisions
+    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+      AND revision_id = '${accepted.chapterRevision}'::uuid`), "1");
+  const reversal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+    proposalId: undone.effect.proposal_id, fetchImpl: prepared.fetchImpl });
+  assert.equal(reversal.proposal.kind, "reversal");
+  assert.equal(reversal.proposal.operation_resolution, "pending");
+  assert.equal(reversal.proposal.candidate_text, accepted.beforeBody);
 });
 
 async function acceptOpened(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, ns: string) {

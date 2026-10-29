@@ -9,12 +9,13 @@ import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreate
   getAgentRun, getChapter, steerAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference, SteerAgentRunRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer,
-} from "../support/node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, challenged, drainLeftoverWork, id, operations, prepare, readProposal, revisions, sendAuthorEdit,
   settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { runWorker, startServer } from "../support/http-harness.ts";
+import { runWorker, serverForFile } from "../support/http-harness.ts";
+
+const started = serverForFile();
 
 // ADR 0071: after a growth, the steering references move to the new Operations, and the Proposal can grow again.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came.", "Dawn broke."];
@@ -150,69 +151,60 @@ async function movedReferences(started: Started, seeded: Seeded, before: Proposa
 }
 
 test("steering after a growth moves the references and grows the Proposal again over the next Block", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns);
-    const { before, growth, first } = await growOnce(started, seeded, ns);
-    const added = chapterReference(seeded.chapter, [2, 0], [2, 4]);
-    await growth.steerAfterDecision("Grow it again. SCRIPT:grow_proposal", id(`${ns}72`), [added]);
-    const run = await growth.settle();
-    const { after, grownRevision, references } = await movedReferences(started, seeded, before, first);
-    assert.equal(run.status, "completed");
-    assert.deepEqual(run.context.selection_references, [
-      ...references.map((moved) => ({ ...moved, availability: { kind: "superseded", current_revision_id: after.revision_id } })),
-      { reference: added, manuscript_block_ids: [seeded.chapter.current_revision.blocks[2]!.manuscript_block_id],
-        availability: { kind: "current" } }]);
-    assert.deepEqual(operations(after), pending(seeded, [first, `${SENTENCES[1]}${JOINED}${REVISED}`, `${SENTENCES[2]}${JOINED}`]));
-    assert.equal(await revisions(before.proposal_id), "3 atomic");
-    if (run.decision.kind !== "prose_change" || after.validation_receipt.kind !== "present") {
-      throw new Error("expected a second growth Decision");
-    }
-    const validationReceiptId = after.validation_receipt.validation_receipt_id;
-    assert.deepEqual(run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, outcome })),
-      after.operations.slice(1).map(({ manuscript_block_id, operation_id }) => ({ manuscript_block_id, outcome: {
-        kind: "revised", proposal_id: before.proposal_id, operation_id, revision_id: after.revision_id,
-        prior_revision_id: grownRevision, validation_receipt_id: validationReceiptId } })));
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns);
+  const { before, growth, first } = await growOnce(started, seeded, ns);
+  const added = chapterReference(seeded.chapter, [2, 0], [2, 4]);
+  await growth.steerAfterDecision("Grow it again. SCRIPT:grow_proposal", id(`${ns}72`), [added]);
+  const run = await growth.settle();
+  const { after, grownRevision, references } = await movedReferences(started, seeded, before, first);
+  assert.equal(run.status, "completed");
+  assert.deepEqual(run.context.selection_references, [
+    ...references.map((moved) => ({ ...moved, availability: { kind: "superseded", current_revision_id: after.revision_id } })),
+    { reference: added, manuscript_block_ids: [seeded.chapter.current_revision.blocks[2]!.manuscript_block_id],
+      availability: { kind: "current" } }]);
+  assert.deepEqual(operations(after), pending(seeded, [first, `${SENTENCES[1]}${JOINED}${REVISED}`, `${SENTENCES[2]}${JOINED}`]));
+  assert.equal(await revisions(before.proposal_id), "3 atomic");
+  if (run.decision.kind !== "prose_change" || after.validation_receipt.kind !== "present") {
+    throw new Error("expected a second growth Decision");
+  }
+  const validationReceiptId = after.validation_receipt.validation_receipt_id;
+  assert.deepEqual(run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, outcome })),
+    after.operations.slice(1).map(({ manuscript_block_id, operation_id }) => ({ manuscript_block_id, outcome: {
+      kind: "revised", proposal_id: before.proposal_id, operation_id, revision_id: after.revision_id,
+      prior_revision_id: grownRevision, validation_receipt_id: validationReceiptId } })));
 });
 
 test("a second growth over a Block that is not adjacent to the run is refused", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns);
-    const { before, growth, first } = await growOnce(started, seeded, ns);
-    const added = chapterReference(seeded.chapter, [2, 0], [3, 4]);
-    await growth.steerAfterDecision("Join only the far line. SCRIPT:grow_gap", id(`${ns}72`), [added]);
-    const run = await growth.settle();
-    const { after, references } = await movedReferences(started, seeded, before, first);
-    assert.deepEqual(run.context.selection_references, [
-      ...references.map((moved) => ({ ...moved, availability: { kind: "current" } })),
-      { reference: added, manuscript_block_ids: seeded.chapter.current_revision.blocks.slice(2)
-        .map((block) => block.manuscript_block_id), availability: { kind: "current" } }]);
-    assert.deepEqual(run.decision, { kind: "absent" });
-    assert.deepEqual(operations(after), pending(seeded, [first, `${SENTENCES[1]}${JOINED}`]));
-    assert.equal(await revisions(before.proposal_id), "2 atomic");
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns);
+  const { before, growth, first } = await growOnce(started, seeded, ns);
+  const added = chapterReference(seeded.chapter, [2, 0], [3, 4]);
+  await growth.steerAfterDecision("Join only the far line. SCRIPT:grow_gap", id(`${ns}72`), [added]);
+  const run = await growth.settle();
+  const { after, references } = await movedReferences(started, seeded, before, first);
+  assert.deepEqual(run.context.selection_references, [
+    ...references.map((moved) => ({ ...moved, availability: { kind: "current" } })),
+    { reference: added, manuscript_block_ids: seeded.chapter.current_revision.blocks.slice(2)
+      .map((block) => block.manuscript_block_id), availability: { kind: "current" } }]);
+  assert.deepEqual(run.decision, { kind: "absent" });
+  assert.deepEqual(operations(after), pending(seeded, [first, `${SENTENCES[1]}${JOINED}`]));
+  assert.equal(await revisions(before.proposal_id), "2 atomic");
 });
 
 test("a Run that references two candidates of the grown Proposal gets the joinable marks", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns);
-    const { before, growth, first } = await growOnce(started, seeded, ns);
-    await growth.settle();
-    const { references } = await movedReferences(started, seeded, before, first);
-    const again = await admit(started, seeded, GROW, id(`${ns}81`), [...references.map(({ reference }) => reference),
-      chapterReference(seeded.chapter, [2, 0], [2, 4])]);
-    await again.settle();
-    assert.deepEqual(operations(await readProposal(started, seeded, before.proposal_id)),
-      pending(seeded, [first, `${SENTENCES[1]}${JOINED}${REVISED}`, `${SENTENCES[2]}${JOINED}`]));
-    assert.equal(await revisions(before.proposal_id), "3 atomic");
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns);
+  const { before, growth, first } = await growOnce(started, seeded, ns);
+  await growth.settle();
+  const { references } = await movedReferences(started, seeded, before, first);
+  const again = await admit(started, seeded, GROW, id(`${ns}81`), [...references.map(({ reference }) => reference),
+    chapterReference(seeded.chapter, [2, 0], [2, 4])]);
+  await again.settle();
+  assert.deepEqual(operations(await readProposal(started, seeded, before.proposal_id)),
+    pending(seeded, [first, `${SENTENCES[1]}${JOINED}${REVISED}`, `${SENTENCES[2]}${JOINED}`]));
+  assert.equal(await revisions(before.proposal_id), "3 atomic");
 });

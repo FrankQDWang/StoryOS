@@ -17,8 +17,8 @@ import type {
   UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { BINDING, PROJECT_A, USER_A, challenged, createEmpty, eventPayloadDigest, parseSseFrames, runRequest,
-  startServer } from "../support/http-harness.ts";
+import { BINDING, PROJECT_A, USER_A, challenged, createEmpty, eventPayloadDigest, parseSseFrames, postRun,
+  runRequest, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
@@ -326,23 +326,6 @@ async function prepareRunProject(
   return createdChapter.effect.chapter_id;
 }
 
-
-async function postRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  key: string,
-  request: CreateAgentRunRequest,
-) {
-  const admitted = await challenged(baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
-    }));
-  return { admitted };
-}
-
 test("implemented assistance and Run Events replay from a retained public cursor", async () => {
   const started = await startServer();
   try {
@@ -356,7 +339,7 @@ test("implemented assistance and Run Events replay from a retained public cursor
       started.baseUrl, first.fetchImpl, first.projectId, activityId("f732"),
       runRequest(chapterId, activityId("f733"), "Help with this passage."),
     );
-    if (run.admitted.effect.kind !== "admitted") throw new Error("Run admission did not apply");
+    if (run.effect.kind !== "admitted") throw new Error("Run admission did not apply");
     const options = {
       baseUrl: started.baseUrl,
       projectId: first.projectId,
@@ -378,7 +361,7 @@ test("implemented assistance and Run Events replay from a retained public cursor
     assert.deepEqual(frames[0]?.data.aggregate_ref, { kind: "project", id: first.projectId });
     assert.equal(frames[3]?.data.event_schema, "storyos.event.agent-run-created.v1");
     assert.deepEqual(frames[3]?.data.aggregate_ref, {
-      kind: "agent_run", id: run.admitted.effect.run_id,
+      kind: "agent_run", id: run.effect.run_id,
     });
     const afterAssistance = await activityStream({ ...options, lastEventId: frames[0]!.id });
     assert.equal((afterAssistance.match(/event: storyos.project-activity/g) ?? []).length, 3);

@@ -6,11 +6,13 @@ import { createAgentRun, createEditorSession, digestCreateAgentRun, digestCreate
   getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse, GetProposalResponse,
   SelectionReference } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, candidateTextReference, challenged, drainLeftoverWork, id, operations, prepare, readProposal,
   revisions, sendAuthorEdit, settleOnce } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { startServer } from "../support/http-harness.ts";
+import { serverForFile } from "../support/http-harness.ts";
+
+const started = serverForFile();
 
 // ADR 0071: one reply revises the referenced candidate and grows its Proposal over adjacent Chapter blocks.
 const SENTENCES = ["Rain fell.", "Wind rose.", "Night came.", "Dawn broke."];
@@ -99,79 +101,67 @@ function grownOperations(before: Proposal, seeded: Seeded, joined: number[]) {
 }
 
 test.each(["all", "part"])("a selection from the candidate into %s of the next Block grows the Proposal", async (cover) => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns, 3);
-    const before = await openProposal(started, seeded, id(`${ns}61`));
-    assert.equal(await revisions(before.proposal_id), "1 none");
-    const grown = await request(started, seeded, GROW, id(`${ns}71`), [candidateTextReference(before),
-      chapterReference(seeded.chapter, [1, 0], [1, cover === "all" ? SENTENCES[1]!.length : 4])]);
-    const after = await readProposal(started, seeded, before.proposal_id);
-    assert.deepEqual(operations(after), grownOperations(before, seeded, [1]));
-    assert.equal(await revisions(before.proposal_id), "2 atomic");
-    assert.equal(await queryPostgres(`SELECT parent_revision_id::text FROM storyos.proposal_revisions
-      WHERE revision_id = '${after.revision_id}'::uuid;`), before.revision_id);
-    if (grown.run.decision.kind !== "prose_change" || after.validation_receipt.kind !== "present") {
-      throw new Error("expected a growth Decision");
-    }
-    const validationReceiptId = after.validation_receipt.validation_receipt_id;
-    assert.deepEqual(grown.run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, outcome })),
-      after.operations.map(({ manuscript_block_id, operation_id }) => ({ manuscript_block_id, outcome: {
-        kind: "revised", proposal_id: before.proposal_id, operation_id, revision_id: after.revision_id,
-        prior_revision_id: before.revision_id, validation_receipt_id: validationReceiptId } })));
-    // An exact retry returns the same Run and writes no second Revision.
-    assert.deepEqual(await grown.repeat(), grown.created);
-    await settleOnce();
-    assert.deepEqual(await readProposal(started, seeded, before.proposal_id), after);
-    assert.equal(await revisions(before.proposal_id), "2 atomic");
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns, 3);
+  const before = await openProposal(started, seeded, id(`${ns}61`));
+  assert.equal(await revisions(before.proposal_id), "1 none");
+  const grown = await request(started, seeded, GROW, id(`${ns}71`), [candidateTextReference(before),
+    chapterReference(seeded.chapter, [1, 0], [1, cover === "all" ? SENTENCES[1]!.length : 4])]);
+  const after = await readProposal(started, seeded, before.proposal_id);
+  assert.deepEqual(operations(after), grownOperations(before, seeded, [1]));
+  assert.equal(await revisions(before.proposal_id), "2 atomic");
+  assert.equal(await queryPostgres(`SELECT parent_revision_id::text FROM storyos.proposal_revisions
+    WHERE revision_id = '${after.revision_id}'::uuid;`), before.revision_id);
+  if (grown.run.decision.kind !== "prose_change" || after.validation_receipt.kind !== "present") {
+    throw new Error("expected a growth Decision");
+  }
+  const validationReceiptId = after.validation_receipt.validation_receipt_id;
+  assert.deepEqual(grown.run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, outcome })),
+    after.operations.map(({ manuscript_block_id, operation_id }) => ({ manuscript_block_id, outcome: {
+      kind: "revised", proposal_id: before.proposal_id, operation_id, revision_id: after.revision_id,
+      prior_revision_id: before.revision_id, validation_receipt_id: validationReceiptId } })));
+  // An exact retry returns the same Run and writes no second Revision.
+  assert.deepEqual(await grown.repeat(), grown.created);
+  await settleOnce();
+  assert.deepEqual(await readProposal(started, seeded, before.proposal_id), after);
+  assert.equal(await revisions(before.proposal_id), "2 atomic");
 });
 
 test("a selection from the Block above into the candidate grows the Proposal upward", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns, 2);
-    const before = await openProposal(started, seeded, id(`${ns}61`), "last");
-    await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
-      candidateTextReference(before)]);
-    const after = await readProposal(started, seeded, before.proposal_id);
-    assert.deepEqual(operations(after), grownOperations(before, seeded, [0]));
-    assert.equal(await revisions(before.proposal_id), "2 atomic");
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns, 2);
+  const before = await openProposal(started, seeded, id(`${ns}61`), "last");
+  await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
+    candidateTextReference(before)]);
+  const after = await readProposal(started, seeded, before.proposal_id);
+  assert.deepEqual(operations(after), grownOperations(before, seeded, [0]));
+  assert.equal(await revisions(before.proposal_id), "2 atomic");
 });
 
 test("a Block that another pending Proposal reserves does not join", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns, 4);
-    const reserved = await openProposal(started, seeded, id(`${ns}61`));
-    const before = await openProposal(started, seeded, id(`${ns}62`));
-    assert.equal(before.manuscript_block_id, seeded.chapter.current_revision.blocks[1]!.manuscript_block_id);
-    await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
-      candidateTextReference(before), chapterReference(seeded.chapter, [2, 0], [2, 4])]);
-    assert.deepEqual(operations(await readProposal(started, seeded, before.proposal_id)), grownOperations(before, seeded, [2]));
-    assert.deepEqual(await readProposal(started, seeded, reserved.proposal_id), reserved);
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns, 4);
+  const reserved = await openProposal(started, seeded, id(`${ns}61`));
+  const before = await openProposal(started, seeded, id(`${ns}62`));
+  assert.equal(before.manuscript_block_id, seeded.chapter.current_revision.blocks[1]!.manuscript_block_id);
+  await request(started, seeded, GROW, id(`${ns}71`), [chapterReference(seeded.chapter, [0, 3], [1, SENTENCES[1]!.length]),
+    candidateTextReference(before), chapterReference(seeded.chapter, [2, 0], [2, 4])]);
+  assert.deepEqual(operations(await readProposal(started, seeded, before.proposal_id)), grownOperations(before, seeded, [2]));
+  assert.deepEqual(await readProposal(started, seeded, reserved.proposal_id), reserved);
 });
 
 test.each(["grow_unjoinable", "grow_gap"])("a %s reply is refused and the Proposal does not change", async (script) => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const seeded = await seedChapter(started, ns, 4);
-    const before = await openProposal(started, seeded, id(`${ns}61`));
-    const { run } = await request(started, seeded, `make these lines one tight scene. SCRIPT:${script}`, id(`${ns}71`),
-      [candidateTextReference(before), chapterReference(seeded.chapter, [1, 0], [2, 4])]);
-    assert.deepEqual(run.decision, { kind: "absent" });
-    assert.deepEqual(await readProposal(started, seeded, before.proposal_id), before);
-    assert.equal(await revisions(before.proposal_id), "1 none");
-    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const seeded = await seedChapter(started, ns, 4);
+  const before = await openProposal(started, seeded, id(`${ns}61`));
+  const { run } = await request(started, seeded, `make these lines one tight scene. SCRIPT:${script}`, id(`${ns}71`),
+    [candidateTextReference(before), chapterReference(seeded.chapter, [1, 0], [2, 4])]);
+  assert.deepEqual(run.decision, { kind: "absent" });
+  assert.deepEqual(await readProposal(started, seeded, before.proposal_id), before);
+  assert.equal(await revisions(before.proposal_id), "1 none");
+  assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
 });

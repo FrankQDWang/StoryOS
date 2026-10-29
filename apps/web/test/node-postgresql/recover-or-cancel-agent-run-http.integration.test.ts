@@ -35,8 +35,8 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, postRun, prepare, problemCode,
-  runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, postRun, prepare,
+  problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
@@ -130,15 +130,6 @@ async function postCancel(
   return { challenge, response };
 }
 
-async function inspectRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  runId: string,
-): Promise<GetAgentRunResponse> {
-  return getAgentRun({ baseUrl, projectId, runId, fetchImpl });
-}
-
 function activityEvent(body: string, eventKind: string) {
   return body.split("\n\n").map((block) => {
     const data = block.split("\n").find((line) => line.startsWith("data:"));
@@ -173,7 +164,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     });
     assert.equal(pauseReplay.command_id, paused.response.command_id);
     assert.equal(pauseReplay.receipt.receipt_id, paused.response.receipt.receipt_id);
-    const pausedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const pausedInspect = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(pausedInspect.status, "paused");
     assert.equal(pausedInspect.decision.kind, "absent");
     assert.equal(pausedInspect.usage.kind, "unknown");
@@ -239,7 +230,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     });
     assert.equal(cancelReplay.command_id, cancelled.response.command_id);
     assert.equal(cancelReplay.receipt.receipt_id, cancelled.response.receipt.receipt_id);
-    const cancelledInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const cancelledInspect = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(cancelledInspect.status, "cancelled");
     assert.equal(cancelledInspect.decision.kind, "absent");
     assert.equal(cancelledInspect.usage.kind, "unknown");
@@ -266,13 +257,13 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     );
     assert.notEqual(successor.effect.run_id, created.effect.run_id);
     await settleOnce();
-    const successorInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id);
+    const successorInspect = await inspectRun(started.baseUrl, prepared, successor.effect.run_id);
     assert.equal(successorInspect.status, "completed");
     const terminal = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id, id("c191"), id("c192"));
     assert.equal(terminal.response.effect.kind, "conflicted");
     if (terminal.response.effect.kind !== "conflicted") throw new Error("expected terminal");
     assert.equal(terminal.response.effect.reason, "terminal_run");
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id)).status, "completed");
+    assert.equal((await inspectRun(started.baseUrl, prepared, successor.effect.run_id)).status, "completed");
   } finally {
     await stopRealServer(started.server);
   }
@@ -318,7 +309,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     writeFileSync(dispatchHold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, run.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const cancelled = await postCancel(started.baseUrl, rateLimitedFetch, prepared.projectId, run.effect.run_id, id("c331"), id("c332"), challenge);
@@ -326,7 +317,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     unlinkSync(dispatchHold);
     await worker;
     await settleOnce();
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id)).status, "cancelled");
+    assert.equal((await inspectRun(started.baseUrl, prepared, run.effect.run_id)).status, "cancelled");
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (worker !== undefined) await Promise.allSettled([worker]);
@@ -359,7 +350,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     });
     workers.push(dispatchWorker);
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const cancelledHold = await postCancel(started.baseUrl, cancelFetch, prepared.projectId, dispatchRun.effect.run_id, id("c231"), id("c232"), dispatchCancelChallenge);
@@ -367,7 +358,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     unlinkSync(dispatchHold);
     await dispatchWorker;
     await settleOnce();
-    const afterCancel = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id);
+    const afterCancel = await inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id);
     assert.equal(afterCancel.status, "cancelled");
     assert.equal(afterCancel.decision.kind, "absent");
     assert.equal(afterCancel.usage.kind, "unknown");
@@ -383,7 +374,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
          AND attempt_role = 'abort';
     `), "1 1 acknowledged");
     await settleOnce();
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id)).status, "cancelled");
+    assert.equal((await inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id)).status, "cancelled");
 
     writeFileSync(dispatchHold, "hold");
     const recoverRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c241"));
@@ -393,7 +384,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     });
     workers.push(staleWorker);
     const beforeRecover = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, recoverRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, recoverRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     if (beforeRecover.model_attempt.kind !== "present") throw new Error("expected attempt");
@@ -401,7 +392,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     const recoverer = settleOnce({ STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
     workers.push(recoverer);
     const recovered = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, recoverRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, recoverRun.effect.run_id),
       (current) => current.status === "completed" && current.model_attempt.kind === "present",
     );
     unlinkSync(dispatchHold);
@@ -423,7 +414,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     };
     await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "PUT", "/api/v1/projects/{project_id}/assistance", unavailable.command_schema, await digestUpdateProjectAssistance(unavailable), id("c253"), (antiForgery) => updateProjectAssistance({ baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, idempotencyKey: id("c253"), antiForgery, request: unavailable }));
     await settleOnce();
-    const blockedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, blocked.effect.run_id);
+    const blockedInspect = await inspectRun(started.baseUrl, prepared, blocked.effect.run_id);
     assert.equal(blockedInspect.status, "refused");
     assert.notEqual(blockedInspect.status, "cancelled");
 
@@ -444,7 +435,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     const decisionWorker = settleHeld({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     workers.push(decisionWorker);
     const beforeCancelProposal = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id),
       (current) => current.decision.kind === "prose_change" && current.decision.opened_proposal.kind === "present",
     );
     if (beforeCancelProposal.decision.kind !== "prose_change") throw new Error("expected prose");
@@ -463,7 +454,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     assert.equal(proposal.proposal.closure, "open");
     assert.equal(proposal.proposal.operation_resolution, "pending");
     assert.equal(proposal.proposal.reservation_state, "unresolved");
-    const cancelledProposalInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id);
+    const cancelledProposalInspect = await inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id);
     assert.equal(cancelledProposalInspect.status, "cancelled");
     assert.equal(cancelledProposalInspect.decision.kind, "prose_change");
   } finally {
@@ -486,7 +477,7 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
     writeFileSync(dispatchHold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, run.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const paused = await postPause(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id, id("c641"), id("c642"));
@@ -496,7 +487,7 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
     unlinkSync(dispatchHold);
     await worker;
     await settleOnce();
-    const after = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, run.effect.run_id);
     assert.equal(after.status, "cancelled");
     assert.equal(after.decision.kind, "absent");
     assert.equal(await queryPostgres(`
