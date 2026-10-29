@@ -191,6 +191,121 @@ async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settleme
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_readable_export_settles_failed_when_its_pinned_snapshot_expired_before_output() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(&runtime_url);
+    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    remove_export_work_rows(&admin).await;
+    let export_id = admit_readable_export(&store, &scope).await;
+    let Some(ClaimedExportWork::Readable(claim)) = claim_next_export_work(&store).await.unwrap()
+    else {
+        panic!("the admitted readable export must be claimed");
+    };
+    let snapshot_key: [&(dyn tokio_postgres::types::ToSql + Sync); 3] = [
+        &scope.owner_user_id.as_ref(),
+        &scope.project_id.as_ref(),
+        &claim.source_snapshot_id,
+    ];
+    let expires_at_before: Option<String> = admin
+        .query_one(
+            "UPDATE storyos.project_snapshots AS snapshot
+                SET expires_at = clock_timestamp() - interval '1 second'
+               FROM storyos.project_snapshots AS earlier
+              WHERE (snapshot.owner_user_id, snapshot.project_id, snapshot.snapshot_id) =
+                    (earlier.owner_user_id, earlier.project_id, earlier.snapshot_id)
+                AND snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.snapshot_id = $3::text::uuid
+             RETURNING earlier.expires_at::text",
+            &snapshot_key,
+        )
+        .await
+        .unwrap()
+        .get(0);
+
+    let activity_position_before = activity_position(&admin, &scope).await;
+    admin.batch_execute("BEGIN").await.unwrap();
+    admin
+        .execute(
+            "SELECT set_config('storyos.user_id', $1, true),
+                    set_config('storyos.owner_user_id', $1, true),
+                    set_config('storyos.project_id', $2, true)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+    let settled = crate::readable_export_work::complete_claimed_export(&admin, &claim)
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let receipt: (String, String) = admin
+        .query_one(
+            "SELECT result_kind, result_payload ->> 'reason' FROM storyos.domain_receipts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &claim.author_command_admission_id,
+            ],
+        )
+        .await
+        .map(|row| (row.get(0), row.get(1)))
+        .unwrap();
+    let after_settlement = store
+        .read_human_readable_manuscript_export(&scope, &export_id)
+        .await
+        .unwrap();
+    remove_export_work_rows(&admin).await;
+    remove_export_settlement_rows(
+        &admin,
+        &scope,
+        &claim.author_command_admission_id,
+        activity_position_before.as_deref(),
+    )
+    .await;
+    admin
+        .execute(
+            "UPDATE storyos.project_snapshots SET expires_at = $4::text::timestamptz
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND snapshot_id = $3::text::uuid",
+            &[
+                snapshot_key[0],
+                snapshot_key[1],
+                snapshot_key[2],
+                &expires_at_before,
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(settled, CompleteReadableExport::SettledFailed);
+    assert_eq!(
+        receipt,
+        (
+            "refused".to_owned(),
+            "pinned_export_source_unavailable".to_owned()
+        )
+    );
+    assert!(
+        matches!(
+            after_settlement,
+            GetHumanReadableManuscriptExport::Failed(_)
+        ),
+        "a read after settlement must see the failed export: {after_settlement:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlement() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
