@@ -8,14 +8,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  acceptProposal, applyAuthorEdit, cancelAgentRun, completeReadyPartialProposal, createAgentRun, createChapter,
+  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter,
   createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
-  digestCompleteReadyPartialProposal, digestCreateAgentRun, digestCreateChapter,
+  digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations,
   reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CompleteReadyPartialProposalRequest,
+  AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest,
   CreateAgentRunRequest, CreateEditorSessionRequest, GetProposalResponse, ReopenRejectedOperationsRequest,
   SelectionReference, SteerAgentRunRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -1391,33 +1391,5 @@ test("reopenRejectedOperations classifies one selected Operation of a two-operat
     assert.deepEqual(after.proposal.operations, proposal.operations.map((current) =>
       current.operation_id === operation.operation_id
         ? { ...current, resolution: "pending", reservation_state: "unresolved" } : current));
-  } finally { await stopRealServer(started.server); }
-});
-
-test("completeReadyPartialProposal classifies a two-operation Proposal Generation", async () => {
-  const started = await startRealServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, proposalId, editorSessionId, targetRevisionId, proposal } =
-      await rejectFirstOperation(started.baseUrl, ns);
-    const { created } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId, proposal,
-      proposal.operations[1]!.operation_id, id(`${ns}51`), "Revise this passage: keep the candidate consistent.");
-    if (created.effect.kind !== "admitted") throw new Error("expected exact candidate admission");
-    await settleOnce();
-    const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
-    assert.equal(revised.proposal.generation, "ready");
-    const request: CompleteReadyPartialProposalRequest = {
-      command_schema: "storyos.command.complete-ready-partial-proposal.request.v1",
-      complete_ready_partial_proposal_input: { proposal_revision_id: revised.proposal.revision_id,
-        generation_id: id(`${ns}61`),
-        expected_candidate_digest: createHash("sha256").update(revised.proposal.candidate_text).digest("hex"),
-        last_applied_stream_seq: "1", expected_target_revisions: [targetRevisionId],
-        editor_session_id: editorSessionId, ...BINDING, correlation_id: id(`${ns}62`) } };
-    const completed = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions", request.command_schema,
-      await digestCompleteReadyPartialProposal(request), id(`${ns}63`), (antiForgery) => completeReadyPartialProposal({
-        baseUrl: started.baseUrl, projectId, proposalId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}63`) }));
-    assert.deepEqual(completed.effect, { kind: "refused", reason: "not_ready_partial" });
   } finally { await stopRealServer(started.server); }
 });

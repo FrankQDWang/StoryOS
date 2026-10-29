@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getChapter, getEditorSession, getProject,
+import { getChapter, getEditorSession, getManuscriptTree, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { UUID_V7, assertForeignRefused, createStory, problemOf, serverForFile } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
@@ -40,6 +40,13 @@ async function twoChapterStory(title: string) {
 
 async function openProject(story: TestStory) {
   return (await getProject({ baseUrl: story.baseUrl, projectId: story.projectId, fetchImpl: story.fetchImpl })).project;
+}
+
+function remove(story: TestProject, chapterId: string, expectedTreeRevision: string): CommandInput<"deleteChapter"> {
+  return { request: {
+    command_schema: "storyos.command.delete-chapter.request.v1",
+    delete_chapter_input: { expected_tree_revision: expectedTreeRevision, ...story.binding() },
+  }, path: { chapterId } };
 }
 
 test("setCurrentChapter applies, replays, refuses, and conflicts", async () => {
@@ -111,4 +118,55 @@ test("setCurrentChapter replays its first acknowledgement after later changes an
   assert.deepEqual(await first.command.send(), { response: first.response, body: first.body });
   await server.restart();
   assert.deepEqual(await first.command.send(), { response: first.response, body: first.body });
+});
+
+test("deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty", async () => {
+  const story = await createStory(server, { title: "Delete Novel", chapters: ["Chapter A", "Chapter B", "Chapter C"] });
+  const { baseUrl, projectId, fetchImpl } = story;
+  const [chapterAId = "", chapterBId = "", chapterCId = ""] = story.chapterIds;
+  const session = await story.openEditorSession();
+  assert.equal(session.writer.kind, "current_writer");
+  assert.equal(session.base_snapshot.chapter_id, chapterAId);
+
+  const removedB = (await story.send("deleteChapter", remove(story, chapterBId, "5"))).response;
+  assert.equal(removedB.effect.kind, "authoritative_applied");
+  assert.equal(removedB.receipt.command_kind, "deleteChapter");
+  assert.match(removedB.command_id, UUID_V7);
+  assert.equal(removedB.project.open.kind, "current_chapter");
+  if (removedB.project.open.kind === "current_chapter") {
+    assert.equal(removedB.project.open.current_chapter_id, chapterAId);
+  }
+  const treeAfterB = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
+  assert.deepEqual(
+    treeAfterB.volumes[0]?.chapters.map((chapter) => chapter.title),
+    ["Chapter A", "Chapter C"],
+  );
+  assert.equal((await problemOf(getChapter({ baseUrl, projectId, chapterId: chapterBId, fetchImpl }))).status, 404);
+
+  const removedA = (await story.send("deleteChapter", remove(story, chapterAId, "6"))).response;
+  assert.equal(removedA.effect.kind, "authoritative_applied");
+  assert.equal(removedA.project.open.kind, "current_chapter");
+  if (removedA.project.open.kind === "current_chapter") {
+    assert.equal(removedA.project.open.current_chapter_id, chapterCId);
+  }
+
+  const removedC = (await story.send("deleteChapter", remove(story, chapterCId, "7"))).response;
+  assert.equal(removedC.effect.kind, "authoritative_applied");
+  assert.equal(removedC.project.open.kind, "empty");
+  const treeEmpty = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
+  assert.deepEqual(treeEmpty.volumes[0]?.chapters, []);
+  const project = await getProject({ baseUrl, projectId, fetchImpl });
+  assert.equal(project.project.open.kind, "empty");
+
+  const already = (await story.send("deleteChapter", remove(story, chapterCId, "8"))).response;
+  assert.equal(already.effect.kind, "no_effect");
+  if (already.effect.kind === "no_effect") {
+    assert.equal(already.effect.reason, "already_removed");
+  }
+
+  const stale = (await story.send("deleteChapter", remove(story, chapterAId, "7"))).response;
+  assert.equal(stale.effect.kind, "conflicted");
+
+  const foreign = await problemOf(story.as("session-b").send("deleteChapter", remove(story, chapterAId, "8")));
+  assert.equal(foreign.status, 404);
 });

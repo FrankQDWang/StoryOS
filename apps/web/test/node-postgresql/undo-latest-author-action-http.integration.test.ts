@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import { getChapter, getEditorSession, getProject, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, openProposal, problemOf, serverForFile,
+import { USER_A, UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, openProposal, problemOf, serverForFile,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
@@ -146,4 +146,65 @@ test("undoLatestAuthorAction of an Operation rejection is a Barrier and keeps th
   assert.deepEqual(blocked.response.effect, { kind: "unavailable", reason: "barrier" });
   assert.deepEqual(await blocked.command.send(), { response: blocked.response, body: blocked.body });
   assert.deepEqual(await inspect(), beforeUndo);
+});
+
+/** Opens one Proposal, withdraws it as the author, and returns the facts of the withdrawal. */
+async function withdrawnProposal(title: string) {
+  const story = await createStory(server, { title, assistance: true });
+  const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+    chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
+  const before = await chapter();
+  const proposal = (await openProposal(story)).proposal;
+  const session = await story.openEditorSession();
+  const withdrawn = (await story.send("withdrawProposal", { request: {
+    command_schema: "storyos.command.withdraw-proposal.request.v1",
+    withdraw_proposal_input: {
+      cause: "author",
+      proposal_revision_id: proposal.revision_id,
+      expected_closure: "open",
+      expected_target_revisions: [before.current_revision.revision_id],
+      withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
+      editor_session_id: session.editor_session.editor_session_id,
+      ...story.binding(),
+    },
+  }, path: { proposalId: proposal.proposal_id } })).response;
+  if (withdrawn.effect.kind !== "resolved" || withdrawn.effect.author_action_sequence === null) {
+    throw new Error("expected an author withdrawal");
+  }
+  const withdrawalEventId = withdrawn.effect.closure_event_refs[0];
+  if (withdrawalEventId === undefined) throw new Error("expected a withdrawal event");
+  return {
+    story,
+    chapter,
+    proposalId: proposal.proposal_id,
+    proposalRevisionId: proposal.revision_id,
+    chapterRevisionId: before.current_revision.revision_id,
+    before,
+    editorSessionId: session.editor_session.editor_session_id,
+    withdrawalEventId,
+    authorActionSequence: withdrawn.effect.author_action_sequence,
+  };
+}
+
+test("root undo of an author withdrawal reopens the Proposal under the existing frontier", async () => {
+  await drainLeftoverWork();
+  const opened = await withdrawnProposal("Reopen Withdrawn Proposal Novel");
+  const { story } = opened;
+  const undoInput = undo(story, { expectedFrontier: opened.authorActionSequence,
+    expectedRevisionId: opened.chapterRevisionId, editorSessionId: opened.editorSessionId });
+  const undone = (await story.send("undoLatestAuthorAction", undoInput)).response;
+  assert.equal(undone.effect.kind, "compensated");
+  if (undone.effect.kind !== "compensated") throw new Error("expected compensated undo");
+  assert.equal(undone.effect.source_sequence, opened.authorActionSequence);
+  assert.deepEqual([Object.hasOwn(undone.effect, "authoritative_revision"), Object.hasOwn(undone.effect, "authoritative_commit_id")],
+    [false, false]);
+  const inspected = (await getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
+    proposalId: opened.proposalId, fetchImpl: story.fetchImpl })).proposal;
+  assert.equal(inspected.closure, "open");
+  assert.equal(inspected.validation, "pending");
+  assert.equal(inspected.operation_resolution, "pending");
+  assert.notEqual(inspected.revision_id, opened.proposalRevisionId);
+  assert.deepEqual(await opened.chapter(), opened.before);
+  const foreign = await problemOf(story.as("session-b").send("undoLatestAuthorAction", undoInput));
+  assert.ok(foreign.status === 404 && !foreign.body.includes(USER_A));
 });

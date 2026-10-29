@@ -8,10 +8,10 @@ import { acceptProposal, createEditorSession, digestAcceptProposal, digestCreate
   getChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, id, startRealServer, drainLeftoverWork, challenged, prepare,
-  admitProse, reviseCandidate, settleOnce, USER_A } from "../support/acceptance.ts";
+  admitProse, reviseCandidate, seedAcceptanceCondition, settleOnce, USER_A } from "../support/acceptance.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { queryStoryOSPostgres, sessionFetch, requireStoryOSProtocolError, stopStoryOSServer } from "../support/node-integration.ts";
-import { TestServer, createStory, freshNamespace, openProposal } from "../support/http-harness.ts";
+import { TestServer, UUID_V7, createStory, freshNamespace, openProposal } from "../support/http-harness.ts";
 
 test("Acceptance retains a stale-writer refusal without changing Proposal validity", async () => {
   let started = await startRealServer();
@@ -263,6 +263,185 @@ test("acceptProposal retains altered_candidate across reload and refuses another
     assert.deepEqual(await inspect(), expected);
     assert.deepEqual(await chapter(), before);
     assert.equal((await inspect()).operation_resolution, "pending");
+  } finally {
+    await server.stop();
+  }
+});
+
+test("replanProposal appends a pending Revision bound to the current Head", async () => {
+  const server = await TestServer.start();
+  try {
+    await drainLeftoverWork();
+    const story = await createStory(server, { title: "Replan Proposal Novel", assistance: true });
+    const chapterId = story.chapterIds[0] ?? "";
+    const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+      chapterId, fetchImpl: story.fetchImpl })).chapter;
+    const inspect = async (proposalId: string) => (await getProposal({ baseUrl: story.baseUrl,
+      projectId: story.projectId, proposalId, fetchImpl: story.fetchImpl })).proposal;
+    let before = await chapter();
+    // openProposal refuses a decision that is not an opened prose change.
+    const opened = await openProposal(story);
+    assert.deepEqual(opened.proposal.source_condition, { kind: "absent" });
+    const { session, revised } = await reviseCandidate(story.baseUrl, story.fetchImpl, story.projectId, opened,
+      freshNamespace());
+    if (revised.proposal.validation_receipt.kind !== "present") {
+      throw new Error("expected validation receipt");
+    }
+    const headId = story.key();
+    await queryStoryOSPostgres(`INSERT INTO storyos.authoritative_revisions
+      SELECT owner_user_id, project_id, manuscript_object_id, '${headId}'::uuid, payload_id
+      FROM storyos.authoritative_revisions WHERE project_id = '${story.projectId}'::uuid
+        AND revision_id = '${before.current_revision.revision_id}'::uuid;
+      INSERT INTO storyos.manuscript_revision_members
+      SELECT owner_user_id, project_id, manuscript_object_id, '${headId}'::uuid,
+        manuscript_block_id, block_order FROM storyos.manuscript_revision_members
+      WHERE project_id = '${story.projectId}'::uuid
+        AND revision_id = '${before.current_revision.revision_id}'::uuid;
+      UPDATE storyos.authoritative_heads SET current_revision_id = '${headId}'::uuid
+      WHERE project_id = '${story.projectId}'::uuid
+        AND manuscript_object_id = '${chapterId}'::uuid`);
+    before = await chapter();
+    const { conflictRef, receiptId } = await seedAcceptanceCondition(story.baseUrl, story.fetchImpl,
+      story.projectId, revised.proposal, session.editor_session.editor_session_id,
+      before.current_revision.revision_id, "proposal_conflict", freshNamespace());
+    const afterConflict = await inspect(revised.proposal.proposal_id);
+    assert.equal(afterConflict.validation, "conflicted");
+    assert.equal(afterConflict.revision_id, revised.proposal.revision_id);
+    assert.deepEqual(afterConflict.source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
+      SET condition_kind = 'proposal_recovery_conflict'
+      WHERE conflict_id = '${conflictRef}'::uuid`);
+    assert.deepEqual((await inspect(revised.proposal.proposal_id)).source_condition, {
+      kind: "proposal_recovery_conflict",
+      proposal_recovery_conflict_ref: conflictRef,
+    });
+    await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
+      SET condition_kind = 'proposal_conflict'
+      WHERE conflict_id = '${conflictRef}'::uuid`);
+    assert.deepEqual((await inspect(revised.proposal.proposal_id)).source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    const replan = (conflictId = conflictRef) => ({ request: {
+      command_schema: "storyos.command.replan-proposal.request.v1" as const,
+      replan_proposal_input: {
+        conflicted_proposal_revision_id: afterConflict.revision_id,
+        expected_current_proposal_head: afterConflict.revision_id,
+        expected_current_target_revisions: [before.current_revision.revision_id],
+        replacement_operations: [afterConflict.operation_id],
+        source_condition: { kind: "proposal_conflict" as const, proposal_conflict_ref: conflictId },
+        editor_session_id: session.editor_session.editor_session_id,
+        ...story.binding(),
+      },
+    }, path: { proposalId: afterConflict.proposal_id } });
+    const unavailableProof = await story.send("replanProposal", replan(story.key()));
+    assert.deepEqual(unavailableProof.response.effect, { kind: "refused", reason: "unavailable_proof" });
+    assert.deepEqual((await inspect(afterConflict.proposal_id)).source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    const replanInput = replan();
+    const replanning = await story.challenge("replanProposal", replanInput);
+    await queryStoryOSPostgres(`CREATE FUNCTION storyos.test_replan_failure() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'replan fault'; END $$;
+      CREATE TRIGGER test_replan_failure BEFORE INSERT ON storyos.proposal_replans
+      FOR EACH ROW EXECUTE FUNCTION storyos.test_replan_failure();`);
+    try {
+      await assert.rejects(() => replanning.send(), (error) => requireStoryOSProtocolError(error).status === 503);
+      const stillConflicted = await inspect(afterConflict.proposal_id);
+      assert.equal(stillConflicted.revision_id, afterConflict.revision_id);
+      assert.equal(stillConflicted.validation, "conflicted");
+    } finally {
+      await queryStoryOSPostgres(`DROP TRIGGER test_replan_failure ON storyos.proposal_replans;
+        DROP FUNCTION storyos.test_replan_failure();`);
+    }
+    const replanned = (await replanning.send()).response;
+    assert.equal(replanned.effect.kind, "resolved");
+    assert.equal(replanned.receipt.result, "resolved");
+    if (replanned.effect.kind !== "resolved") throw new Error("expected resolved");
+    assert.equal(replanned.effect.undo_disposition, "forward");
+    assert.equal(replanned.effect.resulting_validation, "pending");
+    assert.equal(replanned.effect.preserved_generation, afterConflict.generation);
+    assert.equal(replanned.effect.preserved_closure, afterConflict.closure);
+    assert.deepEqual(replanned.effect.source_condition, {
+      kind: "proposal_conflict",
+      proposal_conflict_ref: conflictRef,
+    });
+    assert.match(replanned.effect.author_action_sequence, /^\d+$/);
+    assert.equal(replanned.effect.state_event_refs.length, 1);
+    const replanEventId = replanned.effect.state_event_refs[0] ?? "";
+    assert.match(replanEventId, UUID_V7);
+    assert.notEqual(replanned.effect.resulting_proposal_revision_id, afterConflict.revision_id);
+    assert.equal(replanned.receipt.source_proposal_revision_id, afterConflict.revision_id);
+    assert.equal(replanned.receipt.resulting_proposal_revision_id, replanned.effect.resulting_proposal_revision_id);
+    assert.deepEqual(replanned.receipt.authoritative_commit_ids, []);
+    assert.deepEqual((await replanning.send()).response, replanned);
+    const inspected = await inspect(afterConflict.proposal_id);
+    assert.equal(inspected.operation_id, afterConflict.operation_id);
+    assert.equal(inspected.operation_resolution, afterConflict.operation_resolution);
+    assert.equal(inspected.validation, "pending");
+    assert.equal(inspected.revision_id, replanned.effect.resulting_proposal_revision_id);
+    assert.equal(inspected.base_authoritative_revision_id, before.current_revision.revision_id);
+    assert.deepEqual(inspected.source_condition, { kind: "absent" });
+    assert.deepEqual(inspected.validation_receipt, { kind: "absent" });
+    assert.deepEqual(await chapter(), before);
+    await assert.rejects(() => story.as("session-b").send("replanProposal", replanInput), (error) => {
+      const protocol = requireStoryOSProtocolError(error);
+      return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+    });
+    // The request names the conflicted Proposal Revision, which is not the current Revision now.
+    const refused = await story.send("replanProposal", replan());
+    assert.deepEqual(refused.response.effect, { kind: "refused", reason: "stale_proposal_revision" });
+    const archive = await story.send("exportProjectArchive", { request: {
+      command_schema: "storyos.command.export-project-archive.request.v1",
+      export_project_archive_input: { ...story.binding(), archive_profile: "storyos.project-export.v1",
+        archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" },
+    } });
+    if (archive.response.effect.kind !== "admitted") throw new Error("expected admitted archive");
+    const exportId = archive.response.effect.export_id;
+    await settleOnce();
+    assert.equal((await getExportOperation({ baseUrl: story.baseUrl, projectId: story.projectId, exportId,
+      fetchImpl: story.fetchImpl })).status, "ready");
+    const download = await story.fetchImpl(`${story.baseUrl}/api/v1/projects/${story.projectId}/exports/${exportId}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(download.status, 200);
+    const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
+    assert.deepEqual(conditions, [{
+      owner_user_id: USER_A,
+      project_id: story.projectId,
+      proposal_id: afterConflict.proposal_id,
+      proposal_revision_id: afterConflict.revision_id,
+      acceptance_receipt_id: receiptId,
+      validation: "conflicted",
+      conflict_id: conflictRef,
+      condition_kind: "proposal_conflict",
+    }]);
+    const replans = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_replans.json")));
+    assert.deepEqual(replans, [{
+      owner_user_id: USER_A,
+      project_id: story.projectId,
+      replan_event_id: replanEventId,
+      proposal_id: afterConflict.proposal_id,
+      source_proposal_revision_id: afterConflict.revision_id,
+      resulting_proposal_revision_id: replanned.effect.resulting_proposal_revision_id,
+      source_condition_kind: "proposal_conflict",
+      source_condition_ref: conflictRef,
+      replan_receipt_id: replanned.receipt.receipt_id,
+      author_action_sequence: Number(replanned.effect.author_action_sequence),
+      preserved_generation: replanned.effect.preserved_generation,
+      preserved_closure: replanned.effect.preserved_closure,
+    }]);
+    await server.restart();
+    const reloaded = await inspect(afterConflict.proposal_id);
+    assert.equal(reloaded.revision_id, replanned.effect.resulting_proposal_revision_id);
+    assert.equal(reloaded.validation, "pending");
+    assert.equal(reloaded.base_authoritative_revision_id, before.current_revision.revision_id);
+    assert.deepEqual(reloaded.source_condition, { kind: "absent" });
+    assert.deepEqual(await chapter(), before);
   } finally {
     await server.stop();
   }

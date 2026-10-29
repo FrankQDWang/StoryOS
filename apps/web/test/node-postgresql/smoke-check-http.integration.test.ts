@@ -7,15 +7,16 @@ import { afterAll, test } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { queryStoryOSPostgres } from "../support/node-integration.ts";
 import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
   problemOf, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
+import { queryStoryOSPostgres } from "../support/node-integration.ts";
 
 // The Smoke Check table (ADR 0075). Each row proves only that its route answers: the route exists, a request with no
 // session is refused, a project command with no Command Challenge proof is refused, and the response has the declared
-// schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path.
+// schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path. A read that
+// is bound to the latest Project Snapshot also proves its expired-Snapshot answer.
 const server = serverForFile();
 afterAll(() => drainLeftoverWork());
 
@@ -491,6 +492,8 @@ interface ReadRow {
   shape?(response: unknown): void;
   /** The route needs no session (`public`) or only a session (`user`). Otherwise it is in Project Scope. */
   access?: "public" | "user";
+  /** The route reads the latest Project Snapshot and answers 409 `snapshot_expired` when that Snapshot expires. */
+  snapshotBound?: true;
 }
 
 const READS: Record<string, ReadRow> = {
@@ -515,7 +518,9 @@ const READS: Record<string, ReadRow> = {
         idempotencyKey: key, antiForgery, request: { command_schema: request.command_schema,
           prospective_project_id: issued.prospective_project_id, create_project_input: request.create_project_input } });
       const unproved = await problemOf(send("0".repeat(64), server.fetch()));
-      assert.deepEqual([unproved.status, unproved.code], [422, "challenge_invalid"]);
+      const foreign = await problemOf(send(issued.nonce, server.fetch("session-b")));
+      assert.deepEqual([unproved.status, unproved.code, foreign.status], [422, "challenge_invalid", 422]);
+      assert.ok(!foreign.body.includes(USER_A));
       return send(issued.nonce);
     },
     access: "user",
@@ -532,7 +537,14 @@ const READS: Record<string, ReadRow> = {
       } }),
     shape: (challenge) => assert.match((challenge as { nonce: string }).nonce, NONCE),
   },
-  listProjects: { call: (_, fetchImpl) => client.listProjects({ baseUrl: server.baseUrl, fetchImpl }), access: "user" },
+  listProjects: {
+    call: async (_, fetchImpl) => {
+      const listed = await client.listProjects({ baseUrl: server.baseUrl, fetchImpl });
+      assert.equal(listed.owner_user_id, USER_A);
+      return listed;
+    },
+    access: "user",
+  },
   getProject: { call: ({ story }, fetchImpl) => client.getProject({ ...scope(story), fetchImpl }) },
   getProjectAssistance: {
     call: ({ story }, fetchImpl) => client.getProjectAssistance({ ...scope(story), fetchImpl }),
@@ -545,10 +557,14 @@ const READS: Record<string, ReadRow> = {
     call: ({ story, proposal }, fetchImpl) => client.getAgentRun({ ...scope(story), fetchImpl,
       runId: proposal.source.run_id }),
   },
-  getManuscriptTree: { call: ({ story }, fetchImpl) => client.getManuscriptTree({ ...scope(story), fetchImpl }) },
+  getManuscriptTree: {
+    call: ({ story }, fetchImpl) => client.getManuscriptTree({ ...scope(story), fetchImpl }),
+    snapshotBound: true,
+  },
   getChapter: {
     call: ({ story }, fetchImpl) => client.getChapter({ ...scope(story), fetchImpl,
       chapterId: story.chapterIds[0] ?? "" }),
+    snapshotBound: true,
   },
   getStatistics: { call: ({ story }, fetchImpl) => client.getStatistics({ ...scope(story), fetchImpl }) },
   getProposal: {
@@ -612,6 +628,15 @@ async function checkRead(operation: string, row: ReadRow): Promise<void> {
     assert.equal((response as { schema_id?: string }).schema_id, RESPONSE_SCHEMA.get(operation));
   } else {
     row.shape(response);
+  }
+  if (row.snapshotBound === true) {
+    const story = await createStory(server, { title: "Smoke Expired Novel" });
+    await row.call({ ...fixture, story }, server.fetch());
+    await queryStoryOSPostgres(`
+      UPDATE storyos.project_snapshots SET expires_at = clock_timestamp() - interval '1 second'
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${story.projectId}'::uuid`);
+    const expired = await problemOf(row.call({ ...fixture, story }, server.fetch()));
+    assert.deepEqual([expired.status, expired.code], [409, "snapshot_expired"]);
   }
 }
 

@@ -6,9 +6,12 @@ import { test } from "vitest";
 
 import {
   activityStream, createEditorSession, createProjectCommandChallenge, digestCreateEditorSession,
-  getEditorSession, getSnapshot,
+  getChapter, getEditorSession, getSnapshot, searchManuscript,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetEditorSessionResponse, SearchManuscriptRequest,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { TestServer, createProject } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
@@ -25,7 +28,10 @@ const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UNKNOWN_SNAPSHOT = "018f0000-0000-7001-8000-000000000250";
+const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const SEARCH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 async function startRealServer() {
   return startStoryOSServer({
@@ -38,6 +44,11 @@ function problemCode(error: unknown): unknown {
   const responseBody = requireStoryOSProtocolError(error).responseBody;
   assert.ok(responseBody);
   return Reflect.get(JSON.parse(responseBody), "code");
+}
+
+function sanitizedProtocolFailure(error: unknown, status: number, sensitive: RegExp): boolean {
+  const protocolError = requireStoryOSProtocolError(error);
+  return protocolError.status === status && !sensitive.test(protocolError.responseBody ?? "");
 }
 
 function hasProblem(error: unknown, status: number, code: string): boolean {
@@ -210,5 +221,201 @@ test("getSnapshot and activityStream use the Editor Session Snapshot identity at
     }), (error) => hasProblem(error, 409, "snapshot_expired"));
   } finally {
     await stopRealServer(server);
+  }
+});
+
+test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evidence", async () => {
+  const server = await TestServer.start();
+  try {
+    const project = await createProject(server, { title: "Session Snapshot" });
+    const { baseUrl, projectId, fetchImpl } = project;
+    const volume = await project.send("createVolume", { request: {
+      command_schema: "storyos.command.create-volume.request.v1",
+      create_volume_input: { title: "Volume", expected_tree_revision: "1", ...project.binding() },
+    } });
+    if (volume.response.effect.kind !== "authoritative_applied") throw new Error("Volume must apply");
+    const chapter = await project.send("createChapter", { request: {
+      command_schema: "storyos.command.create-chapter.request.v1",
+      create_chapter_input: { title: "Chapter", expected_tree_revision: "2", ...project.binding() },
+    }, path: { volumeId: volume.response.effect.volume_id } });
+    if (chapter.response.effect.kind !== "authoritative_applied") throw new Error("Chapter must apply");
+    const opened = await getChapter({ baseUrl, projectId, fetchImpl,
+      chapterId: chapter.response.effect.chapter_id });
+    assert.equal(opened.project_activity_position, "3");
+    const request = {
+      command_schema: "storyos.command.create-editor-session.request.v1",
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: project.key(),
+    };
+    const openSession = async () => {
+      const sent = await project.send("createEditorSession", { request });
+      return { command: sent.command, session: sent.response };
+    };
+    const first = await openSession();
+    const base = first.session.base_snapshot;
+    assert.match(base.snapshot_id, UUID_V7);
+    assert.deepEqual(base, {
+      snapshot_id: base.snapshot_id,
+      chapter_id: opened.chapter.chapter_id,
+      project_activity_position: "3",
+      authoritative_head_revision_id: opened.chapter.current_revision.revision_id,
+      proposal_head_revision_ids: [],
+      target_refs: [`manuscript:${opened.chapter.chapter_id}`],
+      observed_ownership_partition: "authoritative",
+      materialized_revision: opened.chapter.current_revision,
+      materialized_payload_digest: { algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
+        value_hex_lowercase: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+      created_at: base.created_at,
+    });
+    assert.deepEqual(first.session.writer, { kind: "current_writer", writer_generation: "1" });
+    assert.deepEqual((await first.command.send()).response, first.session);
+    const canonicalInput = { baseUrl, projectId, fetchImpl, snapshotId: base.snapshot_id };
+    assert.equal((await getSnapshot(canonicalInput)).snapshot.project_activity_position, "3");
+
+    // Reproduce the old writer's stamp after the public commands have proven position 3.
+    await queryPostgres(`UPDATE storyos.editor_session_base_snapshots SET project_activity_position = 0
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+        AND snapshot_id = '${base.snapshot_id}'::uuid;
+      UPDATE storyos.project_snapshots SET project_activity_position = 0
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+        AND snapshot_id = '${base.snapshot_id}'::uuid`);
+    const legacyInput = { baseUrl, projectId, fetchImpl,
+      editorSessionId: first.session.editor_session.editor_session_id };
+    const legacy = await getEditorSession(legacyInput);
+    const legacySnapshot = await getSnapshot(canonicalInput);
+    assert.equal(legacy.base_snapshot.project_activity_position, "0");
+    const retainedQuery = `SELECT json_build_object(
+      'base', (SELECT to_jsonb(s) FROM storyos.editor_session_base_snapshots s
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND snapshot_id = '${base.snapshot_id}'::uuid),
+      'snapshot', (SELECT to_jsonb(s) FROM storyos.project_snapshots s
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND snapshot_id = '${base.snapshot_id}'::uuid),
+      'counters', (SELECT to_jsonb(c) FROM storyos.scope_counters c
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid))::text`;
+    const retained = JSON.parse(await queryPostgres(retainedQuery));
+    const next = await openSession();
+    assert.deepEqual(next.session.writer,
+      { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" });
+    assert.deepEqual(next.session.base_snapshot, { ...base,
+      snapshot_id: next.session.base_snapshot.snapshot_id,
+      created_at: next.session.base_snapshot.created_at });
+    assert.equal((await getSnapshot({ ...canonicalInput,
+      snapshotId: next.session.base_snapshot.snapshot_id })).snapshot.project_activity_position, "3");
+    assert.deepEqual((await next.command.send()).response, next.session);
+    // An exact retry returns the captured first acknowledgement, not the changed base row.
+    assert.deepEqual((await first.command.send()).response, first.session);
+    assert.deepEqual((await getEditorSession(legacyInput)).base_snapshot, legacy.base_snapshot);
+    assert.deepEqual((await getSnapshot(canonicalInput)).snapshot, legacySnapshot.snapshot);
+    assert.deepEqual(JSON.parse(await queryPostgres(retainedQuery)), retained);
+    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.editor_sessions
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid`), "2");
+  } finally {
+    await server.stop();
+  }
+});
+
+test("searchManuscript returns a ready empty page and fail-closes across Project Scope", async () => {
+  const server = await TestServer.start();
+  try {
+    const { baseUrl } = server;
+    const empty = await createProject(server, { title: "Search Empty" });
+    const { projectId } = empty;
+    const request: SearchManuscriptRequest = {
+      schema_id: "storyos.query.manuscript-search.request.v1",
+      selection: "manuscript",
+      query_text: "alpha",
+      required_watermark: null,
+    };
+    const page = await searchManuscript({
+      baseUrl,
+      projectId,
+      fetchImpl: empty.fetchImpl,
+      request,
+    });
+    assert.equal(page.schema_id, "storyos.query.manuscript-search.response.v1");
+    assert.equal(page.project_scope.owner_user_id, USER_A);
+    assert.equal(page.project_scope.project_id, projectId);
+    assert.deepEqual(page.items, []);
+    assert.equal(page.completeness, "complete");
+    assert.equal(page.lag, "0");
+    assert.equal(page.next_cursor, null);
+    assert.equal(page.projection_kind, "manuscript_search");
+    assert.match(page.source_snapshot.snapshot_id, SEARCH_UUID);
+    assert.equal(page.source_snapshot.snapshot_kind, "canonical");
+    assert.equal(page.projection_watermark, page.source_snapshot.project_activity_position);
+
+    const rebuilt = await searchManuscript({
+      baseUrl,
+      projectId,
+      fetchImpl: empty.fetchImpl,
+      request,
+    });
+    assert.equal(rebuilt.source_snapshot.snapshot_id, page.source_snapshot.snapshot_id);
+    assert.equal(rebuilt.projection_watermark, page.projection_watermark);
+    assert.deepEqual(rebuilt.items, page.items);
+
+    await assert.rejects(
+      searchManuscript({
+        baseUrl,
+        projectId,
+        fetchImpl: empty.fetchImpl,
+        request: {
+          ...request,
+          required_watermark: String(Number(page.projection_watermark) + 1),
+        },
+      }),
+      (error) => requireStoryOSProtocolError(error).status === 503
+        && problemCode(error) === "projection_not_ready"
+        && !/Search Empty/.test(requireStoryOSProtocolError(error).responseBody ?? ""),
+    );
+
+    await assert.rejects(
+      searchManuscript({
+        baseUrl,
+        projectId,
+        fetchImpl: empty.fetchImpl,
+        request: { ...request, query_text: "" },
+      }),
+      (error) => sanitizedProtocolFailure(error, 400, /Search Empty/),
+    );
+
+    await assert.rejects(
+      searchManuscript({
+        baseUrl,
+        projectId: PROJECT_B,
+        fetchImpl: server.fetch("session-a"),
+        request,
+      }),
+      (error) => sanitizedProtocolFailure(error, 404, /Project B|secret|Search Empty/),
+    );
+
+    const searchPath = `/api/v1/projects/${projectId}/queries/manuscript-search`;
+    const unauthenticated = await fetch(new URL(searchPath, baseUrl), {
+      method: "POST",
+      headers: { origin: baseUrl, "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const foreignOrigin = await fetch(new URL(searchPath, baseUrl), {
+      method: "POST",
+      headers: {
+        origin: "https://foreign.example",
+        "content-type": "application/json",
+        cookie: "storyos_session=session-a",
+      },
+      body: JSON.stringify(request),
+    });
+    assert.equal(foreignOrigin.status, 403);
+    assert.doesNotMatch(await foreignOrigin.text(), /Search Empty/);
+
+    const disallowedGet = await fetch(new URL(searchPath, baseUrl), {
+      headers: { origin: baseUrl, cookie: "storyos_session=session-a" },
+    });
+    assert.equal(disallowedGet.status, 405);
+  } finally {
+    await server.stop();
   }
 });
