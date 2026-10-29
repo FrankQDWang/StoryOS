@@ -5,7 +5,8 @@ import { test } from "vitest";
 import { getAgentRun, getChapter, getExportOperation, getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { zipStoreFiles } from "../support/archive.ts";
-import { USER_A, UUID_V7, createStory, drainLeftoverWork, openProposal, problemOf, serverForFile, settleOnce,
+import { USER_A, UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, openProposal, problemOf,
+  serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestStory } from "../support/http-harness.ts";
 
@@ -125,9 +126,7 @@ test("rejectProposalOperations resolves, replays, refuses, and conflicts", async
   const changed = rejection(proposal);
   const { status, code } = await problemOf(rejected.command.send({ request: changed.request }));
   assert.deepEqual({ status, code }, { status: 422, code: "challenge_invalid" });
-  const foreign = await problemOf(story.as("session-b").send("rejectProposalOperations", rejection(proposal)));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(story, "rejectProposalOperations", rejection(proposal));
   const wrongAdmission = await problemOf(story.send("rejectProposalOperations",
     rejection(proposal, { editorSessionId: story.key() })));
   assert.equal(wrongAdmission.status, 422);

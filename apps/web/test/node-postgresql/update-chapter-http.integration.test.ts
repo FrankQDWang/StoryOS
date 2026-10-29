@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import { getChapter, getProject } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, UUID_V7, createStory, problemOf, serverForFile } from "../support/http-harness.ts";
+import { UUID_V7, assertForeignRefused, createStory, problemOf, serverForFile } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
 // The Profile Probe of the Structural settlement profile (ADR 0075).
@@ -57,10 +57,7 @@ test("updateChapter applies, replays, refuses, and conflicts", async () => {
   const missing = await story.send("updateChapter", update(story, MISSING_CHAPTER, "Chapter B", "1", "5"));
   assert.deepEqual(missing.response.effect, { kind: "refused", reason: "invalid_chapter_join" });
   assert.equal((await problemOf(story.send("updateChapter", update(story, chapterId, "", "2", "5")))).status, 400);
-  const foreign = await problemOf(story.as("session-b").send("updateChapter",
-    update(story, chapterId, "Stolen Chapter", "1", "5")));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(story, "updateChapter", update(story, chapterId, "Stolen Chapter", "1", "5"));
 
   const archived = await story.send("archiveProject", { request: {
     command_schema: "storyos.command.archive-project.request.v1",

@@ -5,7 +5,8 @@ import { test } from "vitest";
 import { getChapter, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetProposalResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { PROSE, REVISED, reviseCandidate } from "../support/acceptance.ts";
-import { USER_A, UUID_V7, createStory, drainLeftoverWork, freshNamespace, openProposal, problemOf, serverForFile,
+import { UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, freshNamespace, openProposal, problemOf,
+  serverForFile,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestStory } from "../support/http-harness.ts";
 
@@ -70,10 +71,7 @@ test("acceptProposal applies, replays, and refuses", async () => {
   const changed = acceptance(story, revised, { expectedRevisionId, editorSessionId: story.key() });
   const { status, code } = await problemOf(accepted.command.send({ request: changed.request }));
   assert.deepEqual({ status, code }, { status: 422, code: "challenge_invalid" });
-  const foreign = await problemOf(story.as("session-b").send("acceptProposal",
-    acceptance(story, revised, { expectedRevisionId, editorSessionId })));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(story, "acceptProposal", acceptance(story, revised, { expectedRevisionId, editorSessionId }));
   const wrongAdmission = await problemOf(story.send("acceptProposal",
     acceptance(story, revised, { expectedRevisionId, editorSessionId: story.key() })));
   assert.equal(wrongAdmission.status, 422);

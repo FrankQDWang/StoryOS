@@ -6,7 +6,8 @@ import { test } from "vitest";
 import { getHumanReadableManuscriptExport, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { exportSettlementReceipt, queryStoryOSPostgres } from "../support/node-integration.ts";
-import { TestServer, USER_A, UUID_V7, addVolume, createProject, id, problemOf, serverForFile, settleOnce, waitFor,
+import { TestServer, USER_A, UUID_V7, addVolume, assertForeignRefused, createProject, id, problemOf, serverForFile,
+  settleOnce, waitFor,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestProject } from "../support/http-harness.ts";
 
@@ -82,12 +83,9 @@ test("exportHumanReadableManuscript admits, replays, and refuses", async () => {
     projectId: project.projectId, exportId: id("ae99"), fetchImpl: project.fetchImpl }));
   assert.equal(unknown.status, 404);
   const foreignRead = await problemOf(read(project.as("session-b").fetchImpl));
-  const foreignAdmit = await problemOf(project.as("session-b").send("exportHumanReadableManuscript",
-    exportInput(project)));
-  for (const foreign of [foreignRead, foreignAdmit]) {
-    assert.equal(foreign.status, 404);
-    assert.ok(!foreign.body.includes(USER_A));
-  }
+  assert.equal(foreignRead.status, 404);
+  assert.ok(!foreignRead.body.includes(USER_A));
+  await assertForeignRefused(project, "exportHumanReadableManuscript", exportInput(project));
 
   await archive(project);
   const refused = await project.challenge("exportHumanReadableManuscript", exportInput(project));

@@ -232,6 +232,11 @@ export class TestProject {
     return { ...await command.send(), command };
   }
 
+  /** Solves the Command Challenge as this session and sends the command once from another session. */
+  async sendAs<Op extends ProjectCommandId>(session: string, operation: Op, input: CommandInput<Op>): Promise<Delivered<Op>> {
+    return (await this.challenge(operation, input)).send({ session });
+  }
+
   async openEditorSession(): Promise<CreateEditorSessionResponse> {
     const opened = await this.send("createEditorSession", { request: {
       command_schema: "storyos.command.create-editor-session.request.v1",
@@ -342,6 +347,16 @@ export async function problemOf(call: Promise<unknown>): Promise<Problem> {
 // Worker settlement
 
 /** Polls `probe` until `match` holds. */
+/** Proves that another session cannot send the command. The Challenge route answers 404 with no owner identity, and
+ * the command route refuses the Challenge of the owner. */
+export async function assertForeignRefused<Op extends ProjectCommandId>(project: TestProject, operation: Op,
+  input: CommandInput<Op>, session = "session-b"): Promise<void> {
+  const challenge = await problemOf(project.as(session).send(operation, input));
+  const command = await problemOf(project.sendAs(session, operation, input));
+  assert.deepEqual([challenge.status, command.status, command.code], [404, 422, "challenge_invalid"]);
+  for (const { body } of [challenge, command]) assert.ok(!body.includes(USER_A));
+}
+
 export async function waitFor<Value>(probe: () => Promise<Value>, match: (value: Value) => boolean,
   options: { attempts?: number; intervalMs?: number } = {}): Promise<Value> {
   let last: Value | undefined;

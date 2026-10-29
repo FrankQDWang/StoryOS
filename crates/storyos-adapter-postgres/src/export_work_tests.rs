@@ -189,6 +189,83 @@ async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settleme
     );
 }
 
+// A historical export keeps its output row and has no operation row. The read returns the output.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_ready_readable_export_reads_its_output_without_an_operation_row() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(&runtime_url);
+    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    remove_export_work_rows(&admin).await;
+    let export_id = admit_readable_export(&store, &scope).await;
+    let Some(ClaimedExportWork::Readable(claim)) = claim_next_export_work(&store).await.unwrap()
+    else {
+        panic!("the admitted readable export must be claimed");
+    };
+    let activity_position_before = activity_position(&admin, &scope).await;
+    admin.batch_execute("BEGIN").await.unwrap();
+    admin
+        .execute(
+            "SELECT set_config('storyos.user_id', $1, true),
+                    set_config('storyos.owner_user_id', $1, true),
+                    set_config('storyos.project_id', $2, true)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+    let settled = crate::readable_export_work::complete_claimed_export(&admin, &claim)
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let with_operation = store
+        .read_human_readable_manuscript_export(&scope, &export_id)
+        .await
+        .unwrap();
+    let removed = admin
+        .execute(
+            "DELETE FROM storyos.human_readable_manuscript_export_operations
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND export_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &export_id,
+            ],
+        )
+        .await
+        .unwrap();
+    let without_operation = store
+        .read_human_readable_manuscript_export(&scope, &export_id)
+        .await
+        .unwrap();
+    remove_export_work_rows(&admin).await;
+    remove_export_settlement_rows(
+        &admin,
+        &scope,
+        &claim.author_command_admission_id,
+        activity_position_before.as_deref(),
+    )
+    .await;
+
+    assert_eq!(
+        (settled, removed),
+        (CompleteReadableExport::SettledReady, 1)
+    );
+    assert!(
+        matches!(with_operation, GetHumanReadableManuscriptExport::Ready(_)),
+        "a settled export must be ready: {with_operation:?}"
+    );
+    assert_eq!(without_operation, with_operation);
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_readable_export_settles_failed_when_its_pinned_snapshot_expired_before_output() {

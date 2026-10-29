@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { getChapter, getProject } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { TestServer, USER_A, UUID_V7, createProject, createStory, freshNamespace, id, problemOf, serverForFile,
-  waitForSettledKey } from "../support/http-harness.ts";
+import { getChapter, getProject, listProjects } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { TestServer, UUID_V7, assertForeignRefused, createProject, createStory, freshNamespace, id, problemOf,
+  serverForFile, waitForSettledKey,
+} from "../support/http-harness.ts";
 import type { CommandInput, TestProject } from "../support/http-harness.ts";
 
 // The Profile Probe of the ActivityOnly settlement profile (ADR 0075).
@@ -37,6 +38,9 @@ test("updateProject applies, replays, refuses, and conflicts", async () => {
   assert.deepEqual(effect, { kind: "authoritative_applied", title: "Renamed Novel", revision: "2",
     project_activity_position: effect.project_activity_position });
   assert.deepEqual(await applied.command.send(), { response: applied.response, body: applied.body });
+  const listed = (await listProjects({ baseUrl: project.baseUrl, fetchImpl: project.fetchImpl })).projects
+    .find((item) => item.project_scope.project_id === project.projectId);
+  assert.deepEqual([listed?.title, listed?.revision], ["Renamed Novel", "2"]);
 
   const changed = rename(project, "Changed Retry", "1");
   const { status, code } = await problemOf(applied.command.send({ request: changed.request }));
@@ -47,9 +51,7 @@ test("updateProject applies, replays, refuses, and conflicts", async () => {
   const stale = await project.send("updateProject", rename(project, "Stale Title", "1"));
   assert.deepEqual(stale.response.effect, { kind: "conflicted", reason: "stale_project_revision" });
   assert.equal((await problemOf(project.send("updateProject", rename(project, "", "2")))).status, 400);
-  const foreign = await problemOf(project.as("session-b").send("updateProject", rename(project, "Stolen Title", "2")));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(project, "updateProject", rename(project, "Stolen Title", "2"));
   assert.equal((await openProject(project)).title, "Renamed Novel");
 
   const lost = await project.challenge("updateProject", rename(project, "Ack Lost Novel", "2"));

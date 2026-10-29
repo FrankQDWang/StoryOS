@@ -4,7 +4,7 @@ import { test } from "vitest";
 
 import { getChapter, getEditorSession, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, UUID_V7, createStory, problemOf, serverForFile } from "../support/http-harness.ts";
+import { UUID_V7, assertForeignRefused, createStory, problemOf, serverForFile } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
 // The Profile Probe of the ChapterSelection settlement profile (ADR 0075).
@@ -78,9 +78,7 @@ test("setCurrentChapter applies, replays, refuses, and conflicts", async () => {
   const missing = await story.send("setCurrentChapter", select(story, editorSessionId,
     { ...toB, chapterId: MISSING_CHAPTER, expectedCurrentChapterId: chapterB }));
   assert.deepEqual(missing.response.effect, { kind: "refused", reason: "invalid_chapter_join" });
-  const foreign = await problemOf(story.as("session-b").send("setCurrentChapter", select(story, editorSessionId, toB)));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(story, "setCurrentChapter", select(story, editorSessionId, toB));
 
   const archived = await story.send("archiveProject", { request: {
     command_schema: "storyos.command.archive-project.request.v1",

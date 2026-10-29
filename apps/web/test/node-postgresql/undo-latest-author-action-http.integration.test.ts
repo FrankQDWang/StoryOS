@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getChapter, getProject, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, UUID_V7, createStory, drainLeftoverWork, openProposal, problemOf, serverForFile,
+import { getChapter, getEditorSession, getProject, getProposal } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, openProposal, problemOf, serverForFile,
 } from "../support/http-harness.ts";
 import type { CommandInput, TestProject, TestStory } from "../support/http-harness.ts";
 
@@ -35,11 +35,16 @@ async function deletedChapter(title: string) {
   }, path: { chapterId } });
   assert.equal(removed.response.effect.kind, "authoritative_applied");
   assert.equal(removed.response.project.open.kind, "empty");
-  const expectedFrontier = removed.response.receipt.author_action_sequence;
+  const editorSessionId = session.editor_session.editor_session_id;
+  // The Web Client reads the Author Undo Frontier from the Editor Session before each Undo.
+  const sessionFrontier = async () => (await getEditorSession({ baseUrl: story.baseUrl, projectId: story.projectId,
+    editorSessionId, fetchImpl: story.fetchImpl })).author_undo_frontier_sequence ?? null;
+  const expectedFrontier = await sessionFrontier();
   if (expectedFrontier === null) throw new Error("Delete Chapter must allocate an Author Action");
+  assert.equal(expectedFrontier, removed.response.receipt.author_action_sequence);
   const options = { expectedFrontier, expectedRevisionId: session.base_snapshot.authoritative_head_revision_id,
-    editorSessionId: session.editor_session.editor_session_id };
-  return { story, chapterId, options, editorSessionId: options.editorSessionId };
+    editorSessionId };
+  return { story, chapterId, options, editorSessionId, sessionFrontier };
 }
 
 async function openProject(story: TestStory) {
@@ -47,11 +52,13 @@ async function openProject(story: TestStory) {
 }
 
 test("undoLatestAuthorAction compensates, replays, refuses, and conflicts", async () => {
-  const { story, chapterId, options } = await deletedChapter("Undo Probe Novel");
+  const { story, chapterId, options, sessionFrontier } = await deletedChapter("Undo Probe Novel");
   const compensated = await story.send("undoLatestAuthorAction", undo(story, options));
   const { effect, receipt } = compensated.response;
   if (effect.kind !== "compensated") throw new Error("expected a Structure Compensation");
   assert.equal(effect.source_sequence, options.expectedFrontier);
+  // After the Undo, the Editor Session frontier is the next older Author Action.
+  assert.deepEqual([effect.author_undo_frontier_sequence, await sessionFrontier()], ["2", "2"]);
   // A Structure Compensation writes an Authoritative Commit and no Authoritative Revision.
   assert.match(effect.authoritative_commit_id ?? "", UUID_V7);
   assert.deepEqual([Object.hasOwn(effect, "authoritative_revision"), [effect.authoritative_commit_id]],
@@ -67,9 +74,7 @@ test("undoLatestAuthorAction compensates, replays, refuses, and conflicts", asyn
   assert.deepEqual(stale.response.effect,
     { kind: "conflicted", reason: "frontier_mismatch", current_author_undo_frontier_sequence: "2" });
   assert.deepEqual(stale.response.receipt.authoritative_commit_ids, []);
-  const foreign = await problemOf(story.as("session-b").send("undoLatestAuthorAction", undo(story, options)));
-  assert.equal(foreign.status, 404);
-  assert.ok(!foreign.body.includes(USER_A));
+  await assertForeignRefused(story, "undoLatestAuthorAction", undo(story, options));
 });
 
 test("undoLatestAuthorAction replays its first acknowledgements after later changes and a Server restart", async () => {
