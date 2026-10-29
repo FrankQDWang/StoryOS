@@ -1,8 +1,8 @@
 use super::{
-    ACCEPT, ADMITTED_TARGET, Binding, CANCEL, CANDIDATE_EDIT, CAPTURED_MEMORY, COMPACT, COMPARISON,
-    CONTINUE, CONTINUE_GENERATION, CREATE_RUN, EXPIRY, EvidenceClass, FAKE_DECISION, LOOKUP, MULTI,
-    OPEN_BLOCK, PARTIAL, PHYSICAL_DRILL, PHYSICAL_SCRIPT, PRODUCTION_HOST, PROOF, REJECT, REPLAN,
-    RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE, UNDO, WITHDRAW, WORKSPACE,
+    ACCEPT, ACCEPT_REFUSAL, ADMITTED_TARGET, Binding, CANCEL, CANDIDATE_EDIT, CAPTURED_MEMORY,
+    COMPACT, COMPARISON, CONTINUE, EXPIRY, EvidenceClass, FAKE_DECISION, GENERATION_CLAIM, LOOKUP,
+    MULTI, OPEN_BLOCK, PHYSICAL_DRILL, PHYSICAL_SCRIPT, PRODUCTION_HOST, PROOF, REJECT,
+    RUN_EVIDENCE, STAGE2_JOURNEY, STREAM, SUCCESSOR, TICKET_ISSUE, UNDO, WORKSPACE,
 };
 
 macro_rules! issue {
@@ -55,8 +55,8 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("876"),
             issue!("877"),
         ],
-        evidence: CREATE_RUN,
-        supporting_evidence: &[CONTINUE, ADMITTED_TARGET, CAPTURED_MEMORY, RUN_EVIDENCE],
+        evidence: CONTINUE,
+        supporting_evidence: &[ADMITTED_TARGET, CAPTURED_MEMORY, RUN_EVIDENCE],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -133,8 +133,7 @@ pub(super) const BINDINGS: &[Binding] = &[
         evidence: MULTI,
         supporting_evidence: &[
             STREAM,
-            PARTIAL,
-            CONTINUE_GENERATION,
+            GENERATION_CLAIM,
             UNDO,
             COMPARISON,
             PRODUCTION_HOST,
@@ -169,8 +168,8 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("876"),
             issue!("877"),
         ],
-        evidence: CREATE_RUN,
-        supporting_evidence: &[CONTINUE, ADMITTED_TARGET, CAPTURED_MEMORY, RUN_EVIDENCE],
+        evidence: CONTINUE,
+        supporting_evidence: &[ADMITTED_TARGET, CAPTURED_MEMORY, RUN_EVIDENCE],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -194,8 +193,8 @@ pub(super) const BINDINGS: &[Binding] = &[
         ],
         evidence: OPEN_BLOCK,
         supporting_evidence: &[
-            REPLAN,
-            WITHDRAW,
+            ACCEPT_REFUSAL,
+            REJECT,
             PRODUCTION_HOST,
             PHYSICAL_SCRIPT,
             "apps/web/test/browser-source/removed-draft-journal.integration.test.ts",
@@ -274,8 +273,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             COMPARISON,
             UNDO,
             STREAM,
-            PARTIAL,
-            CONTINUE_GENERATION,
+            GENERATION_CLAIM,
             PRODUCTION_HOST,
             OPEN_BLOCK,
             CANDIDATE_EDIT,
@@ -310,7 +308,6 @@ pub(super) const BINDINGS: &[Binding] = &[
         evidence: PRODUCTION_HOST,
         supporting_evidence: &[
             STAGE2_JOURNEY,
-            CREATE_RUN,
             CONTINUE,
             COMPACT,
             ACCEPT,
@@ -321,8 +318,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             CANCEL,
             UNDO,
             STREAM,
-            PARTIAL,
-            CONTINUE_GENERATION,
+            GENERATION_CLAIM,
             MULTI,
             OPEN_BLOCK,
             FAKE_DECISION,
@@ -354,7 +350,7 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("879"),
         ],
         evidence: PRODUCTION_HOST,
-        supporting_evidence: &[CREATE_RUN, ADMITTED_TARGET, OPEN_BLOCK],
+        supporting_evidence: &[CONTINUE, ADMITTED_TARGET, OPEN_BLOCK],
         evidence_class: EvidenceClass::Integration,
     },
     Binding {
@@ -369,9 +365,8 @@ pub(super) const BINDINGS: &[Binding] = &[
             issue!("876"),
             issue!("877"),
         ],
-        evidence: CREATE_RUN,
+        evidence: CONTINUE,
         supporting_evidence: &[
-            CONTINUE,
             FAKE_DECISION,
             ADMITTED_TARGET,
             CAPTURED_MEMORY,
@@ -435,8 +430,7 @@ pub(super) const BINDINGS: &[Binding] = &[
         evidence: UNDO,
         supporting_evidence: &[
             STREAM,
-            PARTIAL,
-            CONTINUE_GENERATION,
+            GENERATION_CLAIM,
             MULTI,
             COMPARISON,
             OPEN_BLOCK,

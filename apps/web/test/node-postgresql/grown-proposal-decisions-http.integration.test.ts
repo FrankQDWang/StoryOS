@@ -9,8 +9,9 @@ import { acceptProposal, createAgentRun, createEditorSession, digestAcceptPropos
 import type { AcceptProposalRequest, CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterResponse,
   GetProposalResponse, SelectionReference, UndoLatestAuthorActionRequest, WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, challenged, drainLeftoverWork, id, prepare, sendAuthorEdit, settleOnce, startRealServer,
+import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { BINDING, USER_A, admitProse, challenged, drainLeftoverWork, id, prepare, reviseCandidate, sendAuthorEdit,
+  settleOnce, startRealServer,
 } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
 
@@ -211,3 +212,126 @@ test("the reads show the joinable blocks of a crossing selection and the atomic 
     assert.deepEqual(run.context.joinable_block_ids, [seeded.chapter.current_revision.blocks[1]!.manuscript_block_id]);
   } finally { await stopRealServer(started.server); }
 });
+
+const undoRoute = "/api/v1/projects/{project_id}/author-actions/undo";
+const acceptRoute = "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances";
+
+test("undo acceptance requires a reversal proposal when the authoritative head has drifted", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id(`1309e1${randomBytes(2).toString("hex")}`), "Undo Acceptance Reversal Novel", "e4");
+    const accepted = await acceptOpened(started.baseUrl, prepared, "ec");
+    await queryPostgres(`UPDATE storyos.authoritative_heads SET current_revision_id = '${accepted.beforeRevision}'::uuid
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+        AND manuscript_object_id = '${prepared.chapterId}'::uuid
+        AND current_revision_id = '${accepted.chapterRevision}'::uuid`);
+    const undone = await sendUndo(started.baseUrl, prepared, accepted.sessionId, accepted.frontier,
+      accepted.beforeRevision, id("e196"), id("e197"));
+    assert.equal(undone.effect.kind, "reversal_required");
+    assert.equal(undone.receipt.result, "proposal_revised");
+    if (undone.effect.kind !== "reversal_required") throw new Error("expected reversal");
+    assert.equal(undone.effect.source_sequence, accepted.frontier);
+    assert.equal(undone.proposal_id, undone.effect.proposal_id);
+    assert.deepEqual(await undoLatestAuthorAction({
+      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e197"), antiForgery: undone.nonce, request: undone.request,
+    }), undone.response);
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    assert.equal(chapter.chapter.current_revision.revision_id, accepted.beforeRevision);
+    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.author_action_entries
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+        AND compensated_source_sequence = ${accepted.frontier}
+        AND disposition = 'compensation'`), "0");
+    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.authoritative_revisions
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+        AND revision_id = '${accepted.chapterRevision}'::uuid`), "1");
+    const reversal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: undone.effect.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.equal(reversal.proposal.kind, "reversal");
+    assert.equal(reversal.proposal.operation_resolution, "pending");
+    assert.equal(reversal.proposal.candidate_text, accepted.beforeBody);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+async function acceptOpened(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, ns: string) {
+  const before = await getChapter({ baseUrl, projectId: prepared.projectId, chapterId: prepared.chapterId,
+    fetchImpl: prepared.fetchImpl });
+  const queried = await admitProse(baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id(`${ns}8`));
+  if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
+    throw new Error("expected an opened prose proposal");
+  }
+  const opened = await getProposal({ baseUrl, projectId: prepared.projectId,
+    proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+  const { session, revised } = await reviseCandidate(baseUrl, prepared.fetchImpl, prepared.projectId, opened, ns);
+  if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
+  const accepted = await sendAccept(baseUrl, prepared, {
+    proposalId: revised.proposal.proposal_id, proposalRevisionId: revised.proposal.revision_id,
+    validationReceiptId: revised.proposal.validation_receipt.validation_receipt_id,
+    operationId: revised.proposal.operation_id, expectedHead: before.chapter.current_revision.revision_id,
+    sessionId: session.editor_session.editor_session_id, correlationId: id(`${ns}9`), idempotencyKey: id(`${ns}a`),
+  });
+  if (accepted.effect.kind !== "applied") throw new Error("expected applied");
+  return {
+    sessionId: session.editor_session.editor_session_id,
+    frontier: accepted.effect.author_action_sequence,
+    chapterRevision: accepted.effect.authoritative_revision.revision_id,
+    commitId: accepted.effect.authoritative_commit_id,
+    receiptId: accepted.receipt.receipt_id,
+    proposalId: revised.proposal.proposal_id,
+    proposalRevisionId: revised.proposal.revision_id,
+    beforeBody: before.chapter.current_revision.body,
+    beforeRevision: before.chapter.current_revision.revision_id,
+  };
+}
+
+async function sendAccept(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, input: {
+  proposalId: string; proposalRevisionId: string; validationReceiptId: string; operationId: string;
+  expectedHead: string; sessionId: string; correlationId: string; idempotencyKey: string;
+}) {
+  const request: AcceptProposalRequest = {
+    command_schema: "storyos.command.accept-proposal.request.v1",
+    accept_proposal_input: {
+      proposal_revision_id: input.proposalRevisionId,
+      validation_receipt_id: input.validationReceiptId,
+      selected_operation_ids: [input.operationId],
+      expected_authoritative_revision_id: input.expectedHead,
+      editor_session_id: input.sessionId,
+      ...BINDING,
+      correlation_id: input.correlationId,
+    },
+  };
+  return challenged(baseUrl, prepared.fetchImpl, prepared.projectId, "POST", acceptRoute,
+    request.command_schema, await digestAcceptProposal(request), input.idempotencyKey,
+    (antiForgery) => acceptProposal({
+      baseUrl, projectId: prepared.projectId, proposalId: input.proposalId, fetchImpl: prepared.fetchImpl,
+      idempotencyKey: input.idempotencyKey, antiForgery, request,
+    }));
+}
+
+function undoBody(sessionId: string, frontier: string, expectedHead: string, correlationId: string): UndoLatestAuthorActionRequest {
+  return {
+    command_schema: "storyos.command.undo-latest-author-action.request.v1",
+    undo_latest_author_action_input: {
+      expected_author_undo_frontier_sequence: frontier,
+      expected_authoritative_revision_id: expectedHead,
+      editor_session_id: sessionId,
+      ...BINDING,
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function sendUndo(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, sessionId: string,
+  frontier: string, expectedHead: string, correlationId: string, idempotencyKey: string) {
+  const request = undoBody(sessionId, frontier, expectedHead, correlationId);
+  const options = { baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+    idempotencyKey, antiForgery: "", request };
+  const response = await challenged(baseUrl, prepared.fetchImpl, prepared.projectId, "POST", undoRoute,
+    request.command_schema, await digestUndoLatestAuthorAction(request), idempotencyKey,
+    (antiForgery) => { options.antiForgery = antiForgery; return undoLatestAuthorAction(options); });
+  return { ...response, request, nonce: options.antiForgery, response };
+}

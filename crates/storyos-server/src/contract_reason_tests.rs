@@ -21,7 +21,7 @@ use storyos_core::{
 
 use storyos_core::{
     CompleteReadyPartialProposalRefusal, ContinueProposalGenerationRefusal,
-    ProposalGenerationConflict,
+    ProposalGenerationConflict, UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable,
 };
 
 use super::contract_reason;
@@ -497,4 +497,36 @@ fn every_agent_run_steering_reason_maps_to_its_public_reason() {
         SteerAgentRunConflict::TerminalRun,
         contracts::PauseAgentRunConflictReason::TerminalRun,
     )]);
+}
+
+#[test]
+fn every_undo_reason_maps_to_its_public_reason() {
+    assert_maps(vec![
+        (
+            UndoLatestAuthorActionConflict::FrontierMismatch,
+            contracts::UndoLatestAuthorActionConflictReason::FrontierMismatch,
+        ),
+        (
+            UndoLatestAuthorActionConflict::WrongTargetHead,
+            contracts::UndoLatestAuthorActionConflictReason::WrongTargetHead,
+        ),
+        (
+            UndoLatestAuthorActionConflict::SourceBindingChanged,
+            contracts::UndoLatestAuthorActionConflictReason::SourceBindingChanged,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            UndoLatestAuthorActionUnavailable::NoFrontier,
+            contracts::UndoLatestAuthorActionUnavailableReason::NoFrontier,
+        ),
+        (
+            UndoLatestAuthorActionUnavailable::Barrier,
+            contracts::UndoLatestAuthorActionUnavailableReason::Barrier,
+        ),
+        (
+            UndoLatestAuthorActionUnavailable::SourceUnavailable,
+            contracts::UndoLatestAuthorActionUnavailableReason::SourceUnavailable,
+        ),
+    ]);
 }

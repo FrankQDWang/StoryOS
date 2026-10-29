@@ -8,14 +8,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  acceptProposal, applyAuthorEdit, cancelAgentRun, completeReadyPartialProposal, createAgentRun, createChapter,
+  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter,
   createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
-  digestCompleteReadyPartialProposal, digestCreateAgentRun, digestCreateChapter,
+  digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations,
   reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CompleteReadyPartialProposalRequest,
+  AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest,
   CreateAgentRunRequest, CreateEditorSessionRequest, GetProposalResponse, ReopenRejectedOperationsRequest,
   SelectionReference, SteerAgentRunRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -1067,6 +1067,17 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       const archivedAttempts = JSON.parse(new TextDecoder().decode(files.get("canonical/model_attempts.json")));
       const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`));
       assert.deepEqual(archivedAttempts, storedAttempts);
+      // The archive keeps each Acceptance Receipt row. The second Acceptance replaced its Block on the first head.
+      const archivedAcceptances = JSON.parse(new TextDecoder().decode(files.get("canonical/acceptance_receipts.json")))
+        .sort((left: { acceptance_receipt_id: string }, right: { acceptance_receipt_id: string }) =>
+          left.acceptance_receipt_id.localeCompare(right.acceptance_receipt_id));
+      assert.deepEqual(archivedAcceptances, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record)
+        ORDER BY acceptance_receipt_id::text)::text FROM storyos.acceptance_receipts AS record
+        WHERE project_id='${prepared.projectId}'::uuid;`)));
+      if (firstAccepted.effect.kind !== "applied") throw new Error("expected applied");
+      const firstHead = firstAccepted.effect.authoritative_revision.revision_id;
+      assert.ok(archivedAcceptances.some((row: { applied_authoritative_revision_id: string; target_resolution: string }) =>
+        row.applied_authoritative_revision_id === firstHead && row.target_resolution === "block_replacement"));
       const originalOutput = archivedAttempts.find((attempt: { run_id: string }) => attempt.run_id === queried.run_id).payload;
       assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), collection ? [null, null, null] : [null, null]);
       assert.deepEqual(originalOutput.decision.locations, queried.decision.kind === "prose_change"
@@ -1391,33 +1402,5 @@ test("reopenRejectedOperations classifies one selected Operation of a two-operat
     assert.deepEqual(after.proposal.operations, proposal.operations.map((current) =>
       current.operation_id === operation.operation_id
         ? { ...current, resolution: "pending", reservation_state: "unresolved" } : current));
-  } finally { await stopRealServer(started.server); }
-});
-
-test("completeReadyPartialProposal classifies a two-operation Proposal Generation", async () => {
-  const started = await startRealServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, proposalId, editorSessionId, targetRevisionId, proposal } =
-      await rejectFirstOperation(started.baseUrl, ns);
-    const { created } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId, proposal,
-      proposal.operations[1]!.operation_id, id(`${ns}51`), "Revise this passage: keep the candidate consistent.");
-    if (created.effect.kind !== "admitted") throw new Error("expected exact candidate admission");
-    await settleOnce();
-    const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
-    assert.equal(revised.proposal.generation, "ready");
-    const request: CompleteReadyPartialProposalRequest = {
-      command_schema: "storyos.command.complete-ready-partial-proposal.request.v1",
-      complete_ready_partial_proposal_input: { proposal_revision_id: revised.proposal.revision_id,
-        generation_id: id(`${ns}61`),
-        expected_candidate_digest: createHash("sha256").update(revised.proposal.candidate_text).digest("hex"),
-        last_applied_stream_seq: "1", expected_target_revisions: [targetRevisionId],
-        editor_session_id: editorSessionId, ...BINDING, correlation_id: id(`${ns}62`) } };
-    const completed = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions", request.command_schema,
-      await digestCompleteReadyPartialProposal(request), id(`${ns}63`), (antiForgery) => completeReadyPartialProposal({
-        baseUrl: started.baseUrl, projectId, proposalId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}63`) }));
-    assert.deepEqual(completed.effect, { kind: "refused", reason: "not_ready_partial" });
   } finally { await stopRealServer(started.server); }
 });

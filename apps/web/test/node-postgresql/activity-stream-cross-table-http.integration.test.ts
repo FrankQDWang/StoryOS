@@ -5,18 +5,23 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  activityStream, applyAuthorEdit, createEditorSession, createProjectCommandChallenge,
-  createVolume, digestApplyAuthorEdit, digestCreateEditorSession, digestCreateVolume,
-  getEditorSession, getManuscriptTree,
+  activityStream, applyAuthorEdit, createAgentRun, createChapter, createEditorSession,
+  createProjectCommandChallenge, createVolume, digestApplyAuthorEdit, digestCreateAgentRun,
+  digestCreateChapter, digestCreateEditorSession, digestCreateVolume, digestUpdateProjectAssistance,
+  getEditorSession, getManuscriptTree, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
+  CreateAgentRunRequest,
+  CreateChapterRequest,
   CreateVolumeRequest,
   DigestValue,
   GetEditorSessionResponse,
+  UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  createEmptyProject,
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -345,5 +350,184 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.deepEqual(replayed.at(1)?.data, expectedEdit);
   } finally {
     await stopRealServer(server);
+  }
+});
+
+const BINDING = {
+  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+  security_policy_revision: "storyos.web-security-policy.release-1.v1",
+};
+
+function activityId(suffix: string): string {
+  return `018f0000-0000-7001-8000-00000000${suffix}`;
+}
+
+async function challenged<T>(options: {
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  projectId: string;
+  method: string;
+  route: string;
+  schema: string;
+  digest: DigestValue;
+  key: string;
+  send: (antiForgery: string) => Promise<T>;
+}): Promise<T> {
+  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
+    baseUrl: options.baseUrl,
+    projectId: options.projectId,
+    fetchImpl: options.fetchImpl,
+    request: {
+      method: options.method,
+      route_template: options.route,
+      command_schema: options.schema,
+      canonical_command_digest: options.digest,
+      idempotency_key: options.key,
+    },
+  }));
+  return options.send(challenge.nonce);
+}
+
+/** Makes assistance available and adds one Volume and one Chapter. */
+async function prepareRunProject(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  keyNs: string,
+) {
+  const key = (index: number) => `018f0000-0000-7001-8000-000000000${keyNs}${index}`;
+  const assistance: UpdateProjectAssistanceRequest = {
+    command_schema: "storyos.command.update-project-assistance.request.v1",
+    update_project_assistance_input: {
+      availability: "available", expected_assistance_revision: "0", ...BINDING, correlation_id: key(0),
+    },
+  };
+  await challenged({
+    baseUrl, fetchImpl, projectId, method: "PUT",
+    route: "/api/v1/projects/{project_id}/assistance",
+    schema: assistance.command_schema, digest: await digestUpdateProjectAssistance(assistance), key: key(1),
+    send: (antiForgery) => updateProjectAssistance({
+      baseUrl, projectId, fetchImpl, idempotencyKey: key(1), antiForgery, request: assistance,
+    }),
+  });
+  const volume: CreateVolumeRequest = {
+    command_schema: "storyos.command.create-volume.request.v1",
+    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: key(2) },
+  };
+  const createdVolume = await challenged({
+    baseUrl, fetchImpl, projectId, method: "POST",
+    route: "/api/v1/projects/{project_id}/volumes",
+    schema: volume.command_schema, digest: await digestCreateVolume(volume), key: key(3),
+    send: (antiForgery) => createVolume({
+      baseUrl, projectId, fetchImpl, idempotencyKey: key(3), antiForgery, request: volume,
+    }),
+  });
+  if (createdVolume.effect.kind !== "authoritative_applied") {
+    throw new Error("Create Volume must apply");
+  }
+  const volumeId = createdVolume.effect.volume_id;
+  const chapter: CreateChapterRequest = {
+    command_schema: "storyos.command.create-chapter.request.v1",
+    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: key(4) },
+  };
+  const createdChapter = await challenged({
+    baseUrl, fetchImpl, projectId, method: "POST",
+    route: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+    schema: chapter.command_schema, digest: await digestCreateChapter(chapter), key: key(5),
+    send: (antiForgery) => createChapter({
+      baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: key(5), antiForgery, request: chapter,
+    }),
+  });
+  if (createdChapter.effect.kind !== "authoritative_applied") {
+    throw new Error("Create Chapter must apply");
+  }
+  return createdChapter.effect.chapter_id;
+}
+
+function runRequest(
+  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
+  chapterId: string,
+  correlationId: string,
+): CreateAgentRunRequest {
+  return {
+    command_schema: "storyos.command.create-agent-run.request.v2",
+    create_agent_run_input: {
+      conversation,
+      author_message: { text: "Help with this passage." },
+      working_target: { kind: "current_chapter", chapter_id: chapterId },
+      instruction: { kind: "absent" },
+      cause: { kind: "author_request" },
+      ...BINDING,
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function postRun(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  key: string,
+  request: CreateAgentRunRequest,
+) {
+  const admitted = await challenged({
+    baseUrl, fetchImpl, projectId, method: "POST",
+    route: "/api/v1/projects/{project_id}/agent-runs",
+    schema: request.command_schema, digest: await digestCreateAgentRun(request), key,
+    send: (antiForgery) => createAgentRun({
+      baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
+    }),
+  });
+  return { admitted };
+}
+
+test("implemented assistance and Run Events replay from a retained public cursor", async () => {
+  const started = await startRealServer();
+  try {
+    const fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const first = {
+      fetchImpl,
+      projectId: await createEmptyProject({
+        baseUrl: started.baseUrl, fetchImpl, createKey: "018f0000-0000-7001-8000-00001309f730",
+        correlationId: activityId("f731"), title: "Activity Novel",
+      }),
+    };
+    const tree = await getManuscriptTree({
+      baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl,
+    });
+    const chapterId = await prepareRunProject(started.baseUrl, first.fetchImpl, first.projectId, "f7");
+    const run = await postRun(
+      started.baseUrl, first.fetchImpl, first.projectId, activityId("f732"),
+      runRequest({ kind: "new" }, chapterId, activityId("f733")),
+    );
+    if (run.admitted.effect.kind !== "admitted") throw new Error("Run admission did not apply");
+    const options = {
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      snapshotId: tree.snapshot.snapshot_id,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: first.fetchImpl,
+    };
+    const body = await activityStream(options);
+    const frames = parseSseFrames(body).map((frame) => ({
+      id: frame.id,
+      data: frame.data as {
+        event_kind: string; event_schema: string; aggregate_ref: { kind: string; id: string };
+      },
+    }));
+    assert.deepEqual(frames.map((frame) => frame.data.event_kind), [
+      "project_assistance_updated", "volume_created", "chapter_created", "agent_run_created",
+    ]);
+    assert.equal(frames[0]?.data.event_schema, "storyos.event.project-assistance-updated.v1");
+    assert.deepEqual(frames[0]?.data.aggregate_ref, { kind: "project", id: first.projectId });
+    assert.equal(frames[3]?.data.event_schema, "storyos.event.agent-run-created.v1");
+    assert.deepEqual(frames[3]?.data.aggregate_ref, {
+      kind: "agent_run", id: run.admitted.effect.run_id,
+    });
+    const afterAssistance = await activityStream({ ...options, lastEventId: frames[0]!.id });
+    assert.equal((afterAssistance.match(/event: storyos.project-activity/g) ?? []).length, 3);
+    assert.equal(await activityStream({ ...options, lastEventId: frames[3]!.id }), "");
+  } finally {
+    await stopRealServer(started.server);
   }
 });

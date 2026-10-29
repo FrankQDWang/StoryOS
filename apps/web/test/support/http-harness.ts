@@ -11,6 +11,7 @@ import * as client from "../../../../generated/typescript/storyos-public-release
 import type { CreateEditorSessionResponse, DigestValue, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, USER_A, admitProse, drainLeftoverWork, id, settleOnce } from "./acceptance.ts";
+import { zipStoreFiles } from "./archive.ts";
 import { createEmptyProject, queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch, startStoryOSServer,
   stopStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 import type { StoryOSServer } from "./node-integration.ts";
@@ -89,7 +90,7 @@ export function serverForFile(extraEnv: Readonly<Record<string, string>> = {}): 
 
 type Client = typeof client;
 type CommandOptions = { baseUrl: string; projectId: string; idempotencyKey: string; antiForgery?: string; request: unknown };
-type ProjectCommandId = {
+export type ProjectCommandId = {
   [K in keyof Client]: `digest${Capitalize<K & string>}` extends keyof Client
     ? Client[K] extends (options: infer Options) => Promise<unknown>
       ? Options extends CommandOptions ? K : never
@@ -113,6 +114,7 @@ export interface Delivered<Op extends ProjectCommandId> {
 /** One project command with a solved Command Challenge. Each `send` uses the same idempotency key and nonce. */
 export interface Challenged<Op extends ProjectCommandId> {
   readonly key: string;
+  readonly nonce: string;
   send(options?: { request?: CommandRequest<Op>; session?: string; fetchImpl?: typeof fetch }): Promise<Delivered<Op>>;
 }
 
@@ -204,6 +206,7 @@ export class TestProject {
     const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
     return {
       key,
+      nonce: challenge.nonce,
       send: async (options = {}) => {
         let body = "";
         const inner = options.fetchImpl ?? this.server.fetch(options.session ?? this.session);
@@ -230,6 +233,15 @@ export class TestProject {
   async send<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>): Promise<Sent<Op>> {
     const command = await this.challenge(operation, input);
     return { ...await command.send(), command };
+  }
+
+  /** Sends the command once with a fresh key and a nonce that no Command Challenge issued. */
+  async sendUnchallenged<Op extends ProjectCommandId>(operation: Op, input: CommandInput<Op>,
+    session = this.session): Promise<CommandResponse<Op>> {
+    const send = clientFunction<(options: object) => Promise<CommandResponse<Op>>>(operation);
+    return send({ ...input.path, baseUrl: this.baseUrl, projectId: this.projectId,
+      fetchImpl: this.server.fetch(session), idempotencyKey: this.key(), antiForgery: "0".repeat(64),
+      request: input.request });
   }
 
   /** Solves the Command Challenge as this session and sends the command once from another session. */
@@ -319,6 +331,124 @@ export async function openProposal(story: TestStory): Promise<GetProposalRespons
     proposalId: run.decision.opened_proposal.proposal_id, fetchImpl: story.fetchImpl });
 }
 
+/** A new Project with assistance, one open Proposal with one pending Proposal Operation, and a writer Editor
+ * Session. */
+export async function openedProposal(server: TestServer, title: string) {
+  await drainLeftoverWork();
+  const story = await createStory(server, { title, assistance: true });
+  const chapter = async () => (await client.getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+    chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
+  const before = await chapter();
+  const opened = (await openProposal(story)).proposal;
+  const session = await story.openEditorSession();
+  const inspect = async () => (await client.getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
+    proposalId: opened.proposal_id, fetchImpl: story.fetchImpl })).proposal;
+  return { story, before, chapter, opened, inspect, editorSessionId: session.editor_session.editor_session_id };
+}
+
+/** The value of `openedProposal`. */
+export type OpenedProposal = Awaited<ReturnType<typeof openedProposal>>;
+
+/** The rejection of the pending Proposal Operation of an `openedProposal`. */
+export function rejection({ story, opened, before, editorSessionId }: OpenedProposal, options: {
+  revisionId?: string; targetRevisionId?: string; editorSessionId?: string;
+} = {}): CommandInput<"rejectProposalOperations"> {
+  return { request: {
+    command_schema: "storyos.command.reject-proposal-operations.request.v1",
+    reject_proposal_operations_input: {
+      proposal_revision_id: options.revisionId ?? opened.revision_id,
+      selected_pending_operation_ids: [opened.operation_id],
+      expected_target_revisions: [options.targetRevisionId ?? before.current_revision.revision_id],
+      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } },
+      editor_session_id: options.editorSessionId ?? editorSessionId,
+      ...story.binding(),
+    },
+  }, path: { proposalId: opened.proposal_id } };
+}
+
+/** Exports the Project archive through the Worker and returns a reader of its canonical tables. */
+export async function archivedTables(story: TestStory): Promise<(table: string) => unknown[]> {
+  const archive = await story.send("exportProjectArchive", { request: {
+    command_schema: "storyos.command.export-project-archive.request.v1",
+    export_project_archive_input: { ...story.binding(), archive_profile: "storyos.project-export.v1",
+      archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" },
+  } });
+  if (archive.response.effect.kind !== "admitted") throw new Error("expected an admitted archive");
+  const exportId = archive.response.effect.export_id;
+  await settleOnce();
+  assert.equal((await client.getExportOperation({ baseUrl: story.baseUrl, projectId: story.projectId, exportId,
+    fetchImpl: story.fetchImpl })).status, "ready");
+  const download = await story.fetchImpl(`${story.baseUrl}/api/v1/projects/${story.projectId}/exports/${exportId}`,
+    { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+  assert.equal(download.status, 200);
+  const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+  return (table) => JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`))) as unknown[];
+}
+
+// Structure inputs
+
+/** The input of `createVolume`. */
+export function createVolumeInput(project: TestProject, title: string,
+  expectedTreeRevision: string): CommandInput<"createVolume"> {
+  return { request: {
+    command_schema: "storyos.command.create-volume.request.v1",
+    create_volume_input: { title, expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  } };
+}
+
+/** The input of `updateVolume`. */
+export function updateVolumeInput(project: TestProject, volumeId: string, title: string, order: string,
+  expectedTreeRevision: string): CommandInput<"updateVolume"> {
+  return { request: {
+    command_schema: "storyos.command.update-volume.request.v1",
+    update_volume_input: { title, order, expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  }, path: { volumeId } };
+}
+
+/** The input of `deleteVolume`. */
+export function deleteVolumeInput(project: TestProject, volumeId: string,
+  expectedTreeRevision: string): CommandInput<"deleteVolume"> {
+  return { request: {
+    command_schema: "storyos.command.delete-volume.request.v1",
+    delete_volume_input: { expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  }, path: { volumeId } };
+}
+
+/** The input of `createChapter` at the end of the Volume. */
+export function createChapterInput(project: TestProject, volumeId: string, title: string,
+  expectedTreeRevision: string): CommandInput<"createChapter"> {
+  return { request: {
+    command_schema: "storyos.command.create-chapter.request.v1",
+    create_chapter_input: { title, expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  }, path: { volumeId } };
+}
+
+/** The input of `updateChapter`. */
+export function updateChapterInput(project: TestProject, chapterId: string, title: string, order: string,
+  expectedTreeRevision: string): CommandInput<"updateChapter"> {
+  return { request: {
+    command_schema: "storyos.command.update-chapter.request.v1",
+    update_chapter_input: { title, order, expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  }, path: { chapterId } };
+}
+
+/** The input of `deleteChapter`. */
+export function deleteChapterInput(project: TestProject, chapterId: string,
+  expectedTreeRevision: string): CommandInput<"deleteChapter"> {
+  return { request: {
+    command_schema: "storyos.command.delete-chapter.request.v1",
+    delete_chapter_input: { expected_tree_revision: expectedTreeRevision, ...project.binding() },
+  }, path: { chapterId } };
+}
+
+/** The applied effect of `createVolume`. It throws when the command did not apply. */
+export function appliedVolume(created: CommandResponse<"createVolume">) {
+  if (created.effect.kind !== "authoritative_applied") {
+    throw new Error("Create Volume must apply");
+  }
+  return created.effect;
+}
+
 // Problems
 
 /** The status and the problem code of a refused HTTP response. */
@@ -346,7 +476,6 @@ export async function problemOf(call: Promise<unknown>): Promise<Problem> {
 
 // Worker settlement
 
-/** Polls `probe` until `match` holds. */
 /** Proves that another session cannot send the command. The Challenge route answers 404 with no owner identity, and
  * the command route refuses the Challenge of the owner. */
 export async function assertForeignRefused<Op extends ProjectCommandId>(project: TestProject, operation: Op,
@@ -357,6 +486,7 @@ export async function assertForeignRefused<Op extends ProjectCommandId>(project:
   for (const { body } of [challenge, command]) assert.ok(!body.includes(USER_A));
 }
 
+/** Polls `probe` until `match` holds. */
 export async function waitFor<Value>(probe: () => Promise<Value>, match: (value: Value) => boolean,
   options: { attempts?: number; intervalMs?: number } = {}): Promise<Value> {
   let last: Value | undefined;

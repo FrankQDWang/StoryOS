@@ -24,10 +24,12 @@ import {
   digestUpdateProjectAssistance,
   activityStream,
   getAgentRun,
+  getChapter,
   getManuscriptTree,
   getProposal,
   pauseAgentRun,
   updateProjectAssistance,
+  withdrawProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CancelAgentRunRequest,
@@ -35,6 +37,7 @@ import type {
   GetAgentRunResponse,
   PauseAgentRunRequest,
   UpdateProjectAssistanceRequest,
+  WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -46,6 +49,7 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
+import { admitProse } from "../support/acceptance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -713,6 +717,149 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (worker !== undefined) await Promise.allSettled([worker]);
+    await stopRealServer(started.server);
+  }
+});
+
+test("current producer withdraw closes the Proposal with zero author actions", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("1309e8f00211"), "Producer Withdraw Novel", "e8f3");
+    const before = await getChapter({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      chapterId: prepared.chapterId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    const queried = await admitProse(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e8f00231"),
+    );
+    if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
+      throw new Error("expected opened prose");
+    }
+    const opened = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: queried.decision.opened_proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(opened.proposal.closure, "open");
+    if (opened.proposal.source.kind !== "agent_run_decision") {
+      throw new Error("expected an agent-run producer");
+    }
+    const mismatch: WithdrawProposalRequest = {
+      command_schema: "storyos.command.withdraw-proposal.request.v1",
+      withdraw_proposal_input: {
+        cause: "current_producer",
+        producer: {
+          kind: "agent_run_decision",
+          run_id: id("e8f00299"),
+          decision_id: id("e8f00298"),
+        },
+        proposal_revision_id: opened.proposal.revision_id,
+        expected_closure: "open",
+        expected_target_revisions: [before.chapter.current_revision.revision_id],
+        withdrawal_reason: { kind: "current_producer_withdrew" },
+        ...BINDING,
+        correlation_id: id("e8f00241"),
+      },
+    };
+    const mismatched = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00242"),
+      request: mismatch,
+    });
+    assert.deepEqual(mismatched.effect, { kind: "no_effect", reason: "unsupported_cause" });
+    assert.equal(mismatched.author_command_admission_id, undefined);
+    const stillOpen = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(stillOpen.proposal.closure, "open");
+    const withdrawRequest: WithdrawProposalRequest = {
+      command_schema: "storyos.command.withdraw-proposal.request.v1",
+      withdraw_proposal_input: {
+        cause: "current_producer",
+        producer: {
+          kind: "agent_run_decision",
+          run_id: opened.proposal.source.run_id,
+          decision_id: opened.proposal.source.decision_id,
+        },
+        proposal_revision_id: opened.proposal.revision_id,
+        expected_closure: "open",
+        expected_target_revisions: [before.chapter.current_revision.revision_id],
+        withdrawal_reason: { kind: "current_producer_withdrew" },
+        ...BINDING,
+        correlation_id: id("e8f00251"),
+      },
+    };
+    const withdrawn = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00252"),
+      request: withdrawRequest,
+    });
+    assert.equal(withdrawn.effect.kind, "resolved");
+    if (withdrawn.effect.kind !== "resolved") throw new Error("expected resolved withdrawal");
+    assert.equal(withdrawn.effect.prior_closure, "open");
+    assert.equal(withdrawn.effect.resulting_closure, "withdrawn");
+    assert.equal(withdrawn.effect.withdrawal_reason.kind, "current_producer_withdrew");
+    assert.equal(withdrawn.effect.author_action_sequence, undefined);
+    assert.equal(withdrawn.effect.undo_disposition, undefined);
+    assert.equal(withdrawn.author_command_admission_id, undefined);
+    assert.equal(withdrawn.receipt.author_command_admission_id, undefined);
+    assert.deepEqual(withdrawn.receipt.authoritative_commit_ids, []);
+    const repeated = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00252"),
+      request: withdrawRequest,
+    });
+    assert.equal(repeated.receipt.receipt_id, withdrawn.receipt.receipt_id);
+    assert.equal(repeated.effect.kind, "resolved");
+    const inspected = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(inspected.proposal.closure, "withdrawn");
+    assert.equal(inspected.proposal.operation_resolution, "pending");
+    assert.equal(inspected.proposal.revision_id, opened.proposal.revision_id);
+    const after = await getChapter({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      chapterId: prepared.chapterId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.deepEqual(after.chapter, before.chapter);
+    const closedRequest: WithdrawProposalRequest = {
+      ...withdrawRequest,
+      withdraw_proposal_input: {
+        ...withdrawRequest.withdraw_proposal_input,
+        correlation_id: id("e8f00261"),
+      },
+    };
+    const closed = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00262"),
+      request: closedRequest,
+    });
+    assert.deepEqual(closed.effect, { kind: "no_effect", reason: "closure_not_open" });
+  } finally {
     await stopRealServer(started.server);
   }
 });

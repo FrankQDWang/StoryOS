@@ -2,51 +2,18 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { getAgentRun, getChapter, getExportOperation, getProposal,
+import { getAgentRun, getChapter, getProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { zipStoreFiles } from "../support/archive.ts";
-import { USER_A, UUID_V7, assertForeignRefused, createStory, drainLeftoverWork, openProposal, problemOf,
-  serverForFile, settleOnce,
+import { USER_A, UUID_V7, archivedTables, assertForeignRefused, createStory, drainLeftoverWork, openProposal,
+  openedProposal, problemOf, rejection, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
-import type { CommandInput, TestStory } from "../support/http-harness.ts";
+import type { CommandInput, OpenedProposal } from "../support/http-harness.ts";
 
 // The Profile Probe of the ActionOnly settlement profile (ADR 0075).
 const server = serverForFile();
 const WRONG_HEAD = "018f0000-0000-7001-8000-00000000fffe";
 
-/** One open Proposal with one pending Proposal Operation and a writer Editor Session. */
-async function openedProposal(title: string) {
-  await drainLeftoverWork();
-  const story = await createStory(server, { title, assistance: true });
-  const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
-    chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
-  const before = await chapter();
-  const opened = (await openProposal(story)).proposal;
-  const session = await story.openEditorSession();
-  const inspect = async () => (await getProposal({ baseUrl: story.baseUrl, projectId: story.projectId,
-    proposalId: opened.proposal_id, fetchImpl: story.fetchImpl })).proposal;
-  return { story, before, chapter, opened, inspect, editorSessionId: session.editor_session.editor_session_id };
-}
-
-type Opened = Awaited<ReturnType<typeof openedProposal>>;
-
-function rejection({ story, opened, before, editorSessionId }: Opened, options: {
-  revisionId?: string; targetRevisionId?: string; editorSessionId?: string;
-} = {}): CommandInput<"rejectProposalOperations"> {
-  return { request: {
-    command_schema: "storyos.command.reject-proposal-operations.request.v1",
-    reject_proposal_operations_input: {
-      proposal_revision_id: options.revisionId ?? opened.revision_id,
-      selected_pending_operation_ids: [opened.operation_id],
-      expected_target_revisions: [options.targetRevisionId ?? before.current_revision.revision_id],
-      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } },
-      editor_session_id: options.editorSessionId ?? editorSessionId,
-      ...story.binding(),
-    },
-  }, path: { proposalId: opened.proposal_id } };
-}
-
-async function withdrawal({ story, opened, before, editorSessionId }: Opened) {
+async function withdrawal({ story, opened, before, editorSessionId }: OpenedProposal) {
   return story.send("withdrawProposal", { request: {
     command_schema: "storyos.command.withdraw-proposal.request.v1",
     withdraw_proposal_input: {
@@ -61,27 +28,8 @@ async function withdrawal({ story, opened, before, editorSessionId }: Opened) {
   }, path: { proposalId: opened.proposal_id } });
 }
 
-/** Exports the Project archive through the Worker and returns a reader of its canonical tables. */
-async function archivedTables(story: TestStory): Promise<(table: string) => unknown[]> {
-  const archive = await story.send("exportProjectArchive", { request: {
-    command_schema: "storyos.command.export-project-archive.request.v1",
-    export_project_archive_input: { ...story.binding(), archive_profile: "storyos.project-export.v1",
-      archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" },
-  } });
-  if (archive.response.effect.kind !== "admitted") throw new Error("expected an admitted archive");
-  const exportId = archive.response.effect.export_id;
-  await settleOnce();
-  assert.equal((await getExportOperation({ baseUrl: story.baseUrl, projectId: story.projectId, exportId,
-    fetchImpl: story.fetchImpl })).status, "ready");
-  const download = await story.fetchImpl(`${story.baseUrl}/api/v1/projects/${story.projectId}/exports/${exportId}`,
-    { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
-  assert.equal(download.status, 200);
-  const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
-  return (table) => JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`))) as unknown[];
-}
-
 test("rejectProposalOperations resolves, replays, refuses, and conflicts", async () => {
-  const proposal = await openedProposal("Reject Proposal Novel");
+  const proposal = await openedProposal(server, "Reject Proposal Novel");
   const { story, opened, before } = proposal;
   assert.equal(opened.operation_resolution, "pending");
   const discussed = await story.send("createAgentRun", { request: {
@@ -149,7 +97,7 @@ test("rejectProposalOperations resolves, replays, refuses, and conflicts", async
 });
 
 test("an exact retry of a rejection returns its first acknowledgement after a withdrawal and a Server restart", async () => {
-  const proposal = await openedProposal("Proposal Decision Replay Novel");
+  const proposal = await openedProposal(server, "Proposal Decision Replay Novel");
   const rejected = await proposal.story.send("rejectProposalOperations", rejection(proposal));
   assert.equal(rejected.response.effect.kind, "resolved");
   const withdrawn = await withdrawal(proposal);
@@ -160,7 +108,7 @@ test("an exact retry of a rejection returns its first acknowledgement after a wi
 });
 
 test("an exact retry of a reopened withdrawal returns its first acknowledgement after a rejection", async () => {
-  const proposal = await openedProposal("Proposal Decision Replay Novel");
+  const proposal = await openedProposal(server, "Proposal Decision Replay Novel");
   const { story, opened, before, editorSessionId } = proposal;
   const withdrawn = await withdrawal(proposal);
   if (withdrawn.response.effect.kind !== "resolved") throw new Error("expected an author withdrawal");
@@ -181,4 +129,59 @@ test("an exact retry of a reopened withdrawal returns its first acknowledgement 
     rejection(proposal, { revisionId: reopened.response.effect.resulting_proposal_revision_id }));
   assert.equal(rejected.response.effect.kind, "resolved");
   assert.deepEqual(await reopened.command.send(), { response: reopened.response, body: reopened.body });
+});
+
+test("author withdraw closes the current Proposal without changing authority", async () => {
+  await drainLeftoverWork();
+  const story = await createStory(server, { title: "Withdraw Proposal Novel", assistance: true });
+  const chapter = async () => (await getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
+    chapterId: story.chapterIds[0] ?? "", fetchImpl: story.fetchImpl })).chapter;
+  const inspect = async (proposalId: string) => (await getProposal({ baseUrl: story.baseUrl,
+    projectId: story.projectId, proposalId, fetchImpl: story.fetchImpl })).proposal;
+  const before = await chapter();
+  // openProposal refuses a decision that is not an opened prose change.
+  const opened = (await openProposal(story)).proposal;
+  assert.equal(opened.closure, "open");
+  const stopped = await story.send("updateProjectAssistance", { request: {
+    command_schema: "storyos.command.update-project-assistance.request.v1",
+    update_project_assistance_input: { availability: "unavailable", expected_assistance_revision: "1",
+      ...story.binding() },
+  } });
+  assert.equal(stopped.response.effect.kind, "authoritative_applied");
+  if (stopped.response.effect.kind === "authoritative_applied") {
+    assert.equal(stopped.response.effect.availability, "unavailable");
+  }
+  const afterStop = await inspect(opened.proposal_id);
+  assert.equal(afterStop.closure, "open");
+  assert.equal(afterStop.operation_resolution, "pending");
+  const session = await story.openEditorSession();
+  const withdrawRequest = (): CommandInput<"withdrawProposal"> => ({ request: {
+    command_schema: "storyos.command.withdraw-proposal.request.v1",
+    withdraw_proposal_input: {
+      cause: "author",
+      proposal_revision_id: opened.revision_id,
+      expected_closure: "open",
+      expected_target_revisions: [before.current_revision.revision_id],
+      withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
+      editor_session_id: session.editor_session.editor_session_id,
+      ...story.binding(),
+    },
+  }, path: { proposalId: opened.proposal_id } });
+  const withdrawInput = withdrawRequest();
+  const withdrawn = (await story.send("withdrawProposal", withdrawInput)).response;
+  assert.equal(withdrawn.effect.kind, "resolved");
+  if (withdrawn.effect.kind !== "resolved") throw new Error("expected resolved withdrawal");
+  assert.equal(withdrawn.effect.prior_closure, "open");
+  assert.equal(withdrawn.effect.resulting_closure, "withdrawn");
+  assert.deepEqual(withdrawn.receipt.authoritative_commit_ids, []);
+  const inspected = await inspect(opened.proposal_id);
+  assert.equal(inspected.closure, "withdrawn");
+  assert.equal(inspected.operation_resolution, "pending");
+  assert.equal(inspected.revision_id, opened.revision_id);
+  assert.deepEqual(await chapter(), before);
+  const foreign = await problemOf(story.as("session-b").send("withdrawProposal", withdrawInput));
+  assert.ok(foreign.status === 404 && !foreign.body.includes(USER_A));
+  const again = (await story.send("withdrawProposal", withdrawRequest())).response;
+  assert.deepEqual(again.effect, { kind: "no_effect", reason: "closure_not_open" });
+  assert.equal(again.receipt.authoritative_commit_ids.length, 0);
 });
