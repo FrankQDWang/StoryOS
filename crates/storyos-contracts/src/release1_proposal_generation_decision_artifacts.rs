@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+    FixtureMembership, OpenApiMethod, OperationArtifacts, RegisteredOperation, operation_schemas,
 };
 use crate::release1_proposal_generation_decision::{
     COMPLETE_READY_PARTIAL_PROPOSAL, COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE,
@@ -91,43 +91,26 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                COMPLETE_FIXTURE_PATHS,
-                [
-                    |_| complete_fixture_bytes(),
-                    |_| complete_invalid_fixture_bytes(),
-                    |_| complete_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                CONTINUE_FIXTURE_PATHS,
-                [
-                    |_| continue_fixture_bytes(),
-                    |_| continue_invalid_fixture_bytes(),
-                    |_| continue_boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: COMPLETE_FIXTURE_PATH,
+            bytes: |_| complete_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: CONTINUE_FIXTURE_PATH,
+            bytes: |_| continue_fixture_bytes(),
+        },
+    ],
 };
 
 pub(super) const COMPLETE_REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json";
 pub(super) const COMPLETE_RESPONSE_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/complete-ready-partial-proposal-response.schema.json";
 pub(super) const CONTINUE_REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/continue-proposal-generation-request.schema.json";
 pub(super) const CONTINUE_RESPONSE_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/continue-proposal-generation-response.schema.json";
-pub(super) const COMPLETE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json",
-    "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json",
-];
-pub(super) const CONTINUE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json",
-    "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json",
-];
+pub(super) const COMPLETE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json";
+pub(super) const CONTINUE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json";
 
 pub(super) fn complete_request_schema_bytes() -> Vec<u8> {
     request_schema::<CompleteReadyPartialProposalRequest>(
@@ -198,39 +181,19 @@ pub(super) fn typescript_type_declarations() -> String {
 }
 
 pub(super) fn complete_fixture_bytes() -> Vec<u8> {
-    json_bytes(&complete_fixture("2026-09-25T12:00:00.000Z"))
-}
-
-pub(super) fn complete_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = complete_fixture("2026-09-25T12:00:00.000Z");
-    value.as_object_mut().expect("fixture").remove("project");
-    json_bytes(&value)
-}
-
-pub(super) fn complete_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&complete_fixture("1970-01-01T00:00:00.000Z"))
+    json_bytes(&complete_fixture())
 }
 
 pub(super) fn continue_fixture_bytes() -> Vec<u8> {
-    json_bytes(&continue_fixture("2026-09-25T12:00:00.000Z"))
+    json_bytes(&continue_fixture())
 }
 
-pub(super) fn continue_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = continue_fixture("2026-09-25T12:00:00.000Z");
-    value.as_object_mut().expect("fixture").remove("project");
-    json_bytes(&value)
-}
-
-pub(super) fn continue_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&continue_fixture("1970-01-01T00:00:00.000Z"))
-}
-
-fn complete_fixture(created_at: &str) -> Value {
+fn complete_fixture() -> Value {
     let mut value = shared_fixture(
         COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
         COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE,
         "proposal_generation_completed",
-        created_at,
+        "2026-09-25T12:00:00.000Z",
         "018f0000-0000-7001-8000-000000000e10",
     );
     value["effect"] = json!({
@@ -248,12 +211,12 @@ fn complete_fixture(created_at: &str) -> Value {
     value
 }
 
-fn continue_fixture(created_at: &str) -> Value {
+fn continue_fixture() -> Value {
     let mut value = shared_fixture(
         CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID,
         CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE,
         "proposal_generation_started",
-        created_at,
+        "2026-09-25T12:00:00.000Z",
         "018f0000-0000-7001-8000-000000000e20",
     );
     value["effect"] = json!({

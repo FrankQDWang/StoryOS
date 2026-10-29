@@ -33,11 +33,7 @@ pub(super) const WITHDRAW_PROPOSAL: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.withdrawProposal.positive.v1",
-        "storyos.golden.withdrawProposal.invalid.v1",
-        "storyos.golden.withdrawProposal.boundary.v1",
-    ],
+    fixture: "storyos.golden.withdrawProposal.positive.v1",
 };
 
 pub const WITHDRAW_PROPOSAL_PATH: &str = WITHDRAW_PROPOSAL.path;

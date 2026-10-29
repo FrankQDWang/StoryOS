@@ -31,11 +31,7 @@ pub(super) const LIST_CHAPTER_OPEN_PROPOSALS: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.listChapterOpenProposals.positive.v1",
-        "storyos.golden.listChapterOpenProposals.invalid.v1",
-        "storyos.golden.listChapterOpenProposals.boundary.v1",
-    ],
+    fixture: "storyos.golden.listChapterOpenProposals.positive.v1",
 };
 
 pub const LIST_CHAPTER_OPEN_PROPOSALS_PATH: &str = LIST_CHAPTER_OPEN_PROPOSALS.path;

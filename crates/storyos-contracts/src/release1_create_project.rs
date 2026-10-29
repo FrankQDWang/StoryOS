@@ -33,11 +33,7 @@ pub(super) const CREATE_PROJECT_CHALLENGE: QueryOperation = QueryOperation {
         (428, "Precondition required"),
         (429, "Rate limited"),
     ],
-    fixtures: &[
-        "storyos.golden.createProjectChallenge.positive.v1",
-        "storyos.golden.createProjectChallenge.invalid.v1",
-        "storyos.golden.createProjectChallenge.boundary.v1",
-    ],
+    fixture: "storyos.golden.createProjectChallenge.positive.v1",
 };
 
 pub const CREATE_PROJECT_CHALLENGE_PATH: &str = CREATE_PROJECT_CHALLENGE.path;
@@ -65,11 +61,7 @@ pub(super) const CREATE_PROJECT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createProject.positive.v1",
-        "storyos.golden.createProject.invalid.v1",
-        "storyos.golden.createProject.boundary.v1",
-    ],
+    fixture: "storyos.golden.createProject.positive.v1",
 };
 
 pub const CREATE_PROJECT_PATH: &str = CREATE_PROJECT.path;

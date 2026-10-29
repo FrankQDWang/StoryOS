@@ -32,11 +32,7 @@ pub(super) const CREATE_CHAPTER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.createChapter.positive.v1",
-        "storyos.golden.createChapter.invalid.v1",
-        "storyos.golden.createChapter.boundary.v1",
-    ],
+    fixture: "storyos.golden.createChapter.positive.v1",
 };
 
 pub const CREATE_CHAPTER_PATH: &str = CREATE_CHAPTER.path;

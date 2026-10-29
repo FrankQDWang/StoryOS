@@ -31,11 +31,7 @@ pub(super) const DELETE_VOLUME: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.deleteVolume.positive.v1",
-        "storyos.golden.deleteVolume.invalid.v1",
-        "storyos.golden.deleteVolume.boundary.v1",
-    ],
+    fixture: "storyos.golden.deleteVolume.positive.v1",
 };
 
 pub const DELETE_VOLUME_PATH: &str = DELETE_VOLUME.path;

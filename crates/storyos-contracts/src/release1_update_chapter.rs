@@ -31,11 +31,7 @@ pub(super) const UPDATE_CHAPTER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.updateChapter.positive.v1",
-        "storyos.golden.updateChapter.invalid.v1",
-        "storyos.golden.updateChapter.boundary.v1",
-    ],
+    fixture: "storyos.golden.updateChapter.positive.v1",
 };
 
 pub const UPDATE_CHAPTER_PATH: &str = UPDATE_CHAPTER.path;

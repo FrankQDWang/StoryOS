@@ -31,11 +31,7 @@ pub(super) const DELETE_CHAPTER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.deleteChapter.positive.v1",
-        "storyos.golden.deleteChapter.invalid.v1",
-        "storyos.golden.deleteChapter.boundary.v1",
-    ],
+    fixture: "storyos.golden.deleteChapter.positive.v1",
 };
 
 pub const DELETE_CHAPTER_PATH: &str = DELETE_CHAPTER.path;

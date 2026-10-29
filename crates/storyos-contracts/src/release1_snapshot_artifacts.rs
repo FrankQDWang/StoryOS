@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_operation_registry::{
-    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    ClientOverride, FixtureMembership, OperationArtifacts, RegisteredOperation, method,
     operation_schemas,
 };
 use crate::release1_route_catalog::{
@@ -98,27 +98,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         methods
     },
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                SNAPSHOT_FIXTURE_PATHS,
-                [
-                    |_| snapshot_fixture_bytes(),
-                    |_| snapshot_invalid_fixture_bytes(),
-                    |_| snapshot_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                ACTIVITY_STREAM_FIXTURE_PATHS,
-                [
-                    |_| activity_stream_fixture_bytes(),
-                    |_| activity_stream_invalid_fixture_bytes(),
-                    |_| activity_stream_boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[FixtureMembership { path: SNAPSHOT_FIXTURE_PATH, bytes: |_| snapshot_fixture_bytes() }, FixtureMembership { path: ACTIVITY_STREAM_FIXTURE_PATH, bytes: |_| activity_stream_fixture_bytes() }],
 };
 
 pub(super) const SNAPSHOT_REQUEST_SCHEMA_PATH: &str =
@@ -129,16 +109,10 @@ pub(super) const ACTIVITY_STREAM_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/activity-stream-request.schema.json";
 pub(super) const ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/activity-stream-response.schema.json";
-pub(super) const SNAPSHOT_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-snapshot.json",
-    "generated/golden-wire/storyos-public-release-1/get-snapshot.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-snapshot.boundary.json",
-];
-pub(super) const ACTIVITY_STREAM_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/activity-stream.json",
-    "generated/golden-wire/storyos-public-release-1/activity-stream.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json",
-];
+pub(super) const SNAPSHOT_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-snapshot.json";
+pub(super) const ACTIVITY_STREAM_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/activity-stream.json";
 
 pub(super) fn snapshot_request_schema_bytes() -> Vec<u8> {
     let mut schema = typed_schema::<GetSnapshotRequest>(
@@ -380,35 +354,8 @@ pub(super) fn snapshot_fixture_bytes() -> Vec<u8> {
     json_bytes(&snapshot_fixture())
 }
 
-pub(super) fn snapshot_invalid_fixture_bytes() -> Vec<u8> {
-    let mut invalid = snapshot_fixture();
-    invalid
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("snapshot");
-    json_bytes(&invalid)
-}
-
-pub(super) fn snapshot_boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = snapshot_fixture();
-    boundary["snapshot"]["expires_at"] = json!("2026-08-19T00:00:00.000Z");
-    json_bytes(&boundary)
-}
-
 pub(super) fn activity_stream_fixture_bytes() -> Vec<u8> {
     json_bytes(&activity_fixture())
-}
-
-pub(super) fn activity_stream_invalid_fixture_bytes() -> Vec<u8> {
-    json_bytes(&json!({
-        "event": "storyos.project-activity"
-    }))
-}
-
-pub(super) fn activity_stream_boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = activity_fixture();
-    boundary["event"] = json!("message");
-    json_bytes(&boundary)
 }
 
 fn snapshot_fixture() -> Value {

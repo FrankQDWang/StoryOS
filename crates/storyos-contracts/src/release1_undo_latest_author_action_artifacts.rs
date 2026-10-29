@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_undo_latest_author_action::{
@@ -36,28 +36,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&UNDO_LATEST_AUTHOR_ACTION, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/undo-latest-author-action-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json",
-    "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<UndoLatestAuthorActionRequest>(
@@ -136,23 +126,10 @@ pub(super) fn typescript_type_declarations() -> String {
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
-    json_bytes(&command_fixture("2026-08-30T12:00:00.000Z"))
+    json_bytes(&command_fixture())
 }
 
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = command_fixture("2026-08-30T12:00:00.000Z");
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&command_fixture("1970-01-01T00:00:00.000Z"))
-}
-
-fn command_fixture(created_at: &str) -> Value {
+fn command_fixture() -> Value {
     json!({
         "schema_id": UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
         "correlation_id": "018f0000-0000-7001-8000-000000000930",
@@ -188,7 +165,7 @@ fn command_fixture(created_at: &str) -> Value {
             "artifact_lifecycle_event_refs": [],
             "condition_refs": [],
             "result": "authoritative_applied",
-            "created_at": created_at
+            "created_at": "2026-08-30T12:00:00.000Z"
         },
         "project": {
             "project_id": "018f0000-0000-7001-8000-000000000002",

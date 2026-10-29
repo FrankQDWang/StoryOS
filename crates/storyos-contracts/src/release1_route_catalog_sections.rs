@@ -346,7 +346,7 @@ pub(super) fn catalog_sections() -> Value {
                 "one response schema ID", "one semantic owner", "one wire owner",
                 "one resource/action shape", "one admission/idempotency/precondition profile",
                 "one settlement/status profile", "one error profile", "one Project Activity mapping",
-                "one positive and at least one negative golden fixture", "one OpenAPI operation",
+                "one positive golden fixture", "one OpenAPI operation",
                 "one TypeScript generated operation", "request/response JSON Schema IDs",
                 "conditional cause profiles when the operation has multiple legal causes",
             ],

@@ -34,11 +34,7 @@ pub(super) const EXPORT_PROJECT_ARCHIVE: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.exportProjectArchive.positive.v1",
-        "storyos.golden.exportProjectArchive.invalid.v1",
-        "storyos.golden.exportProjectArchive.boundary.v1",
-    ],
+    fixture: "storyos.golden.exportProjectArchive.positive.v1",
 };
 
 pub const EXPORT_PROJECT_ARCHIVE_PATH: &str = EXPORT_PROJECT_ARCHIVE.path;

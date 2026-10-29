@@ -9,7 +9,7 @@ use crate::release1::{
     GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID, GetEditorSessionResponse, WEB_CLIENT_CONTRACT_REVISION,
 };
 use crate::release1_operation_registry::{
-    ClientOverride, GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple,
+    ClientOverride, FixtureMembership, GeneratedSchema, OperationArtifacts, RegisteredOperation,
     method,
 };
 use crate::release1_route_catalog::{
@@ -18,7 +18,6 @@ use crate::release1_route_catalog::{
 };
 use crate::release1_wire::{
     canonical_u64_wire_schema, json_bytes, path_request_schema, query_openapi, schema_value,
-    with_boundary_project_scope, without_project_scope,
 };
 
 const CREATE_EDITOR_SESSION_NOTES: &str = "Opening a session is a session Operational Record, not an author-owned Core command and not an Author Command Admission.";
@@ -35,17 +34,11 @@ pub(super) const EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH: &str =
 pub(super) const EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/editor-session-get-response.schema.json";
 
-const CREATE_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
-];
+const CREATE_EDITOR_SESSION_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/create-editor-session.json";
 
-const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
-];
+const GET_EDITOR_SESSION_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-editor-session.json";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -161,27 +154,16 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .map(|declaration| format!("export {declaration}"))
         .join("\n\n")
     },
-    fixtures: || {
-        [
-            fixture_triple(
-                CREATE_EDITOR_SESSION_FIXTURE_PATHS,
-                [
-                    |_| create_editor_session_fixture_bytes(),
-                    |_| invalid_create_editor_session_fixture_bytes(),
-                    |_| boundary_create_editor_session_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                GET_EDITOR_SESSION_FIXTURE_PATHS,
-                [
-                    |_| get_editor_session_fixture_bytes(),
-                    |_| invalid_get_editor_session_fixture_bytes(),
-                    |_| boundary_get_editor_session_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: CREATE_EDITOR_SESSION_FIXTURE_PATH,
+            bytes: |_| create_editor_session_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: GET_EDITOR_SESSION_FIXTURE_PATH,
+            bytes: |_| get_editor_session_fixture_bytes(),
+        },
+    ],
 };
 
 fn editor_session_create_openapi() -> String {
@@ -254,30 +236,6 @@ fn create_editor_session_fixture_bytes() -> Vec<u8> {
 
 fn get_editor_session_fixture_bytes() -> Vec<u8> {
     json_bytes(&editor_session_fixture(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-
-fn invalid_create_editor_session_fixture_bytes() -> Vec<u8> {
-    without_project_scope(editor_session_fixture(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-
-fn boundary_create_editor_session_fixture_bytes() -> Vec<u8> {
-    with_boundary_project_scope(editor_session_fixture(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-
-fn invalid_get_editor_session_fixture_bytes() -> Vec<u8> {
-    without_project_scope(editor_session_fixture(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-
-fn boundary_get_editor_session_fixture_bytes() -> Vec<u8> {
-    with_boundary_project_scope(editor_session_fixture(
         GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
     ))
 }

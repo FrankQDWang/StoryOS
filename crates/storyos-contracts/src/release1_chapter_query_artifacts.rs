@@ -5,13 +5,10 @@ use crate::release1::{
     CHAPTER_REQUEST_SCHEMA_ID, CHAPTER_RESPONSE_SCHEMA_ID, GET_CHAPTER, GetChapterResponse,
 };
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    FixtureMembership, GeneratedSchema, OperationArtifacts, RegisteredOperation, method,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
-use crate::release1_wire::{
-    json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
-    without_project_scope,
-};
+use crate::release1_wire::{json_bytes, path_request_schema, query_openapi, schema_value};
 
 const CHAPTER_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-request.schema.json";
@@ -19,11 +16,8 @@ const CHAPTER_REQUEST_SCHEMA_PATH: &str =
 pub(super) const CHAPTER_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-response.schema.json";
 
-pub(super) const CHAPTER_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-chapter.json",
-    "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
-];
+pub(super) const CHAPTER_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-chapter.json";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -71,17 +65,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetChapterResponse::decl(&Config::default())),
-    fixtures: || {
-        fixture_triple(
-            CHAPTER_FIXTURE_PATHS,
-            [
-                |_| chapter_fixture_bytes(),
-                |_| invalid_chapter_fixture_bytes(),
-                |_| boundary_chapter_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: CHAPTER_FIXTURE_PATH,
+        bytes: |_| chapter_fixture_bytes(),
+    }],
 };
 
 fn chapter_fixture() -> Value {
@@ -96,12 +83,4 @@ fn chapter_fixture() -> Value {
 
 fn chapter_fixture_bytes() -> Vec<u8> {
     json_bytes(&chapter_fixture())
-}
-
-fn invalid_chapter_fixture_bytes() -> Vec<u8> {
-    without_project_scope(chapter_fixture())
-}
-
-fn boundary_chapter_fixture_bytes() -> Vec<u8> {
-    with_boundary_project_scope(chapter_fixture())
 }

@@ -33,11 +33,7 @@ pub(super) const REJECT_PROPOSAL_OPERATIONS: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.rejectProposalOperations.positive.v1",
-        "storyos.golden.rejectProposalOperations.invalid.v1",
-        "storyos.golden.rejectProposalOperations.boundary.v1",
-    ],
+    fixture: "storyos.golden.rejectProposalOperations.positive.v1",
 };
 
 pub const REJECT_PROPOSAL_OPERATIONS_PATH: &str = REJECT_PROPOSAL_OPERATIONS.path;

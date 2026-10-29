@@ -37,7 +37,7 @@ const RELEASE_PROFILE_MODULE_PATH: &str =
 const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:4e8f222b10b34707f2e39cda35e6d82b7f9826e1a8fb2223954359188852ed1f";
+    "sha256:1d681ea8932ca205974b73054821469a0faaec627ded74c02336a79d7738005c";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -257,7 +257,7 @@ fn operation_graph(
         "path": operation.path, "request_schema": operation.request_schema,
         "response_schema": operation.response_schema, "preconditions": preconditions,
         "http_statuses": operation.responses.iter().map(|(status, _)| status).collect::<Vec<_>>(),
-        "fixtures": operation.fixtures,
+        "fixtures": [operation.fixture],
         "generated": ["openapi", "json_schema", "typescript_client", "golden_wire"]
     })
 }

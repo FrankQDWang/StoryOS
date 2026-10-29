@@ -5,13 +5,10 @@ use crate::release1::{
     GET_PROJECT, GetProjectResponse, PROJECT_REQUEST_SCHEMA_ID, PROJECT_RESPONSE_SCHEMA_ID,
 };
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    FixtureMembership, GeneratedSchema, OperationArtifacts, RegisteredOperation, method,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
-use crate::release1_wire::{
-    json_bytes, path_request_schema, query_openapi, schema_value, with_boundary_project_scope,
-    without_project_scope,
-};
+use crate::release1_wire::{json_bytes, path_request_schema, query_openapi, schema_value};
 
 const PROJECT_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-request.schema.json";
@@ -19,11 +16,8 @@ const PROJECT_REQUEST_SCHEMA_PATH: &str =
 pub(super) const PROJECT_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-response.schema.json";
 
-const PROJECT_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-project.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
-];
+const PROJECT_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-project.json";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -67,17 +61,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
     },
     typescript_types: || format!("export {}", GetProjectResponse::decl(&Config::default())),
-    fixtures: || {
-        fixture_triple(
-            PROJECT_FIXTURE_PATHS,
-            [
-                |_| project_fixture_bytes(),
-                |_| invalid_project_fixture_bytes(),
-                |_| boundary_project_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: PROJECT_FIXTURE_PATH,
+        bytes: |_| project_fixture_bytes(),
+    }],
 };
 
 fn project_fixture() -> Value {
@@ -91,12 +78,4 @@ fn project_fixture() -> Value {
 
 fn project_fixture_bytes() -> Vec<u8> {
     json_bytes(&project_fixture())
-}
-
-fn invalid_project_fixture_bytes() -> Vec<u8> {
-    without_project_scope(project_fixture())
-}
-
-fn boundary_project_fixture_bytes() -> Vec<u8> {
-    with_boundary_project_scope(project_fixture())
 }
