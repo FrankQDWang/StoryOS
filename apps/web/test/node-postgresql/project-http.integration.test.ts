@@ -30,7 +30,6 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
@@ -161,8 +160,8 @@ async function archive(
   idempotencyKey: string,
   request: ArchiveProjectRequest,
 ) {
-  const challenge = await issueChallenge(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/archival",
-    request.command_schema, await digestArchiveProject(request), idempotencyKey);
+  const challenge = await issueChallenge(baseUrl, fetchImpl, projectId, "PUT",
+    "/api/v1/projects/{project_id}/archival", request.command_schema, await digestArchiveProject(request), idempotencyKey);
   const archived = await archiveProject({
     baseUrl,
     projectId,
@@ -1438,18 +1437,8 @@ test("archiveProject settles lifecycle, replays, lists archived, and fails close
     const lostRequest = archiveRequest("1", "018f0000-0000-7001-8000-000000000916");
     const lostKey = id(`${ns}0926`);
     const lostDigest = await digestArchiveProject(lostRequest);
-    const lostChallenge = await withChallengeBudget(second.projectId, () => createProjectCommandChallenge({
-      baseUrl,
-      projectId: second.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "PUT",
-        route_template: "/api/v1/projects/{project_id}/archival",
-        command_schema: "storyos.command.archive-project.request.v1",
-        canonical_command_digest: lostDigest,
-        idempotency_key: lostKey,
-      },
-    }));
+    const lostChallenge = await issueChallenge(baseUrl, first.fetchImpl, second.projectId, "PUT",
+      "/api/v1/projects/{project_id}/archival", "storyos.command.archive-project.request.v1", lostDigest, lostKey);
     await assert.rejects(
       archiveProject({
         baseUrl,

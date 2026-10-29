@@ -4,7 +4,6 @@ import { test } from "vitest";
 
 import {
   applyAuthorEdit,
-  createProjectCommandChallenge,
   digestApplyAuthorEdit,
   digestTakeOverProjectWriter,
   getApplyAuthorEditOutcome,
@@ -18,13 +17,13 @@ import type {
   ApplyAuthorEditRequest,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { PROJECT_A, USER_A, challenged, manuscriptAuthority, openEditorSession, problemCode, startServer } from "../support/http-harness.ts";
+import { PROJECT_A, USER_A, challenged, issueChallenge, manuscriptAuthority, openEditorSession, problemCode,
+  startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -106,16 +105,9 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     };
     const authorEditKey = "018f0000-0000-7001-8000-000000000345";
     const authorEditDigest = await digestApplyAuthorEdit(authorEditRequest);
-    const authorEditChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        command_schema: authorEditRequest.command_schema,
-        canonical_command_digest: authorEditDigest,
-        idempotency_key: authorEditKey,
-      },
-    }));
+    const authorEditChallenge = await issueChallenge(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", authorEditRequest.command_schema, authorEditDigest,
+      authorEditKey);
     const authorEditOptions = {
       baseUrl, projectId: PROJECT_A, request: authorEditRequest, idempotencyKey: authorEditKey,
       antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),

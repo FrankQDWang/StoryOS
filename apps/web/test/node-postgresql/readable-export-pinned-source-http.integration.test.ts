@@ -32,9 +32,10 @@ import {
   exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
-  stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, challenged, settleOnce, startServer } from "../support/http-harness.ts";
+import { BINDING, USER_A, challenged, settleOnce, serverForFile } from "../support/http-harness.ts";
+
+const started = serverForFile();
 
 const ADMITTED_MANUSCRIPT = "# Volume A\n\n## Chapter A\n\n\n";
 
@@ -71,357 +72,349 @@ function sourceRowFilter(projectId: string, exportId: string): string {
 }
 
 test("an admitted human-readable export settles the pinned manuscript after later live changes", async () => {
-  const { baseUrl, server } = await startServer();
-  try {
-    const fetchImpl = browserFetch(baseUrl, "session-a");
-    const projectId = await createEmptyProject({
-      baseUrl,
-      fetchImpl,
-      createKey: "018f0000-0000-7001-8000-00000000d101",
-      correlationId: "018f0000-0000-7001-8000-00000000d111",
-      title: "Pinned Source Novel",
-    });
-    const command = {
-      baseUrl,
-      fetchImpl,
-      projectId,
-    };
+  const { baseUrl } = started;
+  const fetchImpl = browserFetch(baseUrl, "session-a");
+  const projectId = await createEmptyProject({
+    baseUrl,
+    fetchImpl,
+    createKey: "018f0000-0000-7001-8000-00000000d101",
+    correlationId: "018f0000-0000-7001-8000-00000000d111",
+    title: "Pinned Source Novel",
+  });
+  const command = {
+    baseUrl,
+    fetchImpl,
+    projectId,
+  };
 
-    const volumeRequest = {
-      command_schema: "storyos.command.create-volume.request.v1" as const,
-      create_volume_input: {
-        title: "Volume A",
-        expected_tree_revision: "1",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d112",
+  const volumeRequest = {
+    command_schema: "storyos.command.create-volume.request.v1" as const,
+    create_volume_input: {
+      title: "Volume A",
+      expected_tree_revision: "1",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d112",
+    },
+  };
+  const volume = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volumeRequest.command_schema,
+    await digestCreateVolume(volumeRequest), "018f0000-0000-7001-8000-00000000d102",
+    (antiForgery) => createVolume({
+      ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d102", antiForgery,
+      request: volumeRequest,
+    }),
+  );
+  if (volume.effect.kind !== "authoritative_applied") {
+    throw new Error("Volume A must apply");
+  }
+  const volumeId = volume.effect.volume_id;
+
+  const chapterRequest = {
+    command_schema: "storyos.command.create-chapter.request.v1" as const,
+    create_chapter_input: {
+      title: "Chapter A",
+      expected_tree_revision: "2",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d113",
+    },
+  };
+  const chapter = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+    chapterRequest.command_schema, await digestCreateChapter(chapterRequest), "018f0000-0000-7001-8000-00000000d103",
+    (antiForgery) => createChapter({
+      ...command, volumeId,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000d103", antiForgery,
+      request: chapterRequest,
+    }),
+  );
+  if (chapter.effect.kind !== "authoritative_applied") {
+    throw new Error("Chapter A must apply");
+  }
+  const chapterId = chapter.effect.chapter_id;
+
+  const request = exportRequest("018f0000-0000-7001-8000-00000000d114");
+  const exportKey = "018f0000-0000-7001-8000-00000000d104";
+  let nonce = "";
+  const applied = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/exports", request.command_schema,
+    await digestExportHumanReadableManuscript(request), exportKey,
+    (antiForgery) => exportHumanReadableManuscript({
+      ...command, idempotencyKey: exportKey, antiForgery: (nonce = antiForgery), request,
+    }),
+  );
+  assert.equal(applied.acknowledgement, "accepted");
+  assert.equal(applied.effect.kind, "admitted");
+  if (applied.effect.kind !== "admitted") {
+    throw new Error("Human-readable export must admit");
+  }
+  assert.equal("manuscript_utf8" in applied, false);
+  const exportId = applied.effect.export_id;
+  const sourceSnapshotId = applied.effect.source_snapshot.snapshot_id;
+
+  const waiting = await getHumanReadableManuscriptExport({
+    baseUrl, projectId, exportId, fetchImpl,
+  });
+  assert.equal(waiting.status, "in_progress");
+  assert.equal("manuscript_utf8" in waiting, false);
+  assert.equal(waiting.source_snapshot.snapshot_id, sourceSnapshotId);
+
+  const replay = await exportHumanReadableManuscript({
+    ...command, idempotencyKey: exportKey, antiForgery: nonce, request,
+  });
+  assert.equal(replay.command_id, applied.command_id);
+  if (replay.effect.kind !== "admitted") {
+    throw new Error("retry must return the same admitted operation");
+  }
+  assert.equal(replay.effect.export_id, exportId);
+
+  const renameProject = {
+    command_schema: "storyos.command.update-project.request.v1" as const,
+    update_project_input: {
+      title: "Later Title",
+      expected_project_revision: "1",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d115",
+    },
+  };
+  const renamed = await challenged(
+    baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}", renameProject.command_schema,
+    await digestUpdateProject(renameProject), "018f0000-0000-7001-8000-00000000d105",
+    (antiForgery) => updateProject({
+      ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d105", antiForgery,
+      request: renameProject,
+    }),
+  );
+  assert.equal(renamed.effect.kind, "authoritative_applied");
+
+  const renameVolume = {
+    command_schema: "storyos.command.update-volume.request.v1" as const,
+    update_volume_input: {
+      title: "Later Volume",
+      order: "1",
+      expected_tree_revision: "3",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d116",
+    },
+  };
+  const renamedVolume = await challenged(
+    baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}/volumes/{volume_id}",
+    renameVolume.command_schema, await digestUpdateVolume(renameVolume), "018f0000-0000-7001-8000-00000000d106",
+    (antiForgery) => updateVolume({
+      ...command, volumeId,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000d106", antiForgery,
+      request: renameVolume,
+    }),
+  );
+  assert.equal(renamedVolume.effect.kind, "authoritative_applied");
+
+  const renameChapter = {
+    command_schema: "storyos.command.update-chapter.request.v1" as const,
+    update_chapter_input: {
+      title: "Later Chapter",
+      order: "1",
+      expected_tree_revision: "4",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d117",
+    },
+  };
+  const renamedChapter = await challenged(
+    baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+    renameChapter.command_schema, await digestUpdateChapter(renameChapter), "018f0000-0000-7001-8000-00000000d107",
+    (antiForgery) => updateChapter({
+      ...command, chapterId,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000d107", antiForgery,
+      request: renameChapter,
+    }),
+  );
+  assert.equal(renamedChapter.effect.kind, "authoritative_applied");
+
+  const sessionRequest: CreateEditorSessionRequest = {
+    command_schema: "storyos.command.create-editor-session.request.v1",
+    ...BINDING,
+    correlation_id: "018f0000-0000-7001-8000-00000000d118",
+  };
+  const session = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/editor-sessions",
+    sessionRequest.command_schema, await digestCreateEditorSession(sessionRequest),
+    "018f0000-0000-7001-8000-00000000d108",
+    (antiForgery) => createEditorSession({
+      ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d108", antiForgery,
+      request: sessionRequest,
+    }),
+  );
+  if (session.writer.kind !== "current_writer") {
+    throw new Error("the later Author Edit needs the current writer");
+  }
+  const from = session.base_snapshot.materialized_revision.body.length;
+  const editRequest: ApplyAuthorEditRequest = {
+    command_schema: "storyos.command.apply-author-edit.request.v1",
+    ...BINDING,
+    correlation_id: "018f0000-0000-7001-8000-00000000d119",
+    editor_session_id: session.editor_session.editor_session_id,
+    writer_generation: session.writer.writer_generation,
+    chapter_id: session.base_snapshot.chapter_id,
+    expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
+    expected_proposal_head_revision_ids: session.base_snapshot.proposal_head_revision_ids,
+    target_refs: session.base_snapshot.target_refs,
+    observed_ownership_partition: session.base_snapshot.observed_ownership_partition,
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
+    undo_group_id: "018f0000-0000-7001-8000-00000000d1a1",
+    completed_intent_record_id: "018f0000-0000-7001-8000-00000000d1a2",
+    local_intent_sequence: "1",
+    author_edit_units: [{
+      normalized_primitives: [{ kind: "replace_selection", from, to: from, text: "Hello world" }],
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to: from,
       },
-    };
-    const volume = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volumeRequest.command_schema,
-      await digestCreateVolume(volumeRequest), "018f0000-0000-7001-8000-00000000d102",
-      (antiForgery) => createVolume({
-        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d102", antiForgery,
-        request: volumeRequest,
-      }),
-    );
-    if (volume.effect.kind !== "authoritative_applied") {
-      throw new Error("Volume A must apply");
-    }
-    const volumeId = volume.effect.volume_id;
+    }],
+  };
+  const edited = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
+    editRequest.command_schema, await digestApplyAuthorEdit(editRequest), "018f0000-0000-7001-8000-00000000d109",
+    (antiForgery) => applyAuthorEdit({
+      ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d109", antiForgery,
+      request: editRequest,
+    }),
+  );
+  assert.equal(edited.effect.kind, "authoritative_applied");
 
-    const chapterRequest = {
-      command_schema: "storyos.command.create-chapter.request.v1" as const,
-      create_chapter_input: {
-        title: "Chapter A",
-        expected_tree_revision: "2",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d113",
-      },
-    };
-    const chapter = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-      chapterRequest.command_schema, await digestCreateChapter(chapterRequest), "018f0000-0000-7001-8000-00000000d103",
-      (antiForgery) => createChapter({
-        ...command, volumeId,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000d103", antiForgery,
-        request: chapterRequest,
-      }),
-    );
-    if (chapter.effect.kind !== "authoritative_applied") {
-      throw new Error("Chapter A must apply");
-    }
-    const chapterId = chapter.effect.chapter_id;
+  const laterVolumeRequest = {
+    command_schema: "storyos.command.create-volume.request.v1" as const,
+    create_volume_input: {
+      title: "Volume B",
+      expected_tree_revision: "5",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d11a",
+    },
+  };
+  const laterVolume = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", laterVolumeRequest.command_schema,
+    await digestCreateVolume(laterVolumeRequest), "018f0000-0000-7001-8000-00000000d10a",
+    (antiForgery) => createVolume({
+      ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d10a", antiForgery,
+      request: laterVolumeRequest,
+    }),
+  );
+  if (laterVolume.effect.kind !== "authoritative_applied") {
+    throw new Error("Volume B must apply");
+  }
+  const laterVolumeId = laterVolume.effect.volume_id;
+  const laterChapterRequest = {
+    command_schema: "storyos.command.create-chapter.request.v1" as const,
+    create_chapter_input: {
+      title: "Chapter B",
+      expected_tree_revision: "6",
+      ...BINDING,
+      correlation_id: "018f0000-0000-7001-8000-00000000d11b",
+    },
+  };
+  const laterChapter = await challenged(
+    baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+    laterChapterRequest.command_schema, await digestCreateChapter(laterChapterRequest),
+    "018f0000-0000-7001-8000-00000000d10b",
+    (antiForgery) => createChapter({
+      ...command, volumeId: laterVolumeId,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000d10b", antiForgery,
+      request: laterChapterRequest,
+    }),
+  );
+  assert.equal(laterChapter.effect.kind, "authoritative_applied");
 
-    const request = exportRequest("018f0000-0000-7001-8000-00000000d114");
-    const exportKey = "018f0000-0000-7001-8000-00000000d104";
-    let nonce = "";
-    const applied = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/exports", request.command_schema,
-      await digestExportHumanReadableManuscript(request), exportKey,
-      (antiForgery) => exportHumanReadableManuscript({
-        ...command, idempotencyKey: exportKey, antiForgery: (nonce = antiForgery), request,
-      }),
-    );
-    assert.equal(applied.acknowledgement, "accepted");
-    assert.equal(applied.effect.kind, "admitted");
-    if (applied.effect.kind !== "admitted") {
-      throw new Error("Human-readable export must admit");
-    }
-    assert.equal("manuscript_utf8" in applied, false);
-    const exportId = applied.effect.export_id;
-    const sourceSnapshotId = applied.effect.source_snapshot.snapshot_id;
+  await settleOnce();
+  const ready = await getHumanReadableManuscriptExport({
+    baseUrl, projectId, exportId, fetchImpl,
+  });
+  assert.equal(ready.status, "ready");
+  if (ready.status !== "ready") {
+    throw new Error("the Worker must settle the pinned human-readable export");
+  }
+  assert.equal(ready.manuscript_utf8, ADMITTED_MANUSCRIPT);
+  assert.equal(ready.source_snapshot.snapshot_id, sourceSnapshotId);
+  assert.equal(ready.export_id, exportId);
 
+  // After settlement the frozen input may be discarded. The output bytes stay.
+  const discarded = await queryPostgres(`
+    DELETE FROM storyos.pinned_export_sources
+     WHERE ${sourceRowFilter(projectId, exportId)};
+    SELECT 'ok';
+  `);
+  assert.match(discarded, /ok$/);
+  const afterDiscard = await getHumanReadableManuscriptExport({
+    baseUrl, projectId, exportId, fetchImpl,
+  });
+  if (afterDiscard.status !== "ready") {
+    throw new Error("a ready export must stay ready after its source is discarded");
+  }
+  assert.equal(afterDiscard.manuscript_utf8, ADMITTED_MANUSCRIPT);
+  assert.equal(afterDiscard.content_sha256, ready.content_sha256);
+});
+
+test("missing, partial, and digest-invalid Pinned Export Sources settle failed without live fallback", async () => {
+  const { baseUrl } = started;
+  const fetchImpl = browserFetch(baseUrl, "session-a");
+  const projectId = await createEmptyProject({
+    baseUrl,
+    fetchImpl,
+    createKey: "018f0000-0000-7001-8000-00000000d501",
+    correlationId: "018f0000-0000-7001-8000-00000000d511",
+    title: "Fail Closed Novel",
+  });
+  const command = { baseUrl, fetchImpl, projectId };
+  const missingId = await admitExport(
+    command, "018f0000-0000-7001-8000-00000000d502", "018f0000-0000-7001-8000-00000000d512",
+  );
+  const partialId = await admitExport(
+    command, "018f0000-0000-7001-8000-00000000d503", "018f0000-0000-7001-8000-00000000d513",
+  );
+  const digestInvalidId = await admitExport(
+    command, "018f0000-0000-7001-8000-00000000d504", "018f0000-0000-7001-8000-00000000d514",
+  );
+
+  // An operation admitted before this source existed has no source row.
+  // A partial source has a matching digest but lacks the required facts.
+  // A digest-invalid source has complete facts that fail their digest.
+  const partialFacts = "{}";
+  const partialDigest = createHash("sha256").update(partialFacts).digest("hex");
+  const damaged = await queryPostgres(`
+    DELETE FROM storyos.pinned_export_sources
+     WHERE ${sourceRowFilter(projectId, missingId)};
+    UPDATE storyos.pinned_export_sources
+       SET facts = '${partialFacts}'::jsonb, facts_sha256 = '${partialDigest}'
+     WHERE ${sourceRowFilter(projectId, partialId)};
+    UPDATE storyos.pinned_export_sources
+       SET facts_sha256 = repeat('0', 64)
+     WHERE ${sourceRowFilter(projectId, digestInvalidId)};
+    SELECT 'ok';
+  `);
+  assert.match(damaged, /ok$/);
+
+  for (const exportId of [missingId, partialId, digestInvalidId]) {
     const waiting = await getHumanReadableManuscriptExport({
       baseUrl, projectId, exportId, fetchImpl,
     });
     assert.equal(waiting.status, "in_progress");
-    assert.equal("manuscript_utf8" in waiting, false);
-    assert.equal(waiting.source_snapshot.snapshot_id, sourceSnapshotId);
-
-    const replay = await exportHumanReadableManuscript({
-      ...command, idempotencyKey: exportKey, antiForgery: nonce, request,
-    });
-    assert.equal(replay.command_id, applied.command_id);
-    if (replay.effect.kind !== "admitted") {
-      throw new Error("retry must return the same admitted operation");
-    }
-    assert.equal(replay.effect.export_id, exportId);
-
-    const renameProject = {
-      command_schema: "storyos.command.update-project.request.v1" as const,
-      update_project_input: {
-        title: "Later Title",
-        expected_project_revision: "1",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d115",
-      },
-    };
-    const renamed = await challenged(
-      baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}", renameProject.command_schema,
-      await digestUpdateProject(renameProject), "018f0000-0000-7001-8000-00000000d105",
-      (antiForgery) => updateProject({
-        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d105", antiForgery,
-        request: renameProject,
-      }),
-    );
-    assert.equal(renamed.effect.kind, "authoritative_applied");
-
-    const renameVolume = {
-      command_schema: "storyos.command.update-volume.request.v1" as const,
-      update_volume_input: {
-        title: "Later Volume",
-        order: "1",
-        expected_tree_revision: "3",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d116",
-      },
-    };
-    const renamedVolume = await challenged(
-      baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}/volumes/{volume_id}",
-      renameVolume.command_schema, await digestUpdateVolume(renameVolume), "018f0000-0000-7001-8000-00000000d106",
-      (antiForgery) => updateVolume({
-        ...command, volumeId,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000d106", antiForgery,
-        request: renameVolume,
-      }),
-    );
-    assert.equal(renamedVolume.effect.kind, "authoritative_applied");
-
-    const renameChapter = {
-      command_schema: "storyos.command.update-chapter.request.v1" as const,
-      update_chapter_input: {
-        title: "Later Chapter",
-        order: "1",
-        expected_tree_revision: "4",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d117",
-      },
-    };
-    const renamedChapter = await challenged(
-      baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}/chapters/{chapter_id}",
-      renameChapter.command_schema, await digestUpdateChapter(renameChapter), "018f0000-0000-7001-8000-00000000d107",
-      (antiForgery) => updateChapter({
-        ...command, chapterId,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000d107", antiForgery,
-        request: renameChapter,
-      }),
-    );
-    assert.equal(renamedChapter.effect.kind, "authoritative_applied");
-
-    const sessionRequest: CreateEditorSessionRequest = {
-      command_schema: "storyos.command.create-editor-session.request.v1",
-      ...BINDING,
-      correlation_id: "018f0000-0000-7001-8000-00000000d118",
-    };
-    const session = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/editor-sessions",
-      sessionRequest.command_schema, await digestCreateEditorSession(sessionRequest),
-      "018f0000-0000-7001-8000-00000000d108",
-      (antiForgery) => createEditorSession({
-        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d108", antiForgery,
-        request: sessionRequest,
-      }),
-    );
-    if (session.writer.kind !== "current_writer") {
-      throw new Error("the later Author Edit needs the current writer");
-    }
-    const from = session.base_snapshot.materialized_revision.body.length;
-    const editRequest: ApplyAuthorEditRequest = {
-      command_schema: "storyos.command.apply-author-edit.request.v1",
-      ...BINDING,
-      correlation_id: "018f0000-0000-7001-8000-00000000d119",
-      editor_session_id: session.editor_session.editor_session_id,
-      writer_generation: session.writer.writer_generation,
-      chapter_id: session.base_snapshot.chapter_id,
-      expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
-      expected_proposal_head_revision_ids: session.base_snapshot.proposal_head_revision_ids,
-      target_refs: session.base_snapshot.target_refs,
-      observed_ownership_partition: session.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v3",
-      undo_group_id: "018f0000-0000-7001-8000-00000000d1a1",
-      completed_intent_record_id: "018f0000-0000-7001-8000-00000000d1a2",
-      local_intent_sequence: "1",
-      author_edit_units: [{
-        normalized_primitives: [{ kind: "replace_selection", from, to: from, text: "Hello world" }],
-        selection_snapshot: {
-          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to: from,
-        },
-      }],
-    };
-    const edited = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/author-edits",
-      editRequest.command_schema, await digestApplyAuthorEdit(editRequest), "018f0000-0000-7001-8000-00000000d109",
-      (antiForgery) => applyAuthorEdit({
-        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d109", antiForgery,
-        request: editRequest,
-      }),
-    );
-    assert.equal(edited.effect.kind, "authoritative_applied");
-
-    const laterVolumeRequest = {
-      command_schema: "storyos.command.create-volume.request.v1" as const,
-      create_volume_input: {
-        title: "Volume B",
-        expected_tree_revision: "5",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d11a",
-      },
-    };
-    const laterVolume = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", laterVolumeRequest.command_schema,
-      await digestCreateVolume(laterVolumeRequest), "018f0000-0000-7001-8000-00000000d10a",
-      (antiForgery) => createVolume({
-        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000d10a", antiForgery,
-        request: laterVolumeRequest,
-      }),
-    );
-    if (laterVolume.effect.kind !== "authoritative_applied") {
-      throw new Error("Volume B must apply");
-    }
-    const laterVolumeId = laterVolume.effect.volume_id;
-    const laterChapterRequest = {
-      command_schema: "storyos.command.create-chapter.request.v1" as const,
-      create_chapter_input: {
-        title: "Chapter B",
-        expected_tree_revision: "6",
-        ...BINDING,
-        correlation_id: "018f0000-0000-7001-8000-00000000d11b",
-      },
-    };
-    const laterChapter = await challenged(
-      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-      laterChapterRequest.command_schema, await digestCreateChapter(laterChapterRequest),
-      "018f0000-0000-7001-8000-00000000d10b",
-      (antiForgery) => createChapter({
-        ...command, volumeId: laterVolumeId,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000d10b", antiForgery,
-        request: laterChapterRequest,
-      }),
-    );
-    assert.equal(laterChapter.effect.kind, "authoritative_applied");
-
     await settleOnce();
-    const ready = await getHumanReadableManuscriptExport({
+    const failed = await getHumanReadableManuscriptExport({
       baseUrl, projectId, exportId, fetchImpl,
     });
-    assert.equal(ready.status, "ready");
-    if (ready.status !== "ready") {
-      throw new Error("the Worker must settle the pinned human-readable export");
-    }
-    assert.equal(ready.manuscript_utf8, ADMITTED_MANUSCRIPT);
-    assert.equal(ready.source_snapshot.snapshot_id, sourceSnapshotId);
-    assert.equal(ready.export_id, exportId);
-
-    // After settlement the frozen input may be discarded. The output bytes stay.
-    const discarded = await queryPostgres(`
-      DELETE FROM storyos.pinned_export_sources
-       WHERE ${sourceRowFilter(projectId, exportId)};
-      SELECT 'ok';
-    `);
-    assert.match(discarded, /ok$/);
-    const afterDiscard = await getHumanReadableManuscriptExport({
-      baseUrl, projectId, exportId, fetchImpl,
-    });
-    if (afterDiscard.status !== "ready") {
-      throw new Error("a ready export must stay ready after its source is discarded");
-    }
-    assert.equal(afterDiscard.manuscript_utf8, ADMITTED_MANUSCRIPT);
-    assert.equal(afterDiscard.content_sha256, ready.content_sha256);
-  } finally {
-    await stopRealServer(server);
+    assert.equal(failed.status, "failed");
+    assert.equal("manuscript_utf8" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId,
+        exportId,
+        operationsTable: "human_readable_manuscript_export_operations",
+      }),
+      "refused pinned_export_source_unavailable",
+    );
   }
-});
 
-test("missing, partial, and digest-invalid Pinned Export Sources settle failed without live fallback", async () => {
-  const { baseUrl, server } = await startServer();
-  try {
-    const fetchImpl = browserFetch(baseUrl, "session-a");
-    const projectId = await createEmptyProject({
-      baseUrl,
-      fetchImpl,
-      createKey: "018f0000-0000-7001-8000-00000000d501",
-      correlationId: "018f0000-0000-7001-8000-00000000d511",
-      title: "Fail Closed Novel",
-    });
-    const command = { baseUrl, fetchImpl, projectId };
-    const missingId = await admitExport(
-      command, "018f0000-0000-7001-8000-00000000d502", "018f0000-0000-7001-8000-00000000d512",
-    );
-    const partialId = await admitExport(
-      command, "018f0000-0000-7001-8000-00000000d503", "018f0000-0000-7001-8000-00000000d513",
-    );
-    const digestInvalidId = await admitExport(
-      command, "018f0000-0000-7001-8000-00000000d504", "018f0000-0000-7001-8000-00000000d514",
-    );
-
-    // An operation admitted before this source existed has no source row.
-    // A partial source has a matching digest but lacks the required facts.
-    // A digest-invalid source has complete facts that fail their digest.
-    const partialFacts = "{}";
-    const partialDigest = createHash("sha256").update(partialFacts).digest("hex");
-    const damaged = await queryPostgres(`
-      DELETE FROM storyos.pinned_export_sources
-       WHERE ${sourceRowFilter(projectId, missingId)};
-      UPDATE storyos.pinned_export_sources
-         SET facts = '${partialFacts}'::jsonb, facts_sha256 = '${partialDigest}'
-       WHERE ${sourceRowFilter(projectId, partialId)};
-      UPDATE storyos.pinned_export_sources
-         SET facts_sha256 = repeat('0', 64)
-       WHERE ${sourceRowFilter(projectId, digestInvalidId)};
-      SELECT 'ok';
-    `);
-    assert.match(damaged, /ok$/);
-
-    for (const exportId of [missingId, partialId, digestInvalidId]) {
-      const waiting = await getHumanReadableManuscriptExport({
-        baseUrl, projectId, exportId, fetchImpl,
-      });
-      assert.equal(waiting.status, "in_progress");
-      await settleOnce();
-      const failed = await getHumanReadableManuscriptExport({
-        baseUrl, projectId, exportId, fetchImpl,
-      });
-      assert.equal(failed.status, "failed");
-      assert.equal("manuscript_utf8" in failed, false);
-      assert.equal(
-        await exportSettlementReceipt({
-          ownerUserId: USER_A,
-          projectId,
-          exportId,
-          operationsTable: "human_readable_manuscript_export_operations",
-        }),
-        "refused pinned_export_source_unavailable",
-      );
-    }
-
-    const outputRows = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.human_readable_manuscript_exports
-       WHERE owner_user_id = '${USER_A}'::uuid
-         AND project_id = '${projectId}'::uuid;
-    `);
-    assert.equal(outputRows, "0");
-  } finally {
-    await stopRealServer(server);
-  }
+  const outputRows = await queryPostgres(`
+    SELECT count(*)::text
+      FROM storyos.human_readable_manuscript_exports
+     WHERE owner_user_id = '${USER_A}'::uuid
+       AND project_id = '${projectId}'::uuid;
+  `);
+  assert.equal(outputRows, "0");
 });

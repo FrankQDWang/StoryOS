@@ -4,7 +4,6 @@ import { test } from "vitest";
 
 import {
   archiveProject,
-  createProjectCommandChallenge,
   createVolume,
   digestArchiveProject,
   digestCreateVolume,
@@ -29,12 +28,10 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 import { zipStoreFiles } from "../support/archive.ts";
-import { BINDING, USER_A, UUID_V7, challenged, createEmpty, settleOnce, startServer, waitFor,
-} from "../support/http-harness.ts";
+import { BINDING, USER_A, UUID_V7, challenged, createEmpty, issueChallenge, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const ARCHIVE_MEDIA =
   'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"';
@@ -651,18 +648,9 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
 
     const refusedRequest = exportRequest("018f0000-0000-7001-8000-000000000c17");
     const refusedDigest = await digestExportProjectArchive(refusedRequest);
-    const refusedChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/exports",
-        command_schema: "storyos.command.export-project-archive.request.v1",
-        canonical_command_digest: refusedDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000c27",
-      },
-    }));
+    const refusedChallenge = await issueChallenge(baseUrl, first.fetchImpl, first.projectId, "POST",
+      "/api/v1/projects/{project_id}/exports", "storyos.command.export-project-archive.request.v1", refusedDigest,
+      "018f0000-0000-7001-8000-000000000c27");
     await assert.rejects(
       exportProjectArchive({
         baseUrl,

@@ -18,21 +18,20 @@ import type {
   ApplyAuthorEditRequest,
   CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres,
-  stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, admitRun, challenged, drainLeftoverWork, id, prepare, runWorker, settleOnce, startServer } from "../support/http-harness.ts";
+import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
+import { BINDING, admitRun, challenged, drainLeftoverWork, id, prepare, runWorker, serverForFile,
+  settleOnce } from "../support/http-harness.ts";
+
+const started = serverForFile();
 
 async function withProject(
   title: string,
   exercise: (project: Awaited<ReturnType<typeof prepare>> & { baseUrl: string; ns: string }) => Promise<void>,
 ) {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const prepared = await prepare(started.baseUrl, id(`${ns}01`), title, ns);
-    await exercise({ ...prepared, baseUrl: started.baseUrl, ns });
-  } finally { await stopRealServer(started.server); }
+  await drainLeftoverWork();
+  const ns = randomBytes(3).toString("hex");
+  const prepared = await prepare(started.baseUrl, id(`${ns}01`), title, ns);
+  await exercise({ ...prepared, baseUrl: started.baseUrl, ns });
 }
 
 async function admitQueued(

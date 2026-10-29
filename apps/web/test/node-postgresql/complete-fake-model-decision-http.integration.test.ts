@@ -7,7 +7,6 @@ import { test } from "vitest";
 
 import {
   createAgentRun,
-  createProjectCommandChallenge,
   digestCreateAgentRun,
   digestUpdateProjectAssistance,
   getProject,
@@ -24,10 +23,9 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
-  inspectRun, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+  inspectRun, issueChallenge, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -345,18 +343,8 @@ test("project assistance prepares the host fake binding without a run", async ()
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = id(`${ns}0a20`);
     const absentDigest = await digestUpdateProjectAssistance(absentRequest);
-    const absentChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: captureFetch,
-      request: {
-        method: "PUT",
-        route_template: "/api/v1/projects/{project_id}/assistance",
-        command_schema: absentRequest.command_schema,
-        canonical_command_digest: absentDigest,
-        idempotency_key: absentKey,
-      },
-    }));
+    const absentChallenge = await issueChallenge(started.baseUrl, captureFetch, first.projectId, "PUT",
+      "/api/v1/projects/{project_id}/assistance", absentRequest.command_schema, absentDigest, absentKey);
     const retryAbsent = () => updateProjectAssistance({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
