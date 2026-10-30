@@ -1,21 +1,18 @@
 use super::*;
 use storyos_application::{
-    ArchiveProjectInput, ArchiveProjectSettlement, IssueProjectCommandChallenge,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId,
-    issue_project_command_challenge,
+    ArchiveProjectInput, ArchiveProjectSettlement, IssueProjectCommandChallenge, ProjectId,
+    ProjectScope, UserId, issue_project_command_challenge,
 };
 use storyos_core::{
     ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect, TransitionOutcome,
 };
 use tokio_postgres::NoTls;
 
-use crate::command_sequence::tests::{CommandCall, command_call};
+use crate::command_sequence::tests::{ARCHIVE_PROJECT, CommandCall, command_call, command_issue};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000201";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000603";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const COMMAND_BYTES: &[u8] = br#"{"expected_project_revision":"1"}"#;
 const LATER_COMMAND_BYTES: &[u8] = br#"{"expected_project_revision":"2"}"#;
 const COMMAND_DIGEST: &str = "sha256:storyos.command.archiveProject.jcs.v1:991082a47282fb31cb629fec61a6ee68b53b5aabfc409154bc8eae46b9c7a30e";
@@ -33,35 +30,8 @@ fn later_digest() -> String {
     format!("sha256:storyos.command.archiveProject.jcs.v1:{value}")
 }
 
-fn issue_request(idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    issue_named_request(idempotency_suffix, COMMAND_DIGEST)
-}
-
-fn issue_named_request(
-    idempotency_suffix: &str,
-    canonical_command_digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT)),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "PUT".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/archival".to_owned(),
-            command_schema: "storyos.command.archive-project.request.v1".to_owned(),
-            command_kind: "archiveProject".to_owned(),
-            canonical_command_digest: canonical_command_digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+fn project_scope() -> ProjectScope {
+    ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT))
 }
 
 fn command(
@@ -120,7 +90,7 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
         .await
         .unwrap();
     let store = PostgresProjectReader::new(runtime_url.clone());
-    let first_issue = issue_request("0601");
+    let first_issue = command_issue(&project_scope(), "0601", &ARCHIVE_PROJECT, COMMAND_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -139,7 +109,7 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
     };
     assert_eq!(applied.effect, ArchiveProjectApplied { revision: 2 });
 
-    let stale_issue = issue_request("0603");
+    let stale_issue = command_issue(&project_scope(), "0603", &ARCHIVE_PROJECT, COMMAND_DIGEST);
     issue_project_command_challenge(&store, &stale_issue)
         .await
         .unwrap();
@@ -158,7 +128,7 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
         TransitionOutcome::Conflicted(ArchiveProjectConflict::StaleProjectRevision)
     );
 
-    let later_issue = issue_named_request("0605", &later_digest());
+    let later_issue = command_issue(&project_scope(), "0605", &ARCHIVE_PROJECT, &later_digest());
     issue_project_command_challenge(&store, &later_issue)
         .await
         .unwrap();

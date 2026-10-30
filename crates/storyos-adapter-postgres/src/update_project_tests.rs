@@ -1,18 +1,16 @@
 use super::*;
 use storyos_application::{
-    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UpdateProjectInput, UpdateProjectSettlement, UserId, issue_project_command_challenge,
+    IssueProjectCommandChallenge, ProjectId, ProjectScope, UpdateProjectInput,
+    UpdateProjectSettlement, UserId, issue_project_command_challenge,
 };
 use storyos_core::{TransitionOutcome, UpdateProjectApplied, UpdateProjectConflict};
 use tokio_postgres::NoTls;
 
-use crate::command_sequence::tests::{CommandCall, command_call};
+use crate::command_sequence::tests::{CommandCall, UPDATE_PROJECT, command_call, command_issue};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000602";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const TITLE: &str = "Renamed Novel";
 const LATER_TITLE: &str = "Later Novel";
 const COMMAND_BYTES: &[u8] = br#"{"title":"Renamed Novel"}"#;
@@ -20,35 +18,8 @@ const LATER_COMMAND_BYTES: &[u8] = br#"{"title":"Later Novel"}"#;
 const COMMAND_DIGEST: &str = "sha256:storyos.command.updateProject.jcs.v1:66b57fdc630e2dac89aa30ad5d2ccb87e8ca64e89d59e95b6c4f2c68fa1b3e6d";
 const LATER_COMMAND_DIGEST: &str = "sha256:storyos.command.updateProject.jcs.v1:d9633f219b249234e3cee881242660df9e21d42a88d46ed5a9e5bafc32607df9";
 
-fn issue_request(idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    issue_named_request(idempotency_suffix, COMMAND_DIGEST)
-}
-
-fn issue_named_request(
-    idempotency_suffix: &str,
-    canonical_command_digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT)),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "PATCH".to_owned(),
-            route_template: "/api/v1/projects/{project_id}".to_owned(),
-            command_schema: "storyos.command.update-project.request.v1".to_owned(),
-            command_kind: "updateProject".to_owned(),
-            canonical_command_digest: canonical_command_digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+fn project_scope() -> ProjectScope {
+    ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT))
 }
 
 fn command(
@@ -110,7 +81,7 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         .await
         .unwrap();
     let store = PostgresProjectReader::new(runtime_url.clone());
-    let first_issue = issue_request("0501");
+    let first_issue = command_issue(&project_scope(), "0501", &UPDATE_PROJECT, COMMAND_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -133,7 +104,7 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         }
     );
 
-    let stale_issue = issue_request("0503");
+    let stale_issue = command_issue(&project_scope(), "0503", &UPDATE_PROJECT, COMMAND_DIGEST);
     issue_project_command_challenge(&store, &stale_issue)
         .await
         .unwrap();
@@ -168,7 +139,12 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         (TITLE.to_owned(), "2".to_owned())
     );
 
-    let later_issue = issue_named_request("0505", LATER_COMMAND_DIGEST);
+    let later_issue = command_issue(
+        &project_scope(),
+        "0505",
+        &UPDATE_PROJECT,
+        LATER_COMMAND_DIGEST,
+    );
     issue_project_command_challenge(&store, &later_issue)
         .await
         .unwrap();

@@ -1,16 +1,11 @@
 use super::*;
+use crate::command_sequence::tests::{create_project_command, create_project_issue};
 use std::path::PathBuf;
-use storyos_application::{
-    AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    EditorClientBinding, IssueCreateProjectChallenge, ProjectId, ProjectScope, UserId,
-    create_project, issue_create_project_challenge,
-};
+use storyos_application::{CreateProjectCommand, create_project, issue_create_project_challenge};
 use tokio_postgres::{Client, NoTls};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const TITLE: &str = "Lawful Empty";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const CATALOG: &str = "storyos.persistence.catalog.release-1.v3";
 const METHOD: &str = "pg_basebackup";
 const ISOLATED_TARGET: &str = "storyos-recovery-hold-empty-null";
@@ -207,56 +202,21 @@ async fn connect_admin(admin_url: &str) -> Client {
 }
 
 async fn create_empty_project(store: &PostgresProjectReader, suffix: &str) -> String {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{suffix:0<64}");
-    let issue = IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(USER_A),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-    };
+    let issue = create_project_issue(
+        USER_A,
+        &format!("018f0000-0000-7001-8000-00000000{suffix}"),
+        suffix,
+    );
     let issued = issue_create_project_challenge(store, &issue).await.unwrap();
     let mut binding = issue.binding.clone();
     binding.prospective_project_id = issued.prospective_project_id.clone();
     binding.canonical_command_digest = issued.canonical_command_digest.clone();
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
     create_project(
         store,
         &CreateProjectCommand {
-            project_scope,
-            client_binding: EditorClientBinding {
-                binding_ref: binding.client_session_binding_digest.clone(),
-                session_generation: binding.client_session_generation,
-                client_contract_revision: binding.client_contract_revision.clone(),
-                security_policy_revision: binding.security_policy_revision.clone(),
-            },
-            challenge_binding: binding.clone(),
-            nonce_digest: issue.nonce_digest.clone(),
             canonical_command_bytes: br#"{"title":"Lawful Empty"}"#.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
             title: TITLE.to_owned(),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
+            ..create_project_command(binding.clone(), &issue.nonce_digest, suffix)
         },
     )
     .await

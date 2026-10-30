@@ -15,10 +15,9 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::seed_project;
 
 use super::support::{
-    CommandCall, Route, SequenceError, issued, run_without_foreign_keys, stores,
+    CommandCall, Route, SequenceError, issued, run_without_foreign_keys, seed_project, stores,
     with_new_request_ids,
 };
 

@@ -78,7 +78,7 @@ async fn connect(database_url: &str) -> Client {
     client
 }
 
-async fn seed_project(admin: &Client, fixture: &TakeoverFixture) {
+async fn seed_takeover_project(admin: &Client, fixture: &TakeoverFixture) {
     let project = &fixture.project_id;
     let chapter = &fixture.chapter_id;
     let payload = &fixture.payload_id;
@@ -580,7 +580,7 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         .expect("run through scripts/verify-project-scope.sh");
     let admin = connect(&admin_url).await;
     let fixture = TakeoverFixture::new(950);
-    seed_project(&admin, &fixture).await;
+    seed_takeover_project(&admin, &fixture).await;
     let store = PostgresProjectReader::new(&runtime_url);
     open_fixture_sessions(&store, &fixture, 1000).await;
     let initial_bases = base_rows(&admin, &fixture).await;
@@ -733,7 +733,7 @@ async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback()
     let admin = connect(&admin_url).await;
     let monitor_client = connect(&admin_url).await;
     let fixture = TakeoverFixture::new(1200);
-    seed_project(&admin, &fixture).await;
+    seed_takeover_project(&admin, &fixture).await;
     let setup_store = PostgresProjectReader::new(&runtime_url);
     open_fixture_sessions(&setup_store, &fixture, 1250).await;
     let initial_bases = base_rows(&admin, &fixture).await;

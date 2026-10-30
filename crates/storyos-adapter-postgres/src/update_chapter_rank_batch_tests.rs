@@ -1,11 +1,11 @@
 use super::*;
 use crate::command_sequence::tests::{
-    CommandCall, applied, command_call, create_volume, update_chapter,
+    CREATE_VOLUME, CommandCall, applied, command_call, command_issue, create_volume, seed_project,
+    update_chapter,
 };
 use crate::delete_chapter_tests::apply_delete;
 use crate::update_chapter_tests::{
-    USER_B, UpdateFixture, apply_chapter, apply_volume, named_issue, seed_project, update_command,
-    update_issue,
+    USER_B, UpdateFixture, apply_chapter, apply_volume, update_command, update_issue,
 };
 use storyos_application::{
     CanonicalManuscriptTree, ChapterId, ChapterNode, CreateVolumeInput, GetManuscriptTree,
@@ -73,15 +73,7 @@ async fn apply_named_volume(
 ) -> String {
     let bytes = titled_structure_bytes(title, expected_tree_revision);
     let digest = command_digest("storyos.command.createVolume.jcs.v1", &bytes);
-    let issue = named_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        &digest,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_VOLUME, &digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();

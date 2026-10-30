@@ -1,7 +1,7 @@
 use super::*;
 use storyos_application::{
-    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandError, ProjectId,
-    ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement, UserId,
+    ProjectCommandChallengeBinding, ProjectCommandError, ProjectId, ProjectScope,
+    UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement, UserId,
     issue_project_command_challenge, open_project_assistance,
 };
 use storyos_core::HOST_FAKE_REGISTRATION;
@@ -10,17 +10,21 @@ use storyos_core::{
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
 };
 
-use crate::command_sequence::tests::{CommandCall, command_call};
+use crate::command_sequence::tests::{
+    CommandCall, UPDATE_PROJECT_ASSISTANCE, command_call, command_issue,
+};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT: &str = "018f0000-0000-7001-8000-0000000006a2";
 const OTHER_PROJECT: &str = "018f0000-0000-7001-8000-0000000006a3";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const UNAVAILABLE_BYTES: &[u8] = br#"{"availability":"unavailable"}"#;
+
+fn project_scope() -> ProjectScope {
+    ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT))
+}
 
 fn digest(bytes: &[u8]) -> String {
     use sha2::{Digest as _, Sha256};
@@ -32,30 +36,6 @@ fn digest(bytes: &[u8]) -> String {
             value
         });
     format!("sha256:storyos.command.updateProjectAssistance.jcs.v1:{value}")
-}
-
-fn issue_request(idempotency_suffix: &str, bytes: &[u8]) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT)),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "PUT".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/assistance".to_owned(),
-            command_schema: "storyos.command.update-project-assistance.request.v1".to_owned(),
-            command_kind: "updateProjectAssistance".to_owned(),
-            canonical_command_digest: digest(bytes),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
 }
 
 fn command(
@@ -130,7 +110,12 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     let scope = ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT));
     assert_eq!(open_project_assistance(&store, &scope).await.unwrap(), None);
 
-    let absent_issue = issue_request("0a0b", UNAVAILABLE_BYTES);
+    let absent_issue = command_issue(
+        &project_scope(),
+        "0a0b",
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(UNAVAILABLE_BYTES),
+    );
     issue_project_command_challenge(&store, &absent_issue)
         .await
         .unwrap();
@@ -149,7 +134,12 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     .unwrap();
     assert_eq!(absent.response.assistance, None);
 
-    let first_issue = issue_request("0a01", AVAILABLE_BYTES);
+    let first_issue = command_issue(
+        &project_scope(),
+        "0a01",
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(AVAILABLE_BYTES),
+    );
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -187,7 +177,12 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         Some(first_binding.clone())
     );
 
-    let same_issue = issue_request("0a03", AVAILABLE_BYTES);
+    let same_issue = command_issue(
+        &project_scope(),
+        "0a03",
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(AVAILABLE_BYTES),
+    );
     issue_project_command_challenge(&store, &same_issue)
         .await
         .unwrap();
@@ -210,7 +205,12 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     );
     assert_eq!(same.response.assistance.as_ref(), Some(&first_binding));
 
-    let stale_issue = issue_request("0a05", UNAVAILABLE_BYTES);
+    let stale_issue = command_issue(
+        &project_scope(),
+        "0a05",
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(UNAVAILABLE_BYTES),
+    );
     issue_project_command_challenge(&store, &stale_issue)
         .await
         .unwrap();
@@ -233,7 +233,12 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     );
     assert_eq!(stale.response.assistance.as_ref(), Some(&first_binding));
 
-    let toggle_issue = issue_request("0a07", UNAVAILABLE_BYTES);
+    let toggle_issue = command_issue(
+        &project_scope(),
+        "0a07",
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(UNAVAILABLE_BYTES),
+    );
     issue_project_command_challenge(&store, &toggle_issue)
         .await
         .unwrap();

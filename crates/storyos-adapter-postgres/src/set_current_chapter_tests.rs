@@ -1,21 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, CreateChapterInput,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
-    EditorSessionId, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    SetCurrentChapterInput, UserId, VolumeCreated, create_editor_session, create_project,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
+    ChapterCreated, ChapterId, CreateChapterInput, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectScope, SetCurrentChapterInput, VolumeCreated,
+    create_editor_session, create_project, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, open_project,
 };
 use storyos_core::TransitionOutcome;
 
 use crate::command_sequence::tests::{
-    CommandCall, applied, command_call, create_chapter, create_volume,
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, CommandCall, SET_CURRENT_CHAPTER,
+    applied, command_call, command_issue, create_chapter, create_project_command,
+    create_project_issue, create_volume,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
 const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
@@ -26,139 +25,12 @@ const CURRENT_BYTES: &[u8] = b"{}";
 const CURRENT_DIGEST: &str = "sha256:storyos.command.setCurrentChapter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
 const WRONG_HEAD: &str = "018f0000-0000-7001-8000-00000000ffff";
 
-fn create_project_issue(
-    idempotency_key: &str,
-    project_suffix: &str,
-) -> IssueCreateProjectChallenge {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{project_suffix:0<64}");
-    IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(USER_A),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{project_suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{project_suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: format!("sha256:nonce-{project_suffix}"),
-    }
-}
-
-fn create_project_command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
-    CreateProjectCommand {
-        project_scope,
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Empty Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
-
-fn volume_issue(scope: &ProjectScope, idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    command_issue(
-        scope,
-        idempotency_suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        VOLUME_DIGEST,
-    )
-}
-
 fn chapter_issue(
     scope: &ProjectScope,
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    command_issue(
-        scope,
-        idempotency_suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-        "storyos.command.create-chapter.request.v1",
-        "createChapter",
-        digest,
-    )
-}
-
-fn command_issue(
-    scope: &ProjectScope,
-    idempotency_suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
-}
-
-fn volume_command(
-    binding: ProjectCommandChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CommandCall<CreateVolumeInput> {
-    command_call(
-        binding,
-        nonce_digest,
-        ids_suffix,
-        VOLUME_BYTES,
-        CreateVolumeInput {
-            title: "Volume A".to_owned(),
-            expected_tree_revision: 1,
-        },
-    )
+    command_issue(scope, idempotency_suffix, &CREATE_CHAPTER, digest)
 }
 
 fn chapter_command(
@@ -235,7 +107,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let issue = create_project_issue("018f0000-0000-7001-8000-000000000e10", "0e10");
+    let issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000e10", "0e10");
     let issued = issue_create_project_challenge(&store, &issue)
         .await
         .unwrap();
@@ -252,16 +124,21 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         project_binding.owner_user_id.clone(),
         project_binding.prospective_project_id.clone(),
     );
-    let volume_issue = volume_issue(&scope, "0e12");
+    let volume_issue = command_issue(&scope, "0e12", &CREATE_VOLUME, VOLUME_DIGEST);
     issue_project_command_challenge(&store, &volume_issue)
         .await
         .unwrap();
     let volume = create_volume(
         &store,
-        &volume_command(
+        &command_call(
             volume_issue.binding.clone(),
             &volume_issue.nonce_digest,
             "0e13",
+            VOLUME_BYTES,
+            CreateVolumeInput {
+                title: "Volume A".to_owned(),
+                expected_tree_revision: 1,
+            },
         ),
     )
     .await
@@ -320,10 +197,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     let session_issue = command_issue(
         &scope,
         "0e18",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:0e18",
     );
     issue_project_command_challenge(&store, &session_issue)
@@ -352,15 +226,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     };
     let revision_b = opened_b.chapter.revision_id.as_ref().to_owned();
 
-    let switch_issue = command_issue(
-        &scope,
-        "0e1b",
-        "PUT",
-        "/api/v1/projects/{project_id}/current-chapter",
-        "storyos.command.set-current-chapter.request.v1",
-        "setCurrentChapter",
-        CURRENT_DIGEST,
-    );
+    let switch_issue = command_issue(&scope, "0e1b", &SET_CURRENT_CHAPTER, CURRENT_DIGEST);
     issue_project_command_challenge(&store, &switch_issue)
         .await
         .unwrap();
@@ -391,15 +257,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         Some(ChapterId::new(chapter_b.clone()))
     );
 
-    let stale_issue = command_issue(
-        &scope,
-        "0e1e",
-        "PUT",
-        "/api/v1/projects/{project_id}/current-chapter",
-        "storyos.command.set-current-chapter.request.v1",
-        "setCurrentChapter",
-        CURRENT_DIGEST,
-    );
+    let stale_issue = command_issue(&scope, "0e1e", &SET_CURRENT_CHAPTER, CURRENT_DIGEST);
     issue_project_command_challenge(&store, &stale_issue)
         .await
         .unwrap();
@@ -422,15 +280,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::StaleCurrentChapter)
     ));
 
-    let wrong_issue = command_issue(
-        &scope,
-        "0e20",
-        "PUT",
-        "/api/v1/projects/{project_id}/current-chapter",
-        "storyos.command.set-current-chapter.request.v1",
-        "setCurrentChapter",
-        CURRENT_DIGEST,
-    );
+    let wrong_issue = command_issue(&scope, "0e20", &SET_CURRENT_CHAPTER, CURRENT_DIGEST);
     issue_project_command_challenge(&store, &wrong_issue)
         .await
         .unwrap();

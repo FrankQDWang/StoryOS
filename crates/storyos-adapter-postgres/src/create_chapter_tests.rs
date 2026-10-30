@@ -1,24 +1,21 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
-    CreateChapterPublicOrder, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeInput, EditorClientBinding, GetManuscriptTree, IssueCreateProjectChallenge,
-    IssueProjectCommandChallenge, OpenChapter, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UserId, VolumeCreated, VolumeId, VolumeNode, create_project, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    open_current_chapter, open_project,
+    ChapterCreated, ChapterId, ChapterNode, CreateChapterInput, CreateChapterPublicOrder,
+    CreateVolumeInput, GetManuscriptTree, IssueProjectCommandChallenge, OpenChapter,
+    ProjectCommandChallengeBinding, ProjectScope, UserId, VolumeCreated, VolumeId, VolumeNode,
+    create_project, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, open_current_chapter, open_project,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CommandCall, applied, command_call, create_chapter, create_volume,
+    CREATE_CHAPTER, CREATE_VOLUME, CommandCall, applied, command_call, command_issue,
+    create_chapter, create_project_command, create_project_issue, create_volume,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_TITLE: &str = "Volume A";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
@@ -30,131 +27,12 @@ const CHAPTER_C_BYTES: &[u8] = br#"{"expected_tree_revision":"4","title":"Chapte
 const CHAPTER_C_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:675e40d4c1b160d396410a4fd620c5352547ce2213dfb9c758e213c0cd7ed52a";
 const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
 
-fn create_project_issue(
-    idempotency_key: &str,
-    project_suffix: &str,
-) -> IssueCreateProjectChallenge {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{project_suffix:0<64}");
-    IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(USER_A),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{project_suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{project_suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: format!("sha256:nonce-{project_suffix}"),
-    }
-}
-
-fn create_project_command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
-    CreateProjectCommand {
-        project_scope,
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Empty Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
-
-fn volume_issue(scope: &ProjectScope, idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/volumes".to_owned(),
-            command_schema: "storyos.command.create-volume.request.v1".to_owned(),
-            command_kind: "createVolume".to_owned(),
-            canonical_command_digest: VOLUME_DIGEST.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
-}
-
-fn volume_command(
-    binding: ProjectCommandChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CommandCall<CreateVolumeInput> {
-    command_call(
-        binding,
-        nonce_digest,
-        ids_suffix,
-        VOLUME_BYTES,
-        CreateVolumeInput {
-            title: VOLUME_TITLE.to_owned(),
-            expected_tree_revision: 1,
-        },
-    )
-}
-
 fn chapter_issue(
     scope: &ProjectScope,
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters".to_owned(),
-            command_schema: "storyos.command.create-chapter.request.v1".to_owned(),
-            command_kind: "createChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &CREATE_CHAPTER, digest)
 }
 
 fn chapter_command(
@@ -191,7 +69,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let issue = create_project_issue("018f0000-0000-7001-8000-000000000910", "0910");
+    let issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000910", "0910");
     let issued = issue_create_project_challenge(&store, &issue)
         .await
         .unwrap();
@@ -209,16 +87,21 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         project_binding.prospective_project_id.clone(),
     );
 
-    let volume_issue = volume_issue(&scope, "0912");
+    let volume_issue = command_issue(&scope, "0912", &CREATE_VOLUME, VOLUME_DIGEST);
     issue_project_command_challenge(&store, &volume_issue)
         .await
         .unwrap();
     let volume = create_volume(
         &store,
-        &volume_command(
+        &command_call(
             volume_issue.binding.clone(),
             &volume_issue.nonce_digest,
             "0913",
+            VOLUME_BYTES,
+            CreateVolumeInput {
+                title: VOLUME_TITLE.to_owned(),
+                expected_tree_revision: 1,
+            },
         ),
     )
     .await
@@ -703,7 +586,7 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let issue = create_project_issue("018f0000-0000-7001-8000-000000000c10", "0c10");
+    let issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000c10", "0c10");
     let issued = issue_create_project_challenge(&store, &issue)
         .await
         .unwrap();
@@ -721,16 +604,21 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
         project_binding.prospective_project_id.clone(),
     );
 
-    let volume_issue = volume_issue(&scope, "0c12");
+    let volume_issue = command_issue(&scope, "0c12", &CREATE_VOLUME, VOLUME_DIGEST);
     issue_project_command_challenge(&store, &volume_issue)
         .await
         .unwrap();
     let volume = create_volume(
         &store,
-        &volume_command(
+        &command_call(
             volume_issue.binding.clone(),
             &volume_issue.nonce_digest,
             "0c13",
+            VOLUME_BYTES,
+            CreateVolumeInput {
+                title: VOLUME_TITLE.to_owned(),
+                expected_tree_revision: 1,
+            },
         ),
     )
     .await

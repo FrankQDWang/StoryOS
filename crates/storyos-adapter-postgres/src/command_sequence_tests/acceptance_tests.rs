@@ -15,7 +15,7 @@ use super::support::{
     CommandCall, Route, SequenceError, issued, run_without_foreign_keys, stores, two_chapter_writer,
 };
 
-pub(super) const ACCEPT_PROPOSAL: Route = Route {
+pub(crate) const ACCEPT_PROPOSAL: Route = Route {
     kind: "acceptProposal",
     method: storyos_contracts::ACCEPT_PROPOSAL_METHOD,
     path: storyos_contracts::ACCEPT_PROPOSAL_PATH,

@@ -3,13 +3,14 @@
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::tests::{
-    applied, command_call, create_volume, update_chapter, update_volume,
+    CREATE_VOLUME, applied, command_call, command_issue, create_volume, seed_project,
+    update_chapter, update_volume,
 };
 use crate::pinned_export_source::{
     PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
 use crate::update_chapter_rank_batch_tests::{connect_admin, runtime_store};
-use crate::update_volume_tests::{apply_chapter, named_issue, seed_project};
+use crate::update_volume_tests::apply_chapter;
 use storyos_application::{
     CanonicalManuscriptTree, CreateVolumeInput, GetManuscriptTree, ProjectScope,
     get_manuscript_tree, issue_project_command_challenge,
@@ -68,13 +69,10 @@ async fn apply_titled_volume(
     expected_tree_revision: u64,
 ) -> String {
     let bytes = structure_bytes(title, expected_tree_revision);
-    let issue = named_issue(
+    let issue = command_issue(
         scope,
         issue_suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
+        &CREATE_VOLUME,
         &digest("storyos.command.createVolume.jcs.v1", &bytes),
     );
     issue_project_command_challenge(store, &issue)
