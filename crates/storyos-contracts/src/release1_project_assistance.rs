@@ -36,11 +36,7 @@ pub(super) const GET_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.getProjectAssistance.positive.v1",
-        "storyos.golden.getProjectAssistance.invalid.v1",
-        "storyos.golden.getProjectAssistance.boundary.v1",
-    ],
+    fixture: "storyos.golden.getProjectAssistance.positive.v1",
 };
 
 pub(super) const UPDATE_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
@@ -65,11 +61,7 @@ pub(super) const UPDATE_PROJECT_ASSISTANCE: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.updateProjectAssistance.positive.v1",
-        "storyos.golden.updateProjectAssistance.invalid.v1",
-        "storyos.golden.updateProjectAssistance.boundary.v1",
-    ],
+    fixture: "storyos.golden.updateProjectAssistance.positive.v1",
 };
 
 pub const GET_PROJECT_ASSISTANCE_PATH: &str = GET_PROJECT_ASSISTANCE.path;

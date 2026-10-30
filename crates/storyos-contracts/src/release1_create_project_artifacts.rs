@@ -10,7 +10,7 @@ use crate::release1_create_project::{
     CreateProjectRequest, CreateProjectResponse,
 };
 use crate::release1_operation_registry::{
-    ClientOverride, OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple,
+    ClientOverride, FixtureMembership, OpenApiMethod, OperationArtifacts, RegisteredOperation,
     operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
@@ -78,47 +78,30 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                CHALLENGE_FIXTURE_PATHS,
-                [
-                    |_| challenge_fixture_bytes(),
-                    |_| challenge_invalid_fixture_bytes(),
-                    |_| challenge_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                FIXTURE_PATHS,
-                [
-                    |_| fixture_bytes(),
-                    |_| invalid_fixture_bytes(),
-                    |_| boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: CHALLENGE_FIXTURE_PATH,
+            bytes: |_| challenge_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: FIXTURE_PATH,
+            bytes: |_| fixture_bytes(),
+        },
+    ],
 };
 
 pub(super) const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/create-project-challenge-request.schema.json";
 pub(super) const CHALLENGE_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/create-project-challenge-response.schema.json";
-pub(super) const CHALLENGE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-project-challenge.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-challenge.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-challenge.boundary.json",
-];
+pub(super) const CHALLENGE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/create-project-challenge.json";
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/create-project-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/create-project-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-project.json",
-    "generated/golden-wire/storyos-public-release-1/create-project.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-project.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/create-project.json";
 
 pub(super) fn challenge_request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CreateProjectChallengeRequest>(
@@ -247,23 +230,10 @@ fn command_openapi() -> String {
 }
 
 pub(super) fn challenge_fixture_bytes() -> Vec<u8> {
-    json_bytes(&challenge_fixture("2026-08-23T08:05:00.000Z"))
+    json_bytes(&challenge_fixture())
 }
 
-pub(super) fn challenge_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = challenge_fixture("2026-08-23T08:05:00.000Z");
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("prospective_project_id");
-    json_bytes(&value)
-}
-
-pub(super) fn challenge_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&challenge_fixture("1970-01-01T00:00:00.000Z"))
-}
-
-fn challenge_fixture(expires_at: &str) -> Value {
+fn challenge_fixture() -> Value {
     json!({
         "prospective_project_id": "018f0000-0000-7001-8000-000000000201",
         "canonical_command_digest": {
@@ -272,29 +242,16 @@ fn challenge_fixture(expires_at: &str) -> Value {
             "value_hex_lowercase": "d".repeat(64)
         },
         "nonce": "e".repeat(64),
-        "expires_at": expires_at,
+        "expires_at": "2026-08-23T08:05:00.000Z",
         "limit_profile_revision": crate::LIMIT_PROFILE_REVISION
     })
 }
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
-    json_bytes(&command_fixture("2026-08-25T08:05:00.000Z"))
+    json_bytes(&command_fixture())
 }
 
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = command_fixture("2026-08-25T08:05:00.000Z");
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&command_fixture("1970-01-01T00:00:00.000Z"))
-}
-
-fn command_fixture(created_at: &str) -> Value {
+fn command_fixture() -> Value {
     let project_scope = json!({
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "project_id": "018f0000-0000-7001-8000-000000000201"
@@ -328,7 +285,7 @@ fn command_fixture(created_at: &str) -> Value {
             "artifact_lifecycle_event_refs": [],
             "condition_refs": [],
             "result": "authoritative_applied",
-            "created_at": created_at
+            "created_at": "2026-08-25T08:05:00.000Z"
         },
         "project": {
             "project_id": "018f0000-0000-7001-8000-000000000201",

@@ -693,7 +693,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
 
 /// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.
 /// Thus the Head is not the base.
-async fn move_to_earlier_base(admin: &tokio_postgres::Client, acceptance: &AcceptProposalInput) {
+pub(super) async fn move_to_earlier_base(
+    admin: &tokio_postgres::Client,
+    acceptance: &AcceptProposalInput,
+) {
     let earlier = Uuid::now_v7();
     admin
         .batch_execute(&format!(

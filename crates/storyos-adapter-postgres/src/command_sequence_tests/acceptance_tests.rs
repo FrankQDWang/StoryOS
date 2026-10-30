@@ -1,7 +1,8 @@
 use storyos_application::{
-    AcceptProposalInput, AcceptProposalSettlement, EditorSessionId, ProjectCommandError,
-    ProjectScope,
+    AcceptProposalInput, AcceptProposalSettlement, EditorSessionId, ManuscriptBlock,
+    ManuscriptBlockKind, ProjectCommandError, ProjectScope,
 };
+use storyos_core::{AcceptProposalRefusal, AcceptanceTargetResolution, TransitionOutcome};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -9,7 +10,10 @@ use crate::PostgresProjectReader;
 use crate::accept_proposal::AcceptProposal;
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
-use super::support::{CommandCall, Route, SequenceError, issued, stores, two_chapter_writer};
+use super::replay::move_to_earlier_base;
+use super::support::{
+    CommandCall, Route, SequenceError, issued, run_without_foreign_keys, stores, two_chapter_writer,
+};
 
 pub(super) const ACCEPT_PROPOSAL: Route = Route {
     kind: "acceptProposal",
@@ -194,4 +198,177 @@ async fn a_damaged_applied_acceptance_replay_is_a_store_fault() {
         observed.push(damaged_replay(&store, &admin, &call, damage).await);
     }
     assert_eq!(observed, vec![ReplayError::Unavailable; 3]);
+}
+
+/// Moves the head of the Chapter of `from` to a new Revision with these Blocks, as an edit that
+/// another client settled. Returns the new Revision.
+pub(super) async fn advance_chapter_head(
+    admin: &Client,
+    from: &str,
+    blocks: &[(String, String)],
+) -> String {
+    let revision = Uuid::now_v7();
+    let payload = crate::manuscript_block::persist_canonical_bytes(
+        &blocks
+            .iter()
+            .map(|(manuscript_block_id, text)| ManuscriptBlock {
+                manuscript_block_id: manuscript_block_id.clone(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: text.clone(),
+            })
+            .collect::<Vec<_>>(),
+    );
+    let source = format!("FROM storyos.authoritative_revisions WHERE revision_id = '{from}'::uuid");
+    let mut statements = vec![
+        format!(
+            "INSERT INTO storyos.authoritative_payloads
+             SELECT owner_user_id, project_id, '{revision}'::uuid,
+                    convert_to('{}', 'UTF8') {source}",
+            payload.replace('\'', "''")
+        ),
+        format!(
+            "INSERT INTO storyos.authoritative_revisions
+             SELECT owner_user_id, project_id, manuscript_object_id, '{revision}'::uuid,
+                    '{revision}'::uuid {source}"
+        ),
+    ];
+    for (order, (block_id, _)) in (1..).zip(blocks) {
+        statements.push(format!(
+            "INSERT INTO storyos.manuscript_blocks
+             SELECT owner_user_id, project_id, '{block_id}'::uuid, manuscript_object_id,
+                    'paragraph' {source} ON CONFLICT DO NOTHING;
+             INSERT INTO storyos.manuscript_revision_members
+             SELECT owner_user_id, project_id, manuscript_object_id, '{revision}'::uuid,
+                    '{block_id}'::uuid, {order} {source}"
+        ));
+    }
+    statements.push(format!(
+        "UPDATE storyos.authoritative_heads SET current_revision_id = '{revision}'::uuid
+          WHERE current_revision_id = '{from}'::uuid"
+    ));
+    admin.batch_execute(&statements.join(";\n")).await.unwrap();
+    revision.to_string()
+}
+
+/// Records a conflicted Acceptance condition of `condition_kind` on one Proposal Revision, as an
+/// earlier Acceptance did. The fixture skips the foreign key to that Acceptance.
+pub(super) async fn seed_condition(
+    admin: &Client,
+    scope: &ProjectScope,
+    proposal_id: &str,
+    revision_id: &str,
+    condition_kind: &str,
+) {
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_validation_conditions
+               (owner_user_id, project_id, proposal_id, proposal_revision_id,
+                acceptance_receipt_id, validation, conflict_id, condition_kind)
+             VALUES ('{owner}', '{project}', '{proposal_id}', '{revision_id}', '{receipt}',
+                     'conflicted', '{conflict}', '{condition_kind}')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            receipt = Uuid::now_v7(),
+            conflict = Uuid::now_v7(),
+        ),
+    )
+    .await;
+}
+
+/// The Chapter head of an Acceptance on an earlier base.
+#[derive(Clone, Copy)]
+enum EarlierHead {
+    /// A copy of the base.
+    Copy,
+    /// The target Block and a new Block.
+    AddedBlock,
+    /// Only a new Block.
+    TargetRemoved,
+}
+
+/// An Acceptance on an earlier base reads the Acceptance condition of the Revision and the Blocks
+/// of the current Chapter head, not those of the base.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_earlier_base_acceptance_reads_the_condition_and_the_blocks_of_the_head() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let new_block = (Uuid::now_v7().to_string(), "A new paragraph".to_owned());
+    let mut observed = Vec::new();
+    let mut targets = Vec::new();
+    for (base, condition, head) in [
+        (
+            0x8a80,
+            Some("proposal_recovery_conflict"),
+            EarlierHead::Copy,
+        ),
+        (0x8aa0, Some("proposal_conflict"), EarlierHead::AddedBlock),
+        (0x8ac0, None, EarlierHead::TargetRemoved),
+    ] {
+        let (scope, mut input, _chapter_a_head) = acceptable_proposal(&store, &admin, base).await;
+        move_to_earlier_base(&admin, &input).await;
+        if let Some(condition_kind) = condition {
+            seed_condition(
+                &admin,
+                &scope,
+                &input.proposal_id,
+                &input.proposal_revision_id,
+                condition_kind,
+            )
+            .await;
+        }
+        let target: String = admin
+            .query_one(
+                "SELECT manuscript_block_id::text FROM storyos.proposals
+                  WHERE proposal_id = $1::text::uuid",
+                &[&input.proposal_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        targets.push(target.clone());
+        let blocks = match head {
+            EarlierHead::Copy => None,
+            EarlierHead::AddedBlock => Some(vec![
+                (target, "The author text".to_owned()),
+                new_block.clone(),
+            ]),
+            EarlierHead::TargetRemoved => Some(vec![new_block.clone()]),
+        };
+        if let Some(blocks) = blocks {
+            input.expected_authoritative_revision_id =
+                advance_chapter_head(&admin, &input.expected_authoritative_revision_id, &blocks)
+                    .await;
+        }
+        let call = issued(&store, &scope, base + 9, &ACCEPT_PROPOSAL, input).await;
+        observed.push(
+            match accept_proposal(&store, &call).await.unwrap().outcome {
+                TransitionOutcome::Applied(applied) => Ok((
+                    applied.effect,
+                    applied
+                        .blocks
+                        .into_iter()
+                        .map(|block| (block.manuscript_block_id, block.text))
+                        .collect::<Vec<_>>(),
+                )),
+                TransitionOutcome::Refused(reason) => Err(reason),
+                other => panic!("the Acceptance must apply or refuse, got {other:?}"),
+            },
+        );
+    }
+
+    assert_eq!(
+        observed,
+        vec![
+            Err(AcceptProposalRefusal::NotEligible),
+            Ok((
+                AcceptanceTargetResolution::BlockReplacement,
+                vec![(targets[1].clone(), "Accepted text".to_owned()), new_block],
+            )),
+            Err(AcceptProposalRefusal::MissingTarget),
+        ]
+    );
 }

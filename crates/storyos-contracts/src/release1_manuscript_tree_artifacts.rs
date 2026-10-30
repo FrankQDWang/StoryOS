@@ -9,7 +9,7 @@ use crate::release1_manuscript_tree::{
     ManuscriptVolumeNode,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+    FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
@@ -38,28 +38,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_MANUSCRIPT_TREE, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-tree-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-tree-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json",
-    "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -147,21 +137,6 @@ pub(super) fn typescript_type_declarations() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&tree_fixture(Vec::new()))
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = tree_fixture(Vec::new());
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("snapshot");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = tree_fixture(Vec::new());
-    boundary["snapshot"]["expires_at"] = json!("2026-08-19T00:00:00.000Z");
-    json_bytes(&boundary)
 }
 
 fn tree_fixture(volumes: Vec<Value>) -> Value {

@@ -1,15 +1,10 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/diagnostic-canary-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  createAgentRun,
   createChapter,
-  createProjectCommandChallenge,
   createVolume,
-  digestCreateAgentRun,
   digestCreateChapter,
   digestCreateVolume,
   digestExportHumanReadableManuscript,
@@ -19,8 +14,6 @@ import {
   getHumanReadableManuscriptExport,
   updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { DigestValue } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   assertNoCanary,
   canary,
@@ -30,51 +23,13 @@ import {
 } from "../support/diagnostic-canary.ts";
 import {
   createEmptyProject,
-  runStoryOSWorkerStderr,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const exe = process.platform === "win32" ? ".exe" : "";
-const serverBinary = join(repositoryRoot, "target", "release-package", `storyos-server${exe}`);
-const workerBinary = join(repositoryRoot, "target", "release-package", `storyos-worker${exe}`);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
+import { BINDING, USER_A, challenged, postRun, runRequest, runWorker, startServer } from "../support/http-harness.ts";
 
 function id(suffix: string): string {
   return `018f0000-0000-7001-8000-0000000a48${suffix}`;
-}
-
-async function challenged<Result>(options: {
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  projectId: string;
-  method: string;
-  route: string;
-  schema: string;
-  idempotencyKey: string;
-  digest: DigestValue;
-  send: (antiForgery: string) => Promise<Result>;
-}): Promise<Result> {
-  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
-    baseUrl: options.baseUrl,
-    projectId: options.projectId,
-    fetchImpl: options.fetchImpl,
-    request: {
-      method: options.method,
-      route_template: options.route,
-      command_schema: options.schema,
-      canonical_command_digest: options.digest,
-      idempotency_key: options.idempotencyKey,
-    },
-  }));
-  return options.send(challenge.nonce);
 }
 
 test("the Diagnostic Projection of Worker claims and dispatches holds no author text", async () => {
@@ -82,9 +37,7 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
   const message = canary("author-message");
   const applicationName = canary("database").replaceAll("-", "_");
   const databaseUrl = canaryDatabaseUrl(applicationName);
-  const { baseUrl, server, stderr: serverStderr } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
+  const { baseUrl, server, stderr: serverStderr } = await startServer({
     sessions: { "session-a": USER_A },
     databaseUrl,
     extraEnv: { STORYOS_LOG: "debug" },
@@ -105,91 +58,54 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
         correlation_id: id("12"),
       },
     };
-    await challenged({
-      ...command,
-      method: "PUT",
-      route: "/api/v1/projects/{project_id}/assistance",
-      schema: assistance.command_schema,
-      idempotencyKey: id("02"),
-      digest: await digestUpdateProjectAssistance(assistance),
-      send: (antiForgery) => updateProjectAssistance({
+    await challenged(
+      baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance", assistance.command_schema,
+      await digestUpdateProjectAssistance(assistance), id("02"),
+      (antiForgery) => updateProjectAssistance({
         ...command, idempotencyKey: id("02"), antiForgery, request: assistance,
       }),
-    });
+    );
     const volumeRequest = {
       command_schema: "storyos.command.create-volume.request.v1" as const,
       create_volume_input: { title, expected_tree_revision: "1", ...BINDING, correlation_id: id("13") },
     };
-    const volume = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/volumes",
-      schema: volumeRequest.command_schema,
-      idempotencyKey: id("03"),
-      digest: await digestCreateVolume(volumeRequest),
-      send: (antiForgery) => createVolume({
+    const volume = await challenged(
+      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volumeRequest.command_schema,
+      await digestCreateVolume(volumeRequest), id("03"),
+      (antiForgery) => createVolume({
         ...command, idempotencyKey: id("03"), antiForgery, request: volumeRequest,
       }),
-    });
+    );
     if (volume.effect.kind !== "authoritative_applied") throw new Error("the volume must apply");
     const volumeId = volume.effect.volume_id;
     const chapterRequest = {
       command_schema: "storyos.command.create-chapter.request.v1" as const,
       create_chapter_input: { title, expected_tree_revision: "2", ...BINDING, correlation_id: id("14") },
     };
-    const chapter = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-      schema: chapterRequest.command_schema,
-      idempotencyKey: id("04"),
-      digest: await digestCreateChapter(chapterRequest),
-      send: (antiForgery) => createChapter({
+    const chapter = await challenged(
+      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+      chapterRequest.command_schema, await digestCreateChapter(chapterRequest), id("04"),
+      (antiForgery) => createChapter({
         ...command, volumeId, idempotencyKey: id("04"), antiForgery, request: chapterRequest,
       }),
-    });
+    );
     if (chapter.effect.kind !== "authoritative_applied") throw new Error("the chapter must apply");
 
-    const runRequest = {
-      command_schema: "storyos.command.create-agent-run.request.v2" as const,
-      create_agent_run_input: {
-        conversation: { kind: "new" as const },
-        author_message: { text: message },
-        working_target: { kind: "current_chapter" as const, chapter_id: chapter.effect.chapter_id },
-        instruction: { kind: "absent" as const },
-        cause: { kind: "author_request" as const },
-        ...BINDING,
-        correlation_id: id("15"),
-      },
-    };
-    const run = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/agent-runs",
-      schema: runRequest.command_schema,
-      idempotencyKey: id("05"),
-      digest: await digestCreateAgentRun(runRequest),
-      send: (antiForgery) => createAgentRun({
-        ...command, idempotencyKey: id("05"), antiForgery, request: runRequest,
-      }),
-    });
+    const request = runRequest(chapter.effect.chapter_id, id("15"), message);
+    const run = await postRun(baseUrl, fetchImpl, projectId, id("05"), request);
     if (run.effect.kind !== "admitted") throw new Error("the AgentRun must admit");
     const runId = run.effect.run_id;
     const exportRequest = {
       command_schema: "storyos.command.export-human-readable-manuscript.request.v1" as const,
       export_human_readable_manuscript_input: { ...BINDING, correlation_id: id("16") },
     };
-    const exported = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/manuscript/exports",
-      schema: exportRequest.command_schema,
-      idempotencyKey: id("06"),
-      digest: await digestExportHumanReadableManuscript(exportRequest),
-      send: (antiForgery) => exportHumanReadableManuscript({
+    const exported = await challenged(
+      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/manuscript/exports",
+      exportRequest.command_schema, await digestExportHumanReadableManuscript(exportRequest), id("06"),
+      (antiForgery) => exportHumanReadableManuscript({
         ...command, idempotencyKey: id("06"), antiForgery, request: exportRequest,
       }),
-    });
+    );
     if (exported.effect.kind !== "admitted") throw new Error("the export must admit");
     const exportId = exported.effect.export_id;
 
@@ -197,13 +113,7 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
       const settledRun = (await getAgentRun({ ...command, runId })).status === "completed";
       const settledExport = (await getHumanReadableManuscriptExport({ ...command, exportId })).status !== "in_progress";
       if (settledRun && settledExport) break;
-      workerStderr += await runStoryOSWorkerStderr({
-        repositoryRoot,
-        workerBinary,
-        args: ["--once"],
-        databaseUrl,
-        extraEnv: { STORYOS_LOG: "debug" },
-      });
+      workerStderr += await runWorker(["--once"], { databaseUrl, extraEnv: { STORYOS_LOG: "debug" } });
     }
     assert.equal((await getAgentRun({ ...command, runId })).status, "completed");
   } finally {

@@ -10,7 +10,7 @@ use crate::release1_author_edit_outcome::{
     GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{
-    ClientOverride, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    ClientOverride, FixtureMembership, OperationArtifacts, RegisteredOperation, method,
     operation_schemas,
 };
 use crate::release1_route_catalog::{
@@ -71,28 +71,15 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&GET_APPLY_AUTHOR_EDIT_OUTCOME, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership { path: FIXTURE_PATH, bytes: |_| fixture_bytes() }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json",
-    "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<GetApplyAuthorEditOutcomeRequest>(
@@ -187,29 +174,6 @@ pub(super) fn openapi() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut invalid = fixture();
-    invalid
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&invalid)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut boundary = fixture();
-    boundary["outcome"] = json!({
-        "outcome_kind": "still_unknown",
-        "observation": {
-            "observation_kind": "admission_committed",
-            "command_id": "018f0000-0000-7001-8000-000000000031",
-            "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
-            "reconciliation_required": true
-        }
-    });
-    json_bytes(&boundary)
 }
 
 fn fixture() -> Value {

@@ -200,4 +200,47 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
         .await
         .unwrap();
     assert_eq!((hidden.get::<_, i64>(0), hidden.get::<_, i64>(1)), (0, 0));
+    foreign.rollback().await.unwrap();
+
+    let payloads = "SELECT count(*) FROM storyos.project_activity_event_payloads
+                     WHERE project_id = $1::text::uuid AND event_kind = 'project_created'";
+    admin
+        .batch_execute(&format!(
+            "BEGIN; SET LOCAL session_replication_role = replica;
+             UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{title}}', '\"Damaged original title\"'::jsonb)
+              WHERE project_id = '{project_id}'::uuid AND event_kind = 'project_created';
+             COMMIT"
+        ))
+        .await
+        .unwrap();
+    assert!(matches!(
+        create_project(
+            &store,
+            &command(first_binding.clone(), &first_issue.nonce_digest, "0498")
+        )
+        .await,
+        Err(CreateProjectError::Unavailable(_))
+    ));
+    let damaged = admin.query_one(payloads, &[&project_id]).await.unwrap();
+    assert_eq!(damaged.get::<_, i64>(0), 1);
+    admin
+        .batch_execute(&format!(
+            "BEGIN; SET LOCAL session_replication_role = replica;
+             DELETE FROM storyos.project_activity_event_payloads
+              WHERE project_id = '{project_id}'::uuid AND event_kind = 'project_created';
+             COMMIT"
+        ))
+        .await
+        .unwrap();
+    assert!(matches!(
+        create_project(
+            &store,
+            &command(first_binding.clone(), &first_issue.nonce_digest, "0497")
+        )
+        .await,
+        Err(CreateProjectError::BindingConflict)
+    ));
+    let removed = admin.query_one(payloads, &[&project_id]).await.unwrap();
+    assert_eq!(removed.get::<_, i64>(0), 0);
 }

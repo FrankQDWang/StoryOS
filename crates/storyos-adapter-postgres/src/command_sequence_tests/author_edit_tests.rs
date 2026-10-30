@@ -1,7 +1,8 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
-    AuthorEditSettlement,
+    AuthorEditSettlement, AuthorEditSettlementEffect, EditorSessionId, UndoLatestAuthorActionInput,
 };
+use storyos_core::{AuthorEditConflict, TransitionOutcome};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -9,10 +10,14 @@ use crate::PostgresProjectReader;
 use crate::author_edit::AuthorEditFault;
 use crate::create_volume_authority_tests::{NamedEdit, adjusted_edit_command, named_edit_command};
 
-use super::acceptance::acceptable_proposal;
+use super::acceptance::{acceptable_proposal, advance_chapter_head, seed_condition};
 use super::agent_run::seed_run;
+use super::secondary_operation::{
+    BLOCK_EDIT, CandidateEdit, PRIMARY_TEXT, chapter_blocks, earlier_base_proposal, edit_block,
+    edit_operation_candidate, one_operation_proposal, proposal_head_revision,
+};
 use super::support::{run_without_foreign_keys, settlement_rows, stores, two_chapter_writer};
-use super::undo::{edit_in_chapter_of, session_chapter_head};
+use super::undo::{edit_in_chapter_of, issued_undo, latest_forward, session_chapter_head, undo};
 
 /// The Author Edit cases of the contract rows.
 #[derive(Clone, Copy, Debug)]
@@ -517,5 +522,206 @@ async fn the_outcome_query_settles_an_expired_admission_as_requires_reconfirmati
             admission_state(&admin, &command).await
         ),
         (0, 1, (1, 0, "settled".to_owned()))
+    );
+}
+
+/// A versioned edit of the Block that an open Block Proposal reserves conflicts and changes
+/// nothing, also when it acknowledges the Proposal head. A versioned edit of another Block of the
+/// Chapter applies.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_versioned_edit_conflicts_on_a_reserved_block_and_applies_on_another_block() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let proposal = one_operation_proposal(&store, &admin, /*base*/ 0x8a00).await;
+    let proposal_revision = proposal_head_revision(&admin, &proposal.proposal_id).await;
+    let before = chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await;
+    let mut conflicts = Vec::new();
+    for (suffix, local_intent_sequence, acknowledged) in [
+        (0x8a09, 3, Vec::new()),
+        (0x8a0a, 4, vec![proposal_revision.clone()]),
+    ] {
+        let edited = edit_block(
+            &store,
+            &proposal,
+            /*block*/ 0,
+            suffix,
+            local_intent_sequence,
+            acknowledged,
+        )
+        .await;
+        conflicts.push(edited.effect);
+    }
+    let unchanged = (
+        chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await,
+        session_chapter_head(&admin, &proposal.editor_session_id).await,
+        proposal_head_revision(&admin, &proposal.proposal_id).await,
+    );
+    let other = edit_block(
+        &store,
+        &proposal,
+        /*block*/ 1,
+        /*suffix*/ 0x8a0b,
+        /*local_intent_sequence*/ 5,
+        Vec::new(),
+    )
+    .await;
+    let AuthorEditSettlementEffect::AuthoritativeApplied { blocks, .. } = other.effect else {
+        panic!("the edit of the unreserved Block must apply, got {other:?}");
+    };
+
+    let conflicted = |reason| AuthorEditSettlementEffect::Conflicted {
+        reason,
+        current_authoritative_revision_id: proposal.chapter_revision_id.clone(),
+    };
+    let mut applied = before.clone();
+    applied[1].1 = format!("{BLOCK_EDIT}{}", before[1].1);
+    assert_eq!(
+        (
+            conflicts,
+            unchanged,
+            blocks
+                .into_iter()
+                .map(|block| (block.manuscript_block_id, block.text))
+                .collect::<Vec<_>>(),
+        ),
+        (
+            vec![
+                conflicted(AuthorEditConflict::ProposalHeadPresent),
+                conflicted(AuthorEditConflict::OwnershipChanged),
+            ],
+            (
+                before,
+                proposal.chapter_revision_id.clone(),
+                proposal_revision
+            ),
+            applied,
+        )
+    );
+}
+
+/// The base, the candidate, the validation, and the Validation Receipt result of the current
+/// Revision of one Proposal.
+async fn head_validation(admin: &Client, proposal_id: &str) -> [String; 4] {
+    let row = admin
+        .query_one(
+            "SELECT revision.base_authoritative_revision_id::text, revision.candidate_text,
+                    revision.validation, receipt.result
+               FROM storyos.proposal_heads AS head
+               JOIN storyos.proposal_revisions AS revision
+                 ON (revision.proposal_id, revision.revision_id) =
+                    (head.proposal_id, head.current_revision_id)
+               JOIN storyos.validation_receipts AS receipt
+                 ON (receipt.proposal_id, receipt.proposal_revision_id) =
+                    (revision.proposal_id, revision.revision_id)
+              WHERE head.proposal_id = $1::text::uuid",
+            &[&proposal_id],
+        )
+        .await
+        .unwrap();
+    std::array::from_fn(|idx| row.get(idx))
+}
+
+/// The state of an earlier-base Proposal before its candidate edit.
+#[derive(Clone, Copy)]
+enum EarlierCandidate {
+    Plain,
+    /// The current Revision has a Proposal Conflict condition.
+    ProposalConflict,
+    /// The Chapter head no longer has the target Block, which the base has.
+    TargetRemoved,
+}
+
+/// A candidate edit on an earlier base keeps that base and is valid, also after a Proposal
+/// Conflict condition and when the head no longer has the target Block. Author Undo of the edit
+/// restores the prior candidate on that base.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_candidate_edit_on_an_earlier_base_is_valid_and_its_undo_keeps_the_base() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut edited = Vec::new();
+    let mut bases = Vec::new();
+    let mut undone = None;
+    for (base, case) in [
+        (0x8a20, EarlierCandidate::Plain),
+        (0x8a40, EarlierCandidate::ProposalConflict),
+        (0x8a60, EarlierCandidate::TargetRemoved),
+    ] {
+        let (mut proposal, earlier) = earlier_base_proposal(&store, &admin, base).await;
+        match case {
+            EarlierCandidate::Plain => {}
+            EarlierCandidate::ProposalConflict => {
+                let revision = proposal_head_revision(&admin, &proposal.proposal_id).await;
+                seed_condition(
+                    &admin,
+                    &proposal.scope,
+                    &proposal.proposal_id,
+                    &revision,
+                    "proposal_conflict",
+                )
+                .await;
+            }
+            EarlierCandidate::TargetRemoved => {
+                let other =
+                    chapter_blocks(&store, &proposal.scope, &proposal.chapter_id).await[1].clone();
+                proposal.chapter_revision_id =
+                    advance_chapter_head(&admin, &proposal.chapter_revision_id, &[other]).await;
+            }
+        }
+        edit_operation_candidate(
+            &store,
+            &admin,
+            &proposal,
+            CandidateEdit {
+                operation: 0,
+                suffix: base + 9,
+                local_intent_sequence: 4,
+                text: "Edited ",
+            },
+        )
+        .await;
+        edited.push(head_validation(&admin, &proposal.proposal_id).await);
+        bases.push(earlier);
+        if let EarlierCandidate::Plain = case {
+            let edit_sequence = latest_forward(&admin, &proposal.scope).await;
+            let call = issued_undo(
+                &store,
+                &proposal.scope,
+                base + 10,
+                UndoLatestAuthorActionInput {
+                    editor_session_id: EditorSessionId::new(proposal.editor_session_id.clone()),
+                    expected_author_undo_frontier_sequence: edit_sequence,
+                    expected_authoritative_revision_id: proposal.chapter_revision_id.clone(),
+                },
+            )
+            .await;
+            let source_sequence = match undo(&store, &call).await.unwrap().outcome {
+                TransitionOutcome::Applied(applied) => applied.source_sequence,
+                other => panic!("the Undo must compensate the candidate edit, got {other:?}"),
+            };
+            undone = Some((
+                source_sequence == edit_sequence,
+                head_validation(&admin, &proposal.proposal_id).await,
+            ));
+        }
+    }
+
+    let valid =
+        |base: &str, candidate: &str| [base, candidate, "valid", "valid"].map(str::to_owned);
+    let candidate = format!("Edited {PRIMARY_TEXT}");
+    assert_eq!(
+        (edited, undone),
+        (
+            bases
+                .iter()
+                .map(|base| valid(base, &candidate))
+                .collect::<Vec<_>>(),
+            Some((true, valid(&bases[0], PRIMARY_TEXT))),
+        )
     );
 }

@@ -25,7 +25,7 @@ use crate::release1_agent_run::{
     SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{
-    ClientOverride, OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple,
+    ClientOverride, FixtureMembership, OpenApiMethod, OperationArtifacts, RegisteredOperation,
     operation_schemas,
 };
 use crate::release1_route_catalog::{
@@ -92,27 +92,16 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi,
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        [
-            fixture_triple(
-                CREATE_FIXTURE_PATHS,
-                [
-                    |_| create_fixture_bytes(),
-                    |_| create_invalid_fixture_bytes(),
-                    |_| create_boundary_fixture_bytes(),
-                ],
-            ),
-            fixture_triple(
-                GET_FIXTURE_PATHS,
-                [
-                    |_| get_fixture_bytes(),
-                    |_| get_invalid_fixture_bytes(),
-                    |_| get_boundary_fixture_bytes(),
-                ],
-            ),
-        ]
-        .concat()
-    },
+    fixtures: &[
+        FixtureMembership {
+            path: CREATE_FIXTURE_PATH,
+            bytes: |_| create_fixture_bytes(),
+        },
+        FixtureMembership {
+            path: GET_FIXTURE_PATH,
+            bytes: |_| get_fixture_bytes(),
+        },
+    ],
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -123,16 +112,10 @@ pub(super) const GET_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/agent-run-request.schema.json";
 pub(super) const GET_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/agent-run-response.schema.json";
-pub(super) const CREATE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-agent-run.json",
-    "generated/golden-wire/storyos-public-release-1/create-agent-run.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-agent-run.boundary.json",
-];
-pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
-    "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
-];
+pub(super) const CREATE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/create-agent-run.json";
+pub(super) const GET_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 
 pub(super) const SELECTION_REFERENCE_UUID_FIELDS: &[&str] = &[
     "chapter_id",
@@ -481,33 +464,7 @@ pub(super) fn create_fixture_bytes() -> Vec<u8> {
     json_bytes(&create_fixture())
 }
 
-pub(super) fn create_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = create_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("conversation_id");
-    json_bytes(&value)
-}
-
-pub(super) fn create_boundary_fixture_bytes() -> Vec<u8> {
-    json_bytes(&create_fixture())
-}
-
 pub(super) fn get_fixture_bytes() -> Vec<u8> {
-    json_bytes(&get_fixture())
-}
-
-pub(super) fn get_invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = get_fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("status");
-    json_bytes(&value)
-}
-
-pub(super) fn get_boundary_fixture_bytes() -> Vec<u8> {
     json_bytes(&get_fixture())
 }
 

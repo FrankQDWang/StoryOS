@@ -31,11 +31,7 @@ pub(super) const UPDATE_VOLUME: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.updateVolume.positive.v1",
-        "storyos.golden.updateVolume.invalid.v1",
-        "storyos.golden.updateVolume.boundary.v1",
-    ],
+    fixture: "storyos.golden.updateVolume.positive.v1",
 };
 
 pub const UPDATE_VOLUME_PATH: &str = UPDATE_VOLUME.path;

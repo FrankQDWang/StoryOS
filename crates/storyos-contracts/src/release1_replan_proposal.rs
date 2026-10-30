@@ -31,11 +31,7 @@ pub(super) const REPLAN_PROPOSAL: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.replanProposal.positive.v1",
-        "storyos.golden.replanProposal.invalid.v1",
-        "storyos.golden.replanProposal.boundary.v1",
-    ],
+    fixture: "storyos.golden.replanProposal.positive.v1",
 };
 
 pub const REPLAN_PROPOSAL_PATH: &str = REPLAN_PROPOSAL.path;

@@ -29,11 +29,7 @@ pub(super) const SEARCH_MANUSCRIPT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Projection not ready"),
     ],
-    fixtures: &[
-        "storyos.golden.searchManuscript.positive.v1",
-        "storyos.golden.searchManuscript.invalid.v1",
-        "storyos.golden.searchManuscript.boundary.v1",
-    ],
+    fixture: "storyos.golden.searchManuscript.positive.v1",
 };
 
 pub const SEARCH_MANUSCRIPT_PATH: &str = SEARCH_MANUSCRIPT.path;

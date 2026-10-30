@@ -1,85 +1,39 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createAgentRun,
-  createChapter,
-  createProject,
-  createProjectChallenge,
   createProjectCommandChallenge,
-  createVolume,
   digestCancelAgentRun,
-  digestCreateAgentRun,
-  digestCreateChapter,
-  digestCreateVolume,
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
   activityStream,
-  getAgentRun,
+  getChapter,
   getManuscriptTree,
   getProposal,
   pauseAgentRun,
   updateProjectAssistance,
+  withdrawProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CancelAgentRunRequest,
   CreateAgentRunRequest,
-  GetAgentRunResponse,
   PauseAgentRunRequest,
   UpdateProjectAssistanceRequest,
+  WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
-  runStoryOSWorker,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
-
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
-const execFileAsync = promisify(execFile);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
-
-function id(suffix: string): string {
-  return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
-}
-
-function runRequest(
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
-  chapterId: string,
-  correlationId: string,
-  text = "Help with this passage.",
-): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, issueChallenge,
+  postRun, prepare, problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
   return {
@@ -95,127 +49,6 @@ function cancelRequest(correlationId: string): CancelAgentRunRequest {
   };
 }
 
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-b": "018f0000-0000-7001-8000-000000000101" },
-  });
-}
-
-async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-    ...(extraEnv === undefined ? {} : { extraEnv }),
-  });
-}
-
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const env = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  }
-  const held = execFileAsync(bin("storyos-worker"), ["--once"], {
-    cwd: repositoryRoot,
-    env,
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void held.catch(() => undefined);
-  return held;
-}
-
-async function drainLeftoverWork() {
-  for (let attempt = 0; attempt < 16; attempt += 1) {
-    const leftover = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.agent_runs
-       WHERE status IN ('queued', 'claimed') OR (status = 'cancelled' AND wakeup_pending);
-    `);
-    if (leftover === "0") return;
-    await settleOnce();
-  }
-  throw new Error("leftover AgentRun work did not drain");
-}
-
-async function challenged<T>(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  method: string,
-  route: string,
-  schema: string,
-  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
-  key: string,
-  send: (antiForgery: string) => Promise<T>,
-): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
-}
-
-async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {
-  const fetchImpl = browserFetch(baseUrl, "session-a");
-  const createRequest = {
-    command_schema: "storyos.command.create-project.request.v1" as const,
-    create_project_input: { title, ...BINDING, correlation_id: id(`${ns}0`) },
-    idempotency_key: createKey,
-  };
-  const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-  await createProject({
-    baseUrl,
-    fetchImpl,
-    idempotencyKey: createKey,
-    antiForgery: created.nonce,
-    request: {
-      command_schema: createRequest.command_schema,
-      prospective_project_id: created.prospective_project_id,
-      create_project_input: createRequest.create_project_input,
-    },
-  });
-  const projectId = created.prospective_project_id;
-  const assistance = {
-    command_schema: "storyos.command.update-project-assistance.request.v1" as const,
-    update_project_assistance_input: {
-      availability: "available" as const,
-      expected_assistance_revision: "0",
-      ...BINDING,
-      correlation_id: id(`${ns}1`),
-    },
-  };
-  await challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance", assistance.command_schema, await digestUpdateProjectAssistance(assistance), id(`${ns}2`), (antiForgery) => updateProjectAssistance({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}2`), antiForgery, request: assistance }));
-  const volume = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(`${ns}3`) },
-  };
-  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
-  if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
-  const volumeId = createdVolume.effect.volume_id;
-  const chapter = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
-  };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
-  if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
-  return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
-}
-
-async function postRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  key: string,
-  request: CreateAgentRunRequest,
-) {
-  return challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema, await digestCreateAgentRun(request), key, (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
-}
-
 async function admit(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -225,7 +58,7 @@ async function admit(
   text = "Help with this passage.",
   conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
 ) {
-  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(conversation, chapterId, id(key.slice(-4)), text));
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(chapterId, id(key.slice(-4)), text, conversation));
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   return created;
 }
@@ -239,29 +72,12 @@ async function postPause(
   correlationId: string,
 ) {
   const request = pauseRequest(correlationId);
-  const digest = await digestPauseAgentRun(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: key,
-    },
-  }));
-  const response = await pauseAgentRun({
-    baseUrl,
-    projectId,
-    runId,
-    fetchImpl,
-    idempotencyKey: key,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, response };
+  let nonce = "";
+  const response = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", request.command_schema, await digestPauseAgentRun(request),
+    key, (antiForgery) => pauseAgentRun({ baseUrl, projectId, runId, fetchImpl, idempotencyKey: key,
+      antiForgery: (nonce = antiForgery), request }));
+  return { nonce, response };
 }
 
 async function cancelChallenge(
@@ -272,19 +88,8 @@ async function cancelChallenge(
   correlationId: string,
 ) {
   const request = cancelRequest(correlationId);
-  const digest = await digestCancelAgentRun(request);
-  return withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: key,
-    },
-  }));
+  return issueChallenge(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+    request.command_schema, await digestCancelAgentRun(request), key);
 }
 
 async function postCancel(
@@ -310,28 +115,6 @@ async function postCancel(
   return { challenge, response };
 }
 
-async function inspectRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  runId: string,
-): Promise<GetAgentRunResponse> {
-  return getAgentRun({ baseUrl, projectId, runId, fetchImpl });
-}
-
-async function waitFor(
-  probe: () => Promise<GetAgentRunResponse>,
-  match: (value: GetAgentRunResponse) => boolean,
-): Promise<GetAgentRunResponse> {
-  let last: GetAgentRunResponse | undefined;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    last = await probe();
-    if (match(last)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`hold inspect timed out: status=${last?.status ?? "none"} decision=${last?.decision.kind ?? "none"}`);
-}
-
 function activityEvent(body: string, eventKind: string) {
   return body.split("\n\n").map((block) => {
     const data = block.split("\n").find((line) => line.startsWith("data:"));
@@ -342,18 +125,8 @@ function activityEvent(body: string, eventKind: string) {
   }).find((event) => event?.event_kind === eventKind);
 }
 
-function problemCode(error: unknown): string | undefined {
-  const protocol = requireStoryOSProtocolError(error);
-  if (protocol.responseBody === undefined) return undefined;
-  try {
-    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
-  } catch {
-    return undefined;
-  }
-}
-
 test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run immutable", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c111"), "Recover Cancel Novel", "c2");
@@ -371,12 +144,12 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
       runId: created.effect.run_id,
       fetchImpl: prepared.fetchImpl,
       idempotencyKey: id("c141"),
-      antiForgery: paused.challenge.nonce,
+      antiForgery: paused.nonce,
       request: pauseRequest(id("c142")),
     });
     assert.equal(pauseReplay.command_id, paused.response.command_id);
     assert.equal(pauseReplay.receipt.receipt_id, paused.response.receipt.receipt_id);
-    const pausedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const pausedInspect = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(pausedInspect.status, "paused");
     assert.equal(pausedInspect.decision.kind, "absent");
     assert.equal(pausedInspect.usage.kind, "unknown");
@@ -442,7 +215,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     });
     assert.equal(cancelReplay.command_id, cancelled.response.command_id);
     assert.equal(cancelReplay.receipt.receipt_id, cancelled.response.receipt.receipt_id);
-    const cancelledInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const cancelledInspect = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(cancelledInspect.status, "cancelled");
     assert.equal(cancelledInspect.decision.kind, "absent");
     assert.equal(cancelledInspect.usage.kind, "unknown");
@@ -469,13 +242,13 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     );
     assert.notEqual(successor.effect.run_id, created.effect.run_id);
     await settleOnce();
-    const successorInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id);
+    const successorInspect = await inspectRun(started.baseUrl, prepared, successor.effect.run_id);
     assert.equal(successorInspect.status, "completed");
     const terminal = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id, id("c191"), id("c192"));
     assert.equal(terminal.response.effect.kind, "conflicted");
     if (terminal.response.effect.kind !== "conflicted") throw new Error("expected terminal");
     assert.equal(terminal.response.effect.reason, "terminal_run");
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, successor.effect.run_id)).status, "completed");
+    assert.equal((await inspectRun(started.baseUrl, prepared, successor.effect.run_id)).status, "completed");
   } finally {
     await stopRealServer(started.server);
   }
@@ -483,7 +256,7 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
 
 test("a rate-limited cancellation Challenge completes before a Worker is held", async () => {
   const dispatchHold = join(tmpdir(), "storyos-s3-17-rate-limit.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -521,7 +294,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     writeFileSync(dispatchHold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, run.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const cancelled = await postCancel(started.baseUrl, rateLimitedFetch, prepared.projectId, run.effect.run_id, id("c331"), id("c332"), challenge);
@@ -529,7 +302,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     unlinkSync(dispatchHold);
     await worker;
     await settleOnce();
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id)).status, "cancelled");
+    assert.equal((await inspectRun(started.baseUrl, prepared, run.effect.run_id)).status, "cancelled");
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (worker !== undefined) await Promise.allSettled([worker]);
@@ -540,7 +313,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
 test("cancellation fences late Worker output and does not hide a Proposal", async () => {
   const dispatchHold = join(tmpdir(), "storyos-s3-17-dispatch.hold");
   const decisionHold = join(tmpdir(), "storyos-s3-17-decision.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   const workers: Array<Promise<void>> = [];
   try {
     await drainLeftoverWork();
@@ -562,7 +335,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     });
     workers.push(dispatchWorker);
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const cancelledHold = await postCancel(started.baseUrl, cancelFetch, prepared.projectId, dispatchRun.effect.run_id, id("c231"), id("c232"), dispatchCancelChallenge);
@@ -570,7 +343,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     unlinkSync(dispatchHold);
     await dispatchWorker;
     await settleOnce();
-    const afterCancel = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id);
+    const afterCancel = await inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id);
     assert.equal(afterCancel.status, "cancelled");
     assert.equal(afterCancel.decision.kind, "absent");
     assert.equal(afterCancel.usage.kind, "unknown");
@@ -586,7 +359,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
          AND attempt_role = 'abort';
     `), "1 1 acknowledged");
     await settleOnce();
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id)).status, "cancelled");
+    assert.equal((await inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id)).status, "cancelled");
 
     writeFileSync(dispatchHold, "hold");
     const recoverRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c241"));
@@ -596,7 +369,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     });
     workers.push(staleWorker);
     const beforeRecover = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, recoverRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, recoverRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     if (beforeRecover.model_attempt.kind !== "present") throw new Error("expected attempt");
@@ -604,7 +377,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     const recoverer = settleOnce({ STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
     workers.push(recoverer);
     const recovered = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, recoverRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, recoverRun.effect.run_id),
       (current) => current.status === "completed" && current.model_attempt.kind === "present",
     );
     unlinkSync(dispatchHold);
@@ -626,7 +399,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     };
     await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "PUT", "/api/v1/projects/{project_id}/assistance", unavailable.command_schema, await digestUpdateProjectAssistance(unavailable), id("c253"), (antiForgery) => updateProjectAssistance({ baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, idempotencyKey: id("c253"), antiForgery, request: unavailable }));
     await settleOnce();
-    const blockedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, blocked.effect.run_id);
+    const blockedInspect = await inspectRun(started.baseUrl, prepared, blocked.effect.run_id);
     assert.equal(blockedInspect.status, "refused");
     assert.notEqual(blockedInspect.status, "cancelled");
 
@@ -647,7 +420,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     const decisionWorker = settleHeld({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     workers.push(decisionWorker);
     const beforeCancelProposal = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id),
       (current) => current.decision.kind === "prose_change" && current.decision.opened_proposal.kind === "present",
     );
     if (beforeCancelProposal.decision.kind !== "prose_change") throw new Error("expected prose");
@@ -666,7 +439,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     assert.equal(proposal.proposal.closure, "open");
     assert.equal(proposal.proposal.operation_resolution, "pending");
     assert.equal(proposal.proposal.reservation_state, "unresolved");
-    const cancelledProposalInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id);
+    const cancelledProposalInspect = await inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id);
     assert.equal(cancelledProposalInspect.status, "cancelled");
     assert.equal(cancelledProposalInspect.decision.kind, "prose_change");
   } finally {
@@ -679,7 +452,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
 
 test("a Pause before the Cancel still sends one Abort for the in-flight Attempt", async () => {
   const dispatchHold = join(tmpdir(), "storyos-g03-pause-cancel.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -689,7 +462,7 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
     writeFileSync(dispatchHold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, run.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     const paused = await postPause(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id, id("c641"), id("c642"));
@@ -699,7 +472,7 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
     unlinkSync(dispatchHold);
     await worker;
     await settleOnce();
-    const after = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, run.effect.run_id);
     assert.equal(after.status, "cancelled");
     assert.equal(after.decision.kind, "absent");
     assert.equal(await queryPostgres(`
@@ -713,6 +486,149 @@ test("a Pause before the Cancel still sends one Abort for the in-flight Attempt"
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (worker !== undefined) await Promise.allSettled([worker]);
+    await stopRealServer(started.server);
+  }
+});
+
+test("current producer withdraw closes the Proposal with zero author actions", async () => {
+  const started = await startServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("1309e8f00211"), "Producer Withdraw Novel", "e8f3");
+    const before = await getChapter({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      chapterId: prepared.chapterId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    const queried = await admitProse(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e8f00231"),
+    );
+    if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
+      throw new Error("expected opened prose");
+    }
+    const opened = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: queried.decision.opened_proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(opened.proposal.closure, "open");
+    if (opened.proposal.source.kind !== "agent_run_decision") {
+      throw new Error("expected an agent-run producer");
+    }
+    const mismatch: WithdrawProposalRequest = {
+      command_schema: "storyos.command.withdraw-proposal.request.v1",
+      withdraw_proposal_input: {
+        cause: "current_producer",
+        producer: {
+          kind: "agent_run_decision",
+          run_id: id("e8f00299"),
+          decision_id: id("e8f00298"),
+        },
+        proposal_revision_id: opened.proposal.revision_id,
+        expected_closure: "open",
+        expected_target_revisions: [before.chapter.current_revision.revision_id],
+        withdrawal_reason: { kind: "current_producer_withdrew" },
+        ...BINDING,
+        correlation_id: id("e8f00241"),
+      },
+    };
+    const mismatched = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00242"),
+      request: mismatch,
+    });
+    assert.deepEqual(mismatched.effect, { kind: "no_effect", reason: "unsupported_cause" });
+    assert.equal(mismatched.author_command_admission_id, undefined);
+    const stillOpen = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(stillOpen.proposal.closure, "open");
+    const withdrawRequest: WithdrawProposalRequest = {
+      command_schema: "storyos.command.withdraw-proposal.request.v1",
+      withdraw_proposal_input: {
+        cause: "current_producer",
+        producer: {
+          kind: "agent_run_decision",
+          run_id: opened.proposal.source.run_id,
+          decision_id: opened.proposal.source.decision_id,
+        },
+        proposal_revision_id: opened.proposal.revision_id,
+        expected_closure: "open",
+        expected_target_revisions: [before.chapter.current_revision.revision_id],
+        withdrawal_reason: { kind: "current_producer_withdrew" },
+        ...BINDING,
+        correlation_id: id("e8f00251"),
+      },
+    };
+    const withdrawn = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00252"),
+      request: withdrawRequest,
+    });
+    assert.equal(withdrawn.effect.kind, "resolved");
+    if (withdrawn.effect.kind !== "resolved") throw new Error("expected resolved withdrawal");
+    assert.equal(withdrawn.effect.prior_closure, "open");
+    assert.equal(withdrawn.effect.resulting_closure, "withdrawn");
+    assert.equal(withdrawn.effect.withdrawal_reason.kind, "current_producer_withdrew");
+    assert.equal(withdrawn.effect.author_action_sequence, undefined);
+    assert.equal(withdrawn.effect.undo_disposition, undefined);
+    assert.equal(withdrawn.author_command_admission_id, undefined);
+    assert.equal(withdrawn.receipt.author_command_admission_id, undefined);
+    assert.deepEqual(withdrawn.receipt.authoritative_commit_ids, []);
+    const repeated = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00252"),
+      request: withdrawRequest,
+    });
+    assert.equal(repeated.receipt.receipt_id, withdrawn.receipt.receipt_id);
+    assert.equal(repeated.effect.kind, "resolved");
+    const inspected = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(inspected.proposal.closure, "withdrawn");
+    assert.equal(inspected.proposal.operation_resolution, "pending");
+    assert.equal(inspected.proposal.revision_id, opened.proposal.revision_id);
+    const after = await getChapter({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      chapterId: prepared.chapterId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.deepEqual(after.chapter, before.chapter);
+    const closedRequest: WithdrawProposalRequest = {
+      ...withdrawRequest,
+      withdraw_proposal_input: {
+        ...withdrawRequest.withdraw_proposal_input,
+        correlation_id: id("e8f00261"),
+      },
+    };
+    const closed = await withdrawProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id,
+      fetchImpl: prepared.fetchImpl,
+      idempotencyKey: id("e8f00262"),
+      request: closedRequest,
+    });
+    assert.deepEqual(closed.effect, { kind: "no_effect", reason: "closure_not_open" });
+  } finally {
     await stopRealServer(started.server);
   }
 });

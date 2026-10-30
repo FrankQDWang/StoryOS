@@ -90,7 +90,6 @@ const ROUTE_STREAM: &str = "crates/storyos-adapter-volcengine-responses/src/stre
 const ROUTE_WIRE: &str = "crates/storyos-adapter-volcengine-responses/src/wire_tests.rs";
 const SETTINGS: &str = "crates/storyos-settings/src/settings_tests.rs";
 const WORKER_ADAPTERS: &str = "crates/storyos-worker-bin/src/registered_adapters_tests.rs";
-const CREATE_RUN: &str = "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts";
 const CONTINUE: &str =
     "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts";
 const COMPACT: &str =
@@ -103,17 +102,17 @@ const SUCCESSOR: &str =
     "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts";
 const CANCEL: &str =
     "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts";
+const FAKE_DECISION: &str =
+    "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts";
 const ACCEPT: &str = "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts";
 const REJECT: &str =
     "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts";
 const CANDIDATE_EDIT: &str =
     "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts";
-const UNDO: &str = "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts";
+const UNDO: &str = "crates/storyos-adapter-postgres/src/command_sequence_tests/proposal_acceptance_undo_chain_tests.rs";
 const ACCEPT_REFUSAL: &str =
     "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts";
-const ASSISTANCE: &str =
-    "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts";
-const ARCHIVE: &str = "apps/web/test/node-postgresql/archive-project-http.integration.test.ts";
+const PROJECT: &str = "apps/web/test/node-postgresql/project-http.integration.test.ts";
 const SUBSET_SELECTIONS: &str =
     "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts";
 const SELECTION_CONTRACT: &str = "apps/web/test/node-contract/selection-reference.test.ts";

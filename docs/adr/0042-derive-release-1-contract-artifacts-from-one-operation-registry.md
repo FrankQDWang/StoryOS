@@ -8,6 +8,8 @@ On 2026-10-04 the author accepted this decision. Each Release 1 artifacts module
 
 [ADR 0074](0074-generate-the-route-catalog-from-the-operation-registry.md) partly supersedes this ADR. The registry order is now the declared order of the registry, and the generator writes the route catalog from the registry. The generator writes the TypeScript client functions and declarations from the registry entries, and it no longer writes the schema catalog or the fixture catalog. ADR 0074 records the one change of the client bytes that this needed.
 
+[ADR 0075](0075-prove-each-behavior-at-one-behavior-owner.md) partly supersedes this ADR. Each operation declares one positive golden-wire fixture. Ticket #1311 removes the invalid and boundary fixtures.
+
 ## Context
 
 At `main` `6c69595c`, `release1_artifacts.rs` and `release1_fixture_corpus.rs` referred to the per-operation artifacts modules more than 500 times through hand-written lists. A new operation needed one line in six or seven lists. Each list had a different order, so each generated artifact had a different operation order, and no source owned that order.

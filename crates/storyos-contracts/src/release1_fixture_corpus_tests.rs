@@ -58,11 +58,12 @@ fn fixture_corpus_digest_covers_every_golden_wire_fixture() {
                     .any(|registered| registered.operation.operation_id == operation_id)
             })
             .unwrap_or_else(|| panic!("{operation_id} must be registered"));
-        let operation_paths = (artifacts.fixtures)()
-            .into_iter()
+        let operation_paths = artifacts
+            .fixtures
+            .iter()
             .map(|entry| entry.path)
             .collect::<Vec<_>>();
-        assert_eq!(operation_paths.len(), 3, "{operation_id}");
+        assert_eq!(operation_paths.len(), 1, "{operation_id}");
         for path in operation_paths {
             let mut files = generated.clone();
             files

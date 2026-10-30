@@ -36,11 +36,7 @@ pub(super) const UNDO_LATEST_AUTHOR_ACTION: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.undoLatestAuthorAction.positive.v1",
-        "storyos.golden.undoLatestAuthorAction.invalid.v1",
-        "storyos.golden.undoLatestAuthorAction.boundary.v1",
-    ],
+    fixture: "storyos.golden.undoLatestAuthorAction.positive.v1",
 };
 
 pub const UNDO_LATEST_AUTHOR_ACTION_PATH: &str = UNDO_LATEST_AUTHOR_ACTION.path;

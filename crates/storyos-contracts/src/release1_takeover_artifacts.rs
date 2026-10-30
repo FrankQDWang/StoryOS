@@ -4,8 +4,8 @@ use ts_rs::{Config, TS};
 
 use crate::ProjectActivityKind;
 use crate::release1_operation_registry::{
-    ClientOverride, ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation,
-    fixture_triple, method, operation_schemas,
+    ClientOverride, ContractGraphEntry, FixtureMembership, OperationArtifacts, OperationKind,
+    RegisteredOperation, method, operation_schemas,
 };
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
@@ -59,28 +59,18 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     },
     openapi: || method(&TAKE_OVER_PROJECT_WRITER, openapi()),
     typescript_types: typescript_type_declarations,
-    fixtures: || {
-        fixture_triple(
-            FIXTURE_PATHS,
-            [
-                |_| fixture_bytes(),
-                |_| invalid_fixture_bytes(),
-                |_| boundary_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: FIXTURE_PATH,
+        bytes: |_| fixture_bytes(),
+    }],
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json";
 pub(super) const RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json";
-pub(super) const FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json",
-    "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json",
-];
+pub(super) const FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema_bytes::<TakeOverProjectWriterRequest>(
@@ -138,33 +128,6 @@ pub(super) fn openapi() -> String {
 
 pub(super) fn fixture_bytes() -> Vec<u8> {
     json_bytes(&fixture())
-}
-
-pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
-    let mut value = fixture();
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&value)
-}
-
-pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
-    let mut value = fixture();
-    value["result"] = json!({
-        "kind": "takeover_compare_failed",
-        "observed_writer_generation": "1",
-        "current_writer_generation": "2",
-        "current_writer_projection": {
-            "kind": "current_writer",
-            "writer_generation": "2"
-        },
-        "current_snapshot_id": "018f0000-0000-7001-8000-000000000032",
-        "current_snapshot_activity_position": "1",
-        "current_heads": ["018f0000-0000-7001-8000-000000000004"],
-        "reason": "writer_generation_advanced_after_admission"
-    });
-    json_bytes(&value)
 }
 
 fn fixture() -> Value {

@@ -49,7 +49,7 @@
           "https://github.com/FrankQDWang/StoryOS/issues/695",
           "https://github.com/FrankQDWang/StoryOS/issues/1165"
         ],
-        "evidence": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+        "evidence": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
         "supporting_evidence": [
           "crates/storyos-adapter-postgres/src/agent_run_create_dispatch_tests.rs",
           "crates/storyos-adapter-postgres/src/model_gateway_tests.rs",
@@ -127,7 +127,7 @@
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
-          "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+          "crates/storyos-adapter-postgres/src/command_sequence_tests/proposal_acceptance_undo_chain_tests.rs",
           "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
@@ -265,7 +265,7 @@
           "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
-          "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+          "crates/storyos-adapter-postgres/src/command_sequence_tests/proposal_acceptance_undo_chain_tests.rs",
           "apps/web/test/browser-exact-dist/selection-reference.integration.test.ts",
           "crates/storyos-core/src/model_output_tests.rs"
         ],
@@ -288,7 +288,7 @@
           "crates/storyos-settings/src/settings_tests.rs",
           "crates/storyos-adapter-postgres/src/grant_scope_tests.rs",
           "crates/storyos-core/src/create_admission_tests.rs",
-          "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts",
+          "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
           "docs/research/standing-grant-scope-live-request-2026-10-12.md",
           "docs/research/agent-plan-over-long-input-rejection-2026-10-14.md"
         ],
@@ -383,7 +383,7 @@
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
           "crates/storyos-core/src/assemble_context_tests.rs",
-          "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
           "crates/storyos-core/src/selection_reference_tests.rs",
           "apps/web/test/node-contract/selection-reference.test.ts",
           "docs/adr/0062-make-the-exact-selection-references-of-a-message-the-working-target.md"
@@ -466,7 +466,7 @@
         ],
         "evidence": "docs/research/stage4-real-author-journey-2026-10-14.md",
         "supporting_evidence": [
-          "apps/web/test/node-postgresql/archive-project-http.integration.test.ts",
+          "apps/web/test/node-postgresql/project-http.integration.test.ts",
           "scripts/verify-recovery-hold.sh",
           "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],

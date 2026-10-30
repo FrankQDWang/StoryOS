@@ -29,11 +29,7 @@ pub(super) const APPLY_AUTHOR_EDIT: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.applyAuthorEdit.positive.v1",
-        "storyos.golden.applyAuthorEdit.invalid.v1",
-        "storyos.golden.applyAuthorEdit.boundary.v1",
-    ],
+    fixture: "storyos.golden.applyAuthorEdit.positive.v1",
 };
 
 pub const APPLY_AUTHOR_EDIT_PATH: &str = APPLY_AUTHOR_EDIT.path;

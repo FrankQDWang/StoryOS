@@ -51,7 +51,6 @@ const PRODUCTION_HOST: &str =
     "apps/web/test/browser-exact-dist/production-host.integration.test.ts";
 const FAKE_DECISION: &str =
     "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts";
-const CREATE_RUN: &str = "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts";
 const CONTINUE: &str =
     "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts";
 const COMPACT: &str =
@@ -66,20 +65,18 @@ const CANCEL: &str =
     "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts";
 const OPEN_BLOCK: &str =
     "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts";
-const REPLAN: &str = "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts";
 const MULTI: &str =
     "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts";
 const STREAM: &str =
     "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts";
-const PARTIAL: &str =
-    "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts";
-const CONTINUE_GENERATION: &str =
-    "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts";
+const GENERATION_CLAIM: &str =
+    "apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts";
 const ACCEPT: &str = "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts";
 const REJECT: &str =
     "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts";
-const UNDO: &str = "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts";
-const WITHDRAW: &str = "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts";
+const ACCEPT_REFUSAL: &str =
+    "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts";
+const UNDO: &str = "crates/storyos-adapter-postgres/src/command_sequence_tests/proposal_acceptance_undo_chain_tests.rs";
 const COMPARISON: &str = "crates/storyos-core/src/revision_comparison_tests.rs";
 const PHYSICAL_SCRIPT: &str = "scripts/verify-recovery-hold.sh";
 const ADMITTED_TARGET: &str =

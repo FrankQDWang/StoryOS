@@ -10,7 +10,7 @@ pub(super) fn fixture_corpus_membership() -> &'static [FixtureMembership] {
     static MEMBERSHIP: LazyLock<Vec<FixtureMembership>> = LazyLock::new(|| {
         RELEASE1_OPERATIONS
             .iter()
-            .flat_map(|artifacts| (artifacts.fixtures)())
+            .flat_map(|artifacts| artifacts.fixtures.iter().copied())
             .collect()
     });
     &MEMBERSHIP

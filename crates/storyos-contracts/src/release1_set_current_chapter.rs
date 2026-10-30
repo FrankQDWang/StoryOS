@@ -33,11 +33,7 @@ pub(super) const SET_CURRENT_CHAPTER: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.setCurrentChapter.positive.v1",
-        "storyos.golden.setCurrentChapter.invalid.v1",
-        "storyos.golden.setCurrentChapter.boundary.v1",
-    ],
+    fixture: "storyos.golden.setCurrentChapter.positive.v1",
 };
 
 pub const SET_CURRENT_CHAPTER_PATH: &str = SET_CURRENT_CHAPTER.path;

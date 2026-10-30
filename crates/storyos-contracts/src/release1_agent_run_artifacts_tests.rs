@@ -11,10 +11,9 @@ fn agent_run_query_rejects_malformed_captured_settings_revision() {
         .should_validate_formats(true)
         .build(&schema)
         .expect("AgentRun response schema must compile");
-    let mut response: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_agent_run_artifacts::GET_FIXTURE_PATHS[0]],
-    )
-    .expect("positive AgentRun response must be JSON");
+    let mut response: serde_json::Value =
+        serde_json::from_slice(&generated[crate::release1_agent_run_artifacts::GET_FIXTURE_PATH])
+            .expect("positive AgentRun response must be JSON");
     assert!(validator.is_valid(&response));
     response["captured_memory_settings"] = serde_json::json!({
         "kind": "available",

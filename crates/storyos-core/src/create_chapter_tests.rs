@@ -1,7 +1,7 @@
 use super::{
     CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,
-    CreateChapterOpen, CreateChapterRefusal, CreateChapterResult, ProjectLifecycle, VolumeJoin,
-    create_chapter,
+    CreateChapterOpen, CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult,
+    ProjectLifecycle, VolumeJoin, create_chapter,
 };
 
 fn command() -> CreateChapter {
@@ -90,5 +90,53 @@ fn an_invalid_title_classifies_as_refused_with_zero_authority_effect() {
     assert_eq!(
         create_chapter(&too_long),
         CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle)
+    );
+}
+
+#[test]
+fn a_placement_takes_the_order_beside_its_live_anchor_and_refuses_an_absent_anchor() {
+    let placed = |placement| {
+        create_chapter(&CreateChapter {
+            placement,
+            ordered_chapter_ids: vec!["chapter-a".to_owned(), "chapter-b".to_owned()],
+            current_open: CreateChapterOpen::CurrentChapter,
+            ..command()
+        })
+    };
+    let applied = |order| {
+        CreateChapterResult::Applied(CreateChapterApplied {
+            tree_revision: 3,
+            current: CreateChapterCurrent::PreserveExisting,
+            order,
+        })
+    };
+    let anchor = |id: &str| id.to_owned();
+    assert_eq!(
+        [
+            placed(CreateChapterPlacement::Before {
+                chapter_id: anchor("chapter-a")
+            }),
+            placed(CreateChapterPlacement::After {
+                chapter_id: anchor("chapter-a")
+            }),
+            placed(CreateChapterPlacement::Before {
+                chapter_id: anchor("chapter-b")
+            }),
+            placed(CreateChapterPlacement::After {
+                chapter_id: anchor("chapter-b")
+            }),
+            placed(CreateChapterPlacement::Append),
+            placed(CreateChapterPlacement::After {
+                chapter_id: anchor("chapter-removed")
+            }),
+        ],
+        [
+            applied(1),
+            applied(2),
+            applied(2),
+            applied(3),
+            applied(3),
+            CreateChapterResult::Refused(CreateChapterRefusal::InvalidPlacement),
+        ]
     );
 }

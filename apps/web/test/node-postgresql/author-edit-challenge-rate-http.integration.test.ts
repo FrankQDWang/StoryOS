@@ -1,16 +1,16 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/list-open-proposals-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createProjectCommandChallenge, StoryOSProtocolError,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { id, prepare, startRealServer } from "../support/acceptance.ts";
+import { id, prepare, startServer } from "../support/http-harness.ts";
 
 const AUTHOR_EDIT_CAPACITY = 120;
 
 // The new Project gives this test its own Author Edit rate window, so other tests cannot use its units.
 test("the real Server refuses Author Edit Challenge requests with HTTP 429 and Retry-After after the class capacity", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const prepared = await prepare(started.baseUrl, id("b7a00001"), "Author Edit Rate Novel", "b7b0000");
     const challenge = (index: number) => createProjectCommandChallenge({

@@ -3,56 +3,42 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import type { IncomingHttpHeaders, RequestOptions } from "node:http";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { promisify } from "node:util";
 
 import {
-  applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
-  digestCreateEditorSession, getApplyAuthorEditOutcome, getChapter, getEditorSession, getProject,
+  applyAuthorEdit, archiveProject, createEditorSession, createProject, createProjectChallenge,
+  createProjectCommandChallenge, digestApplyAuthorEdit, digestArchiveProject, digestCreateEditorSession,
+  digestUpdateProject, getApplyAuthorEditOutcome, getChapter, getEditorSession, getManuscriptTree, getProject,
+  listProjects, updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
+  ArchiveProjectRequest,
   CreateEditorSessionRequest,
-  CreateEditorSessionResponse,
+  CreateProjectChallengeRequest,
   CreateProjectCommandChallengeRequest,
-  DigestValue,
   DomainReceiptResult,
-  GetApplyAuthorEditOutcomeResponse,
-  GetEditorSessionResponse,
+  UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { PROJECT_A, USER_A, USER_B, UUID_V7, challenged, createEmpty, freshNamespace, id, issueChallenge,
+  problemCode, sanitizedProtocolFailure, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
 const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
 const UNKNOWN_CHAPTER = "018f0000-0000-7001-8000-00000000ffff";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const CHAPTER_B = "018f0000-0000-7001-8000-000000000103";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const execFileAsync = promisify(execFile);
-
-async function startRealServer(
-  sessionUsers: Readonly<Record<string, string>> = { "session-a": USER_A, "session-b": USER_B },
-) {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: sessionUsers,
-  });
-}
 
 async function responseSnapshot(response: Response): Promise<{ body: string; status: number }> {
   return { status: response.status, body: await response.text() };
@@ -114,23 +100,81 @@ function protocolFailure(error: unknown, status: number): boolean {
   return requireStoryOSProtocolError(error).status === status;
 }
 
-function sanitizedProtocolFailure(
-  error: unknown,
-  status: number,
-  sensitive: RegExp,
-): boolean {
-  const protocolError = requireStoryOSProtocolError(error);
-  return protocolError.status === status && !sensitive.test(protocolError.responseBody ?? "");
+function createChallengeRequest(
+  idempotencyKey: string,
+  title: string,
+  correlationId: string,
+): CreateProjectChallengeRequest {
+  return {
+    command_schema: "storyos.command.create-project.request.v1",
+    create_project_input: {
+      title,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+    idempotency_key: idempotencyKey,
+  };
 }
 
-function protocolProblem(error: unknown): unknown {
-  const responseBody = requireStoryOSProtocolError(error).responseBody;
-  assert.ok(responseBody);
-  return Reflect.get(JSON.parse(responseBody), "code");
+function archiveRequest(expectedProjectRevision: string, correlationId: string): ArchiveProjectRequest {
+  return {
+    command_schema: "storyos.command.archive-project.request.v1",
+    archive_project_input: {
+      expected_project_revision: expectedProjectRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+function renameRequest(title: string, expectedProjectRevision: string, correlationId: string): UpdateProjectRequest {
+  return {
+    command_schema: "storyos.command.update-project.request.v1",
+    update_project_input: {
+      title,
+      expected_project_revision: expectedProjectRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function projectEffectSnapshot() {
+  return JSON.parse(await queryPostgres(`
+    SELECT json_build_object(
+      'projects', (SELECT count(*) FROM storyos.projects),
+      'admissions', (SELECT count(*) FROM storyos.author_command_admissions),
+      'receipts', (SELECT count(*) FROM storyos.domain_receipts),
+      'activities', (SELECT count(*) FROM storyos.project_activity_events),
+      'chapters', (SELECT count(*) FROM storyos.manuscript_objects)
+    )::text`));
+}
+
+async function archive(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  idempotencyKey: string,
+  request: ArchiveProjectRequest,
+) {
+  const challenge = await issueChallenge(baseUrl, fetchImpl, projectId, "PUT",
+    "/api/v1/projects/{project_id}/archival", request.command_schema, await digestArchiveProject(request), idempotencyKey);
+  const archived = await archiveProject({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+  return { challenge, archived };
 }
 
 test("two authenticated Users open only their own Project and current Chapter over real HTTP", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     const projectA = await getProject({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -168,7 +212,7 @@ test("two authenticated Users open only their own Project and current Chapter ov
 });
 
 test("Project command challenges bind Origin, Scope, nonce, and idempotency on real PostgreSQL", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   const request: CreateProjectCommandChallengeRequest = {
     method: "PATCH",
     route_template: "/api/v1/projects/{project_id}",
@@ -251,9 +295,9 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
 });
 
 test("one current writer settles one Author Edit and exact retries return one result", async () => {
-  const { baseUrl, server } = await startRealServer({
+  const { baseUrl, server } = await startServer({ sessions: {
     "session-a": USER_A, "session-a-alt": USER_A, "session-b": USER_B,
-  });
+  } });
   const requests: readonly [CreateEditorSessionRequest, CreateEditorSessionRequest] = [
     {
       command_schema: "storyos.command.create-editor-session.request.v1",
@@ -832,18 +876,6 @@ test("one current writer settles one Author Edit and exact retries return one re
       assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeOutcomeRead);
     }
 
-    assert.deepEqual(await projectAuthoritySnapshot(), {
-      receipts: 4,
-      admissions: 4,
-      consumed_challenges: 4,
-      activities: 1,
-      revision_envelopes: 1,
-      commits: 1,
-      actions: 1,
-      counter: "1/1/1",
-      zero_authority_activities: 0,
-    });
-
     const unknownKey = rejectedKey;
     const unknownAdmission = "018f0000-0000-7001-8000-000000000065";
     const unknownCommand = "018f0000-0000-7001-8000-000000000066";
@@ -924,19 +956,19 @@ test("one current writer settles one Author Edit and exact retries return one re
       baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
       antiForgery: "0".repeat(64), fetchImpl: browserFetch(baseUrl, "session-a"),
     }), (error) => protocolFailure(error, 422)
-      && protocolProblem(error) === "challenge_invalid");
+      && problemCode(error) === "challenge_invalid");
     await assert.rejects(applyAuthorEdit({
       baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
       antiForgery: staleChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
     }), (error) => protocolFailure(error, 412)
-      && protocolProblem(error) === "editor_writer_stale");
+      && problemCode(error) === "editor_writer_stale");
   } finally {
     await stopRealServer(server);
   }
 });
 
 test("the real challenge endpoint returns a sanitized rate refusal with retry time", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   const request: CreateProjectCommandChallengeRequest = {
     method: "PATCH",
     route_template: "/api/v1/projects/{project_id}",
@@ -987,7 +1019,7 @@ test("the real challenge endpoint returns a sanitized rate refusal with retry ti
 });
 
 test("a sensitive Project read accepts same-origin Referer paths and queries", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     for (const referer of [
       `${baseUrl}?view=project`,
@@ -1006,7 +1038,7 @@ test("a sensitive Project read accepts same-origin Referer paths and queries", a
 });
 
 test("hostile Origin and Referer inputs refuse without Project disclosure", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   const url = new URL(`/api/v1/projects/${PROJECT_A}`, baseUrl);
   const cookie = "storyos_session=session-a";
   try {
@@ -1072,13 +1104,13 @@ test("hostile Origin and Referer inputs refuse without Project disclosure", asyn
 
 test("invalid bootstrap User identity prevents the Server from becoming ready", async () => {
   await assert.rejects(
-    startRealServer({ "session-invalid": "not-a-uuid" }),
+    startServer({ sessions: { "session-invalid": "not-a-uuid" } }),
     /StoryOS Server exited with 1/,
   );
 });
 
 test("missing authentication, cross-Project scope, and unknown Chapter identity use non-oracular errors", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
     await assert.rejects(
       getProject({ baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl) }),
@@ -1113,6 +1145,272 @@ test("missing authentication, cross-Project scope, and unknown Chapter identity 
     });
     assert.equal(refusedOrigin.status, 403);
     assert.doesNotMatch(await refusedOrigin.text(), /Project A|Authoritative/);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("createProject replays its creation evidence after rename and restart", async () => {
+  const ns = freshNamespace();
+  let { baseUrl, server } = await startServer();
+  try {
+    const responseBodies: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const response = await browserFetch(baseUrl, "session-a")(input, init);
+      if (response.ok && response.url.endsWith("/api/v1/projects")) {
+        responseBodies.push(await response.clone().text());
+      }
+      return response;
+    };
+    const idempotencyKey = id(`${ns}0503`);
+    const challengeInput = createChallengeRequest(idempotencyKey, "Original Novel", "018f0000-0000-7001-8000-000000000510");
+    const challenge = await createProjectChallenge({ baseUrl, fetchImpl, request: challengeInput });
+    const projectId = challenge.prospective_project_id;
+    const request = {
+      command_schema: challengeInput.command_schema,
+      prospective_project_id: projectId,
+      create_project_input: challengeInput.create_project_input,
+    };
+    const submitCreate = () => createProject({
+      baseUrl, fetchImpl, idempotencyKey, antiForgery: challenge.nonce, request,
+    });
+    const first = await submitCreate();
+    const firstBody = responseBodies[0];
+    assert.ok(firstBody);
+    const renameRequest: UpdateProjectRequest = {
+      command_schema: "storyos.command.update-project.request.v1",
+      update_project_input: {
+        ...challengeInput.create_project_input,
+        title: "Current Novel",
+        expected_project_revision: "1",
+      },
+    };
+    const renameKey = id(`${ns}0504`);
+    const renameChallenge = await createProjectCommandChallenge({
+      baseUrl, fetchImpl, projectId,
+      request: {
+        method: "PATCH",
+        route_template: "/api/v1/projects/{project_id}",
+        command_schema: renameRequest.command_schema,
+        canonical_command_digest: await digestUpdateProject(renameRequest),
+        idempotency_key: renameKey,
+      },
+    });
+    await updateProject({
+      baseUrl, fetchImpl, projectId, idempotencyKey: renameKey,
+      antiForgery: renameChallenge.nonce, request: renameRequest,
+    });
+    assert.deepEqual(await submitCreate(), first);
+    assert.equal(responseBodies.at(-1), firstBody);
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startServer());
+    assert.deepEqual(await submitCreate(), first);
+    assert.equal(responseBodies.at(-1), firstBody);
+    const current = await getProject({ baseUrl, fetchImpl, projectId });
+    assert.equal(current.project.title, "Current Novel");
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("createProjectChallenge replays, conflicts, isolates Users, and creates no Project", async () => {
+  const ns = freshNamespace();
+  const { baseUrl, server } = await startServer();
+  const before = await projectEffectSnapshot();
+  const request = createChallengeRequest(id(`${ns}0301`), "Prospective Novel", "018f0000-0000-7001-8000-000000000310");
+  try {
+    const options = { baseUrl, request, fetchImpl: browserFetch(baseUrl, "session-a") };
+    const first = await createProjectChallenge(options);
+    const retry = await createProjectChallenge(options);
+    assert.deepEqual(retry, first);
+    assert.match(first.prospective_project_id, UUID_V7);
+    assert.equal(first.canonical_command_digest.algorithm, "sha256");
+    assert.equal(first.canonical_command_digest.profile, "storyos.command.createProject.jcs.v1");
+    assert.match(first.canonical_command_digest.value_hex_lowercase, /^[0-9a-f]{64}$/);
+    assert.match(first.nonce, /^[0-9a-f]{64}$/);
+    assert.equal(first.limit_profile_revision, "storyos.foundation.absolute.v1");
+
+    await assert.rejects(
+      createProjectChallenge({
+        ...options,
+        request: createChallengeRequest(id(`${ns}0301`), "Changed Title", "018f0000-0000-7001-8000-000000000310"),
+      }),
+      (error) => protocolFailure(error, 409),
+    );
+
+    const foreign = await createProjectChallenge({
+      baseUrl,
+      request: createChallengeRequest(id(`${ns}0301`), "Prospective Novel", "018f0000-0000-7001-8000-000000000310"),
+      fetchImpl: browserFetch(baseUrl, "session-b"),
+    });
+    assert.notEqual(foreign.prospective_project_id, first.prospective_project_id);
+    assert.notEqual(foreign.nonce, first.nonce);
+    assert.doesNotMatch(JSON.stringify(foreign), new RegExp(first.prospective_project_id));
+    assert.doesNotMatch(JSON.stringify(foreign), new RegExp(first.nonce));
+
+    assert.deepEqual(await projectEffectSnapshot(), before);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("createProjectChallenge refuses a missing Origin without disclosing User identity", async () => {
+  const ns = freshNamespace();
+  const { baseUrl, server } = await startServer();
+  try {
+    const response = await fetch(new URL("/api/v1/anti-forgery-challenges", baseUrl), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "storyos_session=session-a",
+        host: new URL(baseUrl).host,
+      },
+      body: JSON.stringify(createChallengeRequest(id(`${ns}0302`), "Prospective Novel", "018f0000-0000-7001-8000-000000000310")),
+    });
+    const body = await response.text();
+    assert.equal(response.status, 403);
+    assert.doesNotMatch(body, new RegExp(USER_A));
+    assert.doesNotMatch(body, /nonce/);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("archiveProject settles lifecycle, replays, lists archived, and fails closed", async () => {
+  const ns = freshNamespace();
+  const { baseUrl, server } = await startServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", id(`${ns}0901`), "Empty Novel",
+      "018f0000-0000-7001-8000-000000000910");
+    const request = archiveRequest("1", "018f0000-0000-7001-8000-000000000911");
+    const applied = await archive(baseUrl, first.fetchImpl, first.projectId, id(`${ns}0921`), request);
+    assert.equal(applied.archived.schema_id, "storyos.command.archive-project.response.v1");
+    assert.equal(applied.archived.receipt.command_kind, "archiveProject");
+    assert.equal(applied.archived.receipt.result, "authoritative_applied");
+    assert.equal(applied.archived.effect.kind, "authoritative_applied");
+    assert.match(applied.archived.command_id, UUID_V7);
+    if (applied.archived.effect.kind === "authoritative_applied") {
+      assert.equal(applied.archived.effect.revision, "2");
+    }
+
+    const replay = await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: id(`${ns}0921`),
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.equal(replay.command_id, applied.archived.command_id);
+    assert.equal(replay.receipt.receipt_id, applied.archived.receipt.receipt_id);
+
+    const listed = await listProjects({ baseUrl, fetchImpl: first.fetchImpl });
+    const listedItem = listed.projects.find((item) => item.project_scope.project_id === first.projectId);
+    assert.equal(listedItem?.lifecycle.kind, "archived");
+    assert.equal(listedItem?.revision, "2");
+
+    const archivedProject = await getProject({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
+    assert.equal(archivedProject.project.title, "Empty Novel");
+    await assert.rejects(
+      getManuscriptTree({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
+    );
+
+    const already = await archive(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      id(`${ns}0922`),
+      archiveRequest("2", "018f0000-0000-7001-8000-000000000912"),
+    );
+    assert.equal(already.archived.receipt.result, "no_effect");
+    assert.equal(already.archived.effect.kind, "no_effect");
+
+    const stale = await archive(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      id(`${ns}0923`),
+      archiveRequest("1", "018f0000-0000-7001-8000-000000000913"),
+    );
+    assert.equal(stale.archived.receipt.result, "conflicted");
+    assert.equal(stale.archived.effect.kind, "conflicted");
+
+    await assert.rejects(
+      archiveProject({
+        baseUrl,
+        projectId: first.projectId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: id(`${ns}0921`),
+        antiForgery: applied.challenge.nonce,
+        request: archiveRequest("2", "018f0000-0000-7001-8000-000000000911"),
+      }),
+      (error) => requireStoryOSProtocolError(error).status === 422,
+    );
+
+    const blockedRename = renameRequest("Stolen Title", "2", "018f0000-0000-7001-8000-000000000914");
+    const blockedDigest = await digestUpdateProject(blockedRename);
+    await assert.rejects(
+      challenged(baseUrl, first.fetchImpl, first.projectId, "PATCH", "/api/v1/projects/{project_id}",
+        "storyos.command.update-project.request.v1", blockedDigest, id(`${ns}0924`), (antiForgery) => updateProject({
+          baseUrl,
+          projectId: first.projectId,
+          fetchImpl: first.fetchImpl,
+          idempotencyKey: id(`${ns}0924`),
+          antiForgery,
+          request: blockedRename,
+        })),
+      (error) => requireStoryOSProtocolError(error).status === 409,
+    );
+
+    const foreign = await createEmpty(baseUrl, "session-b", id(`${ns}0902`), "Other Novel",
+      "018f0000-0000-7001-8000-000000000910");
+    await assert.rejects(
+      archive(
+        baseUrl,
+        foreign.fetchImpl,
+        first.projectId,
+        id(`${ns}0925`),
+        archiveRequest("2", "018f0000-0000-7001-8000-000000000915"),
+      ),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+      },
+    );
+
+    const second = await createEmpty(baseUrl, "session-a", id(`${ns}0903`), "Ack Novel",
+      "018f0000-0000-7001-8000-000000000910");
+    const lostRequest = archiveRequest("1", "018f0000-0000-7001-8000-000000000916");
+    const lostKey = id(`${ns}0926`);
+    const lostDigest = await digestArchiveProject(lostRequest);
+    const lostChallenge = await issueChallenge(baseUrl, first.fetchImpl, second.projectId, "PUT",
+      "/api/v1/projects/{project_id}/archival", "storyos.command.archive-project.request.v1", lostDigest, lostKey);
+    await assert.rejects(
+      archiveProject({
+        baseUrl,
+        projectId: second.projectId,
+        fetchImpl: async (input, init) => {
+          const response = await first.fetchImpl(input, init);
+          await response.arrayBuffer();
+          throw new Error("simulated acknowledgement delivery loss");
+        },
+        idempotencyKey: lostKey,
+        antiForgery: lostChallenge.nonce,
+        request: lostRequest,
+      }),
+      /simulated acknowledgement delivery loss/,
+    );
+    const recovered = await archiveProject({
+      baseUrl,
+      projectId: second.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: lostKey,
+      antiForgery: lostChallenge.nonce,
+      request: lostRequest,
+    });
+    assert.equal(recovered.receipt.result, "authoritative_applied");
+    assert.equal(recovered.effect.kind, "authoritative_applied");
   } finally {
     await stopRealServer(server);
   }

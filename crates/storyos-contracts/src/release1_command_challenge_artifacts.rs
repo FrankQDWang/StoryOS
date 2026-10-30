@@ -7,7 +7,7 @@ use crate::release1::{
     PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID, PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
 };
 use crate::release1_operation_registry::{
-    GeneratedSchema, OperationArtifacts, RegisteredOperation, fixture_triple, method,
+    FixtureMembership, GeneratedSchema, OperationArtifacts, RegisteredOperation, method,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::{json_bytes, schema_value};
@@ -18,11 +18,8 @@ pub(super) const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
 pub(super) const CHALLENGE_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json";
 
-const CHALLENGE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
-];
+const CHALLENGE_FIXTURE_PATH: &str =
+    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::challenge(
@@ -67,17 +64,10 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             CreateProjectCommandChallengeResponse::decl(&config),
         )
     },
-    fixtures: || {
-        fixture_triple(
-            CHALLENGE_FIXTURE_PATHS,
-            [
-                |_| challenge_fixture_bytes(),
-                |_| invalid_challenge_fixture_bytes(),
-                |_| boundary_challenge_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
+    fixtures: &[FixtureMembership {
+        path: CHALLENGE_FIXTURE_PATH,
+        bytes: |_| challenge_fixture_bytes(),
+    }],
 };
 
 fn challenge_openapi() -> String {
@@ -118,16 +108,4 @@ fn challenge_fixture() -> Value {
 
 fn challenge_fixture_bytes() -> Vec<u8> {
     json_bytes(&challenge_fixture())
-}
-
-fn invalid_challenge_fixture_bytes() -> Vec<u8> {
-    let mut invalid = challenge_fixture();
-    invalid.as_object_mut().unwrap().remove("nonce");
-    json_bytes(&invalid)
-}
-
-fn boundary_challenge_fixture_bytes() -> Vec<u8> {
-    let mut boundary = challenge_fixture();
-    boundary["expires_at"] = json!("1970-01-01T00:00:00.000Z");
-    json_bytes(&boundary)
 }

@@ -78,10 +78,9 @@ fn catalog_ids_routes_schemas_and_fixtures_are_unique() {
             .chain([&catalog["release_identity"]["schema_id"]])
             .map(text),
     );
-    let operation_fixtures = operations.iter().flat_map(|operation| {
-        std::iter::once(&operation["fixtures"]["positive"])
-            .chain(array(&operation["fixtures"]["negative"]))
-    });
+    let operation_fixtures = operations
+        .iter()
+        .map(|operation| &operation["fixtures"]["positive"]);
     let event_fixtures = events
         .iter()
         .flat_map(|event| [&event["positive_fixture"], &event["negative_fixture"]]);

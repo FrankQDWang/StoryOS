@@ -22,7 +22,7 @@ The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project rea
 make release-package  # needs a clean worktree
 scripts/dev-postgres.sh run cargo test -p storyos-adapter-postgres --lib -- --ignored connection_pool
 scripts/dev-postgres.sh run cargo test -p storyos-adapter-postgres --test project_scope -- --ignored
-scripts/dev-postgres.sh run pnpm --dir apps/web exec vitest run --project node-postgresql test/node-postgresql/create-project-http.integration.test.ts
+scripts/dev-postgres.sh run pnpm --dir apps/web exec vitest run --project node-postgresql test/node-postgresql/update-project-http.integration.test.ts
 ```
 
 Each `run` uses a new fixture and removes its database when the child exits. Run `verify-project-scope.sh` through `make check-full` only. It owns the input oracles and the file order.

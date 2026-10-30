@@ -32,11 +32,7 @@ pub(super) const ACCEPT_PROPOSAL: QueryOperation = QueryOperation {
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],
-    fixtures: &[
-        "storyos.golden.acceptProposal.positive.v1",
-        "storyos.golden.acceptProposal.invalid.v1",
-        "storyos.golden.acceptProposal.boundary.v1",
-    ],
+    fixture: "storyos.golden.acceptProposal.positive.v1",
 };
 
 pub const ACCEPT_PROPOSAL_PATH: &str = ACCEPT_PROPOSAL.path;
