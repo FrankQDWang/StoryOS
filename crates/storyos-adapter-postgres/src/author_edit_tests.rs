@@ -346,15 +346,22 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
             "sha256:outcome-2",
             "75",
         ),
+        (
+            "018f0000-0000-7001-8000-000000000761",
+            "sha256:outcome-3",
+            "76",
+        ),
     ]
     .into_iter()
     .enumerate()
     {
         let mut outcome_command =
             author_command(&scope, editor_session_id, key, nonce_digest, suffix);
-        if index == 1 {
+        if index > 0 {
             outcome_command.expected_authoritative_revision_id =
                 replay_applied_ids.revision_id.clone();
+        }
+        if index == 1 {
             let storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text } =
                 &mut outcome_command.author_edit_units[0].normalized_primitives[0]
             else {
@@ -365,6 +372,9 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
             text.clear();
             outcome_command.author_edit_units[0].selection_snapshot.from = 16;
             outcome_command.author_edit_units[0].selection_snapshot.to = 16;
+        } else if index == 2 {
+            // A valid first unit and an invalid second unit refuse the whole batch.
+            outcome_command.author_edit_units[1].selection_snapshot.to = 15;
         }
         bind_canonical_payload(&mut outcome_command);
         issue_project_command_challenge(
@@ -391,6 +401,12 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
         outcomes[1].effect,
         storyos_application::AuthorEditSettlementEffect::NoEffect {
             reason: storyos_core::AuthorEditNoEffect::ContentUnchanged
+        }
+    ));
+    assert!(matches!(
+        outcomes[2].effect,
+        storyos_application::AuthorEditSettlementEffect::Refused {
+            reason: storyos_core::AuthorEditRefusal::InvalidSelection
         }
     ));
 
@@ -477,6 +493,22 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
 
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
+    // The refused batch writes no part of its valid first unit.
+    let refused_authority = admin
+        .query_one(
+            "SELECT
+                (SELECT count(*) FROM storyos.authoritative_revision_envelopes
+                  WHERE receipt_id = $1::text::uuid),
+                (SELECT count(*) FROM storyos.authoritative_commits
+                  WHERE receipt_id = $1::text::uuid)",
+            &[&outcomes[2].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        [0, 1].map(|index| refused_authority.get::<_, i64>(index)),
+        [0, 0]
+    );
 
     let duplicate_activity = admin
         .execute(

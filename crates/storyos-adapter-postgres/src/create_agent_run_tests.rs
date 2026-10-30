@@ -7,6 +7,8 @@ use storyos_application::{
 };
 use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, TransitionOutcome};
 
+use std::time::Duration;
+
 use crate::command_sequence::tests::{
     CREATE_AGENT_RUN, CommandCall, UPDATE_PROJECT_ASSISTANCE, command_call, command_issue,
 };
@@ -17,6 +19,8 @@ const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT: &str = "018f0000-0000-7001-8000-0000000007a2";
 const OTHER_PROJECT: &str = "018f0000-0000-7001-8000-0000000007a3";
 const CHAPTER: &str = "018f0000-0000-7001-8000-0000000007c1";
+const RACE_PROJECT: &str = "018f0000-0000-7001-8000-000000000b82";
+const RACE_CHAPTER: &str = "018f0000-0000-7001-8000-000000000b8c";
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
 
@@ -191,6 +195,70 @@ async fn delete_run(admin: &Client, project: &str, run_id: &str) {
             .await
             .unwrap();
     }
+}
+
+fn named_store(database_url: &str, application_name: &str) -> PostgresProjectReader {
+    let separator = if database_url.contains('?') { '&' } else { '?' };
+    PostgresProjectReader::new(format!(
+        "{database_url}{separator}application_name={application_name}"
+    ))
+}
+
+/// Waits until the backend of `application_name` waits for a row lock of `holder` only on a row of
+/// `relation`, and returns the backend process ID. A serializable predicate lock does not count.
+async fn wait_for_row_lock_of(
+    monitor: &Client,
+    application_name: &str,
+    holder: i32,
+    relation: &str,
+) -> i32 {
+    let waited = tokio::time::timeout(Duration::from_secs(/*secs*/ 10), async {
+        loop {
+            let waiting = monitor
+                .query_opt(
+                    "SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+                      WHERE activity.application_name = $1 AND activity.wait_event_type = 'Lock'
+                        AND pg_catalog.pg_blocking_pids(activity.pid) = ARRAY[$2::int]
+                        AND EXISTS (
+                          SELECT 1 FROM pg_catalog.pg_locks AS lock
+                           WHERE lock.pid = activity.pid AND lock.locktype = 'tuple'
+                             AND lock.mode <> 'SIReadLock'
+                             AND lock.relation = $3::text::regclass)",
+                    &[&application_name, &holder, &relation],
+                )
+                .await
+                .unwrap();
+            if let Some(row) = waiting {
+                return row.get::<_, i32>(/*idx*/ 0);
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    if let Ok(pid) = waited {
+        return pid;
+    }
+    let observations = monitor
+        .query(
+            "SELECT state, wait_event_type, wait_event, left(query, 160),
+                    pg_catalog.pg_blocking_pids(pid)
+               FROM pg_catalog.pg_stat_activity WHERE application_name = $1",
+            &[&application_name],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, Option<String>>(/*idx*/ 1),
+                row.get::<_, Option<String>>(/*idx*/ 2),
+                row.get::<_, String>(/*idx*/ 3),
+                row.get::<_, Vec<i32>>(/*idx*/ 4),
+            )
+        })
+        .collect::<Vec<_>>();
+    panic!("{application_name} did not wait for backend {holder} on {relation}: {observations:?}");
 }
 
 #[tokio::test]
@@ -421,4 +489,127 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     .await
     .unwrap();
     assert_eq!(hidden, None);
+}
+
+/// Two admissions to one idle Conversation race. The second waits for the Project lock of the
+/// first, so its snapshot does not show the first Run. The contention refusal refuses it.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn concurrent_existing_conversation_admissions_take_the_contention_refusal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (runtime_url, mut admin) = connect_admin().await;
+    let store = PostgresProjectReader::new(runtime_url.clone());
+    prepare_project(&mut admin, &store, RACE_PROJECT, RACE_CHAPTER, "b80").await;
+    let opening_issue = issue_run(RACE_PROJECT, "b811");
+    issue_project_command_challenge(&store, &opening_issue)
+        .await
+        .unwrap();
+    let opening = create(
+        &store,
+        run_command(
+            opening_issue.binding.clone(),
+            &opening_issue.nonce_digest,
+            "b812",
+            ConversationSelection::New,
+            "018f0000-0000-7001-8000-00000006b812",
+            RACE_CHAPTER,
+        ),
+    )
+    .await
+    .unwrap();
+    let conversation_id = admitted(&opening).conversation_id;
+    delete_run(&admin, RACE_PROJECT, &admitted(&opening).run_id).await;
+    let mut calls = Vec::new();
+    for (issue_suffix, ids_suffix) in [("b821", "b822"), ("b831", "b832")] {
+        let issue = issue_run(RACE_PROJECT, issue_suffix);
+        issue_project_command_challenge(&store, &issue)
+            .await
+            .unwrap();
+        calls.push(run_command(
+            issue.binding.clone(),
+            &issue.nonce_digest,
+            ids_suffix,
+            ConversationSelection::Existing {
+                conversation_id: conversation_id.clone(),
+            },
+            &conversation_id,
+            RACE_CHAPTER,
+        ));
+    }
+    let second_call = calls.pop().expect("two admissions");
+    let first_call = calls.pop().expect("two admissions");
+
+    // The gate holds the first admission at its Run insert, after its classification and
+    // while it keeps the Project lock.
+    let (_, gate) = connect_admin().await;
+    gate.batch_execute("BEGIN").await.unwrap();
+    gate.execute(
+        "SELECT 1 FROM storyos.conversation_memory_settings
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND conversation_id = $3::text::uuid
+            FOR UPDATE",
+        &[&USER_A, &RACE_PROJECT, &conversation_id],
+    )
+    .await
+    .unwrap();
+    let gate_pid: i32 = gate
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let first_store = named_store(&runtime_url, "storyos_race_first_admission");
+    let second_store = named_store(&runtime_url, "storyos_race_second_admission");
+    let second_after_first_waits = async {
+        let first_pid = wait_for_row_lock_of(
+            &admin,
+            "storyos_race_first_admission",
+            gate_pid,
+            "storyos.conversation_memory_settings",
+        )
+        .await;
+        let open_gate = async {
+            wait_for_row_lock_of(
+                &admin,
+                "storyos_race_second_admission",
+                first_pid,
+                "storyos.projects",
+            )
+            .await;
+            gate.batch_execute("ROLLBACK").await.unwrap();
+        };
+        tokio::join!(create(&second_store, second_call), open_gate).0
+    };
+    let (first, second) = tokio::join!(create(&first_store, first_call), second_after_first_waits);
+
+    let first = admitted(&first.unwrap());
+    assert_eq!(refused(second), CreateAgentRunRefusal::ConversationBusy);
+    let conversations = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.project_conversations
+              WHERE project_id = $1::text::uuid",
+            &[&RACE_PROJECT],
+        )
+        .await
+        .unwrap()
+        .get::<_, i64>(/*idx*/ 0);
+    let runs = admin
+        .query(
+            "SELECT conversation_id::text, run_id::text, status FROM storyos.agent_runs
+              WHERE project_id = $1::text::uuid",
+            &[&RACE_PROJECT],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))
+        .collect::<Vec<(String, String, String)>>();
+    assert_eq!(
+        (conversations, runs),
+        (
+            1,
+            vec![(conversation_id, first.run_id, "queued".to_owned())]
+        )
+    );
 }
