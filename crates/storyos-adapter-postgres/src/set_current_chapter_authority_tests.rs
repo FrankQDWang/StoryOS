@@ -1,24 +1,23 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority,
-    CreateChapterInput, CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput,
-    EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
-    IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectId, ProjectScope, SetCurrentChapterInput,
-    SetCurrentChapterSettlement, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
-    VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
-    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, open_project,
+    ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority, CreateChapterInput,
+    CreateVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree, OpenChapter,
+    OpenEditorSession, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
+    UndoApplied, UndoRecords, VolumeCreated, VolumeId, VolumeNode, create_editor_session,
+    get_manuscript_tree, issue_project_command_challenge, open_chapter, open_project,
 };
-use storyos_core::TransitionOutcome;
+use storyos_core::{ReceiptResult, TransitionOutcome};
 use tokio_postgres::NoTls;
 
-use crate::command_sequence::tests::{applied, command_call, create_chapter, create_volume};
+use crate::command_sequence::tests::{
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, SET_CURRENT_CHAPTER, applied,
+    command_call, command_issue, create_chapter, create_volume, outcome_code, seed_owned_project,
+    undo_named,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
+const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
 const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
@@ -28,129 +27,8 @@ const CHAPTER_B_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:23a9
 const CURRENT_BYTES: &[u8] = b"{}";
 const CURRENT_DIGEST: &str = "sha256:storyos.command.setCurrentChapter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
 
-fn create_project_issue(
-    owner: &str,
-    idempotency_key: &str,
-    project_suffix: &str,
-) -> IssueCreateProjectChallenge {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{project_suffix:0<64}");
-    IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(owner),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{project_suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{project_suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: format!("sha256:nonce-{project_suffix}"),
-    }
-}
-
-fn create_project_command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    CreateProjectCommand {
-        project_scope: ProjectScope::new(
-            binding.owner_user_id.clone(),
-            binding.prospective_project_id.clone(),
-        ),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Empty Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
-
-fn command_issue(
-    scope: &ProjectScope,
-    suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce: format!("opaque-nonce-{suffix}"),
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
-}
-
-async fn seed_project(
-    store: &PostgresProjectReader,
-    owner: &str,
-    project_suffix: &str,
-) -> ProjectScope {
-    let issue = create_project_issue(
-        owner,
-        &format!("018f0000-0000-7001-8000-00000000{project_suffix}"),
-        project_suffix,
-    );
-    let issued = issue_create_project_challenge(store, &issue).await.unwrap();
-    let mut binding = issue.binding.clone();
-    binding.prospective_project_id = issued.prospective_project_id.clone();
-    binding.canonical_command_digest = issued.canonical_command_digest.clone();
-    create_project(
-        store,
-        &create_project_command(binding.clone(), &issue.nonce_digest, project_suffix),
-    )
-    .await
-    .unwrap();
-    ProjectScope::new(binding.owner_user_id, binding.prospective_project_id)
-}
-
 async fn post_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffix: &str) -> String {
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        VOLUME_DIGEST,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_VOLUME, VOLUME_DIGEST);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -194,15 +72,7 @@ async fn post_chapter(
         digest,
         expected_tree_revision,
     } = chapter;
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-        "storyos.command.create-chapter.request.v1",
-        "createChapter",
-        digest,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_CHAPTER, digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -246,10 +116,7 @@ pub(super) async fn open_session_request(
     let issue = command_issue(
         scope,
         suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         &format!("sha256:storyos.test:{suffix}"),
     );
     issue_project_command_challenge(store, &issue)
@@ -281,15 +148,7 @@ async fn switch_current(
     expected_current_chapter_id: &str,
     expected_target_revision_id: &str,
 ) -> SetCurrentChapterSettlement {
-    let issue = command_issue(
-        scope,
-        suffix,
-        "PUT",
-        "/api/v1/projects/{project_id}/current-chapter",
-        "storyos.command.set-current-chapter.request.v1",
-        "setCurrentChapter",
-        CURRENT_DIGEST,
-    );
+    let issue = command_issue(scope, suffix, &SET_CURRENT_CHAPTER, CURRENT_DIGEST);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -331,75 +190,6 @@ async fn open_admin() -> tokio_postgres::Client {
     admin
 }
 
-pub(super) async fn undo_named(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    editor_session_id: &str,
-    expected_frontier: u64,
-    expected_revision_id: &str,
-    suffix: &str,
-) -> storyos_application::UndoLatestAuthorActionSettlement {
-    let input = serde_json::json!({
-        "expected_author_undo_frontier_sequence": expected_frontier.to_string(),
-        "expected_authoritative_revision_id": expected_revision_id,
-        "editor_session_id": editor_session_id,
-        "client_contract_revision": CLIENT,
-        "security_policy_revision": SECURITY,
-        "correlation_id": format!("018f0000-0000-7001-8000-00000000{suffix}"),
-    });
-    let body = serde_json::json!({
-        "command_schema": "storyos.command.undo-latest-author-action.request.v1",
-        "undo_latest_author_action_input": input,
-    });
-    let bytes = serde_json::to_vec(&body).unwrap();
-    let digest = format!(
-        "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
-        crate::author_edit::sha256_hex(&bytes)
-    );
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &digest,
-    );
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    store
-        .undo_latest_author_action(
-            &ProjectCommandEnvelope {
-                project_scope: scope.clone(),
-                client_binding: EditorClientBinding {
-                    binding_ref: issue.binding.client_session_binding_digest.clone(),
-                    session_generation: issue.binding.client_session_generation,
-                    client_contract_revision: issue.binding.client_contract_revision.clone(),
-                    security_policy_revision: issue.binding.security_policy_revision.clone(),
-                },
-                challenge_binding: issue.binding,
-                nonce_digest: issue.nonce_digest,
-                canonical_command_bytes: bytes,
-                correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-                ids: AuthorCommandAdmissionIds {
-                    command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                    author_command_admission_id: format!(
-                        "018f0000-0000-7001-8000-00000002{suffix}"
-                    ),
-                    receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-                },
-            },
-            &UndoLatestAuthorActionInput {
-                editor_session_id: EditorSessionId::new(editor_session_id),
-                expected_author_undo_frontier_sequence: expected_frontier,
-                expected_authoritative_revision_id: expected_revision_id.to_owned(),
-            },
-        )
-        .await
-        .unwrap()
-}
-
 pub(super) async fn seed_two_chapters(
     store: &PostgresProjectReader,
     owner: &str,
@@ -408,7 +198,7 @@ pub(super) async fn seed_two_chapters(
     chapter_a_suffix: &str,
     chapter_b_suffix: &str,
 ) -> (ProjectScope, String, String, String) {
-    let scope = seed_project(store, owner, project_suffix).await;
+    let scope = seed_owned_project(store, owner, project_suffix).await;
     let volume_id = post_volume(store, &scope, volume_suffix).await;
     let chapter_a = post_chapter(
         store,
@@ -441,7 +231,7 @@ pub(super) async fn seed_two_chapters(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
+async fn set_current_chapter_classifies_its_outcomes_and_keeps_each_project_sequence() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -460,15 +250,7 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
         panic!("Chapter B must open");
     };
     let revision_b = opened_b.chapter.revision_id.as_ref().to_owned();
-    let first_issue = command_issue(
-        &scope,
-        "f822",
-        "PUT",
-        "/api/v1/projects/{project_id}/current-chapter",
-        "storyos.command.set-current-chapter.request.v1",
-        "setCurrentChapter",
-        CURRENT_DIGEST,
-    );
+    let first_issue = command_issue(&scope, "f822", &SET_CURRENT_CHAPTER, CURRENT_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -559,76 +341,30 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
         &revision_b,
     )
     .await;
-    assert!(matches!(
-        stale.outcome,
-        TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::StaleCurrentChapter)
-    ));
-    assert_eq!(switch_authority(&stale), None);
-    let admin = open_admin().await;
-    let observed: serde_json::Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT jsonb_build_object(
-                          'tree_revision', project.tree_revision,
-                          'switch_receipts', (
-                            SELECT count(*) FROM storyos.domain_receipts
-                             WHERE project_id = $1::text::uuid
-                               AND command_kind = 'setCurrentChapter'
-                          ),
-                          'switch_activity', (
-                            SELECT count(*) FROM storyos.project_activity_event_payloads
-                             WHERE project_id = $1::text::uuid
-                               AND event_kind = 'current_chapter_set'
-                          ),
-                          'switch_commits', (
-                            SELECT count(*) FROM storyos.authoritative_commits
-                             WHERE project_id = $1::text::uuid
-                               AND receipt_id = $2::text::uuid
-                          ),
-                          'forward_switch_actions', (
-                            SELECT count(*) FROM storyos.author_action_entries
-                             WHERE project_id = $1::text::uuid
-                               AND disposition = 'forward'
-                               AND receipt_id = $2::text::uuid
-                               AND authoritative_commit_id IS NULL
-                          ),
-                          'stale_actions', (
-                            SELECT count(*) FROM storyos.author_action_entries
-                             WHERE project_id = $1::text::uuid
-                               AND receipt_id = $3::text::uuid
-                          ),
-                          'stale_snapshots', (
-                            SELECT count(*) FROM storyos.project_snapshots
-                             WHERE project_id = $1::text::uuid
-                               AND project_activity_position = $4::text::numeric
-                          )
-                        )::text
-                   FROM storyos.projects AS project
-                  WHERE project.project_id = $1::text::uuid",
-                &[
-                    &scope.project_id.as_ref(),
-                    &first.ids.receipt_id,
-                    &stale.ids.receipt_id,
-                    // A zero-authority outcome has no Activity position.
-                    &"0",
-                ],
-            )
+    let wrong_head = switch_current(
+        &store,
+        &scope,
+        "f82a",
+        &editor_session_id,
+        &chapter_a,
+        &chapter_b,
+        MISSING,
+    )
+    .await;
+    assert_eq!(
+        [&stale, &wrong_head].map(|settlement| outcome_code(&settlement.outcome)),
+        [
+            (ReceiptResult::Conflicted, Some("stale_current_chapter")),
+            (ReceiptResult::Conflicted, Some("wrong_target_head")),
+        ]
+    );
+    assert_eq!(
+        open_project(&store, &scope)
             .await
             .unwrap()
-            .get::<_, String>(0),
-    )
-    .unwrap();
-    assert_eq!(
-        observed,
-        serde_json::json!({
-            "tree_revision": 4,
-            "switch_receipts": 2,
-            "switch_activity": 1,
-            "switch_commits": 0,
-            "forward_switch_actions": 1,
-            "stale_actions": 0,
-            "stale_snapshots": 0,
-        })
+            .expect("the Project remains in exact Scope")
+            .current_chapter_id,
+        Some(ChapterId::new(chapter_b))
     );
 }
 
@@ -794,7 +530,7 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
             &[
                 &blocked_scope.project_id.as_ref(),
                 &blocked_switch.ids.receipt_id,
-                &"018f0000-0000-7001-8000-00000000ffff",
+                &MISSING,
             ],
         )
         .await
@@ -825,10 +561,7 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
             "SELECT count(*) FROM storyos.manuscript_objects
               WHERE project_id = $1::text::uuid
                 AND manuscript_object_id = $2::text::uuid",
-            &[
-                &blocked_scope.project_id.as_ref(),
-                &"018f0000-0000-7001-8000-00000000ffff",
-            ],
+            &[&blocked_scope.project_id.as_ref(), &MISSING],
         )
         .await
         .unwrap()

@@ -1,12 +1,13 @@
-//! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0044).
+//! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 
 use crate::command_replay::ReplayFault;
+use crate::command_sequence::{ActionDisposition, insert_author_action};
 use crate::structural_authority_settlement::{
-    CurrentChapterSequences, allocate_current_chapter_sequences,
+    CurrentChapterSequences, allocate_current_chapter_sequences, update_writer_base,
 };
 use crate::undo_compensation::{CompensationAdapter, CompensationReplay, UndoRequest};
 use crate::undo_latest_author_action::undo_database_error;
@@ -180,15 +181,15 @@ async fn persist_current_chapter_compensation(
         .await
         .map_err(undo_database_error)?
         .get::<_, String>(0);
-    crate::structural_authority_settlement::persist_current_chapter_compensation_author_action(
+    insert_author_action(
         client,
         &command.project_scope,
         sequences.author_action_sequence,
+        &ActionDisposition::Compensation { source_sequence },
+        None,
         &command.ids.receipt_id,
-        source_sequence,
     )
-    .await
-    .map_err(undo_database_error)?;
+    .await?;
     crate::snapshot::persist_canonical_snapshot(
         client,
         &command.project_scope,
@@ -197,41 +198,16 @@ async fn persist_current_chapter_compensation(
     )
     .await
     .map_err(undo_database_error)?;
-    let activity_position_text = sequences.project_activity_position.to_string();
-    let base_updates = client
-        .execute(
-            "UPDATE storyos.editor_session_base_snapshots AS snapshot
-                SET snapshot_id = $4::text::uuid,
-                    chapter_object_id = $5::text::uuid,
-                    authoritative_revision_id = $6::text::uuid,
-                    project_activity_position = $7::text::numeric,
-                    created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
-              WHERE snapshot.owner_user_id = $1::text::uuid
-                AND snapshot.project_id = $2::text::uuid
-                AND snapshot.editor_session_id = $3::text::uuid
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id,
-                     snapshot.editor_session_id)
-                AND writer.writer_generation = (
-                  SELECT max(current_writer.writer_generation)
-                    FROM storyos.project_writer_generations AS current_writer
-                   WHERE current_writer.owner_user_id = snapshot.owner_user_id
-                     AND current_writer.project_id = snapshot.project_id
-                )",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.editor_session_id.as_ref(),
-                &sequences.snapshot_id,
-                &frontier.prior_chapter_id,
-                &prior_head,
-                &activity_position_text,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
+    let base_updates = update_writer_base(
+        client,
+        &command.project_scope,
+        Some(command.editor_session_id.as_ref()),
+        &frontier.prior_chapter_id,
+        &prior_head,
+        &sequences.snapshot_id,
+        sequences.project_activity_position,
+    )
+    .await?;
     if base_updates != 1 {
         return Err(ProjectCommandError::BindingConflict);
     }

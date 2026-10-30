@@ -1,5 +1,5 @@
 //! The `ActivityOnly` settlement profile: one Project Activity record and no Authoritative
-//! Commit, Author Action, Snapshot, or Manuscript Tree Revision change (ADR 0043).
+//! Commit, Author Action, Snapshot, or Manuscript Tree Revision change (ADR 0076).
 
 use storyos_application::{
     ActivityApplied, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
@@ -8,9 +8,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::records::insert_applied_activity;
-use super::{
-    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
-};
+use super::{PersistFacts, PersistInput, SettlementProfile, SingleRecordSet, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 
 /// The applied writes that one `ActivityOnly` command returns.
@@ -28,20 +26,19 @@ pub(crate) struct ActivitySequences {
 
 pub(crate) struct ActivityOnly;
 
-impl<T> SelectsRecords<ActivityOnly> for T {
-    fn selector(&self) {}
+/// The Activity kind of the command.
+pub(crate) struct ActivityKind(&'static str);
+
+impl PersistInput for ActivityKind {
+    fn from_facts(facts: &PersistFacts<'_>) -> Self {
+        Self(facts.activity_kind)
+    }
 }
 
-impl SettlementProfile for ActivityOnly {
-    type Selector = ();
-    type Sequences = ActivitySequences;
-    type Write<E: Send> = ActivityWrite<E>;
-    type Applied<E: Send> = ActivityApplied<E>;
-
+impl SingleRecordSet for ActivityOnly {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
-        (): &(),
     ) -> Result<ActivitySequences, ProjectCommandError> {
         let position = client
             .query_one(
@@ -62,6 +59,13 @@ impl SettlementProfile for ActivityOnly {
             project_activity_event_id: Uuid::now_v7().to_string(),
         })
     }
+}
+
+impl SettlementProfile for ActivityOnly {
+    type Sequences = ActivitySequences;
+    type Write<E: Send> = ActivityWrite<E>;
+    type Applied<E: Send> = ActivityApplied<E>;
+    type Input = ActivityKind;
 
     fn commit_ids(_sequences: &ActivitySequences) -> Vec<String> {
         Vec::new()
@@ -70,16 +74,14 @@ impl SettlementProfile for ActivityOnly {
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        _project: &LockedProject,
-        spec: &CommandSpec,
-        _variant: AppliedVariant,
+        ActivityKind(activity_kind): ActivityKind,
         sequences: ActivitySequences,
         write: ActivityWrite<E>,
     ) -> Result<ActivityApplied<E>, ProjectCommandError> {
         insert_applied_activity(
             client,
             envelope,
-            spec.activity_kind,
+            activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
             write.activity,

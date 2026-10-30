@@ -1,5 +1,5 @@
 //! `applyAuthorEdit` through the admit step and the settle step of the command sequence
-//! (ADR 0044).
+//! (ADR 0076).
 
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
@@ -18,9 +18,9 @@ use crate::author_edit_proposal::{ProposalEditContext, append_proposal_revision_
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification, CommandError,
-    CommandIsolation, CommandSpec, DirectEditorAdmission, LockedProject, MissingAdmission,
-    NoResponse, ProfileSequences, ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs,
-    ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroReceipt, unavailable,
+    CommandSpec, DirectEditorAdmission, LockedProject, NoResponse, ProfileSequences,
+    ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    RevisionWrite, ZeroReceipt, unavailable,
 };
 use crate::undo_compensation::{AuthorEditVariant, ForwardCommand};
 
@@ -195,9 +195,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                 AuthorEditVariant::ProposalRevised,
             )),
         ],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::Diagnosed,
-        rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The `AuthoritativeRevision` profile writes the Activity record.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(AUTHOR_EDIT_REPLAY_EFFECT),

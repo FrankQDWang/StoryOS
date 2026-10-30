@@ -7,15 +7,15 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::records::insert_applied_activity;
-use super::{
-    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+use super::structural_records::{
+    StructuralInput, StructuralRecords, StructureCommit, WriterBaseRebind,
+    persist_structural_records,
 };
+use super::{SettlementProfile, SingleRecordSet};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     StructureAffectedIdentity, StructureCommitBinding, StructureTransitionSequences,
-    allocate_structure_transition_sequences, persist_forward_author_action,
-    persist_structure_commit, rebind_writer_base,
+    allocate_structure_transition_sequences,
 };
 
 pub(crate) enum StructureIdentity {
@@ -55,25 +55,20 @@ pub(crate) struct StructureWrite<E> {
 /// Manuscript Tree Revision advance of one applied Manuscript Structure Transition.
 pub(crate) struct Structural;
 
-impl<T> SelectsRecords<Structural> for T {
-    fn selector(&self) {}
-}
-
-impl SettlementProfile for Structural {
-    type Selector = ();
-    type Sequences = StructureTransitionSequences;
-    type Write<E: Send> = StructureWrite<E>;
-    type Applied<E: Send> = StructureApplied<E>;
-
+impl SingleRecordSet for Structural {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
-        (): &(),
     ) -> Result<StructureTransitionSequences, ProjectCommandError> {
-        allocate_structure_transition_sequences(client, scope)
-            .await
-            .map_err(ProjectCommandError::Unavailable)
+        allocate_structure_transition_sequences(client, scope).await
     }
+}
+
+impl SettlementProfile for Structural {
+    type Sequences = StructureTransitionSequences;
+    type Write<E: Send> = StructureWrite<E>;
+    type Applied<E: Send> = StructureApplied<E>;
+    type Input = StructuralInput;
 
     fn commit_ids(sequences: &StructureTransitionSequences) -> Vec<String> {
         vec![sequences.authoritative_commit_id.clone()]
@@ -82,52 +77,15 @@ impl SettlementProfile for Structural {
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
-        spec: &CommandSpec,
-        _variant: AppliedVariant,
+        input: StructuralInput,
         sequences: StructureTransitionSequences,
         write: StructureWrite<E>,
     ) -> Result<StructureApplied<E>, ProjectCommandError> {
-        let scope = &envelope.project_scope;
-        let ids = &envelope.ids;
         let resulting_current = match &write.current_chapter {
-            CurrentChapterChange::Preserve => project.current_chapter_id.clone(),
-            CurrentChapterChange::Select(chapter_id) => Some(chapter_id.clone()),
+            CurrentChapterChange::Preserve => input.current_chapter_id.as_deref(),
+            CurrentChapterChange::Select(chapter_id) => Some(chapter_id.as_str()),
             CurrentChapterChange::Clear => None,
         };
-        let bumped = client
-            .execute(
-                "UPDATE storyos.projects
-                    SET tree_revision = $3::text::bigint, current_chapter_id = $5::text::uuid
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'
-                    AND current_chapter_id IS NOT DISTINCT FROM $6::text::uuid",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &write.resulting_tree_revision.to_string(),
-                    &project.tree_revision.to_string(),
-                    &resulting_current,
-                    &project.current_chapter_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        if bumped != 1 {
-            return Err(unavailable(
-                "tree revision or Current Chapter changed under FOR UPDATE",
-            ));
-        }
-        insert_applied_activity(
-            client,
-            envelope,
-            spec.activity_kind,
-            sequences.project_activity_position,
-            &sequences.project_activity_event_id,
-            write.activity,
-            &[("tree_revision", write.resulting_tree_revision.to_string())],
-        )
-        .await?;
         let (identity, resulting_revision_id) = match &write.identity {
             StructureIdentity::Volume(volume_id) => {
                 (StructureAffectedIdentity::Volume { volume_id }, None)
@@ -146,44 +104,39 @@ impl SettlementProfile for Structural {
                 Some(revision_id.clone()),
             ),
         };
-        persist_structure_commit(
+        let writer_base = match (&write.writer_base, resulting_current) {
+            (WriterBase::RebindToCurrentChapter, Some(chapter_id)) => {
+                WriterBaseRebind::CurrentWriter { chapter_id }
+            }
+            (WriterBase::Keep, _) | (WriterBase::RebindToCurrentChapter, None) => {
+                WriterBaseRebind::Keep
+            }
+        };
+        persist_structural_records(
             client,
-            scope,
-            &sequences,
-            &ids.author_command_admission_id,
-            &ids.receipt_id,
-            StructureCommitBinding {
-                prior_manuscript_tree_revision: project.tree_revision,
-                resulting_manuscript_tree_revision: write.resulting_tree_revision,
-                identity,
+            envelope,
+            StructuralRecords {
+                input: &input,
+                resulting_tree_revision: write.resulting_tree_revision,
+                resulting_current_chapter_id: resulting_current,
+                author_action_sequence: sequences.author_action_sequence,
+                project_activity_position: sequences.project_activity_position,
+                project_activity_event_id: &sequences.project_activity_event_id,
+                snapshot_id: &sequences.snapshot_id,
+                activity: write.activity,
+                activity_field: ("tree_revision", write.resulting_tree_revision.to_string()),
+                commit: Some(StructureCommit {
+                    sequences: &sequences,
+                    binding: StructureCommitBinding {
+                        prior_manuscript_tree_revision: input.tree_revision,
+                        resulting_manuscript_tree_revision: write.resulting_tree_revision,
+                        identity,
+                    },
+                }),
+                writer_base,
             },
         )
-        .await
-        .map_err(unavailable)?;
-        persist_forward_author_action(client, scope, &sequences, &ids.receipt_id)
-            .await
-            .map_err(unavailable)?;
-        crate::snapshot::persist_canonical_snapshot(
-            client,
-            scope,
-            &sequences.snapshot_id,
-            sequences.project_activity_position,
-        )
-        .await
-        .map_err(unavailable)?;
-        if let (WriterBase::RebindToCurrentChapter, Some(chapter_id)) =
-            (&write.writer_base, &resulting_current)
-        {
-            rebind_writer_base(
-                client,
-                scope,
-                chapter_id,
-                &sequences.snapshot_id,
-                sequences.project_activity_position,
-            )
-            .await
-            .map_err(ProjectCommandError::Unavailable)?;
-        }
+        .await?;
         Ok(StructureApplied {
             effect: write.effect,
             project_activity_position: sequences.project_activity_position,
@@ -192,7 +145,7 @@ impl SettlementProfile for Structural {
                 authoritative_commit_id: sequences.authoritative_commit_id,
                 author_action_sequence: sequences.author_action_sequence,
                 snapshot_id: sequences.snapshot_id,
-                prior_manuscript_tree_revision: project.tree_revision,
+                prior_manuscript_tree_revision: input.tree_revision,
                 resulting_manuscript_tree_revision: write.resulting_tree_revision,
                 resulting_revision_id,
             }),

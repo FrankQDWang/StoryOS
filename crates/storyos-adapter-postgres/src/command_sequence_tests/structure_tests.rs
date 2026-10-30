@@ -1,22 +1,26 @@
-use storyos_application::{ChapterId, EditorSessionId, VolumeId};
+use storyos_application::{
+    ChapterCreated, ChapterId, CreateChapterPublicOrder, CreateVolumePublicOrder, EditorSessionId,
+    VolumeCreated, VolumeId,
+};
 use storyos_application::{
     CreateChapterInput, CreateChapterSettlement, CreateVolumeInput, CreateVolumeSettlement,
     DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput, DeleteVolumeSettlement,
-    ProjectCommandError, ProjectScope, SetCurrentChapterInput, UpdateChapterInput,
-    UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    GetManuscriptTree, ProjectCommandError, ProjectScope, SetCurrentChapterInput,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    get_manuscript_tree, issue_project_command_challenge,
 };
-use storyos_core::CreateChapterPlacement;
+use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::{ProjectCommand, settle_project_command};
-use crate::update_volume_tests::seed_project;
+use crate::command_sequence::{CommandSpec, ProjectCommand, settle_project_command};
 
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
 use super::support::{
-    CommandCall, Route, SequenceError, applied, issued, run_without_foreign_keys, stores,
-    two_chapter_writer, with_new_request_ids,
+    CommandCall, Route, SequenceError, applied, command_call, command_issue, durable_project_rows,
+    issued, run_without_foreign_keys, seed_project, stores, two_chapter_writer,
+    with_new_request_ids,
 };
 
 pub(crate) async fn create_volume(
@@ -61,49 +65,49 @@ pub(crate) async fn delete_chapter(
     store.delete_chapter(&call.envelope, &call.input).await
 }
 
-pub(super) const CREATE_VOLUME: Route = Route {
+pub(crate) const CREATE_VOLUME: Route = Route {
     kind: "createVolume",
     method: storyos_contracts::CREATE_VOLUME_METHOD,
     path: storyos_contracts::CREATE_VOLUME_PATH,
     schema: storyos_contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const UPDATE_VOLUME: Route = Route {
+pub(crate) const UPDATE_VOLUME: Route = Route {
     kind: "updateVolume",
     method: storyos_contracts::UPDATE_VOLUME_METHOD,
     path: storyos_contracts::UPDATE_VOLUME_PATH,
     schema: storyos_contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const DELETE_VOLUME: Route = Route {
+pub(crate) const DELETE_VOLUME: Route = Route {
     kind: "deleteVolume",
     method: storyos_contracts::DELETE_VOLUME_METHOD,
     path: storyos_contracts::DELETE_VOLUME_PATH,
     schema: storyos_contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const CREATE_CHAPTER: Route = Route {
+pub(crate) const CREATE_CHAPTER: Route = Route {
     kind: "createChapter",
     method: storyos_contracts::CREATE_CHAPTER_METHOD,
     path: storyos_contracts::CREATE_CHAPTER_PATH,
     schema: storyos_contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const UPDATE_CHAPTER: Route = Route {
+pub(crate) const UPDATE_CHAPTER: Route = Route {
     kind: "updateChapter",
     method: storyos_contracts::UPDATE_CHAPTER_METHOD,
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const SET_CURRENT_CHAPTER: Route = Route {
+pub(crate) const SET_CURRENT_CHAPTER: Route = Route {
     kind: "setCurrentChapter",
     method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
     path: storyos_contracts::SET_CURRENT_CHAPTER_PATH,
     schema: storyos_contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const DELETE_CHAPTER: Route = Route {
+pub(crate) const DELETE_CHAPTER: Route = Route {
     kind: "deleteChapter",
     method: storyos_contracts::DELETE_CHAPTER_METHOD,
     path: storyos_contracts::DELETE_CHAPTER_PATH,
@@ -149,8 +153,83 @@ pub(super) async fn new_chapter(
     )
 }
 
+/// Settles one applied Create Volume of `title` whose ids derive from the four hex digits
+/// `suffix`, and returns the Volume.
+pub(crate) async fn titled_volume(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    title: &str,
+    expected_tree_revision: u64,
+) -> String {
+    let input = CreateVolumeInput {
+        title: title.to_owned(),
+        expected_tree_revision,
+    };
+    let call = named_call(store, scope, suffix, &CREATE_VOLUME, input).await;
+    applied(&create_volume(store, &call).await.unwrap())
+        .0
+        .volume_id
+}
+
+/// Settles one applied Create Chapter of `title` at the end of `volume_id`, whose ids derive from
+/// the four hex digits `suffix`, and returns the Chapter.
+pub(crate) async fn titled_chapter(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    volume_id: &str,
+    title: &str,
+    expected_tree_revision: u64,
+) -> String {
+    let input = CreateChapterInput {
+        volume_id: volume_id.to_owned(),
+        title: title.to_owned(),
+        placement: CreateChapterPlacement::Append,
+        expected_tree_revision,
+    };
+    let call = named_call(store, scope, suffix, &CREATE_CHAPTER, input).await;
+    applied(&create_chapter(store, &call).await.unwrap())
+        .0
+        .chapter_id
+}
+
+/// Issues one Command Challenge for `route` whose ids derive from the four hex digits `suffix`,
+/// and binds `input` to it.
+pub(crate) async fn named_call<I>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    route: &Route,
+    input: I,
+) -> CommandCall<I> {
+    let issue = command_issue(
+        scope,
+        suffix,
+        route,
+        &format!("sha256:{}:{suffix}", route.kind),
+    );
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    command_call(issue.binding, &issue.nonce_digest, suffix, b"{}", input)
+}
+
+/// The result kind and the reason code of one outcome. An applied outcome has no reason code.
+pub(crate) fn outcome_code<A, N: ReasonCode, C: ReasonCode, R: ReasonCode>(
+    outcome: &TransitionOutcome<A, N, C, R>,
+) -> (ReceiptResult, Option<&'static str>) {
+    let code = match outcome {
+        TransitionOutcome::Applied(_) => None,
+        TransitionOutcome::NoEffect(reason) => Some(reason.code()),
+        TransitionOutcome::Conflicted(reason) => Some(reason.code()),
+        TransitionOutcome::Refused(reason) => Some(reason.code()),
+    };
+    (outcome.receipt_result(), code)
+}
+
 /// One applicable Set Current Chapter from Chapter A to Chapter B in a new Project.
-pub(super) async fn set_current_chapter_call(
+pub(crate) async fn set_current_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<SetCurrentChapterInput> {
@@ -166,7 +245,7 @@ pub(super) async fn set_current_chapter_call(
 }
 
 /// One applicable Create Volume in a new Project.
-pub(super) async fn create_volume_call(
+pub(crate) async fn create_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<CreateVolumeInput> {
@@ -179,7 +258,7 @@ pub(super) async fn create_volume_call(
 }
 
 /// One applicable Update Volume in a new Project with one Volume.
-pub(super) async fn update_volume_call(
+pub(crate) async fn update_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<UpdateVolumeInput> {
@@ -195,7 +274,7 @@ pub(super) async fn update_volume_call(
 }
 
 /// One applicable Delete Volume in a new Project with one empty Volume.
-pub(super) async fn delete_volume_call(
+pub(crate) async fn delete_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<DeleteVolumeInput> {
@@ -209,7 +288,7 @@ pub(super) async fn delete_volume_call(
 }
 
 /// One applicable Create Chapter in a new Project with one Volume.
-pub(super) async fn create_chapter_call(
+pub(crate) async fn create_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<CreateChapterInput> {
@@ -225,7 +304,7 @@ pub(super) async fn create_chapter_call(
 }
 
 /// One applicable Update Chapter in a new Project with one Volume and one Chapter.
-pub(super) async fn update_chapter_call(
+pub(crate) async fn update_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<UpdateChapterInput> {
@@ -249,7 +328,7 @@ pub(super) async fn update_chapter_call(
 }
 
 /// One applicable Delete Chapter in a new Project with one Volume and one Chapter.
-pub(super) async fn delete_chapter_call(
+pub(crate) async fn delete_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<DeleteChapterInput> {
@@ -438,4 +517,262 @@ async fn a_chapter_deletion_without_the_historical_prior_current_field_replays()
         replayed.is_ok(),
         "the historical record must replay: {replayed:?}"
     );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_create_receipt_without_its_order_replays_the_historical_acknowledgement() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let without_order = |receipt_id: &str| {
+        format!(
+            "UPDATE storyos.domain_receipts SET result_payload = '{{}}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        )
+    };
+    let volume = create_volume_call(&store, /*base*/ 0x9600).await;
+    let first = create_volume(&store, &volume).await.unwrap();
+    run_without_foreign_keys(&admin, &without_order(&volume.envelope.ids.receipt_id)).await;
+    let replayed = create_volume(&store, &with_new_request_ids(&volume))
+        .await
+        .unwrap();
+    assert_eq!(
+        applied(&replayed).0,
+        VolumeCreated {
+            order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+            ..applied(&first).0
+        }
+    );
+    // The second Chapter of its Volume, so the order of the Activity record is 2.
+    let earlier = create_chapter_call(&store, /*base*/ 0x9610).await;
+    create_chapter(&store, &earlier).await.unwrap();
+    let input = CreateChapterInput {
+        placement: CreateChapterPlacement::Append,
+        volume_id: earlier.input.volume_id.clone(),
+        title: "Chapter B".to_owned(),
+        expected_tree_revision: 3,
+    };
+    let scope = earlier.envelope.project_scope.clone();
+    let chapter = named_call(&store, &scope, "9618", &CREATE_CHAPTER, input).await;
+    let first = create_chapter(&store, &chapter).await.unwrap();
+    run_without_foreign_keys(&admin, &without_order(&chapter.envelope.ids.receipt_id)).await;
+    let replayed = create_chapter(&store, &with_new_request_ids(&chapter))
+        .await
+        .unwrap();
+    // The historical acknowledgement gives the order of the Activity record.
+    assert_eq!(
+        applied(&replayed).0,
+        ChapterCreated {
+            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(2),
+            ..applied(&first).0
+        }
+    );
+}
+
+/// The sibling kind of a reorder whose final rank write fails.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum RankedSibling {
+    Volume,
+    Chapter,
+}
+
+/// Drops the test trigger that fails a rank write, and its function.
+async fn drop_rank_write_failure(admin: &Client) {
+    admin
+        .batch_execute(
+            "DROP TRIGGER IF EXISTS storyos_test_fail_rank_write ON storyos.manuscript_objects;
+             DROP FUNCTION IF EXISTS public.storyos_test_fail_rank_write();",
+        )
+        .await
+        .unwrap();
+}
+
+/// Installs a test trigger that fails the final rank write of a `sibling` reorder. The failure
+/// message gives the new ranks of that write. The temporary storage-key write of a Volume reorder
+/// raises each key, and that of a Chapter reorder moves each key above 1000000, so the trigger
+/// does not fail them.
+async fn install_rank_write_failure(admin: &Client, sibling: RankedSibling) {
+    let final_rank = match sibling {
+        RankedSibling::Volume => "n.object_kind = 'volume' AND n.tree_order < o.tree_order",
+        RankedSibling::Chapter => "n.object_kind = 'chapter' AND n.tree_order <= 1000000",
+    };
+    drop_rank_write_failure(admin).await;
+    admin
+        .batch_execute(&format!(
+            "CREATE FUNCTION public.storyos_test_fail_rank_write()
+             RETURNS trigger LANGUAGE plpgsql AS $$
+             DECLARE ranks text;
+             BEGIN
+               SELECT string_agg(n.tree_order::text, ',' ORDER BY n.tree_order) INTO ranks
+                 FROM new_rows n JOIN old_rows o
+                USING (owner_user_id, project_id, manuscript_object_id)
+                WHERE n.tree_order IS DISTINCT FROM o.tree_order AND {final_rank};
+               IF ranks IS NOT NULL THEN
+                 RAISE EXCEPTION 'injected rank write failure: %', ranks;
+               END IF;
+               RETURN NULL;
+             END $$;
+             CREATE TRIGGER storyos_test_fail_rank_write
+             AFTER UPDATE ON storyos.manuscript_objects
+             REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT
+             EXECUTE FUNCTION public.storyos_test_fail_rank_write();"
+        ))
+        .await
+        .unwrap();
+}
+
+/// The state of a Project that a failed reorder must keep.
+#[derive(Debug, PartialEq)]
+struct KeptState {
+    tree: GetManuscriptTree,
+    /// The Receipt, Activity payload, Admission, and settled fence rows of the command kind, and
+    /// the Commit, Author Action, and Snapshot rows of the Project.
+    rows: [i64; 7],
+    durable: Vec<serde_json::Value>,
+}
+
+async fn kept_state(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    spec: &CommandSpec,
+) -> KeptState {
+    let row = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.domain_receipts
+                      WHERE project_id = $1::text::uuid AND command_kind = $2),
+                    (SELECT count(*) FROM storyos.project_activity_event_payloads
+                      WHERE project_id = $1::text::uuid AND event_kind = $3),
+                    (SELECT count(*) FROM storyos.author_command_admissions
+                      WHERE project_id = $1::text::uuid AND command_kind = $2),
+                    (SELECT count(*) FROM storyos.command_idempotency
+                      WHERE project_id = $1::text::uuid AND command_kind = $2
+                        AND outcome_kind = 'settled'),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.author_action_entries
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.project_snapshots
+                      WHERE project_id = $1::text::uuid)",
+            &[&scope.project_id.as_ref(), &spec.kind, &spec.activity_kind],
+        )
+        .await
+        .unwrap();
+    KeptState {
+        tree: get_manuscript_tree(store, scope).await.unwrap(),
+        rows: std::array::from_fn(|idx| row.get(idx)),
+        durable: durable_project_rows(admin, scope).await,
+    }
+}
+
+/// Settles the call while a test trigger fails its final rank write.
+///
+/// Returns the ranks of the failed write when the command returns the injected failure as a store
+/// fault, and the kept state before and after the command.
+async fn settle_with_failed_rank_write<C: ProjectCommand<Error = ProjectCommandError>>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    sibling: RankedSibling,
+    call: &CommandCall<C>,
+) -> (Option<String>, [KeptState; 2]) {
+    let scope = &call.envelope.project_scope;
+    let before = kept_state(store, admin, scope, &C::SPEC).await;
+    install_rank_write_failure(admin, sibling).await;
+    let settled = settle_project_command(store, &call.envelope, &call.input).await;
+    drop_rank_write_failure(admin).await;
+    let failed_ranks = match &settled {
+        Err(ProjectCommandError::Unavailable(source)) => source
+            .downcast_ref::<tokio_postgres::Error>()
+            .and_then(tokio_postgres::Error::as_db_error)
+            .and_then(|error| {
+                error
+                    .message()
+                    .strip_prefix("injected rank write failure: ")
+            })
+            .map(str::to_owned),
+        Err(_) | Ok(_) => None,
+    };
+    (
+        failed_ranks,
+        [before, kept_state(store, admin, scope, &C::SPEC).await],
+    )
+}
+
+/// Seeds three siblings of `sibling` in a new Project, and moves the last sibling to the first
+/// place, so that the final rank write changes all three ranks. A test trigger fails that write.
+async fn failed_reorder(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    sibling: RankedSibling,
+    base: u16,
+) -> (Option<String>, [KeptState; 2]) {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
+    match sibling {
+        RankedSibling::Volume => {
+            new_volume(store, &scope, base + 2, /*expected_tree_revision*/ 2).await;
+            let moved = new_volume(store, &scope, base + 3, /*expected_tree_revision*/ 3).await;
+            let input = UpdateVolumeInput {
+                volume_id: moved,
+                title: "Moved".to_owned(),
+                order: 1,
+                expected_tree_revision: 4,
+            };
+            let call = issued(store, &scope, base + 9, &UPDATE_VOLUME, input).await;
+            settle_with_failed_rank_write(store, admin, sibling, &call).await
+        }
+        RankedSibling::Chapter => {
+            for (suffix, expected_tree_revision) in [(base + 2, 2), (base + 3, 3)] {
+                new_chapter(store, &scope, suffix, &volume_id, expected_tree_revision).await;
+            }
+            let moved = new_chapter(
+                store,
+                &scope,
+                base + 4,
+                &volume_id,
+                /*expected_tree_revision*/ 4,
+            )
+            .await;
+            let input = UpdateChapterInput {
+                chapter_id: moved,
+                title: "Moved".to_owned(),
+                order: 1,
+                expected_tree_revision: 5,
+            };
+            let call = issued(store, &scope, base + 9, &UPDATE_CHAPTER, input).await;
+            settle_with_failed_rank_write(store, admin, sibling, &call).await
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_failed_rank_write_rolls_back_the_entire_reorder() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    let mut expected = Vec::new();
+    for (sibling, base) in [
+        (RankedSibling::Volume, 0x8c40),
+        (RankedSibling::Chapter, 0x8c50),
+    ] {
+        let (failed_ranks, [before, after]) = failed_reorder(&store, &admin, sibling, base).await;
+        observed.push((sibling, failed_ranks, after));
+        // The final ranks failed. The same stored rows, tree, and tree revision, no row of the
+        // command, and no new Commit, Author Action, or Snapshot.
+        let [.., commits, actions, snapshots] = before.rows;
+        expected.push((
+            sibling,
+            Some("1,2,3".to_owned()),
+            KeptState {
+                rows: [0, 0, 0, 0, commits, actions, snapshots],
+                ..before
+            },
+        ));
+    }
+    assert_eq!(observed, expected);
 }

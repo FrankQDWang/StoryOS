@@ -28,7 +28,7 @@ use super::support::{
     stores, two_chapter_writer,
 };
 
-pub(super) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
+pub(crate) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
     kind: "undoLatestAuthorAction",
     method: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD,
     path: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
@@ -38,7 +38,7 @@ pub(super) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
 /// The Undo cases of the contract rows. Each case settles one Forward Author Action, or a
 /// state that one Author Undo outcome needs.
 #[derive(Clone, Copy, Debug)]
-enum Case {
+pub(super) enum Case {
     CreateVolume,
     SetCurrentChapter,
     WithdrawProposal,
@@ -160,7 +160,7 @@ pub(super) async fn edit_in_chapter_of(admin: &Client, editor_session_id: &str, 
 
 /// Settles the Forward Author Action of `case` in a new Project and returns the Author Undo of
 /// it.
-async fn undo_call(
+pub(super) async fn undo_call(
     store: &PostgresProjectReader,
     admin: &Client,
     case: Case,
@@ -664,7 +664,7 @@ async fn a_damaged_undo_replay_is_a_store_fault() {
     assert_eq!(observed, vec![ReplayError::Unavailable; 3]);
 }
 
-/// A Project setting command writes no Author Action (ADR 0044). Thus Author Undo after a
+/// A Project setting command writes no Author Action (ADR 0076). Thus Author Undo after a
 /// rename compensates the earlier prose edit and keeps the new title.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

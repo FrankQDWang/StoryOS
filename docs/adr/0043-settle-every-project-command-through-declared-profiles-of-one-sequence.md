@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR 0076
 ---
 
 # Settle Every Project Command Through Declared Profiles of One Sequence
+
+> Superseded on 2026-10-30 by [ADR 0076](0076-settle-every-project-command-through-one-sequence-skeleton.md): one sequence skeleton, one settlement order, one replay rule, and the declared profiles. This text stays as the history of the migration of each command.
 
 On 2026-10-05 the author accepted this decision. It extends [ADR 0041](0041-own-the-project-command-sequence-in-one-adapter-module.md) from the six Manuscript Structure Transition commands to every implemented project command except Author Edit, `acceptProposal`, and Author Undo. One settlement sequence in `storyos-adapter-postgres` stays the only owner of the step order. Each command adapter declares a small set of profiles, and the sequence writes the records that those profiles name. A new project command must settle through this sequence.
 

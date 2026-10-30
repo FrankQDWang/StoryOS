@@ -1,4 +1,4 @@
-//! The settlement profile of `applyAuthorEdit` (ADR 0044).
+//! The settlement profile of `applyAuthorEdit` (ADR 0076).
 
 use storyos_application::{
     ActionApplied, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,
@@ -9,8 +9,8 @@ use tokio_postgres::Client;
 use super::sequence::AuthorEditPlan;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, AppliedVariant, AuthoritativeRevision, CommandSpec, LockedProject,
-    RevisionSequences, RevisionWrite, SelectsRecords, SettlementProfile, unavailable,
+    ActionOnly, ActionSequence, AppliedVariant, AuthoritativeRevision, RevisionSequences,
+    RevisionWrite, SelectsRecords, SettlementProfile, SingleRecordSet, unavailable,
 };
 
 /// The record set of an applied Author Edit.
@@ -23,8 +23,19 @@ pub(crate) enum AuthorEditSelector {
 }
 
 impl SelectsRecords<AuthorEditProfile> for AuthorEditPlan {
-    fn selector(&self) -> AuthorEditSelector {
-        self.kind()
+    async fn allocate_records(
+        &self,
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> Result<AuthorEditSequences, ProjectCommandError> {
+        Ok(match self.kind() {
+            AuthorEditSelector::Revision => {
+                AuthorEditSequences::Revision(AuthoritativeRevision::allocate(client, scope).await?)
+            }
+            AuthorEditSelector::Proposal => {
+                AuthorEditSequences::Proposal(ActionOnly::allocate(client, scope).await?)
+            }
+        })
     }
 }
 
@@ -51,25 +62,11 @@ pub(crate) enum AuthorEditProfileApplied<E> {
 pub(crate) struct AuthorEditProfile;
 
 impl SettlementProfile for AuthorEditProfile {
-    type Selector = AuthorEditSelector;
     type Sequences = AuthorEditSequences;
     type Write<E: Send> = AuthorEditWrite<E>;
     type Applied<E: Send> = AuthorEditProfileApplied<E>;
-
-    async fn allocate(
-        client: &Client,
-        scope: &ProjectScope,
-        selector: &AuthorEditSelector,
-    ) -> Result<AuthorEditSequences, ProjectCommandError> {
-        Ok(match selector {
-            AuthorEditSelector::Revision => AuthorEditSequences::Revision(
-                AuthoritativeRevision::allocate(client, scope, &()).await?,
-            ),
-            AuthorEditSelector::Proposal => {
-                AuthorEditSequences::Proposal(ActionOnly::allocate(client, scope, &()).await?)
-            }
-        })
-    }
+    /// The applied variant that `ActionOnly` reads.
+    type Input = AppliedVariant;
 
     fn commit_ids(sequences: &AuthorEditSequences) -> Vec<String> {
         match sequences {
@@ -92,24 +89,20 @@ impl SettlementProfile for AuthorEditProfile {
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
-        spec: &CommandSpec,
         variant: AppliedVariant,
         sequences: AuthorEditSequences,
         write: AuthorEditWrite<E>,
     ) -> Result<AuthorEditProfileApplied<E>, ProjectCommandError> {
         match (sequences, write) {
             (AuthorEditSequences::Revision(sequences), AuthorEditWrite::Revision(revision)) => {
-                let applied = AuthoritativeRevision::persist(
-                    client, envelope, project, spec, variant, sequences, *revision,
-                )
-                .await?;
+                let applied =
+                    AuthoritativeRevision::persist(client, envelope, (), sequences, *revision)
+                        .await?;
                 Ok(AuthorEditProfileApplied::Revision(applied))
             }
             (AuthorEditSequences::Proposal(sequence), AuthorEditWrite::Proposal { effect }) => {
                 let applied =
-                    ActionOnly::persist(client, envelope, project, spec, variant, sequence, effect)
-                        .await?;
+                    ActionOnly::persist(client, envelope, variant, sequence, effect).await?;
                 Ok(AuthorEditProfileApplied::Proposal(applied))
             }
             (AuthorEditSequences::Revision(_), AuthorEditWrite::Proposal { .. })

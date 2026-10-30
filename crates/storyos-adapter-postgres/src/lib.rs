@@ -9,10 +9,6 @@ mod tests;
 mod author_edit_outcome_tests;
 
 #[cfg(test)]
-#[path = "takeover_persistence_tests.rs"]
-mod takeover_persistence_tests;
-
-#[cfg(test)]
 #[path = "takeover_admission_tests.rs"]
 mod takeover_admission_tests;
 
@@ -33,24 +29,16 @@ mod create_project_tests;
 mod recovery_visibility_proof_tests;
 
 #[cfg(test)]
-#[path = "update_project_tests.rs"]
-mod update_project_tests;
-
-#[cfg(test)]
-#[path = "update_project_assistance_tests.rs"]
-mod update_project_assistance_tests;
+#[path = "project_settings_tests.rs"]
+mod project_settings_tests;
 
 #[cfg(test)]
 #[path = "create_agent_run_tests.rs"]
 mod create_agent_run_tests;
 
 #[cfg(test)]
-#[path = "archive_project_tests.rs"]
-mod archive_project_tests;
-
-#[cfg(test)]
-#[path = "create_volume_tests.rs"]
-mod create_volume_tests;
+#[path = "create_structure_tests.rs"]
+mod create_structure_tests;
 
 #[cfg(test)]
 #[path = "create_volume_authority_tests.rs"]
@@ -61,40 +49,28 @@ mod create_volume_authority_tests;
 mod structural_authority_schema_tests;
 
 #[cfg(test)]
-#[path = "create_chapter_tests.rs"]
-mod create_chapter_tests;
-
-#[cfg(test)]
-#[path = "create_chapter_authority_tests.rs"]
-mod create_chapter_authority_tests;
-
-#[cfg(test)]
-#[path = "update_volume_tests.rs"]
-mod update_volume_tests;
-
-#[cfg(test)]
-#[path = "update_chapter_tests.rs"]
-mod update_chapter_tests;
+#[path = "update_structure_tests.rs"]
+mod update_structure_tests;
 
 #[cfg(test)]
 #[path = "update_chapter_rank_batch_tests.rs"]
 mod update_chapter_rank_batch_tests;
 
 #[cfg(test)]
+#[path = "update_volume_rank_batch_tests.rs"]
+mod update_volume_rank_batch_tests;
+
+#[cfg(test)]
+#[path = "update_volume_storage_order_tests.rs"]
+mod update_volume_storage_order_tests;
+
+#[cfg(test)]
 #[path = "numeric_tree_order_tests.rs"]
 mod numeric_tree_order_tests;
 
 #[cfg(test)]
-#[path = "delete_chapter_tests.rs"]
-mod delete_chapter_tests;
-
-#[cfg(test)]
-#[path = "delete_volume_tests.rs"]
-mod delete_volume_tests;
-
-#[cfg(test)]
-#[path = "set_current_chapter_tests.rs"]
-mod set_current_chapter_tests;
+#[path = "delete_structure_tests.rs"]
+mod delete_structure_tests;
 
 #[cfg(test)]
 #[path = "set_current_chapter_authority_tests.rs"]

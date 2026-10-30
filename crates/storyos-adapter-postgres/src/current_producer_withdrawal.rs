@@ -1,5 +1,5 @@
 //! The current-producer form of Withdraw Proposal. It is an AgentRun decision without a Command
-//! Challenge or an Admission, so it stays outside the command sequence (ADR 0043).
+//! Challenge or an Admission, so it stays outside the command sequence (ADR 0076).
 
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, CurrentProducerWithdrawal,

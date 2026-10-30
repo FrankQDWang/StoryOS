@@ -1,4 +1,4 @@
-//! The Proposal that an Undo Acceptance reopens, derives, or places for a Reversal (ADR 0044).
+//! The Proposal that an Undo Acceptance reopens, derives, or places for a Reversal (ADR 0076).
 
 use storyos_application::ProjectCommandError;
 

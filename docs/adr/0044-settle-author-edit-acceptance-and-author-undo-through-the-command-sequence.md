@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR 0076
 ---
 
 # Settle Author Edit, Acceptance, and Author Undo Through the Command Sequence
+
+> Superseded on 2026-10-30 by [ADR 0076](0076-settle-every-project-command-through-one-sequence-skeleton.md): the Author Edit steps, the compensation adapters, and the Author Undo Disposition of each Forward command kind. This text stays as the history of the migration of each command.
 
 On 2026-10-05 the author accepted this decision. It extends [ADR 0041](0041-own-the-project-command-sequence-in-one-adapter-module.md) and [ADR 0043](0043-settle-every-project-command-through-declared-profiles-of-one-sequence.md) to the three project commands that ADR 0043 kept out: `applyAuthorEdit`, `acceptProposal`, and `undoLatestAuthorAction`. It records the sequence capabilities that these commands need and the Author Undo Disposition of each Forward command kind. It also resolves [Decide the Author Undo Disposition of Replan and Reopen Proposal Actions](https://github.com/FrankQDWang/StoryOS/issues/933).
 

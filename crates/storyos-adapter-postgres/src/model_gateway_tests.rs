@@ -1,3 +1,7 @@
+use crate::command_sequence::tests::{
+    CREATE_AGENT_RUN, UPDATE_PROJECT_ASSISTANCE, command_issue, seed_project, titled_chapter,
+    titled_volume,
+};
 use std::sync::Mutex;
 
 use storyos_adapter_fake_destination::FakeDestination;
@@ -15,12 +19,9 @@ use storyos_core::{
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::{apply_chapter, apply_volume, named_issue, seed_project};
 
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
-const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
-const CHAPTER_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
 
 /// The durable dispatch evidence of one AgentRun.
 #[derive(Debug, PartialEq)]
@@ -253,13 +254,10 @@ pub(crate) async fn queued_run(
     destination: DeploymentDestination,
 ) -> (ProjectScope, String, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
-    let assistance = named_issue(
+    let assistance = command_issue(
         &scope,
         &format!("{prefix}1"),
-        "PUT",
-        "/api/v1/projects/{project_id}/assistance",
-        "storyos.command.update-project-assistance.request.v1",
-        "updateProjectAssistance",
+        &UPDATE_PROJECT_ASSISTANCE,
         &digest("updateProjectAssistance", AVAILABLE_BYTES),
     );
     issue_project_command_challenge(store, &assistance)
@@ -280,23 +278,20 @@ pub(crate) async fn queued_run(
         .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
         .await
         .unwrap();
-    let volume_id = apply_volume(
+    let volume_id = titled_volume(
         store,
         &scope,
         &format!("{prefix}3"),
         "Volume A",
-        VOLUME_BYTES,
-        &digest("createVolume", VOLUME_BYTES),
         /*expected_tree_revision*/ 1,
     )
     .await;
-    let chapter_id = apply_chapter(
+    let chapter_id = titled_chapter(
         store,
         &scope,
         &format!("{prefix}4"),
         &volume_id,
         "Chapter A",
-        CHAPTER_BYTES,
         /*expected_tree_revision*/ 2,
     )
     .await;
@@ -345,13 +340,10 @@ pub(crate) async fn admit_run_in(
     author_message: &str,
     conversation: ConversationSelection,
 ) -> String {
-    let run = named_issue(
+    let run = command_issue(
         scope,
         &format!("{prefix}5"),
-        "POST",
-        "/api/v1/projects/{project_id}/agent-runs",
-        "storyos.command.create-agent-run.request.v2",
-        "createAgentRun",
+        &CREATE_AGENT_RUN,
         &digest("createAgentRun", RUN_BYTES),
     );
     issue_project_command_challenge(store, &run).await.unwrap();

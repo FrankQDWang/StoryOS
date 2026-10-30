@@ -15,9 +15,8 @@ use tokio_postgres::Client;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
-    settle_project_command, unavailable,
+    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
+    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -81,9 +80,6 @@ impl ProjectCommand for CreateAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createAgentRun",
         applied: &[AppliedVariant::NoAuthorAction],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "agent_run_created",
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object('run_id', run_id::text)::text
@@ -102,12 +98,9 @@ impl ProjectCommand for CreateAgentRunInput {
     type NoEffect = Infallible;
     type Conflict = Infallible;
     type Refusal = Infallible;
-
-    fn contention_refusal() -> Option<CreateAgentRunCommandError> {
-        Some(RefusableCommandError::RefusedBeforeAdmission(
-            CreateAgentRunRefusal::ConversationBusy,
-        ))
-    }
+    const CONTENTION_REFUSAL: Option<CreateAgentRunCommandError> = Some(
+        RefusableCommandError::RefusedBeforeAdmission(CreateAgentRunRefusal::ConversationBusy),
+    );
 
     async fn classify(
         &self,

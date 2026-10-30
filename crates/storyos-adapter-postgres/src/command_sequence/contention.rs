@@ -1,4 +1,4 @@
-//! The settlement error of a command and the contention refusal of its first use (ADR 0043).
+//! The settlement error of a command and the contention refusal of its first use (ADR 0076).
 
 use storyos_application::{
     AcceptanceRefusalReason, AgentRunControlRefusal, ArchiveExportRefusal, DiagnosticField as _,

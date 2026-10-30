@@ -144,7 +144,7 @@ the terminal settlement.
 used only when StoryOS cannot yet prove whether the admitted Core transition
 committed. The settlement Query reports it for a `pending` admission that it
 cannot yet settle. No separate row records it
-([ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md)):
+([ADR 0076](../adr/0076-settle-every-project-command-through-one-sequence-skeleton.md)):
 the durable admission row without terminal settlement holds the condition. The
 Query reports the last provable boundary and the `reconciliation_required`
 disposition. It is never

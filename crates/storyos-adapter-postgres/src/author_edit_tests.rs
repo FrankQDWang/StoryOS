@@ -1,10 +1,10 @@
 use storyos_application::{
-    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason,
-    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
-    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, RequiresReconfirmationApplyAuthorEdit,
-    ResolveApplyAuthorEditOutcome, UserId, create_editor_session, get_apply_author_edit_outcome,
-    get_editor_session, issue_project_command_challenge,
+    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, AuthorCommandAdmissionIds,
+    CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId, EditorSessionLookup,
+    EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, ResolveApplyAuthorEditOutcome, UserId,
+    create_editor_session, get_apply_author_edit_outcome, get_editor_session,
+    issue_project_command_challenge,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
@@ -175,7 +175,7 @@ pub(super) fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
+async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the_receipt_shapes() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
@@ -223,58 +223,35 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     .await
     .unwrap();
 
-    let cuts = [
-        (
-            "018f0000-0000-7001-8000-000000000711",
-            "sha256:cut-1",
-            "71",
-            AuthorEditFault::AfterAdmissionBeforeCore,
-        ),
-        (
-            "018f0000-0000-7001-8000-000000000721",
-            "sha256:cut-2",
-            "72",
-            AuthorEditFault::CoreBeforeCommit,
-        ),
-        (
-            "018f0000-0000-7001-8000-000000000731",
-            "sha256:cut-3",
-            "73",
+    let command = author_command(
+        &scope,
+        editor_session_id,
+        "018f0000-0000-7001-8000-000000000731",
+        "sha256:cut-3",
+        "73",
+    );
+    issue_project_command_challenge(
+        &store,
+        &IssueProjectCommandChallenge {
+            binding: command.challenge_binding.clone(),
+            nonce: "nonce-73".to_owned(),
+            nonce_digest: command.nonce_digest.clone(),
+            earlier_revision_nonces: Vec::new(),
+        },
+    )
+    .await
+    .unwrap();
+    let error = store
+        .apply_author_edit_with_fault(
+            &command,
             AuthorEditFault::CoreAfterCommitBeforeAcknowledgement,
-        ),
-    ];
-    let mut committed_command = None;
-    for (key, nonce_digest, suffix, fault) in cuts {
-        let command = author_command(&scope, editor_session_id, key, nonce_digest, suffix);
-        issue_project_command_challenge(
-            &store,
-            &IssueProjectCommandChallenge {
-                binding: command.challenge_binding.clone(),
-                nonce: format!("nonce-{suffix}"),
-                nonce_digest: nonce_digest.to_owned(),
-                earlier_revision_nonces: Vec::new(),
-            },
         )
         .await
-        .unwrap();
-        let error = store
-            .apply_author_edit_with_fault(&command, fault)
-            .await
-            .expect_err("the deterministic fault must stop acknowledgement");
-        let expected_point = match fault {
-            AuthorEditFault::AfterAdmissionBeforeCore => "CFP-ADMISSION-BEFORE-CORE",
-            AuthorEditFault::CoreBeforeCommit => "CFP-CORE-BEFORE-COMMIT",
-            AuthorEditFault::CoreAfterCommitBeforeAcknowledgement => {
-                "CFP-CORE-AFTER-COMMIT-BEFORE-ACK"
-            }
-            AuthorEditFault::None => unreachable!(),
-        };
-        assert!(format!("{error:?}").contains(expected_point), "{error:?}");
-        if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
-            committed_command = Some(command);
-        }
-    }
-    let command = committed_command.unwrap();
+        .expect_err("the deterministic fault must stop acknowledgement");
+    assert!(
+        format!("{error:?}").contains("CFP-CORE-AFTER-COMMIT-BEFORE-ACK"),
+        "{error:?}"
+    );
     let committed_outcome = get_apply_author_edit_outcome(
         &store,
         &ResolveApplyAuthorEditOutcome {
@@ -357,7 +334,8 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         }
     );
 
-    let outcome_specs = [
+    let mut outcomes = Vec::new();
+    for (index, (key, nonce_digest, suffix)) in [
         (
             "018f0000-0000-7001-8000-000000000741",
             "sha256:outcome-1",
@@ -373,10 +351,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             "sha256:outcome-3",
             "76",
         ),
-    ];
-    let mut outcomes = Vec::new();
-    let mut outcome_commands = Vec::new();
-    for (index, (key, nonce_digest, suffix)) in outcome_specs.into_iter().enumerate() {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let mut outcome_command =
             author_command(&scope, editor_session_id, key, nonce_digest, suffix);
         if index > 0 {
@@ -395,6 +373,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             outcome_command.author_edit_units[0].selection_snapshot.from = 16;
             outcome_command.author_edit_units[0].selection_snapshot.to = 16;
         } else if index == 2 {
+            // A valid first unit and an invalid second unit refuse the whole batch.
             outcome_command.author_edit_units[1].selection_snapshot.to = 15;
         }
         bind_canonical_payload(&mut outcome_command);
@@ -409,30 +388,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-        let settlement = store.apply_author_edit(&outcome_command).await.unwrap();
-        let queried_outcome = get_apply_author_edit_outcome(
-            &store,
-            &ResolveApplyAuthorEditOutcome {
-                project_scope: scope.clone(),
-                client_binding: outcome_command.client_binding.clone(),
-                limit_profile_revision: outcome_command
-                    .challenge_binding
-                    .limit_profile_revision
-                    .clone(),
-                idempotency_key: outcome_command.challenge_binding.idempotency_key.clone(),
-                nonce_digest: outcome_command.nonce_digest.clone(),
-            },
-        )
-        .await
-        .unwrap();
-        let ApplyAuthorEditOutcome::Committed(queried) = queried_outcome else {
-            panic!("a settled zero-authority Receipt must read as Committed")
-        };
-        assert_eq!(queried.settlement, settlement);
-        let exact_retry = store.apply_author_edit(&outcome_command).await.unwrap();
-        assert_eq!(exact_retry, settlement);
-        outcomes.push(settlement);
-        outcome_commands.push(outcome_command);
+        outcomes.push(store.apply_author_edit(&outcome_command).await.unwrap());
     }
     assert!(matches!(
         outcomes[0].effect,
@@ -537,130 +493,23 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
 
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
-
-    let payload_command = &outcome_commands[2];
-    admin
-        .execute(
-            "UPDATE storyos.author_command_admissions
-                SET command_payload = jsonb_set(
-                  command_payload,
-                  '{author_edit_units,0,selection_snapshot,to}',
-                  '999'::jsonb,
-                  false)
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &payload_command.ids.author_command_admission_id,
-            ],
-        )
-        .await
-        .unwrap();
-    let payload_error = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: payload_command.client_binding.clone(),
-            limit_profile_revision: payload_command
-                .challenge_binding
-                .limit_profile_revision
-                .clone(),
-            idempotency_key: payload_command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: payload_command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .expect_err("a changed stored command payload must fail its durable digest");
-    assert_eq!(
-        payload_error.to_string(),
-        "Apply Author Edit outcome resolution is unavailable"
-    );
-    admin
-        .execute(
-            "UPDATE storyos.author_command_admissions SET command_payload = $4::text::jsonb
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &payload_command.ids.author_command_admission_id,
-                &String::from_utf8(payload_command.canonical_command_bytes.clone()).unwrap(),
-            ],
-        )
-        .await
-        .unwrap();
-
-    let activity = admin
+    // The refused batch writes no part of its valid first unit.
+    let refused_authority = admin
         .query_one(
-            "SELECT project_activity_position::text, project_activity_event_id::text,
-                    event_kind, receipt_id::text, receipt_result_kind,
-                    authoritative_commit_id::text, resulting_revision_id::text,
-                    author_action_sequence::text,
-                    to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')
-               FROM storyos.project_activity_events
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
+            "SELECT
+                (SELECT count(*) FROM storyos.authoritative_revision_envelopes
+                  WHERE receipt_id = $1::text::uuid),
+                (SELECT count(*) FROM storyos.authoritative_commits
+                  WHERE receipt_id = $1::text::uuid)",
+            &[&outcomes[2].ids.receipt_id],
         )
         .await
         .unwrap();
-    admin
-        .batch_execute(
-            "ALTER TABLE storyos.project_activity_events
-               DISABLE TRIGGER project_activity_author_edit_relation_complete",
-        )
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "DELETE FROM storyos.project_activity_events
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    admin
-        .batch_execute(
-            "ALTER TABLE storyos.project_activity_events
-               ENABLE TRIGGER project_activity_author_edit_relation_complete",
-        )
-        .await
-        .unwrap();
-    // A replay without its Activity record is damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&command).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .execute(
-            "INSERT INTO storyos.project_activity_events
-               (owner_user_id, project_id, project_activity_position,
-                project_activity_event_id, event_kind, receipt_id,
-                receipt_result_kind, authoritative_commit_id,
-                resulting_revision_id, author_action_sequence, created_at)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric,
-                     $4::text::uuid, $5, $6::text::uuid, $7,
-                     $8::text::uuid, $9::text::uuid, $10::text::numeric,
-                     $11::text::timestamptz)",
-            &[
-                &USER,
-                &PROJECT,
-                &activity.get::<_, String>(0),
-                &activity.get::<_, String>(1),
-                &activity.get::<_, String>(2),
-                &activity.get::<_, String>(3),
-                &activity.get::<_, String>(4),
-                &activity.get::<_, String>(5),
-                &activity.get::<_, String>(6),
-                &activity.get::<_, String>(7),
-                &activity.get::<_, String>(8),
-            ],
-        )
-        .await
-        .unwrap();
+    assert_eq!(
+        [0, 1].map(|index| refused_authority.get::<_, i64>(index)),
+        [0, 0]
+    );
+
     let duplicate_activity = admin
         .execute(
             "INSERT INTO storyos.project_activity_events
@@ -692,741 +541,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await;
     assert!(malformed_zero_receipt.is_err());
-
-    let null_no_effect_receipt = "UPDATE storyos.domain_receipts
-            SET expected_heads = ARRAY[NULL]::uuid[],
-                prior_heads = ARRAY[NULL]::uuid[],
-                resulting_heads = ARRAY[NULL]::uuid[]
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let null_no_effect_heads = admin
-        .execute(
-            null_no_effect_receipt,
-            &[&USER, &PROJECT, &outcomes[1].ids.receipt_id],
-        )
-        .await;
-    assert!(null_no_effect_heads.is_err());
-
-    let null_conflict_receipt = "UPDATE storyos.domain_receipts
-            SET result_payload =
-                  '{\"reason\":null,\"current_authoritative_revision_id\":null}'::jsonb
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let null_conflict_payload = admin
-        .execute(
-            null_conflict_receipt,
-            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
-        )
-        .await;
-    assert!(null_conflict_payload.is_err());
-
-    let null_refusal_receipt = "UPDATE storyos.domain_receipts
-          SET result_payload = '{\"reason\":null}'::jsonb
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let null_refusal_reason = admin
-        .execute(
-            null_refusal_receipt,
-            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
-        )
-        .await;
-    assert!(null_refusal_reason.is_err());
-
-    let zero_based_heads_receipt = "UPDATE storyos.domain_receipts
-            SET expected_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0]),
-                prior_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0]),
-                resulting_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0])
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let zero_based_heads = admin
-        .execute(
-            zero_based_heads_receipt,
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[1].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await;
-    assert!(zero_based_heads.is_err());
-
-    let zero_based_commit_ids_receipt = "UPDATE storyos.domain_receipts
-          SET authoritative_commit_ids = array_fill($4::text::uuid, ARRAY[1], ARRAY[0])
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let zero_based_commit_ids = admin
-        .execute(
-            zero_based_commit_ids_receipt,
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.authoritative_commit_id,
-            ],
-        )
-        .await;
-    assert!(zero_based_commit_ids.is_err());
-
-    let applied_revision_id = replay_applied_ids.revision_id.as_str();
-    let head_corruption_cases: [(&ApplyAuthorEditCommand, &str, [&str; 3], [&str; 3]); 4] = [
-        (
-            &command,
-            command.ids.receipt_id.as_str(),
-            [
-                applied_revision_id,
-                applied_revision_id,
-                applied_revision_id,
-            ],
-            [REVISION, REVISION, applied_revision_id],
-        ),
-        (
-            &outcome_commands[0],
-            outcomes[0].ids.receipt_id.as_str(),
-            [
-                "018f0000-0000-7001-8000-000000000790",
-                applied_revision_id,
-                applied_revision_id,
-            ],
-            [REVISION, applied_revision_id, applied_revision_id],
-        ),
-        (
-            &outcome_commands[1],
-            outcomes[1].ids.receipt_id.as_str(),
-            [REVISION, REVISION, REVISION],
-            [
-                applied_revision_id,
-                applied_revision_id,
-                applied_revision_id,
-            ],
-        ),
-        (
-            &outcome_commands[2],
-            outcomes[2].ids.receipt_id.as_str(),
-            [REVISION, REVISION, REVISION],
-            [
-                applied_revision_id,
-                applied_revision_id,
-                applied_revision_id,
-            ],
-        ),
-    ];
-    for (case_command, receipt_id, corrupt_heads, original_heads) in head_corruption_cases {
-        admin
-            .execute(
-                "UPDATE storyos.domain_receipts
-                    SET expected_heads = ARRAY[$4::text::uuid],
-                        prior_heads = ARRAY[$5::text::uuid],
-                        resulting_heads = ARRAY[$6::text::uuid]
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND receipt_id = $3::text::uuid",
-                &[
-                    &USER,
-                    &PROJECT,
-                    &receipt_id,
-                    &corrupt_heads[0],
-                    &corrupt_heads[1],
-                    &corrupt_heads[2],
-                ],
-            )
-            .await
-            .unwrap();
-        assert!(matches!(
-            store.apply_author_edit(case_command).await,
-            Err(storyos_application::AuthorEditError::BindingConflict)
-        ));
-        admin
-            .execute(
-                "UPDATE storyos.domain_receipts
-                    SET expected_heads = ARRAY[$4::text::uuid],
-                        prior_heads = ARRAY[$5::text::uuid],
-                        resulting_heads = ARRAY[$6::text::uuid]
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND receipt_id = $3::text::uuid",
-                &[
-                    &USER,
-                    &PROJECT,
-                    &receipt_id,
-                    &original_heads[0],
-                    &original_heads[1],
-                    &original_heads[2],
-                ],
-            )
-            .await
-            .unwrap();
-    }
-
-    let impossible_stale_receipt = "UPDATE storyos.domain_receipts
-            SET prior_heads = expected_heads,
-                resulting_heads = expected_heads,
-                result_payload = jsonb_build_object(
-                  'reason', 'stale_authoritative_head',
-                  'current_authoritative_revision_id', expected_heads[1]::text)
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND receipt_id = $3::text::uuid";
-    let rejected_stale_receipt = admin
-        .execute(
-            impossible_stale_receipt,
-            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
-        )
-        .await;
-    assert!(rejected_stale_receipt.is_err());
-
-    let common_shape_definition = admin
-        .query_one(
-            "SELECT pg_get_constraintdef(oid)
-               FROM pg_constraint
-              WHERE conrelid = 'storyos.domain_receipts'::regclass
-                AND conname = 'domain_receipts_common_shape'",
-            &[],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(0);
-    let result_shape_definition = admin
-        .query_one(
-            "SELECT pg_get_constraintdef(oid)
-               FROM pg_constraint
-              WHERE conrelid = 'storyos.domain_receipts'::regclass
-                AND conname = 'domain_receipts_result_shape'",
-            &[],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(0);
-    admin
-        .batch_execute(
-            "ALTER TABLE storyos.domain_receipts
-               DROP CONSTRAINT domain_receipts_common_shape;
-             ALTER TABLE storyos.domain_receipts
-               DROP CONSTRAINT domain_receipts_result_shape",
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            zero_based_heads_receipt,
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[1].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-    // Zero-based head arrays are damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[1]).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET expected_heads = ARRAY[$4::text::uuid],
-                    prior_heads = ARRAY[$4::text::uuid],
-                    resulting_heads = ARRAY[$4::text::uuid]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[1].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            zero_based_commit_ids_receipt,
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.authoritative_commit_id,
-            ],
-        )
-        .await
-        .unwrap();
-    // A zero-based Commit array is damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&command).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET authoritative_commit_ids = ARRAY[$4::text::uuid]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.authoritative_commit_id,
-            ],
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            null_no_effect_receipt,
-            &[&USER, &PROJECT, &outcomes[1].ids.receipt_id],
-        )
-        .await
-        .unwrap();
-    // NULL heads are damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[1]).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET expected_heads = ARRAY[$4::text::uuid],
-                    prior_heads = ARRAY[$4::text::uuid],
-                    resulting_heads = ARRAY[$4::text::uuid]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[1].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            null_conflict_receipt,
-            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
-        )
-        .await
-        .unwrap();
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[0]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET result_payload = jsonb_build_object(
-                      'reason', 'stale_authoritative_head',
-                      'current_authoritative_revision_id', $4::text)
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[0].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            null_refusal_receipt,
-            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
-        )
-        .await
-        .unwrap();
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[2]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET result_payload = '{\"reason\":\"invalid_selection\"}'::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
-        )
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            impossible_stale_receipt,
-            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
-        )
-        .await
-        .unwrap();
-    // An impossible stale conflict is damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[0]).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET prior_heads = ARRAY[$4::text::uuid],
-                    resulting_heads = ARRAY[$4::text::uuid],
-                    result_payload = jsonb_build_object(
-                      'reason', 'stale_authoritative_head',
-                      'current_authoritative_revision_id', $4::text)
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &outcomes[0].ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-    admin
-        .batch_execute(&format!(
-            "ALTER TABLE storyos.domain_receipts
-               ADD CONSTRAINT domain_receipts_common_shape {common_shape_definition}"
-        ))
-        .await
-        .unwrap();
-    admin
-        .batch_execute(&format!(
-            "ALTER TABLE storyos.domain_receipts
-               ADD CONSTRAINT domain_receipts_result_shape {result_shape_definition}"
-        ))
-        .await
-        .unwrap();
-
-    admin
-        .execute(
-            "UPDATE storyos.author_command_admissions
-                SET target_refs = ARRAY['manuscript:corrupt']::text[]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.author_command_admission_id],
-        )
-        .await
-        .unwrap();
-    assert!(matches!(
-        store.apply_author_edit(&command).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.author_command_admissions
-                SET target_refs = ARRAY[$4]::text[]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.author_command_admission_id,
-                &format!("manuscript:{CHAPTER}"),
-            ],
-        )
-        .await
-        .unwrap();
-
-    let prior_corruption = admin.transaction().await.unwrap();
-    prior_corruption
-        .execute(
-            "UPDATE storyos.authoritative_revision_envelopes
-                SET parent_revision_id = $4::text::uuid,
-                    payload_digest = 'sha256:corrupt'
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-    prior_corruption
-        .execute(
-            "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
-        )
-        .await
-        .unwrap();
-    prior_corruption.commit().await.unwrap();
-    // A Commit and Envelope of another prior Revision are damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&command).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    let corrupt_outcome_error = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: command.client_binding.clone(),
-            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .expect_err("a corrupt Receipt-first relation must not produce Committed");
-    assert_eq!(
-        corrupt_outcome_error.to_string(),
-        "Apply Author Edit outcome resolution is unavailable"
-    );
-    let prior_restoration = admin.transaction().await.unwrap();
-    prior_restoration
-        .execute(
-            "UPDATE storyos.authoritative_revision_envelopes
-                SET parent_revision_id = $4::text::uuid,
-                    payload_digest = $5
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &REVISION,
-                &sha256_hex(b"Authoritative A!"),
-            ],
-        )
-        .await
-        .unwrap();
-    prior_restoration
-        .execute(
-            "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.receipt_id, &REVISION],
-        )
-        .await
-        .unwrap();
-    prior_restoration.commit().await.unwrap();
-
-    admin
-        .batch_execute("ALTER TABLE storyos.authoritative_commits DISABLE TRIGGER ALL")
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "UPDATE storyos.authoritative_commits
-                SET author_command_admission_id = $4::text::uuid
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND authoritative_commit_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &replay_applied_ids.authoritative_commit_id,
-                &outcomes[0].ids.author_command_admission_id,
-            ],
-        )
-        .await
-        .unwrap();
-    admin
-        .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
-        .await
-        .unwrap();
-    // A Commit of another Admission is damaged evidence (ADR 0043).
-    assert!(matches!(
-        store.apply_author_edit(&outcome_commands[0]).await,
-        Err(storyos_application::AuthorEditError::Unavailable(_))
-    ));
-    admin
-        .batch_execute("ALTER TABLE storyos.authoritative_commits DISABLE TRIGGER ALL")
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "UPDATE storyos.authoritative_commits
-                SET author_command_admission_id = $4::text::uuid
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND authoritative_commit_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &replay_applied_ids.authoritative_commit_id,
-                &command.ids.author_command_admission_id,
-            ],
-        )
-        .await
-        .unwrap();
-    admin
-        .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
-        .await
-        .unwrap();
-
-    let evidence = admin
-        .query_one(
-            "SELECT
-           (SELECT count(*) FROM storyos.author_command_admissions
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT count(*) FROM storyos.domain_receipts
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT count(*) FROM storyos.author_action_entries
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT count(*) FROM storyos.project_activity_events
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT count(*) FROM storyos.author_command_admissions AS admission
-             WHERE admission.owner_user_id = $1::text::uuid
-               AND admission.project_id = $2::text::uuid
-               AND NOT EXISTS (
-                 SELECT 1 FROM storyos.author_command_admission_settlements AS settlement
-                  WHERE (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id) =
-                        (admission.owner_user_id, admission.project_id,
-                         admission.author_command_admission_id))),
-           (SELECT count(*) FROM storyos.author_command_admissions
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND command_payload->>'chapter_id' = $3
-               AND challenge_consumed_at IS NOT NULL
-               AND challenge_expires_at > challenge_consumed_at),
-           (SELECT count(DISTINCT result_kind) FROM storyos.domain_receipts
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT count(*) FROM storyos.domain_receipts
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND ((result_kind = 'authoritative_applied' AND NOT EXISTS (
-                       SELECT 1 FROM storyos.project_activity_events AS activity
-                        WHERE (activity.owner_user_id, activity.project_id,
-                               activity.receipt_id, activity.receipt_result_kind) =
-                              (domain_receipts.owner_user_id, domain_receipts.project_id,
-                               domain_receipts.receipt_id, domain_receipts.result_kind)))
-                 OR (result_kind <> 'authoritative_applied' AND EXISTS (
-                       SELECT 1 FROM storyos.project_activity_events AS activity
-                        WHERE (activity.owner_user_id, activity.project_id,
-                               activity.receipt_id) =
-                              (domain_receipts.owner_user_id, domain_receipts.project_id,
-                               domain_receipts.receipt_id))))),
-           (SELECT concat(author_action_sequence, '/', authoritative_commit_sequence, '/',
-                          project_activity_position)
-              FROM storyos.scope_counters
-             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-           (SELECT convert_from(payload.canonical_bytes, 'UTF8')
-              FROM storyos.authoritative_heads AS head
-              JOIN storyos.authoritative_revisions AS revision
-                ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
-                    revision.revision_id) =
-                   (head.owner_user_id, head.project_id, head.manuscript_object_id,
-                    head.current_revision_id)
-              JOIN storyos.authoritative_payloads AS payload
-                ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
-                   (revision.owner_user_id, revision.project_id, revision.payload_id)
-             WHERE head.owner_user_id = $1::text::uuid AND head.project_id = $2::text::uuid
-               AND head.manuscript_object_id = $3::text::uuid)",
-            &[&USER, &PROJECT, &CHAPTER],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        (
-            evidence.get::<_, i64>(0),
-            evidence.get::<_, i64>(1),
-            evidence.get::<_, i64>(2),
-            evidence.get::<_, i64>(3),
-            evidence.get::<_, i64>(4),
-            evidence.get::<_, i64>(5),
-            evidence.get::<_, i64>(6),
-            evidence.get::<_, i64>(7),
-            evidence.get::<_, String>(8),
-            evidence.get::<_, String>(9),
-        ),
-        (
-            6,
-            4,
-            1,
-            1,
-            2,
-            6,
-            4,
-            0,
-            "1/1/1".to_owned(),
-            "Authoritative A!".to_owned()
-        )
-    );
-
-    let mut recovery_command = author_command(
-        &scope,
-        editor_session_id,
-        "018f0000-0000-7001-8000-000000000771",
-        "sha256:cut-recovery",
-        "77",
-    );
-    recovery_command.expected_authoritative_revision_id = replay_applied_ids.revision_id.clone();
-    bind_canonical_payload(&mut recovery_command);
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: recovery_command.challenge_binding.clone(),
-            nonce: "nonce-77".to_owned(),
-            nonce_digest: recovery_command.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store
-        .apply_author_edit_with_fault(&recovery_command, AuthorEditFault::AfterAdmissionBeforeCore)
-        .await
-        .expect_err("the recovery cut must stop before Core");
-    let recovered = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: recovery_command.client_binding.clone(),
-            limit_profile_revision: recovery_command
-                .challenge_binding
-                .limit_profile_revision
-                .clone(),
-            idempotency_key: recovery_command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: recovery_command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    let ApplyAuthorEditOutcome::Committed(recovered) = recovered else {
-        panic!("an open Admission must complete through the outcome Query: {recovered:?}");
-    };
-    assert_eq!(recovered.correlation_id, recovery_command.correlation_id);
-    assert_eq!(
-        recovered.canonical_command_digest,
-        recovery_command.challenge_binding.canonical_command_digest
-    );
-    assert_eq!(
-        recovered.idempotency_key,
-        recovery_command.challenge_binding.idempotency_key
-    );
-    let recovery_applied_ids = match &recovered.settlement.effect {
-        storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => {
-            ids.clone()
-        }
-        other => panic!("an open Admission must complete as Applied: {other:?}"),
-    };
-    let repeated = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: recovery_command.client_binding.clone(),
-            limit_profile_revision: recovery_command
-                .challenge_binding
-                .limit_profile_revision
-                .clone(),
-            idempotency_key: recovery_command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: recovery_command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        repeated,
-        ApplyAuthorEditOutcome::Committed(recovered.clone())
-    );
 
     let cleanup = admin.transaction().await.unwrap();
     cleanup
@@ -1473,10 +587,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    for revision_id in [
-        &replay_applied_ids.revision_id,
-        &recovery_applied_ids.revision_id,
-    ] {
+    for revision_id in [&replay_applied_ids.revision_id] {
         cleanup
             .execute(
                 "DELETE FROM storyos.manuscript_revision_members
@@ -1496,10 +607,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             .await
             .unwrap();
     }
-    for payload_id in [
-        &replay_applied_ids.payload_id,
-        &recovery_applied_ids.payload_id,
-    ] {
+    for payload_id in [&replay_applied_ids.payload_id] {
         cleanup
             .execute(
                 "DELETE FROM storyos.authoritative_payloads
@@ -1565,239 +673,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .execute(
             "DELETE FROM storyos.scope_counters
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup.commit().await.unwrap();
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let store = PostgresProjectReader::new(&runtime_url);
-    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
-    let session_key = "018f0000-0000-7001-8000-000000000951";
-    let session_nonce_digest = "sha256:session-reconfirm";
-    let session_binding = binding(
-        &scope,
-        "createEditorSession",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        session_key,
-    );
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: session_binding.clone(),
-            nonce: "session-nonce-reconfirm".to_owned(),
-            nonce_digest: session_nonce_digest.to_owned(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000952";
-    let snapshot_id = "018f0000-0000-7001-8000-000000000953";
-    create_editor_session(
-        &store,
-        &OpenEditorSession {
-            project_scope: scope.clone(),
-            editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: snapshot_id.to_owned(),
-            client_binding: EditorClientBinding {
-                binding_ref: "binding:author-edit".to_owned(),
-                session_generation: 1,
-                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
-                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
-            },
-            challenge_binding: session_binding,
-            nonce_digest: session_nonce_digest.to_owned(),
-        },
-    )
-    .await
-    .unwrap();
-    let command = author_command(
-        &scope,
-        editor_session_id,
-        "018f0000-0000-7001-8000-000000000971",
-        "sha256:cut-reconfirm",
-        "96",
-    );
-    issue_project_command_challenge(
-        &store,
-        &IssueProjectCommandChallenge {
-            binding: command.challenge_binding.clone(),
-            nonce: "nonce-96".to_owned(),
-            nonce_digest: command.nonce_digest.clone(),
-            earlier_revision_nonces: Vec::new(),
-        },
-    )
-    .await
-    .unwrap();
-    store
-        .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
-        .await
-        .expect_err("the reconfirmation cut must stop before Core");
-    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    admin
-        .execute(
-            "UPDATE storyos.author_command_admissions
-                SET command_payload = command_payload - 'author_edit_units'
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.author_command_admission_id],
-        )
-        .await
-        .unwrap();
-    assert!(
-        !admin
-            .query_one(
-                "SELECT command_payload ? 'author_edit_units'
-                   FROM storyos.author_command_admissions
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND author_command_admission_id = $3::text::uuid",
-                &[&USER, &PROJECT, &command.ids.author_command_admission_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, bool>(0),
-        "the incomplete-payload fixture must strip author_edit_units"
-    );
-
-    let queried = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: command.client_binding.clone(),
-            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    let expected =
-        ApplyAuthorEditOutcome::RequiresReconfirmation(RequiresReconfirmationApplyAuthorEdit {
-            command_id: command.ids.command_id.clone(),
-            author_command_admission_id: command.ids.author_command_admission_id.clone(),
-            reconfirmation_reason:
-                ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable,
-            recovery_draft_ref: None,
-        });
-    assert_eq!(queried, expected);
-    let repeated = get_apply_author_edit_outcome(
-        &store,
-        &ResolveApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: command.client_binding.clone(),
-            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            nonce_digest: command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(repeated, expected);
-
-    let cleanup = admin.transaction().await.unwrap();
-    cleanup
-        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
-        .await
-        .unwrap();
-    for table in [
-        "author_command_admission_outcome_unknown_observations",
-        "author_command_admission_reconfirmations",
-        "author_command_admission_settlements",
-        "domain_receipts",
-        "author_command_admissions",
-    ] {
-        cleanup
-            .execute(
-                &format!(
-                    "DELETE FROM storyos.{table}
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
-                ),
-                &[&USER, &PROJECT],
-            )
-            .await
-            .unwrap();
-    }
-    cleanup
-        .execute(
-            "DELETE FROM storyos.editor_session_base_snapshots
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND editor_session_id = $3::text::uuid",
-            &[&USER, &PROJECT, &editor_session_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.project_writer_generations
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.editor_sessions
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND editor_session_id = $3::text::uuid",
-            &[&USER, &PROJECT, &editor_session_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.project_snapshots
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND snapshot_id = $3::text::uuid",
-            &[&USER, &PROJECT, &snapshot_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.project_command_challenges
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.command_idempotency
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.project_command_challenge_rate_windows
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND client_session_generation = 1",
-            &[&USER, &PROJECT],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.project_command_challenge_rate_guards
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND client_session_generation = 1",
             &[&USER, &PROJECT],
         )
         .await

@@ -1,4 +1,4 @@
-//! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0044).
+//! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
@@ -11,10 +11,10 @@ pub(crate) use frontier::{ObservedStructureFrontier, ObservedStructureIdentity};
 
 use super::{
     StructureAffectedIdentity, StructureCommitBinding, StructureTransitionSequences,
-    allocate_structure_transition_sequences, persist_compensation_author_action,
-    persist_structure_commit,
+    allocate_structure_transition_sequences, persist_structure_commit,
 };
 use crate::command_replay::ReplayFault;
+use crate::command_sequence::{ActionDisposition, insert_author_action};
 use crate::undo_compensation::{
     CompensationAdapter, CompensationReplay, StructureCommand, UndoRequest,
 };
@@ -45,9 +45,7 @@ impl CompensationAdapter for StructureCompensation {
         client: &Client,
         scope: &ProjectScope,
     ) -> Result<StructureTransitionSequences, ProjectCommandError> {
-        allocate_structure_transition_sequences(client, scope)
-            .await
-            .map_err(ProjectCommandError::Unavailable)
+        allocate_structure_transition_sequences(client, scope).await
     }
 
     fn commit_ids(sequences: &StructureTransitionSequences) -> Vec<String> {
@@ -75,15 +73,15 @@ impl CompensationAdapter for StructureCompensation {
         )
         .await
         .map_err(undo_database_error)?;
-        persist_compensation_author_action(
+        insert_author_action(
             client,
             &command.project_scope,
-            &sequences,
+            sequences.author_action_sequence,
+            &ActionDisposition::Compensation { source_sequence },
+            Some(&sequences.authoritative_commit_id),
             &command.ids.receipt_id,
-            source_sequence,
         )
-        .await
-        .map_err(undo_database_error)?;
+        .await?;
         crate::snapshot::persist_canonical_snapshot(
             client,
             &command.project_scope,

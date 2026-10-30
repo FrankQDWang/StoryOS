@@ -15,10 +15,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
-    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
-    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
-    settle_project_command, unavailable,
+    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
+    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
+    WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -43,9 +42,6 @@ impl ProjectCommand for CreateChapterInput {
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateChapter,
         ))],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "chapter_created",
         replay_effect: ReplayEffect::NoQuery,
     };

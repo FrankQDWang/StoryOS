@@ -1,5 +1,5 @@
 //! The `UndoCompensation` settlement profile: the records of one Author Undo, which the
-//! compensation adapter of the Forward command kind writes (ADR 0044).
+//! compensation adapter of the Forward command kind writes (ADR 0076).
 
 use storyos_application::{
     ManuscriptBlock, ProjectCommandEnvelope, ProjectCommandError, ProjectScope, UndoApplied,
@@ -13,8 +13,8 @@ use crate::author_edit::{ObservedProseFrontier, ProseCompensation};
 use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, AuthoritativeRevision, CommandSpec, LockedProject, ReceiptHeads,
-    RevisionSequences, SelectsRecords, SettlementProfile, unavailable,
+    AppliedVariant, AuthoritativeRevision, ReceiptHeads, RevisionSequences, SelectsRecords,
+    SettlementProfile, SingleRecordSet, unavailable,
 };
 use crate::proposal_decision_compensation::ObservedProposalDecision;
 use crate::reopen_rejected_operations::{ObservedOperationReopening, ReopenRejectedCompensation};
@@ -56,14 +56,6 @@ enum UndoFamily {
         loaded: LoadedAcceptance,
         blocks: Vec<ManuscriptBlock>,
     },
-}
-
-/// The record set that one Author Undo allocates.
-pub(crate) enum UndoSelector {
-    Revision,
-    Structure,
-    CurrentChapter,
-    Action,
 }
 
 /// The scope sequences of one Author Undo.
@@ -126,9 +118,7 @@ impl UndoPlan {
             | UndoFamily::Replan(_)
             | UndoFamily::ReopenRejectedOperations(_)
             | UndoFamily::ReopenWithdrawnProposal(_)
-            | UndoFamily::AuthorWithdrawal(_) => {
-                AppliedVariant::Compensation(ProseCompensation::RESULT_KIND)
-            }
+            | UndoFamily::AuthorWithdrawal(_) => AppliedVariant::Compensation,
         }
     }
 
@@ -200,19 +190,32 @@ impl UndoFamily {
     }
 }
 
+/// The compensation family of the plan selects the record set.
 impl SelectsRecords<UndoCompensation> for UndoPlan {
-    fn selector(&self) -> UndoSelector {
-        match &self.family {
-            UndoFamily::Prose(_) | UndoFamily::Acceptance(_) => UndoSelector::Revision,
-            UndoFamily::Structure(_) => UndoSelector::Structure,
-            UndoFamily::CurrentChapter(_) => UndoSelector::CurrentChapter,
+    async fn allocate_records(
+        &self,
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> Result<UndoSequences, ProjectCommandError> {
+        Ok(match &self.family {
+            UndoFamily::Prose(_) | UndoFamily::Acceptance(_) => {
+                UndoSequences::Revision(AuthoritativeRevision::allocate(client, scope).await?)
+            }
+            UndoFamily::Structure(_) => {
+                UndoSequences::Structure(StructureCompensation::allocate(client, scope).await?)
+            }
+            UndoFamily::CurrentChapter(_) => UndoSequences::CurrentChapter(
+                CurrentChapterCompensation::allocate(client, scope).await?,
+            ),
             UndoFamily::ProposalEdit(_)
             | UndoFamily::Replan(_)
             | UndoFamily::ReopenRejectedOperations(_)
             | UndoFamily::ReopenWithdrawnProposal(_)
             | UndoFamily::AuthorWithdrawal(_)
-            | UndoFamily::Reversal { .. } => UndoSelector::Action,
-        }
+            | UndoFamily::Reversal { .. } => {
+                UndoSequences::Action(allocate_compensation_action(client, scope).await?)
+            }
+        })
     }
 }
 
@@ -220,31 +223,10 @@ impl SelectsRecords<UndoCompensation> for UndoPlan {
 pub(crate) struct UndoCompensation;
 
 impl SettlementProfile for UndoCompensation {
-    type Selector = UndoSelector;
     type Sequences = UndoSequences;
     type Write<E: Send> = UndoWrite<E>;
     type Applied<E: Send> = UndoApplied<E>;
-
-    async fn allocate(
-        client: &Client,
-        scope: &ProjectScope,
-        selector: &UndoSelector,
-    ) -> Result<UndoSequences, ProjectCommandError> {
-        Ok(match selector {
-            UndoSelector::Revision => {
-                UndoSequences::Revision(AuthoritativeRevision::allocate(client, scope, &()).await?)
-            }
-            UndoSelector::Structure => {
-                UndoSequences::Structure(StructureCompensation::allocate(client, scope).await?)
-            }
-            UndoSelector::CurrentChapter => UndoSequences::CurrentChapter(
-                CurrentChapterCompensation::allocate(client, scope).await?,
-            ),
-            UndoSelector::Action => {
-                UndoSequences::Action(allocate_compensation_action(client, scope).await?)
-            }
-        })
-    }
+    type Input = ();
 
     fn commit_ids(sequences: &UndoSequences) -> Vec<String> {
         match sequences {
@@ -265,10 +247,8 @@ impl SettlementProfile for UndoCompensation {
 
     async fn persist<E: Send>(
         client: &Client,
-        _envelope: &ProjectCommandEnvelope,
-        _project: &LockedProject,
-        _spec: &CommandSpec,
-        _variant: AppliedVariant,
+        envelope: &ProjectCommandEnvelope,
+        (): (),
         sequences: UndoSequences,
         write: UndoWrite<E>,
     ) -> Result<UndoApplied<E>, ProjectCommandError> {
@@ -346,8 +326,8 @@ impl SettlementProfile for UndoCompensation {
             | UndoFamily::AuthorWithdrawal(_) => {
                 crate::editor_session::current_author_undo_frontier_sequence(
                     client,
-                    request.project_scope.owner_user_id.as_ref(),
-                    request.project_scope.project_id.as_ref(),
+                    envelope.project_scope.owner_user_id.as_ref(),
+                    envelope.project_scope.project_id.as_ref(),
                 )
                 .await
                 .map_err(super::undo_from_session)?

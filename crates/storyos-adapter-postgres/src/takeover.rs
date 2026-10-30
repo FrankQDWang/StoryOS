@@ -15,9 +15,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityRows,
-    ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    CommandSpec, LockedProject, NoResponse, ProjectCommand, ReceiptHeads, ReplayEffect,
+    TakeoverAdmission, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -84,9 +84,6 @@ impl ProjectCommand for TakeOverProjectWriterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "takeOverProjectWriter",
         applied: &[AppliedVariant::NoAuthorAction],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::BindingConflict,
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "writer_takeover_applied",
         replay_effect: ReplayEffect::NoQuery,
     };
@@ -100,6 +97,14 @@ impl ProjectCommand for TakeOverProjectWriterInput {
     type NoEffect = TakeOverProjectWriterNoEffect;
     type Conflict = Infallible;
     type Refusal = Infallible;
+
+    async fn diagnose_missing_admission(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+    ) -> ProjectCommandError {
+        ProjectCommandError::BindingConflict
+    }
 
     async fn classify(
         &self,

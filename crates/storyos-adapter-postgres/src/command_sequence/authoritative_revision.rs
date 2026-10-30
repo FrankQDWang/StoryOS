@@ -1,6 +1,6 @@
 //! The `AuthoritativeRevision` settlement profile: one new Authoritative Revision of a Chapter
 //! with its Commit, Author Action, Activity record, writer base, and canonical Snapshot
-//! (ADR 0044).
+//! (ADR 0076).
 
 use storyos_application::{
     AuthorCommandAdmissionIds, AuthoritativeAppliedIds, ProjectCommandEnvelope,
@@ -10,7 +10,8 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::{
-    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+    CommitCounters, SettlementProfile, SingleRecordSet, allocate_commit_counters,
+    insert_author_action, unavailable,
 };
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::manuscript_block::{
@@ -26,7 +27,7 @@ pub(crate) struct RevisionSequences {
     pub(crate) ids: AuthoritativeAppliedIds,
 }
 
-/// The Author Action disposition of one applied outcome (ADR 0044).
+/// The Author Action disposition of one applied outcome (ADR 0076).
 pub(crate) enum ActionDisposition {
     Forward,
     /// The Compensation of the Forward Author Action at `source_sequence`.
@@ -69,44 +70,20 @@ pub(crate) struct RevisionWrite<E> {
 
 pub(crate) struct AuthoritativeRevision;
 
-impl<T> SelectsRecords<AuthoritativeRevision> for T {
-    fn selector(&self) {}
-}
-
-impl SettlementProfile for AuthoritativeRevision {
-    type Selector = ();
-    type Sequences = RevisionSequences;
-    type Write<E: Send> = RevisionWrite<E>;
-    type Applied<E: Send> = RevisionApplied<E>;
-
+impl SingleRecordSet for AuthoritativeRevision {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
-        (): &(),
     ) -> Result<RevisionSequences, ProjectCommandError> {
-        let row = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, author_action_sequence,
-                    authoritative_commit_sequence, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   author_action_sequence = counters.author_action_sequence + 1,
-                   authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.author_action_sequence::text,
-                           counters.authoritative_commit_sequence::text,
-                           counters.project_activity_position::text",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .map_err(unavailable)?;
-        let sequence = |index: usize| row.get::<_, String>(index).parse().map_err(unavailable);
+        let CommitCounters {
+            author_action_sequence,
+            authoritative_commit_sequence,
+            project_activity_position,
+        } = allocate_commit_counters(client, scope).await?;
         Ok(RevisionSequences {
-            author_action_sequence: sequence(/*index*/ 0)?,
-            authoritative_commit_sequence: sequence(/*index*/ 1)?,
-            project_activity_position: sequence(/*index*/ 2)?,
+            author_action_sequence,
+            authoritative_commit_sequence,
+            project_activity_position,
             ids: AuthoritativeAppliedIds {
                 revision_id: Uuid::now_v7().to_string(),
                 payload_id: Uuid::now_v7().to_string(),
@@ -115,6 +92,13 @@ impl SettlementProfile for AuthoritativeRevision {
             },
         })
     }
+}
+
+impl SettlementProfile for AuthoritativeRevision {
+    type Sequences = RevisionSequences;
+    type Write<E: Send> = RevisionWrite<E>;
+    type Applied<E: Send> = RevisionApplied<E>;
+    type Input = ();
 
     fn commit_ids(sequences: &RevisionSequences) -> Vec<String> {
         vec![sequences.ids.authoritative_commit_id.clone()]
@@ -127,9 +111,7 @@ impl SettlementProfile for AuthoritativeRevision {
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        _project: &LockedProject,
-        _spec: &CommandSpec,
-        _variant: AppliedVariant,
+        (): (),
         sequences: RevisionSequences,
         write: RevisionWrite<E>,
     ) -> Result<RevisionApplied<E>, ProjectCommandError> {
@@ -314,33 +296,16 @@ pub(crate) async fn write_revision<E>(
         )
         .await
         .map_err(unavailable)?;
+    insert_author_action(
+        client,
+        scope,
+        sequences.author_action_sequence,
+        &write.disposition,
+        Some(&revision.authoritative_commit_id),
+        &ids.receipt_id,
+    )
+    .await?;
     let author_action_sequence = sequences.author_action_sequence.to_string();
-    let (disposition, source_sequence) = match write.disposition {
-        ActionDisposition::Forward => ("forward", None),
-        ActionDisposition::Compensation { source_sequence } => {
-            ("compensation", Some(source_sequence.to_string()))
-        }
-    };
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                compensated_source_sequence, authoritative_commit_id, receipt_id,
-                receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4,
-                     $5::text::numeric, $6::text::uuid, $7::text::uuid, 'authoritative_applied')",
-            &[
-                &owner_user_id,
-                &project_id,
-                &author_action_sequence,
-                &disposition,
-                &source_sequence,
-                &revision.authoritative_commit_id,
-                &ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
     let position = sequences.project_activity_position.to_string();
     client
         .execute(

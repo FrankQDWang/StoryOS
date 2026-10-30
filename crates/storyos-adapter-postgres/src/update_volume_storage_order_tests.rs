@@ -1,9 +1,17 @@
-use storyos_application::{UndoApplied, UndoRecords};
+//! The Author Undo of Volume reorders and a Volume deletion in one Project, newest first.
+
+use storyos_application::{
+    ChapterId, GetManuscriptTree, OpenChapter, UndoApplied, UndoRecords, get_manuscript_tree,
+    open_chapter,
+};
 use storyos_core::TransitionOutcome;
 
-use super::*;
-use crate::delete_volume_tests::apply_delete;
-use crate::set_current_chapter_authority_tests::{open_session, undo_named};
+use crate::command_sequence::tests::{
+    applied, seed_project, stores, titled_chapter, titled_volume, undo_named,
+};
+use crate::delete_structure_tests::settle_delete_volume;
+use crate::set_current_chapter_authority_tests::open_session;
+use crate::update_structure_tests::settle_update_volume;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -11,32 +19,21 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let mut store = PostgresProjectReader {
-        challenge_rate_clock_unix_seconds: Some(60),
-        ..PostgresProjectReader::new(std::env::var("STORYOS_TEST_DATABASE_URL").unwrap())
-    };
+    let (mut store, _admin) = stores().await;
+    store.challenge_rate_clock_unix_seconds = Some(60);
     let scope = seed_project(&store, "7060").await;
     let mut volumes = Vec::new();
     for index in 0..4 {
         let suffix = format!("{:04x}", 0x7061 + index);
         let title = format!("Volume {}", index + 1);
-        let revision = index + 1;
-        let bytes =
-            format!(r#"{{"expected_tree_revision":"{revision}","title":"{title}"}}"#).into_bytes();
-        let digest = format!(
-            "sha256:storyos.command.createVolume.jcs.v1:{}",
-            crate::author_edit::sha256_hex(&bytes)
-        );
-        volumes
-            .push(apply_volume(&store, &scope, &suffix, &title, &bytes, &digest, revision).await);
+        volumes.push(titled_volume(&store, &scope, &suffix, &title, index + 1).await);
     }
-    let chapter_id = apply_chapter(
+    let chapter_id = titled_chapter(
         &store,
         &scope,
         "7065",
         &volumes[0],
         "Chapter A",
-        br#"{"expected_tree_revision":"5","title":"Chapter A"}"#,
         /*expected_tree_revision*/ 5,
     )
     .await;
@@ -44,13 +41,12 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
     else {
         panic!("the original tree must exist");
     };
-    let deleted = apply_delete(
+    let deleted = settle_delete_volume(
         &store,
         &scope,
         "7066",
         &volumes[1],
         /*expected_tree_revision*/ 6,
-        br#"{"expected_tree_revision":"6"}"#,
     )
     .await;
     let mut prior_trees = vec![original];
@@ -64,23 +60,9 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
         prior_trees.push(prior);
         let revision = 7 + index;
         let suffix = format!("{:04x}", 0x7067 + index);
-        let bytes = format!(
-            r#"{{"expected_tree_revision":"{revision}","order":"{order}","title":"{title}"}}"#
-        )
-        .into_bytes();
-        let updated = apply_update(
-            &store,
-            &scope,
-            &suffix,
-            UpdateFixture {
-                volume_id: &volumes[3],
-                title,
-                order,
-                expected_tree_revision: revision,
-                bytes: &bytes,
-            },
-        )
-        .await;
+        let updated =
+            settle_update_volume(&store, &scope, &suffix, &volumes[3], title, order, revision)
+                .await;
         forward_sequences.push(applied(&updated).1.author_action_sequence);
     }
     let editor_session_id = open_session(&store, &scope, "7069").await;

@@ -3,16 +3,14 @@
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::tests::{
-    applied, command_call, create_volume, update_chapter, update_volume,
+    applied, seed_project, stores, titled_chapter, titled_volume,
 };
 use crate::pinned_export_source::{
     PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
-use crate::update_chapter_rank_batch_tests::{connect_admin, runtime_store};
-use crate::update_volume_tests::{apply_chapter, named_issue, seed_project};
+use crate::update_structure_tests::{settle_update_chapter, settle_update_volume};
 use storyos_application::{
-    CanonicalManuscriptTree, CreateVolumeInput, GetManuscriptTree, ProjectScope,
-    get_manuscript_tree, issue_project_command_challenge,
+    CanonicalManuscriptTree, GetManuscriptTree, ProjectScope, get_manuscript_tree,
     render_readable_manuscript_from_pinned_source,
 };
 
@@ -21,22 +19,6 @@ const CHAPTER_COUNT: u16 = 12;
 
 fn suffix(value: u16) -> String {
     format!("{value:04x}")
-}
-
-fn structure_bytes(title: &str, expected_tree_revision: u64) -> Vec<u8> {
-    format!(r#"{{"expected_tree_revision":"{expected_tree_revision}","title":"{title}"}}"#)
-        .into_bytes()
-}
-
-fn update_bytes(title: &str, order: u64, expected_tree_revision: u64) -> Vec<u8> {
-    format!(
-        r#"{{"expected_tree_revision":"{expected_tree_revision}","order":"{order}","title":"{title}"}}"#
-    )
-    .into_bytes()
-}
-
-fn digest(profile: &str, bytes: &[u8]) -> String {
-    format!("sha256:{profile}:{}", crate::author_edit::sha256_hex(bytes))
 }
 
 /// Sibling titles with their ranks, in tree order.
@@ -60,44 +42,6 @@ async fn reset_challenge_rate(admin: &tokio_postgres::Client, scope: &ProjectSco
         .unwrap();
 }
 
-async fn apply_titled_volume(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    issue_suffix: &str,
-    title: &str,
-    expected_tree_revision: u64,
-) -> String {
-    let bytes = structure_bytes(title, expected_tree_revision);
-    let issue = named_issue(
-        scope,
-        issue_suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        &digest("storyos.command.createVolume.jcs.v1", &bytes),
-    );
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = create_volume(
-        store,
-        &command_call(
-            issue.binding,
-            &issue.nonce_digest,
-            issue_suffix,
-            &bytes,
-            CreateVolumeInput {
-                title: title.to_owned(),
-                expected_tree_revision,
-            },
-        ),
-    )
-    .await
-    .unwrap();
-    applied(&settlement).0.volume_id
-}
-
 /// Seeds ten Volumes and twelve Chapters in the first Volume. The tree revision is 23 after it.
 async fn seed_long_tree(
     store: &PostgresProjectReader,
@@ -110,7 +54,7 @@ async fn seed_long_tree(
         let tree_revision = index as u64 + 1;
         reset_challenge_rate(admin, &scope).await;
         volume_ids.push(
-            apply_titled_volume(
+            titled_volume(
                 store,
                 &scope,
                 &suffix(first_suffix + 0x10 + index as u16),
@@ -123,13 +67,12 @@ async fn seed_long_tree(
     for (index, title) in numbered("Chapter", CHAPTER_COUNT).iter().enumerate() {
         let tree_revision = u64::from(VOLUME_COUNT) + index as u64 + 1;
         reset_challenge_rate(admin, &scope).await;
-        apply_chapter(
+        titled_chapter(
             store,
             &scope,
             &suffix(first_suffix + 0x30 + index as u16),
             &volume_ids[0],
             title,
-            &structure_bytes(title, tree_revision),
             tree_revision,
         )
         .await;
@@ -244,8 +187,7 @@ async fn tree_and_readable_export_list_ten_or_more_siblings_in_numeric_rank_orde
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let store = runtime_store();
-    let admin = connect_admin().await;
+    let (store, admin) = stores().await;
     let (scope, first_volume_id) = seed_long_tree(&store, &admin, /*first_suffix*/ 0xc000).await;
 
     let volume_titles = numbered("Volume", VOLUME_COUNT);
@@ -288,32 +230,16 @@ async fn update_chapter_by_title(
         .find(|chapter| chapter.title == edit.current_title)
         .expect("the Chapter is in the tree");
     let order = edit.order.unwrap_or(chapter.order);
-    let bytes = update_bytes(edit.title, order, edit.expected_tree_revision);
-    let issue = crate::update_chapter_tests::update_issue(
+    let settlement = settle_update_chapter(
+        store,
         scope,
         edit.issue_suffix,
-        &digest("storyos.command.updateChapter.jcs.v1", &bytes),
-    );
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = update_chapter(
-        store,
-        &crate::update_chapter_tests::update_command(
-            issue.binding,
-            &issue.nonce_digest,
-            edit.issue_suffix,
-            crate::update_chapter_tests::UpdateFixture {
-                chapter_id: chapter.chapter_id.as_ref(),
-                title: edit.title,
-                order,
-                expected_tree_revision: edit.expected_tree_revision,
-                bytes: &bytes,
-            },
-        ),
+        chapter.chapter_id.as_ref(),
+        edit.title,
+        order,
+        edit.expected_tree_revision,
     )
-    .await
-    .unwrap();
+    .await;
     applied(&settlement);
 }
 
@@ -329,32 +255,16 @@ async fn update_volume_by_title(
         .find(|volume| volume.title == edit.current_title)
         .expect("the Volume is in the tree");
     let order = edit.order.unwrap_or(volume.order);
-    let bytes = update_bytes(edit.title, order, edit.expected_tree_revision);
-    let issue = crate::update_volume_tests::update_issue(
+    let settlement = settle_update_volume(
+        store,
         scope,
         edit.issue_suffix,
-        &digest("storyos.command.updateVolume.jcs.v1", &bytes),
-    );
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = update_volume(
-        store,
-        &crate::update_volume_tests::update_command(
-            issue.binding,
-            &issue.nonce_digest,
-            edit.issue_suffix,
-            crate::update_volume_tests::UpdateFixture {
-                volume_id: volume.volume_id.as_ref(),
-                title: edit.title,
-                order,
-                expected_tree_revision: edit.expected_tree_revision,
-                bytes: &bytes,
-            },
-        ),
+        volume.volume_id.as_ref(),
+        edit.title,
+        order,
+        edit.expected_tree_revision,
     )
-    .await
-    .unwrap();
+    .await;
     applied(&settlement);
 }
 
@@ -382,8 +292,7 @@ async fn rename_and_move_with_ten_or_more_siblings_keep_the_physical_order() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let store = runtime_store();
-    let admin = connect_admin().await;
+    let (store, admin) = stores().await;
     let (scope, first_volume_id) = seed_long_tree(&store, &admin, /*first_suffix*/ 0xc100).await;
     let mut volume_titles = numbered("Volume", VOLUME_COUNT);
     let mut chapter_titles = numbered("Chapter", CHAPTER_COUNT);

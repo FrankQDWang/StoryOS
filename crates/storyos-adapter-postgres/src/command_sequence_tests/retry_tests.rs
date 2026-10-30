@@ -9,7 +9,6 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::open_session;
-use crate::update_volume_tests::seed_project;
 
 use super::acceptance::accept_proposal_call;
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
@@ -31,7 +30,7 @@ use super::structure::{
     update_chapter_call, update_volume_call,
 };
 use super::support::{
-    CommandCall, SequenceError, issued, replayed_outcome, settlement_rows, stores,
+    CommandCall, SequenceError, issued, replayed_outcome, seed_project, settlement_rows, stores,
     two_chapter_writer, with_new_request_ids,
 };
 
