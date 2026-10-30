@@ -2,8 +2,9 @@ use storyos_application::{UndoApplied, UndoRecords};
 use storyos_core::TransitionOutcome;
 
 use super::*;
+use crate::command_sequence::tests::undo_named;
 use crate::delete_volume_tests::apply_delete;
-use crate::set_current_chapter_authority_tests::{open_session, undo_named};
+use crate::set_current_chapter_authority_tests::open_session;
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

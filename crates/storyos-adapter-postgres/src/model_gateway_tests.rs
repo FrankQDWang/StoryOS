@@ -1,4 +1,6 @@
-use crate::command_sequence::tests::seed_project;
+use crate::command_sequence::tests::{
+    CREATE_AGENT_RUN, UPDATE_PROJECT_ASSISTANCE, command_issue, seed_project,
+};
 use std::sync::Mutex;
 
 use storyos_adapter_fake_destination::FakeDestination;
@@ -16,7 +18,7 @@ use storyos_core::{
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::{apply_chapter, apply_volume, named_issue};
+use crate::update_volume_tests::{apply_chapter, apply_volume};
 
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
@@ -254,13 +256,10 @@ pub(crate) async fn queued_run(
     destination: DeploymentDestination,
 ) -> (ProjectScope, String, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
-    let assistance = named_issue(
+    let assistance = command_issue(
         &scope,
         &format!("{prefix}1"),
-        "PUT",
-        "/api/v1/projects/{project_id}/assistance",
-        "storyos.command.update-project-assistance.request.v1",
-        "updateProjectAssistance",
+        &UPDATE_PROJECT_ASSISTANCE,
         &digest("updateProjectAssistance", AVAILABLE_BYTES),
     );
     issue_project_command_challenge(store, &assistance)
@@ -346,13 +345,10 @@ pub(crate) async fn admit_run_in(
     author_message: &str,
     conversation: ConversationSelection,
 ) -> String {
-    let run = named_issue(
+    let run = command_issue(
         scope,
         &format!("{prefix}5"),
-        "POST",
-        "/api/v1/projects/{project_id}/agent-runs",
-        "storyos.command.create-agent-run.request.v2",
-        "createAgentRun",
+        &CREATE_AGENT_RUN,
         &digest("createAgentRun", RUN_BYTES),
     );
     issue_project_command_challenge(store, &run).await.unwrap();

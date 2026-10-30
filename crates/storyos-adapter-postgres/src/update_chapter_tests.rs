@@ -12,8 +12,9 @@ use storyos_core::{TransitionOutcome, UpdateChapterApplied};
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CREATE_VOLUME, CommandCall, applied, command_call, command_issue, create_chapter,
-    create_project_command, create_project_issue, create_volume, seed_project, update_chapter,
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, CommandCall, UNDO_LATEST_AUTHOR_ACTION,
+    UPDATE_CHAPTER, applied, command_call, command_issue, create_chapter, create_project_command,
+    create_project_issue, create_volume, seed_project, update_chapter,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -39,27 +40,7 @@ fn chapter_issue(
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters".to_owned(),
-            command_schema: "storyos.command.create-chapter.request.v1".to_owned(),
-            command_kind: "createChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &CREATE_CHAPTER, digest)
 }
 
 fn chapter_command(
@@ -90,27 +71,7 @@ pub(super) fn update_issue(
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "PATCH".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/chapters/{chapter_id}".to_owned(),
-            command_schema: "storyos.command.update-chapter.request.v1".to_owned(),
-            command_kind: "updateChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &UPDATE_CHAPTER, digest)
 }
 
 pub(super) struct UpdateFixture<'a> {
@@ -563,38 +524,6 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     assert_eq!(chapters_after_refuse, 2);
 }
 
-pub(super) fn named_issue(
-    scope: &ProjectScope,
-    suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce: format!("opaque-nonce-{suffix}"),
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
-}
-
 pub(super) async fn apply_volume(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
@@ -744,13 +673,10 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     .await;
     let (UpdateChapterApplied { tree_revision, .. }, authority) = applied(&updated);
     assert_eq!(tree_revision, 6);
-    let session_issue = named_issue(
+    let session_issue = command_issue(
         &scope,
         "118c",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:118c",
     );
     issue_project_command_challenge(&store, &session_issue)
@@ -799,15 +725,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
         "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
         crate::author_edit::sha256_hex(&undo_bytes)
     );
-    let undo_issue = named_issue(
-        &scope,
-        "118f",
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &undo_digest,
-    );
+    let undo_issue = command_issue(&scope, "118f", &UNDO_LATEST_AUTHOR_ACTION, &undo_digest);
     issue_project_command_challenge(&store, &undo_issue)
         .await
         .unwrap();
@@ -1011,13 +929,10 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
             ],
         }]
     );
-    let session_issue = named_issue(
+    let session_issue = command_issue(
         &scope,
         "11ca",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:11ca",
     );
     issue_project_command_challenge(&store, &session_issue)
@@ -1066,15 +981,7 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
         "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
         crate::author_edit::sha256_hex(&undo_bytes)
     );
-    let undo_issue = named_issue(
-        &scope,
-        "11ce",
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &undo_digest,
-    );
+    let undo_issue = command_issue(&scope, "11ce", &UNDO_LATEST_AUTHOR_ACTION, &undo_digest);
     issue_project_command_challenge(&store, &undo_issue)
         .await
         .unwrap();

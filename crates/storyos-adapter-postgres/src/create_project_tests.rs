@@ -1,45 +1,11 @@
 use super::*;
-use crate::command_sequence::tests::create_project_issue;
-use storyos_application::{
-    AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateProjectError, EditorClientBinding, ProjectScope, create_project,
-    issue_create_project_challenge,
-};
+use crate::command_sequence::tests::{create_project_command, create_project_issue};
+use storyos_application::{CreateProjectError, create_project, issue_create_project_challenge};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const TITLE: &str = "Empty Novel";
-
-fn command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
-    CreateProjectCommand {
-        project_scope,
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: TITLE.to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -61,7 +27,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     first_binding.canonical_command_digest = issued.canonical_command_digest.clone();
     let first = create_project(
         &store,
-        &command(first_binding.clone(), &first_issue.nonce_digest, "0402"),
+        &create_project_command(first_binding.clone(), &first_issue.nonce_digest, "0402"),
     )
     .await
     .unwrap();
@@ -69,7 +35,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert_eq!(first.project_activity_position, 1);
     let replay = create_project(
         &store,
-        &command(first_binding.clone(), &first_issue.nonce_digest, "0499"),
+        &create_project_command(first_binding.clone(), &first_issue.nonce_digest, "0499"),
     )
     .await
     .unwrap();
@@ -82,7 +48,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert!(matches!(
         create_project(
             &store,
-            &command(changed_digest, &first_issue.nonce_digest, "0403")
+            &create_project_command(changed_digest, &first_issue.nonce_digest, "0403")
         )
         .await,
         Err(CreateProjectError::InvalidChallenge)
@@ -90,7 +56,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert!(matches!(
         create_project(
             &store,
-            &command(first_binding.clone(), "sha256:nonce-other", "0404")
+            &create_project_command(first_binding.clone(), "sha256:nonce-other", "0404")
         )
         .await,
         Err(CreateProjectError::InvalidChallenge)
@@ -119,7 +85,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert!(matches!(
         create_project(
             &store,
-            &command(existing_binding, &existing_issue.nonce_digest, "0406")
+            &create_project_command(existing_binding, &existing_issue.nonce_digest, "0406")
         )
         .await,
         Err(CreateProjectError::ExistingProject)
@@ -192,7 +158,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert!(matches!(
         create_project(
             &store,
-            &command(first_binding.clone(), &first_issue.nonce_digest, "0498")
+            &create_project_command(first_binding.clone(), &first_issue.nonce_digest, "0498")
         )
         .await,
         Err(CreateProjectError::Unavailable(_))
@@ -211,7 +177,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     assert!(matches!(
         create_project(
             &store,
-            &command(first_binding.clone(), &first_issue.nonce_digest, "0497")
+            &create_project_command(first_binding.clone(), &first_issue.nonce_digest, "0497")
         )
         .await,
         Err(CreateProjectError::BindingConflict)

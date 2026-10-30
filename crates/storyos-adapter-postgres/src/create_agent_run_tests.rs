@@ -9,7 +9,9 @@ use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, TransitionOutc
 
 use std::time::Duration;
 
-use crate::command_sequence::tests::{CommandCall, command_call};
+use crate::command_sequence::tests::{
+    CREATE_AGENT_RUN, CommandCall, UPDATE_PROJECT_ASSISTANCE, command_call, command_issue,
+};
 use tokio_postgres::{Client, NoTls};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -19,8 +21,6 @@ const OTHER_PROJECT: &str = "018f0000-0000-7001-8000-0000000007a3";
 const CHAPTER: &str = "018f0000-0000-7001-8000-0000000007c1";
 const RACE_PROJECT: &str = "018f0000-0000-7001-8000-000000000b82";
 const RACE_CHAPTER: &str = "018f0000-0000-7001-8000-000000000b8c";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
 
@@ -37,54 +37,24 @@ fn digest(profile: &str, bytes: &[u8]) -> String {
 }
 
 fn issue_assistance(project: &str, idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: ProjectScope::new(UserId::new(USER_A), ProjectId::new(project)),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "PUT".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/assistance".to_owned(),
-            command_schema: "storyos.command.update-project-assistance.request.v1".to_owned(),
-            command_kind: "updateProjectAssistance".to_owned(),
-            canonical_command_digest: digest(
-                "storyos.command.updateProjectAssistance.jcs.v1",
-                AVAILABLE_BYTES,
-            ),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(
+        &ProjectScope::new(UserId::new(USER_A), ProjectId::new(project)),
+        idempotency_suffix,
+        &UPDATE_PROJECT_ASSISTANCE,
+        &digest(
+            "storyos.command.updateProjectAssistance.jcs.v1",
+            AVAILABLE_BYTES,
+        ),
+    )
 }
 
 fn issue_run(project: &str, idempotency_suffix: &str) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: ProjectScope::new(UserId::new(USER_A), ProjectId::new(project)),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/agent-runs".to_owned(),
-            command_schema: "storyos.command.create-agent-run.request.v2".to_owned(),
-            command_kind: "createAgentRun".to_owned(),
-            canonical_command_digest: digest("storyos.command.createAgentRun.jcs.v1", RUN_BYTES),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(
+        &ProjectScope::new(UserId::new(USER_A), ProjectId::new(project)),
+        idempotency_suffix,
+        &CREATE_AGENT_RUN,
+        &digest("storyos.command.createAgentRun.jcs.v1", RUN_BYTES),
+    )
 }
 
 fn run_command(

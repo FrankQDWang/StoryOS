@@ -114,7 +114,7 @@ A Barrier stops Author Undo, and Author Undo never skips it. These product decis
 
 ### Amendment of ADR 0075
 
-Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, the missing Admission, and the rate-limited Command Challenge. A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
+Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, and the missing Admission. The settlement path never returns a rate-limited Command Challenge, because only the Challenge issue applies the rate limit. Thus no command row has a rate-limit guarantee (coordinator decision of 2026-10-30 on #1317). A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
 
 ## Considered options
 

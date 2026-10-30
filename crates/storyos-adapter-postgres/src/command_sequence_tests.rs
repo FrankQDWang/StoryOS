@@ -64,13 +64,15 @@ mod author_edit;
 #[path = "command_sequence_tests/secondary_operation_tests.rs"]
 mod secondary_operation;
 
+pub(crate) use agent_run::CREATE_AGENT_RUN;
 pub(crate) use project_session::{ARCHIVE_PROJECT, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
 pub(crate) use structure::{
-    CREATE_CHAPTER, CREATE_VOLUME, SET_CURRENT_CHAPTER, UPDATE_CHAPTER, UPDATE_VOLUME,
-    create_chapter, create_volume, delete_chapter, delete_volume, update_chapter, update_volume,
+    CREATE_CHAPTER, CREATE_VOLUME, DELETE_CHAPTER, DELETE_VOLUME, SET_CURRENT_CHAPTER,
+    UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_volume, delete_chapter, delete_volume,
+    update_chapter, update_volume,
 };
 pub(crate) use support::{
     CREATE_EDITOR_SESSION, CommandCall, applied, command_call, command_issue,
-    create_project_command, create_project_issue, seed_owned_project, seed_project,
+    create_project_command, create_project_issue, seed_owned_project, seed_project, undo_named,
 };
 pub(crate) use undo::UNDO_LATEST_AUTHOR_ACTION;

@@ -10,14 +10,12 @@ use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CREATE_VOLUME, CommandCall, applied, command_call, command_issue, create_chapter,
-    create_project_command, create_project_issue, create_volume,
+    CREATE_CHAPTER, CREATE_VOLUME, CommandCall, applied, command_call, command_issue,
+    create_chapter, create_project_command, create_project_issue, create_volume,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_TITLE: &str = "Volume A";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
@@ -34,27 +32,7 @@ fn chapter_issue(
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters".to_owned(),
-            command_schema: "storyos.command.create-chapter.request.v1".to_owned(),
-            command_kind: "createChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &CREATE_CHAPTER, digest)
 }
 
 fn chapter_command(

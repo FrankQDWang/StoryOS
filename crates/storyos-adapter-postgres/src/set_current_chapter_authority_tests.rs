@@ -1,25 +1,21 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority,
-    CreateChapterInput, CreateVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree,
-    OpenChapter, OpenEditorSession, ProjectCommandEnvelope, ProjectScope, SetCurrentChapterInput,
-    SetCurrentChapterSettlement, UndoApplied, UndoLatestAuthorActionInput, UndoRecords,
-    VolumeCreated, VolumeId, VolumeNode, create_editor_session, get_manuscript_tree,
-    issue_project_command_challenge, open_chapter, open_project,
+    ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority, CreateChapterInput,
+    CreateVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree, OpenChapter,
+    OpenEditorSession, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
+    UndoApplied, UndoRecords, VolumeCreated, VolumeId, VolumeNode, create_editor_session,
+    get_manuscript_tree, issue_project_command_challenge, open_chapter, open_project,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, SET_CURRENT_CHAPTER,
-    UNDO_LATEST_AUTHOR_ACTION, applied, command_call, command_issue, create_chapter, create_volume,
-    seed_owned_project,
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, SET_CURRENT_CHAPTER, applied,
+    command_call, command_issue, create_chapter, create_volume, seed_owned_project, undo_named,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
 const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
@@ -190,67 +186,6 @@ async fn open_admin() -> tokio_postgres::Client {
         admin_connection.await.unwrap();
     });
     admin
-}
-
-pub(super) async fn undo_named(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    editor_session_id: &str,
-    expected_frontier: u64,
-    expected_revision_id: &str,
-    suffix: &str,
-) -> storyos_application::UndoLatestAuthorActionSettlement {
-    let input = serde_json::json!({
-        "expected_author_undo_frontier_sequence": expected_frontier.to_string(),
-        "expected_authoritative_revision_id": expected_revision_id,
-        "editor_session_id": editor_session_id,
-        "client_contract_revision": CLIENT,
-        "security_policy_revision": SECURITY,
-        "correlation_id": format!("018f0000-0000-7001-8000-00000000{suffix}"),
-    });
-    let body = serde_json::json!({
-        "command_schema": "storyos.command.undo-latest-author-action.request.v1",
-        "undo_latest_author_action_input": input,
-    });
-    let bytes = serde_json::to_vec(&body).unwrap();
-    let digest = format!(
-        "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
-        crate::author_edit::sha256_hex(&bytes)
-    );
-    let issue = command_issue(scope, suffix, &UNDO_LATEST_AUTHOR_ACTION, &digest);
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    store
-        .undo_latest_author_action(
-            &ProjectCommandEnvelope {
-                project_scope: scope.clone(),
-                client_binding: EditorClientBinding {
-                    binding_ref: issue.binding.client_session_binding_digest.clone(),
-                    session_generation: issue.binding.client_session_generation,
-                    client_contract_revision: issue.binding.client_contract_revision.clone(),
-                    security_policy_revision: issue.binding.security_policy_revision.clone(),
-                },
-                challenge_binding: issue.binding,
-                nonce_digest: issue.nonce_digest,
-                canonical_command_bytes: bytes,
-                correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-                ids: AuthorCommandAdmissionIds {
-                    command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                    author_command_admission_id: format!(
-                        "018f0000-0000-7001-8000-00000002{suffix}"
-                    ),
-                    receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-                },
-            },
-            &UndoLatestAuthorActionInput {
-                editor_session_id: EditorSessionId::new(editor_session_id),
-                expected_author_undo_frontier_sequence: expected_frontier,
-                expected_authoritative_revision_id: expected_revision_id.to_owned(),
-            },
-        )
-        .await
-        .unwrap()
 }
 
 pub(super) async fn seed_two_chapters(

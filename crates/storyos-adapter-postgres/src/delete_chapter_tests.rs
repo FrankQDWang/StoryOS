@@ -12,8 +12,9 @@ use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CREATE_VOLUME, CommandCall, applied, command_call, command_issue, create_chapter,
-    create_volume, delete_chapter, seed_project,
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, CommandCall, DELETE_CHAPTER,
+    UNDO_LATEST_AUTHOR_ACTION, applied, command_call, command_issue, create_chapter, create_volume,
+    delete_chapter, seed_project,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -32,27 +33,7 @@ fn chapter_issue(
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters".to_owned(),
-            command_schema: "storyos.command.create-chapter.request.v1".to_owned(),
-            command_kind: "createChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &CREATE_CHAPTER, digest)
 }
 
 fn chapter_command(
@@ -83,27 +64,7 @@ fn delete_issue(
     idempotency_suffix: &str,
     digest: &str,
 ) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: "DELETE".to_owned(),
-            route_template: "/api/v1/projects/{project_id}/chapters/{chapter_id}".to_owned(),
-            command_schema: "storyos.command.delete-chapter.request.v1".to_owned(),
-            command_kind: "deleteChapter".to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
-        },
-        nonce: format!("opaque-nonce-{idempotency_suffix}"),
-        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
+    command_issue(scope, idempotency_suffix, &DELETE_CHAPTER, digest)
 }
 
 fn delete_command(
@@ -124,38 +85,6 @@ fn delete_command(
             expected_tree_revision,
         },
     )
-}
-
-fn named_issue(
-    scope: &ProjectScope,
-    suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce: format!("opaque-nonce-{suffix}"),
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
 }
 
 async fn apply_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffix: &str) -> String {
@@ -554,13 +483,10 @@ async fn author_undo_compensates_delete_chapter_and_restores_prior_chapter_ident
             chapter_id: chapter_b.clone(),
         }
     );
-    let session_issue = named_issue(
+    let session_issue = command_issue(
         &scope,
         "e43a",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:e43a",
     );
     issue_project_command_challenge(&store, &session_issue)
@@ -609,15 +535,7 @@ async fn author_undo_compensates_delete_chapter_and_restores_prior_chapter_ident
         "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
         crate::author_edit::sha256_hex(&undo_bytes)
     );
-    let undo_issue = named_issue(
-        &scope,
-        "e43d",
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &undo_digest,
-    );
+    let undo_issue = command_issue(&scope, "e43d", &UNDO_LATEST_AUTHOR_ACTION, &undo_digest);
     issue_project_command_challenge(&store, &undo_issue)
         .await
         .unwrap();

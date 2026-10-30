@@ -1,45 +1,14 @@
 use super::*;
-use crate::command_sequence::tests::create_project_issue;
+use crate::command_sequence::tests::{create_project_command, create_project_issue};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    EditorClientBinding, GetManuscriptTree, ProjectId, ProjectScope, UserId, create_project,
-    get_manuscript_tree, issue_create_project_challenge,
+    GetManuscriptTree, ProjectId, ProjectScope, UserId, create_project, get_manuscript_tree,
+    issue_create_project_challenge,
 };
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
-
-fn command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
-    CreateProjectCommand {
-        project_scope,
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Empty Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
@@ -61,7 +30,7 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
     binding.canonical_command_digest = issued.canonical_command_digest.clone();
     create_project(
         &store,
-        &command(binding.clone(), &issue.nonce_digest, "0611"),
+        &create_project_command(binding.clone(), &issue.nonce_digest, "0611"),
     )
     .await
     .unwrap();

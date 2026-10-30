@@ -2,16 +2,18 @@ use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
     CreateVolumeInput, DeleteVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree,
-    IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords,
-    VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session, get_manuscript_tree,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, VolumeCreated,
+    VolumeDeleted, VolumeId, VolumeNode, create_editor_session, get_manuscript_tree,
     issue_project_command_challenge, open_chapter,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CommandCall, applied, command_call, create_chapter, create_volume, delete_volume, seed_project,
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, CommandCall, DELETE_VOLUME,
+    UNDO_LATEST_AUTHOR_ACTION, applied, command_call, command_issue, create_chapter, create_volume,
+    delete_volume, seed_project,
 };
 
 const CLIENT: &str = "storyos.web-client.release-1.v3";
@@ -35,38 +37,6 @@ fn client_binding(binding: &ProjectCommandChallengeBinding) -> EditorClientBindi
         session_generation: binding.client_session_generation,
         client_contract_revision: binding.client_contract_revision.clone(),
         security_policy_revision: binding.security_policy_revision.clone(),
-    }
-}
-
-fn named_issue(
-    scope: &ProjectScope,
-    suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce: format!("opaque-nonce-{suffix}"),
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-        earlier_revision_nonces: Vec::new(),
     }
 }
 
@@ -106,15 +76,7 @@ async fn apply_volume(
             crate::author_edit::sha256_hex(bytes)
         )
     };
-    let issue = named_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        &digest,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_VOLUME, &digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -150,15 +112,7 @@ async fn apply_chapter(
         "sha256:storyos.command.createChapter.jcs.v1:{}",
         crate::author_edit::sha256_hex(bytes)
     );
-    let issue = named_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-        "storyos.command.create-chapter.request.v1",
-        "createChapter",
-        &digest,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_CHAPTER, &digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -195,15 +149,7 @@ pub(super) async fn apply_delete(
         "sha256:storyos.command.deleteVolume.jcs.v1:{}",
         crate::author_edit::sha256_hex(bytes)
     );
-    let issue = named_issue(
-        scope,
-        suffix,
-        "DELETE",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}",
-        "storyos.command.delete-volume.request.v1",
-        "deleteVolume",
-        &digest,
-    );
+    let issue = command_issue(scope, suffix, &DELETE_VOLUME, &digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -281,15 +227,7 @@ async fn delete_volume_is_atomic_replayable_and_scope_safe() {
         "sha256:storyos.command.deleteVolume.jcs.v1:{}",
         crate::author_edit::sha256_hex(delete_bytes)
     );
-    let first_issue = named_issue(
-        &scope,
-        "e458",
-        "DELETE",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}",
-        "storyos.command.delete-volume.request.v1",
-        "deleteVolume",
-        &delete_digest,
-    );
+    let first_issue = command_issue(&scope, "e458", &DELETE_VOLUME, &delete_digest);
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -477,13 +415,10 @@ async fn author_undo_compensates_delete_volume_and_restores_prior_volume_identit
             volume_id: volume_b.clone(),
         }
     );
-    let session_issue = named_issue(
+    let session_issue = command_issue(
         &scope,
         "e47a",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:e47a",
     );
     issue_project_command_challenge(&store, &session_issue)
@@ -526,15 +461,7 @@ async fn author_undo_compensates_delete_volume_and_restores_prior_volume_identit
         "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
         crate::author_edit::sha256_hex(&undo_bytes)
     );
-    let undo_issue = named_issue(
-        &scope,
-        "e47d",
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &undo_digest,
-    );
+    let undo_issue = command_issue(&scope, "e47d", &UNDO_LATEST_AUTHOR_ACTION, &undo_digest);
     issue_project_command_challenge(&store, &undo_issue)
         .await
         .unwrap();

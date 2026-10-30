@@ -1,8 +1,7 @@
 use super::*;
-use crate::command_sequence::tests::create_project_issue;
+use crate::command_sequence::tests::{create_project_command, create_project_issue};
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, CreateProjectChallengeBinding, CreateProjectCommand,
-    EditorClientBinding, ManuscriptSearchCompleteness, ManuscriptSearchRequest,
+    ChapterId, CreateProjectCommand, ManuscriptSearchCompleteness, ManuscriptSearchRequest,
     ManuscriptSearchSelection, ProjectId, ProjectScope, SearchManuscript, UserId, create_project,
     issue_create_project_challenge, search_manuscript,
 };
@@ -12,36 +11,6 @@ use tokio_postgres::NoTls;
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
-
-fn command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    let project_scope = ProjectScope::new(
-        binding.owner_user_id.clone(),
-        binding.prospective_project_id.clone(),
-    );
-    CreateProjectCommand {
-        project_scope,
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Search Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Search Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
 
 fn manuscript_query(query_text: &str) -> ManuscriptSearchRequest {
     ManuscriptSearchRequest {
@@ -71,7 +40,11 @@ async fn search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_
     binding.canonical_command_digest = issued.canonical_command_digest.clone();
     create_project(
         &store,
-        &command(binding.clone(), &issue.nonce_digest, "0d91"),
+        &CreateProjectCommand {
+            canonical_command_bytes: br#"{"title":"Search Novel"}"#.to_vec(),
+            title: "Search Novel".to_owned(),
+            ..create_project_command(binding.clone(), &issue.nonce_digest, "0d91")
+        },
     )
     .await
     .unwrap();

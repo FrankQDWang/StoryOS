@@ -8,7 +8,8 @@ use storyos_application::{
     UserId, create_project, issue_create_project_challenge, issue_project_command_challenge,
 };
 use storyos_application::{
-    ChallengeRateClass, ChapterId, IssueProjectCommandChallenge, OpenChapter, open_chapter,
+    ChallengeRateClass, ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter,
+    UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement, open_chapter,
 };
 use storyos_core::{ReasonCode, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
@@ -16,6 +17,8 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::set_current_chapter_authority_tests::{open_session, seed_two_chapters};
+
+use super::undo::UNDO_LATEST_AUTHOR_ACTION;
 
 /// The sequence error of a settlement that a contract row expects.
 pub(crate) trait SequenceError {
@@ -334,6 +337,54 @@ pub(crate) fn command_issue(
         nonce_digest: format!("sha256:nonce-{suffix}"),
         earlier_revision_nonces: Vec::new(),
     }
+}
+
+/// Settles one Author Undo of the Author Undo Frontier `expected_frontier`, whose ids derive from
+/// `suffix`.
+pub(crate) async fn undo_named(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    editor_session_id: &str,
+    expected_frontier: u64,
+    expected_revision_id: &str,
+    suffix: &str,
+) -> UndoLatestAuthorActionSettlement {
+    let input = serde_json::json!({
+        "expected_author_undo_frontier_sequence": expected_frontier.to_string(),
+        "expected_authoritative_revision_id": expected_revision_id,
+        "editor_session_id": editor_session_id,
+        "client_contract_revision": CLIENT_CONTRACT_REVISION,
+        "security_policy_revision": SECURITY_POLICY_REVISION,
+        "correlation_id": format!("018f0000-0000-7001-8000-00000000{suffix}"),
+    });
+    let body = serde_json::json!({
+        "command_schema": "storyos.command.undo-latest-author-action.request.v1",
+        "undo_latest_author_action_input": input,
+    });
+    let bytes = serde_json::to_vec(&body).unwrap();
+    let digest = format!(
+        "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
+        crate::author_edit::sha256_hex(&bytes)
+    );
+    let issue = command_issue(scope, suffix, &UNDO_LATEST_AUTHOR_ACTION, &digest);
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    let call = command_call(
+        issue.binding,
+        &issue.nonce_digest,
+        suffix,
+        &bytes,
+        UndoLatestAuthorActionInput {
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            expected_author_undo_frontier_sequence: expected_frontier,
+            expected_authoritative_revision_id: expected_revision_id.to_owned(),
+        },
+    );
+    store
+        .undo_latest_author_action(&call.envelope, &call.input)
+        .await
+        .unwrap()
 }
 
 /// Settles one call, replays it with new request identities, and requires an equal settlement.
