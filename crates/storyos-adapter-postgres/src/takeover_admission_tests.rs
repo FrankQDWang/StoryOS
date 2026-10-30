@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use storyos_application::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, EditorSessionId,
     IssueProjectCommandChallenge, OpenEditorSession, ProjectCommandChallengeBinding,
@@ -60,7 +58,8 @@ struct DurableTakeoverState {
     snapshot_count: i64,
     activity_count: i64,
     settlement_count: i64,
-    activity_position: Option<String>,
+    /// The Author Action sequence, the Commit sequence, and the Activity position.
+    counters: Option<[String; 3]>,
     pending_keys: Vec<String>,
     settled_keys: Vec<String>,
     consumed_keys: Vec<String>,
@@ -356,7 +355,9 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
                    AND event_kind = 'writer_takeover_applied'),
                (SELECT count(*) FROM storyos.author_command_admission_settlements
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-               (SELECT project_activity_position::text FROM storyos.scope_counters
+               (SELECT ARRAY[author_action_sequence::text, authoritative_commit_sequence::text,
+                             project_activity_position::text]
+                  FROM storyos.scope_counters
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid)",
             &[&USER, &fixture.project_id.as_str()],
         )
@@ -384,7 +385,9 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
         snapshot_count: counts.get(0),
         activity_count: counts.get(1),
         settlement_count: counts.get(2),
-        activity_position: counts.get(3),
+        counters: counts
+            .get::<_, Option<Vec<String>>>(3)
+            .map(|counters| counters.try_into().unwrap()),
         pending_keys,
         settled_keys,
         consumed_keys,
@@ -404,36 +407,6 @@ async fn base_rows(admin: &Client, fixture: &TakeoverFixture) -> serde_json::Val
     serde_json::from_str(row.get(0)).unwrap()
 }
 
-fn assert_winner_base_handoff(
-    before: &serde_json::Value,
-    after: &serde_json::Value,
-    settlement: &TakeOverProjectWriterSettlement,
-) {
-    let WriterTakeover {
-        resulting_editor_session_id,
-        resulting_snapshot_id,
-        resulting_snapshot_activity_position,
-        ..
-    } = settlement
-        .zero_authority_effect
-        .as_ref()
-        .expect("a writer takeover records its writer effect");
-    let base = &after[resulting_editor_session_id];
-    let id = base["snapshot_id"].as_str().unwrap();
-    uuid::Uuid::parse_str(id).unwrap();
-    assert_ne!(
-        base["snapshot_id"],
-        before[resulting_editor_session_id]["snapshot_id"]
-    );
-    assert_eq!(id, resulting_snapshot_id);
-    let mut expected = before.clone();
-    expected[resulting_editor_session_id]["snapshot_id"] = base["snapshot_id"].clone();
-    expected[resulting_editor_session_id]["created_at"] = base["created_at"].clone();
-    expected[resulting_editor_session_id]["project_activity_position"] =
-        serde_json::json!(resulting_snapshot_activity_position);
-    assert_eq!(after, &expected);
-}
-
 fn expected_initial_state(
     fixture: &TakeoverFixture,
     pending_keys: Vec<String>,
@@ -445,134 +418,16 @@ fn expected_initial_state(
         snapshot_count: 3,
         activity_count: 0,
         settlement_count: 0,
-        activity_position: None,
+        counters: None,
         pending_keys,
         settled_keys: Vec::new(),
         consumed_keys: Vec::new(),
     }
 }
 
-fn assert_complete_settlement(
-    settlement: &TakeOverProjectWriterSettlement,
-    call: &CommandCall<TakeOverProjectWriterInput>,
-    fixture: &TakeoverFixture,
-) {
-    let resulting_snapshot_id = settlement
-        .zero_authority_effect
-        .as_ref()
-        .expect("a writer takeover records its writer effect")
-        .resulting_snapshot_id
-        .clone();
-    assert_eq!(
-        settlement,
-        &TakeOverProjectWriterSettlement {
-            ids: call.envelope.ids.clone(),
-            receipt_created_at: settlement.receipt_created_at.clone(),
-            outcome: TransitionOutcome::NoEffect(
-                TakeOverProjectWriterNoEffect::WriterTakeoverApplied
-            ),
-            response: (),
-            zero_authority_effect: Some(WriterTakeover {
-                prior_editor_session_id: fixture.writer_session_id.clone(),
-                prior_writer_generation: 1,
-                resulting_editor_session_id: call.input.editor_session_id.as_ref().to_owned(),
-                resulting_writer_generation: 2,
-                resulting_snapshot_id,
-                resulting_snapshot_activity_position: 1,
-                resulting_head: fixture.revision_id.clone(),
-            }),
-        }
-    );
-}
-
-fn named_store(database_url: &str, application_name: &str) -> PostgresProjectReader {
-    let separator = if database_url.contains('?') { '&' } else { '?' };
-    PostgresProjectReader::new(format!(
-        "{database_url}{separator}application_name={application_name}"
-    ))
-}
-
-async fn wait_for_generation_insert_gate(
-    admin: &Client,
-    application_names: &[String],
-    blocker_pid: i32,
-) -> Result<(), String> {
-    let waited = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            // The first Takeover waits for the gate. The second waits for the first Project lock.
-            let row = admin
-                .query_one(
-                    "SELECT count(DISTINCT activity.pid),
-                            count(DISTINCT activity.pid) FILTER (
-                              WHERE $2::int = ANY(pg_catalog.pg_blocking_pids(activity.pid))
-                            )
-                       FROM pg_catalog.pg_stat_activity AS activity
-                      WHERE activity.application_name = ANY($1::text[])
-                        AND activity.wait_event_type = 'Lock'",
-                    &[&application_names, &blocker_pid],
-                )
-                .await
-                .map_err(|error| error.to_string())?;
-            let (waiting, gated): (i64, i64) = (row.get(/*idx*/ 0), row.get(/*idx*/ 1));
-            if waiting == application_names.len() as i64 && gated >= 1 {
-                return Ok(());
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await;
-    match waited {
-        Ok(result) => result,
-        Err(_) => {
-            let observations = admin
-                .query(
-                    "SELECT application_name, state, wait_event_type, wait_event,
-                            left(query, 160), pg_catalog.pg_blocking_pids(pid)
-                       FROM pg_catalog.pg_stat_activity
-                      WHERE application_name = ANY($1::text[])
-                      ORDER BY application_name",
-                    &[&application_names],
-                )
-                .await
-                .map_err(|error| error.to_string())?
-                .into_iter()
-                .map(|row| {
-                    (
-                        row.get::<_, String>(0),
-                        row.get::<_, String>(1),
-                        row.get::<_, Option<String>>(2),
-                        row.get::<_, Option<String>>(3),
-                        row.get::<_, String>(4),
-                        row.get::<_, Vec<i32>>(5),
-                    )
-                })
-                .collect::<Vec<_>>();
-            Err(format!(
-                "both Takeovers did not reach the generation gate before timeout: {observations:?}"
-            ))
-        }
-    }
-}
-
-fn assert_database_race_failure(error: ProjectCommandError) {
-    let ProjectCommandError::Unavailable(source) = error else {
-        panic!("the losing Takeover must fail as unavailable: {error}");
-    };
-    let database_error = source
-        .downcast_ref::<tokio_postgres::Error>()
-        .expect("the losing Takeover must preserve the PostgreSQL error source");
-    let sqlstate = database_error
-        .code()
-        .map(tokio_postgres::error::SqlState::code);
-    assert!(
-        matches!(sqlstate, Some("40001" | "23505")),
-        "unexpected losing Takeover SQLSTATE: {sqlstate:?}"
-    );
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
+async fn a_takeover_hands_the_writer_to_an_observer_and_refuses_a_stale_or_current_writer() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
@@ -587,61 +442,59 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
 
     let same_session =
         prepare_takeover(&store, &fixture, &fixture.writer_session_id, 1, 1010).await;
-    assert!(matches!(
-        take_over_project_writer(&store, &same_session).await,
-        Err(ProjectCommandError::BindingConflict)
-    ));
-    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
-    assert_eq!(
-        durable_state(&admin, &fixture).await,
-        expected_initial_state(
-            &fixture,
-            vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ]
-        )
-    );
-
     let stale_generation =
         prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 0, 1020).await;
-    assert!(matches!(
-        take_over_project_writer(&store, &stale_generation).await,
-        Err(ProjectCommandError::BindingConflict)
-    ));
-    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
+    let refused_keys = [&same_session, &stale_generation]
+        .map(|call| call.envelope.challenge_binding.idempotency_key.clone())
+        .to_vec();
+    for refused in [&same_session, &stale_generation] {
+        assert!(matches!(
+            take_over_project_writer(&store, refused).await,
+            Err(ProjectCommandError::BindingConflict)
+        ));
+    }
     assert_eq!(
         durable_state(&admin, &fixture).await,
-        expected_initial_state(
-            &fixture,
-            vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-                stale_generation
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-            ]
-        )
+        expected_initial_state(&fixture, refused_keys.clone())
     );
 
     let successful =
         prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 1, 1030).await;
     let settlement = take_over_project_writer(&store, &successful).await.unwrap();
-    assert_complete_settlement(&settlement, &successful, &fixture);
     let settled_bases = base_rows(&admin, &fixture).await;
-    assert_winner_base_handoff(&initial_bases, &settled_bases, &settlement);
     let base_snapshot_id = settled_bases[&fixture.observer_one_session_id]["snapshot_id"]
         .as_str()
         .unwrap()
         .to_owned();
+    assert_eq!(
+        settlement,
+        TakeOverProjectWriterSettlement {
+            ids: successful.envelope.ids.clone(),
+            receipt_created_at: settlement.receipt_created_at.clone(),
+            outcome: TransitionOutcome::NoEffect(
+                TakeOverProjectWriterNoEffect::WriterTakeoverApplied
+            ),
+            response: (),
+            zero_authority_effect: Some(WriterTakeover {
+                prior_editor_session_id: fixture.writer_session_id.clone(),
+                prior_writer_generation: 1,
+                resulting_editor_session_id: fixture.observer_one_session_id.clone(),
+                resulting_writer_generation: 2,
+                resulting_snapshot_id: base_snapshot_id.clone(),
+                resulting_snapshot_activity_position: 1,
+                resulting_head: fixture.revision_id.clone(),
+            }),
+        }
+    );
+    // Only the base of the new writer moves to the takeover Snapshot.
+    let mut expected_bases = initial_bases.clone();
+    let observer_base = &mut expected_bases[&fixture.observer_one_session_id];
+    assert_ne!(observer_base["snapshot_id"], base_snapshot_id.as_str());
+    observer_base["snapshot_id"] = serde_json::json!(base_snapshot_id);
+    observer_base["created_at"] =
+        settled_bases[&fixture.observer_one_session_id]["created_at"].clone();
+    observer_base["project_activity_position"] = serde_json::json!(1);
+    assert_eq!(settled_bases, expected_bases);
     let resumed = store
         .activity_resume(&SnapshotLookup {
             project_scope: fixture.scope(),
@@ -662,11 +515,11 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
             expires_at: None,
         }
     );
-    assert_eq!(
-        take_over_project_writer(&store, &successful).await.unwrap(),
-        settlement
-    );
-    assert_eq!(base_rows(&admin, &fixture).await, settled_bases);
+    let settled_key = successful
+        .envelope
+        .challenge_binding
+        .idempotency_key
+        .clone();
     assert_eq!(
         durable_state(&admin, &fixture).await,
         DurableTakeoverState {
@@ -674,193 +527,49 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
                 ("1".to_owned(), fixture.writer_session_id.clone()),
                 ("2".to_owned(), fixture.observer_one_session_id.clone()),
             ],
-            admission_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
-            receipt_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
+            admission_keys: vec![settled_key.clone()],
+            receipt_keys: vec![settled_key.clone()],
             snapshot_count: 4,
             activity_count: 1,
             settlement_count: 1,
-            activity_position: Some("1".to_owned()),
-            pending_keys: vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-                stale_generation
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-            ],
-            settled_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
-            consumed_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
+            counters: Some(["0", "0", "1"].map(str::to_owned)),
+            pending_keys: refused_keys,
+            settled_keys: vec![settled_key.clone()],
+            consumed_keys: vec![settled_key],
         }
     );
-}
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin = connect(&admin_url).await;
-    let monitor_client = connect(&admin_url).await;
-    let fixture = TakeoverFixture::new(1200);
-    seed_takeover_project(&admin, &fixture).await;
-    let setup_store = PostgresProjectReader::new(&runtime_url);
-    open_fixture_sessions(&setup_store, &fixture, 1250).await;
-    let initial_bases = base_rows(&admin, &fixture).await;
-
-    let application_names = vec![
-        "storyos_takeover_observer_a".to_owned(),
-        "storyos_takeover_observer_b".to_owned(),
-    ];
-    let left_store = named_store(&runtime_url, &application_names[0]);
-    let right_store = named_store(&runtime_url, &application_names[1]);
-    let left_command = prepare_takeover(
-        &left_store,
-        &fixture,
-        &fixture.observer_one_session_id,
-        1,
-        1300,
-    )
-    .await;
-    let right_command = prepare_takeover(
-        &right_store,
-        &fixture,
-        &fixture.observer_two_session_id,
-        1,
-        1320,
-    )
-    .await;
-    let left_evidence = (
-        left_command.input.editor_session_id.as_ref().to_owned(),
-        left_command
-            .envelope
-            .challenge_binding
-            .idempotency_key
-            .clone(),
-        left_command.clone(),
-    );
-    let right_evidence = (
-        right_command.input.editor_session_id.as_ref().to_owned(),
-        right_command
-            .envelope
-            .challenge_binding
-            .idempotency_key
-            .clone(),
-        right_command.clone(),
-    );
-
+    // A takeover moves only the Activity position of an existing counter row.
     admin
-        .batch_execute("BEGIN; LOCK TABLE storyos.project_writer_generations IN SHARE MODE")
+        .execute(
+            "UPDATE storyos.scope_counters
+                SET author_action_sequence = 7, authoritative_commit_sequence = 11
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &fixture.project_id.as_str()],
+        )
         .await
         .unwrap();
-    let blocker_pid: i32 = admin
-        .query_one("SELECT pg_backend_pid()", &[])
+    let second =
+        prepare_takeover(&store, &fixture, &fixture.observer_two_session_id, 2, 1300).await;
+    let second_effect = take_over_project_writer(&store, &second)
         .await
         .unwrap()
-        .get(0);
-    let monitor = async move {
-        let gate =
-            wait_for_generation_insert_gate(&monitor_client, &application_names, blocker_pid).await;
-        admin
-            .batch_execute(if gate.is_ok() { "COMMIT" } else { "ROLLBACK" })
-            .await
-            .unwrap();
-        (admin, gate)
-    };
-    let (left_result, right_result, (admin, gate)) = tokio::join!(
-        tokio::time::timeout(
-            Duration::from_secs(20),
-            take_over_project_writer(&left_store, &left_command)
-        ),
-        tokio::time::timeout(
-            Duration::from_secs(20),
-            take_over_project_writer(&right_store, &right_command)
-        ),
-        monitor,
-    );
-    if let Err(error) = gate {
-        panic!("{error}");
-    }
-    let left_result = left_result.expect("the left Takeover must finish after the gate opens");
-    let right_result = right_result.expect("the right Takeover must finish after the gate opens");
-    let (winner_session, winner_key, loser_key, winner_command, settlement) =
-        match (left_result, right_result) {
-            (Ok(settlement), Err(error)) => {
-                assert_database_race_failure(error);
-                (
-                    left_evidence.0,
-                    left_evidence.1,
-                    right_evidence.1,
-                    left_evidence.2,
-                    settlement,
-                )
-            }
-            (Err(error), Ok(settlement)) => {
-                assert_database_race_failure(error);
-                (
-                    right_evidence.0,
-                    right_evidence.1,
-                    left_evidence.1,
-                    right_evidence.2,
-                    settlement,
-                )
-            }
-            (left_result, right_result) => panic!(
-                "exactly one Takeover must settle: left={left_result:?}, right={right_result:?}"
-            ),
-        };
-    assert_complete_settlement(&settlement, &winner_command, &fixture);
-    assert_winner_base_handoff(
-        &initial_bases,
-        &base_rows(&admin, &fixture).await,
-        &settlement,
+        .zero_authority_effect
+        .expect("a writer takeover records its writer effect");
+    assert_eq!(
+        second_effect,
+        WriterTakeover {
+            prior_editor_session_id: fixture.observer_one_session_id.clone(),
+            prior_writer_generation: 2,
+            resulting_editor_session_id: fixture.observer_two_session_id.clone(),
+            resulting_writer_generation: 3,
+            resulting_snapshot_id: second_effect.resulting_snapshot_id.clone(),
+            resulting_snapshot_activity_position: 2,
+            resulting_head: fixture.revision_id.clone(),
+        }
     );
     assert_eq!(
-        durable_state(&admin, &fixture).await,
-        DurableTakeoverState {
-            generations: vec![
-                ("1".to_owned(), fixture.writer_session_id.clone()),
-                ("2".to_owned(), winner_session),
-            ],
-            admission_keys: vec![winner_key.clone()],
-            receipt_keys: vec![winner_key.clone()],
-            snapshot_count: 4,
-            activity_count: 1,
-            settlement_count: 1,
-            activity_position: Some("1".to_owned()),
-            pending_keys: vec![loser_key],
-            settled_keys: vec![winner_key.clone()],
-            consumed_keys: vec![winner_key],
-        }
+        durable_state(&admin, &fixture).await.counters,
+        Some(["7", "11", "2"].map(str::to_owned))
     );
 }

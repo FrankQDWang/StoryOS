@@ -392,11 +392,240 @@ async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_
     assert_eq!(observed, vec![true; 4]);
 }
 
+/// The CHECK constraints of the Receipt table that refuse a malformed Receipt shape.
+const RECEIPT_SHAPE_CHECKS: [&str; 2] = [
+    "domain_receipts_common_shape",
+    "domain_receipts_result_shape",
+];
+
+/// Requires that the Receipt shape CHECK constraints refuse `damage`, replays `command` once past
+/// them, and then restores the Receipt of `command` and the constraints.
+async fn replay_past_receipt_checks(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    command: &ApplyAuthorEditCommand,
+    damage: &str,
+) -> Result<AuthorEditSettlement, AuthorEditError> {
+    assert!(
+        admin.batch_execute(damage).await.is_err(),
+        "the Receipt shape checks must refuse: {damage}"
+    );
+    let mut restored = String::new();
+    for name in RECEIPT_SHAPE_CHECKS {
+        let definition: String = admin
+            .query_one(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                  WHERE conrelid = 'storyos.domain_receipts'::regclass AND conname = $1",
+                &[&name],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        restored.push_str(&format!(
+            "ALTER TABLE storyos.domain_receipts ADD CONSTRAINT {name} {definition};"
+        ));
+    }
+    let dropped = RECEIPT_SHAPE_CHECKS
+        .map(|name| format!("ALTER TABLE storyos.domain_receipts DROP CONSTRAINT {name};"))
+        .concat();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "CREATE TEMP TABLE kept_receipt AS
+               SELECT * FROM storyos.domain_receipts WHERE receipt_id = '{receipt_id}';
+             {dropped} {damage}",
+            receipt_id = command.ids.receipt_id,
+        ),
+    )
+    .await;
+    let replayed = store.apply_author_edit(&exact_retry(command)).await;
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "UPDATE storyos.domain_receipts AS receipt
+                SET expected_heads = kept.expected_heads, prior_heads = kept.prior_heads,
+                    resulting_heads = kept.resulting_heads,
+                    authoritative_commit_ids = kept.authoritative_commit_ids,
+                    result_payload = kept.result_payload
+               FROM kept_receipt AS kept
+              WHERE receipt.receipt_id = kept.receipt_id;
+             DROP TABLE kept_receipt; {restored}"
+        ),
+    )
+    .await;
+    replayed
+}
+
+/// Gives the Commit and the Envelope of the Receipt `{receipt}` another prior Revision.
+const CORRUPT_PRIOR_REVISION: &str = "
+    UPDATE storyos.authoritative_revision_envelopes
+       SET parent_revision_id = revision_id, payload_digest = 'sha256:corrupt'
+     WHERE receipt_id = '{receipt}';
+    UPDATE storyos.authoritative_commits SET prior_revision_id = resulting_revision_id
+     WHERE receipt_id = '{receipt}'";
+
+/// Where a damage row changes the stored records of a settled Author Edit.
+#[derive(Clone, Copy, Debug)]
+enum Damage {
+    /// A change that the CHECK constraints permit.
+    Records,
+    /// A change of the Receipt shape that only a replay past the CHECK constraints can read.
+    ReceiptShape,
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_replay_refuses_a_changed_binding_and_fails_on_a_damaged_receipt_shape() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let receipt = |set: &str| {
+        format!("UPDATE storyos.domain_receipts SET {set} WHERE receipt_id = '{{receipt}}'")
+    };
+    let other_head = "ARRAY['018f0000-0000-7001-8000-0000000099ff'::uuid]";
+    let rows: [(Edit, Damage, String); 13] = [
+        (
+            Edit::Prose,
+            Damage::ReceiptShape,
+            receipt(
+                "authoritative_commit_ids =
+                   array_fill(authoritative_commit_ids[1], ARRAY[1], ARRAY[0])",
+            ),
+        ),
+        (
+            Edit::Unchanged,
+            Damage::ReceiptShape,
+            receipt(
+                "expected_heads = array_fill(expected_heads[1], ARRAY[1], ARRAY[0]),
+                 prior_heads = array_fill(prior_heads[1], ARRAY[1], ARRAY[0]),
+                 resulting_heads = array_fill(resulting_heads[1], ARRAY[1], ARRAY[0])",
+            ),
+        ),
+        (
+            Edit::Unchanged,
+            Damage::ReceiptShape,
+            receipt(
+                "expected_heads = ARRAY[NULL]::uuid[], prior_heads = ARRAY[NULL]::uuid[],
+                 resulting_heads = ARRAY[NULL]::uuid[]",
+            ),
+        ),
+        (
+            Edit::StaleHead,
+            Damage::ReceiptShape,
+            receipt(
+                "prior_heads = expected_heads, resulting_heads = expected_heads,
+                 result_payload = jsonb_build_object(
+                   'reason', 'stale_authoritative_head',
+                   'current_authoritative_revision_id', expected_heads[1]::text)",
+            ),
+        ),
+        (
+            Edit::StaleHead,
+            Damage::ReceiptShape,
+            receipt(
+                "result_payload =
+                   '{\"reason\":null,\"current_authoritative_revision_id\":null}'::jsonb",
+            ),
+        ),
+        (
+            Edit::InvalidSelection,
+            Damage::ReceiptShape,
+            receipt("result_payload = '{\"reason\":null}'::jsonb"),
+        ),
+        (
+            Edit::Prose,
+            Damage::Records,
+            receipt("expected_heads = resulting_heads, prior_heads = resulting_heads"),
+        ),
+        (
+            Edit::StaleHead,
+            Damage::Records,
+            receipt(&format!("expected_heads = {other_head}")),
+        ),
+        (
+            Edit::Unchanged,
+            Damage::Records,
+            receipt(&format!(
+                "expected_heads = {other_head}, prior_heads = {other_head},
+                 resulting_heads = {other_head}"
+            )),
+        ),
+        (
+            Edit::InvalidSelection,
+            Damage::Records,
+            receipt(&format!(
+                "expected_heads = {other_head}, prior_heads = {other_head},
+                 resulting_heads = {other_head}"
+            )),
+        ),
+        (
+            Edit::Prose,
+            Damage::Records,
+            "UPDATE storyos.author_command_admissions
+                SET target_refs = ARRAY['manuscript:corrupt']::text[]
+              WHERE author_command_admission_id = (
+                SELECT author_command_admission_id FROM storyos.domain_receipts
+                 WHERE receipt_id = '{receipt}')"
+                .to_owned(),
+        ),
+        (
+            Edit::Prose,
+            Damage::Records,
+            CORRUPT_PRIOR_REVISION.to_owned(),
+        ),
+        (
+            Edit::StaleHead,
+            Damage::Records,
+            "UPDATE storyos.authoritative_commits AS edit_commit
+                SET author_command_admission_id = receipt.author_command_admission_id
+               FROM storyos.domain_receipts AS receipt, storyos.domain_receipts AS applied
+              WHERE receipt.receipt_id = '{receipt}'
+                AND (applied.owner_user_id, applied.project_id, applied.command_kind) =
+                    (receipt.owner_user_id, receipt.project_id, 'applyAuthorEdit')
+                AND edit_commit.receipt_id = applied.receipt_id"
+                .to_owned(),
+        ),
+    ];
+    let mut observed = Vec::new();
+    for ((edit, damage, statements), base) in rows.into_iter().zip((0x9900..).step_by(0x10)) {
+        let command = edit_command(&store, &admin, edit, base).await;
+        store.apply_author_edit(&command).await.unwrap();
+        let statements = statements.replace("{receipt}", &command.ids.receipt_id);
+        let replayed = match damage {
+            Damage::ReceiptShape => {
+                replay_past_receipt_checks(&store, &admin, &command, &statements).await
+            }
+            Damage::Records => {
+                run_without_foreign_keys(&admin, &statements).await;
+                store.apply_author_edit(&exact_retry(&command)).await
+            }
+        };
+        observed.push(match replayed {
+            Err(AuthorEditError::BindingConflict) => "binding_conflict",
+            Err(AuthorEditError::Unavailable(_)) => "unavailable",
+            other => panic!("the replay of {edit:?} must fail, got {other:?}"),
+        });
+    }
+    assert_eq!(
+        observed,
+        [
+            ["unavailable"; 4].as_slice(),
+            &["binding_conflict"; 7],
+            &["unavailable"; 2],
+        ]
+        .concat()
+    );
+}
+
 /// The outcome query of one Author Edit, as the Server sends it after a cut.
-async fn outcome(
+async fn outcome_result(
     store: &PostgresProjectReader,
     command: &ApplyAuthorEditCommand,
-) -> storyos_application::ApplyAuthorEditOutcome {
+) -> Result<
+    storyos_application::ApplyAuthorEditOutcome,
+    storyos_application::ApplyAuthorEditOutcomeResolveError,
+> {
     storyos_application::get_apply_author_edit_outcome(
         store,
         &storyos_application::ResolveApplyAuthorEditOutcome {
@@ -408,7 +637,13 @@ async fn outcome(
         },
     )
     .await
-    .unwrap()
+}
+
+async fn outcome(
+    store: &PostgresProjectReader,
+    command: &ApplyAuthorEditCommand,
+) -> storyos_application::ApplyAuthorEditOutcome {
+    outcome_result(store, command).await.unwrap()
 }
 
 /// The Receipt facts of one settlement that do not depend on its identities.
@@ -470,58 +705,122 @@ async fn the_outcome_query_settles_a_cut_admission_with_the_receipt_of_an_uninte
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_outcome_query_settles_an_expired_admission_as_requires_reconfirmation() {
+async fn the_outcome_query_settles_an_expired_or_unrecoverable_admission_as_requires_reconfirmation()
+ {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let command = edit_command(&store, &admin, Edit::Prose, /*base*/ 0x3c00).await;
-    store
-        .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
-        .await
-        .expect_err("the cut must stop after the admit step");
-    run_without_foreign_keys(
-        &admin,
-        &format!(
+    let mut observed = Vec::new();
+    let mut expected = Vec::new();
+    for (base, damage, reconfirmation_reason) in [
+        (
+            0x3c00,
             "UPDATE storyos.author_command_admissions
                 SET challenge_expires_at = challenge_consumed_at
               WHERE author_command_admission_id = '{admission}';
              UPDATE storyos.project_command_challenges SET expires_at = consumed_at
               WHERE command_kind = 'applyAuthorEdit' AND idempotency_key = '{key}'",
-            admission = command.ids.author_command_admission_id,
-            key = command.challenge_binding.idempotency_key,
+            storyos_application::ApplyAuthorEditReconfirmationReason::AdmissionExpired,
         ),
-    )
-    .await;
-    let expected = storyos_application::ApplyAuthorEditOutcome::RequiresReconfirmation(
-        storyos_application::RequiresReconfirmationApplyAuthorEdit {
-            command_id: command.ids.command_id.clone(),
-            author_command_admission_id: command.ids.author_command_admission_id.clone(),
-            reconfirmation_reason:
-                storyos_application::ApplyAuthorEditReconfirmationReason::AdmissionExpired,
-            recovery_draft_ref: None,
-        },
-    );
-    assert_eq!(outcome(&store, &command).await, expected);
-    assert_eq!(outcome(&store, &command).await, expected);
-    // The Admission has one reconfirmation, no Receipt, and no Receipt settlement.
-    let row = admin
-        .query_one(
-            "SELECT (SELECT count(*) FROM storyos.domain_receipts
-                      WHERE author_command_admission_id = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.author_command_admission_reconfirmations
-                      WHERE author_command_admission_id = $1::text::uuid)",
-            &[&command.ids.author_command_admission_id],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
         (
+            0x99e0,
+            "UPDATE storyos.author_command_admissions
+                SET command_payload = command_payload - 'author_edit_units'
+              WHERE author_command_admission_id = '{admission}'",
+            storyos_application::ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable,
+        ),
+    ] {
+        let command = edit_command(&store, &admin, Edit::Prose, base).await;
+        store
+            .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
+            .await
+            .expect_err("the cut must stop after the admit step");
+        run_without_foreign_keys(
+            &admin,
+            &damage
+                .replace("{admission}", &command.ids.author_command_admission_id)
+                .replace("{key}", &command.challenge_binding.idempotency_key),
+        )
+        .await;
+        let queried = [
+            outcome(&store, &command).await,
+            outcome(&store, &command).await,
+        ];
+        let row = admin
+            .query_one(
+                "SELECT (SELECT count(*) FROM storyos.domain_receipts
+                          WHERE author_command_admission_id = $1::text::uuid),
+                        (SELECT count(*) FROM storyos.author_command_admission_reconfirmations
+                          WHERE author_command_admission_id = $1::text::uuid)",
+                &[&command.ids.author_command_admission_id],
+            )
+            .await
+            .unwrap();
+        observed.push((
+            queried,
             row.get::<_, i64>(/*idx*/ 0),
             row.get::<_, i64>(/*idx*/ 1),
-            admission_state(&admin, &command).await
+            admission_state(&admin, &command).await,
+        ));
+        let requires_reconfirmation =
+            storyos_application::ApplyAuthorEditOutcome::RequiresReconfirmation(
+                storyos_application::RequiresReconfirmationApplyAuthorEdit {
+                    command_id: command.ids.command_id.clone(),
+                    author_command_admission_id: command.ids.author_command_admission_id.clone(),
+                    reconfirmation_reason,
+                    recovery_draft_ref: None,
+                },
+            );
+        // The Admission has one reconfirmation, no Receipt, and no Receipt settlement.
+        expected.push((
+            [requires_reconfirmation.clone(), requires_reconfirmation],
+            0,
+            1,
+            (1, 0, "settled".to_owned()),
+        ));
+    }
+    assert_eq!(observed, expected);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_outcome_query_fails_on_a_changed_command_payload_or_a_corrupt_commit() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    for (edit, base, damage) in [
+        (
+            Edit::Unchanged,
+            0x9860,
+            "UPDATE storyos.author_command_admissions
+                SET command_payload = jsonb_set(
+                  command_payload, '{author_edit_units,0,selection_snapshot,to}', '998'::jsonb,
+                  false)
+              WHERE author_command_admission_id = (
+                SELECT author_command_admission_id FROM storyos.domain_receipts
+                 WHERE receipt_id = '{receipt}')",
         ),
-        (0, 1, (1, 0, "settled".to_owned()))
+        (Edit::Prose, 0x99d0, CORRUPT_PRIOR_REVISION),
+    ] {
+        let command = edit_command(&store, &admin, edit, base).await;
+        store.apply_author_edit(&command).await.unwrap();
+        run_without_foreign_keys(
+            &admin,
+            &damage.replace("{receipt}", &command.ids.receipt_id),
+        )
+        .await;
+        observed.push(
+            outcome_result(&store, &command)
+                .await
+                .map_err(|error| error.to_string()),
+        );
+    }
+    assert_eq!(
+        observed,
+        vec![Err("Apply Author Edit outcome resolution is unavailable".to_owned()); 2]
     );
 }
 

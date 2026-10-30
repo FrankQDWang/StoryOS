@@ -100,7 +100,7 @@ pub(crate) fn applied<A: Clone + Debug, N: Debug, C: Debug, R: Debug>(
     }
 }
 
-pub(super) async fn stores() -> (PostgresProjectReader, Client) {
+pub(crate) async fn stores() -> (PostgresProjectReader, Client) {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
@@ -261,7 +261,7 @@ pub(crate) const CREATE_EDITOR_SESSION: Route = Route {
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
-pub(super) async fn issued<I>(
+pub(crate) async fn issued<I>(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,
