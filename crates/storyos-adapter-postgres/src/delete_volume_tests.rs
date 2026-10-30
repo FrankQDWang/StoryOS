@@ -1,22 +1,19 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, DeleteVolumeInput,
-    EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
+    CreateVolumeInput, DeleteVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree,
     IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput,
-    UndoRecords, UserId, VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session,
-    create_project, get_manuscript_tree, issue_create_project_challenge,
+    ProjectCommandEnvelope, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords,
+    VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session, get_manuscript_tree,
     issue_project_command_challenge, open_chapter,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
-    CommandCall, applied, command_call, create_chapter, create_volume, delete_volume,
+    CommandCall, applied, command_call, create_chapter, create_volume, delete_volume, seed_project,
 };
 
-const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const CLIENT: &str = "storyos.web-client.release-1.v3";
 const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_A_TITLE: &str = "Volume A";
@@ -91,59 +88,6 @@ fn delete_command(
             expected_tree_revision,
         },
     )
-}
-
-async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{suffix:0<64}");
-    let issue = IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(USER_A),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-    };
-    let issued = issue_create_project_challenge(store, &issue).await.unwrap();
-    let mut binding = issue.binding.clone();
-    binding.prospective_project_id = issued.prospective_project_id.clone();
-    binding.canonical_command_digest = issued.canonical_command_digest.clone();
-    create_project(
-        store,
-        &CreateProjectCommand {
-            project_scope: ProjectScope::new(
-                binding.owner_user_id.clone(),
-                binding.prospective_project_id.clone(),
-            ),
-            client_binding: EditorClientBinding {
-                binding_ref: binding.client_session_binding_digest.clone(),
-                session_generation: binding.client_session_generation,
-                client_contract_revision: binding.client_contract_revision.clone(),
-                security_policy_revision: binding.security_policy_revision.clone(),
-            },
-            challenge_binding: binding.clone(),
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: "Empty Novel".to_owned(),
-            ids: ids(suffix),
-        },
-    )
-    .await
-    .unwrap();
-    ProjectScope::new(binding.owner_user_id, binding.prospective_project_id)
 }
 
 async fn apply_volume(

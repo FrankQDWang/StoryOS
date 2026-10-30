@@ -2,6 +2,7 @@
 //! A text order puts rank 10 before rank 2.
 
 use crate::PostgresProjectReader;
+use crate::command_sequence::tests::seed_project;
 use crate::command_sequence::tests::{
     applied, command_call, create_volume, update_chapter, update_volume,
 };
@@ -9,7 +10,7 @@ use crate::pinned_export_source::{
     PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
 use crate::update_chapter_rank_batch_tests::{connect_admin, runtime_store};
-use crate::update_volume_tests::{apply_chapter, named_issue, seed_project};
+use crate::update_volume_tests::{apply_chapter, named_issue};
 use storyos_application::{
     CanonicalManuscriptTree, CreateVolumeInput, GetManuscriptTree, ProjectScope,
     get_manuscript_tree, issue_project_command_challenge,

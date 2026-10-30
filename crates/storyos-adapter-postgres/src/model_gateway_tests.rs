@@ -1,3 +1,4 @@
+use crate::command_sequence::tests::seed_project;
 use std::sync::Mutex;
 
 use storyos_adapter_fake_destination::FakeDestination;
@@ -15,7 +16,7 @@ use storyos_core::{
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::{apply_chapter, apply_volume, named_issue, seed_project};
+use crate::update_volume_tests::{apply_chapter, apply_volume, named_issue};
 
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;

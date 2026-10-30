@@ -5,13 +5,13 @@ use storyos_application::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::seed_project;
 
 use super::agent_run::{request_rows, seed_run};
 use super::support::{CommandCall, Route, SequenceError, issued, stores};
 
-pub(super) const STEER_AGENT_RUN: Route = Route {
+pub(crate) const STEER_AGENT_RUN: Route = Route {
     kind: "steerAgentRun",
     method: storyos_contracts::STEER_AGENT_RUN_METHOD,
     path: storyos_contracts::STEER_AGENT_RUN_PATH,

@@ -1,41 +1,15 @@
 use super::*;
+use crate::command_sequence::tests::create_project_issue;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateProjectError, EditorClientBinding, IssueCreateProjectChallenge, ProjectId, ProjectScope,
-    UserId, create_project, issue_create_project_challenge,
+    CreateProjectError, EditorClientBinding, ProjectScope, create_project,
+    issue_create_project_challenge,
 };
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const TITLE: &str = "Empty Novel";
-const CLIENT: &str = "storyos.web-client.release-1.v3";
-const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
-
-fn issue_request(idempotency_key: &str, project_suffix: &str) -> IssueCreateProjectChallenge {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{project_suffix:0<64}");
-    IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(USER_A),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{project_suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{project_suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: format!("sha256:nonce-{project_suffix}"),
-    }
-}
 
 fn command(
     binding: CreateProjectChallengeBinding,
@@ -78,7 +52,7 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url.clone());
-    let first_issue = issue_request("018f0000-0000-7001-8000-000000000401", "0401");
+    let first_issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000401", "0401");
     let issued = issue_create_project_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -122,7 +96,8 @@ async fn create_project_is_atomic_empty_replayable_and_fail_closed() {
         Err(CreateProjectError::InvalidChallenge)
     ));
 
-    let existing_issue = issue_request("018f0000-0000-7001-8000-000000000405", "0405");
+    let existing_issue =
+        create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000405", "0405");
     let existing_issued = issue_create_project_challenge(&store, &existing_issue)
         .await
         .unwrap();

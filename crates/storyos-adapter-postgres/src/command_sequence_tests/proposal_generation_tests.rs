@@ -17,14 +17,14 @@ use super::proposal_decision::{
 };
 use super::support::{CommandCall, Route, SequenceError, issued, stores, two_chapter_writer};
 
-pub(super) const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
+pub(crate) const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
     kind: "completeReadyPartialProposal",
     method: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
     path: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
     schema: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const CONTINUE_PROPOSAL_GENERATION: Route = Route {
+pub(crate) const CONTINUE_PROPOSAL_GENERATION: Route = Route {
     kind: "continueProposalGeneration",
     method: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_METHOD,
     path: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_PATH,

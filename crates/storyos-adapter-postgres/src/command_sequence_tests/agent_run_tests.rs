@@ -7,30 +7,30 @@ use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, ReceiptResult}
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::seed_two_chapters;
-use crate::update_volume_tests::seed_project;
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
 use super::project_session::UPDATE_PROJECT_ASSISTANCE;
 use super::support::{CommandCall, Route, SequenceError, issued, stores};
 
-pub(super) const PAUSE_AGENT_RUN: Route = Route {
+pub(crate) const PAUSE_AGENT_RUN: Route = Route {
     kind: "pauseAgentRun",
     method: storyos_contracts::PAUSE_AGENT_RUN_METHOD,
     path: storyos_contracts::PAUSE_AGENT_RUN_PATH,
     schema: storyos_contracts::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const CANCEL_AGENT_RUN: Route = Route {
+pub(crate) const CANCEL_AGENT_RUN: Route = Route {
     kind: "cancelAgentRun",
     method: storyos_contracts::CANCEL_AGENT_RUN_METHOD,
     path: storyos_contracts::CANCEL_AGENT_RUN_PATH,
     schema: storyos_contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const CREATE_AGENT_RUN: Route = Route {
+pub(crate) const CREATE_AGENT_RUN: Route = Route {
     kind: "createAgentRun",
     method: storyos_contracts::CREATE_AGENT_RUN_METHOD,
     path: storyos_contracts::CREATE_AGENT_RUN_PATH,

@@ -19,35 +19,35 @@ use super::support::{
     two_chapter_writer, with_new_request_ids,
 };
 
-pub(super) const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
+pub(crate) const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
     kind: "reopenWithdrawnProposal",
     method: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     path: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
     schema: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const REJECT_PROPOSAL_OPERATIONS: Route = Route {
+pub(crate) const REJECT_PROPOSAL_OPERATIONS: Route = Route {
     kind: "rejectProposalOperations",
     method: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_METHOD,
     path: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_PATH,
     schema: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const REPLAN_PROPOSAL: Route = Route {
+pub(crate) const REPLAN_PROPOSAL: Route = Route {
     kind: "replanProposal",
     method: storyos_contracts::REPLAN_PROPOSAL_METHOD,
     path: storyos_contracts::REPLAN_PROPOSAL_PATH,
     schema: storyos_contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const REOPEN_REJECTED_OPERATIONS: Route = Route {
+pub(crate) const REOPEN_REJECTED_OPERATIONS: Route = Route {
     kind: "reopenRejectedOperations",
     method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
     path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
     schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const WITHDRAW_PROPOSAL: Route = Route {
+pub(crate) const WITHDRAW_PROPOSAL: Route = Route {
     kind: "withdrawProposal",
     method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
     path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,

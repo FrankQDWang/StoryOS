@@ -1,18 +1,19 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
-    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
-    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
-    ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
-    VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
-    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, open_project,
+    CreateVolumeInput, EditorClientBinding, EditorSessionId, GetManuscriptTree, OpenChapter,
+    OpenEditorSession, ProjectCommandEnvelope, ProjectScope, UndoApplied,
+    UndoLatestAuthorActionInput, UndoRecords, VolumeCreated, VolumeId, VolumeNode,
+    create_editor_session, get_manuscript_tree, issue_project_command_challenge, open_chapter,
+    open_project,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
-use crate::command_sequence::tests::{applied, command_call, create_chapter, create_volume};
+use crate::command_sequence::tests::{
+    CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, UNDO_LATEST_AUTHOR_ACTION, applied,
+    command_call, command_issue, create_chapter, create_volume, seed_owned_project,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -25,133 +26,12 @@ const CHAPTER_A_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:fdee
 const CHAPTER_B_BYTES: &[u8] = br#"{"expected_tree_revision":"3","title":"Chapter B"}"#;
 const CHAPTER_B_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:23a99998cce1f35b113794d41235dae8fae7d8ae9f234ba67161a2f9e8e86e65";
 
-fn create_project_issue(
-    owner: &str,
-    idempotency_key: &str,
-    project_suffix: &str,
-) -> IssueCreateProjectChallenge {
-    let digest = format!("sha256:storyos.command.createProject.jcs.v1:{project_suffix:0<64}");
-    IssueCreateProjectChallenge {
-        binding: CreateProjectChallengeBinding {
-            owner_user_id: UserId::new(owner),
-            prospective_project_id: ProjectId::new(format!(
-                "018f0000-0000-7001-8000-00000000{project_suffix}"
-            )),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            method: "POST".to_owned(),
-            route_template: "/api/v1/projects".to_owned(),
-            command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
-            create_input_digest: format!("{project_suffix:0<64}"),
-            canonical_command_digest: digest,
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: format!("sha256:nonce-{project_suffix}"),
-    }
-}
-
-fn create_project_command(
-    binding: CreateProjectChallengeBinding,
-    nonce_digest: &str,
-    ids_suffix: &str,
-) -> CreateProjectCommand {
-    CreateProjectCommand {
-        project_scope: ProjectScope::new(
-            binding.owner_user_id.clone(),
-            binding.prospective_project_id.clone(),
-        ),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: br#"{"title":"Empty Novel"}"#.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Empty Novel".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
-}
-
-fn command_issue(
-    scope: &ProjectScope,
-    suffix: &str,
-    method: &str,
-    route: &str,
-    schema: &str,
-    kind: &str,
-    digest: &str,
-) -> IssueProjectCommandChallenge {
-    IssueProjectCommandChallenge {
-        binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: "sha256:session-a".to_owned(),
-            client_session_generation: 1,
-            client_contract_revision: CLIENT.to_owned(),
-            security_policy_revision: SECURITY.to_owned(),
-            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
-            challenge_rate_policy_revision:
-                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
-            method: method.to_owned(),
-            route_template: route.to_owned(),
-            command_schema: schema.to_owned(),
-            command_kind: kind.to_owned(),
-            canonical_command_digest: digest.to_owned(),
-            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        },
-        nonce: format!("opaque-nonce-{suffix}"),
-        nonce_digest: format!("sha256:nonce-{suffix}"),
-        earlier_revision_nonces: Vec::new(),
-    }
-}
-
-async fn seed_project(
-    store: &PostgresProjectReader,
-    owner: &str,
-    project_suffix: &str,
-) -> ProjectScope {
-    let issue = create_project_issue(
-        owner,
-        &format!("018f0000-0000-7001-8000-00000000{project_suffix}"),
-        project_suffix,
-    );
-    let issued = issue_create_project_challenge(store, &issue).await.unwrap();
-    let mut binding = issue.binding.clone();
-    binding.prospective_project_id = issued.prospective_project_id.clone();
-    binding.canonical_command_digest = issued.canonical_command_digest.clone();
-    create_project(
-        store,
-        &create_project_command(binding.clone(), &issue.nonce_digest, project_suffix),
-    )
-    .await
-    .unwrap();
-    ProjectScope::new(binding.owner_user_id, binding.prospective_project_id)
-}
-
 async fn post_volume(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
 ) -> storyos_application::CreateVolumeSettlement {
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes",
-        "storyos.command.create-volume.request.v1",
-        "createVolume",
-        VOLUME_A_DIGEST,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_VOLUME, VOLUME_A_DIGEST);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -193,15 +73,7 @@ async fn post_chapter(
         digest,
         expected_tree_revision,
     } = chapter;
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-        "storyos.command.create-chapter.request.v1",
-        "createChapter",
-        digest,
-    );
+    let issue = command_issue(scope, suffix, &CREATE_CHAPTER, digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -259,15 +131,7 @@ async fn undo_named(
         "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
         crate::author_edit::sha256_hex(&bytes)
     );
-    let issue = command_issue(
-        scope,
-        suffix,
-        "POST",
-        "/api/v1/projects/{project_id}/author-actions/undo",
-        "storyos.command.undo-latest-author-action.request.v1",
-        "undoLatestAuthorAction",
-        &digest,
-    );
+    let issue = command_issue(scope, suffix, &UNDO_LATEST_AUTHOR_ACTION, &digest);
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
@@ -312,9 +176,9 @@ async fn two_users_and_two_projects_keep_separate_chapter_sequences() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let first = seed_project(&store, USER_A, "f710").await;
-    let second = seed_project(&store, USER_A, "f712").await;
-    let other_user = seed_project(&store, USER_B, "f714").await;
+    let first = seed_owned_project(&store, USER_A, "f710").await;
+    let second = seed_owned_project(&store, USER_A, "f712").await;
+    let other_user = seed_owned_project(&store, USER_B, "f714").await;
     let first_volume = post_volume(&store, &first, "f716").await;
     let second_volume = post_volume(&store, &second, "f718").await;
     let other_volume = post_volume(&store, &other_user, "f71a").await;
@@ -403,7 +267,7 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let scope = seed_project(&store, USER_A, "f722").await;
+    let scope = seed_owned_project(&store, USER_A, "f722").await;
     let volume = post_volume(&store, &scope, "f724").await;
     let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
     let chapter_a = post_chapter(
@@ -449,10 +313,7 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
     let session_issue = command_issue(
         &scope,
         "f72a",
-        "POST",
-        "/api/v1/projects/{project_id}/editor-sessions",
-        "storyos.command.create-editor-session.request.v1",
-        "createEditorSession",
+        &CREATE_EDITOR_SESSION,
         "sha256:storyos.test:f72a",
     );
     issue_project_command_challenge(&store, &session_issue)

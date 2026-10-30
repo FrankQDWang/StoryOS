@@ -14,8 +14,8 @@ use storyos_core::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::seed_project;
 
 use super::support::{
     CommandCall, Route, SequenceError, issued, run_without_foreign_keys, stores,

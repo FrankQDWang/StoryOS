@@ -28,7 +28,7 @@ use super::support::{
     stores, two_chapter_writer,
 };
 
-pub(super) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
+pub(crate) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
     kind: "undoLatestAuthorAction",
     method: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD,
     path: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,

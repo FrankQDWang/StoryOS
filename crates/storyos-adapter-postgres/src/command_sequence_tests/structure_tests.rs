@@ -8,9 +8,9 @@ use storyos_application::{
 use storyos_core::CreateChapterPlacement;
 use tokio_postgres::Client;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
-use crate::update_volume_tests::seed_project;
 
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
@@ -61,49 +61,49 @@ pub(crate) async fn delete_chapter(
     store.delete_chapter(&call.envelope, &call.input).await
 }
 
-pub(super) const CREATE_VOLUME: Route = Route {
+pub(crate) const CREATE_VOLUME: Route = Route {
     kind: "createVolume",
     method: storyos_contracts::CREATE_VOLUME_METHOD,
     path: storyos_contracts::CREATE_VOLUME_PATH,
     schema: storyos_contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const UPDATE_VOLUME: Route = Route {
+pub(crate) const UPDATE_VOLUME: Route = Route {
     kind: "updateVolume",
     method: storyos_contracts::UPDATE_VOLUME_METHOD,
     path: storyos_contracts::UPDATE_VOLUME_PATH,
     schema: storyos_contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const DELETE_VOLUME: Route = Route {
+pub(crate) const DELETE_VOLUME: Route = Route {
     kind: "deleteVolume",
     method: storyos_contracts::DELETE_VOLUME_METHOD,
     path: storyos_contracts::DELETE_VOLUME_PATH,
     schema: storyos_contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const CREATE_CHAPTER: Route = Route {
+pub(crate) const CREATE_CHAPTER: Route = Route {
     kind: "createChapter",
     method: storyos_contracts::CREATE_CHAPTER_METHOD,
     path: storyos_contracts::CREATE_CHAPTER_PATH,
     schema: storyos_contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const UPDATE_CHAPTER: Route = Route {
+pub(crate) const UPDATE_CHAPTER: Route = Route {
     kind: "updateChapter",
     method: storyos_contracts::UPDATE_CHAPTER_METHOD,
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const SET_CURRENT_CHAPTER: Route = Route {
+pub(crate) const SET_CURRENT_CHAPTER: Route = Route {
     kind: "setCurrentChapter",
     method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
     path: storyos_contracts::SET_CURRENT_CHAPTER_PATH,
     schema: storyos_contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const DELETE_CHAPTER: Route = Route {
+pub(crate) const DELETE_CHAPTER: Route = Route {
     kind: "deleteChapter",
     method: storyos_contracts::DELETE_CHAPTER_METHOD,
     path: storyos_contracts::DELETE_CHAPTER_PATH,

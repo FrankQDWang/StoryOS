@@ -11,8 +11,8 @@ use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGen
 use storyos_core::{AssistanceAvailability, CreateChapterPlacement};
 use uuid::Uuid;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::seed_project;
 
 use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, acceptance_rows};
 use super::agent_run::{

@@ -5,9 +5,9 @@ use storyos_application::{
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::AssistanceAvailability;
 
+use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::set_current_chapter_authority_tests::open_session;
-use crate::update_volume_tests::seed_project;
 
 use super::damaged_evidence::ReplayError;
 use super::support::{
@@ -23,28 +23,28 @@ pub(super) async fn take_over_project_writer(
         .await
 }
 
-pub(super) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
+pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
     kind: "updateProjectAssistance",
     method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const TAKE_OVER_PROJECT_WRITER: Route = Route {
+pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
     kind: "takeOverProjectWriter",
     method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
     path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
     schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const UPDATE_PROJECT: Route = Route {
+pub(crate) const UPDATE_PROJECT: Route = Route {
     kind: "updateProject",
     method: storyos_contracts::UPDATE_PROJECT_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
 };
 
-pub(super) const ARCHIVE_PROJECT: Route = Route {
+pub(crate) const ARCHIVE_PROJECT: Route = Route {
     kind: "archiveProject",
     method: storyos_contracts::ARCHIVE_PROJECT_METHOD,
     path: storyos_contracts::ARCHIVE_PROJECT_PATH,
