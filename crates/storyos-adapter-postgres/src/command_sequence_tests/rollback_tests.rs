@@ -9,9 +9,10 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivitySequences, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileApplied,
-    ProfileSequences, ProfileWrite, ProjectCommand, ReceiptRefs, ZeroAuthorityRows,
-    ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
+    ActivitySequences, Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification,
+    CommandSpec, LockedProject, ProfileApplied, ProfileSequences, ProfileWrite, ProjectCommand,
+    ReceiptRefs, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
+    unavailable,
 };
 
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
@@ -232,6 +233,20 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
         replay: &CommandReplay,
     ) -> Result<Option<Self::ZeroEffect>, ReplayFault> {
         self.command.decode_zero_authority_effect(replay)
+    }
+}
+
+impl<C: AdmittedCommand, S: DeclaredSpec<C>> AdmittedCommand for Failing<C, S> {
+    fn admission(&self, envelope: &ProjectCommandEnvelope) -> Admission {
+        self.command.admission(envelope)
+    }
+
+    fn admitted_refusal(refusal: AdmittedRefusal) -> Self::Error {
+        C::admitted_refusal(refusal)
+    }
+
+    fn before_commit(&self) -> Result<(), Self::Error> {
+        self.command.before_commit()
     }
 }
 

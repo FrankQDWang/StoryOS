@@ -5,15 +5,15 @@ use storyos_application::{
 use storyos_application::{
     CreateChapterInput, CreateChapterSettlement, CreateVolumeInput, CreateVolumeSettlement,
     DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput, DeleteVolumeSettlement,
-    ProjectCommandError, ProjectScope, SetCurrentChapterInput, UpdateChapterInput,
-    UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
-    issue_project_command_challenge,
+    GetManuscriptTree, ProjectCommandError, ProjectScope, SetCurrentChapterInput,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    get_manuscript_tree, issue_project_command_challenge,
 };
 use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::command_sequence::{ProjectCommand, settle_project_command};
+use crate::command_sequence::{CommandSpec, ProjectCommand, settle_project_command};
 
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
@@ -568,4 +568,177 @@ async fn a_create_receipt_without_its_order_replays_the_historical_acknowledgeme
             ..applied(&first).0
         }
     );
+}
+
+/// The sibling kind of a reorder whose rank write fails.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum RankedSibling {
+    Volume,
+    Chapter,
+}
+
+/// Drops the test trigger that fails a rank write, and its function.
+async fn drop_rank_write_failure(admin: &Client) {
+    admin
+        .batch_execute(
+            "DROP TRIGGER IF EXISTS storyos_test_fail_rank_write ON storyos.manuscript_objects;
+             DROP FUNCTION IF EXISTS public.storyos_test_fail_rank_write();",
+        )
+        .await
+        .unwrap();
+}
+
+/// Installs a test trigger that fails each write of a live rank.
+async fn install_rank_write_failure(admin: &Client) {
+    drop_rank_write_failure(admin).await;
+    admin
+        .batch_execute(
+            "CREATE FUNCTION public.storyos_test_fail_rank_write()
+             RETURNS trigger LANGUAGE plpgsql AS $$
+             BEGIN
+               IF NEW.tree_order IS DISTINCT FROM OLD.tree_order
+                  AND NEW.tree_order <= 1000000 THEN
+                 RAISE EXCEPTION 'injected rank write failure';
+               END IF;
+               RETURN NEW;
+             END $$;
+             CREATE TRIGGER storyos_test_fail_rank_write
+             BEFORE UPDATE ON storyos.manuscript_objects FOR EACH ROW
+             EXECUTE FUNCTION public.storyos_test_fail_rank_write();",
+        )
+        .await
+        .unwrap();
+}
+
+/// The canonical tree of the Project. Then the Receipt, Activity payload, Admission, and settled
+/// fence rows of the command kind of `spec`, and the Commit, Author Action, and Snapshot rows of
+/// the Project.
+async fn tree_and_rows(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    spec: &CommandSpec,
+) -> (GetManuscriptTree, [i64; 7]) {
+    let row = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.domain_receipts
+                      WHERE project_id = $1::text::uuid AND command_kind = $2),
+                    (SELECT count(*) FROM storyos.project_activity_event_payloads
+                      WHERE project_id = $1::text::uuid AND event_kind = $3),
+                    (SELECT count(*) FROM storyos.author_command_admissions
+                      WHERE project_id = $1::text::uuid AND command_kind = $2),
+                    (SELECT count(*) FROM storyos.command_idempotency
+                      WHERE project_id = $1::text::uuid AND command_kind = $2
+                        AND outcome_kind = 'settled'),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.author_action_entries
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.project_snapshots
+                      WHERE project_id = $1::text::uuid)",
+            &[&scope.project_id.as_ref(), &spec.kind, &spec.activity_kind],
+        )
+        .await
+        .unwrap();
+    (
+        get_manuscript_tree(store, scope).await.unwrap(),
+        std::array::from_fn(|idx| row.get(idx)),
+    )
+}
+
+/// Settles the call while a test trigger fails its rank write.
+///
+/// Returns whether the command returns the injected failure as a store fault, and the result of
+/// `tree_and_rows` before and after the command.
+async fn settle_with_failed_rank_write<C: ProjectCommand<Error = ProjectCommandError>>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> (bool, [(GetManuscriptTree, [i64; 7]); 2]) {
+    let scope = &call.envelope.project_scope;
+    let before = tree_and_rows(store, admin, scope, &C::SPEC).await;
+    install_rank_write_failure(admin).await;
+    let settled = settle_project_command(store, &call.envelope, &call.input).await;
+    drop_rank_write_failure(admin).await;
+    let injected = matches!(&settled, Err(ProjectCommandError::Unavailable(source))
+        if format!("{source:?}").contains("injected rank write failure"));
+    (
+        injected,
+        [before, tree_and_rows(store, admin, scope, &C::SPEC).await],
+    )
+}
+
+/// Seeds three siblings of `sibling` in a new Project, and moves the last sibling to the first
+/// place, so that the rank write changes all three ranks. A test trigger fails that rank write.
+async fn failed_reorder(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    sibling: RankedSibling,
+    base: u16,
+) -> (bool, [(GetManuscriptTree, [i64; 7]); 2]) {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
+    match sibling {
+        RankedSibling::Volume => {
+            new_volume(store, &scope, base + 2, /*expected_tree_revision*/ 2).await;
+            let moved = new_volume(store, &scope, base + 3, /*expected_tree_revision*/ 3).await;
+            let input = UpdateVolumeInput {
+                volume_id: moved,
+                title: "Moved".to_owned(),
+                order: 1,
+                expected_tree_revision: 4,
+            };
+            let call = issued(store, &scope, base + 9, &UPDATE_VOLUME, input).await;
+            settle_with_failed_rank_write(store, admin, &call).await
+        }
+        RankedSibling::Chapter => {
+            for (suffix, expected_tree_revision) in [(base + 2, 2), (base + 3, 3)] {
+                new_chapter(store, &scope, suffix, &volume_id, expected_tree_revision).await;
+            }
+            let moved = new_chapter(
+                store,
+                &scope,
+                base + 4,
+                &volume_id,
+                /*expected_tree_revision*/ 4,
+            )
+            .await;
+            let input = UpdateChapterInput {
+                chapter_id: moved,
+                title: "Moved".to_owned(),
+                order: 1,
+                expected_tree_revision: 5,
+            };
+            let call = issued(store, &scope, base + 9, &UPDATE_CHAPTER, input).await;
+            settle_with_failed_rank_write(store, admin, &call).await
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_failed_rank_write_rolls_back_the_entire_reorder() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    let mut expected = Vec::new();
+    for (sibling, base) in [
+        (RankedSibling::Volume, 0x8c40),
+        (RankedSibling::Chapter, 0x8c50),
+    ] {
+        let (injected, [(tree_before, rows_before), after]) =
+            failed_reorder(&store, &admin, sibling, base).await;
+        observed.push((sibling, injected, after));
+        // The same tree and tree revision, no row of the command, and no new Commit, Author
+        // Action, or Snapshot.
+        let [.., commits, actions, snapshots] = rows_before;
+        expected.push((
+            sibling,
+            true,
+            (tree_before, [0, 0, 0, 0, commits, actions, snapshots]),
+        ));
+    }
+    assert_eq!(observed, expected);
 }

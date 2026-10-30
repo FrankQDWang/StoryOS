@@ -1,10 +1,10 @@
-//! The Chapter rank batch of Update Chapter: one rank write for many siblings, the scope of the
-//! write, and the rollback of a failed rank write. `command_sequence_tests/` owns replay.
+//! The Chapter rank batch of Update Chapter: one rank write for many siblings and the scope of the
+//! write. `command_sequence_tests/` owns replay and the rollback of a failed rank write.
 
 use storyos_application::{
-    CanonicalManuscriptTree, ChapterId, ChapterNode, GetManuscriptTree, ProjectCommandError,
-    ProjectScope, UpdateChapterInput, UpdateChapterSettlement, UserId, VolumeId, VolumeNode,
-    get_manuscript_tree, open_project,
+    CanonicalManuscriptTree, ChapterId, ChapterNode, GetManuscriptTree, ProjectScope,
+    UpdateChapterInput, UpdateChapterSettlement, UserId, VolumeId, VolumeNode, get_manuscript_tree,
+    open_project,
 };
 use storyos_core::{TransitionOutcome, UpdateChapterApplied};
 
@@ -74,10 +74,8 @@ async fn drop_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
         .batch_execute(
             "DROP TRIGGER IF EXISTS storyos_issue_650_count_manuscript_objects ON storyos.manuscript_objects;
              DROP TRIGGER IF EXISTS storyos_issue_650_count_projects ON storyos.projects;
-             DROP TRIGGER IF EXISTS storyos_issue_650_fail_rank_write ON storyos.manuscript_objects;
              DROP FUNCTION IF EXISTS public.storyos_issue_650_count_manuscript_objects();
              DROP FUNCTION IF EXISTS public.storyos_issue_650_count_projects();
-             DROP FUNCTION IF EXISTS public.storyos_issue_650_fail_rank_write();
              DROP TABLE IF EXISTS public.storyos_issue_650_sql_calls;",
         )
         .await
@@ -520,99 +518,6 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
             "live_a": "Chapter 4:1,Chapter 1:2,Chapter 3:3",
             "removed_a": "1000002",
             "live_b": "Other Volume Chapter:1",
-        })
-    );
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn failed_chapter_rank_write_rolls_back_the_entire_command() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope, volume_id, chapter_ids) = seed_volume_with_chapters(
-        &store, /*project_suffix*/ 0x6530, /*chapter_count*/ 3,
-    )
-    .await;
-    let command = issue_update(
-        &store,
-        &scope,
-        &hex_suffix(0x6535),
-        &chapter_ids[2],
-        "Chapter 3",
-        /*order*/ 1,
-        /*expected_tree_revision*/ 5,
-    )
-    .await;
-    drop_chapter_tree_sql_probes(&admin).await;
-    admin
-        .batch_execute(
-            "CREATE FUNCTION public.storyos_issue_650_fail_rank_write()
-             RETURNS trigger LANGUAGE plpgsql AS $$
-             BEGIN
-               IF NEW.object_kind = 'chapter'
-                  AND NEW.tree_order IS DISTINCT FROM OLD.tree_order
-                  AND NEW.tree_order <= 1000000 THEN
-                 RAISE EXCEPTION 'injected Chapter rank persistence failure';
-               END IF;
-               RETURN NEW;
-             END $$;
-             CREATE TRIGGER storyos_issue_650_fail_rank_write
-             BEFORE UPDATE ON storyos.manuscript_objects FOR EACH ROW
-             EXECUTE FUNCTION public.storyos_issue_650_fail_rank_write();",
-        )
-        .await
-        .unwrap();
-    let error = update_chapter(&store, &command)
-        .await
-        .expect_err("a failed rank write must stop acknowledgement");
-    drop_chapter_tree_sql_probes(&admin).await;
-    assert!(matches!(error, ProjectCommandError::Unavailable(_)));
-    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
-        panic!("the Project still has a Canonical Query");
-    };
-    assert_eq!(tree.tree_revision, 5);
-    assert_eq!(
-        tree.volumes,
-        vec![VolumeNode {
-            volume_id: VolumeId::new(volume_id),
-            title: "Volume A".to_owned(),
-            order: 1,
-            chapters: chapter_nodes(&chapter_ids, &["Chapter 1", "Chapter 2", "Chapter 3"]),
-        }]
-    );
-    assert_eq!(
-        json_query(
-            &admin,
-            "SELECT jsonb_build_object(
-               'update_receipts', (SELECT count(*) FROM storyos.domain_receipts
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'),
-               'chapter_updated', (SELECT count(*) FROM storyos.project_activity_event_payloads
-                 WHERE project_id = $1::text::uuid AND event_kind = 'chapter_updated'),
-               'update_admissions', (SELECT count(*) FROM storyos.author_command_admissions
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'),
-               'settled_idempotency', (SELECT count(*) FROM storyos.command_idempotency
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'
-                   AND outcome_kind = 'settled'),
-               'commits', (SELECT count(*) FROM storyos.authoritative_commits
-                 WHERE project_id = $1::text::uuid),
-               'actions', (SELECT count(*) FROM storyos.author_action_entries
-                 WHERE project_id = $1::text::uuid),
-               'snapshots', (SELECT count(*) FROM storyos.project_snapshots
-                 WHERE project_id = $1::text::uuid)
-             )::text",
-            &[&scope.project_id.as_ref()],
-        )
-        .await,
-        serde_json::json!({
-            "update_receipts": 0,
-            "chapter_updated": 0,
-            "update_admissions": 0,
-            "settled_idempotency": 0,
-            "commits": 4,
-            "actions": 4,
-            "snapshots": 5,
         })
     );
 }

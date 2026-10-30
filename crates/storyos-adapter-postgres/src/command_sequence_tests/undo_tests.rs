@@ -38,7 +38,7 @@ pub(crate) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
 /// The Undo cases of the contract rows. Each case settles one Forward Author Action, or a
 /// state that one Author Undo outcome needs.
 #[derive(Clone, Copy, Debug)]
-enum Case {
+pub(super) enum Case {
     CreateVolume,
     SetCurrentChapter,
     WithdrawProposal,
@@ -160,7 +160,7 @@ pub(super) async fn edit_in_chapter_of(admin: &Client, editor_session_id: &str, 
 
 /// Settles the Forward Author Action of `case` in a new Project and returns the Author Undo of
 /// it.
-async fn undo_call(
+pub(super) async fn undo_call(
     store: &PostgresProjectReader,
     admin: &Client,
     case: Case,

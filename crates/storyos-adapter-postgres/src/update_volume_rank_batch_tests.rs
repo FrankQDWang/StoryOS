@@ -1,5 +1,6 @@
-//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, a failed rank write,
-//! storage-key exhaustion, and the replay of a reorder after later reorders.
+//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, storage-key
+//! exhaustion, and the replay of a reorder after later reorders. `command_sequence_tests/` owns the
+//! rollback of a failed rank write.
 
 use storyos_application::{
     GetManuscriptTree, ProjectCommandError, ProjectScope, UpdateVolumeInput, VolumeId, VolumeNode,
