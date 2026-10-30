@@ -30,7 +30,7 @@ use super::undo::latest_forward;
 
 /// The Withdrawal of the current head by the AgentRun decision that produced the Proposal.
 /// Returns its Withdrawal event.
-async fn producer_withdraw(
+pub(super) async fn producer_withdraw(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
@@ -78,7 +78,7 @@ async fn producer_withdraw(
 
 /// The explicit reopen of the current head with `withdrawal_event_id`. Returns the outcome
 /// without its values.
-async fn reopen(
+pub(super) async fn reopen(
     store: &PostgresProjectReader,
     admin: &Client,
     proposal: &TwoOperationProposal,
@@ -232,8 +232,8 @@ async fn author_undo_of_an_earlier_candidate_edit_keeps_a_producer_withdrawal() 
 }
 
 /// E0, E1, P, Undo E1, reopen D with P, Undo D, and Undo E0. The Undo of D gives back the kept
-/// withdrawn Revision, so Undo E0 keeps the Proposal withdrawn. The Undo of D left no Revision
-/// of P below the head, so a second reopen with P has no effect.
+/// withdrawn Revision, so Undo E0 keeps the Proposal withdrawn. A second reopen with P goes
+/// through the Compensation of D and reopens the Proposal.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn author_undo_keeps_a_producer_withdrawal_after_the_undo_of_its_reopen() {
@@ -292,7 +292,7 @@ async fn author_undo_keeps_a_producer_withdrawal_after_the_undo_of_its_reopen() 
             TransitionOutcome::Applied(()),
             (first, Some(prior)),
             "withdrawn".to_owned(),
-            TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch),
+            TransitionOutcome::Applied(()),
             candidates
         )
     );
