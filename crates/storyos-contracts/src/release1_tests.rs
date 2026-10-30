@@ -10,20 +10,8 @@ use crate::{
     SelectionSnapshot,
 };
 
-/// Project commands that the challenge admits but that no route serves. The protocol document plans them for later Stages.
-const PLANNED_CHALLENGE_TARGETS: [&str; 8] = [
-    "createReplacementProposal",
-    "decideApproval",
-    "deleteProject",
-    "importProjectArchive",
-    "resolveWait",
-    "resumeAgentRun",
-    "supersedeProposal",
-    "updateConversationMemorySettings",
-];
-
 #[test]
-fn challenge_targets_equal_the_project_scoped_release_1_command_catalog_and_the_planned_commands() {
+fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
     let catalog: serde_json::Value =
         serde_json::from_slice(&crate::release1_route_catalog::route_catalog_bytes())
             .expect("Release 1 route catalog must be valid JSON");
@@ -57,18 +45,8 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog_and_the_
             )
         })
         .collect::<BTreeSet<_>>();
-    let (planned_targets, served_targets): (BTreeSet<_>, BTreeSet<_>) = implementation_targets
-        .into_iter()
-        .partition(|target| PLANNED_CHALLENGE_TARGETS.contains(&target.0));
 
-    assert_eq!(served_targets, catalog_targets);
-    assert_eq!(
-        planned_targets
-            .iter()
-            .map(|target| target.0)
-            .collect::<Vec<_>>(),
-        PLANNED_CHALLENGE_TARGETS
-    );
+    assert_eq!(implementation_targets, catalog_targets);
 }
 
 #[test]

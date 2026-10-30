@@ -13,6 +13,7 @@ use storyos_application::{
 };
 
 const ATTEMPTS: u64 = 4;
+const SERIALIZATION_FAILURE: &str = "40001";
 
 /// Combined persistence port for the packaged Worker loop.
 pub trait WorkerStore: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore {}
@@ -46,7 +47,7 @@ pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match claim_next_export_work(store).await? {
+    match claim_after_contention(|| claim_next_export_work(store)).await? {
         Some(ClaimedExportWork::Readable(claim)) => {
             readable_export_claim(store, &claim, /*attempts*/ 1).await?;
             Ok(())
@@ -55,7 +56,7 @@ pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
             archive_export_claim(store, &claim, /*attempts*/ 1).await?;
             Ok(())
         }
-        None => match claim_next_agent_run(store, A::ADAPTERS).await? {
+        None => match claim_after_contention(|| claim_next_agent_run(store, A::ADAPTERS)).await? {
             Some(claim) => {
                 match agent_run_claim(store, destination, &claim, /*attempts*/ 1).await {
                     Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
@@ -99,6 +100,28 @@ async fn step<A: ModelProviderAdapter, O: ContractFaultObserver>(
             Err(error) => claim_failed(&error),
         },
         Err(error) => claim_failed(&error),
+    }
+}
+
+/// Runs one claim again after a serialization failure, as the loop does, for at most `ATTEMPTS`
+/// attempts.
+async fn claim_after_contention<T, F>(mut claim: impl FnMut() -> F) -> Result<T, ProjectReadError>
+where
+    F: Future<Output = Result<T, ProjectReadError>>,
+{
+    let mut attempt = 1;
+    loop {
+        match claim().await {
+            Err(error)
+                if attempt < ATTEMPTS
+                    && SqlState(&error).diagnostic().as_deref() == Some(SERIALIZATION_FAILURE) =>
+            {
+                claim_failed(&error);
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            result => return result,
+        }
+        attempt += 1;
     }
 }
 
@@ -230,3 +253,7 @@ where
         attempt += 1;
     }
 }
+
+#[cfg(test)]
+#[path = "run_once_tests.rs"]
+mod tests;
