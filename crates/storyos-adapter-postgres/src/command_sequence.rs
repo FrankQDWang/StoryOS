@@ -25,6 +25,7 @@ mod response;
 mod settle;
 mod skeleton;
 mod structural;
+mod structural_records;
 use crate::command_replay::{CommandReplay, EffectKey, ReplayFault, read_command_replay};
 pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
@@ -37,6 +38,7 @@ pub(crate) use authoritative_revision::{
 };
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 pub(crate) use contention::CommandError;
+pub(crate) use records::{CommitCounters, allocate_commit_counters, insert_author_action};
 use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
 pub(crate) use settle::{
@@ -148,24 +150,18 @@ pub(crate) struct LockedProject {
 
 /// The authority records that an applied project command allocates and writes (ADR 0076).
 ///
-/// A command names one profile. The sequence calls `allocate` before the Domain Receipt and
-/// `persist` after the command effect rows. On an exact retry, it calls `replay` instead.
-/// Implementations never run transaction control and never write the Admission, Receipt,
-/// settlement link, or idempotency rows.
+/// A command names one profile. The sequence allocates the profile sequences through the plan
+/// (`SelectsRecords`) before the Domain Receipt, and calls `persist` after the command effect rows.
+/// On an exact retry, it calls `replay` instead. Implementations never run transaction control
+/// and never write the Admission, Receipt, settlement link, or idempotency rows.
 pub(crate) trait SettlementProfile {
-    /// The record set that one applied plan selects. A profile of one record set uses `()`.
-    type Selector: Send + Sync;
     type Sequences: Send + Sync;
     /// The applied writes that a command of this profile returns.
     type Write<E: Send>: Send;
     /// The applied value of the settlement, equal on first delivery and replay.
     type Applied<E: Send>: Send;
-
-    fn allocate(
-        client: &Client,
-        scope: &ProjectScope,
-        selector: &Self::Selector,
-    ) -> impl Future<Output = Result<Self::Sequences, ProjectCommandError>> + Send;
+    /// The settlement facts besides the envelope that `persist` reads.
+    type Input: PersistInput + Send;
 
     /// The Authoritative Commit identities that the Domain Receipt binds.
     fn commit_ids(sequences: &Self::Sequences) -> Vec<String>;
@@ -179,9 +175,7 @@ pub(crate) trait SettlementProfile {
     fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
-        spec: &CommandSpec,
-        variant: AppliedVariant,
+        input: Self::Input,
         sequences: Self::Sequences,
         write: Self::Write<E>,
     ) -> impl Future<Output = Result<Self::Applied<E>, ProjectCommandError>> + Send;
@@ -194,11 +188,59 @@ pub(crate) trait SettlementProfile {
     ) -> Result<Self::Applied<E>, ReplayFault>;
 }
 
-/// Gives the record set of the settlement profile `P` that one applied plan selects.
+/// The settlement facts of one applied outcome besides the envelope.
+pub(crate) struct PersistFacts<'a> {
+    pub(crate) project: &'a LockedProject,
+    pub(crate) activity_kind: &'static str,
+    pub(crate) variant: AppliedVariant,
+}
+
+/// The input of `persist` of one profile: only the settlement facts that the profile reads.
+pub(crate) trait PersistInput {
+    fn from_facts(facts: &PersistFacts<'_>) -> Self;
+}
+
+/// A profile that reads only the envelope.
+impl PersistInput for () {
+    fn from_facts(_facts: &PersistFacts<'_>) -> Self {}
+}
+
+/// A profile whose records record the Receipt result kind of the applied variant.
+impl PersistInput for AppliedVariant {
+    fn from_facts(facts: &PersistFacts<'_>) -> Self {
+        facts.variant
+    }
+}
+
+/// A settlement profile of one record set. Every plan allocates its sequences.
+pub(crate) trait SingleRecordSet: SettlementProfile {
+    fn allocate(
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<Self::Sequences, ProjectCommandError>> + Send;
+}
+
+/// Allocates the sequences of the record set of the settlement profile `P` that one applied plan
+/// selects.
 ///
-/// A profile of one record set has a blanket implementation for every plan.
+/// A profile of one record set has a blanket implementation for every plan. A profile of more
+/// than one record set selects the set from the plan.
 pub(crate) trait SelectsRecords<P: SettlementProfile> {
-    fn selector(&self) -> P::Selector;
+    fn allocate_records(
+        &self,
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<P::Sequences, ProjectCommandError>> + Send;
+}
+
+impl<P: SingleRecordSet, T> SelectsRecords<P> for T {
+    fn allocate_records(
+        &self,
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<P::Sequences, ProjectCommandError>> + Send {
+        P::allocate(client, scope)
+    }
 }
 
 /// A Core Transition Outcome whose applied value carries the locked facts that `apply` reuses.
@@ -561,8 +603,9 @@ async fn settle_classified<C: ProjectCommand>(
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let variant = command.applied_variant(&applied, &plan);
-            let sequences =
-                C::Profile::allocate(client, &envelope.project_scope, &plan.selector()).await?;
+            let sequences = plan
+                .allocate_records(client, &envelope.project_scope)
+                .await?;
             let revision_ids = C::Profile::revision_ids(&sequences);
             let mut receipt = ReceiptRecord {
                 payload: command.applied_receipt_payload(&applied, &plan),
@@ -583,16 +626,12 @@ async fn settle_classified<C: ProjectCommand>(
             let write = command
                 .apply(client, envelope, project, &sequences, plan, applied)
                 .await?;
-            let applied = C::Profile::persist(
-                client,
-                envelope,
+            let input = PersistInput::from_facts(&PersistFacts {
                 project,
-                &C::SPEC,
+                activity_kind: C::SPEC.activity_kind,
                 variant,
-                sequences,
-                write,
-            )
-            .await?;
+            });
+            let applied = C::Profile::persist(client, envelope, input, sequences, write).await?;
             command
                 .apply_after_authority(client, envelope, &applied)
                 .await?;
@@ -627,7 +666,7 @@ async fn settle_classified<C: ProjectCommand>(
                     .await?,
             ),
             ZeroAuthorityRows::EffectWithActivity => {
-                let activity = ActivityOnly::allocate(client, &envelope.project_scope, &()).await?;
+                let activity = ActivityOnly::allocate(client, &envelope.project_scope).await?;
                 let write = command
                     .write_zero_authority_activity(client, envelope, project, &activity)
                     .await?;

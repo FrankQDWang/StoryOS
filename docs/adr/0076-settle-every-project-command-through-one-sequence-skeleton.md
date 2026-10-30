@@ -55,13 +55,15 @@ A profile fixes the scope sequences and the authority records of an applied outc
 
 | Profile | Records of an applied outcome | Commands |
 | --- | --- | --- |
-| `Structural` | The guarded Project update, the Authoritative Commit, the Forward Author Action, the Activity record with `tree_revision`, the canonical Snapshot, and the writer-base rebind | The six structure commands |
-| `ChapterSelection` | An Author Action without an Authoritative Commit, the Activity record, the canonical Snapshot, and the writer-base rebind | `setCurrentChapter` |
+| `Structural` | The guarded Project update, the Activity record with `tree_revision`, the Authoritative Commit, the Forward Author Action, the canonical Snapshot, and the rebind of the current writer base when the command asks for it | The six structure commands |
+| `ChapterSelection` | The guarded Project update, the Activity record with `base_snapshot_id`, a Forward Author Action without an Authoritative Commit, the canonical Snapshot, and the required rebind of the writer base of the Editor Session | `setCurrentChapter` |
 | `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `takeOverProjectWriter`, and the four AgentRun commands |
 | `ActionOnly` | One Forward Author Action | The seven Proposal decisions |
 | `AuthoritativeRevision` | The Revision with its payload, members, and Envelope, the guarded Head update, the Authoritative Commit, the Author Action, the `project_activity_events` row, the writer-base update, and the canonical Snapshot | `acceptProposal`, the applied Author Edit, and the prose and Acceptance compensations |
 
-- `Structural` and `ChapterSelection` share their common record writes. `Structural` and `AuthoritativeRevision` share one sequence allocation. A profile takes only the inputs that it reads, and it keeps its own replay evidence check.
+- `Structural` and `ChapterSelection` write their records through one shared step, in the order of the table. `Structural` and `AuthoritativeRevision` share one allocation of the Author Action, Authoritative Commit, and Activity counters. The compensation adapters use the same Author Action insert and writer-base update.
+- `persist` takes the envelope and only the other settlement facts that the profile reads: the applied variant (`ActionOnly`), the Activity kind (`ActivityOnly`), or the locked Project facts and the Activity kind (`Structural`, `ChapterSelection`).
+- A profile of one record set allocates its sequences for every plan. Only `AuthorEditProfile` and `UndoCompensation` have more than one record set, and their plan selects the set. Each profile keeps its own replay evidence check.
 - A zero-authority outcome never allocates an Authoritative Commit or an Author Action. It can write effect rows, and an Activity record where its schema requires one (`steerAgentRun`, `takeOverProjectWriter`).
 - The response record is the Command-response Project, the Command-response Project with the Project assistance record, or none. A command without a response record decodes its acknowledgement from the Receipt and its effect rows.
 

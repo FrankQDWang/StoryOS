@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::author_edit_proposal::{decode_proposal_compensation, proposal_receipt_payload};
 use crate::command_replay::ReplayFault;
+use crate::command_sequence::{ActionDisposition, insert_author_action};
 use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
     allocate_compensation_action,
@@ -232,15 +233,15 @@ async fn persist_withdrawal_compensation(
     if head_updates != 1 {
         return Err(ProjectCommandError::BindingConflict);
     }
-    crate::structural_authority_settlement::persist_current_chapter_compensation_author_action(
+    insert_author_action(
         client,
         &command.project_scope,
         sequences.author_action_sequence,
+        &ActionDisposition::Compensation { source_sequence },
+        None,
         &command.ids.receipt_id,
-        source_sequence,
     )
-    .await
-    .map_err(undo_database_error)?;
+    .await?;
     Ok(UndoRecords::Proposal {
         proposal_revision_id: Some(proposal_revision_id),
         project_activity_position: sequences.project_activity_position,

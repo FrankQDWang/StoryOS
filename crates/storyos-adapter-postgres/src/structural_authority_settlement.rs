@@ -1,6 +1,8 @@
-use storyos_application::ProjectScope;
+use storyos_application::{ProjectCommandError, ProjectScope};
 use tokio_postgres::Client;
 use uuid::Uuid;
+
+use crate::command_sequence::{CommitCounters, allocate_commit_counters, unavailable};
 
 mod compensation;
 pub(crate) use compensation::{ObservedStructureFrontier, StructureCompensation};
@@ -43,28 +45,16 @@ pub(crate) struct StructureCommitBinding<'a> {
 pub(crate) async fn allocate_structure_transition_sequences(
     client: &Client,
     scope: &ProjectScope,
-) -> Result<StructureTransitionSequences, Box<dyn std::error::Error + Send + Sync>> {
-    let row = client
-        .query_one(
-            "INSERT INTO storyos.scope_counters AS counters
-               (owner_user_id, project_id, author_action_sequence,
-                authoritative_commit_sequence, project_activity_position)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
-             ON CONFLICT (owner_user_id, project_id)
-             DO UPDATE SET
-               author_action_sequence = counters.author_action_sequence + 1,
-               authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
-               project_activity_position = counters.project_activity_position + 1
-             RETURNING counters.author_action_sequence::text,
-                       counters.authoritative_commit_sequence::text,
-                       counters.project_activity_position::text",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await?;
+) -> Result<StructureTransitionSequences, ProjectCommandError> {
+    let CommitCounters {
+        author_action_sequence,
+        authoritative_commit_sequence,
+        project_activity_position,
+    } = allocate_commit_counters(client, scope).await?;
     Ok(StructureTransitionSequences {
-        author_action_sequence: parse_counter(row.get(0))?,
-        authoritative_commit_sequence: parse_counter(row.get(1))?,
-        project_activity_position: parse_counter(row.get(2))?,
+        author_action_sequence,
+        authoritative_commit_sequence,
+        project_activity_position,
         authoritative_commit_id: Uuid::now_v7().to_string(),
         project_activity_event_id: Uuid::now_v7().to_string(),
         snapshot_id: Uuid::now_v7().to_string(),
@@ -195,147 +185,36 @@ pub(crate) async fn allocate_current_chapter_sequences(
     })
 }
 
-pub(crate) async fn persist_current_chapter_forward_author_action(
-    client: &Client,
-    scope: &ProjectScope,
-    author_action_sequence: u64,
-    receipt_id: &str,
-) -> Result<(), tokio_postgres::Error> {
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
-                     $4::text::uuid, 'authoritative_applied')",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &author_action_sequence.to_string(),
-                &receipt_id,
-            ],
-        )
-        .await?;
-    Ok(())
-}
-
-pub(crate) async fn persist_current_chapter_compensation_author_action(
-    client: &Client,
-    scope: &ProjectScope,
-    author_action_sequence: u64,
-    receipt_id: &str,
-    source_sequence: u64,
-) -> Result<(), tokio_postgres::Error> {
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                compensated_source_sequence, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'compensation',
-                     $4::text::numeric, $5::text::uuid, 'authoritative_applied')",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &author_action_sequence.to_string(),
-                &source_sequence.to_string(),
-                &receipt_id,
-            ],
-        )
-        .await?;
-    Ok(())
-}
-
-pub(crate) async fn persist_forward_author_action(
-    client: &Client,
-    scope: &ProjectScope,
-    sequences: &StructureTransitionSequences,
-    receipt_id: &str,
-) -> Result<(), tokio_postgres::Error> {
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                authoritative_commit_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
-                     $4::text::uuid, $5::text::uuid, 'authoritative_applied')",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &sequences.author_action_sequence.to_string(),
-                &sequences.authoritative_commit_id,
-                &receipt_id,
-            ],
-        )
-        .await?;
-    Ok(())
-}
-
 fn parse_counter(value: String) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     Ok(value.parse()?)
 }
 
-pub(crate) async fn persist_compensation_author_action(
+/// Moves the writer base Snapshot to a new canonical Snapshot of the Chapter Revision
+/// `revision_id`, and gives the number of moved bases.
+///
+/// The base moves only for the current writer Editor Session. With `editor_session_id`, it moves
+/// only when that session is the current writer.
+pub(crate) async fn update_writer_base(
     client: &Client,
     scope: &ProjectScope,
-    sequences: &StructureTransitionSequences,
-    receipt_id: &str,
-    source_sequence: u64,
-) -> Result<(), tokio_postgres::Error> {
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                compensated_source_sequence, authoritative_commit_id, receipt_id,
-                receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'compensation',
-                     $4::text::numeric, $5::text::uuid, $6::text::uuid, 'authoritative_applied')",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &sequences.author_action_sequence.to_string(),
-                &source_sequence.to_string(),
-                &sequences.authoritative_commit_id,
-                &receipt_id,
-            ],
-        )
-        .await?;
-    Ok(())
-}
-
-/// Moves the current writer base Snapshot to a new canonical Snapshot of one Chapter.
-pub(crate) async fn rebind_writer_base(
-    client: &Client,
-    scope: &ProjectScope,
+    editor_session_id: Option<&str>,
     chapter_id: &str,
+    revision_id: &str,
     snapshot_id: &str,
     project_activity_position: u64,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let authoritative_revision_id = client
-        .query_opt(
-            "SELECT head.current_revision_id::text
-               FROM storyos.authoritative_heads AS head
-              WHERE head.owner_user_id = $1::text::uuid AND head.project_id = $2::text::uuid
-                AND head.manuscript_object_id = $3::text::uuid",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &chapter_id,
-            ],
-        )
-        .await?
-        .map(|row| row.get::<_, String>(0))
-        .ok_or("the Current Chapter has no authoritative head")?;
+) -> Result<u64, ProjectCommandError> {
     client
         .execute(
             "UPDATE storyos.editor_session_base_snapshots AS snapshot
-                SET snapshot_id = $3::text::uuid,
-                    chapter_object_id = $4::text::uuid,
-                    authoritative_revision_id = $5::text::uuid,
-                    project_activity_position = $6::text::numeric,
+                SET snapshot_id = $4::text::uuid,
+                    chapter_object_id = $5::text::uuid,
+                    authoritative_revision_id = $6::text::uuid,
+                    project_activity_position = $7::text::numeric,
                     created_at = clock_timestamp()
                FROM storyos.project_writer_generations AS writer
               WHERE snapshot.owner_user_id = $1::text::uuid
                 AND snapshot.project_id = $2::text::uuid
+                AND ($3::text IS NULL OR snapshot.editor_session_id = $3::text::uuid)
                 AND (writer.owner_user_id, writer.project_id,
                      writer.current_editor_session_id) =
                     (snapshot.owner_user_id, snapshot.project_id,
@@ -349,12 +228,13 @@ pub(crate) async fn rebind_writer_base(
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
+                &editor_session_id,
                 &snapshot_id,
                 &chapter_id,
-                &authoritative_revision_id,
+                &revision_id,
                 &project_activity_position.to_string(),
             ],
         )
-        .await?;
-    Ok(())
+        .await
+        .map_err(unavailable)
 }
