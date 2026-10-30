@@ -40,12 +40,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.archive-project.request.v1",
     ),
     target(
-        "deleteProject",
-        "DELETE",
-        "/api/v1/projects/{project_id}",
-        "storyos.command.delete-project.request.v1",
-    ),
-    target(
         "createEditorSession",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
@@ -106,12 +100,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.apply-author-edit.request.v1",
     ),
     target(
-        "createReplacementProposal",
-        "POST",
-        "/api/v1/projects/{project_id}/manuscript/replacement-proposals",
-        "storyos.command.create-replacement-proposal.request.v1",
-    ),
-    target(
         "acceptProposal",
         "POST",
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
@@ -140,12 +128,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "POST",
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings",
         "storyos.command.reopen-withdrawn-proposal.request.v1",
-    ),
-    target(
-        "supersedeProposal",
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/supersessions",
-        "storyos.command.supersede-proposal.request.v1",
     ),
     target(
         "reopenRejectedOperations",
@@ -190,40 +172,10 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.pause-agent-run.request.v1",
     ),
     target(
-        "resumeAgentRun",
-        "POST",
-        "/api/v1/projects/{project_id}/agent-runs/{run_id}/resume",
-        "storyos.command.resume-agent-run.request.v1",
-    ),
-    target(
         "cancelAgentRun",
         "POST",
         "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
         "storyos.command.cancel-agent-run.request.v1",
-    ),
-    target(
-        "resolveWait",
-        "POST",
-        "/api/v1/projects/{project_id}/waits/{wait_id}/resolutions",
-        "storyos.command.resolve-wait.request.v1",
-    ),
-    target(
-        "decideApproval",
-        "POST",
-        "/api/v1/projects/{project_id}/approvals/{approval_id}/decisions",
-        "storyos.command.decide-approval.request.v2",
-    ),
-    target(
-        "updateConversationMemorySettings",
-        "POST",
-        "/api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings",
-        "storyos.command.update-conversation-memory-settings.request.v1",
-    ),
-    target(
-        "importProjectArchive",
-        "POST",
-        "/api/v1/projects/{project_id}/imports",
-        "storyos.command.import-project-archive.request.v1",
     ),
     target(
         "exportProjectArchive",
