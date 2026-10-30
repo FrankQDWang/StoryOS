@@ -1,39 +1,24 @@
-use super::*;
-use crate::command_sequence::tests::{
-    CREATE_VOLUME, CommandCall, applied, command_call, command_issue, create_volume, seed_project,
-    update_chapter,
-};
-use crate::delete_chapter_tests::apply_delete;
-use crate::update_chapter_tests::{
-    USER_B, UpdateFixture, apply_chapter, apply_volume, update_command, update_issue,
-};
+//! The Chapter rank batch of Update Chapter: one rank write for many siblings, and the scope of
+//! the write. `command_sequence_tests/` owns replay and rollback.
+
 use storyos_application::{
-    CanonicalManuscriptTree, ChapterId, ChapterNode, CreateVolumeInput, GetManuscriptTree,
-    ProjectCommandError, ProjectScope, UpdateChapterInput, UpdateChapterSettlement, UserId,
-    VolumeCreated, VolumeId, VolumeNode, get_manuscript_tree, issue_project_command_challenge,
+    CanonicalManuscriptTree, ChapterId, ChapterNode, GetManuscriptTree, ProjectScope,
+    UpdateChapterInput, UpdateChapterSettlement, UserId, VolumeId, VolumeNode, get_manuscript_tree,
     open_project,
 };
 use storyos_core::{TransitionOutcome, UpdateChapterApplied};
-use tokio_postgres::NoTls;
+
+use crate::PostgresProjectReader;
+use crate::command_sequence::tests::{
+    CommandCall, UPDATE_CHAPTER, applied, named_call, seed_project, stores, titled_chapter,
+    titled_volume, update_chapter,
+};
+use crate::delete_structure_tests::settle_delete_chapter;
+
+const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 
 fn hex_suffix(value: u16) -> String {
     format!("{value:04x}")
-}
-
-fn titled_structure_bytes(title: &str, expected_tree_revision: u64) -> Vec<u8> {
-    format!(r#"{{"expected_tree_revision":"{expected_tree_revision}","title":"{title}"}}"#)
-        .into_bytes()
-}
-
-fn update_bytes(title: &str, order: u64, expected_tree_revision: u64) -> Vec<u8> {
-    format!(
-        r#"{{"expected_tree_revision":"{expected_tree_revision}","order":"{order}","title":"{title}"}}"#
-    )
-    .into_bytes()
-}
-
-fn command_digest(profile: &str, bytes: &[u8]) -> String {
-    format!("sha256:{profile}:{}", crate::author_edit::sha256_hex(bytes))
 }
 
 async fn apply_live_chapters(
@@ -47,67 +32,29 @@ async fn apply_live_chapters(
     let mut chapter_ids = Vec::new();
     for index in 0..count {
         let title = format!("Chapter {}", index + 1);
-        let bytes = titled_structure_bytes(&title, first_tree_revision + index);
-        chapter_ids.push(
-            apply_chapter(
-                store,
-                scope,
-                &hex_suffix(first_suffix + index as u16),
-                volume_id,
-                &title,
-                &bytes,
-                first_tree_revision + index,
-            )
-            .await,
-        );
+        let suffix = hex_suffix(first_suffix + index as u16);
+        let revision = first_tree_revision + index;
+        chapter_ids.push(titled_chapter(store, scope, &suffix, volume_id, &title, revision).await);
     }
     chapter_ids
-}
-
-async fn apply_named_volume(
-    store: &PostgresProjectReader,
-    scope: &ProjectScope,
-    suffix: &str,
-    title: &str,
-    expected_tree_revision: u64,
-) -> String {
-    let bytes = titled_structure_bytes(title, expected_tree_revision);
-    let digest = command_digest("storyos.command.createVolume.jcs.v1", &bytes);
-    let issue = command_issue(scope, suffix, &CREATE_VOLUME, &digest);
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    let settlement = create_volume(
-        store,
-        &command_call(
-            issue.binding,
-            &issue.nonce_digest,
-            suffix,
-            &bytes,
-            CreateVolumeInput {
-                title: title.to_owned(),
-                expected_tree_revision,
-            },
-        ),
-    )
-    .await
-    .unwrap();
-    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
-    volume_id
 }
 
 async fn issue_update(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
-    fixture: UpdateFixture<'_>,
+    chapter_id: &str,
+    title: &str,
+    order: u64,
+    expected_tree_revision: u64,
 ) -> CommandCall<UpdateChapterInput> {
-    let digest = command_digest("storyos.command.updateChapter.jcs.v1", fixture.bytes);
-    let issue = update_issue(scope, suffix, &digest);
-    issue_project_command_challenge(store, &issue)
-        .await
-        .unwrap();
-    update_command(issue.binding, &issue.nonce_digest, suffix, fixture)
+    let input = UpdateChapterInput {
+        chapter_id: ChapterId::new(chapter_id),
+        title: title.to_owned(),
+        order,
+        expected_tree_revision,
+    };
+    named_call(store, scope, suffix, &UPDATE_CHAPTER, input).await
 }
 
 fn chapter_nodes(ids: &[String], titles: &[&str]) -> Vec<ChapterNode> {
@@ -122,32 +69,13 @@ fn chapter_nodes(ids: &[String], titles: &[&str]) -> Vec<ChapterNode> {
         .collect()
 }
 
-pub(crate) async fn connect_admin() -> tokio_postgres::Client {
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        connection.await.unwrap();
-    });
-    admin
-}
-
-pub(crate) fn runtime_store() -> PostgresProjectReader {
-    PostgresProjectReader::new(
-        std::env::var("STORYOS_TEST_DATABASE_URL")
-            .expect("run through scripts/verify-project-scope.sh"),
-    )
-}
-
 async fn drop_chapter_tree_sql_probes(admin: &tokio_postgres::Client) {
     admin
         .batch_execute(
             "DROP TRIGGER IF EXISTS storyos_issue_650_count_manuscript_objects ON storyos.manuscript_objects;
              DROP TRIGGER IF EXISTS storyos_issue_650_count_projects ON storyos.projects;
-             DROP TRIGGER IF EXISTS storyos_issue_650_fail_rank_write ON storyos.manuscript_objects;
              DROP FUNCTION IF EXISTS public.storyos_issue_650_count_manuscript_objects();
              DROP FUNCTION IF EXISTS public.storyos_issue_650_count_projects();
-             DROP FUNCTION IF EXISTS public.storyos_issue_650_fail_rank_write();
              DROP TABLE IF EXISTS public.storyos_issue_650_sql_calls;",
         )
         .await
@@ -270,7 +198,8 @@ async fn seed_volume_with_chapters(
     chapter_count: u64,
 ) -> (ProjectScope, String, Vec<String>) {
     let scope = seed_project(store, &hex_suffix(project_suffix)).await;
-    let volume_id = apply_volume(store, &scope, &hex_suffix(project_suffix + 1)).await;
+    let volume_suffix = hex_suffix(project_suffix + 1);
+    let volume_id = titled_volume(store, &scope, &volume_suffix, "Volume A", 1).await;
     let chapter_ids = apply_live_chapters(
         store,
         &scope,
@@ -305,7 +234,6 @@ struct MeasuredReorder {
     tree_revision: u64,
     titles: &'static [&'static str],
     issue_suffix: u16,
-    retry: bool,
 }
 
 async fn measure_applied_reorder(
@@ -318,18 +246,14 @@ async fn measure_applied_reorder(
     let mut expected_ids = chapter_ids.clone();
     let moved = expected_ids.remove(case.move_from);
     expected_ids.insert((case.move_to - 1) as usize, moved);
-    let bytes = update_bytes(case.title, case.move_to, case.expected_tree_revision);
     let command = issue_update(
         store,
         &scope,
         &hex_suffix(case.issue_suffix),
-        UpdateFixture {
-            chapter_id: &chapter_ids[case.move_from],
-            title: case.title,
-            order: case.move_to,
-            expected_tree_revision: case.expected_tree_revision,
-            bytes: &bytes,
-        },
+        &chapter_ids[case.move_from],
+        case.title,
+        case.move_to,
+        case.expected_tree_revision,
     )
     .await;
     let ((object_updates, project_updates, rank_writes, rank_rows), settlement) =
@@ -346,9 +270,6 @@ async fn measure_applied_reorder(
         (rank_writes, rank_rows, object_updates + project_updates),
         (1, case.chapter_count as i64, 4)
     );
-    if case.retry {
-        assert_eq!(update_chapter(store, &command).await.unwrap(), settlement);
-    }
     let GetManuscriptTree::Found(tree) = get_manuscript_tree(store, &scope).await.unwrap() else {
         panic!("the Project still has a Canonical Query");
     };
@@ -368,8 +289,7 @@ async fn applied_chapter_reorder_uses_one_rank_write_for_many_siblings() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let store = runtime_store();
-    let admin = connect_admin().await;
+    let (store, admin) = stores().await;
     measure_applied_reorder(
         &store,
         &admin,
@@ -389,7 +309,6 @@ async fn applied_chapter_reorder_uses_one_rank_write_for_many_siblings() {
                 "Chapter 4",
             ],
             issue_suffix: 0x6507,
-            retry: true,
         },
     )
     .await;
@@ -414,7 +333,6 @@ async fn applied_chapter_reorder_uses_one_rank_write_for_many_siblings() {
                 "Chapter 1",
             ],
             issue_suffix: 0x6519,
-            retry: false,
         },
     )
     .await;
@@ -441,46 +359,35 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let store = runtime_store();
-    let admin = connect_admin().await;
+    let (store, admin) = stores().await;
     let scope = seed_project(&store, &hex_suffix(0x6520)).await;
-    let volume_a = apply_volume(&store, &scope, &hex_suffix(0x6521)).await;
-    let volume_b = apply_named_volume(
-        &store,
-        &scope,
-        &hex_suffix(0x6522),
-        "Volume B",
-        /*expected_tree_revision*/ 2,
-    )
-    .await;
+    let volume_a = titled_volume(&store, &scope, &hex_suffix(0x6521), "Volume A", 1).await;
+    let volume_b = titled_volume(&store, &scope, &hex_suffix(0x6522), "Volume B", 2).await;
     let chapter_ids = apply_live_chapters(
         &store, &scope, &volume_a, /*first_suffix*/ 0x6523, /*count*/ 4,
         /*first_tree_revision*/ 3,
     )
     .await;
-    let other_bytes =
-        titled_structure_bytes("Other Volume Chapter", /*expected_tree_revision*/ 7);
-    let other_chapter = apply_chapter(
+    let other_chapter = titled_chapter(
         &store,
         &scope,
         &hex_suffix(0x6527),
         &volume_b,
         "Other Volume Chapter",
-        &other_bytes,
         /*expected_tree_revision*/ 7,
     )
     .await;
-    apply_delete(
+    settle_delete_chapter(
         &store,
         &scope,
         &hex_suffix(0x6528),
         &chapter_ids[1],
         /*expected_tree_revision*/ 8,
-        br#"{"expected_tree_revision":"8"}"#,
     )
     .await;
     let other_scope = seed_project(&store, &hex_suffix(0x6540)).await;
-    let other_volume = apply_volume(&store, &other_scope, &hex_suffix(0x6541)).await;
+    let other_volume =
+        titled_volume(&store, &other_scope, &hex_suffix(0x6541), "Volume A", 1).await;
     let other_ids = apply_live_chapters(
         &store,
         &other_scope,
@@ -495,22 +402,14 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
         .unwrap()
         .expect("the Project remains in exact Scope")
         .current_chapter_id;
-    let move_bytes = update_bytes(
-        "Chapter 4",
-        /*order*/ 1,
-        /*expected_tree_revision*/ 9,
-    );
     let command = issue_update(
         &store,
         &scope,
         &hex_suffix(0x6529),
-        UpdateFixture {
-            chapter_id: &chapter_ids[3],
-            title: "Chapter 4",
-            order: 1,
-            expected_tree_revision: 9,
-            bytes: &move_bytes,
-        },
+        &chapter_ids[3],
+        "Chapter 4",
+        /*order*/ 1,
+        /*expected_tree_revision*/ 9,
     )
     .await;
     let updated = update_chapter(&store, &command).await.unwrap();
@@ -619,108 +518,6 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
             "live_a": "Chapter 4:1,Chapter 1:2,Chapter 3:3",
             "removed_a": "1000002",
             "live_b": "Other Volume Chapter:1",
-        })
-    );
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn failed_chapter_rank_write_rolls_back_the_entire_command() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let store = runtime_store();
-    let admin = connect_admin().await;
-    let (scope, volume_id, chapter_ids) = seed_volume_with_chapters(
-        &store, /*project_suffix*/ 0x6530, /*chapter_count*/ 3,
-    )
-    .await;
-    let move_bytes = update_bytes(
-        "Chapter 3",
-        /*order*/ 1,
-        /*expected_tree_revision*/ 5,
-    );
-    let command = issue_update(
-        &store,
-        &scope,
-        &hex_suffix(0x6535),
-        UpdateFixture {
-            chapter_id: &chapter_ids[2],
-            title: "Chapter 3",
-            order: 1,
-            expected_tree_revision: 5,
-            bytes: &move_bytes,
-        },
-    )
-    .await;
-    drop_chapter_tree_sql_probes(&admin).await;
-    admin
-        .batch_execute(
-            "CREATE FUNCTION public.storyos_issue_650_fail_rank_write()
-             RETURNS trigger LANGUAGE plpgsql AS $$
-             BEGIN
-               IF NEW.object_kind = 'chapter'
-                  AND NEW.tree_order IS DISTINCT FROM OLD.tree_order
-                  AND NEW.tree_order <= 1000000 THEN
-                 RAISE EXCEPTION 'injected Chapter rank persistence failure';
-               END IF;
-               RETURN NEW;
-             END $$;
-             CREATE TRIGGER storyos_issue_650_fail_rank_write
-             BEFORE UPDATE ON storyos.manuscript_objects FOR EACH ROW
-             EXECUTE FUNCTION public.storyos_issue_650_fail_rank_write();",
-        )
-        .await
-        .unwrap();
-    let error = update_chapter(&store, &command)
-        .await
-        .expect_err("a failed rank write must stop acknowledgement");
-    drop_chapter_tree_sql_probes(&admin).await;
-    assert!(matches!(error, ProjectCommandError::Unavailable(_)));
-    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
-        panic!("the Project still has a Canonical Query");
-    };
-    assert_eq!(tree.tree_revision, 5);
-    assert_eq!(
-        tree.volumes,
-        vec![VolumeNode {
-            volume_id: VolumeId::new(volume_id),
-            title: "Volume A".to_owned(),
-            order: 1,
-            chapters: chapter_nodes(&chapter_ids, &["Chapter 1", "Chapter 2", "Chapter 3"]),
-        }]
-    );
-    assert_eq!(
-        json_query(
-            &admin,
-            "SELECT jsonb_build_object(
-               'update_receipts', (SELECT count(*) FROM storyos.domain_receipts
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'),
-               'chapter_updated', (SELECT count(*) FROM storyos.project_activity_event_payloads
-                 WHERE project_id = $1::text::uuid AND event_kind = 'chapter_updated'),
-               'update_admissions', (SELECT count(*) FROM storyos.author_command_admissions
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'),
-               'settled_idempotency', (SELECT count(*) FROM storyos.command_idempotency
-                 WHERE project_id = $1::text::uuid AND command_kind = 'updateChapter'
-                   AND outcome_kind = 'settled'),
-               'commits', (SELECT count(*) FROM storyos.authoritative_commits
-                 WHERE project_id = $1::text::uuid),
-               'actions', (SELECT count(*) FROM storyos.author_action_entries
-                 WHERE project_id = $1::text::uuid),
-               'snapshots', (SELECT count(*) FROM storyos.project_snapshots
-                 WHERE project_id = $1::text::uuid)
-             )::text",
-            &[&scope.project_id.as_ref()],
-        )
-        .await,
-        serde_json::json!({
-            "update_receipts": 0,
-            "chapter_updated": 0,
-            "update_admissions": 0,
-            "settled_idempotency": 0,
-            "commits": 4,
-            "actions": 4,
-            "snapshots": 5,
         })
     );
 }

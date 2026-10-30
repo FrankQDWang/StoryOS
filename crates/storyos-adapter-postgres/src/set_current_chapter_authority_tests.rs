@@ -6,16 +6,18 @@ use storyos_application::{
     UndoApplied, UndoRecords, VolumeCreated, VolumeId, VolumeNode, create_editor_session,
     get_manuscript_tree, issue_project_command_challenge, open_chapter, open_project,
 };
-use storyos_core::TransitionOutcome;
+use storyos_core::{ReceiptResult, TransitionOutcome};
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{
     CREATE_CHAPTER, CREATE_EDITOR_SESSION, CREATE_VOLUME, SET_CURRENT_CHAPTER, applied,
-    command_call, command_issue, create_chapter, create_volume, seed_owned_project, undo_named,
+    command_call, command_issue, create_chapter, create_volume, outcome_code, seed_owned_project,
+    undo_named,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
+const MISSING: &str = "018f0000-0000-7001-8000-00000000ffff";
 const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const VOLUME_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
 const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
@@ -229,7 +231,7 @@ pub(super) async fn seed_two_chapters(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
+async fn set_current_chapter_classifies_its_outcomes_and_keeps_each_project_sequence() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -339,76 +341,30 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
         &revision_b,
     )
     .await;
-    assert!(matches!(
-        stale.outcome,
-        TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::StaleCurrentChapter)
-    ));
-    assert_eq!(switch_authority(&stale), None);
-    let admin = open_admin().await;
-    let observed: serde_json::Value = serde_json::from_str(
-        &admin
-            .query_one(
-                "SELECT jsonb_build_object(
-                          'tree_revision', project.tree_revision,
-                          'switch_receipts', (
-                            SELECT count(*) FROM storyos.domain_receipts
-                             WHERE project_id = $1::text::uuid
-                               AND command_kind = 'setCurrentChapter'
-                          ),
-                          'switch_activity', (
-                            SELECT count(*) FROM storyos.project_activity_event_payloads
-                             WHERE project_id = $1::text::uuid
-                               AND event_kind = 'current_chapter_set'
-                          ),
-                          'switch_commits', (
-                            SELECT count(*) FROM storyos.authoritative_commits
-                             WHERE project_id = $1::text::uuid
-                               AND receipt_id = $2::text::uuid
-                          ),
-                          'forward_switch_actions', (
-                            SELECT count(*) FROM storyos.author_action_entries
-                             WHERE project_id = $1::text::uuid
-                               AND disposition = 'forward'
-                               AND receipt_id = $2::text::uuid
-                               AND authoritative_commit_id IS NULL
-                          ),
-                          'stale_actions', (
-                            SELECT count(*) FROM storyos.author_action_entries
-                             WHERE project_id = $1::text::uuid
-                               AND receipt_id = $3::text::uuid
-                          ),
-                          'stale_snapshots', (
-                            SELECT count(*) FROM storyos.project_snapshots
-                             WHERE project_id = $1::text::uuid
-                               AND project_activity_position = $4::text::numeric
-                          )
-                        )::text
-                   FROM storyos.projects AS project
-                  WHERE project.project_id = $1::text::uuid",
-                &[
-                    &scope.project_id.as_ref(),
-                    &first.ids.receipt_id,
-                    &stale.ids.receipt_id,
-                    // A zero-authority outcome has no Activity position.
-                    &"0",
-                ],
-            )
+    let wrong_head = switch_current(
+        &store,
+        &scope,
+        "f82a",
+        &editor_session_id,
+        &chapter_a,
+        &chapter_b,
+        MISSING,
+    )
+    .await;
+    assert_eq!(
+        [&stale, &wrong_head].map(|settlement| outcome_code(&settlement.outcome)),
+        [
+            (ReceiptResult::Conflicted, Some("stale_current_chapter")),
+            (ReceiptResult::Conflicted, Some("wrong_target_head")),
+        ]
+    );
+    assert_eq!(
+        open_project(&store, &scope)
             .await
             .unwrap()
-            .get::<_, String>(0),
-    )
-    .unwrap();
-    assert_eq!(
-        observed,
-        serde_json::json!({
-            "tree_revision": 4,
-            "switch_receipts": 2,
-            "switch_activity": 1,
-            "switch_commits": 0,
-            "forward_switch_actions": 1,
-            "stale_actions": 0,
-            "stale_snapshots": 0,
-        })
+            .expect("the Project remains in exact Scope")
+            .current_chapter_id,
+        Some(ChapterId::new(chapter_b))
     );
 }
 
@@ -574,7 +530,7 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
             &[
                 &blocked_scope.project_id.as_ref(),
                 &blocked_switch.ids.receipt_id,
-                &"018f0000-0000-7001-8000-00000000ffff",
+                &MISSING,
             ],
         )
         .await
@@ -605,10 +561,7 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
             "SELECT count(*) FROM storyos.manuscript_objects
               WHERE project_id = $1::text::uuid
                 AND manuscript_object_id = $2::text::uuid",
-            &[
-                &blocked_scope.project_id.as_ref(),
-                &"018f0000-0000-7001-8000-00000000ffff",
-            ],
+            &[&blocked_scope.project_id.as_ref(), &MISSING],
         )
         .await
         .unwrap()

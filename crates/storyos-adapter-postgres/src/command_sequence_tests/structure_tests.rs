@@ -1,11 +1,15 @@
-use storyos_application::{ChapterId, EditorSessionId, VolumeId};
+use storyos_application::{
+    ChapterCreated, ChapterId, CreateChapterPublicOrder, CreateVolumePublicOrder, EditorSessionId,
+    VolumeCreated, VolumeId,
+};
 use storyos_application::{
     CreateChapterInput, CreateChapterSettlement, CreateVolumeInput, CreateVolumeSettlement,
     DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput, DeleteVolumeSettlement,
     ProjectCommandError, ProjectScope, SetCurrentChapterInput, UpdateChapterInput,
     UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    issue_project_command_challenge,
 };
-use storyos_core::CreateChapterPlacement;
+use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -14,8 +18,8 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
 use super::support::{
-    CommandCall, Route, SequenceError, applied, issued, run_without_foreign_keys, seed_project,
-    stores, two_chapter_writer, with_new_request_ids,
+    CommandCall, Route, SequenceError, applied, command_call, command_issue, issued,
+    run_without_foreign_keys, seed_project, stores, two_chapter_writer, with_new_request_ids,
 };
 
 pub(crate) async fn create_volume(
@@ -148,8 +152,83 @@ pub(super) async fn new_chapter(
     )
 }
 
+/// Settles one applied Create Volume of `title` whose ids derive from the four hex digits
+/// `suffix`, and returns the Volume.
+pub(crate) async fn titled_volume(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    title: &str,
+    expected_tree_revision: u64,
+) -> String {
+    let input = CreateVolumeInput {
+        title: title.to_owned(),
+        expected_tree_revision,
+    };
+    let call = named_call(store, scope, suffix, &CREATE_VOLUME, input).await;
+    applied(&create_volume(store, &call).await.unwrap())
+        .0
+        .volume_id
+}
+
+/// Settles one applied Create Chapter of `title` at the end of `volume_id`, whose ids derive from
+/// the four hex digits `suffix`, and returns the Chapter.
+pub(crate) async fn titled_chapter(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    volume_id: &str,
+    title: &str,
+    expected_tree_revision: u64,
+) -> String {
+    let input = CreateChapterInput {
+        volume_id: volume_id.to_owned(),
+        title: title.to_owned(),
+        placement: CreateChapterPlacement::Append,
+        expected_tree_revision,
+    };
+    let call = named_call(store, scope, suffix, &CREATE_CHAPTER, input).await;
+    applied(&create_chapter(store, &call).await.unwrap())
+        .0
+        .chapter_id
+}
+
+/// Issues one Command Challenge for `route` whose ids derive from the four hex digits `suffix`,
+/// and binds `input` to it.
+pub(crate) async fn named_call<I>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+    route: &Route,
+    input: I,
+) -> CommandCall<I> {
+    let issue = command_issue(
+        scope,
+        suffix,
+        route,
+        &format!("sha256:{}:{suffix}", route.kind),
+    );
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    command_call(issue.binding, &issue.nonce_digest, suffix, b"{}", input)
+}
+
+/// The result kind and the reason code of one outcome. An applied outcome has no reason code.
+pub(crate) fn outcome_code<A, N: ReasonCode, C: ReasonCode, R: ReasonCode>(
+    outcome: &TransitionOutcome<A, N, C, R>,
+) -> (ReceiptResult, Option<&'static str>) {
+    let code = match outcome {
+        TransitionOutcome::Applied(_) => None,
+        TransitionOutcome::NoEffect(reason) => Some(reason.code()),
+        TransitionOutcome::Conflicted(reason) => Some(reason.code()),
+        TransitionOutcome::Refused(reason) => Some(reason.code()),
+    };
+    (outcome.receipt_result(), code)
+}
+
 /// One applicable Set Current Chapter from Chapter A to Chapter B in a new Project.
-pub(super) async fn set_current_chapter_call(
+pub(crate) async fn set_current_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<SetCurrentChapterInput> {
@@ -165,7 +244,7 @@ pub(super) async fn set_current_chapter_call(
 }
 
 /// One applicable Create Volume in a new Project.
-pub(super) async fn create_volume_call(
+pub(crate) async fn create_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<CreateVolumeInput> {
@@ -178,7 +257,7 @@ pub(super) async fn create_volume_call(
 }
 
 /// One applicable Update Volume in a new Project with one Volume.
-pub(super) async fn update_volume_call(
+pub(crate) async fn update_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<UpdateVolumeInput> {
@@ -194,7 +273,7 @@ pub(super) async fn update_volume_call(
 }
 
 /// One applicable Delete Volume in a new Project with one empty Volume.
-pub(super) async fn delete_volume_call(
+pub(crate) async fn delete_volume_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<DeleteVolumeInput> {
@@ -208,7 +287,7 @@ pub(super) async fn delete_volume_call(
 }
 
 /// One applicable Create Chapter in a new Project with one Volume.
-pub(super) async fn create_chapter_call(
+pub(crate) async fn create_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<CreateChapterInput> {
@@ -224,7 +303,7 @@ pub(super) async fn create_chapter_call(
 }
 
 /// One applicable Update Chapter in a new Project with one Volume and one Chapter.
-pub(super) async fn update_chapter_call(
+pub(crate) async fn update_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<UpdateChapterInput> {
@@ -248,7 +327,7 @@ pub(super) async fn update_chapter_call(
 }
 
 /// One applicable Delete Chapter in a new Project with one Volume and one Chapter.
-pub(super) async fn delete_chapter_call(
+pub(crate) async fn delete_chapter_call(
     store: &PostgresProjectReader,
     base: u16,
 ) -> CommandCall<DeleteChapterInput> {
@@ -436,5 +515,47 @@ async fn a_chapter_deletion_without_the_historical_prior_current_field_replays()
     assert!(
         replayed.is_ok(),
         "the historical record must replay: {replayed:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_create_receipt_without_its_order_replays_the_historical_acknowledgement() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let without_order = |receipt_id: &str| {
+        format!(
+            "UPDATE storyos.domain_receipts SET result_payload = '{{}}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        )
+    };
+    let volume = create_volume_call(&store, /*base*/ 0x9600).await;
+    let first = create_volume(&store, &volume).await.unwrap();
+    run_without_foreign_keys(&admin, &without_order(&volume.envelope.ids.receipt_id)).await;
+    let replayed = create_volume(&store, &with_new_request_ids(&volume))
+        .await
+        .unwrap();
+    assert_eq!(
+        applied(&replayed).0,
+        VolumeCreated {
+            order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+            ..applied(&first).0
+        }
+    );
+    let chapter = create_chapter_call(&store, /*base*/ 0x9610).await;
+    let first = create_chapter(&store, &chapter).await.unwrap();
+    run_without_foreign_keys(&admin, &without_order(&chapter.envelope.ids.receipt_id)).await;
+    let replayed = create_chapter(&store, &with_new_request_ids(&chapter))
+        .await
+        .unwrap();
+    // The historical acknowledgement gives the order of the Activity record.
+    assert_eq!(
+        applied(&replayed).0,
+        ChapterCreated {
+            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(1),
+            ..applied(&first).0
+        }
     );
 }
