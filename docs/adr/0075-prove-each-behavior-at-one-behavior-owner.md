@@ -4,7 +4,7 @@ status: accepted
 
 # Prove Each Behavior at One Behavior Owner
 
-The repository cleanup specification of phase 3 ([#1307](https://github.com/FrankQDWang/StoryOS/issues/1307)) owns this ADR. Ticket [#1308](https://github.com/FrankQDWang/StoryOS/issues/1308) adds this ADR, the shared HTTP test harness, and the Profile Probes. Ticket [#1309](https://github.com/FrankQDWang/StoryOS/issues/1309) adds the Smoke Check table and removes the smoke-only HTTP files. Ticket [#1310](https://github.com/FrankQDWang/StoryOS/issues/1310) moves the kept HTTP files to the harness. Ticket [#1311](https://github.com/FrankQDWang/StoryOS/issues/1311) removes the invalid and boundary golden-wire fixtures. This ADR partly supersedes [ADR 0042](0042-derive-release-1-contract-artifacts-from-one-operation-registry.md) for the fixture triple.
+The repository cleanup specification of phase 3 ([#1307](https://github.com/FrankQDWang/StoryOS/issues/1307)) owns this ADR. Ticket [#1308](https://github.com/FrankQDWang/StoryOS/issues/1308) adds this ADR, the shared HTTP test harness, and the Profile Probes. Ticket [#1309](https://github.com/FrankQDWang/StoryOS/issues/1309) adds the Smoke Check table and removes the smoke-only HTTP files. Ticket [#1310](https://github.com/FrankQDWang/StoryOS/issues/1310) moves the kept HTTP files to the harness. Ticket [#1311](https://github.com/FrankQDWang/StoryOS/issues/1311) removes the invalid and boundary golden-wire fixtures. This ADR partly supersedes [ADR 0042](0042-derive-release-1-contract-artifacts-from-one-operation-registry.md) for the fixture triple. [ADR 0076](0076-settle-every-project-command-through-one-sequence-skeleton.md) amends the Behavior Owner table with the owner inside the adapter tests.
 
 ## Context
 
@@ -24,6 +24,7 @@ The generated golden-wire corpus had three fixtures for each of the 48 operation
   | --- | --- |
   | `storyos-core` and `storyos-application` unit tests | The pure rules of a command: its outcome for each input. |
   | `storyos-adapter-postgres` tests, with `command_sequence_tests/` | The SQL semantics: the stored records, replay, retry, rollback, and damaged or historical stored evidence. |
+  | `command_sequence_tests/` inside the adapter tests | The generic guarantees of the command sequence for each command row ([ADR 0076](0076-settle-every-project-command-through-one-sequence-skeleton.md)). A per-command adapter test owns only the classification and the effect rows of its command, its scope isolation, and its own refusals. |
   | `storyos-server` unit tests | The HTTP answer of an error that an HTTP test cannot make without a change to stored rows. |
   | HTTP tests under `apps/web/test/node-postgresql/` | The wire contract: the Smoke Check table, the Profile Probes, and the cross-cutting files of host, session, Origin, Challenge rate, streams, Snapshot, takeover, diagnostics, Worker flows, exports, and process cuts. |
   | Browser-source tests | The Web Client. |
@@ -31,7 +32,7 @@ The generated golden-wire corpus had three fixtures for each of the 48 operation
 
 - **Smoke Check table.** One HTTP test file holds one Smoke Check row for each operation of the generated Route Catalog, keyed by operation ID. A row has an arrange step from the harness, an input, and the expected result: a success, or a declared refusal code when a Profile Probe or a kept file proves the success path. A project command row also proves that a request with no session and a request with no Command Challenge proof are refused. A row reads its response through the Web Client function of its operation. A stream row proves only that the stream opens and closes. A coverage test compares the row keys with the Route Catalog, so a new operation fails until it gets a row. The table runs in the `http-main` phase.
 
-- **Profile Probes.** One HTTP file keeps the complete HTTP semantics of each settlement profile of [ADR 0043](0043-settle-every-project-command-through-declared-profiles-of-one-sequence.md), of Author Undo compensation, and of export admission:
+- **Profile Probes.** One HTTP file keeps the complete HTTP semantics of each settlement profile of [ADR 0076](0076-settle-every-project-command-through-one-sequence-skeleton.md), of Author Undo compensation, and of export admission:
 
   | Path | Operation | File |
   | --- | --- | --- |

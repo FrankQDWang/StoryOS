@@ -664,7 +664,7 @@ async fn a_damaged_undo_replay_is_a_store_fault() {
     assert_eq!(observed, vec![ReplayError::Unavailable; 3]);
 }
 
-/// A Project setting command writes no Author Action (ADR 0044). Thus Author Undo after a
+/// A Project setting command writes no Author Action (ADR 0076). Thus Author Undo after a
 /// rename compensates the earlier prose edit and keeps the new title.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

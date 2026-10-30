@@ -1,4 +1,4 @@
-//! The settlement profile of `applyAuthorEdit` (ADR 0044).
+//! The settlement profile of `applyAuthorEdit` (ADR 0076).
 
 use storyos_application::{
     ActionApplied, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,

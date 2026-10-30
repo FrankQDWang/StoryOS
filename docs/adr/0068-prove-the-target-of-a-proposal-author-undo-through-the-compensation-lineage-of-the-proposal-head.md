@@ -36,7 +36,7 @@ The Draft Compensation of a Refused Edit Draft expansion X had a different rule.
 - **Withdrawal target.** The Undo of an author withdrawal compensates when two conditions are true. The current head is withdrawn. The withdrawn Revision is a Proposal Head Lineage Revision of the current head. The Compensation reopens the Proposal.
 - **Compensation records.** The Compensation appends its Revision to the current head, as the Chapter rule of ADR 0067 does. Thus the Proposal history stays linear. The Undo Receipt payload records the appended Revision and the current head as its parent. The replay of an exact retry finds the appended Revision through these two ids.
 - **Barrier.** These conditions still stop the chain with the reason `barrier`. No new reason code is added.
-  - The Frontier has the Barrier disposition of ADR 0044, for example `rejectProposalOperations`, `completeReadyPartialProposal`, `continueProposalGeneration`, or `undoLatestAuthorAction` with `reversal_required`.
+  - The Frontier has the Barrier disposition of ADR 0076, for example `rejectProposalOperations`, `completeReadyPartialProposal`, `continueProposalGeneration`, or `undoLatestAuthorAction` with `reversal_required`.
   - A writer that the records cannot explain moved the Proposal head. Examples are an append of Worker generation and an old Compensation with no Receipt payload.
   - The source is a candidate edit, and the edited Operation is not `pending`. An example is the Undo of an Acceptance that did not reopen the Proposal.
   - The source is a candidate edit from before migration 0085 on a Block that is not the primary Block. Its prior candidate is not known.

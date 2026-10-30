@@ -1,4 +1,4 @@
-//! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0044).
+//! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;

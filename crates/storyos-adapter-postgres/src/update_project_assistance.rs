@@ -13,9 +13,9 @@ use tokio_postgres::Client;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification,
-    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectAssistanceResponse,
-    ProjectCommand, RateLimitedChallenge, ReplayEffect, settle_project_command, unavailable,
+    ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification, CommandSpec,
+    LockedProject, ProjectAssistanceResponse, ProjectCommand, RateLimitedChallenge, ReplayEffect,
+    settle_project_command, unavailable,
 };
 use crate::{PostgresProjectReader, read_error};
 
@@ -34,8 +34,6 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateProjectAssistance",
         applied: &[AppliedVariant::NoAuthorAction],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "project_assistance_updated",
         replay_effect: ReplayEffect::NoQuery,

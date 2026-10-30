@@ -1,4 +1,4 @@
-//! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0044). The
+//! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0076). The
 //! compensation adapter of the Forward command kind writes its Compensation records.
 
 use std::convert::Infallible;
@@ -17,10 +17,10 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec, EditorAdmission,
-    LockedProject, MissingAdmission, ProfileSequences, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
-    ZeroReceipt, settle_project_command, unavailable,
+    Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission, LockedProject,
+    ProfileSequences, ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads,
+    ReceiptRefs, ReplayEffect, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command,
+    unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
 use crate::undo_frontier::{ObservedFrontier, head_lineage_revision, load_observed_frontier};
@@ -57,11 +57,9 @@ impl ProjectCommand for UndoLatestAuthorAction {
     const SPEC: CommandSpec = CommandSpec {
         kind: "undoLatestAuthorAction",
         applied: &[
-            AppliedVariant::Compensation("authoritative_applied"),
+            AppliedVariant::Compensation,
             AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),
         ],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The compensation adapters write their own Activity records.
         activity_kind: "",

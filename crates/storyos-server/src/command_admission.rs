@@ -222,7 +222,7 @@ impl ProjectCommandRequest for contracts::WithdrawProposalRequest {
 /// Whether a request carries the anti-forgery nonce of a Command Challenge.
 pub(super) enum AntiForgery {
     Required,
-    /// The request consumes no Command Challenge, as the current-producer Withdrawal (ADR 0043).
+    /// The request consumes no Command Challenge, as the current-producer Withdrawal (ADR 0076).
     Absent,
 }
 

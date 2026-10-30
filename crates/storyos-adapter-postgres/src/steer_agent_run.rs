@@ -14,10 +14,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect,
-    ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt, settle_project_command,
-    unavailable,
+    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse,
+    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroAuthorityWrite,
+    ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 
 const ACTIVITY_KIND: &str = "agent_run_steering_retained";
@@ -39,8 +38,6 @@ impl ProjectCommand for SteerAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "steerAgentRun",
         applied: &[AppliedVariant::NoAuthorAction],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: ACTIVITY_KIND,
         replay_effect: ReplayEffect::NoQuery,

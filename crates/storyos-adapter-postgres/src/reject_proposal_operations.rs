@@ -15,9 +15,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandIsolation,
-    CommandSpec, EditorAdmission, LockedProject, MissingAdmission, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt,
+    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandSpec,
+    EditorAdmission, LockedProject, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt,
     settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
@@ -105,8 +105,6 @@ impl ProjectCommand for RejectProposalOperationsInput {
         applied: &[AppliedVariant::Forward(
             ForwardCommand::RejectProposalOperations,
         )],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",

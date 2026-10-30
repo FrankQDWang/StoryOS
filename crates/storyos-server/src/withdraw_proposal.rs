@@ -28,7 +28,7 @@ const WITHDRAW_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
 };
 
 /// The author form settles through the command sequence. The current-producer form is an
-/// AgentRun decision without a Command Challenge (ADR 0043).
+/// AgentRun decision without a Command Challenge (ADR 0076).
 enum WithdrawalForm {
     Author(WithdrawProposalInput),
     CurrentProducer(CurrentProducerWithdrawal),

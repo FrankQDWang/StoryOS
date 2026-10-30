@@ -1,6 +1,6 @@
 //! The `AuthoritativeRevision` settlement profile: one new Authoritative Revision of a Chapter
 //! with its Commit, Author Action, Activity record, writer base, and canonical Snapshot
-//! (ADR 0044).
+//! (ADR 0076).
 
 use storyos_application::{
     AuthorCommandAdmissionIds, AuthoritativeAppliedIds, ProjectCommandEnvelope,
@@ -26,7 +26,7 @@ pub(crate) struct RevisionSequences {
     pub(crate) ids: AuthoritativeAppliedIds,
 }
 
-/// The Author Action disposition of one applied outcome (ADR 0044).
+/// The Author Action disposition of one applied outcome (ADR 0076).
 pub(crate) enum ActionDisposition {
     Forward,
     /// The Compensation of the Forward Author Action at `source_sequence`.

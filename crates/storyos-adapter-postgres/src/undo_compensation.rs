@@ -1,4 +1,4 @@
-//! The selection of an Author Undo compensation by the Forward command kind (ADR 0044).
+//! The selection of an Author Undo compensation by the Forward command kind (ADR 0076).
 
 use std::future::Future;
 
@@ -35,7 +35,7 @@ impl UndoRequest {
     }
 }
 
-/// The compensation adapter of one Forward command family (ADR 0044).
+/// The compensation adapter of one Forward command family (ADR 0076).
 ///
 /// Author Undo selects the adapter from the Forward command kind. The adapter loads the Forward
 /// evidence under the Project lock. After the Undo Receipt, it writes the Compensation records
@@ -48,8 +48,6 @@ pub(crate) trait CompensationAdapter {
     type Evidence: Send + Sync;
     /// The scope sequences that one Compensation of the family uses.
     type Sequences: Send + Sync;
-    /// The Receipt result kind of a Compensation of the family.
-    const RESULT_KIND: &'static str = "authoritative_applied";
 
     /// Loads the evidence of one Forward Author Action. `None` makes the action a Barrier.
     fn load(

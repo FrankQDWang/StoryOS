@@ -1,23 +1,24 @@
-//! The admit step and the settle step of a direct editor action (ADR 0044).
+//! The admit step and the settle step of a direct editor action (ADR 0076).
 //!
 //! The admit step consumes the Command Challenge and commits the Admission. The fence stays
 //! `in_progress`. The settle step settles the admitted command in a new transaction.
 
 use storyos_application::{
-    DiagnosticField as _, DiagnosticId, ProjectCommandChallengeTransaction,
-    ProjectCommandChallengeUse, ProjectCommandEnvelope, ProjectCommandError,
+    DiagnosticField as _, DiagnosticId, ProjectCommandEnvelope, ProjectCommandError,
 };
 use tokio_postgres::Client;
 
 use super::admission::insert_admission;
 use super::records::read_project;
+use super::skeleton::{
+    ChallengeUse, FirstUse, begin_command_transaction, challenge_problem, consume_challenge,
+    record_ids, record_result,
+};
 use super::{
-    Admission, CommandIsolation, MissingAdmission, ProjectCommand, SettledCommand,
-    challenge_problem, record_ids, record_settled, replay_command, replay_problem,
-    settle_classified, unavailable,
+    Admission, Classification, ProjectCommand, RateLimitedChallenge, SettledCommand,
+    replay_receipt, settle_classified, unavailable,
 };
 use crate::PostgresProjectReader;
-use crate::command_replay::read_command_replay;
 
 /// The result reference of a fence that the outcome query settled as `RequiresReconfirmation`.
 const REQUIRES_RECONFIRMATION: &str = "requires_reconfirmation";
@@ -68,86 +69,62 @@ pub(crate) async fn admit_and_settle<C: AdmittedCommand>(
     command: &C,
     after_admission: impl FnOnce() -> Result<(), C::Error>,
 ) -> Result<SettledCommand<C>, C::Error> {
-    let settled = admit_then_settle(store, envelope, command, after_admission).await;
-    record_settled(&settled);
+    let settled = async {
+        match consume_challenge(store, envelope, &Admit(command)).await? {
+            ChallengeUse::Committed(()) => {
+                tracing::Span::current().record("outcome", "admitted");
+            }
+            ChallengeUse::ExactRetrySettled(result_reference) => {
+                if result_reference == REQUIRES_RECONFIRMATION {
+                    return Err(ProjectCommandError::BindingConflict.into());
+                }
+                return replay_receipt(store, envelope, command, &result_reference).await;
+            }
+            ChallengeUse::ExactRetryInProgress => {
+                return Err(ProjectCommandError::BindingConflict.into());
+            }
+        }
+        after_admission()?;
+        // The settle step records its outcome on this span, so that one command has one span.
+        settle_admitted_steps(store, envelope, command).await
+    }
+    .await;
+    record_result(&settled);
     settled
 }
 
-async fn admit_then_settle<C: AdmittedCommand>(
-    store: &PostgresProjectReader,
-    envelope: &ProjectCommandEnvelope,
-    command: &C,
-    after_admission: impl FnOnce() -> Result<(), C::Error>,
-) -> Result<SettledCommand<C>, C::Error> {
-    let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
-    let mut transaction = match C::SPEC.isolation {
-        CommandIsolation::Serializable => {
-            store
-                .begin_serializable_project_command_transaction(&envelope.project_scope)
-                .await
-        }
-    }
-    .map_err(challenge_error)?;
-    let challenge_use = transaction
-        .consume(&envelope.challenge_binding, &envelope.nonce_digest)
-        .await
-        .map_err(challenge_error)?;
-    match challenge_use {
-        ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-            transaction.rollback().await.map_err(challenge_error)?;
-            if result_reference == REQUIRES_RECONFIRMATION {
-                return Err(ProjectCommandError::BindingConflict.into());
-            }
-            return replay_receipt(store, envelope, command, &result_reference).await;
-        }
-        ProjectCommandChallengeUse::ExactRetryInProgress => {
-            transaction.rollback().await.map_err(challenge_error)?;
-            return Err(ProjectCommandError::BindingConflict.into());
-        }
-        ProjectCommandChallengeUse::FirstUse => {
-            record_ids(
-                &envelope.ids.command_id,
-                &envelope.ids.author_command_admission_id,
-            );
-            match admit(&transaction.client, envelope, command).await {
-                Ok(()) => {
-                    transaction.commit().await.map_err(challenge_error)?;
-                    tracing::Span::current().record("outcome", "admitted");
-                }
-                Err(error) => {
-                    transaction.rollback().await.map_err(challenge_error)?;
-                    return Err(error);
-                }
-            }
-        }
-    }
-    after_admission()?;
-    // The settle step records its outcome on this span, so that one command has one span.
-    settle_admitted_steps(store, envelope, command).await
-}
+/// The admit step of a direct editor action: its first use commits only the Admission.
+struct Admit<'c, C>(&'c C);
 
-async fn admit<C: AdmittedCommand>(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    command: &C,
-) -> Result<(), C::Error> {
-    // The Admission insert requires an active Project. As on `main`, the admit step locks no
-    // Project row, so a concurrent transaction that holds a key share of it does not stop it.
-    read_project(client, envelope).await?;
-    if insert_admission(client, envelope, C::SPEC.kind, &command.admission(envelope)).await? {
-        return Ok(());
-    }
-    Err(match C::SPEC.missing_admission {
-        MissingAdmission::Diagnosed => command.diagnose_missing_admission(client, envelope).await,
-        MissingAdmission::InvalidChallenge | MissingAdmission::BindingConflict => {
-            C::SPEC.missing_admission.error().into()
+impl<C: AdmittedCommand> FirstUse for Admit<'_, C> {
+    type Output = ();
+    type Error = C::Error;
+    const RATE_LIMITED: RateLimitedChallenge = C::SPEC.rate_limited;
+
+    async fn write(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+    ) -> Result<(), C::Error> {
+        record_ids(
+            &envelope.ids.command_id,
+            &envelope.ids.author_command_admission_id,
+        );
+        let command = self.0;
+        // The Admission insert requires an active Project. As on `main`, the admit step locks no
+        // Project row, so a concurrent transaction that holds a key share of it does not stop it.
+        read_project(client, envelope).await?;
+        if insert_admission(client, envelope, C::SPEC.kind, &command.admission(envelope)).await? {
+            return Ok(());
         }
-    })
+        Err(command.diagnose_missing_admission(client, envelope).await)
+    }
 }
 
 /// Settles one admitted command in a new transaction. It reads the Project row without a lock, and
-/// the command locks its own facts in `classify`. It requires an Admission without settlement that is not expired and whose Editor Session is
-/// the current writer. A settled Admission replays its Receipt.
+/// the command locks its own facts in `classify`. It requires an Admission without settlement
+/// that is not expired and whose Editor Session is the current writer. A settled Admission
+/// replays its Receipt.
 #[tracing::instrument(skip_all, fields(
     command_kind = C::SPEC.kind.diagnostic(),
     project_id = envelope.project_scope.project_id.diagnostic(),
@@ -166,7 +143,7 @@ pub(crate) async fn settle_admitted_command<C: AdmittedCommand>(
         &envelope.ids.author_command_admission_id,
     );
     let settled = settle_admitted_steps(store, envelope, command).await;
-    record_settled(&settled);
+    record_result(&settled);
     settled
 }
 
@@ -176,14 +153,7 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
     let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
-    let transaction = match C::SPEC.isolation {
-        CommandIsolation::Serializable => {
-            store
-                .begin_serializable_project_command_transaction(&envelope.project_scope)
-                .await
-        }
-    }
-    .map_err(challenge_error)?;
+    let transaction = begin_command_transaction(store, envelope, C::SPEC.rate_limited).await?;
     let client = &transaction.client;
     let settled = async {
         let project = read_project(client, envelope).await?;
@@ -195,9 +165,23 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
                 return Err(ProjectCommandError::BindingConflict.into());
             }
         }
-        let classification = command.classify(client, envelope, &project).await?;
-        let settlement =
-            settle_classified(client, envelope, command, &project, classification).await?;
+        // The admit step inserted the Admission, so the settle step does not read it.
+        let Classification {
+            outcome,
+            admission: _,
+            heads,
+            zero_receipt,
+        } = command.classify(client, envelope, &project).await?;
+        let settlement = settle_classified(
+            client,
+            envelope,
+            command,
+            &project,
+            outcome,
+            heads,
+            zero_receipt,
+        )
+        .await?;
         command.before_commit()?;
         Ok(Ok(settlement))
     }
@@ -209,13 +193,13 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
         }
         Ok(Err(receipt_id)) => {
             transaction.rollback().await.map_err(challenge_error)?;
-            replay_receipt(store, envelope, command, &receipt_id).await
+            replay_recorded(store, envelope, command, &receipt_id).await
         }
         Err(error) => {
             transaction.rollback().await.map_err(challenge_error)?;
             // A concurrent settle step can settle the same Admission first.
             match settled_receipt(store, envelope).await? {
-                Some(receipt_id) => replay_receipt(store, envelope, command, &receipt_id).await,
+                Some(receipt_id) => replay_recorded(store, envelope, command, &receipt_id).await,
                 None => Err(error),
             }
         }
@@ -237,29 +221,20 @@ pub(crate) async fn replay_settled<C: ProjectCommand>(
     command: &C,
     receipt_id: &str,
 ) -> Result<SettledCommand<C>, C::Error> {
-    replay_receipt(store, envelope, command, receipt_id).await
+    let replayed = replay_recorded(store, envelope, command, receipt_id).await;
+    record_result(&replayed);
+    replayed
 }
 
-/// Replays one Domain Receipt and records `replayed` and its identifiers on the current span.
-async fn replay_receipt<C: ProjectCommand>(
+/// Replays one Domain Receipt and records `replayed` on the current span.
+async fn replay_recorded<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
     receipt_id: &str,
 ) -> Result<SettledCommand<C>, C::Error> {
     tracing::Span::current().record("outcome", "replayed");
-    let replayed = read_command_replay(
-        store,
-        &envelope.challenge_binding,
-        receipt_id,
-        &envelope.canonical_command_bytes,
-        &C::SPEC.replay_effect,
-    )
-    .await
-    .and_then(|replay| replay_command(command, &replay))
-    .map_err(|fault| replay_problem(fault).into());
-    record_settled(&replayed);
-    replayed
+    replay_receipt(store, envelope, command, receipt_id).await
 }
 
 /// Reads the settlement, expiry, and writer facts of the Admission of `envelope`. The settlement
@@ -359,6 +334,7 @@ async fn settled_receipt(
             .map_err(unavailable)
     }
     .await;
+    // The read is read-only, so a failed COMMIT does not change the Receipt that it read.
     let _end = client.batch_execute("COMMIT").await;
     Ok(receipt?.map(|row| row.get(/*idx*/ 0)))
 }

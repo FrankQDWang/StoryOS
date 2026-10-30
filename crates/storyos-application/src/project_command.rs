@@ -60,7 +60,7 @@ impl std::error::Error for ProjectCommandError {
     }
 }
 
-/// The error of a project command that declares a refusal before its Admission (ADR 0043).
+/// The error of a project command that declares a refusal before its Admission (ADR 0076).
 #[derive(Debug)]
 pub enum RefusableCommandError<R> {
     /// The command refused before its Admission. It wrote no row, and the Command Challenge
@@ -77,7 +77,7 @@ impl<R> From<ProjectCommandError> for RefusableCommandError<R> {
 
 /// The settled outcome of one project command, equal on first delivery and replay.
 ///
-/// `A` is the applied record of the command's settlement profile (ADR 0043). `P` is the
+/// `A` is the applied record of the command's settlement profile (ADR 0076). `P` is the
 /// acknowledgement record that the command keeps for an exact retry. `Z` is the effect of a
 /// zero-authority outcome that writes effect rows.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,7 +90,7 @@ pub struct ProjectCommandSettlement<A, N, C, R, P = Project, Z = ()> {
     pub zero_authority_effect: Option<Z>,
 }
 
-/// The first admission of a command that the admit step commits (ADR 0043).
+/// The first admission of a command that the admit step commits (ADR 0076).
 ///
 /// It is equal on first use and on each exact retry, also after a later settlement.
 ///

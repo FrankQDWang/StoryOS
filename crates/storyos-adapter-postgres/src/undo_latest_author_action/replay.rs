@@ -1,4 +1,4 @@
-//! The stored evidence of a settled Author Undo that an exact retry reads (ADR 0044). The
+//! The stored evidence of a settled Author Undo that an exact retry reads (ADR 0076). The
 //! decoder comes from the command kind of the source Receipt.
 
 use storyos_application::UndoRecords;

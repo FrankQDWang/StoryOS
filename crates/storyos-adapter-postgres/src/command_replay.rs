@@ -248,7 +248,7 @@ impl CommandReplay {
         {
             return Ok(TransitionOutcome::Applied(()));
         }
-        // A missing or unknown reason is a binding conflict (ADR 0043), unless the recorded
+        // A missing or unknown reason is a binding conflict (ADR 0076), unless the recorded
         // result kind gives an outcome that records no reason.
         let reason = match self.receipt.field("reason")? {
             Field::Text(reason) => Some(reason),
@@ -420,6 +420,14 @@ pub(crate) fn response_project(
     }
 }
 
+/// The identity that the effect query of a replay takes as `$3`.
+#[derive(Clone, Copy)]
+pub(crate) enum EffectKey {
+    Receipt,
+    /// The Admission of the Receipt. The admit step keys its work rows by it.
+    Admission,
+}
+
 /// Reads the settled acknowledgement evidence of one exact retry in a read-only transaction.
 pub(crate) async fn read_command_replay(
     store: &PostgresProjectReader,
@@ -427,16 +435,9 @@ pub(crate) async fn read_command_replay(
     receipt_id: &str,
     canonical_command_bytes: &[u8],
     effect: &ReplayEffect,
+    effect_key: EffectKey,
 ) -> Result<CommandReplay, ReplayFault> {
-    let client = store.connect_challenge().await.map_err(unavailable)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(unavailable)?;
-    let rows = async {
-        set_challenge_scope_on_client(&client, &binding.project_scope)
-            .await
-            .map_err(unavailable)?;
+    let (row, effect) = read_snapshot(store, &binding.project_scope, async |client| {
         let owner_user_id = binding.project_scope.owner_user_id.as_ref();
         let project_id = binding.project_scope.project_id.as_ref();
         let row = client
@@ -454,26 +455,20 @@ pub(crate) async fn read_command_replay(
             )
             .await
             .map_err(unavailable)?;
-        let effect = match (effect, &row) {
-            (ReplayEffect::NoQuery, _) | (ReplayEffect::AdmissionQuery(_), None) => None,
-            (ReplayEffect::Query(sql), _) => {
-                read_effect(&client, sql, &binding.project_scope, receipt_id).await?
+        let effect = match (effect, effect_key, &row) {
+            (ReplayEffect::NoQuery, _, _)
+            | (ReplayEffect::Query(_), EffectKey::Admission, None) => None,
+            (ReplayEffect::Query(sql), EffectKey::Receipt, _) => {
+                read_effect(client, sql, &binding.project_scope, receipt_id).await?
             }
-            (ReplayEffect::AdmissionQuery(sql), Some(row)) => {
+            (ReplayEffect::Query(sql), EffectKey::Admission, Some(row)) => {
                 let admission_id = row.get::<_, String>(/*idx*/ 1);
-                read_effect(&client, sql, &binding.project_scope, &admission_id).await?
+                read_effect(client, sql, &binding.project_scope, &admission_id).await?
             }
         };
         Ok((row, effect))
-    }
-    .await;
-    match &rows {
-        Ok(_) => client.batch_execute("COMMIT").await.map_err(unavailable)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
-        }
-    }
-    let (row, effect) = rows?;
+    })
+    .await?;
     let row = row.ok_or(ReplayFault::BindingConflict)?;
     let authority = match (
         row.get::<_, Option<String>>(9),
@@ -572,6 +567,34 @@ pub(crate) async fn read_command_replay(
             _ => None,
         },
     })
+}
+
+/// Runs `read` in a read-only REPEATABLE READ transaction on a Challenge connection with the
+/// Project Scope set. A failed read rolls back, and a failed commit is a store fault.
+pub(crate) async fn read_snapshot<T>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    read: impl AsyncFnOnce(&tokio_postgres::Client) -> Result<T, ReplayFault>,
+) -> Result<T, ReplayFault> {
+    let client = store.connect_challenge().await.map_err(unavailable)?;
+    client
+        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(unavailable)?;
+    let read = async {
+        set_challenge_scope_on_client(&client, scope)
+            .await
+            .map_err(unavailable)?;
+        read(&client).await
+    }
+    .await;
+    match &read {
+        Ok(_) => client.batch_execute("COMMIT").await.map_err(unavailable)?,
+        Err(_) => {
+            let _rollback = client.batch_execute("ROLLBACK").await;
+        }
+    }
+    read
 }
 
 /// Reads the one JSON object text of an effect query that takes the owner, Project, and `key`.
