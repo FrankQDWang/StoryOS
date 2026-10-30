@@ -1,6 +1,16 @@
-use super::*;
-use crate::delete_volume_tests::apply_delete;
-use storyos_application::ProjectCommandError;
+//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, a failed rank write,
+//! storage-key exhaustion, and the replay of a reorder after later reorders.
+
+use storyos_application::{
+    GetManuscriptTree, ProjectCommandError, ProjectScope, UpdateVolumeInput, VolumeId, VolumeNode,
+    get_manuscript_tree,
+};
+use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
+
+use crate::command_sequence::tests::{
+    UPDATE_VOLUME, applied, named_call, seed_project, stores, titled_volume, update_volume,
+};
+use crate::delete_structure_tests::settle_delete_volume;
 
 async fn durable_project_rows(
     admin: &tokio_postgres::Client,
@@ -63,45 +73,25 @@ async fn removed_volume_state(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement() {
+async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let mut store = PostgresProjectReader {
-        challenge_rate_clock_unix_seconds: Some(60),
-        ..PostgresProjectReader::new(std::env::var("STORYOS_TEST_DATABASE_URL").unwrap())
-    };
-    let (admin, connection) = tokio_postgres::connect(
-        &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap(),
-        NoTls,
-    )
-    .await
-    .unwrap();
-    tokio::spawn(async move {
-        connection.await.unwrap();
-    });
+    let (mut store, admin) = stores().await;
+    store.challenge_rate_clock_unix_seconds = Some(60);
     let scope = seed_project(&store, "6870").await;
     let mut volumes = Vec::new();
     for index in 0..4 {
         let suffix = format!("{:04x}", 0x6871 + index);
         let title = format!("Volume {}", index + 1);
-        let revision = index + 1;
-        let bytes =
-            format!(r#"{{"expected_tree_revision":"{revision}","title":"{title}"}}"#).into_bytes();
-        let digest = format!(
-            "sha256:storyos.command.createVolume.jcs.v1:{}",
-            crate::author_edit::sha256_hex(&bytes)
-        );
-        volumes
-            .push(apply_volume(&store, &scope, &suffix, &title, &bytes, &digest, revision).await);
+        volumes.push(titled_volume(&store, &scope, &suffix, &title, index + 1).await);
     }
-    apply_delete(
+    settle_delete_volume(
         &store,
         &scope,
         "6875",
         &volumes[1],
         /*expected_tree_revision*/ 5,
-        br#"{"expected_tree_revision":"5"}"#,
     )
     .await;
     admin
@@ -145,27 +135,13 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         .await
         .unwrap();
 
-    let bytes = br#"{"expected_tree_revision":"6","order":"1","title":"Rejected title"}"#;
-    let digest = format!(
-        "sha256:storyos.command.updateVolume.jcs.v1:{}",
-        crate::author_edit::sha256_hex(bytes)
-    );
-    let issue = update_issue(&scope, "6879", &digest);
-    issue_project_command_challenge(&store, &issue)
-        .await
-        .unwrap();
-    let command = update_command(
-        issue.binding,
-        &issue.nonce_digest,
-        "6879",
-        UpdateFixture {
-            volume_id: &volumes[3],
-            title: "Rejected title",
-            order: 1,
-            expected_tree_revision: 6,
-            bytes,
-        },
-    );
+    let input = UpdateVolumeInput {
+        volume_id: VolumeId::new(volumes[3].clone()),
+        title: "Rejected title".to_owned(),
+        order: 1,
+        expected_tree_revision: 6,
+    };
+    let command = named_call(&store, &scope, "6879", &UPDATE_VOLUME, input).await;
     let before = durable_project_rows(&admin, &scope).await;
     admin
         .execute(
@@ -174,8 +150,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         )
         .await
         .unwrap();
-    let result = update_volume(&store, &command).await;
-    match result {
+    match update_volume(&store, &command).await {
         Err(ProjectCommandError::Unavailable(error)) => {
             assert!(format!("{error:?}").contains("injected Volume rank failure"));
         }
@@ -189,7 +164,6 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         )
         .await
         .unwrap();
-
     admin
         .execute(
             "UPDATE storyos.manuscript_objects SET tree_order = 9223372036854775807
@@ -223,8 +197,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         .await
         .unwrap();
 
-    let mut first_command = None;
-    let mut first_settlement = None;
+    let mut first = None;
     for (index, order, title, expected_ids, expected_titles, expected_calls) in [
         (
             0,
@@ -294,30 +267,13 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         let removed_before = removed_volume_state(&admin, &scope).await;
         let revision = 6 + index;
         let suffix = format!("{:04x}", 0x7051 + index);
-        let bytes = format!(
-            r#"{{"expected_tree_revision":"{revision}","order":"{order}","title":"{title}"}}"#
-        )
-        .into_bytes();
-        let digest = format!(
-            "sha256:storyos.command.updateVolume.jcs.v1:{}",
-            crate::author_edit::sha256_hex(&bytes)
-        );
-        let issue = update_issue(&scope, &suffix, &digest);
-        issue_project_command_challenge(&store, &issue)
-            .await
-            .unwrap();
-        let command = update_command(
-            issue.binding,
-            &issue.nonce_digest,
-            &suffix,
-            UpdateFixture {
-                volume_id: &volumes[3],
-                title,
-                order,
-                expected_tree_revision: revision,
-                bytes: &bytes,
-            },
-        );
+        let input = UpdateVolumeInput {
+            volume_id: VolumeId::new(volumes[3].clone()),
+            title: title.to_owned(),
+            order,
+            expected_tree_revision: revision,
+        };
+        let command = named_call(&store, &scope, &suffix, &UPDATE_VOLUME, input).await;
         let settlement = update_volume(&store, &command).await.unwrap();
         let (effect, authority) = applied(&settlement);
         assert_eq!(
@@ -378,16 +334,13 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
             )
         );
         assert_eq!(removed_volume_state(&admin, &scope).await, removed_before);
-        if first_command.is_none() {
-            first_command = Some(command);
-            first_settlement = Some(settlement);
-        }
+        first.get_or_insert((command, settlement));
     }
+    // The first reorder replays its own settlement after the later reorders.
+    let (first_command, first_settlement) = first.expect("the first reorder settled");
     assert_eq!(
-        update_volume(&store, &first_command.unwrap())
-            .await
-            .unwrap(),
-        first_settlement.unwrap()
+        update_volume(&store, &first_command).await.unwrap(),
+        first_settlement
     );
 
     admin

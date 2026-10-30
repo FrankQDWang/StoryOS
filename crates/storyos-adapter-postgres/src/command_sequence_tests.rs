@@ -68,11 +68,13 @@ pub(crate) use agent_run::CREATE_AGENT_RUN;
 pub(crate) use project_session::{ARCHIVE_PROJECT, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
 pub(crate) use structure::{
     CREATE_CHAPTER, CREATE_VOLUME, DELETE_CHAPTER, DELETE_VOLUME, SET_CURRENT_CHAPTER,
-    UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_volume, delete_chapter, delete_volume,
-    update_chapter, update_volume,
+    UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_chapter_call, create_volume,
+    create_volume_call, delete_chapter, delete_chapter_call, delete_volume, delete_volume_call,
+    named_call, outcome_code, set_current_chapter_call, titled_chapter, titled_volume,
+    update_chapter, update_chapter_call, update_volume, update_volume_call,
 };
 pub(crate) use support::{
     CREATE_EDITOR_SESSION, CommandCall, applied, command_call, command_issue,
-    create_project_command, create_project_issue, seed_owned_project, seed_project, undo_named,
+    create_project_command, create_project_issue, seed_owned_project, seed_project, stores,
+    undo_named,
 };
-pub(crate) use undo::UNDO_LATEST_AUTHOR_ACTION;
