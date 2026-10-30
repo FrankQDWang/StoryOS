@@ -1381,9 +1381,17 @@ Author Undo keeps a Withdrawal by the producer of the Proposal
 ([ADR 0069](../adr/0069-keep-a-producer-withdrawal-through-author-undo.md)).
 When the current head is `withdrawn`, the Compensation of a candidate edit, a
 Replan, or a reopen of rejected Operations keeps the closure `withdrawn`. It
-restores the content as before. The explicit reopen with that Withdrawal event
-accepts the head when the event names the head. It also accepts the head when
-the event names a withdrawn Revision below the head that such Compensations kept.
+restores the content as before. The Compensation of an author Withdrawal keeps
+the closure `withdrawn` when a producer Withdrawal still keeps the head
+withdrawn.
+
+The explicit reopen accepts a Withdrawal event that still keeps the head
+withdrawn. A walk from the `withdrawn` head finds these Withdrawals. From a
+recorded Proposal Compensation Revision with a `withdrawn` parent, the walk goes
+to the parent. From the Compensation of an explicit reopen, it goes to the
+withdrawn Revision of that reopen. Thus after the Undo of a reopen, the author
+can reopen the same Withdrawal again. An author Withdrawal that Author Undo
+compensated keeps nothing withdrawn.
 
 ### 10.2 UndoAcceptance
 

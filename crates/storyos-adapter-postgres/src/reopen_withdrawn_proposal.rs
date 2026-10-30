@@ -1,5 +1,5 @@
 use storyos_application::{
-    ProjectCommandEnvelope, ProjectCommandError, ProposalReopened, ReopenWithdrawnProposalInput,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalReopened, ReopenWithdrawnProposalInput,
     ReopenWithdrawnProposalSettlement,
 };
 use storyos_core::{
@@ -41,35 +41,38 @@ pub(crate) struct WithdrawnRevision {
     operation_resolution: String,
 }
 
-/// Whether the Withdrawal event names `head_revision_id` or a Revision that it keeps withdrawn
-/// (ADR 0069). A recorded Compensation of a candidate edit, a Replan, or a reopen of rejected
-/// Operations keeps the closure of a withdrawn parent. The walk goes from each such appended
-/// Revision to its parent.
-async fn head_keeps_withdrawal(
+/// A Withdrawal that keeps a withdrawn Proposal head withdrawn (ADR 0069).
+pub(crate) struct HeadWithdrawal {
+    pub(crate) withdrawal_event_id: String,
+    pub(crate) by_producer: bool,
+}
+
+/// The Withdrawals that keep the withdrawn head `head_revision_id` withdrawn (ADR 0069). The walk
+/// goes from the head through recorded Proposal Compensations. From a Compensation Revision with
+/// a `withdrawn` parent, it goes to the parent. From the Compensation of an explicit reopen, it
+/// goes to the withdrawn Revision of that reopen. An author Withdrawal that Author Undo
+/// compensated keeps nothing withdrawn.
+pub(crate) async fn head_withdrawals(
     client: &Client,
-    envelope: &ProjectCommandEnvelope,
+    scope: &ProjectScope,
     proposal_id: &str,
     head_revision_id: &str,
-    withdrawal_event_id: &str,
-) -> Result<bool, ProjectCommandError> {
-    let scope = &envelope.project_scope;
-    let row = client
-        .query_one(
+) -> Result<Vec<HeadWithdrawal>, ProjectCommandError> {
+    let rows = client
+        .query(
             "WITH RECURSIVE kept(revision_id) AS (
                  SELECT $4::text::uuid
-               UNION ALL
-                 SELECT appended.parent_revision_id
+               UNION
+                 SELECT step.revision_id
                    FROM kept
-                   JOIN storyos.proposal_revisions AS appended
-                     ON (appended.owner_user_id, appended.project_id, appended.proposal_id,
-                         appended.revision_id) =
-                        ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
+             CROSS JOIN LATERAL (
+                 SELECT next.revision_id
+                   FROM storyos.proposal_revisions AS appended
                    JOIN storyos.proposal_revisions AS parent
                      ON (parent.owner_user_id, parent.project_id, parent.proposal_id,
                          parent.revision_id) =
                         (appended.owner_user_id, appended.project_id, appended.proposal_id,
                          appended.parent_revision_id)
-                    AND parent.closure = 'withdrawn'
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id) =
                         (appended.owner_user_id, appended.project_id)
@@ -92,29 +95,55 @@ async fn head_keeps_withdrawal(
                          source_receipt.receipt_id) =
                         (source.owner_user_id, source.project_id, source.receipt_id)
                     AND source_receipt.command_kind IN
-                          ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations')
-             ) CYCLE revision_id SET looped USING path
-             SELECT EXISTS (
-               SELECT 1
-                 FROM kept
-                 JOIN storyos.proposal_withdrawals AS withdrawal
-                   ON (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
-                       withdrawal.proposal_revision_id) =
-                      ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
-                WHERE NOT kept.looped
-                  AND withdrawal.withdrawal_event_id = $5::text::uuid
-             )",
+                          ('applyAuthorEdit', 'replanProposal', 'reopenRejectedOperations',
+                           'reopenWithdrawnProposal', 'withdrawProposal')
+                   LEFT JOIN storyos.proposal_withdrawal_reopenings AS reopening
+                     ON (reopening.owner_user_id, reopening.project_id,
+                         reopening.reopen_receipt_id) =
+                        (source_receipt.owner_user_id, source_receipt.project_id,
+                         source_receipt.receipt_id)
+             CROSS JOIN LATERAL (
+                 VALUES (CASE WHEN parent.closure = 'withdrawn'
+                              THEN appended.parent_revision_id END),
+                        (reopening.source_proposal_revision_id)
+             ) AS next(revision_id)
+                  WHERE (appended.owner_user_id, appended.project_id, appended.proposal_id,
+                         appended.revision_id) =
+                        ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
+                    AND next.revision_id IS NOT NULL
+             ) AS step
+             )
+             SELECT withdrawal.withdrawal_event_id::text,
+                    withdrawal.withdrawal_reason = 'current_producer_withdrew'
+               FROM kept
+               JOIN storyos.proposal_withdrawals AS withdrawal
+                 ON (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
+                     withdrawal.proposal_revision_id) =
+                    ($1::text::uuid, $2::text::uuid, $3::text::uuid, kept.revision_id)
+              WHERE NOT EXISTS (
+                SELECT 1
+                  FROM storyos.author_action_entries AS undo
+                 WHERE (undo.owner_user_id, undo.project_id, undo.compensated_source_sequence) =
+                       (withdrawal.owner_user_id, withdrawal.project_id,
+                        withdrawal.author_action_sequence)
+                   AND undo.disposition = 'compensation'
+              )",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &proposal_id,
                 &head_revision_id,
-                &withdrawal_event_id,
             ],
         )
         .await
         .map_err(unavailable)?;
-    Ok(row.get(/*idx*/ 0))
+    Ok(rows
+        .iter()
+        .map(|row| HeadWithdrawal {
+            withdrawal_event_id: row.get(/*idx*/ 0),
+            by_producer: row.get(/*idx*/ 1),
+        })
+        .collect())
 }
 
 impl ProjectCommand for ReopenWithdrawnProposalInput {
@@ -205,14 +234,15 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
             proposal_revision_current: current_revision_id == self.proposal_revision_id,
             closure_withdrawn: closure == "withdrawn",
             terminal_supersession: closure == "superseded",
-            withdrawal_event_matches: head_keeps_withdrawal(
+            withdrawal_event_matches: head_withdrawals(
                 client,
-                envelope,
+                scope,
                 &self.proposal_id,
                 &current_revision_id,
-                &self.withdrawal_event_id,
             )
-            .await?,
+            .await?
+            .iter()
+            .any(|withdrawal| withdrawal.withdrawal_event_id == self.withdrawal_event_id),
             expected_target_matches_head: row.get::<_, Option<String>>(/*idx*/ 6).as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
