@@ -105,24 +105,28 @@ async fn load_record_targets(
     {
         return Ok(Vec::new());
     }
-    let rows = client
-        .query(
-            "SELECT member.manuscript_block_id::text,
-                    convert_from(payload.canonical_bytes, 'UTF8')
+    // The member array is NULL when the Revision has no member, so the payload stays undecoded.
+    let row = client
+        .query_opt(
+            "SELECT membership.block_ids, convert_from(payload.canonical_bytes, 'UTF8')
                FROM storyos.authoritative_revisions AS revision
                JOIN storyos.authoritative_payloads AS payload
                  ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
                     (revision.owner_user_id, revision.project_id, revision.payload_id)
-               JOIN storyos.manuscript_revision_members AS member
-                 ON (member.owner_user_id, member.project_id, member.manuscript_object_id,
-                     member.revision_id) =
-                    (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
-                     revision.revision_id)
+              CROSS JOIN LATERAL (
+                SELECT array_agg(member.manuscript_block_id::text
+                                 ORDER BY member.block_order) AS block_ids
+                  FROM storyos.manuscript_revision_members AS member
+                 WHERE (member.owner_user_id, member.project_id, member.manuscript_object_id,
+                        member.revision_id) =
+                       (revision.owner_user_id, revision.project_id,
+                        revision.manuscript_object_id, revision.revision_id)
+              ) AS membership
               WHERE revision.owner_user_id = $1::text::uuid
                 AND revision.project_id = $2::text::uuid
                 AND revision.manuscript_object_id = $3::text::uuid
                 AND revision.revision_id = $4::text::uuid
-              ORDER BY member.block_order",
+                AND membership.block_ids IS NOT NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -132,11 +136,11 @@ async fn load_record_targets(
         )
         .await
         .map_err(database_error)?;
-    let ids: Vec<String> = rows.iter().map(|row| row.get(0)).collect();
-    let Some(first) = rows.first() else {
+    let Some(row) = row else {
         return Ok(Vec::new());
     };
-    let stored: String = first.get(1);
+    let ids: Vec<String> = row.get(/*idx*/ 0);
+    let stored: String = row.get(/*idx*/ 1);
     let blocks = crate::manuscript_block::blocks_from_stored_payload(&stored, &ids);
     if blocks.len() != ids.len() {
         return Ok(Vec::new());
