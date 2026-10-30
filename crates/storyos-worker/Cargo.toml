@@ -9,5 +9,9 @@ storyos-application = { path = "../storyos-application" }
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
 
+[dev-dependencies]
+storyos-core = { path = "../storyos-core" }
+tokio = { workspace = true, features = ["test-util"] }
+
 [lints]
 workspace = true

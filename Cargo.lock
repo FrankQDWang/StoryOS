@@ -1976,6 +1976,7 @@ name = "storyos-worker"
 version = "0.1.0"
 dependencies = [
  "storyos-application",
+ "storyos-core",
  "tokio",
  "tracing",
 ]

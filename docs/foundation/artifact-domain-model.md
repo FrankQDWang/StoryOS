@@ -432,7 +432,7 @@ An Artifact is eligible for Acceptance only when it is a StoryOS Core Proposal c
 - an inspectable preview of expected effects;
 - a current Core `ValidationReceipt`.
 
-The exact revision must also satisfy the complete `retained + ready + valid + open` predicate, and every selected operation must be pending.
+The exact revision must also satisfy the complete Acceptance-eligibility predicate of section 6.4: `retained + ready + (valid or conflicted) + open`, with no Proposal Recovery Conflict, and every selected operation must be pending. A `conflicted` validation and a Proposal Conflict do not block Acceptance. An `invalid` validation and a Proposal Recovery Conflict block it, and a target Block that is not on the Chapter Head refuses it with `missing_target` ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)).
 
 Messages, Candidates, Drafts, Research Artifacts, Analysis Reports, Tool Artifacts, App View Artifacts, and Extension Artifacts cannot be accepted directly. They may request or source a new Proposal.
 
@@ -544,14 +544,14 @@ Author Undo command reference. The root Author Undo admission, digest, and
 idempotency boundary cover the handler; it cannot receive a second Admission or
 be retried independently.
 
-Direct compensation is allowed only when the Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision in the Acceptance Receipt. It atomically:
+Direct compensation is allowed only when the Acceptance is the current Author Undo Frontier and has not already been compensated, and every affected target has a Safe Compensation Head: the current Head is the expected current Head of the input, the Head Lineage Revision of that Head is the resulting Authoritative Revision in the Acceptance Receipt, the payload digest of the Head matches that Revision, and the prior evidence stays usable ([ADR 0067](../adr/0067-prove-the-target-of-author-undo-through-the-compensation-lineage-of-the-chapter-head.md)). It atomically:
 
 - creates compensating Authoritative Revisions and an Authoritative Commit;
 - appends a new Proposal Revision preserving the accepted content against the compensated base only when the Proposal still has a safe linear head;
 - reopens the corresponding operations as pending;
 - preserves the original Acceptance Receipt and creates an immutable Undo Acceptance Receipt.
 
-When the Proposal head advanced incompatibly, was withdrawn or superseded, StoryOS creates a new derived Proposal identity instead of branching history without blocking otherwise safe authoritative compensation. Any non-exact authoritative target Head, including an apparently non-overlapping later change, forbids direct compensation and derives a `ReversalProposal` against current Authoritative State when possible. If required evidence was tombstoned or is unsupported, the outcome is unavailable.
+When the Proposal head advanced incompatibly, was withdrawn or superseded, StoryOS creates a new derived Proposal identity instead of branching history without blocking otherwise safe authoritative compensation. A current target Head that is not the expected current Head gives `conflicted` with `wrong_target_head`. A target Head whose Head Lineage Revision is another Revision, including an apparently non-overlapping later change, forbids direct compensation and derives a `ReversalProposal` against current Authoritative State when possible. If required evidence was tombstoned or is unsupported, the outcome is unavailable.
 
 ### 8.5 Unified author undo order
 
@@ -692,7 +692,7 @@ author-owned creative state.
 11. Content revisions and lifecycle events are distinct.
 12. Applied and rejected Proposal Operations remain bound to their resolving revision.
 13. Validation is Core-owned and scoped to exact Proposal and target versions.
-14. Acceptance requires the exact retained, ready, valid, open revision and pending selections; it is author-authorized, idempotent, and revalidated, with domain operations atomic and Bundles governed by their explicit policy.
+14. Acceptance requires the exact retained, ready, open revision with `valid` or `conflicted` validation, no Proposal Recovery Conflict, and pending selections; it is author-authorized, idempotent, and revalidated, with domain operations atomic and Bundles governed by their explicit policy.
 15. Undo never overwrites later conflicting author work.
 16. Tombstoning a source makes the provenance gap explicit and never cascades into silent authoritative deletion.
 17. Typed Receipts are Operational Records, not Artifacts.

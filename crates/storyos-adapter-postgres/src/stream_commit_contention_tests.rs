@@ -10,7 +10,10 @@ use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run, claim_run, queued_run, stores};
 
 /// Claims the next Create of `claim`, as the Gateway does before the exchange.
-async fn dispatched(store: &PostgresProjectReader, claim: &ClaimedAgentRun) -> DispatchClaim {
+pub(crate) async fn dispatched(
+    store: &PostgresProjectReader,
+    claim: &ClaimedAgentRun,
+) -> DispatchClaim {
     let NextDispatchWork::Request(request) = store.next_dispatch_work(claim).await.unwrap() else {
         panic!("The claimed AgentRun has no request");
     };

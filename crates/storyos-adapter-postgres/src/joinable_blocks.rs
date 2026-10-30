@@ -81,30 +81,30 @@ pub(crate) async fn mark(
     if last - first + 1 != own.len() || blocks[first].2.as_deref() != Some("block_edit") {
         return Ok(());
     }
-    let mut join = |index: usize, distance: i32| {
+    // The reverse collect keeps the first declared position of each Block ID.
+    let positions: std::collections::BTreeMap<&str, usize> = declared
+        .iter()
+        .enumerate()
+        .filter(|(_, declared)| {
+            declared.chapter_id == chapter_id && declared.kind == DeclaredTargetKind::ChapterBlock
+        })
+        .map(|(position, declared)| (declared.block_id.as_str(), position))
+        .rev()
+        .collect();
+    let joinable = |index: usize| {
         let (block_id, reservation, _) = &blocks[index];
-        let Some(declared) = declared.iter_mut().find(|declared| {
-            declared.chapter_id == chapter_id
-                && declared.block_id == *block_id
-                && declared.kind == DeclaredTargetKind::ChapterBlock
-        }) else {
-            return false;
-        };
-        if reservation.is_some() || !covered.contains(block_id.as_str()) {
-            return false;
-        }
-        declared.kind = DeclaredTargetKind::JoinableBlock { distance };
-        true
+        let position = *positions.get(block_id.as_str())?;
+        (reservation.is_none() && covered.contains(block_id.as_str())).then_some(position)
     };
-    for (distance, index) in (1..).zip((0..first).rev()) {
-        if !join(index, -distance) {
-            break;
-        }
-    }
-    for (distance, index) in (1..).zip(last + 1..blocks.len()) {
-        if !join(index, distance) {
-            break;
-        }
+    let upward = (1..)
+        .zip((0..first).rev())
+        .map_while(|(distance, index)| Some((joinable(index)?, -distance)));
+    let downward = (1..)
+        .zip(last + 1..blocks.len())
+        .map_while(|(distance, index)| Some((joinable(index)?, distance)));
+    let joined: Vec<(usize, i32)> = upward.chain(downward).collect();
+    for (position, distance) in joined {
+        declared[position].kind = DeclaredTargetKind::JoinableBlock { distance };
     }
     Ok(())
 }

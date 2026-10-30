@@ -1613,7 +1613,10 @@ available.
 11. Acceptance binds exact Author Command Admission, Proposal Revision,
     Validation Receipt, pending selection, target Revisions, and idempotency
     input.
-12. Direct Undo Acceptance requires exact resulting target Heads; otherwise it
+12. Direct Undo Acceptance requires that the current Head of each affected
+    target is the expected Head and that its Head Lineage Revision (section
+    10.1) is the resulting Revision of the Acceptance (ADR 0067). A current
+    Head that is not the expected Head conflicts. Another lineage Revision
     creates a Reversal Proposal or returns unavailable.
 13. Unified undo acts only on the exact Author Undo Frontier; Compensation
     actions are unique per source and are not candidates, and a Barrier is
