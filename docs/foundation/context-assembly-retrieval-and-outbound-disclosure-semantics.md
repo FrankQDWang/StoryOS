@@ -842,11 +842,19 @@ settings. It enables one exact Processing Destination Identity for named
 ordinary Purposes, outbound data categories, and hard bounds under one Project
 Scope.
 
+Each grant records its standing scope, and a request outside it refuses
+before the dispatch claim. A new grant records the current scope
+`project_writing_assistance_v2`
+([ADR 0055](../adr/0055-install-a-host-managed-compaction-summary-for-the-decision-request.md)).
+It names all items of the first scope, the Purpose `active_context_compaction`,
+and the source class `conversation_summary`.
+
 [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)
-records the current standing scope `project_writing_assistance_v1`: all
-current content of the Project for writing assistance on the grant
-destination, with no length bound. Each grant records its scope, and a
-request outside it refuses before the dispatch claim.
+records the first scope `project_writing_assistance_v1`: all current content of
+the Project for writing assistance on the grant destination, with no length
+bound. A stored grant with the first scope keeps this meaning. It refuses the
+compaction summary request, and the decision request keeps the ordinary
+continuation.
 
 Destination Attempts for ordinary model and embedding operations inside the
 effective Grant proceed without individual confirmation. They still require
