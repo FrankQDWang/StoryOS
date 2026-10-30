@@ -102,13 +102,18 @@ pub(crate) async fn archive(admin: &tokio_postgres::Client, scope: &ProjectScope
         .unwrap();
 }
 
-async fn expire_snapshots(admin: &tokio_postgres::Client, scope: &ProjectScope) {
+/// Expires only the latest Snapshot. The older Snapshots stay valid, and a read must not fall back to them.
+async fn expire_latest_snapshot(
+    admin: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    snapshot_id: &str,
+) {
     admin
         .execute(
             "UPDATE storyos.project_snapshots
                 SET expires_at = clock_timestamp() - interval '1 second'
-              WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
+              WHERE project_id = $1::text::uuid AND snapshot_id = $2::text::uuid",
+            &[&scope.project_id.as_ref(), &snapshot_id],
         )
         .await
         .unwrap();
@@ -140,6 +145,14 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
                 ..second_effect.clone()
             },
         ]
+    );
+    assert_eq!(
+        (
+            second_authority.prior_manuscript_tree_revision,
+            second_authority.resulting_manuscript_tree_revision,
+            second_authority.author_action_sequence
+        ),
+        (2, 3, 2)
     );
     let live = tree(&store, &scope).await;
     assert_eq!(
@@ -190,13 +203,13 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
     )
     .await
     .unwrap();
-    assert_eq!(recovered, Some(live.snapshot));
-    expire_snapshots(&admin, &scope).await;
+    assert_eq!(recovered.as_ref(), Some(&live.snapshot));
+    expire_latest_snapshot(&admin, &scope, &live.snapshot.snapshot_id).await;
     assert_eq!(
         get_manuscript_tree(&store, &scope).await.unwrap(),
         GetManuscriptTree::SnapshotExpired
     );
-    // An archived Project has no Canonical Query, so this step is the last.
+    // An archived Project has no readable Manuscript Tree, so this step is the last.
     archive(&admin, &scope).await;
     let archived = settle_volume(&store, &scope, "9624", "Volume C", 3).await;
     assert_eq!(
@@ -242,6 +255,14 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
                 order: CreateChapterPublicOrder::CanonicalSiblingOrder(2),
             },
         ]
+    );
+    assert_eq!(
+        (
+            second_authority.prior_manuscript_tree_revision,
+            second_authority.resulting_manuscript_tree_revision,
+            second_authority.author_action_sequence
+        ),
+        (3, 4, 3)
     );
     let live = tree(&store, &scope).await;
     assert_eq!(
@@ -350,16 +371,17 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
     );
 
     let stale = settle_chapter(&store, &scope, "9634", &volume_id, "Chapter C", 2).await;
-    let missing = settle_chapter(&store, &scope, "9635", MISSING, "Chapter C", 4).await;
+    // The invalid join has a stale tree revision too: the refusal comes before the conflict.
+    let missing = settle_chapter(&store, &scope, "9635", MISSING, "Chapter C", 2).await;
     assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-    expire_snapshots(&admin, &scope).await;
+    expire_latest_snapshot(&admin, &scope, &live.snapshot.snapshot_id).await;
     assert_eq!(
         open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
             .await
             .unwrap(),
         OpenChapter::SnapshotExpired
     );
-    // An archived Project has no Canonical Query, so this step is the last.
+    // An archived Project has no readable Manuscript Tree, so this step is the last.
     archive(&admin, &scope).await;
     let archived = settle_chapter(&store, &scope, "9636", &volume_id, "Chapter C", 4).await;
     assert_eq!(
@@ -479,6 +501,14 @@ async fn author_undo_compensates_create_volume_after_a_later_edit_is_undone() {
         TransitionOutcome::Applied(UndoApplied { source_sequence, records: UndoRecords::Revision { .. }, .. })
             if source_sequence == later_action
     ));
+    let after_edit_undo = tree(&store, &scope).await;
+    assert_eq!(
+        (
+            after_edit_undo.tree_revision,
+            after_edit_undo.volumes[1].volume_id.as_ref()
+        ),
+        (4, applied(&volume_b).0.volume_id.as_str())
+    );
     let volume_undo = undo_named(
         &store,
         &scope,

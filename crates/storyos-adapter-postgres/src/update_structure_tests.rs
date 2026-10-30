@@ -6,6 +6,7 @@ use storyos_application::{
     CanonicalManuscriptTree, ChapterId, GetManuscriptTree, OpenChapter, ProjectScope,
     StructureAuthority, UndoApplied, UndoRecords, UpdateChapterInput, UpdateChapterSettlement,
     UpdateVolumeInput, UpdateVolumeSettlement, UserId, VolumeId, get_manuscript_tree, open_chapter,
+    open_current_chapter,
 };
 use storyos_core::{ReceiptResult, TransitionOutcome};
 
@@ -252,7 +253,7 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
     for (kind, base) in [(Sibling::Volume, 0x9670), (Sibling::Chapter, 0x9680)] {
         let suffix = |offset: u16| format!("{:04x}", base + offset);
         let scope = seed_project(&store, &suffix(0)).await;
-        let Seeded { a, b, .. } = kind.seed(&store, &scope, base).await;
+        let Seeded { a, b, chapter } = kind.seed(&store, &scope, base).await;
         let identity = chapter_identity(&admin, &scope).await;
         let renamed = kind.title("B");
         let first = kind
@@ -262,6 +263,14 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
             panic!("the {kind:?} update must apply");
         };
         assert_eq!((node, tree_revision), ((a.clone(), renamed.clone(), 2), 5));
+        assert_eq!(
+            (
+                authority.prior_manuscript_tree_revision,
+                authority.resulting_manuscript_tree_revision,
+                authority.author_action_sequence
+            ),
+            (4, 5, 4)
+        );
         let live = tree(&store, &scope).await;
         assert_eq!(
             (kind.nodes(&live), &live.snapshot.snapshot_id),
@@ -279,6 +288,23 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
         );
         // An update keeps the current Chapter and every Chapter Head.
         assert_eq!(chapter_identity(&admin, &scope).await, identity);
+        // The current Chapter reads the new title only when the update renames it.
+        let current = open_current_chapter(&store, &scope, &ChapterId::new(chapter.clone()))
+            .await
+            .unwrap()
+            .expect("the current Chapter identity is unchanged");
+        let current_title = match kind {
+            Sibling::Volume => "Chapter A".to_owned(),
+            Sibling::Chapter => renamed.clone(),
+        };
+        assert_eq!(
+            (current.chapter_id, current.title, current.body),
+            (
+                ChapterId::new(chapter.clone()),
+                current_title,
+                String::new()
+            )
+        );
         assert_eq!(
             get_manuscript_tree(
                 &store,
@@ -290,11 +316,8 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
         );
 
         let mut codes = Vec::new();
-        for (offset, id, order, expected_tree_revision) in [
-            (5, a.as_str(), 2, 4),
-            (6, MISSING, 2, 5),
-            (7, a.as_str(), 3, 5),
-        ] {
+        // Each case sends the stale tree revision 4, so a refusal comes before the conflict.
+        for (offset, id, order) in [(5, a.as_str(), 2), (6, MISSING, 2), (7, a.as_str(), 3)] {
             let updated = kind
                 .update(
                     &store,
@@ -303,13 +326,13 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
                     id,
                     &renamed,
                     order,
-                    expected_tree_revision,
+                    /*expected_tree_revision*/ 4,
                 )
                 .await;
             codes.push(updated.code);
         }
         assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-        // An archived Project has no Canonical Query, so this step is the last.
+        // An archived Project has no readable Manuscript Tree, so this step is the last.
         crate::create_structure_tests::archive(&admin, &scope).await;
         let archived = kind
             .update(&store, &scope, &suffix(8), &a, &renamed, 2, 5)

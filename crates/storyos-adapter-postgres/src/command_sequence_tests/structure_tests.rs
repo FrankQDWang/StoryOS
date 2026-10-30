@@ -544,7 +544,17 @@ async fn a_create_receipt_without_its_order_replays_the_historical_acknowledgeme
             ..applied(&first).0
         }
     );
-    let chapter = create_chapter_call(&store, /*base*/ 0x9610).await;
+    // The second Chapter of its Volume, so the order of the Activity record is 2.
+    let earlier = create_chapter_call(&store, /*base*/ 0x9610).await;
+    create_chapter(&store, &earlier).await.unwrap();
+    let input = CreateChapterInput {
+        placement: CreateChapterPlacement::Append,
+        volume_id: earlier.input.volume_id.clone(),
+        title: "Chapter B".to_owned(),
+        expected_tree_revision: 3,
+    };
+    let scope = earlier.envelope.project_scope.clone();
+    let chapter = named_call(&store, &scope, "9618", &CREATE_CHAPTER, input).await;
     let first = create_chapter(&store, &chapter).await.unwrap();
     run_without_foreign_keys(&admin, &without_order(&chapter.envelope.ids.receipt_id)).await;
     let replayed = create_chapter(&store, &with_new_request_ids(&chapter))
@@ -554,7 +564,7 @@ async fn a_create_receipt_without_its_order_replays_the_historical_acknowledgeme
     assert_eq!(
         applied(&replayed).0,
         ChapterCreated {
-            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(1),
+            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(2),
             ..applied(&first).0
         }
     );

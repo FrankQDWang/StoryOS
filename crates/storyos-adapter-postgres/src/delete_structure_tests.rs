@@ -144,6 +144,14 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
         let Some((effect, authority)) = first.applied else {
             panic!("the {kind:?} deletion must apply");
         };
+        assert_eq!(
+            (
+                authority.prior_manuscript_tree_revision,
+                authority.resulting_manuscript_tree_revision,
+                authority.author_action_sequence
+            ),
+            (4, 5, 4)
+        );
         let live = tree(&store, &scope).await;
         let volume_id = live.volumes[0].volume_id.as_ref().to_owned();
         let current = (kind == Sibling::Chapter).then_some(DeleteChapterCurrent::PreserveExisting);
@@ -204,7 +212,7 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
             codes.push(deleted.code);
         }
         assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-        // An archived Project has no Canonical Query, so this step is the last.
+        // An archived Project has no readable Manuscript Tree, so this step is the last.
         archive(&admin, &scope).await;
         codes.push(delete(kind, &store, &scope, &suffix(9), &a, 5).await.code);
         let mut expected = vec![
@@ -291,6 +299,15 @@ async fn author_undo_of_each_delete_restores_the_prior_identity_and_place() {
             removal_decisions(&admin, &scope).await,
             Vec::<String>::new()
         );
+        // The restored Chapter opens again.
+        if kind == Sibling::Chapter {
+            assert!(matches!(
+                open_chapter(&store, &scope, &ChapterId::new(removed.clone()))
+                    .await
+                    .unwrap(),
+                OpenChapter::Found(_)
+            ));
+        }
         // The Compensation is no new create command.
         let counts = admin
             .query_one(

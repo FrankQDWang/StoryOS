@@ -1,5 +1,5 @@
-//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, and storage-key
-//! exhaustion. `command_sequence_tests/` owns replay and rollback.
+//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, a failed rank write,
+//! storage-key exhaustion, and the replay of a reorder after later reorders.
 
 use storyos_application::{
     GetManuscriptTree, ProjectCommandError, ProjectScope, UpdateVolumeInput, VolumeId, VolumeNode,
@@ -11,7 +11,6 @@ use crate::command_sequence::tests::{
     UPDATE_VOLUME, applied, named_call, seed_project, stores, titled_volume, update_volume,
 };
 use crate::delete_structure_tests::settle_delete_volume;
-use crate::update_structure_tests::settle_update_volume;
 
 async fn durable_project_rows(
     admin: &tokio_postgres::Client,
@@ -99,7 +98,8 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         .batch_execute(
             "CREATE TABLE public.storyos_issue_687_counts (
            object_calls bigint NOT NULL DEFAULT 0, project_calls bigint NOT NULL DEFAULT 0,
-           rank_calls bigint NOT NULL DEFAULT 0, rank_rows bigint NOT NULL DEFAULT 0);
+           rank_calls bigint NOT NULL DEFAULT 0, rank_rows bigint NOT NULL DEFAULT 0,
+           fail_rank boolean NOT NULL DEFAULT false);
          INSERT INTO public.storyos_issue_687_counts DEFAULT VALUES;
          CREATE FUNCTION public.storyos_issue_687_count_objects()
          RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
@@ -110,6 +110,9 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
              USING (owner_user_id, project_id, manuscript_object_id)
             WHERE n.object_kind = 'volume' AND n.tree_order IS DISTINCT FROM o.tree_order
               AND n.tree_order < o.tree_order;
+           IF changed > 0 AND (SELECT fail_rank FROM public.storyos_issue_687_counts) THEN
+             RAISE EXCEPTION 'injected Volume rank failure';
+           END IF;
            UPDATE public.storyos_issue_687_counts
               SET object_calls = object_calls + 1,
                   rank_calls = rank_calls + CASE WHEN changed > 0 THEN 1 ELSE 0 END,
@@ -139,6 +142,28 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         expected_tree_revision: 6,
     };
     let command = named_call(&store, &scope, "6879", &UPDATE_VOLUME, input).await;
+    let before = durable_project_rows(&admin, &scope).await;
+    admin
+        .execute(
+            "UPDATE public.storyos_issue_687_counts SET fail_rank = true",
+            &[],
+        )
+        .await
+        .unwrap();
+    match update_volume(&store, &command).await {
+        Err(ProjectCommandError::Unavailable(error)) => {
+            assert!(format!("{error:?}").contains("injected Volume rank failure"));
+        }
+        other => panic!("expected the injected rank failure, got {other:?}"),
+    }
+    assert_eq!(durable_project_rows(&admin, &scope).await, before);
+    admin
+        .execute(
+            "UPDATE public.storyos_issue_687_counts SET fail_rank = false",
+            &[],
+        )
+        .await
+        .unwrap();
     admin
         .execute(
             "UPDATE storyos.manuscript_objects SET tree_order = 9223372036854775807
@@ -172,6 +197,7 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         .await
         .unwrap();
 
+    let mut first = None;
     for (index, order, title, expected_ids, expected_titles, expected_calls) in [
         (
             0,
@@ -241,9 +267,14 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         let removed_before = removed_volume_state(&admin, &scope).await;
         let revision = 6 + index;
         let suffix = format!("{:04x}", 0x7051 + index);
-        let settlement =
-            settle_update_volume(&store, &scope, &suffix, &volumes[3], title, order, revision)
-                .await;
+        let input = UpdateVolumeInput {
+            volume_id: VolumeId::new(volumes[3].clone()),
+            title: title.to_owned(),
+            order,
+            expected_tree_revision: revision,
+        };
+        let command = named_call(&store, &scope, &suffix, &UPDATE_VOLUME, input).await;
+        let settlement = update_volume(&store, &command).await.unwrap();
         let (effect, authority) = applied(&settlement);
         assert_eq!(
             effect,
@@ -303,7 +334,14 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
             )
         );
         assert_eq!(removed_volume_state(&admin, &scope).await, removed_before);
+        first.get_or_insert((command, settlement));
     }
+    // The first reorder replays its own settlement after the later reorders.
+    let (first_command, first_settlement) = first.expect("the first reorder settled");
+    assert_eq!(
+        update_volume(&store, &first_command).await.unwrap(),
+        first_settlement
+    );
 
     admin
         .batch_execute(
