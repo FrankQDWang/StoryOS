@@ -13,9 +13,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedVariant, ChapterSelection, ChapterSelectionWrite, Classification,
-    CommandSpec, EditorAdmission, LockedProject, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
-    unavailable,
+    CommandSpec, EditorAdmission, LockedProject, ProjectCommand, ProjectResponse, ReceiptHeads,
+    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 use crate::undo_compensation::ForwardCommand;
@@ -41,7 +40,6 @@ impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "setCurrentChapter",
         applied: &[AppliedVariant::Forward(ForwardCommand::SetCurrentChapter)],
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "current_chapter_set",
         replay_effect: ReplayEffect::NoQuery,
     };

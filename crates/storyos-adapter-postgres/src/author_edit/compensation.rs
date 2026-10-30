@@ -8,7 +8,7 @@ use tokio_postgres::Client;
 use crate::command_replay::ReplayFault;
 use crate::command_sequence::{
     ActionDisposition, AuthoritativeRevision, RevisionBase, RevisionMembers, RevisionSequences,
-    RevisionWrite, SettlementProfile, write_revision,
+    RevisionWrite, SettlementProfile, SingleRecordSet, write_revision,
 };
 use crate::manuscript_block::{blocks_from_stored_payload, display_body_from_stored};
 use crate::undo_compensation::{CompensationAdapter, CompensationReplay, UndoRequest};
@@ -77,7 +77,7 @@ impl CompensationAdapter for ProseCompensation {
         client: &Client,
         scope: &ProjectScope,
     ) -> Result<RevisionSequences, ProjectCommandError> {
-        AuthoritativeRevision::allocate(client, scope, &()).await
+        AuthoritativeRevision::allocate(client, scope).await
     }
 
     fn commit_ids(sequences: &RevisionSequences) -> Vec<String> {

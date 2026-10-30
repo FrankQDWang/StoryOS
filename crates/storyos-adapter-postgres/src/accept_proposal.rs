@@ -20,9 +20,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
     CommandSpec, EditorAdmission, LockedProject, ProfileSequences, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
-    RevisionWrite, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command,
-    unavailable,
+    ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite,
+    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -86,7 +85,6 @@ impl ProjectCommand for AcceptProposal {
     const SPEC: CommandSpec = CommandSpec {
         kind: "acceptProposal",
         applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
-        rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The AuthoritativeRevision profile writes its own Activity record.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(

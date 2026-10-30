@@ -12,7 +12,9 @@ use crate::author_edit::{
     load_revision_evidence,
 };
 use crate::command_replay::ReplayFault;
-use crate::command_sequence::{AuthoritativeRevision, RevisionSequences, SettlementProfile};
+use crate::command_sequence::{
+    AuthoritativeRevision, RevisionSequences, SettlementProfile, SingleRecordSet,
+};
 use crate::undo_compensation::{
     CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
 };
@@ -71,7 +73,7 @@ impl CompensationAdapter for AcceptanceCompensation {
         client: &Client,
         scope: &ProjectScope,
     ) -> Result<RevisionSequences, ProjectCommandError> {
-        AuthoritativeRevision::allocate(client, scope, &()).await
+        AuthoritativeRevision::allocate(client, scope).await
     }
 
     fn commit_ids(sequences: &RevisionSequences) -> Vec<String> {

@@ -14,8 +14,8 @@ use super::records::lock_project;
 use super::response::read_response_project;
 use super::skeleton::{ChallengeUse, FirstUse, consume_challenge, record_result, replay_problem};
 use super::{
-    Admission, CommandError, LockedProject, ProjectResponse, RateLimitedChallenge, ReplayEffect,
-    ResponseRecord, unavailable,
+    Admission, CommandError, LockedProject, ProjectResponse, ReplayEffect, ResponseRecord,
+    unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{
@@ -28,7 +28,6 @@ use crate::command_response_project::{
 
 pub(crate) struct AdmitSpec {
     pub(crate) kind: &'static str,
-    pub(crate) rate_limited: RateLimitedChallenge,
     /// The query of the work rows. It takes the owner, Project, and Admission identities as `$1`,
     /// `$2`, and `$3`. Its optional row holds one JSON object text.
     pub(crate) work_query: &'static str,
@@ -191,7 +190,6 @@ struct Admit<'c, C>(&'c C);
 impl<C: AdmitCommand> FirstUse for Admit<'_, C> {
     type Output = Admitted<C>;
     type Error = C::Error;
-    const RATE_LIMITED: RateLimitedChallenge = C::SPEC.rate_limited;
 
     async fn write(
         &self,

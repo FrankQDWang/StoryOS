@@ -11,8 +11,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReplayEffect, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
+    WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -44,7 +44,6 @@ impl ProjectCommand for UpdateChapterInput {
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateChapter,
         ))],
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "chapter_updated",
         replay_effect: ReplayEffect::NoQuery,
     };

@@ -6,9 +6,7 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::{
-    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
-};
+use super::{AppliedVariant, SettlementProfile, SingleRecordSet, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 
 /// The Author Action Sequence position that one Forward Author Action uses.
@@ -16,20 +14,10 @@ pub(crate) struct ActionSequence(pub(crate) u64);
 
 pub(crate) struct ActionOnly;
 
-impl<T> SelectsRecords<ActionOnly> for T {
-    fn selector(&self) {}
-}
-
-impl SettlementProfile for ActionOnly {
-    type Selector = ();
-    type Sequences = ActionSequence;
-    type Write<E: Send> = E;
-    type Applied<E: Send> = ActionApplied<E>;
-
+impl SingleRecordSet for ActionOnly {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
-        (): &(),
     ) -> Result<ActionSequence, ProjectCommandError> {
         let sequence = client
             .query_one(
@@ -46,6 +34,14 @@ impl SettlementProfile for ActionOnly {
             .get::<_, String>(/*idx*/ 0);
         Ok(ActionSequence(sequence.parse().map_err(unavailable)?))
     }
+}
+
+impl SettlementProfile for ActionOnly {
+    type Sequences = ActionSequence;
+    type Write<E: Send> = E;
+    type Applied<E: Send> = ActionApplied<E>;
+    /// The Receipt result kind of the Author Action comes from the applied variant.
+    type Input = AppliedVariant;
 
     fn commit_ids(_sequences: &ActionSequence) -> Vec<String> {
         Vec::new()
@@ -54,8 +50,6 @@ impl SettlementProfile for ActionOnly {
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        _project: &LockedProject,
-        _spec: &CommandSpec,
         variant: AppliedVariant,
         ActionSequence(sequence): ActionSequence,
         effect: E,

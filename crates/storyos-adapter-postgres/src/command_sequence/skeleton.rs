@@ -10,7 +10,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::contention::{CommandError, contended};
-use super::{RateLimitedChallenge, unavailable};
+use super::unavailable;
 use crate::command_replay::ReplayFault;
 use crate::{PostgresProjectCommandTransaction, PostgresProjectReader};
 
@@ -21,7 +21,6 @@ use crate::{PostgresProjectCommandTransaction, PostgresProjectReader};
 pub(super) trait FirstUse: Sync {
     type Output: Send;
     type Error: CommandError;
-    const RATE_LIMITED: RateLimitedChallenge;
     /// The refusal of a serialization failure, a unique violation, or a deadlock of the first use,
     /// including its commit. `None` keeps such a failure a store fault.
     const CONTENTION_REFUSAL: Option<Self::Error> = None;
@@ -51,20 +50,19 @@ pub(super) async fn consume_challenge<F: FirstUse>(
     envelope: &ProjectCommandEnvelope,
     first_use: &F,
 ) -> Result<ChallengeUse<F::Output>, F::Error> {
-    let challenge_error = |error| challenge_problem(F::RATE_LIMITED, error);
-    let mut transaction = begin_command_transaction(store, envelope, F::RATE_LIMITED).await?;
+    let mut transaction = begin_command_transaction(store, envelope).await?;
     let challenge_use = transaction
         .consume(&envelope.challenge_binding, &envelope.nonce_digest)
         .await
-        .map_err(challenge_error)?;
+        .map_err(challenge_problem)?;
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-            transaction.rollback().await.map_err(challenge_error)?;
+            transaction.rollback().await.map_err(challenge_problem)?;
             tracing::Span::current().record("outcome", "replayed");
             Ok(ChallengeUse::ExactRetrySettled(result_reference))
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
-            transaction.rollback().await.map_err(challenge_error)?;
+            transaction.rollback().await.map_err(challenge_problem)?;
             Ok(ChallengeUse::ExactRetryInProgress)
         }
         ProjectCommandChallengeUse::FirstUse => {
@@ -73,9 +71,9 @@ pub(super) async fn consume_challenge<F: FirstUse>(
                     .commit()
                     .await
                     .map(|()| ChallengeUse::Committed(output))
-                    .map_err(|error| challenge_error(error).into()),
+                    .map_err(|error| challenge_problem(error).into()),
                 Err(error) => {
-                    transaction.rollback().await.map_err(challenge_error)?;
+                    transaction.rollback().await.map_err(challenge_problem)?;
                     Err(error)
                 }
             }
@@ -91,12 +89,11 @@ pub(super) async fn consume_challenge<F: FirstUse>(
 pub(super) async fn begin_command_transaction(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
-    rate_limited: RateLimitedChallenge,
 ) -> Result<PostgresProjectCommandTransaction, ProjectCommandError> {
     store
         .begin_serializable_project_command_transaction(&envelope.project_scope)
         .await
-        .map_err(|error| challenge_problem(rate_limited, error))
+        .map_err(challenge_problem)
 }
 
 /// The command and Admission identities of one sequence result.
@@ -149,17 +146,13 @@ pub(super) fn replay_problem(fault: ReplayFault) -> ProjectCommandError {
     }
 }
 
-pub(super) fn challenge_problem(
-    rate_limited: RateLimitedChallenge,
-    error: ProjectCommandChallengeError,
-) -> ProjectCommandError {
+/// Maps an error of the Challenge transaction. Only a Challenge issue applies the rate limit, so a
+/// `RateLimited` error here is a store fault.
+pub(super) fn challenge_problem(error: ProjectCommandChallengeError) -> ProjectCommandError {
     match error {
         ProjectCommandChallengeError::BindingConflict => ProjectCommandError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired => ProjectCommandError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. } => match rate_limited {
-            RateLimitedChallenge::InvalidChallenge => ProjectCommandError::InvalidChallenge,
-            RateLimitedChallenge::Unavailable => unavailable(error),
-        },
-        ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
+        ProjectCommandChallengeError::RateLimited { .. }
+        | ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
     }
 }
