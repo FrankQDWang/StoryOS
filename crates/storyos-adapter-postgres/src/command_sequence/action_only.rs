@@ -1,5 +1,5 @@
 //! The `ActionOnly` settlement profile: one Forward Author Action and no Project Activity
-//! record, Authoritative Commit, or Snapshot (ADR 0043).
+//! record, Authoritative Commit, or Snapshot (ADR 0076).
 
 use storyos_application::{
     ActionApplied, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,

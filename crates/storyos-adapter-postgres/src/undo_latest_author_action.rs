@@ -1,4 +1,4 @@
-//! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0044). The
+//! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0076). The
 //! compensation adapter of the Forward command kind writes its Compensation records.
 
 use std::convert::Infallible;

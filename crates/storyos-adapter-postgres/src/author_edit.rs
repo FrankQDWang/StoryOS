@@ -40,7 +40,7 @@ pub(crate) enum AuthorEditFault {
 }
 
 impl PostgresProjectReader {
-    /// Settles one Author Edit through the admit step and the settle step (ADR 0044).
+    /// Settles one Author Edit through the admit step and the settle step (ADR 0076).
     pub async fn apply_author_edit(
         &self,
         command: &ApplyAuthorEditCommand,

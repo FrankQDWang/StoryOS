@@ -475,7 +475,7 @@ AuthorEditUnit {
 A Block Proposal candidate edit sets `proposal_target` to the exact current
 Proposal, pending Operation, Proposal Revision, and manuscript Block. The
 Operation can be the primary or a secondary Operation
-([ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md)).
+([ADR 0076](../adr/0076-settle-every-project-command-through-one-sequence-skeleton.md)).
 
 The `expected_proposal_heads` of the edit contains the complete observed chapter Head set,
 including the selected Revision. Each unit has one `ReplaceSelection` with
@@ -1314,7 +1314,7 @@ action routes to its registered typed handler:
 - Acceptance -> `UndoAcceptance`;
 - withdrawal -> typed Proposal reopen;
 - any action without a registered exact handler, for example a rejection
-  (ADR 0044) -> Barrier.
+  (ADR 0076) -> Barrier.
 
 Every first attempt records:
 

@@ -18,7 +18,7 @@ use crate::command_response_project::{
 };
 use crate::update_project_assistance::read_assistance_record;
 
-/// The acknowledgement record of one command kind (ADR 0043).
+/// The acknowledgement record of one command kind (ADR 0076).
 ///
 /// The sequence calls `settle` after every write of a first use. It reads the response and
 /// settles the Command Idempotency Fence. On an exact retry it calls `replay` instead.

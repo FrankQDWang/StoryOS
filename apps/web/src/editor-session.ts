@@ -357,7 +357,7 @@ export async function openEditorWorkspace({
         baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
       }), workspace, snapshotId);
       // Activity-only commands, for example a readable export, advance the Chapter
-      // position without a canonical Snapshot (ADR 0043). Only a later Snapshot is stale.
+      // position without a canonical Snapshot (ADR 0076). Only a later Snapshot is stale.
       if (JSON.stringify(canonicalSnapshot) !== JSON.stringify(tree.snapshot)
         || BigInt(canonicalSnapshot.project_activity_position)
           > BigInt(chapter.project_activity_position)

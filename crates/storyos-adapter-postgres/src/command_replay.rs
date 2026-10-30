@@ -248,7 +248,7 @@ impl CommandReplay {
         {
             return Ok(TransitionOutcome::Applied(()));
         }
-        // A missing or unknown reason is a binding conflict (ADR 0043), unless the recorded
+        // A missing or unknown reason is a binding conflict (ADR 0076), unless the recorded
         // result kind gives an outcome that records no reason.
         let reason = match self.receipt.field("reason")? {
             Field::Text(reason) => Some(reason),

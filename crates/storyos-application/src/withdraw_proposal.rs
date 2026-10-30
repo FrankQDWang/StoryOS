@@ -21,7 +21,7 @@ pub struct WithdrawProposalInput {
 }
 
 /// One Withdrawal by the AgentRun decision that produced the Proposal. It consumes no Command
-/// Challenge and writes no Admission (ADR 0043).
+/// Challenge and writes no Admission (ADR 0076).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CurrentProducerWithdrawal {
     pub run_id: String,

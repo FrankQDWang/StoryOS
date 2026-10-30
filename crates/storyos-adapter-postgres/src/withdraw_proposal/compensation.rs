@@ -1,4 +1,4 @@
-//! The author withdrawal Compensation of Author Undo (ADR 0044).
+//! The author withdrawal Compensation of Author Undo (ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;

@@ -1,5 +1,5 @@
 //! The `UndoCompensation` settlement profile: the records of one Author Undo, which the
-//! compensation adapter of the Forward command kind writes (ADR 0044).
+//! compensation adapter of the Forward command kind writes (ADR 0076).
 
 use storyos_application::{
     ManuscriptBlock, ProjectCommandEnvelope, ProjectCommandError, ProjectScope, UndoApplied,

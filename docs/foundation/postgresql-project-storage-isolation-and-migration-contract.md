@@ -69,7 +69,7 @@ and Project Scope and has one Scope-bound `observation_id`. A one-based
 `observation_sequence` orders rows within one Admission and has the closed
 range `1..=18446744073709551615`.
 
-Since [ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md),
+Under [ADR 0076](../adr/0076-settle-every-project-command-through-one-sequence-skeleton.md),
 no product path appends to this table. The `getApplyAuthorEditOutcome` Query
 reports `outcome_unknown` for a `pending` Admission that it cannot yet settle,
 and no row records that report. The table and the database rules below stay

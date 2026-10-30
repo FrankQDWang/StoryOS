@@ -629,7 +629,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    // A replay without its Activity record is damaged evidence (ADR 0043).
+    // A replay without its Activity record is damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&command).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -916,7 +916,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    // Zero-based head arrays are damaged evidence (ADR 0043).
+    // Zero-based head arrays are damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&outcome_commands[1]).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -951,7 +951,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    // A zero-based Commit array is damaged evidence (ADR 0043).
+    // A zero-based Commit array is damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&command).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -979,7 +979,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    // NULL heads are damaged evidence (ADR 0043).
+    // NULL heads are damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&outcome_commands[1]).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -1060,7 +1060,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    // An impossible stale conflict is damaged evidence (ADR 0043).
+    // An impossible stale conflict is damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&outcome_commands[0]).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -1161,7 +1161,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
     prior_corruption.commit().await.unwrap();
-    // A Commit and Envelope of another prior Revision are damaged evidence (ADR 0043).
+    // A Commit and Envelope of another prior Revision are damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&command).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))
@@ -1234,7 +1234,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
         .await
         .unwrap();
-    // A Commit of another Admission is damaged evidence (ADR 0043).
+    // A Commit of another Admission is damaged evidence (ADR 0076).
     assert!(matches!(
         store.apply_author_edit(&outcome_commands[0]).await,
         Err(storyos_application::AuthorEditError::Unavailable(_))

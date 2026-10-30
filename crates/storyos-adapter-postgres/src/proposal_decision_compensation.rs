@@ -1,4 +1,4 @@
-//! The exact Compensation of a Proposal decision that appended one Proposal Revision (ADR 0044,
+//! The exact Compensation of a Proposal decision that appended one Proposal Revision (ADR 0076,
 //! ADR 0068).
 
 use storyos_application::{ProjectCommandError, UndoRecords};

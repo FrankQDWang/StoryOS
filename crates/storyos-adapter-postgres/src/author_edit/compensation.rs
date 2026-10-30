@@ -1,5 +1,5 @@
 //! The prose Compensation of Author Undo: it restores the Revision before one applied Author
-//! Edit through the `AuthoritativeRevision` profile (ADR 0044).
+//! Edit through the `AuthoritativeRevision` profile (ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;

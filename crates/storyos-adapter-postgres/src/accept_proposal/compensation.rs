@@ -1,4 +1,4 @@
-//! The Acceptance Compensation of Author Undo (ADR 0044). It compensates through the
+//! The Acceptance Compensation of Author Undo (ADR 0076). It compensates through the
 //! `AuthoritativeRevision` profile and reopens or derives the Proposal. Otherwise it requires a
 //! Reversal Proposal or reports the source unavailable.
 

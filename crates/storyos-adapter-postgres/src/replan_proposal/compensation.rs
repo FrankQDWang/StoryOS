@@ -1,4 +1,4 @@
-//! The replan Compensation of Author Undo (ADR 0044, ADR 0068).
+//! The replan Compensation of Author Undo (ADR 0076, ADR 0068).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;

@@ -1,5 +1,5 @@
 //! The `ActivityOnly` settlement profile: one Project Activity record and no Authoritative
-//! Commit, Author Action, Snapshot, or Manuscript Tree Revision change (ADR 0043).
+//! Commit, Author Action, Snapshot, or Manuscript Tree Revision change (ADR 0076).
 
 use storyos_application::{
     ActivityApplied, ProjectCommandEnvelope, ProjectCommandError, ProjectScope,

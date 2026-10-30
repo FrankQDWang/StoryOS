@@ -1,5 +1,5 @@
 //! `acceptProposal`: one Acceptance of selected pending Proposal Operations through the command
-//! sequence (ADR 0044). A refusal before Admission retains its Pre-Admission Refusal Record
+//! sequence (ADR 0076). A refusal before Admission retains its Pre-Admission Refusal Record
 //! (ADR 0013).
 
 use storyos_application::{

@@ -1,4 +1,4 @@
-//! The replay checks and the effect query of `applyAuthorEdit` (ADR 0043, ADR 0044).
+//! The replay checks and the effect query of `applyAuthorEdit` (ADR 0076).
 
 use super::sequence::AuthorEditRecord;
 use crate::command_replay::{CommandReplay, ReplayFault};

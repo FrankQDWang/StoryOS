@@ -1,5 +1,5 @@
 //! `applyAuthorEdit` through the admit step and the settle step of the command sequence
-//! (ADR 0044).
+//! (ADR 0076).
 
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,

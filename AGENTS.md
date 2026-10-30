@@ -22,6 +22,6 @@ This file is the operating-rule source for every agent client. Codex reads it di
 ## Code and references
 
 - **Coding standards:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) before you change Rust code, a test, a generated artifact, or a contract, and before a Standards review.
-- **Project commands:** a new project command settles through the command sequence and declares its profiles (ADR 0043). A new Forward command kind declares its Author Undo Disposition (ADR 0044).
+- **Project commands:** a new project command settles through the command sequence and declares its profiles. A new Forward command kind declares its Author Undo Disposition (ADR 0076).
 - **Reference material:** `.reference/` is local-only, Git-ignored reference material. Keep it out of Git and out of the Cargo workspace, build, test, package, release, and runtime. Edit a reference only when a task refreshes it.
 - **Own design:** learn from upstream patterns, and design StoryOS around its domain. Do not fork, embed, or wrap the Codex runtime. Before you copy upstream code, verify its fit, isolate it, review its license, and record its provenance.

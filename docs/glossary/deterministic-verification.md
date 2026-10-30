@@ -53,7 +53,7 @@ The one line that each check tier prints at the end of a local run. It gives the
 _Avoid_: verification record, input fingerprint, cached result, admission receipt
 
 **Behavior Owner**:
-The one test layer that proves a behavior. The PostgreSQL adapter tests own the SQL semantics, and the HTTP tests own the wire contract. The browser-source tests own the Web Client, and the exact-dist journeys own an end-to-end path. A behavior has one owner, and another layer does not repeat its proof.
+The one test layer that proves a behavior. The PostgreSQL adapter tests own the SQL semantics, and the HTTP tests own the wire contract. Inside the adapter tests, `command_sequence_tests/` owns the generic guarantees of the command sequence, and a per-command test owns the classification and the effect rows of its command ([ADR 0076](../adr/0076-settle-every-project-command-through-one-sequence-skeleton.md)). The browser-source tests own the Web Client, and the exact-dist journeys own an end-to-end path. A behavior has one owner, and another layer does not repeat its proof.
 _Avoid_: defence in depth, redundant coverage, cross-tier duplicate
 
 **Smoke Check**:

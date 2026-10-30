@@ -1,4 +1,4 @@
-//! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0044).
+//! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0076).
 
 use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
