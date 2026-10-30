@@ -216,7 +216,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             let target = transaction
                 .client
                 .query_opt(
-                    "SELECT payload::text FROM storyos.model_attempts
+                    "SELECT COALESCE(payload->'items', 'null'::jsonb)::text FROM storyos.model_attempts
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid
                         AND attempt_role IN ('decision', 'successor', 'compaction')
@@ -246,13 +246,9 @@ impl ModelDispatchStore for PostgresProjectReader {
             if run.settled() {
                 return Ok(Some(StreamStop::StaleFence));
             }
-            let mut committed =
+            let committed_items =
                 serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(/*idx*/ 0))
                     .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-            let committed_items = committed
-                .get_mut("items")
-                .map(serde_json::Value::take)
-                .unwrap_or_default();
             let items = merge_items(committed_items, events);
             let retained = reference.map(crate::agent_run_recovery::encode_retained_reference);
             transaction
@@ -582,4 +578,8 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "stream_commit_contention_tests.rs"]
-mod stream_commit_contention_tests;
+pub(crate) mod stream_commit_contention_tests;
+
+#[cfg(test)]
+#[path = "stream_commit_payload_tests.rs"]
+mod stream_commit_payload_tests;
