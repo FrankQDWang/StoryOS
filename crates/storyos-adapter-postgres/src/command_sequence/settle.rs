@@ -15,8 +15,8 @@ use super::skeleton::{
     record_ids, record_result,
 };
 use super::{
-    Admission, Classification, ProjectCommand, RateLimitedChallenge, SettledCommand,
-    replay_receipt, settle_classified, unavailable,
+    Admission, Classification, ProjectCommand, SettledCommand, replay_receipt, settle_classified,
+    unavailable,
 };
 use crate::PostgresProjectReader;
 
@@ -99,7 +99,6 @@ struct Admit<'c, C>(&'c C);
 impl<C: AdmittedCommand> FirstUse for Admit<'_, C> {
     type Output = ();
     type Error = C::Error;
-    const RATE_LIMITED: RateLimitedChallenge = C::SPEC.rate_limited;
 
     async fn write(
         &self,
@@ -152,8 +151,7 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
-    let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
-    let transaction = begin_command_transaction(store, envelope, C::SPEC.rate_limited).await?;
+    let transaction = begin_command_transaction(store, envelope).await?;
     let client = &transaction.client;
     let settled = async {
         let project = read_project(client, envelope).await?;
@@ -188,15 +186,15 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
     .await;
     match settled {
         Ok(Ok(settlement)) => {
-            transaction.commit().await.map_err(challenge_error)?;
+            transaction.commit().await.map_err(challenge_problem)?;
             Ok(settlement)
         }
         Ok(Err(receipt_id)) => {
-            transaction.rollback().await.map_err(challenge_error)?;
+            transaction.rollback().await.map_err(challenge_problem)?;
             replay_recorded(store, envelope, command, &receipt_id).await
         }
         Err(error) => {
-            transaction.rollback().await.map_err(challenge_error)?;
+            transaction.rollback().await.map_err(challenge_problem)?;
             // A concurrent settle step can settle the same Admission first.
             match settled_receipt(store, envelope).await? {
                 Some(receipt_id) => replay_recorded(store, envelope, command, &receipt_id).await,

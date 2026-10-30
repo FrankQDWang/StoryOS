@@ -41,6 +41,7 @@ A refusal before Admission and a failure of a step roll back the transaction. No
 - Replay checks the binding of the command first, then the authority evidence of the profile, and then decodes the command effect. Thus a binding conflict comes before damaged evidence, and a decode never hides damaged authority evidence.
 - A missing settled record or an unknown reason is a binding conflict. A pre-capture record gives `historical_acknowledgement_unavailable` ([ADR 0032](0032-accept-historical-acknowledgement-unavailable.md)), only for a command that has a response record. Damaged evidence is a store fault. A zero-authority Receipt with an Author Action is damaged evidence.
 - An exact retry in progress is a binding conflict, except in the admit step of an export.
+- Only a Command Challenge issue applies the Challenge rate limit. The use, commit, and rollback of a Challenge never give `RateLimited`, so a command declares no rate-limited error, and the sequence maps such an error as a store fault.
 
 ### Admission forms
 
@@ -116,7 +117,7 @@ A Barrier stops Author Undo, and Author Undo never skips it. These product decis
 
 ### Amendment of ADR 0075
 
-Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, the missing Admission, and the rate-limited Command Challenge. A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
+Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, and the missing Admission. A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
 
 ## Considered options
 

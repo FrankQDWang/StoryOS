@@ -13,9 +13,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
-    unavailable,
+    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
+    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -33,7 +32,6 @@ impl ProjectCommand for PauseAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "pauseAgentRun",
         applied: &[AppliedVariant::NoAuthorAction],
-        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "agent_run_paused",
         replay_effect: ReplayEffect::NoQuery,
     };

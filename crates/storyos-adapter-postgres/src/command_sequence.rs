@@ -117,13 +117,6 @@ pub(crate) struct ReceiptRefs {
     pub(crate) condition_refs: Vec<String>,
 }
 
-/// The error of a Command Challenge that the rate limit refuses.
-#[derive(Clone, Copy)]
-pub(crate) enum RateLimitedChallenge {
-    InvalidChallenge,
-    Unavailable,
-}
-
 /// The effect rows of the command that an exact retry reads in the replay transaction.
 pub(crate) enum ReplayEffect {
     NoQuery,
@@ -136,7 +129,6 @@ pub(crate) struct CommandSpec {
     pub(crate) kind: &'static str,
     /// The closed set of applied variants. A command of one variant names only it.
     pub(crate) applied: &'static [AppliedVariant],
-    pub(crate) rate_limited: RateLimitedChallenge,
     pub(crate) activity_kind: &'static str,
     pub(crate) replay_effect: ReplayEffect,
 }
@@ -514,7 +506,6 @@ struct Settle<'c, C>(&'c C);
 impl<C: ProjectCommand> FirstUse for Settle<'_, C> {
     type Output = SettledCommand<C>;
     type Error = C::Error;
-    const RATE_LIMITED: RateLimitedChallenge = C::SPEC.rate_limited;
     const CONTENTION_REFUSAL: Option<C::Error> = C::CONTENTION_REFUSAL;
 
     async fn write(
