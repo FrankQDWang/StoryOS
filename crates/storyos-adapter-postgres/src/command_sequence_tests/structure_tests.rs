@@ -8,15 +8,14 @@ use storyos_application::{
 use storyos_core::CreateChapterPlacement;
 use tokio_postgres::Client;
 
-use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
 use super::support::{
-    CommandCall, Route, SequenceError, applied, issued, run_without_foreign_keys, stores,
-    two_chapter_writer, with_new_request_ids,
+    CommandCall, Route, SequenceError, applied, issued, run_without_foreign_keys, seed_project,
+    stores, two_chapter_writer, with_new_request_ids,
 };
 
 pub(crate) async fn create_volume(

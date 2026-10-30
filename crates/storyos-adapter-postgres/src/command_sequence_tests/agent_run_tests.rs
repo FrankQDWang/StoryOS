@@ -7,14 +7,13 @@ use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, ReceiptResult}
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::seed_two_chapters;
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
 use super::project_session::UPDATE_PROJECT_ASSISTANCE;
-use super::support::{CommandCall, Route, SequenceError, issued, stores};
+use super::support::{CommandCall, Route, SequenceError, issued, seed_project, stores};
 
 pub(crate) const PAUSE_AGENT_RUN: Route = Route {
     kind: "pauseAgentRun",

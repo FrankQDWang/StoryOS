@@ -11,7 +11,6 @@ use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGen
 use storyos_core::{AssistanceAvailability, CreateChapterPlacement};
 use uuid::Uuid;
 
-use super::support::seed_project;
 use crate::PostgresProjectReader;
 
 use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, acceptance_rows};
@@ -40,7 +39,9 @@ use super::structure::{
     UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_volume, delete_chapter, delete_volume,
     new_chapter, new_volume, update_chapter, update_volume,
 };
-use super::support::{CommandCall, issued, replayed_outcome, stores, two_chapter_writer};
+use super::support::{
+    CommandCall, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
+};
 
 const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
 

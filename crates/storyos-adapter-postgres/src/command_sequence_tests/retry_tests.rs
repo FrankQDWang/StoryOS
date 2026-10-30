@@ -6,7 +6,6 @@ use storyos_application::{EditorSessionId, VolumeId};
 use storyos_core::ReceiptResult;
 use tokio_postgres::Client;
 
-use super::support::seed_project;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::open_session;
@@ -31,7 +30,7 @@ use super::structure::{
     update_chapter_call, update_volume_call,
 };
 use super::support::{
-    CommandCall, SequenceError, issued, replayed_outcome, settlement_rows, stores,
+    CommandCall, SequenceError, issued, replayed_outcome, seed_project, settlement_rows, stores,
     two_chapter_writer, with_new_request_ids,
 };
 
