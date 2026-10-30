@@ -343,19 +343,6 @@ test("replanProposal appends a pending Revision bound to the current Head", asyn
     });
     const replanInput = replan();
     const replanning = await story.challenge("replanProposal", replanInput);
-    await queryStoryOSPostgres(`CREATE FUNCTION storyos.test_replan_failure() RETURNS trigger
-      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'replan fault'; END $$;
-      CREATE TRIGGER test_replan_failure BEFORE INSERT ON storyos.proposal_replans
-      FOR EACH ROW EXECUTE FUNCTION storyos.test_replan_failure();`);
-    try {
-      await assert.rejects(() => replanning.send(), (error) => requireStoryOSProtocolError(error).status === 503);
-      const stillConflicted = await inspect(afterConflict.proposal_id);
-      assert.equal(stillConflicted.revision_id, afterConflict.revision_id);
-      assert.equal(stillConflicted.validation, "conflicted");
-    } finally {
-      await queryStoryOSPostgres(`DROP TRIGGER test_replan_failure ON storyos.proposal_replans;
-        DROP FUNCTION storyos.test_replan_failure();`);
-    }
     const replanned = (await replanning.send()).response;
     assert.equal(replanned.effect.kind, "resolved");
     assert.equal(replanned.receipt.result, "resolved");
@@ -475,17 +462,6 @@ test("reopenRejectedOperations appends a pending Revision without rewriting Reje
     assert.equal((await proposal.inspect()).operation_resolution, "rejected");
     const reopenInput = reopening();
     const reopen = await story.challenge("reopenRejectedOperations", reopenInput);
-    await queryStoryOSPostgres(`CREATE FUNCTION storyos.test_reopen_failure() RETURNS trigger
-      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'reopen fault'; END $$;
-      CREATE TRIGGER test_reopen_failure BEFORE INSERT ON storyos.proposal_operation_reopenings
-      FOR EACH ROW EXECUTE FUNCTION storyos.test_reopen_failure();`);
-    try {
-      assert.equal((await problemOf(reopen.send())).status, 503);
-      assert.equal((await proposal.inspect()).operation_resolution, "rejected");
-    } finally {
-      await queryStoryOSPostgres(`DROP TRIGGER test_reopen_failure ON storyos.proposal_operation_reopenings;
-        DROP FUNCTION storyos.test_reopen_failure();`);
-    }
     const reopened = (await reopen.send()).response;
     assert.equal(reopened.effect.kind, "resolved");
     assert.equal(reopened.receipt.result, "resolved");

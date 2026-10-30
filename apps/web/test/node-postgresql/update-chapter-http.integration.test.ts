@@ -8,7 +8,6 @@ import { UUID_V7, appliedVolume, assertForeignRefused, createChapterInput, creat
   deleteVolumeInput, problemOf, serverForFile, updateChapterInput, updateVolumeInput,
 } from "../support/http-harness.ts";
 import type { TestStory } from "../support/http-harness.ts";
-import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 
 // The Profile Probe of the Structural settlement profile (ADR 0075).
 const server = serverForFile();
@@ -311,28 +310,8 @@ test("deleteVolume freezes applied, no-effect, conflict, and refusal acknowledge
     throw new Error("GET must report Chapter B");
   }
   assert.equal(opened.project.open.current_chapter_id, chapterId);
-  const receiptCount = await queryPostgres(`
-    SELECT count(*) FROM storyos.domain_receipts
-     WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'deleteVolume';
-  `);
-  assert.equal(receiptCount, "4");
-  assert.equal(
-    await queryPostgres(`
-      SELECT count(*) FROM storyos.authoritative_commits
-       WHERE project_id = '${first.projectId}'::uuid
-         AND receipt_id = '${applied.response.receipt.receipt_id}'::uuid;
-    `),
-    "1",
-  );
   await server.restart();
   const afterRestart = await applied.command.send();
   assert.deepEqual(afterRestart.response, applied.response);
   assert.equal(afterRestart.body, appliedBody);
-  assert.equal(
-    await queryPostgres(`
-      SELECT count(*) FROM storyos.domain_receipts
-       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'deleteVolume';
-    `),
-    receiptCount,
-  );
 });

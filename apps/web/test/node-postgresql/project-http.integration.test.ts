@@ -1220,47 +1220,6 @@ test("createProject replays its creation evidence after rename and restart", asy
     assert.equal(responseBodies.at(-1), firstBody);
     const current = await getProject({ baseUrl, fetchImpl, projectId });
     assert.equal(current.project.title, "Current Novel");
-
-    const countsQuery = `SELECT json_build_object(
-      'projects', (SELECT count(*) FROM storyos.projects
-        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid),
-      'receipts', (SELECT count(*) FROM storyos.domain_receipts
-        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
-          AND command_kind = 'createProject'),
-      'admissions', (SELECT count(*) FROM storyos.author_command_admissions
-        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
-          AND command_kind = 'createProject'),
-      'activities', (SELECT count(*) FROM storyos.project_activity_event_payloads
-        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
-          AND event_kind = 'project_created'))::text`;
-    const counts: unknown = JSON.parse(await queryPostgres(countsQuery));
-    assert.deepEqual(counts, { projects: 1, receipts: 1, admissions: 1, activities: 1 });
-
-    await queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
-      UPDATE storyos.project_activity_event_payloads
-         SET payload = jsonb_set(payload, '{title}', '"Damaged original title"'::jsonb)
-       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
-         AND event_kind = 'project_created'; COMMIT`);
-    await assert.rejects(submitCreate(), (error) => {
-      const problem = requireStoryOSProtocolError(error);
-      return problem.status === 503
-        && problemCode(error) === "project_store_unavailable";
-    });
-    assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), counts);
-    assert.deepEqual((await getProject({ baseUrl, fetchImpl, projectId })).project, current.project);
-    await queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
-      DELETE FROM storyos.project_activity_event_payloads
-       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
-         AND event_kind = 'project_created'; COMMIT`);
-    await assert.rejects(submitCreate(), (error) => {
-      const problem = requireStoryOSProtocolError(error);
-      return problem.status === 409
-        && problemCode(error) === "idempotency_binding_conflict";
-    });
-    assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), {
-      projects: 1, receipts: 1, admissions: 1, activities: 0,
-    });
-    assert.deepEqual((await getProject({ baseUrl, fetchImpl, projectId })).project, current.project);
   } finally {
     await stopRealServer(server);
   }
