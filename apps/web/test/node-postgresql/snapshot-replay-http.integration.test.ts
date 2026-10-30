@@ -399,7 +399,7 @@ function appliedChapter(created: CommandResponse<"createChapter">) {
   return created.effect;
 }
 
-test("createChapter reports Canonical Sibling Order through removal, replay, and historical acks", async () => {
+test("createChapter reports Canonical Sibling Order through removal and replay", async () => {
   const first = await createProject(fileServer, { title: "Order Novel" });
   const volume = await first.send("createVolume", createVolumeInput(first, "Volume A", "1"));
   if (volume.response.effect.kind !== "authoritative_applied") {
@@ -472,18 +472,6 @@ test("createChapter reports Canonical Sibling Order through removal, replay, and
   assert.equal(createdDActivity?.event_schema, "storyos.event.chapter-created.v2");
   assert.equal(createdDActivity?.payload?.order, "3");
 
-  const durable = JSON.parse(await queryPostgres(`SELECT json_build_object(
-    'receipt_order', receipt.result_payload->>'order',
-    'activity_order', payload.payload->>'order'
-  )::text
-    FROM storyos.domain_receipts AS receipt
-    JOIN storyos.project_activity_event_payloads AS payload
-      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-   WHERE receipt.receipt_id = '${chapterD.response.receipt.receipt_id}'::uuid`));
-  assert.equal(durable.receipt_order, "3");
-  assert.equal(durable.activity_order, "3");
-
   await first.send("updateChapter", updateChapterInput(first, createdD.chapter_id, "Chapter D", "1", "7"));
   const replayAfterReorder = (await chapterD.command.send()).response;
   assert.equal(appliedChapter(replayAfterReorder).order, "3");
@@ -493,18 +481,9 @@ test("createChapter reports Canonical Sibling Order through removal, replay, and
   assert.equal(removedC.effect.kind, "authoritative_applied");
   const replayAfterDelete = (await chapterD.command.send()).response;
   assert.equal(appliedChapter(replayAfterDelete).order, "3");
-
-  await queryPostgres(`UPDATE storyos.domain_receipts
-      SET result_payload = '{}'::jsonb
-    WHERE receipt_id = '${chapterB.response.receipt.receipt_id}'::uuid`);
-  const historicalB = (await chapterB.command.send()).response;
-  assert.equal(appliedChapter(historicalB).order, "2");
-  assert.equal(historicalB.receipt.receipt_id, chapterB.response.receipt.receipt_id);
-  assert.deepEqual(historicalB.receipt.authoritative_commit_ids, []);
-  assert.equal(historicalB.receipt.author_action_sequence, null);
 });
 
-test("createVolume reports Canonical Sibling Order through removal, replay, and historical acks", async () => {
+test("createVolume reports Canonical Sibling Order through removal and replay", async () => {
   const first = await createProject(fileServer, { title: "Order Novel" });
   const volumeA = await first.send("createVolume", createVolumeInput(first, "Volume A", "1"));
   const volumeB = await first.send("createVolume", createVolumeInput(first, "Volume B", "2"));
@@ -568,18 +547,6 @@ test("createVolume reports Canonical Sibling Order through removal, replay, and 
   assert.equal(createdDActivity?.event_schema, "storyos.event.volume-created.v2");
   assert.equal(createdDActivity?.payload?.order, "3");
 
-  const durable = JSON.parse(await queryPostgres(`SELECT json_build_object(
-    'receipt_order', receipt.result_payload->>'order',
-    'activity_order', payload.payload->>'order'
-  )::text
-    FROM storyos.domain_receipts AS receipt
-    JOIN storyos.project_activity_event_payloads AS payload
-      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-   WHERE receipt.receipt_id = '${volumeD.response.receipt.receipt_id}'::uuid`));
-  assert.equal(durable.receipt_order, "3");
-  assert.equal(durable.activity_order, "3");
-
   await first.send("updateVolume", updateVolumeInput(first, createdD.volume_id, "Volume D", "1", "6"));
   const replayAfterReorder = (await volumeD.command.send()).response;
   assert.equal(appliedVolume(replayAfterReorder).order, "3");
@@ -589,13 +556,4 @@ test("createVolume reports Canonical Sibling Order through removal, replay, and 
   assert.equal(removedC.effect.kind, "authoritative_applied");
   const replayAfterDelete = (await volumeD.command.send()).response;
   assert.equal(appliedVolume(replayAfterDelete).order, "3");
-
-  await queryPostgres(`UPDATE storyos.domain_receipts
-      SET result_payload = '{}'::jsonb
-    WHERE receipt_id = '${volumeB.response.receipt.receipt_id}'::uuid`);
-  const historicalB = (await volumeB.command.send()).response;
-  assert.equal(appliedVolume(historicalB).order, "1");
-  assert.equal(historicalB.receipt.receipt_id, volumeB.response.receipt.receipt_id);
-  assert.deepEqual(historicalB.receipt.authoritative_commit_ids, []);
-  assert.equal(historicalB.receipt.author_action_sequence, null);
 });

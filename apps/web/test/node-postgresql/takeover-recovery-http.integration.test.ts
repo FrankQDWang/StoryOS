@@ -7,13 +7,9 @@ import { test } from "vitest";
 
 import {
   applyAuthorEdit,
-  createChapter,
   createEditorSession,
-  createVolume,
   digestApplyAuthorEdit,
-  digestCreateChapter,
   digestCreateEditorSession,
-  digestCreateVolume,
   digestTakeOverProjectWriter,
   getApplyAuthorEditOutcome,
   getEditorSession,
@@ -22,7 +18,8 @@ import {
 import type {
   ApplyAuthorEditRequest, CreateEditorSessionResponse, DigestValue, GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, USER_A, createEmpty, issueChallenge, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, TestServer, USER_A, addVolume, createProject, issueChallenge, startServer, waitFor,
+} from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
@@ -63,35 +60,10 @@ async function openSession(host: Host, projectId: string, id: (n: number) => str
 }
 
 /** Creates a Project with one Chapter so that no other test shares its writer state. */
-async function createChapterProject(host: Host, id: (n: number) => string): Promise<string> {
-  const { projectId } = await createEmpty(host.baseUrl, "session-a", id(1), "Takeover Recovery Novel", id(2));
-  const command = { baseUrl: host.baseUrl, projectId, fetchImpl: host.fetchImpl };
-  const volumeRequest = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: {
-      title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(3),
-    },
-  };
-  const volume = await createVolume({
-    ...command, request: volumeRequest, idempotencyKey: id(4),
-    antiForgery: await challenge(host, projectId, "/api/v1/projects/{project_id}/volumes",
-      volumeRequest.command_schema, await digestCreateVolume(volumeRequest), id(4)),
-  });
-  if (volume.effect.kind !== "authoritative_applied") throw new Error("Volume A must apply");
-  const chapterRequest = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: {
-      title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(5),
-    },
-  };
-  const chapter = await createChapter({
-    ...command, volumeId: volume.effect.volume_id, request: chapterRequest, idempotencyKey: id(6),
-    antiForgery: await challenge(host, projectId,
-      "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-      chapterRequest.command_schema, await digestCreateChapter(chapterRequest), id(6)),
-  });
-  if (chapter.effect.kind !== "authoritative_applied") throw new Error("Chapter A must apply");
-  return projectId;
+async function createChapterProject(host: Host): Promise<string> {
+  const project = await createProject(TestServer.at(host.baseUrl), { title: "Takeover Recovery Novel" });
+  await addVolume(project, ["Chapter A"]);
+  return project.projectId;
 }
 
 function editRequest(session: GetEditorSessionResponse | CreateEditorSessionResponse,
@@ -151,7 +123,7 @@ async function proveTakeoverRefusesAdmittedRecovery(schedule: Schedule): Promise
     String(n).padStart(4, "0")}`;
   let host = await startHost();
   try {
-    const projectId = await createChapterProject(host, id);
+    const projectId = await createChapterProject(host);
     const writer = await openSession(host, projectId, id, 10);
     const observer = await openSession(host, projectId, id, 12);
     if (writer.writer.kind !== "current_writer" || observer.writer.kind !== "read_only") {

@@ -5,14 +5,10 @@ import { test } from "vitest";
 import {
   applyAuthorEdit,
   archiveProject,
-  createChapter,
   createEditorSession,
-  createVolume,
   digestApplyAuthorEdit,
   digestArchiveProject,
-  digestCreateChapter,
   digestCreateEditorSession,
-  digestCreateVolume,
   digestExportHumanReadableManuscript,
   digestExportProjectArchive,
   exportHumanReadableManuscript,
@@ -28,37 +24,13 @@ import {
   stopStoryOSServer,
 } from "../support/node-integration.ts";
 import { zipStoreFiles } from "../support/archive.ts";
-import { BINDING, challenged, settleOnce, startServer } from "../support/http-harness.ts";
+import { BINDING, TestProject, TestServer, addVolume, challenged, settleOnce, startServer } from "../support/http-harness.ts";
 
 const prose = "The archived chapter keeps its own words.";
 
 async function addProse(command: { baseUrl: string; projectId: string; fetchImpl: typeof fetch }, suffix: string) {
   const { baseUrl, projectId, fetchImpl } = command;
-  const volumeRequest = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: { title: "Recovery Volume", expected_tree_revision: "1", ...BINDING,
-      correlation_id: `018f0000-0000-7001-8000-00000000${suffix}11` },
-  };
-  const volumeKey = `018f0000-0000-7001-8000-00000000${suffix}01`;
-  const volume = await challenged(baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/volumes", volumeRequest.command_schema,
-    await digestCreateVolume(volumeRequest), volumeKey,
-    (antiForgery) => createVolume({ ...command, request: volumeRequest, idempotencyKey: volumeKey, antiForgery }));
-  if (volume.effect.kind !== "authoritative_applied") throw new Error("Recovery Volume was not created");
-  const volumeId = volume.effect.volume_id;
-
-  const chapterRequest = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Recovery Chapter", expected_tree_revision: "2", ...BINDING,
-      correlation_id: `018f0000-0000-7001-8000-00000000${suffix}12` },
-  };
-  const chapterKey = `018f0000-0000-7001-8000-00000000${suffix}02`;
-  const chapter = await challenged(baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapterRequest.command_schema,
-    await digestCreateChapter(chapterRequest), chapterKey,
-    (antiForgery) => createChapter({ ...command, volumeId, request: chapterRequest, idempotencyKey: chapterKey,
-      antiForgery }));
-  if (chapter.effect.kind !== "authoritative_applied") throw new Error("Recovery Chapter was not created");
+  await addVolume(new TestProject(TestServer.at(baseUrl), projectId, "session-a"), ["Recovery Chapter"]);
 
   const sessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1" as const,

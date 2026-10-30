@@ -5,28 +5,22 @@ import { test } from "vitest";
 import {
   activityStream,
   applyAuthorEdit,
-  createChapter,
   createEditorSession,
   createVolume,
   digestApplyAuthorEdit,
-  digestCreateChapter,
   digestCreateEditorSession,
   digestCreateVolume,
-  digestUpdateProjectAssistance,
   getEditorSession,
   getManuscriptTree,
-  updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
-  CreateChapterRequest,
   CreateVolumeRequest,
   GetEditorSessionResponse,
-  UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { BINDING, PROJECT_A, USER_A, challenged, createEmpty, eventPayloadDigest, parseSseFrames, postRun,
-  runRequest, startServer } from "../support/http-harness.ts";
+import { PROJECT_A, TestProject, TestServer, USER_A, addVolume, challenged, createEmpty, eventPayloadDigest,
+  parseSseFrames, postRun, runRequest, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
@@ -285,53 +279,14 @@ function activityId(suffix: string): string {
 }
 
 /** Makes assistance available and adds one Volume and one Chapter. */
-async function prepareRunProject(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  keyNs: string,
-) {
-  const key = (index: number) => `018f0000-0000-7001-8000-000000000${keyNs}${index}`;
-  const assistance: UpdateProjectAssistanceRequest = {
+async function prepareRunProject(baseUrl: string, projectId: string): Promise<string> {
+  const project = new TestProject(TestServer.at(baseUrl), projectId, "session-a");
+  await project.send("updateProjectAssistance", { request: {
     command_schema: "storyos.command.update-project-assistance.request.v1",
-    update_project_assistance_input: {
-      availability: "available", expected_assistance_revision: "0", ...BINDING, correlation_id: key(0),
-    },
-  };
-  await challenged(baseUrl, fetchImpl, projectId, "PUT",
-    "/api/v1/projects/{project_id}/assistance",
-    assistance.command_schema, await digestUpdateProjectAssistance(assistance), key(1),
-    (antiForgery) => updateProjectAssistance({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key(1), antiForgery, request: assistance,
-    }));
-  const volume: CreateVolumeRequest = {
-    command_schema: "storyos.command.create-volume.request.v1",
-    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: key(2) },
-  };
-  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/volumes",
-    volume.command_schema, await digestCreateVolume(volume), key(3),
-    (antiForgery) => createVolume({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key(3), antiForgery, request: volume,
-    }));
-  if (createdVolume.effect.kind !== "authoritative_applied") {
-    throw new Error("Create Volume must apply");
-  }
-  const volumeId = createdVolume.effect.volume_id;
-  const chapter: CreateChapterRequest = {
-    command_schema: "storyos.command.create-chapter.request.v1",
-    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: key(4) },
-  };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
-    chapter.command_schema, await digestCreateChapter(chapter), key(5),
-    (antiForgery) => createChapter({
-      baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: key(5), antiForgery, request: chapter,
-    }));
-  if (createdChapter.effect.kind !== "authoritative_applied") {
-    throw new Error("Create Chapter must apply");
-  }
-  return createdChapter.effect.chapter_id;
+    update_project_assistance_input: { availability: "available", expected_assistance_revision: "0", ...project.binding() },
+  } });
+  const story = await addVolume(project, ["Chapter A"]);
+  return story.chapterIds[0] ?? "";
 }
 
 test("implemented assistance and Run Events replay from a retained public cursor", async () => {
@@ -342,7 +297,7 @@ test("implemented assistance and Run Events replay from a retained public cursor
     const tree = await getManuscriptTree({
       baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl,
     });
-    const chapterId = await prepareRunProject(started.baseUrl, first.fetchImpl, first.projectId, "f7");
+    const chapterId = await prepareRunProject(started.baseUrl, first.projectId);
     const run = await postRun(
       started.baseUrl, first.fetchImpl, first.projectId, activityId("f732"),
       runRequest(chapterId, activityId("f733"), "Help with this passage."),

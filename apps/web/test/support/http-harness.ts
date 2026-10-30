@@ -62,6 +62,7 @@ export async function restartServer(started: StoryOSServer, options: Omit<Server
 export class TestServer {
   private readonly extraEnv: Readonly<Record<string, string>>;
   private current: StoryOSServer | undefined;
+  private attachedBaseUrl: string | undefined;
 
   constructor(extraEnv: Readonly<Record<string, string>> = {}) {
     this.extraEnv = extraEnv;
@@ -73,11 +74,19 @@ export class TestServer {
     return server;
   }
 
+  /** A Server that the test started with its own options and stops itself. Use it only to send commands. */
+  static at(baseUrl: string): TestServer {
+    const server = new TestServer();
+    server.attachedBaseUrl = baseUrl;
+    return server;
+  }
+
   async start(): Promise<void> {
     this.current = await startServer({ extraEnv: this.extraEnv });
   }
 
   get baseUrl(): string {
+    if (this.attachedBaseUrl !== undefined) return this.attachedBaseUrl;
     assert.ok(this.current, "the Server is not started");
     return this.current.baseUrl;
   }
