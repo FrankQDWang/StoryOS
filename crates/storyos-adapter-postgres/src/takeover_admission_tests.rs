@@ -663,6 +663,37 @@ async fn a_takeover_hands_the_writer_to_an_observer_and_refuses_a_stale_or_curre
         }
     );
 
+    // The schema refuses an Author Edit Activity row for the no_effect takeover Receipt.
+    let runtime = connect(&runtime_url).await;
+    let forbidden = runtime
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL storyos.owner_user_id = '{USER}';
+             SET LOCAL storyos.project_id = '{project}';
+             INSERT INTO storyos.project_activity_events
+               (owner_user_id, project_id, project_activity_position, project_activity_event_id,
+                event_kind, receipt_id, receipt_result_kind, authoritative_commit_id,
+                resulting_revision_id, author_action_sequence)
+             VALUES ('{USER}', '{project}', 2, '{event}', 'authoritative_author_edit_applied',
+                     '{receipt}', 'no_effect', '{revision}', '{revision}', 1);",
+            project = fixture.project_id,
+            event = test_uuid(1049),
+            receipt = successful.envelope.ids.receipt_id,
+            revision = fixture.revision_id,
+        ))
+        .await
+        .expect_err("an Author Edit Activity row needs an applied Receipt");
+    let refusal = forbidden
+        .as_db_error()
+        .expect("the database refuses the row");
+    assert_eq!(
+        (refusal.code(), refusal.constraint()),
+        (
+            &tokio_postgres::error::SqlState::CHECK_VIOLATION,
+            Some("project_activity_events_receipt_result_kind_check")
+        )
+    );
+
     // A takeover moves only the Activity position of an existing counter row.
     admin
         .execute(
