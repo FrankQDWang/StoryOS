@@ -19,9 +19,9 @@ ADR 0043 and ADR 0044 have approximately 10,000 words, and they mix the current 
 
 ### The sequence skeleton
 
-- One function, `consume_challenge`, owns these steps: begin the Serializable transaction and set Project Scope, consume the Command Challenge, run the first use of the entry point, commit a first use that succeeded, and roll back every other path. It maps a contended first use to the declared contention refusal, and it records `replayed` on the command span for an exact retry of a settled command. A failed rollback is a store fault.
+- One function, `consume_challenge`, owns the transaction steps. It begins the Serializable transaction and sets Project Scope. It consumes the Command Challenge and runs the first use of the entry point. It commits a first use that succeeded, and it rolls back every other path. It maps a contended first use to the declared contention refusal, and it records `replayed` on the command span for an exact retry of a settled command. A failed rollback is a store fault.
 - An entry point gives its first use and answers the two exact-retry branches. The three entry points are the settle step of `ProjectCommand`, the admit step of the two exports, and the admit and settle steps of Author Edit.
-- Each entry function keeps its own span, because [ADR 0047](0047-write-server-and-worker-diagnostic-projections-as-json-lines-to-stderr.md) and the diagnostic canary tests use the span name, and a span name is static. One function records the identifiers or the reason code of the result on the span.
+- Each entry function declares its own span with `#[tracing::instrument]` at its definition. [CODING_STANDARDS.md](../../CODING_STANDARDS.md) requires this form for a `command_sequence` entry and forbids `.instrument(...)` at a call site. The span name is static, and [ADR 0047](0047-write-server-and-worker-diagnostic-projections-as-json-lines-to-stderr.md) and the diagnostic canary tests use it. Thus the skeleton cannot own the span declaration. It owns the span records: `consume_challenge` records `replayed`, and one function, `record_result`, records the identifiers or the reason code of the result.
 
 ### Settlement order
 

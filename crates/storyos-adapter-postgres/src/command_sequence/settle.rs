@@ -12,14 +12,13 @@ use super::admission::insert_admission;
 use super::records::read_project;
 use super::skeleton::{
     ChallengeUse, FirstUse, begin_command_transaction, challenge_problem, consume_challenge,
-    record_ids, record_result, replay_problem,
+    record_ids, record_result,
 };
 use super::{
     Admission, Classification, ProjectCommand, RateLimitedChallenge, SettledCommand,
     replay_receipt, settle_classified, unavailable,
 };
 use crate::PostgresProjectReader;
-use crate::command_replay::{ReplayFault, read_snapshot};
 
 /// The result reference of a fence that the outcome query settled as `RequiresReconfirmation`.
 const REQUIRES_RECONFIRMATION: &str = "requires_reconfirmation";
@@ -310,8 +309,15 @@ async fn settled_receipt(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
 ) -> Result<Option<String>, ProjectCommandError> {
-    let scope = &envelope.project_scope;
-    read_snapshot(store, scope, async |client| {
+    let client = store.connect_challenge().await.map_err(unavailable)?;
+    client
+        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(unavailable)?;
+    let receipt = async {
+        crate::set_challenge_scope_on_client(&client, &envelope.project_scope)
+            .await
+            .map_err(unavailable)?;
         client
             .query_opt(
                 "SELECT receipt_id::text FROM storyos.author_command_admission_settlements
@@ -319,15 +325,16 @@ async fn settled_receipt(
                     AND author_command_admission_id = $3::text::uuid
                     AND settlement_kind = 'receipt_settled'",
                 &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
+                    &envelope.project_scope.owner_user_id.as_ref(),
+                    &envelope.project_scope.project_id.as_ref(),
                     &envelope.ids.author_command_admission_id,
                 ],
             )
             .await
-            .map(|row| row.map(|row| row.get(/*idx*/ 0)))
-            .map_err(|error| ReplayFault::Unavailable(Box::new(error)))
-    })
-    .await
-    .map_err(replay_problem)
+            .map_err(unavailable)
+    }
+    .await;
+    // The read is read-only, so a failed COMMIT does not change the Receipt that it read.
+    let _end = client.batch_execute("COMMIT").await;
+    Ok(receipt?.map(|row| row.get(/*idx*/ 0)))
 }
