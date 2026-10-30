@@ -8,45 +8,10 @@ use storyos_application::{
 use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
 
 use crate::command_sequence::tests::{
-    UPDATE_VOLUME, applied, named_call, seed_project, stores, titled_volume, update_volume,
+    UPDATE_VOLUME, applied, durable_project_rows, named_call, seed_project, stores, titled_volume,
+    update_volume,
 };
 use crate::delete_structure_tests::settle_delete_volume;
-
-async fn durable_project_rows(
-    admin: &tokio_postgres::Client,
-    scope: &ProjectScope,
-) -> Vec<serde_json::Value> {
-    let mut rows = Vec::new();
-    for table in [
-        "projects",
-        "manuscript_objects",
-        "domain_receipts",
-        "author_command_admissions",
-        "project_activity_events",
-        "project_activity_event_payloads",
-        "authoritative_commits",
-        "author_action_entries",
-        "project_snapshots",
-        "command_idempotency",
-        "volume_removal_decisions",
-    ] {
-        let sql = format!(
-            "SELECT jsonb_agg(to_jsonb(row) ORDER BY to_jsonb(row)::text)::text
-               FROM storyos.{table} AS row
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
-        );
-        let value: Option<String> = admin
-            .query_one(
-                &sql,
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .unwrap()
-            .get(0);
-        rows.push(serde_json::from_str(value.as_deref().unwrap_or("null")).unwrap());
-    }
-    rows
-}
 
 async fn removed_volume_state(
     admin: &tokio_postgres::Client,

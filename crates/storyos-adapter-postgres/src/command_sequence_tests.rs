@@ -75,6 +75,6 @@ pub(crate) use structure::{
 };
 pub(crate) use support::{
     CREATE_EDITOR_SESSION, CommandCall, Route, applied, command_call, command_issue,
-    create_project_command, create_project_issue, issued, seed_owned_project, seed_project, stores,
-    undo_named,
+    create_project_command, create_project_issue, durable_project_rows, issued, seed_owned_project,
+    seed_project, stores, undo_named,
 };
