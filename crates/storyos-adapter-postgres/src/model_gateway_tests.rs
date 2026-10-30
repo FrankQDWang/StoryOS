@@ -1,5 +1,6 @@
 use crate::command_sequence::tests::{
-    CREATE_AGENT_RUN, UPDATE_PROJECT_ASSISTANCE, command_issue, seed_project,
+    CREATE_AGENT_RUN, UPDATE_PROJECT_ASSISTANCE, command_issue, seed_project, titled_chapter,
+    titled_volume,
 };
 use std::sync::Mutex;
 
@@ -18,12 +19,9 @@ use storyos_core::{
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
-use crate::update_volume_tests::{apply_chapter, apply_volume};
 
 const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
 const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
-const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
-const CHAPTER_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
 
 /// The durable dispatch evidence of one AgentRun.
 #[derive(Debug, PartialEq)]
@@ -280,23 +278,20 @@ pub(crate) async fn queued_run(
         .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
         .await
         .unwrap();
-    let volume_id = apply_volume(
+    let volume_id = titled_volume(
         store,
         &scope,
         &format!("{prefix}3"),
         "Volume A",
-        VOLUME_BYTES,
-        &digest("createVolume", VOLUME_BYTES),
         /*expected_tree_revision*/ 1,
     )
     .await;
-    let chapter_id = apply_chapter(
+    let chapter_id = titled_chapter(
         store,
         &scope,
         &format!("{prefix}4"),
         &volume_id,
         "Chapter A",
-        CHAPTER_BYTES,
         /*expected_tree_revision*/ 2,
     )
     .await;
