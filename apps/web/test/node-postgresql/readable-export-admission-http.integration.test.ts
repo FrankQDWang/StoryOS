@@ -5,7 +5,6 @@ import { test } from "vitest";
 
 import { getHumanReadableManuscriptExport, getProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { exportSettlementReceipt, queryStoryOSPostgres } from "../support/node-integration.ts";
 import { TestServer, USER_A, UUID_V7, addVolume, assertForeignRefused, createProject, id, problemOf, serverForFile,
   settleOnce, waitFor,
 } from "../support/http-harness.ts";
@@ -49,14 +48,6 @@ async function settled(read: () => ReturnType<typeof getHumanReadableManuscriptE
   }, (page) => page.status !== "in_progress", { attempts: 16, intervalMs: 0 });
 }
 
-async function settledActivityCount(project: TestProject): Promise<string> {
-  return queryStoryOSPostgres(`
-    SELECT count(*)::text FROM storyos.project_activity_event_payloads
-     WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${project.projectId}'::uuid
-       AND event_kind = 'human_readable_manuscript_export_settled';
-  `);
-}
-
 test("exportHumanReadableManuscript admits, replays, and refuses", async () => {
   const project = await createProject(server, { title: "Readable Export Novel" });
   const { sent, exportId, read } = await admitted(project);
@@ -74,7 +65,6 @@ test("exportHumanReadableManuscript admits, replays, and refuses", async () => {
   assert.deepEqual([inspected.export_id, inspected.export_profile, inspected.source_snapshot.snapshot_id],
     [exportId, effect.export_profile, effect.source_snapshot.snapshot_id]);
   assert.deepEqual(["manuscript_utf8" in inspected, "content_sha256" in inspected], [false, false]);
-  assert.equal(await settledActivityCount(project), "0");
   assert.deepEqual(await sent.command.send(), { response: sent.response, body: sent.body });
 
   const { status, code } = await problemOf(sent.command.send({ request: exportInput(project).request }));
@@ -126,7 +116,6 @@ test("the in-process Worker settles an admitted human-readable export to ready",
     assert.deepEqual([ready.manuscript_utf8, ready.content_sha256], [EMPTY_MANUSCRIPT, EMPTY_MANUSCRIPT_SHA256]);
     assert.deepEqual(await sent.command.send(), { response: sent.response, body: sent.body });
     assert.equal((await read()).status, "ready");
-    assert.equal(await settledActivityCount(project), "1");
   } finally {
     await worker.stop();
   }
@@ -134,14 +123,12 @@ test("the in-process Worker settles an admitted human-readable export to ready",
 
 test("the Worker settles failed when the Project is archived after admission", async () => {
   const project = await createProject(server, { title: "Archive After Novel" });
-  const { sent, exportId, read } = await admitted(project);
+  const { sent, read } = await admitted(project);
   await archive(project);
   assert.equal((await read()).status, "in_progress");
   const failed = await settled(read);
   assert.equal(failed.status, "failed");
   assert.equal("manuscript_utf8" in failed, false);
-  assert.equal(await exportSettlementReceipt({ ownerUserId: USER_A, projectId: project.projectId, exportId,
-    operationsTable: "human_readable_manuscript_export_operations" }), "refused archived_project");
   assert.deepEqual(await sent.command.send(), { response: sent.response, body: sent.body });
   assert.equal((await read()).status, "failed");
 });

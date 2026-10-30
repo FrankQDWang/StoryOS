@@ -444,15 +444,6 @@ test("project assistance prepares the host fake binding without a run", async ()
     await assert.rejects(retryAbsent, (error) => problemCode(error) === "stale_assistance_revision");
     assert.deepEqual(responses.at(-1), absentBytes);
 
-    const counts = () => queryPostgres(`
-      SELECT json_build_object(
-        'commands', (SELECT count(*) FROM storyos.command_idempotency WHERE project_id = '${first.projectId}'::uuid),
-        'receipts', (SELECT count(*) FROM storyos.domain_receipts WHERE project_id = '${first.projectId}'::uuid),
-        'activities', (SELECT count(*) FROM storyos.project_activity_events WHERE project_id = '${first.projectId}'::uuid),
-        'policies', (SELECT count(*) FROM storyos.project_policy_revisions WHERE project_id = '${first.projectId}'::uuid)
-      )::text;
-    `);
-    const beforeRetries = await counts();
     for (const [original, originalBytes, nonce, key, request] of [
       [initialized.updated, initializedBytes, initialized.nonce, id(`${ns}0a22`), assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23")],
       [unchanged.updated, unchangedBytes, unchanged.nonce, id(`${ns}0a24`), assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a25")],
@@ -469,7 +460,6 @@ test("project assistance prepares the host fake binding without a run", async ()
       assert.deepEqual(replay, original);
       assert.deepEqual(responses.at(-1), originalBytes);
     }
-    assert.equal(await counts(), beforeRetries);
 
     const bound = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a16`), "Bound Novel", id("a10"));
     const boundInit = await prepareAssistance(
@@ -498,7 +488,6 @@ test("project assistance prepares the host fake binding without a run", async ()
     });
     assert.deepEqual(restartedResponse, initialized.updated);
     assert.deepEqual(responses.at(-1), initializedBytes);
-    assert.equal(await counts(), beforeRetries);
     assert.deepEqual((await getProjectAssistance({
       baseUrl: started.baseUrl,
       projectId: first.projectId,

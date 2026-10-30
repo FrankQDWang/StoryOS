@@ -211,8 +211,8 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
   }
 });
 
-// The recovery seed runs this test: it retains one altered-candidate Acceptance condition. No Rust adapter test
-// alters a stored candidate, so this test changes the row with SQL.
+// ADR 0075 records this exception. The recovery seed runs this test: it retains one altered-candidate Acceptance
+// condition. No Rust adapter test alters a stored candidate, so this test changes the row with SQL.
 test("acceptProposal retains altered_candidate across reload and refuses another attempt until revision", async () => {
   const server = await TestServer.start();
   try {

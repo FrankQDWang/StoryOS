@@ -209,13 +209,6 @@ test("undo acceptance requires a reversal proposal when the authoritative head h
   const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
     chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
   assert.equal(chapter.chapter.current_revision.revision_id, accepted.beforeRevision);
-  assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.author_action_entries
-    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
-      AND compensated_source_sequence = ${accepted.frontier}
-      AND disposition = 'compensation'`), "0");
-  assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.authoritative_revisions
-    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
-      AND revision_id = '${accepted.chapterRevision}'::uuid`), "1");
   const reversal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
     proposalId: undone.effect.proposal_id, fetchImpl: prepared.fetchImpl });
   assert.equal(reversal.proposal.kind, "reversal");

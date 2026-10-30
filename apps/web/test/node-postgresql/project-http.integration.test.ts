@@ -876,18 +876,6 @@ test("one current writer settles one Author Edit and exact retries return one re
       assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeOutcomeRead);
     }
 
-    assert.deepEqual(await projectAuthoritySnapshot(), {
-      receipts: 4,
-      admissions: 4,
-      consumed_challenges: 4,
-      activities: 1,
-      revision_envelopes: 1,
-      commits: 1,
-      actions: 1,
-      counter: "1/1/1",
-      zero_authority_activities: 0,
-    });
-
     const unknownKey = rejectedKey;
     const unknownAdmission = "018f0000-0000-7001-8000-000000000065";
     const unknownCommand = "018f0000-0000-7001-8000-000000000066";

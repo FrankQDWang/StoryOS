@@ -585,15 +585,6 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillVisible.status, "in_progress");
-    const admittedActivity = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.project_activity_event_payloads
-       WHERE owner_user_id = '${USER_A}'::uuid
-         AND project_id = '${first.projectId}'::uuid
-         AND event_kind = 'project_export_settled';
-    `);
-    assert.match(admittedActivity, /0$/);
-
     await assert.rejects(
       postExport(
         baseUrl,
@@ -792,15 +783,6 @@ test("the in-process Worker settles an admitted Project Export Archive to ready"
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillReady.status, "ready");
-
-    const activityCount = await queryPostgres(`
-      SELECT count(*)::text
-        FROM storyos.project_activity_event_payloads
-       WHERE owner_user_id = '${USER_A}'::uuid
-         AND project_id = '${first.projectId}'::uuid
-         AND event_kind = 'project_export_settled';
-    `);
-    assert.match(activityCount, /1$/);
 
     const archived = await archiveOpenProject(
       baseUrl,
