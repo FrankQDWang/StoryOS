@@ -203,6 +203,8 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
             .await;
             codes.push(deleted.code);
         }
+        assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
+        // An archived Project has no Canonical Query, so this step is the last.
         archive(&admin, &scope).await;
         codes.push(delete(kind, &store, &scope, &suffix(9), &a, 5).await.code);
         let mut expected = vec![
@@ -215,7 +217,6 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
             expected.insert(0, (ReceiptResult::Refused, Some("nonempty_volume")));
         }
         assert_eq!(codes, expected, "{kind:?}");
-        assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
     }
 }
 

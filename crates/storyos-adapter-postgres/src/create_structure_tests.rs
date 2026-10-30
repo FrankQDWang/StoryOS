@@ -178,18 +178,6 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
     );
 
     let stale = settle_volume(&store, &scope, "9623", "Volume C", 1).await;
-    archive(&admin, &scope).await;
-    let archived = settle_volume(&store, &scope, "9624", "Volume C", 3).await;
-    assert_eq!(
-        [
-            outcome_code(&stale.outcome),
-            outcome_code(&archived.outcome)
-        ],
-        [
-            (ReceiptResult::Conflicted, Some("stale_tree_revision")),
-            (ReceiptResult::Refused, Some("archived_project")),
-        ]
-    );
     assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
 
     // Recovery reads the latest Snapshot until it expires.
@@ -207,6 +195,19 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
     assert_eq!(
         get_manuscript_tree(&store, &scope).await.unwrap(),
         GetManuscriptTree::SnapshotExpired
+    );
+    // An archived Project has no Canonical Query, so this step is the last.
+    archive(&admin, &scope).await;
+    let archived = settle_volume(&store, &scope, "9624", "Volume C", 3).await;
+    assert_eq!(
+        [
+            outcome_code(&stale.outcome),
+            outcome_code(&archived.outcome)
+        ],
+        [
+            (ReceiptResult::Conflicted, Some("stale_tree_revision")),
+            (ReceiptResult::Refused, Some("archived_project")),
+        ]
     );
 }
 
@@ -350,6 +351,15 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
 
     let stale = settle_chapter(&store, &scope, "9634", &volume_id, "Chapter C", 2).await;
     let missing = settle_chapter(&store, &scope, "9635", MISSING, "Chapter C", 4).await;
+    assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
+    expire_snapshots(&admin, &scope).await;
+    assert_eq!(
+        open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
+            .await
+            .unwrap(),
+        OpenChapter::SnapshotExpired
+    );
+    // An archived Project has no Canonical Query, so this step is the last.
     archive(&admin, &scope).await;
     let archived = settle_chapter(&store, &scope, "9636", &volume_id, "Chapter C", 4).await;
     assert_eq!(
@@ -359,14 +369,6 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
             (ReceiptResult::Refused, Some("invalid_volume_join")),
             (ReceiptResult::Refused, Some("archived_project")),
         ]
-    );
-    assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-    expire_snapshots(&admin, &scope).await;
-    assert_eq!(
-        open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
-            .await
-            .unwrap(),
-        OpenChapter::SnapshotExpired
     );
 }
 
@@ -508,9 +510,10 @@ async fn author_undo_compensates_create_volume_after_a_later_edit_is_undone() {
             before_volume.volumes
         )
     );
+    // One Compensation for the later edit and one for the Volume.
     assert_eq!(
         compensation_rows(&admin, &scope, "deleteVolume").await,
-        serde_json::json!({ "compensations": 1, "removal_receipts": 0 })
+        serde_json::json!({ "compensations": 2, "removal_receipts": 0 })
     );
 }
 

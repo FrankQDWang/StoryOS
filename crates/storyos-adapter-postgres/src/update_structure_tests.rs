@@ -308,6 +308,8 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
                 .await;
             codes.push(updated.code);
         }
+        assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
+        // An archived Project has no Canonical Query, so this step is the last.
         crate::create_structure_tests::archive(&admin, &scope).await;
         let archived = kind
             .update(&store, &scope, &suffix(8), &a, &renamed, 2, 5)
@@ -323,7 +325,6 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
             ],
             "{kind:?}"
         );
-        assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
     }
 }
 
