@@ -2,17 +2,40 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { test, vi } from "vitest";
-import { execFile } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
-  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter,
-  createEditorSession, digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun,
-  digestCreateAgentRun, digestCreateChapter,
-  digestCreateEditorSession, digestExportProjectArchive, digestReopenRejectedOperations,
-  reopenRejectedOperations, steerAgentRun, digestSteerAgentRun, exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, setCurrentChapter, digestSetCurrentChapter,
+  acceptProposal,
+  applyAuthorEdit,
+  cancelAgentRun,
+  createChapter,
+  createEditorSession,
+  digestAcceptProposal,
+  digestApplyAuthorEdit,
+  digestCancelAgentRun,
+  digestCreateChapter,
+  digestCreateEditorSession,
+  digestExportProjectArchive,
+  digestReopenRejectedOperations,
+  reopenRejectedOperations,
+  steerAgentRun,
+  digestSteerAgentRun,
+  exportProjectArchive,
+  getAgentRun,
+  getChapter,
+  getExportOperation,
+  getManuscriptTree,
+  getEditorSession,
+  getProposal,
+  pauseAgentRun,
+  digestPauseAgentRun,
+  deleteChapter,
+  digestDeleteChapter,
+  rejectProposalOperations,
+  digestRejectProposalOperations,
+  setCurrentChapter,
+  digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest,
@@ -24,7 +47,8 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, re
 import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
-  startRealServer } from "../support/acceptance.ts";
+} from "../support/acceptance.ts";
+import { heldWorker, postRun, problemCode, runRequest, settleRun, startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -143,36 +167,13 @@ async function admitPassages(
   target?: CreateAgentRunRequest["create_agent_run_input"]["working_target"],
   conversation?: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
 ) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: conversation ?? { kind: "new" },
-      author_message: { text },
-      working_target: target ?? { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl, fetchImpl, projectId, "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema, await digestCreateAgentRun(request), key,
-    (antiForgery) => createAgentRun({
-      baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request,
-    }),
-  );
+  const request = runRequest(chapterId, id(key.slice(-4)), text, conversation);
+  if (target !== undefined) request.create_agent_run_input.working_target = target;
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, request);
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await beforeSettle?.();
-  let run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-  if (settle) {
-    for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
-      await settleOnce();
-      run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
-    }
-  }
-  return run;
+  return settle ? settleRun(baseUrl, { projectId, fetchImpl }, created.effect.run_id)
+    : getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
 async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.", secondTitle = "Second target") {
@@ -216,7 +217,7 @@ async function collectionSetup(baseUrl: string, ns: string, secondText = "A lant
 }
 
 test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request produces three exact locations across two Chapters%s", async (script) => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -264,7 +265,7 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
         .find((operation) => operation.operation_id === outcome.operation_id)?.candidate_text, location.candidate_text);
     }
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
     assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
@@ -276,7 +277,7 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
 });
 
 test("ordinary clarification keeps the Conversation and resolves fresh targets with continuation", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -308,7 +309,7 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
 });
 
 test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reservation"])("collection refuses %s before destination dispatch", async (boundary) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     const ns = randomBytes(3).toString("hex");
     const setup = await collectionSetup(started.baseUrl, ns, boundary === "over_budget" ? "a".repeat(32_000) : undefined);
@@ -365,7 +366,7 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
 });
 
 test.each(["current", "stale", "empty", "reversed"])("a %s selection reference declares its covered blocks or blocks the Context Assembly", async (base) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -409,7 +410,7 @@ test.each(["current", "stale", "empty", "reversed"])("a %s selection reference d
 });
 
 test("guidance adds its distinct references to the Run up to eight references", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -440,14 +441,10 @@ test("guidance adds its distinct references to the Run up to eight references", 
       (error: unknown) => {
         const protocol = requireStoryOSProtocolError(error);
         assert.equal(protocol.status, 413);
-        assert.equal(JSON.parse(protocol.responseBody ?? "{}").code, "steering_reference_limit");
+        assert.equal(problemCode(error), "steering_reference_limit");
         return true;
       });
-    let run = await getAgentRun(options);
-    for (let attempt = 0; attempt < 8 && run.status !== "completed"; attempt++) {
-      await settleOnce();
-      run = await getAgentRun(options);
-    }
+    const run = await settleRun(started.baseUrl, setup, queued.run_id, (current) => current.status === "completed");
     assert.equal(run.status, "completed");
     assert.deepEqual(run.context.selection_references, [
       { reference: initial, manuscript_block_ids: first!.current_revision.blocks.map((block) => block.manuscript_block_id),
@@ -462,7 +459,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
 });
 
 test("one request produces explained exact locations and keeps them after restart", async () => {
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -491,7 +488,7 @@ test("one request produces explained exact locations and keeps them after restar
     const after = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     assert.deepEqual(after.chapter, before.chapter);
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
     const reloadedFetch = browserFetch(started.baseUrl, "session-a");
     const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
     assert.deepEqual(reloaded.decision, run.decision);
@@ -506,9 +503,9 @@ test("one request produces explained exact locations and keeps them after restar
 test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
-  let started = await startRealServer();
+  let started = await startServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
-  let child: ReturnType<typeof execFile> | undefined;
+  let child: ReturnType<typeof heldWorker>["child"] | undefined;
   let exited: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
@@ -528,14 +525,9 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
         proposal.proposal.operations[1]!.operation_id, id(`${ns}43`), "revise the candidate consistently.");
       admitted = await getAgentRun({ baseUrl: started.baseUrl, projectId, fetchImpl, runId: fresh.created.effect.run_id });
     }
-    const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
     writeFileSync(hold, "hold");
-    child = execFile(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"], {
-      cwd: repositoryRoot, env: { ...process.env, STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
-        [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold },
-      timeout: 60_000, killSignal: "SIGKILL",
-    });
-    exited = new Promise<void>((resolve) => child!.once("exit", () => resolve()));
+    ({ child, exited } = heldWorker({
+      [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold }));
     let held = admitted;
     await vi.waitUntil(async () => {
       held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
@@ -595,7 +587,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
       }
       const address = new URL(started.baseUrl);
       await stopRealServer(started.server);
-      started = await startRealServer(`${address.hostname}:${address.port}`);
+      started = await startServer({ bind: `${address.hostname}:${address.port}` });
     }
     unlinkSync(hold);
     if (child) { await exited; child = undefined; }
@@ -633,7 +625,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
 });
 
 test.each(["undeclared_location", "stale_location_base"])("scalar requests do not enter the typed script %s", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -657,7 +649,7 @@ test.each(["undeclared_location", "stale_location_base"])("scalar requests do no
 
 test.each(["malformed_locations", "undeclared_location", "stale_location_base", "oversized_explanation", "incomplete", "unselected"])(
   "unusable typed output %s retains evidence without candidates", async (script) => {
-    const started = await startRealServer();
+    const started = await startServer();
     try {
       await drainLeftoverWork();
       const ns = randomBytes(3).toString("hex");
@@ -680,7 +672,7 @@ test.each(["malformed_locations", "undeclared_location", "stale_location_base", 
 
 // ADR 0061: a reply can change a subset of the declared target blocks.
 test.each(["chapter", "collection"])("a %s reply that changes only the last target opens a Proposal for that block only", async (scope) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -710,7 +702,7 @@ test.each(["chapter", "collection"])("a %s reply that changes only the last targ
 });
 
 test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Proposal", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -726,7 +718,7 @@ test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Propos
 });
 
 test.each(["", " SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -812,7 +804,7 @@ function acceptRequest(
 }
 
 test("acceptProposal applies a reversed multi-operation set without using array order as authority", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820111"), "Multi Operation Novel", "f3822");
@@ -868,7 +860,7 @@ test("acceptProposal applies a reversed multi-operation set without using array 
 for (const history of ["retained", "legacy_overwritten", "collection"]) {
 test(`partial Acceptance preserves ${history} evidence and replaces the remaining Operation text`, async () => {
   const ns = randomBytes(3).toString("hex");
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const collection = history === "collection" ? await collectionSetup(started.baseUrl, ns) : undefined;
@@ -921,7 +913,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       }),
     ), /Controlled acknowledgement loss/);
     const address = new URL(started.baseUrl);
-    started = await startRealServer(`${address.hostname}:${address.port}`);
+    started = await startServer({ bind: `${address.hostname}:${address.port}` });
     const fetchImpl = browserFetch(started.baseUrl, "session-a");
     const firstAccepted = await acceptProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -1045,7 +1037,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
     if (history === "legacy_overwritten") {
       await assert.rejects(() => archive(), (error) => {
         const problem = requireStoryOSProtocolError(error);
-        return problem.status === 422 && JSON.parse(problem.responseBody ?? "null").code === "invalid_provenance";
+        return problem.status === 422 && problemCode(error) === "invalid_provenance";
       });
       assert.deepEqual(await retainedHistory(), unchangedHistory);
     } else {
@@ -1126,7 +1118,7 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
 }
 
 test("acceptProposal refuses incomplete atomic Bundle closure then applies the closed set", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820211"), "Bundle Operation Novel", "f3824");
@@ -1180,9 +1172,8 @@ test("acceptProposal refuses incomplete atomic Bundle closure then applies the c
   }
 });
 
-
 test.each(["pending", "rejected"])("AI revises only the secondary candidate with a %s sibling", async (sibling) => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1223,7 +1214,7 @@ test.each(["pending", "rejected"])("AI revises only the secondary candidate with
 });
 
 test("a candidate reference sends its exact range and a stale candidate reference blocks the assembly", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1275,7 +1266,7 @@ test("a candidate reference sends its exact range and a stale candidate referenc
 });
 
 test("each candidate reference keeps the text of its Operation and a Chapter reference does not hide it", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1308,7 +1299,7 @@ test("each candidate reference keeps the text of its Operation and a Chapter ref
 });
 
 test("a candidate reference of a removed Chapter becomes unavailable in Context Inspect", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
@@ -1368,7 +1359,7 @@ async function rejectFirstOperation(baseUrl: string, ns: string) {
 }
 
 test("reopenRejectedOperations classifies one selected Operation of a two-operation Proposal", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");

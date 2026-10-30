@@ -8,21 +8,16 @@ import { test } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import {
-  startStoryOSServer,
-  stopStoryOSServer,
-} from "../support/node-integration.ts";
+import { USER_A, USER_B, startServer } from "../support/http-harness.ts";
+import { stopStoryOSServer } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
 const webRoot = join(repositoryRoot, "target/release-package/web");
-const LOCAL_USER = "018f0000-0000-7001-8000-000000000001";
-const FOREIGN_USER = "018f0000-0000-7001-8000-000000000101";
 
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'";
 
 test("the generated client boots protected Web state over the real Server HTTP boundary", async () => {
-  const { baseUrl, server } = await startStoryOSServer({ repositoryRoot, serverBinary });
+  const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A } });
   try {
     assert.deepEqual(await bootProtectedWebClient({ baseUrl }), {
       kind: "protected-ready", profile: RELEASE_1_PROTOCOL_PROFILE,
@@ -33,9 +28,7 @@ test("the generated client boots protected Web state over the real Server HTTP b
 });
 
 test("printed origin HTML GET issues the configured session cookie", async () => {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot, serverBinary, sessions: { "session-a": LOCAL_USER },
-  });
+  const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A } });
   try {
     const response = await fetch(`${baseUrl}/`);
     assert.equal(response.status, 200);
@@ -64,10 +57,7 @@ test("printed origin HTML GET issues the configured session cookie", async () =>
 });
 
 test("two-User isolation mappings start without issuing a cookie", async () => {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot, serverBinary,
-    sessions: { "session-a": LOCAL_USER, "session-b": FOREIGN_USER },
-  });
+  const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A, "session-b": USER_B } });
   try {
     const response = await fetch(`${baseUrl}/`);
     assert.equal(response.status, 200);
@@ -85,7 +75,7 @@ test("ready production responses use the validated snapshot after its directory 
     const script = readdirSync(join(root, "assets")).find((name) => name.endsWith(".js"));
     assert.ok(script);
     const expected = [readFileSync(join(root, "index.html")), readFileSync(join(root, "assets", script))];
-    const { baseUrl, server } = await startStoryOSServer({ repositoryRoot, serverBinary, webRoot: root });
+    const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A }, webRoot: root });
     try {
       renameSync(root, join(temporary, "moved"));
       const actual = [];
@@ -104,7 +94,7 @@ test("ready production responses use the validated snapshot after its directory 
 });
 
 test("the production process serves exact pages and resources with restrictive HTTP policy", async () => {
-  const { baseUrl, server } = await startStoryOSServer({ repositoryRoot, serverBinary });
+  const { baseUrl, server } = await startServer({ sessions: { "session-a": USER_A } });
   try {
     const script = readdirSync(join(webRoot, "assets")).find((name) => name.endsWith(".js"));
     assert.ok(script);

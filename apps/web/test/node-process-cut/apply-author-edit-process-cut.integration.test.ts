@@ -1,33 +1,27 @@
 // Verification: {"phase":"author-edit-process-cut","after":[]}
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { promisify } from "node:util";
 
 import {
-  applyAuthorEdit, createProjectCommandChallenge, digestApplyAuthorEdit,
-  getApplyAuthorEditOutcome, getEditorSession,
+  applyAuthorEdit,
+  digestApplyAuthorEdit,
+  getApplyAuthorEditOutcome,
+  getEditorSession,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
   GetEditorSessionResponse,
   StoryOSQueryOptions,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { USER_A as USER, issueChallenge, restartServer, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
-  ? "storyos-server.exe" : "storyos-server");
-const USER = "018f0000-0000-7001-8000-000000000001";
 const PROJECT = "018f0000-0000-7001-8000-000000000002";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SESSION_HANDLE = "session-a";
@@ -46,21 +40,6 @@ function trackingFetch(baseUrl: string, actions: string[]): typeof fetch {
     }
     return inner(url, options);
   };
-}
-
-async function startRealServer(bind = "127.0.0.1:0") {
-  return startStoryOSServer({
-    bind,
-    repositoryRoot,
-    serverBinary,
-    sessions: SESSIONS,
-  });
-}
-
-async function restartServer(server: ChildProcess, baseUrl: string) {
-  const url = new URL(baseUrl);
-  await stopRealServer(server);
-  return startRealServer(`${url.hostname}:${url.port}`);
 }
 
 async function projectAuthoritySnapshot() {
@@ -132,16 +111,9 @@ async function issueAuthorEditChallenge(
   request: ApplyAuthorEditRequest,
   idempotencyKey: string,
 ) {
-  return withChallengeBudget(PROJECT, async () => createProjectCommandChallenge({
-    baseUrl, projectId: PROJECT, fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
-      command_schema: request.command_schema,
-      canonical_command_digest: await digestApplyAuthorEdit(request),
-      idempotency_key: idempotencyKey,
-    },
-  }));
+  return issueChallenge(baseUrl, browserFetch(baseUrl, SESSION_HANDLE), PROJECT, "POST",
+    "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+    await digestApplyAuthorEdit(request), idempotencyKey);
 }
 
 function outcomeOptions(
@@ -182,7 +154,8 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
     assert.ok(
       process.env.STORYOS_TEST_POSTGRES_CONTAINER, "run through scripts/verify-project-scope.sh",
     );
-    let { baseUrl, server } = await startRealServer();
+    let started = await startServer({ sessions: SESSIONS });
+    let { baseUrl, server } = started;
     let postgresPaused = false;
     try {
       const session = await openCurrentWriter(baseUrl);
@@ -191,7 +164,8 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
       const challenge = await issueAuthorEditChallenge(baseUrl, request, idempotencyKey);
       const authorityBefore = await projectAuthoritySnapshot();
       let actions: string[] = [];
-      ({ baseUrl, server } = await restartServer(server, baseUrl));
+      started = await restartServer(started, { sessions: SESSIONS });
+      ({ baseUrl, server } = started);
       const unknownAfterRestart = await getApplyAuthorEditOutcome(
         outcomeOptions(baseUrl, idempotencyKey, challenge.nonce, trackingFetch(baseUrl, actions)),
       );
@@ -241,7 +215,8 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
       assert.equal(authorityAfterCommit.activities, authorityBefore.activities + 1);
 
       actions = [];
-      ({ baseUrl, server } = await restartServer(server, baseUrl));
+      started = await restartServer(started, { sessions: SESSIONS });
+      ({ baseUrl, server } = started);
       const committedAfterRestart = await getApplyAuthorEditOutcome(
         outcomeOptions(baseUrl, idempotencyKey, challenge.nonce, trackingFetch(baseUrl, actions)),
       );

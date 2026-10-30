@@ -8,10 +8,11 @@ import { acceptProposal, applyAuthorEdit, createAgentRun, createChapter, createE
   rejectProposalOperations, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, ApplyAuthorEditRequest, AuthorEditPrimitive, CreateAgentRunRequest,
-  CreateEditorSessionRequest, RejectProposalOperationsRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+  CreateEditorSessionRequest, GetAgentRunResponse, RejectProposalOperationsRequest, SelectionReference,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
-  sessionFetch as browserFetch, startStoryOSServer, withChallengeBudget } from "./node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres, runStoryOSWorkerStderr,
+  sessionFetch as browserFetch, withChallengeBudget } from "./node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -28,12 +29,16 @@ export function id(suffix: string): string {
   return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
 }
 
-function runRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
+type Conversation = CreateAgentRunRequest["create_agent_run_input"]["conversation"];
+
+/** An AgentRun on the Current Chapter with this author message, in a new conversation by default. */
+export function runRequest(chapterId: string, correlationId: string, text = "Revise this passage: keep the voice.",
+  conversation: Conversation = { kind: "new" }): CreateAgentRunRequest {
   return {
     command_schema: "storyos.command.create-agent-run.request.v2",
     create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text: "Revise this passage: keep the voice." },
+      conversation,
+      author_message: { text },
       working_target: { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" },
       cause: { kind: "author_request" },
@@ -43,22 +48,16 @@ function runRequest(chapterId: string, correlationId: string): CreateAgentRunReq
   };
 }
 
-export async function startRealServer(bind = "127.0.0.1:0") {
-  return startStoryOSServer({
-    bind,
-    repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-c": USER_A, "session-b": "018f0000-0000-7001-8000-00000000000b" },
-  });
+/** Runs one packaged Worker process with these arguments to its exit, and returns its stderr. */
+export function runWorker(args: readonly string[], options: {
+  extraEnv?: Readonly<Record<string, string>>;
+  databaseUrl?: string;
+} = {}): Promise<string> {
+  return runStoryOSWorkerStderr({ ...options, repositoryRoot, workerBinary: bin("storyos-worker"), args });
 }
 
 export async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-    ...(extraEnv === undefined ? {} : { extraEnv }),
-  });
+  await runWorker(["--once"], extraEnv === undefined ? {} : { extraEnv });
 }
 
 /** Settles the AgentRun and export work that earlier files left. The Worker claims export work first. */
@@ -76,6 +75,25 @@ export async function drainLeftoverWork() {
   throw new Error("leftover AgentRun or export work did not drain");
 }
 
+/** Issues one Command Challenge for this command inside the Challenge rate budget. */
+export function issueChallenge(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  method: string,
+  route: string,
+  schema: string,
+  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
+  key: string,
+) {
+  return withChallengeBudget(projectId, () => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
+  }));
+}
+
 export async function challenged<T>(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -87,13 +105,7 @@ export async function challenged<T>(
   key: string,
   send: (antiForgery: string) => Promise<T>,
 ): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
+  return send((await issueChallenge(baseUrl, fetchImpl, projectId, method, route, schema, digest, key)).nonce);
 }
 
 export async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {
@@ -142,19 +154,86 @@ export async function prepare(baseUrl: string, createKey: string, title: string,
   return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
 }
 
+/** A new streamed AgentRun on the Current Chapter. */
+export function streamRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
+  return runRequest(chapterId, correlationId, "Stream this passage: keep the voice.");
+}
+
+/** Sends one createAgentRun command through its Command Challenge. */
+export async function postRun(baseUrl: string, fetchImpl: typeof fetch, projectId: string, key: string,
+  request: CreateAgentRunRequest) {
+  return challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
+    request.command_schema, await digestCreateAgentRun(request), key,
+    (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
+}
+
+/** Admits one AgentRun with this author message on the Current Chapter of a prepared Project. */
+export async function admitRun(baseUrl: string,
+  prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch; readonly chapterId: string }, key: string,
+  text: string, conversation: Conversation = { kind: "new" }) {
+  const created = await postRun(baseUrl, prepared.fetchImpl, prepared.projectId, key,
+    runRequest(prepared.chapterId, id(key.slice(-4)), text, conversation));
+  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+  return created;
+}
+
+/** Reads one AgentRun of a prepared Project, optionally at one Model Attempt. */
+export async function inspectRun(baseUrl: string, prepared: { projectId: string; fetchImpl: typeof fetch },
+  runId: string, modelAttemptId?: string): Promise<GetAgentRunResponse> {
+  return getAgentRun({ baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
+    ...(modelAttemptId === undefined ? {} : { modelAttemptId }) });
+}
+
+const SETTLED_RUN = ["completed", "refused", "cancelled", "paused"];
+
+/** Runs Worker passes, at most eight, until `done` holds for the AgentRun. By default `done` is a settled status. */
+export async function settleRun(baseUrl: string, prepared: { projectId: string; fetchImpl: typeof fetch },
+  runId: string, done = (run: GetAgentRunResponse) => SETTLED_RUN.includes(run.status)): Promise<GetAgentRunResponse> {
+  let run = await inspectRun(baseUrl, prepared, runId);
+  for (let pass = 0; pass < 8 && !done(run); pass += 1) {
+    await settleOnce();
+    run = await inspectRun(baseUrl, prepared, runId);
+  }
+  return run;
+}
+
+/** The content of the selected context item of this source class. */
+export function selected(queried: GetAgentRunResponse, sourceClass: string) {
+  return queried.context.selected.find((item) => item.source_class === sourceClass)?.content;
+}
+
+/** The Model Attempt of the AgentRun. It throws when the AgentRun has none. */
+export function attempt(queried: GetAgentRunResponse) {
+  if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
+  return queried.model_attempt;
+}
+
+/** The continuation binding that the advisory Decision produced. */
+export function produced(queried: GetAgentRunResponse) {
+  if (queried.decision.kind !== "advisory" || queried.decision.continuation.kind !== "present") {
+    throw new Error("expected produced continuation");
+  }
+  return queried.decision.continuation.continuation_binding_id;
+}
+
+/** Replaces the bytes of the Chapter Head payload with this SQL string expression. */
+export async function rewriteChapter(projectId: string, chapterId: string, body: string) {
+  await queryPostgres(`
+    UPDATE storyos.authoritative_payloads AS payload
+       SET canonical_bytes = convert_to(${body}, 'UTF8')
+      FROM storyos.authoritative_heads AS head
+      JOIN storyos.authoritative_revisions AS revision
+        ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id)
+         = (head.owner_user_id, head.project_id, head.manuscript_object_id, head.current_revision_id)
+     WHERE (payload.owner_user_id, payload.project_id, payload.payload_id)
+         = (revision.owner_user_id, revision.project_id, revision.payload_id)
+       AND head.project_id = '${projectId}'::uuid
+       AND head.manuscript_object_id = '${chapterId}'::uuid;
+  `);
+}
+
 export async function admitProse(baseUrl: string, fetchImpl: typeof fetch, projectId: string, chapterId: string, key: string) {
-  const request = runRequest(chapterId, id(key.slice(-4)));
-  const created = await challenged(
-    baseUrl,
-    fetchImpl,
-    projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }),
-  );
+  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(chapterId, id(key.slice(-4))));
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await settleOnce();
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
@@ -340,7 +419,8 @@ export async function seedAcceptanceCondition(baseUrl: string, fetchImpl: typeof
   return { conflictRef, receiptId: invalid.receipt.receipt_id };
 }
 
-export type Started = Awaited<ReturnType<typeof startRealServer>>;
+/** A started Server. */
+export type Started = { readonly baseUrl: string };
 
 /** A valid Block Proposal Revision on the Chapter Head H0. */
 export async function openedBlockProposal(started: Started, ns: string) {
@@ -409,6 +489,32 @@ export async function reject(started: Started, opened: Awaited<ReturnType<typeof
 }
 
 type Proposal = Awaited<ReturnType<typeof getProposal>>["proposal"];
+
+/** Reads one Proposal of a seeded Project. */
+export async function readProposal(started: Started, seeded: { projectId: string; fetchImpl: typeof fetch },
+  proposalId: string) {
+  return (await getProposal({ baseUrl: started.baseUrl, projectId: seeded.projectId, proposalId,
+    fetchImpl: seeded.fetchImpl })).proposal;
+}
+
+/** A selection of the first four characters of the candidate text of the Proposal. */
+export function candidateTextReference(proposal: Proposal): SelectionReference {
+  return { kind: "proposal_candidate_text", chapter_id: proposal.chapter_id, proposal_id: proposal.proposal_id,
+    operation_id: proposal.operation_id, revision_id: proposal.revision_id,
+    coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 0, end_offset: 4 };
+}
+
+/** The Revision count and the bundle policy of the Proposal. */
+export async function revisions(proposalId: string) {
+  return queryPostgres(`SELECT count(*)::text || ' ' || (SELECT bundle_policy FROM storyos.proposals
+    WHERE proposal_id = '${proposalId}'::uuid) FROM storyos.proposal_revisions WHERE proposal_id = '${proposalId}'::uuid;`);
+}
+
+/** The Block, candidate text, resolution, and reservation of each Proposal Operation. */
+export function operations(proposal: Proposal) {
+  return proposal.operations.map(({ manuscript_block_id, candidate_text, resolution, reservation_state }) =>
+    ({ manuscript_block_id, candidate_text, resolution, reservation_state }));
+}
 
 /** The Proposal ownership that one author edit observes: none, an acknowledged head, or an explicit target. */
 export type EditOwnership = { kind: "authoritative" } | { kind: "acknowledged" | "targeted"; proposal: Proposal };

@@ -3,55 +3,32 @@ import assert from "node:assert/strict";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
   createAgentRun,
-  createChapter,
-  createProject,
-  createProjectChallenge,
-  createProjectCommandChallenge,
-  createVolume,
   digestCreateAgentRun,
-  digestCreateChapter,
-  digestCreateVolume,
   digestUpdateProjectAssistance,
-  getAgentRun,
   getProject,
   getProjectAssistance,
   updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest,
-  CreateProjectChallengeRequest,
   GetAgentRunResponse,
   UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
-  runStoryOSWorker,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
-import { freshNamespace } from "../support/http-harness.ts";
+import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
+  inspectRun, issueChallenge, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
 const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const BINDING = {
-  client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-  security_policy_revision: "storyos.web-security-policy.release-1.v1",
-};
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
-const PROSE = "Guard the narrator voice in this passage.";
 const CLARIFICATION = "Which wording should stay in this sentence?";
 const REFUSALS = [
   ["Please invoke a tool for this passage.", "tool"],
@@ -64,161 +41,6 @@ const REFUSALS = [
   ["Please run an eval on this.", "eval"],
 ] as const;
 
-function id(suffix: string): string {
-  return `018f0000-0000-7001-8000-${suffix.padStart(12, "0")}`;
-}
-
-function runRequest(
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
-  chapterId: string,
-  correlationId: string,
-  text: string,
-): CreateAgentRunRequest {
-  return {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation,
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
-
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-b": "018f0000-0000-7001-8000-000000000101" },
-  });
-}
-
-async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
-  await runStoryOSWorker({
-    repositoryRoot,
-    workerBinary: bin("storyos-worker"),
-    args: ["--once"],
-    ...(extraEnv === undefined ? {} : { extraEnv }),
-  });
-}
-
-/** Settles the AgentRun and export work that earlier files left. The Worker claims export work first. */
-async function drainLeftoverWork() {
-  for (let attempt = 0; attempt < 16; attempt += 1) {
-    const leftover = await queryPostgres(`
-      SELECT ((SELECT count(*) FROM storyos.agent_runs WHERE status IN ('queued', 'claimed'))
-       + (SELECT count(*) FROM storyos.project_export_operations WHERE settled_result IS NULL)
-       + (SELECT count(*) FROM storyos.human_readable_manuscript_export_operations WHERE settled_result IS NULL))::text;
-    `);
-    if (leftover === "0") return;
-    await settleOnce();
-  }
-  throw new Error("leftover AgentRun or export work did not drain");
-}
-
-async function challenged<T>(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  method: string,
-  route: string,
-  schema: string,
-  digest: Awaited<ReturnType<typeof digestCreateAgentRun>>,
-  key: string,
-  send: (antiForgery: string) => Promise<T>,
-): Promise<T> {
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: { method, route_template: route, command_schema: schema, canonical_command_digest: digest, idempotency_key: key },
-  }));
-  return send(challenge.nonce);
-}
-
-async function prepare(baseUrl: string, createKey: string, title: string, ns: string) {
-  const fetchImpl = browserFetch(baseUrl, "session-a");
-  const createRequest = {
-    command_schema: "storyos.command.create-project.request.v1" as const,
-    create_project_input: { title, ...BINDING, correlation_id: id(`${ns}0`) },
-    idempotency_key: createKey,
-  };
-  const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-  await createProject({
-    baseUrl,
-    fetchImpl,
-    idempotencyKey: createKey,
-    antiForgery: created.nonce,
-    request: {
-      command_schema: createRequest.command_schema,
-      prospective_project_id: created.prospective_project_id,
-      create_project_input: createRequest.create_project_input,
-    },
-  });
-  const projectId = created.prospective_project_id;
-  const assistance = {
-    command_schema: "storyos.command.update-project-assistance.request.v1" as const,
-    update_project_assistance_input: {
-      availability: "available" as const,
-      expected_assistance_revision: "0",
-      ...BINDING,
-      correlation_id: id(`${ns}1`),
-    },
-  };
-  await challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance", assistance.command_schema, await digestUpdateProjectAssistance(assistance), id(`${ns}2`), (antiForgery) => updateProjectAssistance({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}2`), antiForgery, request: assistance }));
-  const volume = {
-    command_schema: "storyos.command.create-volume.request.v1" as const,
-    create_volume_input: { title: "Volume A", expected_tree_revision: "1", ...BINDING, correlation_id: id(`${ns}3`) },
-  };
-  const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
-  if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
-  const volumeId = createdVolume.effect.volume_id;
-  const chapter = {
-    command_schema: "storyos.command.create-chapter.request.v1" as const,
-    create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
-  };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
-  if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
-  return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
-}
-
-async function postRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  key: string,
-  request: CreateAgentRunRequest,
-) {
-  return challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema, await digestCreateAgentRun(request), key, (antiForgery) => createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
-}
-
-async function inspectRun(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  runId: string,
-  modelAttemptId?: string,
-): Promise<GetAgentRunResponse> {
-  return getAgentRun({ baseUrl, projectId, runId, fetchImpl, ...(modelAttemptId === undefined ? {} : { modelAttemptId }) });
-}
-
-async function admit(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  chapterId: string,
-  key: string,
-  text: string,
-  conversation: CreateAgentRunRequest["create_agent_run_input"]["conversation"] = { kind: "new" },
-) {
-  const created = await postRun(baseUrl, fetchImpl, projectId, key, runRequest(conversation, chapterId, id(key.slice(-4)), text));
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  return created;
-}
-
 function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
   if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
   const attemptId = queried.model_attempt.model_attempt_id;
@@ -228,40 +50,6 @@ function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
     { kind: "provider_report", attempt_id: attemptId, availability: "current", report: "host_fake_no_provider_usage" },
     { kind: "provider_opaque", attempt_id: attemptId, availability: "unknown", unknown_facts: ["provider_internal_content"] },
   ]);
-}
-
-async function waitFor(
-  probe: () => Promise<GetAgentRunResponse>,
-  match: (value: GetAgentRunResponse) => boolean,
-): Promise<GetAgentRunResponse> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const current = await probe();
-    if (match(current)) return current;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error("hold inspect timed out");
-}
-
-function problemCode(error: unknown): string | undefined {
-  const protocol = requireStoryOSProtocolError(error);
-  if (protocol.responseBody === undefined) return undefined;
-  try {
-    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
-  } catch {
-    return undefined;
-  }
-}
-
-function createChallengeRequest(idempotencyKey: string, title: string): CreateProjectChallengeRequest {
-  return {
-    command_schema: "storyos.command.create-project.request.v1",
-    create_project_input: {
-      title,
-      ...BINDING,
-      correlation_id: "018f0000-0000-7001-8000-000000000a10",
-    },
-    idempotency_key: idempotencyKey,
-  };
 }
 
 function assistanceRequest(
@@ -280,24 +68,6 @@ function assistanceRequest(
   };
 }
 
-async function createEmpty(baseUrl: string, session: string, idempotencyKey: string, title: string) {
-  const fetchImpl = browserFetch(baseUrl, session);
-  const request = createChallengeRequest(idempotencyKey, title);
-  const challenge = await createProjectChallenge({ baseUrl, request, fetchImpl });
-  const created = await createProject({
-    baseUrl,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request: {
-      command_schema: request.command_schema,
-      prospective_project_id: challenge.prospective_project_id,
-      create_project_input: request.create_project_input,
-    },
-  });
-  return { created, fetchImpl, projectId: challenge.prospective_project_id };
-}
-
 async function prepareAssistance(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -305,31 +75,14 @@ async function prepareAssistance(
   idempotencyKey: string,
   request: UpdateProjectAssistanceRequest,
 ) {
-  const digest = await digestUpdateProjectAssistance(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "PUT",
-      route_template: "/api/v1/projects/{project_id}/assistance",
-      command_schema: "storyos.command.update-project-assistance.request.v1",
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
-  const updated = await updateProjectAssistance({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, updated };
+  let nonce = "";
+  const updated = await challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/assistance",
+    request.command_schema, await digestUpdateProjectAssistance(request), idempotencyKey, (antiForgery) =>
+      updateProjectAssistance({ baseUrl, projectId, fetchImpl, idempotencyKey, antiForgery: (nonce = antiForgery), request }));
+  return { nonce, updated };
 }
 
-/** Sends one createAgentRun command and returns its Command Challenge with the response. */
+/** Sends one createAgentRun command and returns its Command Challenge nonce with the response. */
 async function postRunWithChallenge(
   baseUrl: string,
   fetchImpl: typeof fetch,
@@ -337,38 +90,21 @@ async function postRunWithChallenge(
   key: string,
   request: CreateAgentRunRequest,
 ) {
-  const digest = await digestCreateAgentRun(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs",
-      command_schema: "storyos.command.create-agent-run.request.v2",
-      canonical_command_digest: digest,
-      idempotency_key: key,
-    },
-  }));
-  const admitted = await createAgentRun({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey: key,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, admitted };
+  let nonce = "";
+  const admitted = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs",
+    request.command_schema, await digestCreateAgentRun(request), key, (antiForgery) =>
+      createAgentRun({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery: (nonce = antiForgery), request }));
+  return { nonce, admitted };
 }
 
 test("Worker completes one Host-fake advisory Decision", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e111"), "Fake Decision Novel", "e2");
-    const created = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e131"), "Help with this passage.");
+    const created = await admitRun(started.baseUrl, prepared, id("e131"), "Help with this passage.");
     await settleOnce();
-    const queried = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+    const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(queried.status, "completed");
     assert.equal(queried.context.destination_io.kind, "host_fake");
     assert.equal(queried.context.destination_context_manifest.kind, "present");
@@ -390,31 +126,29 @@ test("Worker completes one Host-fake advisory Decision", async () => {
     assert.equal(queried.items[0]?.state, "complete");
     assert.equal(queried.items[0]?.phase, "complete");
     assert.equal(queried.usage.kind, "unknown");
-    const matched = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, queried.model_attempt.model_attempt_id);
+    const matched = await inspectRun(started.baseUrl, prepared, created.effect.run_id, queried.model_attempt.model_attempt_id);
     assert.equal(matched.status, "completed");
-    const second = await admit(
+    const second = await admitRun(
       started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      prepared.chapterId,
+      prepared,
       id("e133"),
       "Help with this passage.",
       { kind: "existing", conversation_id: created.conversation_id },
     );
     await settleOnce();
-    const secondInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, second.effect.run_id);
+    const secondInspect = await inspectRun(started.baseUrl, prepared, second.effect.run_id);
     if (secondInspect.model_attempt.kind !== "present") throw new Error("expected second attempt");
     const foreignAttemptId = secondInspect.model_attempt.model_attempt_id;
     await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, foreignAttemptId),
+      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, foreignAttemptId),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
     await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, id("dead")),
+      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, id("dead")),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
     await assert.rejects(
-      () => inspectRun(started.baseUrl, browserFetch(started.baseUrl, "session-b"), prepared.projectId, created.effect.run_id),
+      () => inspectRun(started.baseUrl, { projectId: prepared.projectId, fetchImpl: browserFetch(started.baseUrl, "session-b") }, created.effect.run_id),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
@@ -428,24 +162,22 @@ test("Worker completes one Host-fake advisory Decision", async () => {
 });
 
 test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval without dispatch", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e141"), "Refuse Novel", "e5");
     let conversationId: string | undefined;
     for (const [index, [text, capability]] of REFUSALS.entries()) {
-      const created = await admit(
+      const created = await admitRun(
         started.baseUrl,
-        prepared.fetchImpl,
-        prepared.projectId,
-        prepared.chapterId,
+        prepared,
         id(`e5${index}`),
         text,
         conversationId === undefined ? { kind: "new" } : { kind: "existing", conversation_id: conversationId },
       );
       conversationId = created.conversation_id;
       await settleOnce();
-      const queried = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id);
+      const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       assert.equal(queried.status, "refused");
       assert.deepEqual(queried.decision, { kind: "execution_refused", capability });
       assert.equal(queried.model_attempt.kind, "absent");
@@ -465,9 +197,9 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
          AND head.project_id = '${blocked.projectId}'::uuid
          AND head.manuscript_object_id = '${blocked.chapterId}'::uuid;
     `);
-    const createdBlocked = await admit(started.baseUrl, blocked.fetchImpl, blocked.projectId, blocked.chapterId, id("e181"), "Help with this passage.");
+    const createdBlocked = await admitRun(started.baseUrl, blocked, id("e181"), "Help with this passage.");
     await settleOnce();
-    const refused = await inspectRun(started.baseUrl, blocked.fetchImpl, blocked.projectId, createdBlocked.effect.run_id);
+    const refused = await inspectRun(started.baseUrl, blocked, createdBlocked.effect.run_id);
     assert.equal(refused.status, "refused");
     assert.deepEqual(refused.decision, { kind: "execution_refused", capability: "blocked_context" });
     assert.equal(refused.model_attempt.kind, "absent");
@@ -478,16 +210,16 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
 });
 
 test("Worker distinguishes prose-change, clarification, and CFP holds", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   const dispatchHold = join(tmpdir(), `storyos-fake-dispatch-${process.pid}`);
   const streamHold = join(tmpdir(), `storyos-fake-stream-${process.pid}`);
   const decisionHold = join(tmpdir(), `storyos-fake-decision-${process.pid}`);
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e191"), "Hold Novel", "ea");
-    const prose = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb11"), "Revise this passage: keep the voice.");
+    const prose = await admitRun(started.baseUrl, prepared, id("eb11"), "Revise this passage: keep the voice.");
     await settleOnce();
-    const proseInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, prose.effect.run_id);
+    const proseInspect = await inspectRun(started.baseUrl, prepared, prose.effect.run_id);
     assert.equal(proseInspect.status, "completed");
     assert.equal(proseInspect.decision.kind, "prose_change");
     if (proseInspect.decision.kind !== "prose_change") throw new Error("expected prose");
@@ -497,9 +229,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(proseInspect.decision.authoritative, false);
     assert.equal(proseInspect.decision.continuation.kind, "present");
 
-    const clarification = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb13"), "Which wording should I keep? The first clause.");
+    const clarification = await admitRun(started.baseUrl, prepared, id("eb13"), "Which wording should I keep? The first clause.");
     await settleOnce();
-    const clarified = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, clarification.effect.run_id);
+    const clarified = await inspectRun(started.baseUrl, prepared, clarification.effect.run_id);
     assert.equal(clarified.status, "completed");
     assert.equal(clarified.decision.kind, "clarification");
     if (clarified.decision.kind !== "clarification") throw new Error("expected clarification");
@@ -509,10 +241,10 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(clarified.decision.continuation.kind, "absent");
 
     writeFileSync(dispatchHold, "hold");
-    const dispatchRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb15"), "Help with this passage.");
+    const dispatchRun = await admitRun(started.baseUrl, prepared, id("eb15"), "Help with this passage.");
     const dispatchWorker = settleOnce({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     const beforeDecision = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, dispatchRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
     assert.equal(beforeDecision.decision.kind, "absent");
@@ -521,19 +253,19 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     unlinkSync(dispatchHold);
     await dispatchWorker;
     writeFileSync(streamHold, "hold");
-    const streamRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb16"), "Help with this passage.");
+    const streamRun = await admitRun(started.baseUrl, prepared, id("eb16"), "Help with this passage.");
     const streamWorker = settleOnce({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: streamHold });
     const beforeDecisionCut = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, streamRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, streamRun.effect.run_id),
       (current) => current.items.length > 0 && current.decision.kind === "absent",
     );
     assert.equal(beforeDecisionCut.status, "claimed");
     unlinkSync(streamHold);
     await streamWorker;
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, streamRun.effect.run_id)).status, "completed");
-    const unselected = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb18"), "SCRIPT:unselected");
+    assert.equal((await inspectRun(started.baseUrl, prepared, streamRun.effect.run_id)).status, "completed");
+    const unselected = await admitRun(started.baseUrl, prepared, id("eb18"), "SCRIPT:unselected");
     await settleOnce();
-    const unselectedInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, unselected.effect.run_id);
+    const unselectedInspect = await inspectRun(started.baseUrl, prepared, unselected.effect.run_id);
     assert.equal(unselectedInspect.status, "completed");
     assert.equal(unselectedInspect.decision.kind, "absent");
     assert.equal(unselectedInspect.items[0]?.state, "complete");
@@ -551,17 +283,15 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     ] as const;
     let scriptIndex = 0;
     for (const [text, state, role] of scriptCases) {
-      const scripted = await admit(
+      const scripted = await admitRun(
         started.baseUrl,
-        prepared.fetchImpl,
-        prepared.projectId,
-        prepared.chapterId,
+        prepared,
         id(`ec1${scriptIndex}`),
         text,
       );
       scriptIndex += 1;
       await settleOnce();
-      const inspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, scripted.effect.run_id);
+      const inspect = await inspectRun(started.baseUrl, prepared, scripted.effect.run_id);
       assert.equal(inspect.status, "completed");
       assert.equal(inspect.decision.kind, "absent");
       assert.equal(inspect.items[0]?.state, state);
@@ -573,16 +303,16 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     }
 
     writeFileSync(decisionHold, "hold");
-    const decisionRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb17"), "Help with this passage.");
+    const decisionRun = await admitRun(started.baseUrl, prepared, id("eb17"), "Help with this passage.");
     const decisionWorker = settleOnce({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     const beforeContinuation = await waitFor(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, decisionRun.effect.run_id),
+      () => inspectRun(started.baseUrl, prepared, decisionRun.effect.run_id),
       (current) => current.decision.kind === "advisory" && current.decision.continuation.kind === "absent",
     );
     assert.equal(beforeContinuation.status, "claimed");
     unlinkSync(decisionHold);
     await decisionWorker;
-    const afterDecision = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, decisionRun.effect.run_id);
+    const afterDecision = await inspectRun(started.baseUrl, prepared, decisionRun.effect.run_id);
     assert.equal(afterDecision.status, "completed");
     assert.equal(afterDecision.decision.kind, "advisory");
     if (afterDecision.decision.kind !== "advisory") throw new Error("expected advisory");
@@ -597,9 +327,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
 
 test("project assistance prepares the host fake binding without a run", async () => {
   const ns = freshNamespace();
-  let started = await startRealServer();
+  let started = await startServer();
   try {
-    const first = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a21`), "Assistance Novel");
+    const first = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a21`), "Assistance Novel", id("a10"));
     const responses: Buffer[] = [];
     const captureFetch: typeof fetch = async (input, init) => {
       const response = await first.fetchImpl(input, init);
@@ -613,18 +343,8 @@ test("project assistance prepares the host fake binding without a run", async ()
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = id(`${ns}0a20`);
     const absentDigest = await digestUpdateProjectAssistance(absentRequest);
-    const absentChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl: started.baseUrl,
-      projectId: first.projectId,
-      fetchImpl: captureFetch,
-      request: {
-        method: "PUT",
-        route_template: "/api/v1/projects/{project_id}/assistance",
-        command_schema: absentRequest.command_schema,
-        canonical_command_digest: absentDigest,
-        idempotency_key: absentKey,
-      },
-    }));
+    const absentChallenge = await issueChallenge(started.baseUrl, captureFetch, first.projectId, "PUT",
+      "/api/v1/projects/{project_id}/assistance", absentRequest.command_schema, absentDigest, absentKey);
     const retryAbsent = () => updateProjectAssistance({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
@@ -664,7 +384,7 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
       idempotencyKey: id(`${ns}0a22`),
-      antiForgery: initialized.challenge.nonce,
+      antiForgery: initialized.nonce,
       request: assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23"),
     });
     assert.deepEqual(replay, initialized.updated);
@@ -733,17 +453,17 @@ test("project assistance prepares the host fake binding without a run", async ()
       )::text;
     `);
     const beforeRetries = await counts();
-    for (const [original, originalBytes, challenge, key, request] of [
-      [initialized.updated, initializedBytes, initialized.challenge, id(`${ns}0a22`), assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23")],
-      [unchanged.updated, unchangedBytes, unchanged.challenge, id(`${ns}0a24`), assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a25")],
-      [stale.updated, staleBytes, stale.challenge, id(`${ns}0a26`), assistanceRequest("unavailable", "0", "018f0000-0000-7001-8000-000000000a27")],
+    for (const [original, originalBytes, nonce, key, request] of [
+      [initialized.updated, initializedBytes, initialized.nonce, id(`${ns}0a22`), assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23")],
+      [unchanged.updated, unchangedBytes, unchanged.nonce, id(`${ns}0a24`), assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a25")],
+      [stale.updated, staleBytes, stale.nonce, id(`${ns}0a26`), assistanceRequest("unavailable", "0", "018f0000-0000-7001-8000-000000000a27")],
     ] as const) {
       const replay = await updateProjectAssistance({
         baseUrl: started.baseUrl,
         projectId: first.projectId,
         fetchImpl: captureFetch,
         idempotencyKey: key,
-        antiForgery: challenge.nonce,
+        antiForgery: nonce,
         request,
       });
       assert.deepEqual(replay, original);
@@ -751,7 +471,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     }
     assert.equal(await counts(), beforeRetries);
 
-    const bound = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a16`), "Bound Novel");
+    const bound = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a16`), "Bound Novel", id("a10"));
     const boundInit = await prepareAssistance(
       started.baseUrl,
       bound.fetchImpl,
@@ -762,12 +482,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     assert.equal(boundInit.updated.assistance.availability, "available");
 
     await stopRealServer(started.server);
-    started = await startStoryOSServer({
-      repositoryRoot,
-      serverBinary: bin("storyos-server"),
-      sessions: { "session-a": USER_A, "session-b": USER_B },
-      modelDestination: null,
-    });
+    started = await startServer({ modelDestination: null });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const restartedResponse = await updateProjectAssistance({
       baseUrl: started.baseUrl,
@@ -778,7 +493,7 @@ test("project assistance prepares the host fake binding without a run", async ()
         return response;
       },
       idempotencyKey: id(`${ns}0a22`),
-      antiForgery: initialized.challenge.nonce,
+      antiForgery: initialized.nonce,
       request: assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23"),
     });
     assert.deepEqual(restartedResponse, initialized.updated);
@@ -794,7 +509,7 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: bound.projectId,
       fetchImpl: restartedFetch,
     })).assistance, { ...boundInit.updated.assistance, availability: "unavailable" });
-    const unconfigured = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a19`), "Unconfigured Novel");
+    const unconfigured = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a19`), "Unconfigured Novel", id("a10"));
     await assert.rejects(
       () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: unconfigured.projectId, fetchImpl: unconfigured.fetchImpl }),
       (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
@@ -811,7 +526,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     );
 
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startServer();
 
     const stillOpen = await getProject({
       baseUrl: started.baseUrl,
@@ -820,7 +535,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     });
     assert.equal(stillOpen.project.title, "Assistance Novel");
 
-    const other = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a2a`), "Second Novel");
+    const other = await createEmpty(started.baseUrl, "session-a", id(`${ns}0a2a`), "Second Novel", id("a10"));
     const otherInit = await prepareAssistance(
       started.baseUrl,
       other.fetchImpl,
@@ -868,27 +583,22 @@ test("project assistance prepares the host fake binding without a run", async ()
 
 test("createAgentRun exact retry replays in a deployment that offers no model destination", async () => {
   const ns = freshNamespace();
-  let started = await startRealServer();
+  let started = await startServer();
   try {
     const first = await prepare(started.baseUrl, id(`${ns}e1a0`), "No Destination Novel", `${ns}e1b`);
     const { chapterId } = first;
-    const request = runRequest({ kind: "new" }, chapterId, id(`${ns}e1a2`), "Help with this passage.");
+    const request = runRequest(chapterId, id(`${ns}e1a2`), "Help with this passage.");
     const created = await postRunWithChallenge(started.baseUrl, first.fetchImpl, first.projectId, id(`${ns}e1a3`), request);
 
     await stopRealServer(started.server);
-    started = await startStoryOSServer({
-      repositoryRoot,
-      serverBinary: bin("storyos-server"),
-      sessions: { "session-a": USER_A, "session-b": USER_B },
-      modelDestination: null,
-    });
+    started = await startServer({ modelDestination: null });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const replay = await createAgentRun({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: restartedFetch,
       idempotencyKey: id(`${ns}e1a3`),
-      antiForgery: created.challenge.nonce,
+      antiForgery: created.nonce,
       request,
     });
     assert.deepEqual(replay, created.admitted);
@@ -898,7 +608,7 @@ test("createAgentRun exact retry replays in a deployment that offers no model de
         restartedFetch,
         first.projectId,
         id(`${ns}e1a4`),
-        runRequest({ kind: "new" }, chapterId, id(`${ns}e1a5`), "Help with this passage."),
+        runRequest(chapterId, id(`${ns}e1a5`), "Help with this passage."),
       ),
       (error) => requireStoryOSProtocolError(error).status === 422
         && problemCode(error) === "assistance_unavailable",

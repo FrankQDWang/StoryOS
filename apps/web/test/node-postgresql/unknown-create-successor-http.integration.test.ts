@@ -1,21 +1,15 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { execFile, type ChildProcess } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createAgentRun,
   digestCancelAgentRun,
-  digestCreateAgentRun,
   getAgentRun,
   type CancelAgentRunRequest,
-  type CreateAgentRunRequest,
   type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
@@ -24,122 +18,10 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import {
-  BINDING,
-  USER_A,
-  challenged,
-  drainLeftoverWork,
-  id,
-  prepare,
-  settleOnce,
-  startRealServer,
-} from "../support/acceptance.ts";
+import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, heldWorker, id, inspectRun, prepare, settleHeld,
+  settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-const execFileAsync = promisify(execFile);
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const workerBin = join(repositoryRoot, "target/release-package/storyos-worker");
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
-
-async function admit(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  key: string,
-  text: string,
-) {
-  const request: CreateAgentRunRequest = {
-    command_schema: "storyos.command.create-agent-run.request.v2",
-    create_agent_run_input: {
-      conversation: { kind: "new" },
-      author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
-      instruction: { kind: "absent" },
-      cause: { kind: "author_request" },
-      ...BINDING,
-      correlation_id: id(key.slice(-4)),
-    },
-  };
-  const created = await challenged(
-    baseUrl,
-    prepared.fetchImpl,
-    prepared.projectId,
-    "POST",
-    "/api/v1/projects/{project_id}/agent-runs",
-    request.command_schema,
-    await digestCreateAgentRun(request),
-    key,
-    (antiForgery) => createAgentRun({
-      baseUrl,
-      projectId: prepared.projectId,
-      fetchImpl: prepared.fetchImpl,
-      idempotencyKey: key,
-      antiForgery,
-      request,
-    }),
-  );
-  if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  return created;
-}
-
-function workerEnv(extraEnv: Readonly<Record<string, string>>) {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
-  }
-  return env;
-}
-
-function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
-  const settled = execFileAsync(workerBin, ["--once"], {
-    cwd: repositoryRoot,
-    env: workerEnv(extraEnv),
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  }).then(() => undefined);
-  void settled.catch(() => undefined);
-  return settled;
-}
-
-function heldWorker(extraEnv: Readonly<Record<string, string>>) {
-  const child: ChildProcess = execFile(workerBin, ["--once"], {
-    cwd: repositoryRoot,
-    env: workerEnv(extraEnv),
-    timeout: 60_000,
-    killSignal: "SIGKILL",
-  });
-  const exited = new Promise<void>((resolve) => {
-    child.once("exit", () => resolve());
-    child.once("error", () => resolve());
-  });
-  return { child, exited };
-}
-
-async function inspect(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  runId: string,
-) {
-  return getAgentRun({
-    baseUrl,
-    projectId: prepared.projectId,
-    runId,
-    fetchImpl: prepared.fetchImpl,
-  });
-}
-
-async function poll(
-  baseUrl: string,
-  prepared: Awaited<ReturnType<typeof prepare>>,
-  runId: string,
-  ready: (response: GetAgentRunResponse) => boolean,
-) {
-  let held: GetAgentRunResponse | undefined;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    held = await inspect(baseUrl, prepared, runId);
-    if (ready(held)) return held;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`worker did not reach the hold: ${held?.status ?? "missing"}`);
-}
 
 function successor(response: GetAgentRunResponse) {
   if (response.unknown_create_successor.kind !== "present") {
@@ -195,13 +77,13 @@ function assertClosedSuccessor(found: ReturnType<typeof successor>) {
 }
 
 test("one successor shares the invocation and a restart does not add another", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a401"), "Successor Once Novel", "a4");
-    const created = await admit(started.baseUrl, prepared, id("a411"), "SCRIPT:successor-once");
+    const created = await admitRun(started.baseUrl, prepared, id("a411"), "SCRIPT:successor-once");
     await settleOnce();
-    const first = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const first = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(first);
     const attempt = presentAttempt(first);
     assert.equal(first.status, "completed");
@@ -259,7 +141,7 @@ test("one successor shares the invocation and a restart does not add another", a
     `), "1 1");
     await requeue(prepared.projectId, created.effect.run_id);
     await settleOnce();
-    const repeated = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const repeated = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const again = successor(repeated);
     assert.equal(repeated.status, "completed");
     assert.equal(again.recovery_id, found.recovery_id);
@@ -286,7 +168,7 @@ test("one successor shares the invocation and a restart does not add another", a
 });
 
 test("missing and unsupported lookup still permit one successor", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a501"), "Successor Lookup Novel", "a5");
@@ -295,9 +177,9 @@ test("missing and unsupported lookup still permit one successor", async () => {
       ["SCRIPT:successor-unsupported", "unsupported_retrieval", id("a512")],
     ] as const;
     for (const [script, reason, key] of cases) {
-      const created = await admit(started.baseUrl, prepared, key, script);
+      const created = await admitRun(started.baseUrl, prepared, key, script);
       await settleOnce();
-      const inspected = await inspect(started.baseUrl, prepared, created.effect.run_id);
+      const inspected = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       const found = successor(inspected);
       assert.equal(inspected.status, "completed", script);
       assert.equal(found.lookup_unavailable_reason, reason, script);
@@ -315,7 +197,7 @@ test("missing and unsupported lookup still permit one successor", async () => {
 });
 
 test("failed gates pause and a restart keeps that pause", async () => {
-  const started = await startRealServer();
+  const started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a601"), "Successor Pause Novel", "a6");
@@ -329,9 +211,9 @@ test("failed gates pause and a restart keeps that pause", async () => {
       ["SCRIPT:successor-authority", "authority_unavailable", id("a6c6")],
     ] as const;
     for (const [script, reason, key] of cases) {
-      const created = await admit(started.baseUrl, prepared, key, script);
+      const created = await admitRun(started.baseUrl, prepared, key, script);
       await settleOnce();
-      const inspected = await inspect(started.baseUrl, prepared, created.effect.run_id);
+      const inspected = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
       const found = successor(inspected);
       assert.equal(inspected.status, "paused", script);
       assert.equal(inspected.decision.kind, "absent", script);
@@ -345,7 +227,7 @@ test("failed gates pause and a restart keeps that pause", async () => {
       if (script === "SCRIPT:successor-context") {
         await requeue(prepared.projectId, created.effect.run_id);
         await settleOnce();
-        const repeated = await inspect(started.baseUrl, prepared, created.effect.run_id);
+        const repeated = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
         const again = successor(repeated);
         assert.equal(repeated.status, "paused", script);
         assert.equal(again.recovery_id, found.recovery_id, script);
@@ -361,15 +243,15 @@ test("failed gates pause and a restart keeps that pause", async () => {
 
 test("cancellation after the fence prohibits the successor", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-fence.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a701"), "Successor Fence Novel", "a7");
-    const created = await admit(started.baseUrl, prepared, id("a711"), "SCRIPT:successor-once");
+    const created = await admitRun(started.baseUrl, prepared, id("a711"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspectRun(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return found.kind === "present" && found.disposition === "fenced"
         && found.successor_model_attempt_id == null;
@@ -406,7 +288,7 @@ test("cancellation after the fence prohibits the successor", async () => {
     unlinkSync(hold);
     await worker;
     await settleOnce();
-    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(after);
     assert.equal(after.status, "cancelled");
     assert.equal(after.decision.kind, "absent");
@@ -432,17 +314,17 @@ test("cancellation after the fence prohibits the successor", async () => {
 
 test("a crash after the fence resumes the same successor once", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-crash.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: ReturnType<typeof heldWorker> | undefined;
   let projectId = "";
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a801"), "Successor Crash Novel", "a8");
     projectId = prepared.projectId;
-    const created = await admit(started.baseUrl, prepared, id("a811"), "SCRIPT:successor-once");
+    const created = await admitRun(started.baseUrl, prepared, id("a811"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = heldWorker({ STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspectRun(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return found.kind === "present" && found.disposition === "fenced"
         && found.successor_model_attempt_id == null;
@@ -460,7 +342,7 @@ test("a crash after the fence resumes the same successor once", async () => {
     `);
     unlinkSync(hold);
     await settleOnce();
-    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(after);
     assert.equal(after.status, "completed");
     assert.equal(found.recovery_id, fenced.recovery_id);
@@ -494,15 +376,15 @@ test("a crash after the fence resumes the same successor once", async () => {
 
 test("a late predecessor updates evidence and usage only", async () => {
   const hold = join(tmpdir(), "storyos-s3-24-late.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("a901"), "Successor Late Novel", "a9");
-    const created = await admit(started.baseUrl, prepared, id("a911"), "SCRIPT:successor-late");
+    const created = await admitRun(started.baseUrl, prepared, id("a911"), "SCRIPT:successor-late");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_SUCCESSOR_LATE_HOLD_PATH: hold });
-    const held = await poll(started.baseUrl, prepared, created.effect.run_id, (response) => {
+    const held = await waitFor(() => inspectRun(started.baseUrl, prepared, created.effect.run_id), (response) => {
       const found = response.unknown_create_successor;
       return response.status === "claimed" && found.kind === "present"
         && found.successor_model_attempt_id != null
@@ -526,7 +408,7 @@ test("a late predecessor updates evidence and usage only", async () => {
     `), "false");
     unlinkSync(hold);
     await worker;
-    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(after);
     assert.equal(after.status, "completed");
     assert.equal(after.usage.kind, "unknown");
@@ -564,19 +446,16 @@ test("a late predecessor updates evidence and usage only", async () => {
 
 test("cancellation during the successor stream aborts the successor once", async () => {
   const hold = join(tmpdir(), "storyos-g03-successor-stream.hold");
-  const started = await startRealServer();
+  const started = await startServer();
   let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("ab01"), "Successor Cancel Novel", "ab");
-    const created = await admit(started.baseUrl, prepared, id("ab11"), "SCRIPT:successor-once");
+    const created = await admitRun(started.baseUrl, prepared, id("ab11"), "SCRIPT:successor-once");
     writeFileSync(hold, "hold");
     worker = settleHeld({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: hold });
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (await roles(prepared.projectId, created.effect.run_id) === "1 1 1 1") break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
+    assert.equal(await waitFor(() => roles(prepared.projectId, created.effect.run_id),
+      (counts) => counts === "1 1 1 1"), "1 1 1 1");
     const request: CancelAgentRunRequest = {
       command_schema: "storyos.command.cancel-agent-run.request.v1",
       cancel_agent_run_input: { ...BINDING, correlation_id: id("ab21") },
@@ -604,7 +483,7 @@ test("cancellation during the successor stream aborts the successor once", async
     unlinkSync(hold);
     await worker;
     await settleOnce();
-    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    const after = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     assert.equal(after.status, "cancelled");
     assert.equal(after.decision.kind, "absent");
     assert.equal(successor(after).disposition, "prohibited");

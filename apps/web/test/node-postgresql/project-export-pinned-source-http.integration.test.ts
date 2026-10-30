@@ -1,12 +1,9 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
   archiveProject,
-  createProjectCommandChallenge,
   createVolume,
   digestArchiveProject,
   digestCreateVolume,
@@ -21,44 +18,27 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
-  DigestValue,
   ExportHumanReadableManuscriptRequest,
   ExportProjectArchiveRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   createEmptyProject,
   exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
-  runStoryOSWorker,
   sessionFetch as browserFetch,
-  startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 import { zipStoreFiles } from "../support/archive.ts";
+import { BINDING, USER_A, UUID_V7, challenged, createEmpty, issueChallenge, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const exe = process.platform === "win32" ? ".exe" : "";
-const serverBinary = join(repositoryRoot, "target", "release-package", `storyos-server${exe}`);
-const workerBinary = join(repositoryRoot, "target", "release-package", `storyos-worker${exe}`);
-const USER_A = "018f0000-0000-7001-8000-000000000001";
-const USER_B = "018f0000-0000-7001-8000-000000000101";
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const CLIENT = RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision;
-const SECURITY = "storyos.web-security-policy.release-1.v1";
 const ARCHIVE_MEDIA =
   'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"';
 const ADMITTED_TITLE = "Pinned Archive Novel";
 const HISTORICAL_RECEIPT = "018f0000-0000-7001-8000-00000000c301";
 const HISTORICAL_EVENT = "018f0000-0000-7001-8000-00000000c302";
 const HISTORICAL_ROOT = `sha256:${"c".repeat(64)}`;
-
-function bindings() {
-  return { client_contract_revision: CLIENT, security_policy_revision: SECURITY };
-}
 
 function exportRequest(
   correlationId: string,
@@ -67,40 +47,11 @@ function exportRequest(
   return {
     command_schema: "storyos.command.export-project-archive.request.v1",
     export_project_archive_input: {
-      ...bindings(),
+      ...BINDING,
       correlation_id: correlationId,
       archive_profile: archiveProfile,
       archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
     },
-  };
-}
-
-async function challenged<Result>(options: {
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  projectId: string;
-  method: string;
-  route: string;
-  schema: string;
-  idempotencyKey: string;
-  digest: DigestValue;
-  send: (antiForgery: string) => Promise<Result>;
-}): Promise<{ antiForgery: string; result: Result }> {
-  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
-    baseUrl: options.baseUrl,
-    projectId: options.projectId,
-    fetchImpl: options.fetchImpl,
-    request: {
-      method: options.method,
-      route_template: options.route,
-      command_schema: options.schema,
-      canonical_command_digest: options.digest,
-      idempotency_key: options.idempotencyKey,
-    },
-  }));
-  return {
-    antiForgery: challenge.nonce,
-    result: await options.send(challenge.nonce),
   };
 }
 
@@ -110,21 +61,17 @@ async function admitArchive(
   correlationId: string,
 ): Promise<string> {
   const request = exportRequest(correlationId);
-  const applied = await challenged({
-    ...command,
-    method: "POST",
-    route: "/api/v1/projects/{project_id}/exports",
-    schema: request.command_schema,
-    idempotencyKey: exportKey,
-    digest: await digestExportProjectArchive(request),
-    send: (antiForgery) => exportProjectArchive({
+  const applied = await challenged(
+    command.baseUrl, command.fetchImpl, command.projectId, "POST", "/api/v1/projects/{project_id}/exports",
+    request.command_schema, await digestExportProjectArchive(request), exportKey,
+    (antiForgery) => exportProjectArchive({
       ...command, idempotencyKey: exportKey, antiForgery, request,
     }),
-  });
-  if (applied.result.effect.kind !== "admitted") {
+  );
+  if (applied.effect.kind !== "admitted") {
     throw new Error("Project Export Archive must admit");
   }
-  return applied.result.effect.export_id;
+  return applied.effect.export_id;
 }
 
 async function admitHumanReadableExport(
@@ -134,23 +81,19 @@ async function admitHumanReadableExport(
 ): Promise<string> {
   const request: ExportHumanReadableManuscriptRequest = {
     command_schema: "storyos.command.export-human-readable-manuscript.request.v1",
-    export_human_readable_manuscript_input: { ...bindings(), correlation_id: correlationId },
+    export_human_readable_manuscript_input: { ...BINDING, correlation_id: correlationId },
   };
-  const applied = await challenged({
-    ...command,
-    method: "POST",
-    route: "/api/v1/projects/{project_id}/manuscript/exports",
-    schema: request.command_schema,
-    idempotencyKey: exportKey,
-    digest: await digestExportHumanReadableManuscript(request),
-    send: (antiForgery) => exportHumanReadableManuscript({
+  const applied = await challenged(
+    command.baseUrl, command.fetchImpl, command.projectId, "POST", "/api/v1/projects/{project_id}/manuscript/exports",
+    request.command_schema, await digestExportHumanReadableManuscript(request), exportKey,
+    (antiForgery) => exportHumanReadableManuscript({
       ...command, idempotencyKey: exportKey, antiForgery, request,
     }),
-  });
-  if (applied.result.effect.kind !== "admitted") {
+  );
+  if (applied.effect.kind !== "admitted") {
     throw new Error("Human-readable export must admit");
   }
-  return applied.result.effect.export_id;
+  return applied.effect.export_id;
 }
 
 function exportUrlFor(baseUrl: string, projectId: string, exportId: string): string {
@@ -158,12 +101,7 @@ function exportUrlFor(baseUrl: string, projectId: string, exportId: string): str
 }
 
 test("an admitted Project Export Archive settles the pinned families after later live changes", async () => {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A },
-    extraEnv: { STORYOS_WORKER: "0" },
-  });
+  const { baseUrl, server } = await startServer();
   try {
     const fetchImpl = browserFetch(baseUrl, "session-a");
     const projectId = await createEmptyProject({
@@ -177,23 +115,20 @@ test("an admitted Project Export Archive settles the pinned families after later
 
     const request = exportRequest("018f0000-0000-7001-8000-00000000e114");
     const exportKey = "018f0000-0000-7001-8000-00000000e104";
-    const applied = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/exports",
-      schema: request.command_schema,
-      idempotencyKey: exportKey,
-      digest: await digestExportProjectArchive(request),
-      send: (antiForgery) => exportProjectArchive({
-        ...command, idempotencyKey: exportKey, antiForgery, request,
+    let nonce = "";
+    const applied = await challenged(
+      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/exports", request.command_schema,
+      await digestExportProjectArchive(request), exportKey,
+      (antiForgery) => exportProjectArchive({
+        ...command, idempotencyKey: exportKey, antiForgery: (nonce = antiForgery), request,
       }),
-    });
-    assert.equal(applied.result.acknowledgement, "accepted");
-    if (applied.result.effect.kind !== "admitted") {
+    );
+    assert.equal(applied.acknowledgement, "accepted");
+    if (applied.effect.kind !== "admitted") {
       throw new Error("Project Export Archive must admit");
     }
-    const exportId = applied.result.effect.export_id;
-    const sourceSnapshotId = applied.result.effect.source_snapshot.snapshot_id;
+    const exportId = applied.effect.export_id;
+    const sourceSnapshotId = applied.effect.source_snapshot.snapshot_id;
     const exportUrl = exportUrlFor(baseUrl, projectId, exportId);
 
     const waiting = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
@@ -204,9 +139,9 @@ test("an admitted Project Export Archive settles the pinned families after later
     assert.equal(refusedZip.status, 422);
 
     const replay = await exportProjectArchive({
-      ...command, idempotencyKey: exportKey, antiForgery: applied.antiForgery, request,
+      ...command, idempotencyKey: exportKey, antiForgery: nonce, request,
     });
-    assert.equal(replay.command_id, applied.result.command_id);
+    assert.equal(replay.command_id, applied.command_id);
     if (replay.effect.kind !== "admitted") {
       throw new Error("retry must return the same admitted operation");
     }
@@ -217,48 +152,40 @@ test("an admitted Project Export Archive settles the pinned families after later
       update_project_input: {
         title: "Later Archive Title",
         expected_project_revision: "1",
-        ...bindings(),
+        ...BINDING,
         correlation_id: "018f0000-0000-7001-8000-00000000e115",
       },
     };
-    const renamed = await challenged({
-      ...command,
-      method: "PATCH",
-      route: "/api/v1/projects/{project_id}",
-      schema: renameProject.command_schema,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000e105",
-      digest: await digestUpdateProject(renameProject),
-      send: (antiForgery) => updateProject({
+    const renamed = await challenged(
+      baseUrl, fetchImpl, projectId, "PATCH", "/api/v1/projects/{project_id}", renameProject.command_schema,
+      await digestUpdateProject(renameProject), "018f0000-0000-7001-8000-00000000e105",
+      (antiForgery) => updateProject({
         ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000e105", antiForgery,
         request: renameProject,
       }),
-    });
-    assert.equal(renamed.result.effect.kind, "authoritative_applied");
+    );
+    assert.equal(renamed.effect.kind, "authoritative_applied");
 
     const laterVolumeRequest = {
       command_schema: "storyos.command.create-volume.request.v1" as const,
       create_volume_input: {
         title: "Volume B",
         expected_tree_revision: "1",
-        ...bindings(),
+        ...BINDING,
         correlation_id: "018f0000-0000-7001-8000-00000000e11a",
       },
     };
-    const laterVolume = await challenged({
-      ...command,
-      method: "POST",
-      route: "/api/v1/projects/{project_id}/volumes",
-      schema: laterVolumeRequest.command_schema,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000e10a",
-      digest: await digestCreateVolume(laterVolumeRequest),
-      send: (antiForgery) => createVolume({
+    const laterVolume = await challenged(
+      baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", laterVolumeRequest.command_schema,
+      await digestCreateVolume(laterVolumeRequest), "018f0000-0000-7001-8000-00000000e10a",
+      (antiForgery) => createVolume({
         ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000e10a", antiForgery,
         request: laterVolumeRequest,
       }),
-    });
-    assert.equal(laterVolume.result.effect.kind, "authoritative_applied");
+    );
+    assert.equal(laterVolume.effect.kind, "authoritative_applied");
 
-    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    await settleOnce();
     const ready = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
     assert.equal(ready.status, "ready");
     if (ready.status !== "ready") {
@@ -283,12 +210,7 @@ test("an admitted Project Export Archive settles the pinned families after later
 });
 
 test("an Archive whose Pinned Export Source is missing settles failed without live fallback", async () => {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A },
-    extraEnv: { STORYOS_WORKER: "0" },
-  });
+  const { baseUrl, server } = await startServer();
   try {
     const fetchImpl = browserFetch(baseUrl, "session-a");
     const projectId = await createEmptyProject({
@@ -316,7 +238,7 @@ test("an Archive whose Pinned Export Source is missing settles failed without li
     const waiting = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
     assert.equal(waiting.status, "in_progress");
 
-    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    await settleOnce();
     const failed = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
     assert.equal(failed.status, "failed");
     assert.equal("immutable_root" in failed, false);
@@ -344,12 +266,7 @@ test("an Archive whose Pinned Export Source is missing settles failed without li
 });
 
 test("a later Archive packs other in-progress Pinned Export Sources and not its own", async () => {
-  const { baseUrl, server } = await startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A },
-    extraEnv: { STORYOS_WORKER: "0" },
-  });
+  const { baseUrl, server } = await startServer();
   try {
     const fetchImpl = browserFetch(baseUrl, "session-a");
     const projectId = await createEmptyProject({
@@ -368,8 +285,8 @@ test("a later Archive packs other in-progress Pinned Export Sources and not its 
     );
 
     // Claim order is readable-first, so two runs settle both operations.
-    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
-    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    await settleOnce();
+    await settleOnce();
     const readable = await getHumanReadableManuscriptExport({
       baseUrl, projectId, exportId: readableExportId, fetchImpl,
     });
@@ -401,42 +318,10 @@ function archiveRequest(expectedProjectRevision: string, correlationId: string):
     command_schema: "storyos.command.archive-project.request.v1",
     archive_project_input: {
       expected_project_revision: expectedProjectRevision,
-      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      ...BINDING,
       correlation_id: correlationId,
     },
   };
-}
-
-async function startRealServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-    extraEnv: { STORYOS_WORKER: "0" },
-  });
-}
-
-async function startWorkerServer() {
-  return startStoryOSServer({
-    repositoryRoot,
-    serverBinary,
-    sessions: { "session-a": USER_A, "session-b": USER_B },
-    extraEnv: { STORYOS_WORKER: "1" },
-  });
-}
-
-/** Creates one empty Project for the session and returns its fetch and Project ID. */
-async function createEmpty(baseUrl: string, session: string, idempotencyKey: string, title: string) {
-  const fetchImpl = browserFetch(baseUrl, session);
-  const projectId = await createEmptyProject({
-    baseUrl,
-    fetchImpl,
-    createKey: idempotencyKey,
-    correlationId: "018f0000-0000-7001-8000-000000000c10",
-    title,
-  });
-  return { fetchImpl, projectId };
 }
 
 async function postExport(
@@ -446,28 +331,18 @@ async function postExport(
   idempotencyKey: string,
   request: ExportProjectArchiveRequest,
 ) {
-  const digest = await digestExportProjectArchive(request);
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "POST",
-      route_template: "/api/v1/projects/{project_id}/exports",
-      command_schema: "storyos.command.export-project-archive.request.v1",
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
-  const admitted = await exportProjectArchive({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, admitted };
+  let nonce = "";
+  const admitted = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/exports",
+    request.command_schema, await digestExportProjectArchive(request), idempotencyKey,
+    (antiForgery) => exportProjectArchive({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      idempotencyKey,
+      antiForgery: (nonce = antiForgery),
+      request,
+    }));
+  return { nonce, admitted };
 }
 
 async function archiveOpenProject(
@@ -478,27 +353,17 @@ async function archiveOpenProject(
   correlationId: string,
   idempotencyKey: string,
 ) {
-  const digest = await digestArchiveProject(archiveRequest(expectedProjectRevision, correlationId));
-  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "PUT",
-      route_template: "/api/v1/projects/{project_id}/archival",
-      command_schema: "storyos.command.archive-project.request.v1",
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
-  return archiveProject({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request: archiveRequest(expectedProjectRevision, correlationId),
-  });
+  const request = archiveRequest(expectedProjectRevision, correlationId);
+  return challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/archival",
+    request.command_schema, await digestArchiveProject(request), idempotencyKey,
+    (antiForgery) => archiveProject({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      idempotencyKey,
+      antiForgery,
+      request,
+    }));
 }
 
 async function insertHistoricalReady(options: {
@@ -589,27 +454,19 @@ async function waitForExportStatus(
   fetchImpl: typeof fetch,
   status: "ready" | "failed" | "outcome_unknown",
 ) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const page = await getExportOperation({
-      baseUrl,
-      projectId,
-      exportId,
-      fetchImpl,
-    });
-    if (page.status === status) {
-      return page;
-    }
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 50);
-    });
-  }
-  throw new Error(`Project Export Archive did not become ${status}`);
+  return waitFor(() => getExportOperation({
+    baseUrl,
+    projectId,
+    exportId,
+    fetchImpl,
+  }), (page) => page.status === status);
 }
 
 test("exportProjectArchive admits one inspectable in-progress operation", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309c001", "Empty Novel");
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309c001", "Empty Novel",
+      "018f0000-0000-7001-8000-000000000c10");
     const request = exportRequest("018f0000-0000-7001-8000-000000000c11");
     const applied = await postExport(
       baseUrl,
@@ -669,7 +526,7 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
       idempotencyKey: "018f0000-0000-7001-8000-000000000c21",
-      antiForgery: applied.challenge.nonce,
+      antiForgery: applied.nonce,
       request,
     });
     assert.equal(replay.command_id, applied.admitted.command_id);
@@ -690,7 +547,8 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
 
-    const foreign = await createEmpty(baseUrl, "session-b", "018f0000-0000-7001-8000-00001309c002", "Other Novel");
+    const foreign = await createEmpty(baseUrl, "session-b", "018f0000-0000-7001-8000-00001309c002", "Other Novel",
+      "018f0000-0000-7001-8000-000000000c10");
     await assert.rejects(
       getExportOperation({
         baseUrl,
@@ -790,18 +648,9 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
 
     const refusedRequest = exportRequest("018f0000-0000-7001-8000-000000000c17");
     const refusedDigest = await digestExportProjectArchive(refusedRequest);
-    const refusedChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/exports",
-        command_schema: "storyos.command.export-project-archive.request.v1",
-        canonical_command_digest: refusedDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000c27",
-      },
-    }));
+    const refusedChallenge = await issueChallenge(baseUrl, first.fetchImpl, first.projectId, "POST",
+      "/api/v1/projects/{project_id}/exports", "storyos.command.export-project-archive.request.v1", refusedDigest,
+      "018f0000-0000-7001-8000-000000000c27");
     await assert.rejects(
       exportProjectArchive({
         baseUrl,
@@ -870,9 +719,10 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
 });
 
 test("the in-process Worker settles an admitted Project Export Archive to ready", async () => {
-  const { baseUrl, server } = await startWorkerServer();
+  const { baseUrl, server } = await startServer({ extraEnv: { STORYOS_WORKER: "1" } });
   try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d001", "Worker Novel");
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d001", "Worker Novel",
+      "018f0000-0000-7001-8000-000000000c10");
     const request = exportRequest("018f0000-0000-7001-8000-00000000d011");
     const applied = await postExport(
       baseUrl,
@@ -926,7 +776,7 @@ test("the in-process Worker settles an admitted Project Export Archive to ready"
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
       idempotencyKey: "018f0000-0000-7001-8000-00000000d021",
-      antiForgery: applied.challenge.nonce,
+      antiForgery: applied.nonce,
       request,
     });
     assert.equal(replay.acknowledgement, "accepted");
@@ -976,15 +826,11 @@ test("the in-process Worker settles an admitted Project Export Archive to ready"
 });
 
 test("the Worker settles failed when the Project is archived after admission", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary,
-      args: ["--once"],
-      extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" },
-    });
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d002", "Archive After");
+    await settleOnce({ STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d002", "Archive After",
+      "018f0000-0000-7001-8000-000000000c10");
     const applied = await postExport(
       baseUrl,
       first.fetchImpl,
@@ -1010,11 +856,7 @@ test("the Worker settles failed when the Project is archived after admission", a
       fetchImpl: first.fetchImpl,
     });
     assert.equal(waiting.status, "in_progress");
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary,
-      args: ["--once"],
-    });
+    await settleOnce();
     const failed = await getExportOperation({
       baseUrl,
       projectId: first.projectId,
@@ -1041,7 +883,7 @@ test("the Worker settles failed when the Project is archived after admission", a
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
       idempotencyKey: "018f0000-0000-7001-8000-00000000d022",
-      antiForgery: applied.challenge.nonce,
+      antiForgery: applied.nonce,
       request: exportRequest("018f0000-0000-7001-8000-00000000d012"),
     });
     assert.equal(replay.acknowledgement, "accepted");
@@ -1063,15 +905,11 @@ test("the Worker settles failed when the Project is archived after admission", a
 });
 
 test("the Worker settles failed when the pinned Snapshot is unavailable before output exists", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startServer();
   try {
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary,
-      args: ["--once"],
-      extraEnv: { STORYOS_EXPORT_LEASE_TTL_SECS: "0" },
-    });
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d003", "Expired Snapshot");
+    await settleOnce({ STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d003", "Expired Snapshot",
+      "018f0000-0000-7001-8000-000000000c10");
     const applied = await postExport(
       baseUrl,
       first.fetchImpl,
@@ -1099,11 +937,7 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
     });
     assert.equal(waiting.status, "in_progress");
     assert.equal("immutable_root" in waiting, false);
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary,
-      args: ["--once"],
-    });
+    await settleOnce();
     const failed = await getExportOperation({
       baseUrl,
       projectId: first.projectId,
