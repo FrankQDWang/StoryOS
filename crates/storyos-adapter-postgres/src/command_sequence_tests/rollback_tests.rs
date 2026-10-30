@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ReceiptResult;
@@ -36,10 +37,13 @@ use super::structure::{
 use super::support::{CommandCall, SequenceError, settlement_rows, stores};
 
 #[derive(Clone, Copy, Debug)]
-enum FailurePoint {
+pub(super) enum FailurePoint {
     Classify,
     Apply,
     AfterAuthority,
+    /// A serialization failure of the store after the classify step.
+    ContendedClassify,
+    NoFailure,
 }
 
 /// The failure that `Failing` injects, identified by its step.
@@ -54,14 +58,40 @@ impl std::fmt::Display for Injected {
 
 impl std::error::Error for Injected {}
 
-/// A project command that fails after one step has written its rows.
-struct Failing<C> {
-    command: C,
-    at: FailurePoint,
+/// The command spec that `Failing` declares for the wrapped command `C`.
+pub(super) trait DeclaredSpec<C: ProjectCommand>: Send + Sync {
+    const SPEC: CommandSpec;
 }
 
-impl<C: ProjectCommand> ProjectCommand for Failing<C> {
+/// The spec of the wrapped command.
+pub(super) struct WrappedSpec;
+
+impl<C: ProjectCommand> DeclaredSpec<C> for WrappedSpec {
     const SPEC: CommandSpec = C::SPEC;
+}
+
+/// The spec of the wrapped command with a kind that no Command Challenge has, so the Admission
+/// insert writes no row.
+pub(super) struct UnchallengedKind;
+
+impl<C: ProjectCommand> DeclaredSpec<C> for UnchallengedKind {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "unchallengedCommand",
+        applied: &[],
+        ..C::SPEC
+    };
+}
+
+/// A project command that fails after one step has written its rows.
+pub(super) struct Failing<C, S = WrappedSpec> {
+    pub(super) command: C,
+    pub(super) at: FailurePoint,
+    pub(super) spec: PhantomData<S>,
+}
+
+impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
+    const SPEC: CommandSpec = S::SPEC;
+    const CONTENTION_REFUSAL: Option<Self::Error> = C::CONTENTION_REFUSAL;
     type Error = C::Error;
     type Profile = C::Profile;
     type Response = C::Response;
@@ -82,12 +112,15 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
             FailurePoint::Classify => Err(unavailable(Injected("classify")).into()),
-            FailurePoint::Apply | FailurePoint::AfterAuthority => Ok(Classification {
-                outcome: classified.outcome,
-                admission: classified.admission,
-                heads: classified.heads,
-                zero_receipt: classified.zero_receipt,
-            }),
+            FailurePoint::ContendedClassify => Err(serialization_failure(client).await.into()),
+            FailurePoint::Apply | FailurePoint::AfterAuthority | FailurePoint::NoFailure => {
+                Ok(Classification {
+                    outcome: classified.outcome,
+                    admission: classified.admission,
+                    heads: classified.heads,
+                    zero_receipt: classified.zero_receipt,
+                })
+            }
         }
     }
 
@@ -128,7 +161,10 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
             .await?;
         match self.at {
             FailurePoint::Apply => Err(unavailable(Injected("apply"))),
-            FailurePoint::Classify | FailurePoint::AfterAuthority => Ok(write),
+            FailurePoint::Classify
+            | FailurePoint::AfterAuthority
+            | FailurePoint::ContendedClassify
+            | FailurePoint::NoFailure => Ok(write),
         }
     }
 
@@ -146,7 +182,10 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
             written.await?;
             match self.at {
                 FailurePoint::AfterAuthority => Err(unavailable(Injected("after authority"))),
-                FailurePoint::Classify | FailurePoint::Apply => Ok(()),
+                FailurePoint::Classify
+                | FailurePoint::Apply
+                | FailurePoint::ContendedClassify
+                | FailurePoint::NoFailure => Ok(()),
             }
         }
     }
@@ -196,9 +235,23 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     }
 }
 
+/// Raises a serialization failure in the command transaction, and returns it as a store fault.
+async fn serialization_failure(client: &Client) -> ProjectCommandError {
+    match client
+        .batch_execute(
+            "DO $$ BEGIN RAISE EXCEPTION 'injected contention'
+             USING ERRCODE = 'serialization_failure'; END $$",
+        )
+        .await
+    {
+        Err(error) => unavailable(error),
+        Ok(()) => panic!("the injected statement must fail"),
+    }
+}
+
 /// The zero-authority outcome of the wrapped command.
-fn inner_outcome<'a, C: ProjectCommand>(
-    outcome: &ZeroOutcome<'a, Failing<C>>,
+fn inner_outcome<'a, C: ProjectCommand, S: DeclaredSpec<C>>(
+    outcome: &ZeroOutcome<'a, Failing<C, S>>,
 ) -> ZeroOutcome<'a, C> {
     match outcome {
         ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
@@ -225,6 +278,7 @@ pub(super) async fn failed_then_settled<C: ProjectCommand<Error: SequenceError> 
         let failing = Failing {
             command: call.input.clone(),
             at,
+            spec: PhantomData::<WrappedSpec>,
         };
         let injected = match settle_project_command(store, &call.envelope, &failing)
             .await

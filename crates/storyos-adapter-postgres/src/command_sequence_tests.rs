@@ -37,6 +37,9 @@ mod rollback;
 #[path = "command_sequence_tests/damaged_evidence_tests.rs"]
 mod damaged_evidence;
 
+#[path = "command_sequence_tests/declared_error_tests.rs"]
+mod declared_error;
+
 #[path = "command_sequence_tests/undo_tests.rs"]
 mod undo;
 
