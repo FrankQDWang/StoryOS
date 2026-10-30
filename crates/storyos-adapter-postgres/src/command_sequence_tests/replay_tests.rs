@@ -726,9 +726,34 @@ async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() 
     let replayed_archival = store
         .archive_project(&archive_retry.envelope, &archive_retry.input)
         .await;
+
+    // The later reorder writes a later Snapshot, Commit, and tree revision than the first one.
+    let scope = seed_project(&store, "8c60").await;
+    let first_volume = new_volume(&store, &scope, 0x8c61, /*expected_tree_revision*/ 1).await;
+    let second_volume = new_volume(&store, &scope, 0x8c62, /*expected_tree_revision*/ 2).await;
+    let mut reorders = Vec::new();
+    for (suffix, volume_id, expected_tree_revision) in
+        [(0x8c69, second_volume, 3), (0x8c6a, first_volume, 4)]
+    {
+        let input = UpdateVolumeInput {
+            volume_id,
+            title: "Moved".to_owned(),
+            order: 1,
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_VOLUME, input).await;
+        let settled = update_volume(&store, &call).await;
+        reorders.push((with_new_request_ids(&call), settled.unwrap()));
+    }
+    let (reorder_retry, first_reorder) = &reorders[0];
+    let replayed_reorder = update_volume(&store, reorder_retry).await;
     assert_eq!(
-        (replayed.unwrap(), replayed_archival.unwrap()),
-        (first.clone(), first_archival.clone())
+        (
+            replayed.unwrap(),
+            replayed_archival.unwrap(),
+            replayed_reorder.unwrap()
+        ),
+        (first.clone(), first_archival.clone(), first_reorder.clone())
     );
 }
 

@@ -1,6 +1,5 @@
-//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, storage-key
-//! exhaustion, and the replay of a reorder after later reorders. `command_sequence_tests/` owns the
-//! rollback of a failed rank write.
+//! The Volume rank batch of Update Volume: sparse order, removed Volume rows, and storage-key
+//! exhaustion. `command_sequence_tests/` owns replay and the rollback of a failed rank write.
 
 use storyos_application::{
     GetManuscriptTree, ProjectCommandError, ProjectScope, UpdateVolumeInput, VolumeId, VolumeNode,
@@ -172,7 +171,6 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         .await
         .unwrap();
 
-    let mut first = None;
     for (index, order, title, expected_ids, expected_titles, expected_calls) in [
         (
             0,
@@ -309,14 +307,7 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
             )
         );
         assert_eq!(removed_volume_state(&admin, &scope).await, removed_before);
-        first.get_or_insert((command, settlement));
     }
-    // The first reorder replays its own settlement after the later reorders.
-    let (first_command, first_settlement) = first.expect("the first reorder settled");
-    assert_eq!(
-        update_volume(&store, &first_command).await.unwrap(),
-        first_settlement
-    );
 
     admin
         .batch_execute(
