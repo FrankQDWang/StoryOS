@@ -4,7 +4,7 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{LockedProject, ProjectCommand, ReceiptHeads, ReceiptRefs, unavailable};
+use super::{LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
 
 pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
@@ -77,20 +77,6 @@ pub(super) async fn insert_receipt(
         )
         .await
         .map_err(unavailable)?;
-    Ok(receipt_created_at)
-}
-
-/// Inserts the Domain Receipt and the child Receipt of a zero-authority outcome.
-pub(super) async fn insert_zero_receipt<C: ProjectCommand>(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    command: &C,
-    receipt: &ReceiptRecord,
-) -> Result<String, ProjectCommandError> {
-    let receipt_created_at = insert_receipt(client, envelope, receipt, &[]).await?;
-    command
-        .write_child_receipt(client, envelope, receipt.result)
-        .await?;
     Ok(receipt_created_at)
 }
 

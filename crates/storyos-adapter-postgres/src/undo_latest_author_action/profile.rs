@@ -126,9 +126,7 @@ impl UndoPlan {
             | UndoFamily::Replan(_)
             | UndoFamily::ReopenRejectedOperations(_)
             | UndoFamily::ReopenWithdrawnProposal(_)
-            | UndoFamily::AuthorWithdrawal(_) => {
-                AppliedVariant::Compensation(ProseCompensation::RESULT_KIND)
-            }
+            | UndoFamily::AuthorWithdrawal(_) => AppliedVariant::Compensation,
         }
     }
 

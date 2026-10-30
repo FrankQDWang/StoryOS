@@ -48,8 +48,6 @@ pub(crate) trait CompensationAdapter {
     type Evidence: Send + Sync;
     /// The scope sequences that one Compensation of the family uses.
     type Sequences: Send + Sync;
-    /// The Receipt result kind of a Compensation of the family.
-    const RESULT_KIND: &'static str = "authoritative_applied";
 
     /// Loads the evidence of one Forward Author Action. `None` makes the action a Barrier.
     fn load(

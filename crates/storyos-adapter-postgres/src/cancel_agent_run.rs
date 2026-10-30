@@ -15,9 +15,9 @@ use crate::agent_run_successor::prohibit_automatic_successor;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
-    settle_project_command, unavailable,
+    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse,
+    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
+    unavailable,
 };
 
 impl PostgresProjectReader {
@@ -35,8 +35,6 @@ impl ProjectCommand for CancelAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "cancelAgentRun",
         applied: &[AppliedVariant::NoAuthorAction],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "agent_run_cancelled",
         replay_effect: ReplayEffect::NoQuery,

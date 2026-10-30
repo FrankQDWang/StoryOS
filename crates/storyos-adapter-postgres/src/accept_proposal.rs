@@ -19,10 +19,10 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
-    CommandIsolation, CommandSpec, EditorAdmission, LockedProject, MissingAdmission,
-    ProfileSequences, ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads,
-    ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroAuthorityRows,
-    ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    CommandSpec, EditorAdmission, LockedProject, ProfileSequences, ProjectCommand, ProjectResponse,
+    RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    RevisionWrite, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command,
+    unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -86,8 +86,6 @@ impl ProjectCommand for AcceptProposal {
     const SPEC: CommandSpec = CommandSpec {
         kind: "acceptProposal",
         applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::Diagnosed,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The AuthoritativeRevision profile writes its own Activity record.
         activity_kind: "",
@@ -259,39 +257,6 @@ impl ProjectCommand for AcceptProposal {
         })
     }
 
-    async fn write_child_receipt(
-        &self,
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        result_kind: &'static str,
-    ) -> Result<(), ProjectCommandError> {
-        // `apply` writes the applied row, because only the plan holds its target resolution.
-        if result_kind == "authoritative_applied" {
-            return Ok(());
-        }
-        client
-            .execute(
-                "INSERT INTO storyos.acceptance_receipts
-                   (owner_user_id, project_id, acceptance_receipt_id, proposal_id,
-                    proposal_revision_id, validation_receipt_id, selected_operation_ids, result)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, $6::text::uuid, $7::text[]::uuid[], $8)",
-                &[
-                    &envelope.project_scope.owner_user_id.as_ref(),
-                    &envelope.project_scope.project_id.as_ref(),
-                    &envelope.ids.receipt_id,
-                    &self.input.proposal_id,
-                    &self.input.proposal_revision_id,
-                    &self.input.validation_receipt_id,
-                    &self.input.selected_operation_ids,
-                    &result_kind,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        Ok(())
-    }
-
     async fn apply(
         &self,
         client: &Client,
@@ -374,25 +339,47 @@ impl ProjectCommand for AcceptProposal {
             })
     }
 
-    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
-        match outcome {
-            ZeroOutcome::NoEffect(_) | ZeroOutcome::Conflicted(_) => ZeroAuthorityRows::Effect,
-            ZeroOutcome::Refused(_) => ZeroAuthorityRows::None,
-        }
+    fn zero_authority_rows(&self, _outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        ZeroAuthorityRows::Effect
     }
 
+    /// Writes the Acceptance Receipt of a zero-authority outcome, and the condition of an invalid
+    /// Acceptance. `apply` writes the applied Acceptance Receipt, because only the plan holds its
+    /// target resolution.
     async fn write_zero_authority_effect(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         outcome: &ZeroOutcome<'_, Self>,
     ) -> Result<Vec<String>, ProjectCommandError> {
+        let result = outcome.receipt_result_kind();
+        client
+            .execute(
+                "INSERT INTO storyos.acceptance_receipts
+                   (owner_user_id, project_id, acceptance_receipt_id, proposal_id,
+                    proposal_revision_id, validation_receipt_id, selected_operation_ids, result)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::uuid, $7::text[]::uuid[], $8)",
+                &[
+                    &envelope.project_scope.owner_user_id.as_ref(),
+                    &envelope.project_scope.project_id.as_ref(),
+                    &envelope.ids.receipt_id,
+                    &self.input.proposal_id,
+                    &self.input.proposal_revision_id,
+                    &self.input.validation_receipt_id,
+                    &self.input.selected_operation_ids,
+                    &result,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
         match outcome {
             ZeroOutcome::NoEffect(_) => {}
             // Since ADR 0064 no Acceptance gives a conflict. Only earlier Receipts record one.
-            ZeroOutcome::Conflicted(_) | ZeroOutcome::Refused(_) => {
+            ZeroOutcome::Conflicted(_) => {
                 return Err(unavailable("only an invalid Acceptance writes a condition"));
             }
+            ZeroOutcome::Refused(_) => return Ok(Vec::new()),
         }
         client
             .execute(

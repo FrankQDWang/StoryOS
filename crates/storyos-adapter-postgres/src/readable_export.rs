@@ -16,8 +16,8 @@ use tokio_postgres::Client;
 use super::*;
 use crate::command_replay::{CommandReplay, EffectRecord, ReplayFault};
 use crate::command_sequence::{
-    Admission, AdmitCommand, AdmitSpec, CommandIsolation, LockedProject, MissingAdmission,
-    ProjectActionClass, ProjectResponse, RateLimitedChallenge, admit_project_command, unavailable,
+    Admission, AdmitCommand, AdmitSpec, LockedProject, ProjectActionClass, ProjectResponse,
+    RateLimitedChallenge, admit_project_command, unavailable,
 };
 use crate::pinned_export_source::check_export_settlement;
 
@@ -42,8 +42,6 @@ pub(crate) struct ReadableExportFacts {
 impl AdmitCommand for ExportHumanReadableManuscriptInput {
     const SPEC: AdmitSpec = AdmitSpec {
         kind: "exportHumanReadableManuscript",
-        isolation: CommandIsolation::Serializable,
-        missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
         work_query: READABLE_EXPORT_WORK,
     };

@@ -101,17 +101,6 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
             .await
     }
 
-    async fn write_child_receipt(
-        &self,
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        result_kind: &'static str,
-    ) -> Result<(), ProjectCommandError> {
-        self.command
-            .write_child_receipt(client, envelope, result_kind)
-            .await
-    }
-
     fn applied_variant(&self, applied: &Self::Applied, plan: &Self::Plan) -> AppliedVariant {
         self.command.applied_variant(applied, plan)
     }
