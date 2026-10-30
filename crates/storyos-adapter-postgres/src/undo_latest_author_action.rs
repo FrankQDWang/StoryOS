@@ -18,9 +18,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission, LockedProject,
-    ProfileSequences, ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads,
-    ReceiptRefs, ReplayEffect, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command,
-    unavailable,
+    ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs, ReplayEffect,
+    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
 use crate::undo_frontier::{ObservedFrontier, head_lineage_revision, load_observed_frontier};
@@ -60,7 +59,6 @@ impl ProjectCommand for UndoLatestAuthorAction {
             AppliedVariant::Compensation,
             AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),
         ],
-        rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The compensation adapters write their own Activity records.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(replay::UNDO_REPLAY_EFFECT),

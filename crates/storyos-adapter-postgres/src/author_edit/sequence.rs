@@ -19,8 +19,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification, CommandError,
     CommandSpec, DirectEditorAdmission, LockedProject, NoResponse, ProfileSequences,
-    ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase,
-    RevisionMembers, RevisionWrite, ZeroReceipt, unavailable,
+    ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    RevisionWrite, ZeroReceipt, unavailable,
 };
 use crate::undo_compensation::{AuthorEditVariant, ForwardCommand};
 
@@ -195,7 +195,6 @@ impl ProjectCommand for AuthorEdit<'_> {
                 AuthorEditVariant::ProposalRevised,
             )),
         ],
-        rate_limited: RateLimitedChallenge::InvalidChallenge,
         // The `AuthoritativeRevision` profile writes the Activity record.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(AUTHOR_EDIT_REPLAY_EFFECT),

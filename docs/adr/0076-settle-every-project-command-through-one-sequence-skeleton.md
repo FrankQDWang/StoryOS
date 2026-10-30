@@ -41,6 +41,7 @@ A refusal before Admission and a failure of a step roll back the transaction. No
 - Replay checks the binding of the command first, then the authority evidence of the profile, and then decodes the command effect. Thus a binding conflict comes before damaged evidence, and a decode never hides damaged authority evidence.
 - A missing settled record or an unknown reason is a binding conflict. A pre-capture record gives `historical_acknowledgement_unavailable` ([ADR 0032](0032-accept-historical-acknowledgement-unavailable.md)), only for a command that has a response record. Damaged evidence is a store fault. A zero-authority Receipt with an Author Action is damaged evidence.
 - An exact retry in progress is a binding conflict, except in the admit step of an export.
+- Only a Command Challenge issue applies the Challenge rate limit. The use, commit, and rollback of a Challenge never give `RateLimited`, so a command declares no rate-limited error, and the sequence maps such an error as a store fault.
 
 ### Admission forms
 
@@ -55,13 +56,15 @@ A profile fixes the scope sequences and the authority records of an applied outc
 
 | Profile | Records of an applied outcome | Commands |
 | --- | --- | --- |
-| `Structural` | The guarded Project update, the Authoritative Commit, the Forward Author Action, the Activity record with `tree_revision`, the canonical Snapshot, and the writer-base rebind | The six structure commands |
-| `ChapterSelection` | An Author Action without an Authoritative Commit, the Activity record, the canonical Snapshot, and the writer-base rebind | `setCurrentChapter` |
+| `Structural` | The guarded Project update, the Activity record with `tree_revision`, the Authoritative Commit, the Forward Author Action, the canonical Snapshot, and the rebind of the current writer base when the command asks for it | The six structure commands |
+| `ChapterSelection` | The guarded Project update, the Activity record with `base_snapshot_id`, a Forward Author Action without an Authoritative Commit, the canonical Snapshot, and the required rebind of the writer base of the Editor Session | `setCurrentChapter` |
 | `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `takeOverProjectWriter`, and the four AgentRun commands |
 | `ActionOnly` | One Forward Author Action | The seven Proposal decisions |
 | `AuthoritativeRevision` | The Revision with its payload, members, and Envelope, the guarded Head update, the Authoritative Commit, the Author Action, the `project_activity_events` row, the writer-base update, and the canonical Snapshot | `acceptProposal`, the applied Author Edit, and the prose and Acceptance compensations |
 
-- `Structural` and `ChapterSelection` share their common record writes. `Structural` and `AuthoritativeRevision` share one sequence allocation. A profile takes only the inputs that it reads, and it keeps its own replay evidence check.
+- `Structural` and `ChapterSelection` write their records through one shared step, in the order of the table. `Structural` and `AuthoritativeRevision` share one allocation of the Author Action, Authoritative Commit, and Activity counters. The compensation adapters use the same Author Action insert and writer-base update.
+- `persist` takes the envelope and only the other settlement facts that the profile reads: the applied variant (`ActionOnly`), the Activity kind (`ActivityOnly`), or the locked Project facts and the Activity kind (`Structural`, `ChapterSelection`).
+- A profile of one record set allocates its sequences for every plan. Only `AuthorEditProfile` and `UndoCompensation` have more than one record set, and their plan selects the set. Each profile keeps its own replay evidence check.
 - A zero-authority outcome never allocates an Authoritative Commit or an Author Action. It can write effect rows, and an Activity record where its schema requires one (`steerAgentRun`, `takeOverProjectWriter`).
 - The response record is the Command-response Project, the Command-response Project with the Project assistance record, or none. A command without a response record decodes its acknowledgement from the Receipt and its effect rows.
 
@@ -114,7 +117,7 @@ A Barrier stops Author Undo, and Author Undo never skips it. These product decis
 
 ### Amendment of ADR 0075
 
-Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, the missing Admission, and the rate-limited Command Challenge. A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
+Inside `storyos-adapter-postgres`, `command_sequence_tests/` owns the generic guarantees for each command row: replay equality, the declared records only, rollback, an exact retry in progress, damaged and pre-capture evidence, the contention refusal, and the missing Admission. A per-command test owns the classification and the effect rows of its command, its scope isolation, and its own refusals.
 
 ## Considered options
 

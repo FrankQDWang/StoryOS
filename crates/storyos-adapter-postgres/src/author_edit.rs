@@ -199,8 +199,11 @@ pub(super) fn parse_u64(value: String) -> Result<u64, AuthorEditError> {
 pub(super) fn author_edit_challenge_error(error: ProjectCommandChallengeError) -> AuthorEditError {
     match error {
         ProjectCommandChallengeError::BindingConflict => AuthorEditError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired
-        | ProjectCommandChallengeError::RateLimited { .. } => AuthorEditError::InvalidChallenge,
+        ProjectCommandChallengeError::InvalidOrExpired => AuthorEditError::InvalidChallenge,
+        // Only a Challenge issue applies the rate limit, so this error is a store fault here.
+        error @ ProjectCommandChallengeError::RateLimited { .. } => {
+            AuthorEditError::Unavailable(Box::new(error))
+        }
         ProjectCommandChallengeError::Unavailable(source) => AuthorEditError::Unavailable(source),
     }
 }

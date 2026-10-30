@@ -1,10 +1,11 @@
-//! The Admission, Receipt, Project lock, and Command Idempotency Fence rows of the sequence.
+//! The Admission, Receipt, Project lock, scope counter, and Command Idempotency Fence rows of the
+//! sequence.
 
-use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
+use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
+use super::{ActionDisposition, LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
 
 pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
@@ -138,6 +139,84 @@ pub(super) async fn insert_activity_payload(
                 &envelope.ids.receipt_id,
                 &receipt_result_kind,
                 &payload.to_string(),
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(())
+}
+
+/// The scope sequences of one applied outcome with an Authoritative Commit.
+pub(crate) struct CommitCounters {
+    pub(crate) author_action_sequence: u64,
+    pub(crate) authoritative_commit_sequence: u64,
+    pub(crate) project_activity_position: u64,
+}
+
+/// Advances the Author Action, Authoritative Commit, and Project Activity counters of the scope.
+/// `Structural` and `AuthoritativeRevision` share this allocation.
+pub(crate) async fn allocate_commit_counters(
+    client: &Client,
+    scope: &ProjectScope,
+) -> Result<CommitCounters, ProjectCommandError> {
+    let row = client
+        .query_one(
+            "INSERT INTO storyos.scope_counters AS counters
+               (owner_user_id, project_id, author_action_sequence,
+                authoritative_commit_sequence, project_activity_position)
+             VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
+             ON CONFLICT (owner_user_id, project_id)
+             DO UPDATE SET
+               author_action_sequence = counters.author_action_sequence + 1,
+               authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
+               project_activity_position = counters.project_activity_position + 1
+             RETURNING counters.author_action_sequence::text,
+                       counters.authoritative_commit_sequence::text,
+                       counters.project_activity_position::text",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(unavailable)?;
+    let counter = |index: usize| row.get::<_, String>(index).parse().map_err(unavailable);
+    Ok(CommitCounters {
+        author_action_sequence: counter(/*index*/ 0)?,
+        authoritative_commit_sequence: counter(/*index*/ 1)?,
+        project_activity_position: counter(/*index*/ 2)?,
+    })
+}
+
+/// Inserts the Author Action of one `authoritative_applied` outcome. A Current Chapter change has
+/// no Authoritative Commit.
+pub(crate) async fn insert_author_action(
+    client: &Client,
+    scope: &ProjectScope,
+    author_action_sequence: u64,
+    disposition: &ActionDisposition,
+    authoritative_commit_id: Option<&str>,
+    receipt_id: &str,
+) -> Result<(), ProjectCommandError> {
+    let (disposition, source_sequence) = match disposition {
+        ActionDisposition::Forward => ("forward", None),
+        ActionDisposition::Compensation { source_sequence } => {
+            ("compensation", Some(source_sequence.to_string()))
+        }
+    };
+    client
+        .execute(
+            "INSERT INTO storyos.author_action_entries
+               (owner_user_id, project_id, author_action_sequence, disposition,
+                compensated_source_sequence, authoritative_commit_id, receipt_id,
+                receipt_result_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4,
+                     $5::text::numeric, $6::text::uuid, $7::text::uuid, 'authoritative_applied')",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &author_action_sequence.to_string(),
+                &disposition,
+                &source_sequence,
+                &authoritative_commit_id,
+                &receipt_id,
             ],
         )
         .await

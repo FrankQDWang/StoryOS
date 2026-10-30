@@ -7,14 +7,13 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::records::insert_applied_activity;
-use super::{
-    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+use super::structural_records::{
+    StructuralInput, StructuralRecords, WriterBaseRebind, persist_structural_records,
 };
+use super::{SettlementProfile, SingleRecordSet};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     CurrentChapterSequences, allocate_current_chapter_sequences,
-    persist_current_chapter_forward_author_action,
 };
 
 /// The applied writes of one Current Chapter change. The profile writes every authority record.
@@ -28,129 +27,65 @@ pub(crate) struct ChapterSelectionWrite<E> {
     pub(crate) chapter_revision_id: String,
 }
 
-/// The Current Chapter update, canonical Snapshot, writer base rebind, Activity record, and
-/// Forward Author Action of one applied Current Chapter change.
+/// The Current Chapter update, Activity record, Forward Author Action, canonical Snapshot, and
+/// writer base rebind of one applied Current Chapter change.
 pub(crate) struct ChapterSelection;
 
-impl<T> SelectsRecords<ChapterSelection> for T {
-    fn selector(&self) {}
-}
-
-impl SettlementProfile for ChapterSelection {
-    type Selector = ();
-    type Sequences = CurrentChapterSequences;
-    type Write<E: Send> = ChapterSelectionWrite<E>;
-    type Applied<E: Send> = ChapterSelectionApplied<E>;
-
+impl SingleRecordSet for ChapterSelection {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
-        (): &(),
     ) -> Result<CurrentChapterSequences, ProjectCommandError> {
         allocate_current_chapter_sequences(client, scope)
             .await
             .map_err(ProjectCommandError::Unavailable)
     }
+}
+
+impl SettlementProfile for ChapterSelection {
+    type Sequences = CurrentChapterSequences;
+    type Write<E: Send> = ChapterSelectionWrite<E>;
+    type Applied<E: Send> = ChapterSelectionApplied<E>;
+    type Input = StructuralInput;
 
     fn commit_ids(_sequences: &CurrentChapterSequences) -> Vec<String> {
         Vec::new()
     }
 
+    /// The locked Current Chapter guards the Project update. Core applies a Current Chapter
+    /// change only when the locked Current Chapter is the prior Chapter of the write.
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
-        spec: &CommandSpec,
-        _variant: AppliedVariant,
+        input: StructuralInput,
         sequences: CurrentChapterSequences,
         write: ChapterSelectionWrite<E>,
     ) -> Result<ChapterSelectionApplied<E>, ProjectCommandError> {
-        let scope = &envelope.project_scope;
-        let updated = client
-            .execute(
-                "UPDATE storyos.projects
-                    SET current_chapter_id = $3::text::uuid
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND lifecycle_state = 'active'
-                    AND current_chapter_id = $4::text::uuid",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &write.chapter_id,
-                    &write.prior_chapter_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        if updated != 1 {
-            return Err(unavailable("current Chapter changed under FOR UPDATE"));
-        }
-        crate::snapshot::persist_canonical_snapshot(
-            client,
-            scope,
-            &sequences.snapshot_id,
-            sequences.project_activity_position,
-        )
-        .await
-        .map_err(unavailable)?;
-        let base_updates = client
-            .execute(
-                "UPDATE storyos.editor_session_base_snapshots AS snapshot
-                    SET snapshot_id = $4::text::uuid,
-                        chapter_object_id = $5::text::uuid,
-                        authoritative_revision_id = $6::text::uuid,
-                        project_activity_position = $7::text::numeric,
-                        created_at = clock_timestamp()
-                   FROM storyos.project_writer_generations AS writer
-                  WHERE snapshot.owner_user_id = $1::text::uuid
-                    AND snapshot.project_id = $2::text::uuid
-                    AND snapshot.editor_session_id = $3::text::uuid
-                    AND (writer.owner_user_id, writer.project_id,
-                         writer.current_editor_session_id) =
-                        (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.editor_session_id)
-                    AND writer.writer_generation = (
-                      SELECT max(current_writer.writer_generation)
-                        FROM storyos.project_writer_generations AS current_writer
-                       WHERE current_writer.owner_user_id = snapshot.owner_user_id
-                         AND current_writer.project_id = snapshot.project_id
-                    )",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &write.editor_session_id,
-                    &sequences.snapshot_id,
-                    &write.chapter_id,
-                    &write.chapter_revision_id,
-                    &sequences.project_activity_position.to_string(),
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        if base_updates != 1 {
-            return Err(ProjectCommandError::BindingConflict);
-        }
-        insert_applied_activity(
+        persist_structural_records(
             client,
             envelope,
-            spec.activity_kind,
-            sequences.project_activity_position,
-            &sequences.project_activity_event_id,
-            serde_json::json!({
-                "prior_chapter_id": write.prior_chapter_id,
-                "current_chapter_id": write.chapter_id,
-            }),
-            &[("base_snapshot_id", sequences.snapshot_id.clone())],
+            StructuralRecords {
+                input: &input,
+                resulting_tree_revision: input.tree_revision,
+                resulting_current_chapter_id: Some(&write.chapter_id),
+                author_action_sequence: sequences.author_action_sequence,
+                project_activity_position: sequences.project_activity_position,
+                project_activity_event_id: &sequences.project_activity_event_id,
+                snapshot_id: &sequences.snapshot_id,
+                activity: serde_json::json!({
+                    "prior_chapter_id": write.prior_chapter_id,
+                    "current_chapter_id": write.chapter_id,
+                }),
+                activity_field: ("base_snapshot_id", sequences.snapshot_id.clone()),
+                commit: None,
+                writer_base: WriterBaseRebind::Session {
+                    editor_session_id: &write.editor_session_id,
+                    chapter_id: &write.chapter_id,
+                    revision_id: &write.chapter_revision_id,
+                },
+            },
         )
         .await?;
-        persist_current_chapter_forward_author_action(
-            client,
-            scope,
-            sequences.author_action_sequence,
-            &envelope.ids.receipt_id,
-        )
-        .await
-        .map_err(unavailable)?;
         Ok(ChapterSelectionApplied {
             effect: write.effect,
             project_activity_position: sequences.project_activity_position,
@@ -158,7 +93,7 @@ impl SettlementProfile for ChapterSelection {
             authority: AuthorityEvidence::Settled(ChapterSelectionAuthority {
                 author_action_sequence: sequences.author_action_sequence,
                 snapshot_id: sequences.snapshot_id,
-                manuscript_tree_revision: project.tree_revision,
+                manuscript_tree_revision: input.tree_revision,
             }),
         })
     }
