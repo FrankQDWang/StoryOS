@@ -181,7 +181,11 @@ async fn load_author_withdrawal(
         generation: row.get(/*idx*/ 2),
         candidate_text: row.get(/*idx*/ 3),
         base_authoritative_revision_id: row.get(/*idx*/ 4),
-        closure: if producer_withdrew { "withdrawn" } else { "open" },
+        closure: if producer_withdrew {
+            "withdrawn"
+        } else {
+            "open"
+        },
     }))
 }
 

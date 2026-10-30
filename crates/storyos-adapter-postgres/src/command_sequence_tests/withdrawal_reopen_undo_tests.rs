@@ -11,13 +11,18 @@ use super::secondary_operation::two_operation_proposal;
 use super::support::stores;
 use super::undo::latest_forward;
 
-/// The Withdrawal event of the author Withdrawal at `author_action_sequence`.
-async fn author_withdrawal_event(admin: &Client, author_action_sequence: u64) -> String {
+/// The Withdrawal event of the author Withdrawal of one Proposal at `author_action_sequence`.
+async fn author_withdrawal_event(
+    admin: &Client,
+    proposal_id: &str,
+    author_action_sequence: u64,
+) -> String {
     admin
         .query_one(
             "SELECT withdrawal_event_id::text FROM storyos.proposal_withdrawals
-              WHERE author_action_sequence = $1::text::numeric",
-            &[&author_action_sequence.to_string()],
+              WHERE proposal_id = $1::text::uuid
+                AND author_action_sequence = $2::text::numeric",
+            &[&proposal_id, &author_action_sequence.to_string()],
         )
         .await
         .unwrap()
@@ -36,7 +41,7 @@ async fn the_author_reopens_a_withdrawal_again_after_the_undo_of_its_reopen() {
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x9e00).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
     let withdrawn = withdraw(&store, &admin, &proposal, /*suffix*/ 0x9e09).await;
-    let withdrawal = author_withdrawal_event(&admin, withdrawn).await;
+    let withdrawal = author_withdrawal_event(&admin, &proposal.proposal_id, withdrawn).await;
     let first_reopen = reopen(
         &store,
         &admin,
@@ -66,7 +71,10 @@ async fn the_author_reopens_a_withdrawal_again_after_the_undo_of_its_reopen() {
             head_closure(&admin, &proposal.proposal_id).await
         ),
         (
-            [TransitionOutcome::Applied(()), TransitionOutcome::Applied(())],
+            [
+                TransitionOutcome::Applied(()),
+                TransitionOutcome::Applied(())
+            ],
             "open".to_owned(),
             [
                 (reopened, Some(withdrawn)),
@@ -90,7 +98,7 @@ async fn author_undo_of_an_author_withdrawal_keeps_a_later_producer_withdrawal()
     let proposal = two_operation_proposal(&store, &admin, /*base*/ 0x9e20).await;
     let prior = latest_forward(&admin, &proposal.scope).await;
     let withdrawn = withdraw(&store, &admin, &proposal, /*suffix*/ 0x9e29).await;
-    let author_withdrawal = author_withdrawal_event(&admin, withdrawn).await;
+    let author_withdrawal = author_withdrawal_event(&admin, &proposal.proposal_id, withdrawn).await;
     let author_reopen = reopen(
         &store,
         &admin,

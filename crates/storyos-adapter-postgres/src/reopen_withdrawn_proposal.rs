@@ -1,6 +1,6 @@
 use storyos_application::{
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalReopened, ReopenWithdrawnProposalInput,
-    ReopenWithdrawnProposalSettlement,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalReopened,
+    ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
 use storyos_core::{
     ReopenWithdrawnProposal as CoreReopen, ReopenWithdrawnProposalConflict,
