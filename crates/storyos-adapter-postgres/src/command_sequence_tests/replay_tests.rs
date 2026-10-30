@@ -41,6 +41,7 @@ use super::structure::{
 };
 use super::support::{
     CommandCall, issued, replayed_outcome, seed_project, stores, two_chapter_writer,
+    with_new_request_ids,
 };
 
 const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
@@ -690,6 +691,45 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     assert_eq!(acceptance_records, vec![[1, 1], [1, 0], [1, 0], [1, 0]]);
     assert_eq!(rejection_records, vec![1; 4]);
     assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, _admin) = stores().await;
+    let scope = seed_project(&store, "9840").await;
+    let mut renames = Vec::new();
+    for (suffix, title, expected_revision) in [(0x9841, "Renamed", 1), (0x9842, "Later", 2)] {
+        let input = UpdateProjectInput {
+            title: title.to_owned(),
+            expected_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_PROJECT, input).await;
+        let settled = store.update_project(&call.envelope, &call.input).await;
+        renames.push((with_new_request_ids(&call), settled.unwrap()));
+    }
+    let (retry, first) = &renames[0];
+    let replayed = store.update_project(&retry.envelope, &retry.input).await;
+
+    let scope = seed_project(&store, "9850").await;
+    let mut archivals = Vec::new();
+    for (suffix, expected_revision) in [(0x9851, 1), (0x9852, 2)] {
+        let input = ArchiveProjectInput { expected_revision };
+        let call = issued(&store, &scope, suffix, &ARCHIVE_PROJECT, input).await;
+        let settled = store.archive_project(&call.envelope, &call.input).await;
+        archivals.push((with_new_request_ids(&call), settled.unwrap()));
+    }
+    let (archive_retry, first_archival) = &archivals[0];
+    let replayed_archival = store
+        .archive_project(&archive_retry.envelope, &archive_retry.input)
+        .await;
+    assert_eq!(
+        (replayed.unwrap(), replayed_archival.unwrap()),
+        (first.clone(), first_archival.clone())
+    );
 }
 
 /// Gives the Proposal Revision and its Validation Receipt a copy of the Chapter Head as base.

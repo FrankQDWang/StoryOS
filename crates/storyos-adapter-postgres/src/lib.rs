@@ -9,10 +9,6 @@ mod tests;
 mod author_edit_outcome_tests;
 
 #[cfg(test)]
-#[path = "takeover_persistence_tests.rs"]
-mod takeover_persistence_tests;
-
-#[cfg(test)]
 #[path = "takeover_admission_tests.rs"]
 mod takeover_admission_tests;
 
@@ -33,20 +29,12 @@ mod create_project_tests;
 mod recovery_visibility_proof_tests;
 
 #[cfg(test)]
-#[path = "update_project_tests.rs"]
-mod update_project_tests;
-
-#[cfg(test)]
-#[path = "update_project_assistance_tests.rs"]
-mod update_project_assistance_tests;
+#[path = "project_settings_tests.rs"]
+mod project_settings_tests;
 
 #[cfg(test)]
 #[path = "create_agent_run_tests.rs"]
 mod create_agent_run_tests;
-
-#[cfg(test)]
-#[path = "archive_project_tests.rs"]
-mod archive_project_tests;
 
 #[cfg(test)]
 #[path = "create_structure_tests.rs"]

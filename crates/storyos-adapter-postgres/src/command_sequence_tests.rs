@@ -74,7 +74,7 @@ pub(crate) use structure::{
     update_chapter, update_chapter_call, update_volume, update_volume_call,
 };
 pub(crate) use support::{
-    CREATE_EDITOR_SESSION, CommandCall, applied, command_call, command_issue,
-    create_project_command, create_project_issue, seed_owned_project, seed_project, stores,
+    CREATE_EDITOR_SESSION, CommandCall, Route, applied, command_call, command_issue,
+    create_project_command, create_project_issue, issued, seed_owned_project, seed_project, stores,
     undo_named,
 };

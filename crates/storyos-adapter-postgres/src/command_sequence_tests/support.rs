@@ -261,7 +261,7 @@ pub(crate) const CREATE_EDITOR_SESSION: Route = Route {
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
-pub(super) async fn issued<I>(
+pub(crate) async fn issued<I>(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,

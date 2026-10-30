@@ -60,7 +60,8 @@ struct DurableTakeoverState {
     snapshot_count: i64,
     activity_count: i64,
     settlement_count: i64,
-    activity_position: Option<String>,
+    /// The Author Action sequence, the Commit sequence, and the Activity position.
+    counters: Option<[String; 3]>,
     pending_keys: Vec<String>,
     settled_keys: Vec<String>,
     consumed_keys: Vec<String>,
@@ -356,7 +357,9 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
                    AND event_kind = 'writer_takeover_applied'),
                (SELECT count(*) FROM storyos.author_command_admission_settlements
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
-               (SELECT project_activity_position::text FROM storyos.scope_counters
+               (SELECT ARRAY[author_action_sequence::text, authoritative_commit_sequence::text,
+                             project_activity_position::text]
+                  FROM storyos.scope_counters
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid)",
             &[&USER, &fixture.project_id.as_str()],
         )
@@ -384,7 +387,9 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
         snapshot_count: counts.get(0),
         activity_count: counts.get(1),
         settlement_count: counts.get(2),
-        activity_position: counts.get(3),
+        counters: counts
+            .get::<_, Option<Vec<String>>>(3)
+            .map(|counters| counters.try_into().unwrap()),
         pending_keys,
         settled_keys,
         consumed_keys,
@@ -402,6 +407,24 @@ async fn base_rows(admin: &Client, fixture: &TakeoverFixture) -> serde_json::Val
         .await
         .unwrap();
     serde_json::from_str(row.get(0)).unwrap()
+}
+
+fn expected_initial_state(
+    fixture: &TakeoverFixture,
+    pending_keys: Vec<String>,
+) -> DurableTakeoverState {
+    DurableTakeoverState {
+        generations: vec![("1".to_owned(), fixture.writer_session_id.clone())],
+        admission_keys: Vec::new(),
+        receipt_keys: Vec::new(),
+        snapshot_count: 3,
+        activity_count: 0,
+        settlement_count: 0,
+        counters: None,
+        pending_keys,
+        settled_keys: Vec::new(),
+        consumed_keys: Vec::new(),
+    }
 }
 
 fn assert_winner_base_handoff(
@@ -432,24 +455,6 @@ fn assert_winner_base_handoff(
     expected[resulting_editor_session_id]["project_activity_position"] =
         serde_json::json!(resulting_snapshot_activity_position);
     assert_eq!(after, &expected);
-}
-
-fn expected_initial_state(
-    fixture: &TakeoverFixture,
-    pending_keys: Vec<String>,
-) -> DurableTakeoverState {
-    DurableTakeoverState {
-        generations: vec![("1".to_owned(), fixture.writer_session_id.clone())],
-        admission_keys: Vec::new(),
-        receipt_keys: Vec::new(),
-        snapshot_count: 3,
-        activity_count: 0,
-        settlement_count: 0,
-        activity_position: None,
-        pending_keys,
-        settled_keys: Vec::new(),
-        consumed_keys: Vec::new(),
-    }
 }
 
 fn assert_complete_settlement(
@@ -572,7 +577,7 @@ fn assert_database_race_failure(error: ProjectCommandError) {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
+async fn a_takeover_hands_the_writer_to_an_observer_and_refuses_a_stale_or_current_writer() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
@@ -587,61 +592,33 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
 
     let same_session =
         prepare_takeover(&store, &fixture, &fixture.writer_session_id, 1, 1010).await;
-    assert!(matches!(
-        take_over_project_writer(&store, &same_session).await,
-        Err(ProjectCommandError::BindingConflict)
-    ));
-    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
-    assert_eq!(
-        durable_state(&admin, &fixture).await,
-        expected_initial_state(
-            &fixture,
-            vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ]
-        )
-    );
-
     let stale_generation =
         prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 0, 1020).await;
-    assert!(matches!(
-        take_over_project_writer(&store, &stale_generation).await,
-        Err(ProjectCommandError::BindingConflict)
-    ));
-    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
+    let refused_keys = [&same_session, &stale_generation]
+        .map(|call| call.envelope.challenge_binding.idempotency_key.clone())
+        .to_vec();
+    for refused in [&same_session, &stale_generation] {
+        assert!(matches!(
+            take_over_project_writer(&store, refused).await,
+            Err(ProjectCommandError::BindingConflict)
+        ));
+        assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
+    }
     assert_eq!(
         durable_state(&admin, &fixture).await,
-        expected_initial_state(
-            &fixture,
-            vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-                stale_generation
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-            ]
-        )
+        expected_initial_state(&fixture, refused_keys.clone())
     );
 
     let successful =
         prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 1, 1030).await;
     let settlement = take_over_project_writer(&store, &successful).await.unwrap();
-    assert_complete_settlement(&settlement, &successful, &fixture);
     let settled_bases = base_rows(&admin, &fixture).await;
-    assert_winner_base_handoff(&initial_bases, &settled_bases, &settlement);
     let base_snapshot_id = settled_bases[&fixture.observer_one_session_id]["snapshot_id"]
         .as_str()
         .unwrap()
         .to_owned();
+    assert_complete_settlement(&settlement, &successful, &fixture);
+    assert_winner_base_handoff(&initial_bases, &settled_bases, &settlement);
     let resumed = store
         .activity_resume(&SnapshotLookup {
             project_scope: fixture.scope(),
@@ -662,11 +639,11 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
             expires_at: None,
         }
     );
-    assert_eq!(
-        take_over_project_writer(&store, &successful).await.unwrap(),
-        settlement
-    );
-    assert_eq!(base_rows(&admin, &fixture).await, settled_bases);
+    let settled_key = successful
+        .envelope
+        .challenge_binding
+        .idempotency_key
+        .clone();
     assert_eq!(
         durable_state(&admin, &fixture).await,
         DurableTakeoverState {
@@ -674,51 +651,81 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
                 ("1".to_owned(), fixture.writer_session_id.clone()),
                 ("2".to_owned(), fixture.observer_one_session_id.clone()),
             ],
-            admission_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
-            receipt_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
+            admission_keys: vec![settled_key.clone()],
+            receipt_keys: vec![settled_key.clone()],
             snapshot_count: 4,
             activity_count: 1,
             settlement_count: 1,
-            activity_position: Some("1".to_owned()),
-            pending_keys: vec![
-                same_session
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-                stale_generation
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-            ],
-            settled_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
-            consumed_keys: vec![
-                successful
-                    .envelope
-                    .challenge_binding
-                    .idempotency_key
-                    .clone()
-            ],
+            counters: Some(["0", "0", "1"].map(str::to_owned)),
+            pending_keys: refused_keys,
+            settled_keys: vec![settled_key.clone()],
+            consumed_keys: vec![settled_key],
         }
+    );
+
+    // The schema refuses an Author Edit Activity row for the no_effect takeover Receipt.
+    let runtime = connect(&runtime_url).await;
+    let forbidden = runtime
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL storyos.owner_user_id = '{USER}';
+             SET LOCAL storyos.project_id = '{project}';
+             INSERT INTO storyos.project_activity_events
+               (owner_user_id, project_id, project_activity_position, project_activity_event_id,
+                event_kind, receipt_id, receipt_result_kind, authoritative_commit_id,
+                resulting_revision_id, author_action_sequence)
+             VALUES ('{USER}', '{project}', 2, '{event}', 'authoritative_author_edit_applied',
+                     '{receipt}', 'no_effect', '{revision}', '{revision}', 1);",
+            project = fixture.project_id,
+            event = test_uuid(1049),
+            receipt = successful.envelope.ids.receipt_id,
+            revision = fixture.revision_id,
+        ))
+        .await
+        .expect_err("an Author Edit Activity row needs an applied Receipt");
+    let refusal = forbidden
+        .as_db_error()
+        .expect("the database refuses the row");
+    assert_eq!(
+        (refusal.code(), refusal.constraint()),
+        (
+            &tokio_postgres::error::SqlState::CHECK_VIOLATION,
+            Some("project_activity_events_receipt_result_kind_check")
+        )
+    );
+
+    // A takeover moves only the Activity position of an existing counter row.
+    admin
+        .execute(
+            "UPDATE storyos.scope_counters
+                SET author_action_sequence = 7, authoritative_commit_sequence = 11
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &fixture.project_id.as_str()],
+        )
+        .await
+        .unwrap();
+    let second =
+        prepare_takeover(&store, &fixture, &fixture.observer_two_session_id, 2, 1040).await;
+    let second_effect = take_over_project_writer(&store, &second)
+        .await
+        .unwrap()
+        .zero_authority_effect
+        .expect("a writer takeover records its writer effect");
+    assert_eq!(
+        second_effect,
+        WriterTakeover {
+            prior_editor_session_id: fixture.observer_one_session_id.clone(),
+            prior_writer_generation: 2,
+            resulting_editor_session_id: fixture.observer_two_session_id.clone(),
+            resulting_writer_generation: 3,
+            resulting_snapshot_id: second_effect.resulting_snapshot_id.clone(),
+            resulting_snapshot_activity_position: 2,
+            resulting_head: fixture.revision_id.clone(),
+        }
+    );
+    assert_eq!(
+        durable_state(&admin, &fixture).await.counters,
+        Some(["7", "11", "2"].map(str::to_owned))
     );
 }
 
@@ -857,7 +864,7 @@ async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback()
             snapshot_count: 4,
             activity_count: 1,
             settlement_count: 1,
-            activity_position: Some("1".to_owned()),
+            counters: Some(["0", "0", "1"].map(str::to_owned)),
             pending_keys: vec![loser_key],
             settled_keys: vec![winner_key.clone()],
             consumed_keys: vec![winner_key],

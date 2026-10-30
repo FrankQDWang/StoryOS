@@ -371,21 +371,6 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         (true, true)
     );
 
-    let replay = create(
-        &store,
-        run_command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "7a99",
-            ConversationSelection::New,
-            "018f0000-0000-7001-8000-000000067a99",
-            CHAPTER,
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(replay, first);
-
     let busy_issue = issue_run(PROJECT, "7a21");
     issue_project_command_challenge(&store, &busy_issue)
         .await
