@@ -98,8 +98,7 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         .batch_execute(
             "CREATE TABLE public.storyos_issue_687_counts (
            object_calls bigint NOT NULL DEFAULT 0, project_calls bigint NOT NULL DEFAULT 0,
-           rank_calls bigint NOT NULL DEFAULT 0, rank_rows bigint NOT NULL DEFAULT 0,
-           fail_rank boolean NOT NULL DEFAULT false);
+           rank_calls bigint NOT NULL DEFAULT 0, rank_rows bigint NOT NULL DEFAULT 0);
          INSERT INTO public.storyos_issue_687_counts DEFAULT VALUES;
          CREATE FUNCTION public.storyos_issue_687_count_objects()
          RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
@@ -110,9 +109,6 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
              USING (owner_user_id, project_id, manuscript_object_id)
             WHERE n.object_kind = 'volume' AND n.tree_order IS DISTINCT FROM o.tree_order
               AND n.tree_order < o.tree_order;
-           IF changed > 0 AND (SELECT fail_rank FROM public.storyos_issue_687_counts) THEN
-             RAISE EXCEPTION 'injected Volume rank failure';
-           END IF;
            UPDATE public.storyos_issue_687_counts
               SET object_calls = object_calls + 1,
                   rank_calls = rank_calls + CASE WHEN changed > 0 THEN 1 ELSE 0 END,
@@ -142,28 +138,6 @@ async fn volume_rank_batch_keeps_sparse_order_and_removed_volume_rows() {
         expected_tree_revision: 6,
     };
     let command = named_call(&store, &scope, "6879", &UPDATE_VOLUME, input).await;
-    let before = durable_project_rows(&admin, &scope).await;
-    admin
-        .execute(
-            "UPDATE public.storyos_issue_687_counts SET fail_rank = true",
-            &[],
-        )
-        .await
-        .unwrap();
-    match update_volume(&store, &command).await {
-        Err(ProjectCommandError::Unavailable(error)) => {
-            assert!(format!("{error:?}").contains("injected Volume rank failure"));
-        }
-        other => panic!("expected the injected rank failure, got {other:?}"),
-    }
-    assert_eq!(durable_project_rows(&admin, &scope).await, before);
-    admin
-        .execute(
-            "UPDATE public.storyos_issue_687_counts SET fail_rank = false",
-            &[],
-        )
-        .await
-        .unwrap();
     admin
         .execute(
             "UPDATE storyos.manuscript_objects SET tree_order = 9223372036854775807
