@@ -24,8 +24,8 @@ use crate::project_archive_build::{
 };
 
 impl PostgresProjectReader {
-    /// Admits one exportProjectArchive. An archived Project and each archive build refusal are
-    /// refusals before Admission. The Worker settles the admitted operation later.
+    /// Admits one exportProjectArchive. Each archive build refusal is a refusal before
+    /// Admission. The Worker settles the admitted operation later.
     pub async fn export_project_archive(
         &self,
         envelope: &ProjectCommandEnvelope,
@@ -56,16 +56,15 @@ impl AdmitCommand for ExportProjectArchiveInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<ArchiveExportFacts, ExportProjectArchiveError> {
         match classify_export(&CoreExport {
             presence: ProjectPresence::Present,
-            current_lifecycle: project.lifecycle,
         }) {
             ExportProjectArchiveResult::Admitted => {}
             ExportProjectArchiveResult::Refused { reason } => {
                 return Err(RefusableCommandError::RefusedBeforeAdmission(
-                    ArchiveExportRefusal::Lifecycle(reason),
+                    ArchiveExportRefusal::Presence(reason),
                 ));
             }
         }
@@ -220,19 +219,6 @@ impl ExportOperationReader for PostgresProjectReader {
             .await
             .map_err(read_error)?;
         set_scope(&transaction, scope).await?;
-        let Some(project) = transaction
-            .query_opt(
-                "SELECT lifecycle_state FROM storyos.projects
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .map_err(read_error)?
-        else {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetExportOperation::Missing);
-        };
-        let archived = project.get::<_, String>(0) == "archived";
         let ready = transaction
             .query_opt(
                 "SELECT export.export_id::text,
@@ -320,11 +306,7 @@ impl ExportOperationReader for PostgresProjectReader {
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
-            return Ok(if archived {
-                GetExportOperation::Archived
-            } else {
-                GetExportOperation::Missing
-            });
+            return Ok(GetExportOperation::Missing);
         };
         let snapshot_id = operation.get::<_, String>(3);
         let source_snapshot =
@@ -368,9 +350,6 @@ impl ExportOperationReader for PostgresProjectReader {
     ) -> Result<storyos_application::VerifiedExportArchive, ProjectReadError> {
         match self.read_export_operation(scope, export_id).await? {
             GetExportOperation::Missing => Ok(storyos_application::VerifiedExportArchive::Missing),
-            GetExportOperation::Archived => {
-                Ok(storyos_application::VerifiedExportArchive::Archived)
-            }
             GetExportOperation::Expired => Ok(storyos_application::VerifiedExportArchive::Expired),
             GetExportOperation::InProgress(_)
             | GetExportOperation::Failed(_)

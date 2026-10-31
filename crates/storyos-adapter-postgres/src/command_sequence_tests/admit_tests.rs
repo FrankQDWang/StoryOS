@@ -306,7 +306,9 @@ async fn keeps_the_fence_open<E: ExportInput>(base: u16) {
     let mut unknown = Vec::new();
     for (result_kind, reason) in [
         ("refused", "unknown_reason"),
-        ("conflicted", "archived_project"),
+        // ADR 0078 removes this settlement reason, so an old Receipt of it does not decode.
+        ("refused", "archived_project"),
+        ("conflicted", "pinned_export_source_unavailable"),
         ("refused", "pinned_export_source_unavailable"),
     ] {
         run_without_foreign_keys(

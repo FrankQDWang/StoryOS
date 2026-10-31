@@ -181,7 +181,7 @@ pub use project_archive::{
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
-    ProjectLifecycle, export_project_archive,
+    export_project_archive,
 };
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,

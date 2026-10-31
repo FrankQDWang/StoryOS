@@ -24,7 +24,6 @@ impl ExportOperationReader for Reader {
     ) -> Result<VerifiedExportArchive, ProjectReadError> {
         match self.read_export_operation(scope, export_id).await? {
             GetExportOperation::Missing => Ok(VerifiedExportArchive::Missing),
-            GetExportOperation::Archived => Ok(VerifiedExportArchive::Archived),
             GetExportOperation::Expired => Ok(VerifiedExportArchive::Expired),
             GetExportOperation::InProgress(_)
             | GetExportOperation::Failed(_)
@@ -99,7 +98,6 @@ async fn verified_archive_bytes_are_refused_while_in_progress() {
                 | GetExportOperation::Failed(_)
                 | GetExportOperation::OutcomeUnknown(_) => Ok(VerifiedExportArchive::Unsettled),
                 GetExportOperation::Missing => Ok(VerifiedExportArchive::Missing),
-                GetExportOperation::Archived => Ok(VerifiedExportArchive::Archived),
                 GetExportOperation::Expired => Ok(VerifiedExportArchive::Expired),
                 GetExportOperation::Ready(_) => {
                     Ok(VerifiedExportArchive::Ready(b"PK\x03\x04".to_vec()))
