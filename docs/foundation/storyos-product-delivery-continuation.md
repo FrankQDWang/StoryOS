@@ -329,7 +329,8 @@ apply to every added stage; their completed implementation is reusable.
 The release correction delivers these requirements to the existing proof
 owner. That owner must cover every current requirement, journey, evidence,
 stage, and successor without treating the historical Stage 1 crosswalk as
-current route verification. It also owns the mechanism that detects a missing
+current route verification. The historical crosswalk evidence is on the tag
+`evidence/pre-cleanup-round-2`. It also owns the mechanism that detects a missing
 source disposition, duplicate owner, unknown identifier, or stale ticket graph.
 
 After the proof owner consumes this release revision, the `to-spec` skill refreshes the
