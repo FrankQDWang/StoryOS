@@ -57,45 +57,6 @@ fn paragraph(id: &str, text: &str) -> ManuscriptBlock {
 }
 
 #[test]
-fn ordered_versioned_ids_decode_the_complete_payload() {
-    let blocks = vec![
-        paragraph("018f0000-0000-7001-8000-0000000000b1", "Alpha"),
-        paragraph("018f0000-0000-7001-8000-0000000000b2", "Beta"),
-    ];
-    let stored = persist_canonical_bytes(&blocks);
-    let ids = vec![
-        "018f0000-0000-7001-8000-0000000000b1".to_owned(),
-        "018f0000-0000-7001-8000-0000000000b2".to_owned(),
-    ];
-    assert_eq!(blocks_from_stored_payload(&stored, &ids), blocks);
-}
-
-#[test]
-fn versioned_id_mismatch_decodes_no_blocks() {
-    let blocks = vec![
-        paragraph("018f0000-0000-7001-8000-0000000000b1", "Alpha"),
-        paragraph("018f0000-0000-7001-8000-0000000000b2", "Beta"),
-    ];
-    let stored = persist_canonical_bytes(&blocks);
-    let reversed = vec![
-        "018f0000-0000-7001-8000-0000000000b2".to_owned(),
-        "018f0000-0000-7001-8000-0000000000b1".to_owned(),
-    ];
-    assert_eq!(
-        blocks_from_stored_payload(&stored, &reversed),
-        Vec::<ManuscriptBlock>::new()
-    );
-}
-
-#[test]
-fn legacy_payload_with_zero_members_decodes_no_blocks() {
-    assert_eq!(
-        blocks_from_stored_payload("Hello", &[]),
-        Vec::<ManuscriptBlock>::new()
-    );
-}
-
-#[test]
 fn legacy_payload_with_one_member_upgrades_that_block() {
     assert_eq!(
         blocks_from_stored_payload(

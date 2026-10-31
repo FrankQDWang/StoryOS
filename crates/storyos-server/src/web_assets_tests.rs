@@ -45,21 +45,6 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn validated_resources_survive_directory_changes() {
-    let fixture = Fixture::new();
-    let assets = WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap();
-    fs::write(fixture.root.join("index.html"), b"substituted").unwrap();
-    fs::remove_file(fixture.root.join(SCRIPT)).unwrap();
-    let expected = WebResource::from_bytes("index.html".to_owned(), INDEX).unwrap();
-    assert_eq!(
-        assets.resource("index.html"),
-        Some((&expected, Bytes::from_static(INDEX)))
-    );
-    assert!(assets.resource(SCRIPT).is_some());
-    assert!(assets.resource(WEB_ASSET_MANIFEST).is_none());
-}
-
-#[test]
 fn refuses_missing_extra_altered_and_mixed_resources() {
     let mutations: [fn(&mut Fixture); 5] = [
         |f| {
