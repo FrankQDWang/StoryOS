@@ -191,7 +191,6 @@ impl PostgresProjectReader {
                     command_id: admission.command_id.clone(),
                     author_command_admission_id: admission.author_command_admission_id.clone(),
                     reconfirmation_reason: reason,
-                    recovery_draft_ref: None,
                 },
             ));
         }
@@ -360,8 +359,7 @@ pub(super) async fn load_requires_reconfirmation(
 ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
     let row = client
         .query_opt(
-            "SELECT reconfirmation.reconfirmation_reason,
-                    reconfirmation.recovery_draft_ref::text
+            "SELECT reconfirmation.reconfirmation_reason
                FROM storyos.author_command_admission_reconfirmations AS reconfirmation
               WHERE reconfirmation.owner_user_id = $1::text::uuid
                 AND reconfirmation.project_id = $2::text::uuid
@@ -380,7 +378,6 @@ pub(super) async fn load_requires_reconfirmation(
             command_id: command_id.to_owned(),
             author_command_admission_id: author_command_admission_id.to_owned(),
             reconfirmation_reason: parse_reason(row.get(0)).ok_or_else(outcome_unavailable)?,
-            recovery_draft_ref: row.get(1),
         },
     ))
 }

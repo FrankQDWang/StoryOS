@@ -138,7 +138,6 @@ fn contract_outcome(
                         contracts::ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable
                     }
                 },
-                recovery_draft_ref: reconfirmation.recovery_draft_ref,
             }
         },
         ApplicationOutcome::StillUnknown { observation } => {

@@ -920,7 +920,6 @@ test("one current writer settles one Author Edit and exact retries return one re
       command_id: unknownCommand,
       author_command_admission_id: unknownAdmission,
       reconfirmation_reason: "direct_edit_intent_unrecoverable",
-      recovery_draft_ref: null,
     });
     assert.equal(await unknownObservationCount(), "1");
     const unknownAfter = await getApplyAuthorEditOutcome(unknownOptions);

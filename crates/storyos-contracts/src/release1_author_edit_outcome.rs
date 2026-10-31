@@ -122,7 +122,6 @@ pub enum ApplyAuthorEditOutcome {
         command_id: String,
         author_command_admission_id: String,
         reconfirmation_reason: ApplyAuthorEditReconfirmationReason,
-        recovery_draft_ref: Option<String>,
     },
     StillUnknown {
         observation: ApplyAuthorEditUnknownObservation,

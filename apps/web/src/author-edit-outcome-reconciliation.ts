@@ -37,7 +37,6 @@ type ClosedOutcome =
         | "admission_expired"
         | "binding_changed"
         | "direct_edit_intent_unrecoverable";
-      recovery_draft_ref: string | null;
     }
   | { kind: "still_unknown"; strongest: Exclude<ReconciliationEvidence,
       { kind: "no_outcome_observed" }> };
@@ -282,7 +281,6 @@ export async function commitOutcomeQueryWithGroup(
               command_id: closed.command_id,
               author_command_admission_id: closed.author_command_admission_id,
               reconfirmation_reason: closed.reconfirmation_reason,
-              recovery_draft_ref: closed.recovery_draft_ref,
             }
           : { kind: "still_unknown", observation: closed.strongest },
   };
@@ -348,7 +346,6 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
       command_id?: unknown;
       author_command_admission_id?: unknown;
       reconfirmation_reason?: unknown;
-      recovery_draft_ref?: unknown;
       observation?: {
         observation_kind?: unknown;
         expires_at?: unknown;
@@ -378,15 +375,12 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
     && UUID.test((outcome.author_command_admission_id ?? "") as string)
     && (outcome.reconfirmation_reason === "admission_expired"
       || outcome.reconfirmation_reason === "binding_changed"
-      || outcome.reconfirmation_reason === "direct_edit_intent_unrecoverable")
-    && (outcome.recovery_draft_ref === null
-      || typeof outcome.recovery_draft_ref === "string")) {
+      || outcome.reconfirmation_reason === "direct_edit_intent_unrecoverable")) {
     return {
       kind: "requires_reconfirmation",
       command_id: outcome.command_id as string,
       author_command_admission_id: outcome.author_command_admission_id as string,
       reconfirmation_reason: outcome.reconfirmation_reason,
-      recovery_draft_ref: outcome.recovery_draft_ref as string | null,
     };
   }
   if (outcome.outcome_kind === "still_unknown"
@@ -543,7 +537,6 @@ export async function reconcileLostAcknowledgement({
           command_id: closed.command_id,
           author_command_admission_id: closed.author_command_admission_id,
           reconfirmation_reason: closed.reconfirmation_reason,
-          recovery_draft_ref: closed.recovery_draft_ref,
         },
       },
     });

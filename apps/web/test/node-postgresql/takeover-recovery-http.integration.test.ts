@@ -178,7 +178,7 @@ async function proveTakeoverRefusesAdmittedRecovery(schedule: Schedule): Promise
         AND project_id = '${projectId}'::uuid AND idempotency_key = '${id(23)}'::uuid`));
     const expectedOutcome = {
       outcome_kind: "requires_reconfirmation", ...admission,
-      reconfirmation_reason: "binding_changed", recovery_draft_ref: null,
+      reconfirmation_reason: "binding_changed",
     };
     assert.deepEqual((await getApplyAuthorEditOutcome(outcomeOptions)).outcome, expectedOutcome);
     assert.deepEqual((await getApplyAuthorEditOutcome(outcomeOptions)).outcome, expectedOutcome);

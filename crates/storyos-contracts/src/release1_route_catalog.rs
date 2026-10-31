@@ -18,7 +18,8 @@ mod sections;
 pub(super) const ROUTE_CATALOG_PATH: &str =
     "generated/route-catalog/versioned-protocol-release-1-route-catalog.json";
 const WIRE_OWNER: Owner = Owner::Protocol;
-const AUTHOR_RECOVERY_RULE: &str = "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only.";
+const AUTHOR_RECOVERY_RULE: &str =
+    "Only the protected author cause may use the Author Command Admission recovery path.";
 const DURABLE_VISIBILITY: &str =
     "only after the durable transition or async settlement named by the operation";
 
