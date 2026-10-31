@@ -1218,9 +1218,8 @@ per-intent idempotency identity can conflict. Coalescing never
 alters local undo grouping, crosses a partition, includes an explicit command,
 or applies to `explicit_editor_command`.
 
-The #70-owned [structured prerelease policy](author-edit-batch-release-1-policy.json)
-selects the replaceable Release 1 window and ceilings and records the candidate
-set, evidence, and future anonymous calibration gate. The current
+The #70-owned prerelease policy
+selects the replaceable Release 1 window and ceilings. The current
 `storyos.editor-contract.release-1.v3` retains that legacy policy and the request
 digest binding. The retained v2 Journal read-only recovery boundary is
 specified in the [Refused Edit Input profile](refused-edit-input-release-1-profile.md).

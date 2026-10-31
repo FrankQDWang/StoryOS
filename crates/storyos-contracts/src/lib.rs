@@ -82,16 +82,6 @@ mod release1_update_volume_artifacts;
 mod release1_wire;
 mod release1_withdraw_proposal;
 mod release1_withdraw_proposal_artifacts;
-mod stage1_bundle;
-mod stage1_crosswalk;
-mod stage1_delivery;
-mod stage1_handoff;
-mod stage1_provenance;
-mod stage1_selection;
-mod stage2_crosswalk;
-mod stage3_crosswalk;
-mod stage4_crosswalk;
-mod stage_crosswalk;
 mod web_assets;
 
 pub use release1_project_activity::ProjectActivityKind;
@@ -379,22 +369,13 @@ pub use release1_withdraw_proposal::{
     WithdrawProposalInput, WithdrawProposalNoEffectReason, WithdrawProposalRefusalReason,
     WithdrawProposalRequest, WithdrawProposalResponse, WithdrawalReceipt, WithdrawalReceiptResult,
 };
-pub use stage1_crosswalk::{
-    CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
-    write_crosswalk,
-};
-pub use stage2_crosswalk::{
-    GENERATED_STAGE2_CROSSWALK_PATH, check_stage2_crosswalk, generate_stage2_crosswalk,
-    write_stage2_crosswalk,
-};
-pub use stage3_crosswalk::{
-    GENERATED_STAGE3_CROSSWALK_PATH, check_stage3_crosswalk, generate_stage3_crosswalk,
-    write_stage3_crosswalk,
-};
-pub use stage4_crosswalk::{
-    GENERATED_STAGE4_CROSSWALK_PATH, check_stage4_crosswalk, generate_stage4_crosswalk,
-    write_stage4_crosswalk,
-};
+/// Resolve the repository that owns this build-time contract tool.
+pub fn repository_root() -> &'static std::path::Path {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("contracts crate must be nested under the repository root")
+}
 
 mod release1_chapter_query_artifacts;
 mod release1_command_challenge_artifacts;

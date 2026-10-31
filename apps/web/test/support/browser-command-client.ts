@@ -9,6 +9,7 @@ import {
   type CommandChallengeRateWindowsResult,
   type ImeCompositionRequest,
   type ImeCompositionResult,
+  type ProjectReceiptsRequest,
   type ProductionHostRequest,
   type ProductionHostResult,
   type TrustedInputRequest,
@@ -18,6 +19,7 @@ import {
   parseClipboardPermissionResult,
   parseCommandChallengeRateWindowsResult,
   parseImeCompositionResult,
+  parseProjectReceiptsResult,
   parseProductionHostResult,
   parseSettleWorkerOnceResult,
   parseTrustedInputResult,
@@ -93,5 +95,11 @@ export async function resetCommandChallengeRateWindows(): Promise<CommandChallen
 export async function settleWorkerOnce(): Promise<void> {
   parseSettleWorkerOnceResult(
     await invokeStoryOSCommand(storyOSBrowserCommandNames.settleWorkerOnce, {}),
+  );
+}
+
+export async function assertPageProjectReceipts(request: ProjectReceiptsRequest): Promise<void> {
+  parseProjectReceiptsResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.projectReceipts, request),
   );
 }

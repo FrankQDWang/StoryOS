@@ -13,6 +13,7 @@ import type { CancelAgentRunRequest, CreateAgentRunResponse, UpdateProjectAssist
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, sessionFetch, startStoryOSServer, stopStoryOSServer }
   from "./node-integration.ts";
+import { assertProjectReceipts } from "./project-receipts.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -152,16 +153,8 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await writeFile(join(evidence, "captured-settings.json"), JSON.stringify({ first: historical, second: current,
       unavailable: await inspect(second.effect.run_id) }, null, 2));
     assert.deepEqual(pageErrors, []);
-    const facts = await queryStoryOSPostgres(`
-      SELECT json_build_object(
-        'project_count', (SELECT count(*) FROM storyos.projects WHERE project_id = '${projectId}'::uuid),
-        'receipts', (SELECT json_object_agg(command_kind, count) FROM (
-          SELECT command_kind, count(*) FROM storyos.domain_receipts
-          WHERE project_id = '${projectId}'::uuid GROUP BY command_kind) AS receipts),
-        'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
-          WHERE project_id = '${projectId}'::uuid))::text;
-    `);
-    await writeFile(join(evidence, "fixture-facts.json"), facts + "\n");
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+      updateProjectAssistance: 1, createAgentRun: 2, cancelAgentRun: 1 }, authorActions: 2 });
   } finally {
     try {
       await page.unrouteAll({ behavior: "ignoreErrors" });

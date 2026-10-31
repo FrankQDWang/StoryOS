@@ -504,9 +504,7 @@ reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 start_exact_dist_server
 start_ai_disabled_exact_dist_server
-# The authority oracle compares the receipts of the exact-dist journeys of the fake destination.
-# The Stage 2 AI-independent journeys run first, without a model destination and the oracle.
-export STORYOS_STAGE1_AUTHORITY_ORACLE=1
+# The Stage 2 AI-independent journeys run first, without a model destination.
 # The vitest --exclude option does not apply to a workspace project, so the second run names its files.
 journeys=""
 for path in apps/web/test/browser-exact-dist/*.test.ts; do
@@ -517,7 +515,7 @@ done
 sh -c '
   ai_disabled=$1
   shift
-  env -u STORYOS_STAGE1_AUTHORITY_ORACLE STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
+  STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
     pnpm --dir apps/web exec vitest run --project browser-exact-dist $ai_disabled &&
     pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@"
 ' exact-dist "$exact_dist_ai_disabled_journeys" $journeys

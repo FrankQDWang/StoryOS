@@ -9,6 +9,7 @@ import { cancelAgentRun, digestCancelAgentRun, getAgentRun } from "../../../../g
 import type { CancelAgentRunRequest, CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, challenged, drainLeftoverWork, id, prepare, settleOnce, USER_A } from "./acceptance";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration";
+import { assertProjectReceipts } from "./project-receipts.ts";
 
 export async function verifyProductionRunEvidence(context: BrowserContext): Promise<void> {
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -24,6 +25,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
   try {
     await drainLeftoverWork();
     let setup = await prepare(server.baseUrl, id("f87700"), "Run evidence acceptance", "f8771");
+    const projectIds = [setup.projectId];
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
     await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
@@ -86,6 +88,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     assert.deepEqual((await inspect(firstId)).context, historical.context);
     const openCase = async (suffix: string) => {
       setup = await prepare(server.baseUrl, id(`f877${suffix}00`), `Run evidence ${suffix}`, `f877${suffix}`);
+      projectIds.push(setup.projectId);
       await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
       await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
       await editor.waitFor();
@@ -252,6 +255,8 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     assert.equal(blocked.model_attempt.kind, "absent");
     await page.reload();
     assert.deepEqual((await inspect(blockedId)).context, blocked.context);
+    await assertProjectReceipts(projectIds, { projects: 13, receipts: { createProject: 13, createVolume: 13, createChapter: 13,
+      updateProjectAssistance: 13, applyAuthorEdit: 4, createAgentRun: 19, cancelAgentRun: 2 }, authorActions: 30 });
     assert.deepEqual(errors, []);
   } finally {
     await page.close();

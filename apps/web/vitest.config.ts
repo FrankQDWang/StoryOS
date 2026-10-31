@@ -81,7 +81,6 @@ export default defineConfig({
         },
         test: {
           ...browserTest(),
-          globalSetup: ["./test/support/exact-dist-global-setup.ts"],
           include: physicalDrill
             ? ["test/browser-exact-dist/s2-physical-drill.integration.test.ts"]
             : ["test/browser-exact-dist/**/*.test.ts"],
