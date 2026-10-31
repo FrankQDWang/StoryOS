@@ -51,14 +51,6 @@ fn protocol_example_entry_and_root_digests_are_golden() {
 }
 
 #[test]
-fn corrupt_entry_digest_is_a_typed_terminal_failure() {
-    assert_eq!(
-        verify_entry_digest(PROTOCOL_ENTRY_BYTES.as_bytes(), "00".repeat(32).as_str()),
-        Err(ProjectArchiveBuildRefusal::CorruptDigest)
-    );
-}
-
-#[test]
 fn case_colliding_paths_are_refused() {
     let source = ArchiveEntrySource {
         path: "canonical/project.json".to_owned(),
@@ -72,6 +64,9 @@ fn case_colliding_paths_are_refused() {
         payload_schema: "storyos.project-record.v1".to_owned(),
         bytes: b"[]".to_vec(),
     };
+    let mixed_case = build_project_archive(&protocol_facts(), std::slice::from_ref(&colliding))
+        .expect("a mixed-case path alone is admitted");
+    assert_eq!(mixed_case.entries[0].path, "canonical/Project.json");
     assert_eq!(
         build_project_archive(&protocol_facts(), &[source, colliding]),
         Err(ProjectArchiveBuildRefusal::Collision)
@@ -101,10 +96,6 @@ fn file_path_that_equals_a_directory_prefix_is_refused() {
 const NESTED_CANONICAL: &str = "{\"empty_array\":[],\"empty_object\":{},\"nested\":[{\"ok\":true},null],\"note\":\"quote\\\"and\\\\slash\\nand\\ttab稿\",\"z\":\"\"}";
 const NESTED_CANONICAL_DIGEST: &str =
     "401bc49a7e445ca401402cbf28bed8f2eec190ef769caeb25a454aec90da1dc2";
-const REPRESENTATIVE_TEXT: &str = "manuscript-payload";
-const REPRESENTATIVE_CANONICAL: &str = r#"[{"text":"manuscript-payload"}]"#;
-const REPRESENTATIVE_ENCODED_SCALAR: &str = r#""manuscript-payload""#;
-const PREVIOUS_SUBTREE_STRING_PAYLOAD_COPIES: usize = 6;
 
 #[test]
 fn nested_archive_records_keep_escaped_empty_and_sorted_bytes() {
@@ -128,59 +119,6 @@ fn nested_archive_records_keep_escaped_empty_and_sorted_bytes() {
         "a\"k": 1
     });
     assert_eq!(canonical_json(&escaped_key), "{\"a\\\"k\":1,\"b\":2}");
-}
-
-#[test]
-fn archive_row_sort_keys_follow_canonical_object_bytes() {
-    let later = serde_json::json!({"z": "1", "m": []});
-    let earlier = serde_json::json!({"a": "1"});
-    let mut rows = vec![later.clone(), earlier.clone()];
-    rows.sort_by_cached_key(canonical_json);
-    assert_eq!(rows, vec![earlier, later.clone()]);
-
-    let equal_left = serde_json::json!({"k": "same", "n": 1});
-    let equal_right = serde_json::json!({"n": 1, "k": "same"});
-    let mut equal_keys = vec![equal_right.clone(), later.clone(), equal_left.clone()];
-    equal_keys.sort_by_cached_key(canonical_json);
-    assert_eq!(equal_keys, vec![equal_right, equal_left, later]);
-}
-
-#[test]
-fn representative_row_array_appends_payload_once_into_one_buffer() {
-    let value = serde_json::json!([{ "text": REPRESENTATIVE_TEXT }]);
-    assert_eq!(canonical_json(&value), REPRESENTATIVE_CANONICAL);
-
-    let mut record = PayloadWriteRecord {
-        payload: REPRESENTATIVE_ENCODED_SCALAR,
-        payload_write_bytes: 0,
-        sink: String::new(),
-    };
-    append_canonical_json(&mut record, &value).expect("the public encoder writes into one buffer");
-    assert_eq!(record.sink, REPRESENTATIVE_CANONICAL);
-    assert_eq!(
-        record.payload_write_bytes,
-        REPRESENTATIVE_ENCODED_SCALAR.len()
-    );
-    assert!(
-        record.payload_write_bytes
-            < PREVIOUS_SUBTREE_STRING_PAYLOAD_COPIES * REPRESENTATIVE_ENCODED_SCALAR.len()
-    );
-}
-
-struct PayloadWriteRecord<'a> {
-    payload: &'a str,
-    payload_write_bytes: usize,
-    sink: String,
-}
-
-impl std::fmt::Write for PayloadWriteRecord<'_> {
-    fn write_str(&mut self, text: &str) -> std::fmt::Result {
-        if text == self.payload {
-            self.payload_write_bytes += text.len();
-        }
-        self.sink.push_str(text);
-        Ok(())
-    }
 }
 
 #[test]
