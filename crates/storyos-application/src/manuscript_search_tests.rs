@@ -155,6 +155,7 @@ async fn dense_ascii_page_decodes_each_utf16_unit_once() {
         SearchManuscript::Ready(page) => {
             assert_eq!(page.items.len(), MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT);
             assert_eq!(page.completeness, ManuscriptSearchCompleteness::Truncated);
+            assert_eq!(page.page_count, MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT as u64);
             assert_eq!(page.items[0].start, 0);
             assert_eq!(page.items[0].end, 1);
             assert_eq!(
