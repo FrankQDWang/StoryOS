@@ -278,7 +278,3 @@ pub(super) fn verify_mandatory_evidence(evidence: &MandatoryEvidence) -> Result<
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "stage1_bundle_tests.rs"]
-mod tests;

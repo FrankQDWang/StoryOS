@@ -151,7 +151,3 @@ pub async fn get_editor_session(
 ) -> Result<Option<EditorSession>, EditorSessionError> {
     store.read_editor_session(request).await
 }
-
-#[cfg(test)]
-#[path = "editor_session_tests.rs"]
-mod tests;

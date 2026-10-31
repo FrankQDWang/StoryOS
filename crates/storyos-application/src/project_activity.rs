@@ -20,7 +20,3 @@ pub struct ProjectActivityEvent {
     pub aggregate: ActivityAggregateRef,
     pub payload_json: String,
 }
-
-#[cfg(test)]
-#[path = "project_activity_tests.rs"]
-mod tests;

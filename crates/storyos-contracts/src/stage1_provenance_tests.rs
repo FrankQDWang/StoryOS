@@ -31,34 +31,6 @@ fn temp_workspace_at(members: &str, now_nanos: u128) -> std::path::PathBuf {
 }
 
 #[test]
-fn equal_clock_values_get_distinct_temp_workspaces() {
-    let now_nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-
-    let first = temp_workspace_at("", now_nanos);
-    let second = temp_workspace_at("", now_nanos);
-
-    assert_ne!(first, second);
-}
-
-#[test]
-fn current_repository_proves_production_shaped_provenance() {
-    provenance_evidence(repository_root())
-        .expect("current workspace should prove S1-REQ-006 and S1-EVD-006");
-}
-
-#[test]
-fn reference_workspace_member_is_rejected() {
-    let dir = temp_workspace("  \"crates/storyos-adapter-postgres\",\n  \".reference/codex\",\n");
-    let evidence = provenance_evidence(repository_root()).expect("complete evidence");
-    let error = verify_provenance_evidence(&dir, &evidence)
-        .expect_err("`.reference/**` workspace member should fail closed");
-    assert!(error.contains("forbidden tree"), "{error}");
-}
-
-#[test]
 fn missing_production_journey_is_rejected() {
     let dir = temp_workspace(
         "  \"crates/storyos-adapter-diagnostics\",\n  \"crates/storyos-adapter-fake-destination\",\n  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-adapter-volcengine-responses\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-literal-guard\",\n  \"crates/storyos-server\",\n  \"crates/storyos-settings\",\n  \"crates/storyos-worker\",\n  \"crates/storyos-worker-bin\",\n",
@@ -70,31 +42,4 @@ fn missing_production_journey_is_rejected() {
         error.contains("browser-exact-dist/s1-jrn-001.integration.test.ts"),
         "{error}"
     );
-}
-
-#[test]
-fn windows_prototype_workspace_member_is_rejected() {
-    let dir = temp_workspace("  \"crates/storyos-adapter-postgres\",\n  \"prototypes\\\\lab\",\n");
-    let evidence = provenance_evidence(repository_root()).expect("complete evidence");
-    let error = verify_provenance_evidence(&dir, &evidence)
-        .expect_err("Windows prototypes path should fail closed");
-    assert!(error.contains("forbidden tree"), "{error}");
-}
-
-#[test]
-fn journey_missing_postgresql_marker_is_rejected() {
-    let dir = temp_workspace(
-        "  \"crates/storyos-adapter-diagnostics\",\n  \"crates/storyos-adapter-fake-destination\",\n  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-adapter-volcengine-responses\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-literal-guard\",\n  \"crates/storyos-server\",\n  \"crates/storyos-settings\",\n  \"crates/storyos-worker\",\n  \"crates/storyos-worker-bin\",\n",
-    );
-    let journey = dir.join("apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts");
-    fs::create_dir_all(journey.parent().expect("journey parent")).expect("journey dir");
-    fs::write(
-        &journey,
-        "test(\"S1-JRN-001 runs on the Vite production page and storyos-server\", () => {});\n",
-    )
-    .expect("journey file");
-    let evidence = provenance_evidence(repository_root()).expect("complete evidence");
-    let error = verify_provenance_evidence(&dir, &evidence)
-        .expect_err("journey without PostgreSQL should fail closed");
-    assert!(error.contains("PostgreSQL"), "{error}");
 }

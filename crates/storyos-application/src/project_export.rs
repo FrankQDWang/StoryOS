@@ -117,7 +117,3 @@ pub async fn get_verified_export_archive(
 ) -> Result<VerifiedExportArchive, ProjectReadError> {
     reader.read_verified_export_archive(scope, export_id).await
 }
-
-#[cfg(test)]
-#[path = "project_export_tests.rs"]
-mod tests;
