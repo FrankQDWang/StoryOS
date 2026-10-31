@@ -2,14 +2,13 @@ use super::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
     CreateAgentRunRefusal, create_agent_run,
 };
-use crate::{ProjectLifecycle, ProjectPresence, TransitionOutcome};
+use crate::{ProjectPresence, TransitionOutcome};
 
 #[test]
 fn admits_a_new_conversation_when_assistance_and_target_are_current() {
     assert_eq!(
         create_agent_run(&CreateAgentRun {
             presence: ProjectPresence::Present,
-            lifecycle: ProjectLifecycle::Active,
             assistance: AssistanceAdmission::Available,
             conversation: ConversationAdmission::New,
             chapter: ChapterAdmission::Current,
@@ -23,7 +22,6 @@ fn refuses_an_inaccessible_existing_conversation() {
     assert_eq!(
         create_agent_run(&CreateAgentRun {
             presence: ProjectPresence::Present,
-            lifecycle: ProjectLifecycle::Active,
             assistance: AssistanceAdmission::Available,
             conversation: ConversationAdmission::ExistingMissing,
             chapter: ChapterAdmission::Current,
@@ -35,21 +33,10 @@ fn refuses_an_inaccessible_existing_conversation() {
 fn admitted() -> CreateAgentRun {
     CreateAgentRun {
         presence: ProjectPresence::Present,
-        lifecycle: ProjectLifecycle::Active,
         assistance: AssistanceAdmission::Available,
         conversation: ConversationAdmission::New,
         chapter: ChapterAdmission::Current,
     }
-}
-
-#[test]
-fn refuses_an_archived_project() {
-    let mut command = admitted();
-    command.lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        create_agent_run(&command),
-        Err(CreateAgentRunRefusal::ArchivedProject)
-    );
 }
 
 #[test]

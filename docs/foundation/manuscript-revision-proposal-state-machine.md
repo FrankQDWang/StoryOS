@@ -720,7 +720,8 @@ contracts, `ProposalRevised` therefore allocates exactly one Forward action;
 boundary is required so a successful Proposal edit has a durable Author Undo Frontier.
 
 Each of the five effects is possible for each fresh editor intent. Copying
-Recovery Draft text is a read action, not a Core command.
+unsent text from the browser local recovery panel is a read action, not a Core
+command.
 
 ### 7.3 Proposal generation
 
@@ -1114,8 +1115,8 @@ The accepted prototype's transitions map one-to-one as follows:
 The prototype label `no-effect` after reject or withdraw means
 no manuscript authority was changed and no candidate remains active on that
 surface. It does not replace the positive Core lifecycle/result Receipt with
-`NoEffect`. Complete Recovery Draft payloads and preserved Proposal content remain
-recoverable from their Core Artifact Revisions; UI character or line counts are
+`NoEffect`. Preserved Proposal content remains
+recoverable from its Core Artifact Revisions; UI character or line counts are
 evidence, not schema fields.
 
 ### 7.7 Non-author production and validation settlement
@@ -1510,7 +1511,7 @@ closed matrix:
 | Admission is `pending` and authoritative storage cannot be validated | no safe positive or negative Receipt proof | the Admission stays `pending` and the outcome Query reports `outcome_unknown`; write no observation row; perform read-only reconciliation and block invocation | none |
 | exact typed Receipt is found | Receipt, idempotency record, and command digest match the Admission | atomically settle or observe `ReceiptSettled`; replay the immutable acknowledgement | only the allocations already named by that Receipt |
 | validated storage proves no Receipt; action is the same unexpired `direct_editor_action`; every binding required by Author Command Admission sections 3 and 5 is equal; the complete #46 intent, chapter, selections, targets, recomputed ownership, Authoritative and Proposal Heads, Anchors, reservations, editor-contract revision, and author-visible undo group all match; and the complete persisted Admission `command_payload` remains recoverable | exact Admission and idempotency/nonce records, current Core facts, and complete persisted Admission `command_payload` | invoke the already-admitted command once under the same Command, Admission, nonce, and idempotency key | exactly the owning command's eventual Receipt matrix; never a second Author Action |
-| validated storage proves no Receipt; action is explicit, Admission expired, any section 3 or 5 binding or #46 fact changed, or complete intent is not recoverable | exact negative Receipt proof plus the mismatching or unrecoverable fact | terminal `RequiresReconfirmation`; this Admission can never later settle to a Receipt | no Core command effect; create one `RecoveryDraft` only when complete author-edit payload can be preserved |
+| validated storage proves no Receipt; action is explicit, Admission expired, any section 3 or 5 binding or #46 fact changed, or complete intent is not recoverable | exact negative Receipt proof plus the mismatching or unrecoverable fact | terminal `RequiresReconfirmation`; this Admission can never later settle to a Receipt | no Core command effect and no Host Artifact; the browser keeps its local unsent text ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)) |
 | Core Transition committed before acknowledgement | Receipt and `ReceiptSettled` exist atomically with all effects | replay the same Receipt and converge projection | no new allocation |
 
 Acceptance, rejection, withdrawal, Author Undo, and every other
@@ -1528,10 +1529,8 @@ not the illustrative #46 facts that follow it. This state machine consumes
 that equality decision and does not redefine Admission issuance, expiry,
 settlement, or recovery lifecycle.
 
-A `RecoveryDraft` is created only by Host-assigned `EditorRecovery`, contains
-the complete recoverable author-edit payload and exact evidence reference, and
-is the only new Draft Artifact in this recovery flow. It is not a Receipt,
-condition, or proof that the edit was attempted or committed. A later Retry
+This recovery flow creates no Draft Artifact. StoryOS has no Host-created
+Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). A later Retry
 uses a new Admission unless the automatic same-Admission row above still
 applies. Journal mechanics, Snapshot transport, writer takeover, local
 projection, and garbage collection remain owned by the Web Editor Session
@@ -1548,10 +1547,7 @@ For a streaming Proposal:
   unsupported contracts select Proposal Safe Mode and disable Acceptance.
 
 Proposal Conflict and Proposal Recovery Conflict are conditions on a preserved
-Proposal surface. Neither is a Draft Artifact. When recovery can preserve
-complete author text but cannot prove a Proposal projection, it may create one
-Recovery Draft for that text and independently project Proposal Recovery
-Conflict; the two facts remain orthogonal.
+Proposal surface. Neither is a Draft Artifact.
 
 Recovery never infers success from a network process, model stream, editor
 cache, timestamp, or absent error. Physical corruption detection and store
@@ -1582,7 +1578,6 @@ these one-to-one semantics:
 | undo Acceptance | `UndoAcceptanceSettled` |
 | route unified undo | `AuthorUndoRouted`, `AuthorUndoSettled` |
 | allocate author-owned order | `AuthorActionRecorded` |
-| preserve an uncommitted edit | `RecoveryDraftCreated` |
 | expose ambiguous Proposal recovery | `ProposalRecoveryConflictDetected` |
 
 Every event binds its exact Project Scope, owning identity, expected prior Revision or state,
@@ -1640,6 +1635,6 @@ available.
 18. A missing response or temporarily unavailable store never proves
     non-commit. Post-admission uncertainty remains `outcome_unknown` until
     authoritative reconciliation reaches exactly one terminal settlement.
-19. Recovery Draft is the only Draft Artifact kind in this editor flow.
+19. This editor flow has no Draft Artifact kind.
     Proposal Conflict and Proposal Recovery Conflict remain conditions on
     preserved Proposal surfaces.

@@ -91,17 +91,6 @@ async fn recorded_orders(admin: &tokio_postgres::Client, receipt_id: &str) -> (S
     (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
 }
 
-pub(crate) async fn archive(admin: &tokio_postgres::Client, scope: &ProjectScope) {
-    admin
-        .execute(
-            "UPDATE storyos.projects SET lifecycle_state = 'archived'
-              WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-}
-
 /// Expires only the latest Snapshot. The older Snapshots stay valid, and a read must not fall back to them.
 async fn expire_latest_snapshot(
     admin: &tokio_postgres::Client,
@@ -209,18 +198,9 @@ async fn create_volume_classifies_its_outcomes_and_writes_its_effect_rows() {
         get_manuscript_tree(&store, &scope).await.unwrap(),
         GetManuscriptTree::SnapshotExpired
     );
-    // An archived Project has no readable Manuscript Tree, so this step is the last.
-    archive(&admin, &scope).await;
-    let archived = settle_volume(&store, &scope, "9624", "Volume C", 3).await;
     assert_eq!(
-        [
-            outcome_code(&stale.outcome),
-            outcome_code(&archived.outcome)
-        ],
-        [
-            (ReceiptResult::Conflicted, Some("stale_tree_revision")),
-            (ReceiptResult::Refused, Some("archived_project")),
-        ]
+        outcome_code(&stale.outcome),
+        (ReceiptResult::Conflicted, Some("stale_tree_revision"))
     );
 }
 
@@ -381,15 +361,11 @@ async fn create_chapter_classifies_its_outcomes_and_writes_its_effect_rows() {
             .unwrap(),
         OpenChapter::SnapshotExpired
     );
-    // An archived Project has no readable Manuscript Tree, so this step is the last.
-    archive(&admin, &scope).await;
-    let archived = settle_chapter(&store, &scope, "9636", &volume_id, "Chapter C", 4).await;
     assert_eq!(
-        [&stale, &missing, &archived].map(|settlement| outcome_code(&settlement.outcome)),
+        [&stale, &missing].map(|settlement| outcome_code(&settlement.outcome)),
         [
             (ReceiptResult::Conflicted, Some("stale_tree_revision")),
             (ReceiptResult::Refused, Some("invalid_volume_join")),
-            (ReceiptResult::Refused, Some("archived_project")),
         ]
     );
 }

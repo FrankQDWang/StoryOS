@@ -30,7 +30,6 @@ it("opens the URL-selected Project and fails closed before invalid entry request
         projects: [{
           project_scope: { owner_user_id: OWNER, project_id: PROJECT },
           title: "Project A",
-          lifecycle: { kind: "active" },
           revision: "1",
           open: { kind: "current_chapter", current_chapter_id: scenario.chapter.chapter.chapter_id },
         }],

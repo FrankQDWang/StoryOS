@@ -61,7 +61,7 @@ A removed Draft Core Artifact kind. Before [ADR 0073](../adr/0073-remove-the-ref
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft Core Artifact that an Editor Recovery Creator creates from one complete author-edit intent. It keeps the exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It never applies automatically. The author can copy its text, and Release 1 has no retry or discard command for it ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)). It is not a Receipt, Proposal condition, or proof of prior Core invocation.
+A Host-created Draft Core Artifact that StoryOS does not have ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). A `RequiresReconfirmation` settlement carries no draft reference. The unsent author text stays only in the browser Local Edit Journal and its local recovery panel.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
@@ -73,7 +73,7 @@ A per-editor-session fallback used when the environment cannot uphold lossless P
 _Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
 
 **Proposal Recovery Conflict**:
-The fail-closed condition on a preserved Proposal surface. In it, the durable Proposal Heads, stream sequences, Pause Fences, digests, or editor checkpoint cannot prove one clear review projection. Agent replay and Acceptance stay disabled until an explicit reconciliation. No cache or network order can fill the uncertainty. A separately preserved complete author intent may become a Recovery Draft, but the condition and Draft remain orthogonal.
+The fail-closed condition on a preserved Proposal surface. In it, the durable Proposal Heads, stream sequences, Pause Fences, digests, or editor checkpoint cannot prove one clear review projection. Agent replay and Acceptance stay disabled until an explicit reconciliation. No cache or network order can fill the uncertainty.
 _Avoid_: Best-effort replay, hidden repair, ordinary validation pending, Draft Artifact
 
 **Editor Support Profile**:

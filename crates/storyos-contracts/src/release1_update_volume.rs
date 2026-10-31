@@ -70,7 +70,6 @@ pub enum UpdateVolumeConflictReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateVolumeRefusalReason {
-    ArchivedProject,
     InvalidTitle,
     InvalidOrder,
     InvalidVolumeJoin,

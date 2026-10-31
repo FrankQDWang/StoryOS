@@ -57,31 +57,8 @@
             "source_snapshot"
           ],
           "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/ExportHumanReadableManuscriptRefusalReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
         }
       ]
-    },
-    "ExportHumanReadableManuscriptRefusalReason": {
-      "enum": [
-        "archived_project"
-      ],
-      "type": "string"
     },
     "HumanReadableManuscriptExportRef": {
       "oneOf": [

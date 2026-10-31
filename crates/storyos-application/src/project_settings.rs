@@ -2,10 +2,7 @@
 
 use std::convert::Infallible;
 
-use storyos_core::{
-    ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect, UpdateProjectApplied,
-    UpdateProjectConflict, UpdateProjectNoEffect,
-};
+use storyos_core::{UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect};
 
 use crate::{ActivityApplied, ProjectCommandSettlement};
 
@@ -19,17 +16,5 @@ pub type UpdateProjectSettlement = ProjectCommandSettlement<
     ActivityApplied<UpdateProjectApplied>,
     UpdateProjectNoEffect,
     UpdateProjectConflict,
-    Infallible,
->;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ArchiveProjectInput {
-    pub expected_revision: u64,
-}
-
-pub type ArchiveProjectSettlement = ProjectCommandSettlement<
-    ActivityApplied<ArchiveProjectApplied>,
-    ArchiveProjectNoEffect,
-    ArchiveProjectConflict,
     Infallible,
 >;

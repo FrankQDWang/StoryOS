@@ -1,6 +1,6 @@
 use super::{
-    ChapterJoin, ProjectLifecycle, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict,
-    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateChapterResult, update_chapter,
+    ChapterJoin, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict, UpdateChapterNoEffect,
+    UpdateChapterRefusal, UpdateChapterResult, update_chapter,
 };
 
 fn command() -> UpdateChapter {
@@ -8,7 +8,6 @@ fn command() -> UpdateChapter {
         chapter_join: ChapterJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
-        current_lifecycle: ProjectLifecycle::Active,
         title: "Chapter B".to_owned(),
         current_title: "Chapter A".to_owned(),
         order: 2,
@@ -73,15 +72,5 @@ fn an_invalid_order_classifies_as_refused_with_zero_authority_effect() {
     assert_eq!(
         update_chapter(&past_end),
         UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidOrder)
-    );
-}
-
-#[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        update_chapter(&archived),
-        UpdateChapterResult::Refused(UpdateChapterRefusal::ArchivedProject)
     );
 }

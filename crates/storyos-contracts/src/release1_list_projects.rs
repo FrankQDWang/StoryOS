@@ -34,18 +34,10 @@ pub const LIST_PROJECTS_PATH: &str = LIST_PROJECTS.path;
 pub const LIST_PROJECTS_METHOD: &str = LIST_PROJECTS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProjectLifecycleState {
-    Active,
-    Archived,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectListItem {
     pub project_scope: ProjectScope,
     pub title: String,
-    pub lifecycle: ProjectLifecycleState,
     pub revision: String,
     pub open: ProjectOpenState,
 }

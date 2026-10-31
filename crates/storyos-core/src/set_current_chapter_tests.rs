@@ -1,6 +1,6 @@
 use super::{
-    ChapterJoin, ProjectLifecycle, SetCurrentChapter, SetCurrentChapterConflict,
-    SetCurrentChapterNoEffect, SetCurrentChapterRefusal, TransitionOutcome, set_current_chapter,
+    ChapterJoin, SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, TransitionOutcome, set_current_chapter,
 };
 
 const CURRENT: &str = "018f0000-0000-7001-8000-000000000003";
@@ -10,7 +10,6 @@ const HEAD: &str = "018f0000-0000-7001-8000-000000000805";
 fn command() -> SetCurrentChapter {
     SetCurrentChapter {
         chapter_join: ChapterJoin::ExactScope,
-        current_lifecycle: ProjectLifecycle::Active,
         current_chapter_id: Some(CURRENT.to_owned()),
         expected_current_chapter_id: CURRENT.to_owned(),
         target_chapter_id: TARGET.to_owned(),
@@ -58,16 +57,6 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
 }
 
 #[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        set_current_chapter(&archived),
-        TransitionOutcome::Refused(SetCurrentChapterRefusal::ArchivedProject)
-    );
-}
-
-#[test]
 fn an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect() {
     let mut invalid = command();
     invalid.chapter_join = ChapterJoin::Invalid;
@@ -78,20 +67,12 @@ fn an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect() {
 }
 
 #[test]
-fn refusals_take_archived_project_then_invalid_chapter_join_then_empty_project() {
+fn an_invalid_chapter_join_is_refused_before_an_empty_project() {
     let mut removed_on_empty = command();
     removed_on_empty.chapter_join = ChapterJoin::Invalid;
     removed_on_empty.current_chapter_id = None;
-    let mut archived = removed_on_empty.clone();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
-        [
-            set_current_chapter(&archived),
-            set_current_chapter(&removed_on_empty)
-        ],
-        [
-            TransitionOutcome::Refused(SetCurrentChapterRefusal::ArchivedProject),
-            TransitionOutcome::Refused(SetCurrentChapterRefusal::InvalidChapterJoin),
-        ]
+        set_current_chapter(&removed_on_empty),
+        TransitionOutcome::Refused(SetCurrentChapterRefusal::InvalidChapterJoin)
     );
 }

@@ -11,9 +11,7 @@ use super::acceptance::accept_proposal_call;
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
-use super::project_session::{
-    archive_project_call, update_project_assistance_call, update_project_call,
-};
+use super::project_session::{update_project_assistance_call, update_project_call};
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
@@ -143,12 +141,6 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &archive_project_call(&store, /*base*/ 0x6a70).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
             &set_current_chapter_call(&store, /*base*/ 0x6a80).await,
         )
         .await,
@@ -236,7 +228,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 20];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
     expected.push(separated(ReceiptResult::NoEffect));
     expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);

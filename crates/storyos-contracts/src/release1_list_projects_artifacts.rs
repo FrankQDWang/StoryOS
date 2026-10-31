@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1_list_projects::{
     LIST_PROJECTS, LIST_PROJECTS_REQUEST_SCHEMA_ID, LIST_PROJECTS_RESPONSE_SCHEMA_ID,
-    ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
+    ListProjectsResponse, ProjectListItem,
 };
 use crate::release1_operation_registry::{
     FixtureMembership, OperationArtifacts, RegisteredOperation, method, operation_schemas,
@@ -107,8 +107,7 @@ pub(super) fn method_openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}",
-        ProjectLifecycleState::decl(&config),
+        "export {}\n\nexport {}",
         ProjectListItem::decl(&config),
         ListProjectsResponse::decl(&config),
     )
@@ -122,7 +121,6 @@ pub(super) fn fixture_bytes() -> Vec<u8> {
                 "project_id": "018f0000-0000-7001-8000-000000000002"
             },
             "title": "Project A",
-            "lifecycle": {"kind": "active"},
             "revision": "1",
             "open": {
                 "kind": "current_chapter",
@@ -135,7 +133,6 @@ pub(super) fn fixture_bytes() -> Vec<u8> {
                 "project_id": "018f0000-0000-7001-8000-000000000012"
             },
             "title": "Empty Novel",
-            "lifecycle": {"kind": "active"},
             "revision": "1",
             "open": {"kind": "empty"}
         }),

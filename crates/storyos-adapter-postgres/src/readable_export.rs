@@ -22,8 +22,7 @@ use crate::command_sequence::{
 use crate::pinned_export_source::check_export_settlement;
 
 impl PostgresProjectReader {
-    /// Admits one exportHumanReadableManuscript. An archived Project is a refusal before
-    /// Admission. The Worker settles the admitted operation later.
+    /// Admits one exportHumanReadableManuscript. The Worker settles the admitted operation later.
     pub async fn export_human_readable_manuscript(
         &self,
         envelope: &ProjectCommandEnvelope,
@@ -53,11 +52,10 @@ impl AdmitCommand for ExportHumanReadableManuscriptInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<ReadableExportFacts, ExportHumanReadableManuscriptError> {
         match classify_export(&CoreExport {
             presence: ProjectPresence::Present,
-            current_lifecycle: project.lifecycle,
         }) {
             ExportHumanReadableManuscriptResult::Admitted => {}
             ExportHumanReadableManuscriptResult::Refused { reason } => {
@@ -203,19 +201,6 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             .await
             .map_err(read_error)?;
         set_scope(&transaction, scope).await?;
-        let Some(project) = transaction
-            .query_opt(
-                "SELECT lifecycle_state FROM storyos.projects
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .map_err(read_error)?
-        else {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetHumanReadableManuscriptExport::Missing);
-        };
-        let archived = project.get::<_, String>(0) == "archived";
         let ready = transaction
             .query_opt(
                 "SELECT export.export_id::text,
@@ -303,11 +288,7 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
-            return Ok(if archived {
-                GetHumanReadableManuscriptExport::Archived
-            } else {
-                GetHumanReadableManuscriptExport::Missing
-            });
+            return Ok(GetHumanReadableManuscriptExport::Missing);
         };
         let snapshot_id = operation.get::<_, String>(2);
         let source_snapshot =

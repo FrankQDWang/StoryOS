@@ -615,9 +615,8 @@ producer. The catalog's discriminated request/response schemas encode
 these profiles; it does not duplicate the Core state machine.
 
 All exact retries return the original typed settlement and event identities.
-`RecoveryDraft` has no upload or browser-cache route: only the admitted
-`ApplyAuthorEdit` body may return `recovery_draft_ref` when it reaches terminal
-`RequiresReconfirmation`. Every Release 1 editor command in the catalog
+A terminal `RequiresReconfirmation` carries no Host draft reference: StoryOS
+creates no Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). Every Release 1 editor command in the catalog
 excludes `Accepted` from its acknowledgement union; `Accepted` remains an
 asynchronous-operation acknowledgement for the catalogued long-running
 Agent-run, Proposal production, human-readable manuscript export, and portable
@@ -801,7 +800,6 @@ CommandAcknowledgement =
       | "admission_expired"
       | "binding_changed"
       | "direct_edit_intent_unrecoverable"
-    recovery_draft_ref: DraftId | null
     recorded_at
     limit_profile_revision
   }

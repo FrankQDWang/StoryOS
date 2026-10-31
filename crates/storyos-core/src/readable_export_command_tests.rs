@@ -1,26 +1,23 @@
 use super::*;
-use crate::ProjectLifecycle;
 use crate::ProjectPresence;
 
 #[test]
-fn archived_project_is_refused() {
+fn absent_project_is_refused() {
     assert_eq!(
         export_human_readable_manuscript(&ExportHumanReadableManuscript {
-            presence: ProjectPresence::Present,
-            current_lifecycle: ProjectLifecycle::Archived,
+            presence: ProjectPresence::Absent,
         }),
         ExportHumanReadableManuscriptResult::Refused {
-            reason: ExportHumanReadableManuscriptRefusal::ArchivedProject,
+            reason: ExportHumanReadableManuscriptRefusal::MissingProject,
         }
     );
 }
 
 #[test]
-fn active_project_is_admitted() {
+fn present_project_is_admitted() {
     assert_eq!(
         export_human_readable_manuscript(&ExportHumanReadableManuscript {
             presence: ProjectPresence::Present,
-            current_lifecycle: ProjectLifecycle::Active,
         }),
         ExportHumanReadableManuscriptResult::Admitted
     );

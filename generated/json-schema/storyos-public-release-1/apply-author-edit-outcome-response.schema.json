@@ -163,12 +163,6 @@
             },
             "reconfirmation_reason": {
               "$ref": "#/$defs/ApplyAuthorEditReconfirmationReason"
-            },
-            "recovery_draft_ref": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           },
           "required": [
@@ -495,7 +489,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",

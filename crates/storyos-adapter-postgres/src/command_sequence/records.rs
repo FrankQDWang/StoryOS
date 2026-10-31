@@ -2,7 +2,6 @@
 //! sequence.
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
-use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
 use super::{ActionDisposition, LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
@@ -248,7 +247,7 @@ async fn project_row(
     let row = client
         .query_opt(
             &format!(
-                "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+                "SELECT tree_revision::text, current_chapter_id::text
                    FROM storyos.projects
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                   {lock}"
@@ -261,21 +260,11 @@ async fn project_row(
         .await
         .map_err(unavailable)?
         .ok_or(ProjectCommandError::MissingProject)?;
-    let lifecycle = match row.get::<_, String>(/*idx*/ 0).as_str() {
-        "active" => ProjectLifecycle::Active,
-        "archived" => ProjectLifecycle::Archived,
-        other => {
-            return Err(unavailable(format!(
-                "unsupported Project lifecycle {other}"
-            )));
-        }
-    };
     Ok(LockedProject {
-        lifecycle,
         tree_revision: row
-            .get::<_, String>(/*idx*/ 1)
+            .get::<_, String>(/*idx*/ 0)
             .parse()
             .map_err(unavailable)?,
-        current_chapter_id: row.get(/*idx*/ 2),
+        current_chapter_id: row.get(/*idx*/ 1),
     })
 }

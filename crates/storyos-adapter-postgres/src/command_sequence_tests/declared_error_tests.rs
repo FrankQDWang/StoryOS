@@ -15,8 +15,8 @@ use crate::set_current_chapter_authority_tests::open_session;
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
 use super::project_session::{
-    TAKE_OVER_PROJECT_WRITER, archive_project_call, take_over_project_writer,
-    take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    TAKE_OVER_PROJECT_WRITER, take_over_project_writer, take_over_project_writer_call,
+    update_project_assistance_call, update_project_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
@@ -191,7 +191,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         declared_errors(&store, &update_chapter_call(&store, /*base*/ 0x9340).await).await,
         declared_errors(&store, &delete_chapter_call(&store, /*base*/ 0x9350).await).await,
         declared_errors(&store, &update_project_call(&store, /*base*/ 0x9360).await).await,
-        declared_errors(&store, &archive_project_call(&store, /*base*/ 0x9370).await).await,
         declared_errors(
             &store,
             &set_current_chapter_call(&store, /*base*/ 0x9380).await,
@@ -300,7 +299,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         ("updateChapter", None, "invalid_challenge"),
         ("deleteChapter", None, "invalid_challenge"),
         ("updateProject", None, "invalid_challenge"),
-        ("archiveProject", None, "invalid_challenge"),
         ("setCurrentChapter", None, "invalid_challenge"),
         ("updateProjectAssistance", None, "invalid_challenge"),
         ("takeOverProjectWriter", None, "binding_conflict"),

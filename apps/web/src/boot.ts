@@ -142,7 +142,7 @@ export async function openControlledProject(options: {
     const listed = await listProjects(queryOptions);
     const listedItem = listed.projects.find((entry) =>
       entry.project_scope.project_id === projectId);
-    if (listedItem?.lifecycle.kind !== "active") {
+    if (listedItem === undefined) {
       return {
         kind: "project-blocked",
         code: "project_unavailable",

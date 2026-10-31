@@ -1,22 +1,19 @@
 use std::convert::Infallible;
 
 use storyos_application::{
-    ActivityApplied, ArchiveProjectInput, ProjectAssistanceRecord, ProjectCommandError,
-    ProjectCommandSettlement, ProjectScope, UpdateProjectAssistanceInput, UpdateProjectInput,
-    open_project_assistance,
+    ActivityApplied, ProjectAssistanceRecord, ProjectCommandError, ProjectCommandSettlement,
+    ProjectScope, UpdateProjectAssistanceInput, UpdateProjectInput, open_project_assistance,
 };
 use storyos_core::{
-    ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect, AssistanceAvailability,
-    HOST_FAKE_REGISTRATION, ReasonCode, TransitionOutcome, UpdateProjectApplied,
-    UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
+    AssistanceAvailability, HOST_FAKE_REGISTRATION, ReasonCode, TransitionOutcome,
+    UpdateProjectApplied, UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
     UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
 };
 use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::tests::{
-    ARCHIVE_PROJECT, CommandCall, Route, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, issued,
-    seed_project, stores,
+    CommandCall, Route, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, issued, seed_project, stores,
 };
 
 const OTHER_USER: &str = "018f0000-0000-7001-8000-000000000101";
@@ -127,57 +124,6 @@ async fn update_project_renames_only_its_own_project() {
     assert_eq!(
         (row.get::<_, String>(0), row.get::<_, String>(1)),
         ("Later Novel".to_owned(), "3".to_owned())
-    );
-    assert_eq!(rows_for_other_user(&scope, "projects").await, 0);
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn archive_project_archives_only_its_own_project_once() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let scope = seed_project(&store, "9810").await;
-    let settled = settle_each(
-        &store,
-        &scope,
-        &ARCHIVE_PROJECT,
-        /*first_suffix*/ 0x9811,
-        [1, 1, 2]
-            .map(|expected_revision| ArchiveProjectInput { expected_revision })
-            .to_vec(),
-        async |store: &PostgresProjectReader, call: &CommandCall<ArchiveProjectInput>| {
-            store.archive_project(&call.envelope, &call.input).await
-        },
-    )
-    .await;
-    assert_eq!(
-        settled.iter().map(outcome).collect::<Vec<_>>(),
-        vec![
-            TransitionOutcome::Applied(ArchiveProjectApplied { revision: 2 }),
-            TransitionOutcome::Conflicted(ArchiveProjectConflict::StaleProjectRevision),
-            TransitionOutcome::NoEffect(ArchiveProjectNoEffect::AlreadyArchived),
-        ]
-    );
-    let row = admin
-        .query_one(
-            "SELECT lifecycle_state, revision::text,
-                    (SELECT count(*) FROM storyos.project_archival_decisions
-                      WHERE project_id = $1::text::uuid)
-               FROM storyos.projects
-              WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        (
-            row.get::<_, String>(0),
-            row.get::<_, String>(1),
-            row.get::<_, i64>(2)
-        ),
-        ("archived".to_owned(), "2".to_owned(), 1)
     );
     assert_eq!(rows_for_other_user(&scope, "projects").await, 0);
 }

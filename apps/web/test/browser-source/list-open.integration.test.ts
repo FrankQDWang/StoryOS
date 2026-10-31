@@ -22,7 +22,6 @@ it("opens a listed empty Project from getProject, not from the list payload", as
         projects: [{
           project_scope: { owner_user_id: OWNER, project_id: EMPTY_PROJECT },
           title: "List Lie",
-          lifecycle: { kind: "active" },
           revision: "1",
           open: { kind: "empty" },
         }],

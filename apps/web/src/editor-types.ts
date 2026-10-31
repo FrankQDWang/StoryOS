@@ -187,7 +187,6 @@ export type SubmissionSettlement =
         | "admission_expired"
         | "binding_changed"
         | "direct_edit_intent_unrecoverable";
-      recovery_draft_ref: string | null;
     });
 
 export interface JournalSubmissionGroup extends Record<string, unknown> {

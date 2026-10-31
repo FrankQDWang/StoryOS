@@ -424,9 +424,8 @@ Before accepting more editing input, the client proves that the current
 journal schema, transaction, checkpoint, and complete-payload reconstruction
 are usable. Quota, corruption, schema incompatibility, or persistence failure
 stops new editing and submission and enters read-only local recovery.
-In-memory or copyable text remains plainly labelled local payload. It is not a
-`RecoveryDraft`, Artifact, Snapshot, or successful save. StoryOS may create a
-durable `RecoveryDraft` only through section 9.
+In-memory or copyable text remains plainly labelled local payload. It is not an
+Artifact, Snapshot, or successful save (section 9).
 
 ### 3.5 Frozen groups, transport attempts, and browser evidence
 
@@ -546,7 +545,6 @@ GroupSettlement =
       requires_reconfirmation_observation_id
       author_command_admission_id
       reconfirmation_reason
-      recovery_draft_ref | null
       recorded_at
     }
 
@@ -602,7 +600,6 @@ AuthorSurfaceConvergence =
       requires_reconfirmation_observation_id
       author_command_admission_id
       preserved_local_payload_ref
-      recovery_draft_ref | null
       local_reconfirmation_surface_id
     }
 
@@ -839,7 +836,6 @@ BrowserProtocolObservation =
       correlation_id
       author_command_admission_id
       reconfirmation_reason
-      recovery_draft_ref | null
       recorded_at
       limit_profile_revision
     }
@@ -952,7 +948,6 @@ ApplyAuthorEditOutcomeQueryObservation =
             admission_expired
             | binding_changed
             | direct_edit_intent_unrecoverable
-          recovery_draft_ref | null
         }
   }
 
@@ -1261,7 +1256,7 @@ The author-facing save state is derived:
 | --- | --- |
 | `saving` | complete intent/command is durably journaled, but settlement or its applicable convergence branch remains pending |
 | `saved` | an installed authorized Server base has no unsettled journal work and needs no attention, including a newly installed base with no local records, `AuthoritativeApplied` that has converged through its exact Activity/Snapshot position, or `NoEffect` that has resolved against the already-installed exact durable base without advancing that base |
-| `needs_attention` | a visible zero-authority `Refused` or `Conflicted` result, outcome Query rejection with preserved local work, a converged reconfirmation, Recovery Draft, or other typed result requires an author decision, or current evidence cannot safely reconstruct the surface |
+| `needs_attention` | a visible zero-authority `Refused` or `Conflicted` result, outcome Query rejection with preserved local work, a converged reconfirmation or other typed result requires an author decision, or current evidence cannot safely reconstruct the surface |
 
 `Accepted` HTTP acknowledgement, an exact replay that remains in progress, a
 Receipt without its applicable result visibility or convergence proof, and an
@@ -1493,7 +1488,7 @@ Convergence is positive and branches by settlement kind:
 | `ZeroAuthorityReceiptSettled` | the exact `ApplyAuthorEditZeroAuthorityObservation`, `DomainReceiptRef`, and `ProposalRevised | NoEffect | Conflicted | Refused` effect are visible as `ZeroAuthorityReceiptVisible`; no Project Activity position, checkpoint advance, authoritative projection advance, or active-base roll-forward exists or is fabricated |
 | `OtherEditorReceiptSettled` | the exact `OtherEditorCommittedObservation`, `ReceiptRef`, and canonical `project_activity_position`; processed Project Activity or a Snapshot proves projection at or beyond it, preserving the pre-correction convergence rule |
 | `PreAdmissionRefused` | the exact `PreAdmissionProblemObservation`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
-| `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained payload or returned `recovery_draft_ref` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
+| `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained local payload plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
 
 Applied manuscript convergence additionally requires no unresolved earlier
 Activity gap. Zero-authority result visibility neither clears nor creates an
@@ -1502,7 +1497,7 @@ converge while an unrelated manuscript projection remains in resync, but it
 cannot label that manuscript surface `saved`. Every branch rejects an
 incompatible writer generation for the surface being shown. `AuthorAttention`
 is evaluated separately: a visible zero-authority conflict or refusal, or a
-converged Recovery Draft or reconfirmation, normally remains `Required`.
+converged reconfirmation, normally remains `Required`.
 
 ## 8. Core result and control projection
 
@@ -1522,8 +1517,8 @@ Acceptance from an authoritative result or from the absence of a candidate.
 This response-v2 table does not redefine Proposal, Draft, or recovery command
 results. `ProposalConflict` and `ProposalRecoveryConflict` remain conditions on
 a preserved Proposal surface. Neither is a Draft Artifact. A healthy local
-journal retaining complete conflicted text is not automatically converted into
-a `RecoveryDraft`.
+journal retaining complete conflicted text is never converted into a Host
+Artifact.
 
 ### 8.2 Editor decision matrix
 
@@ -1536,7 +1531,7 @@ successor for journal GC.
 
 ### 8.3 Proposal, condition, and Draft control consumer matrix
 
-This matrix consumes the current Proposal and Recovery Draft state and retained production
+This matrix consumes the current Proposal state and retained production
 UX contract. It does not create a Core transition or infer eligibility from a
 label.
 
@@ -1547,7 +1542,6 @@ label.
 | Proposal whose base is not the Chapter Head of the editor, `open`, `ready`, validation `valid` or `conflicted` | accept; reject; candidate edit; copy; a short note that Acceptance replaces the current text of its target; no confirmation dialog (ADR 0064) |
 | `ProposalConflict` on a preserved Proposal | accept, reject pending Operations, candidate edit, copy, and the same note (ADR 0064) |
 | `ProposalRecoveryConflict` on a preserved Proposal | reject pending Operations, withdraw, copy; no accept and no candidate edit |
-| `RecoveryDraft` | copy only; no retry, discard, or expansion (ADR 0073) |
 | `superseded` Proposal | immutable history/copy only; no accept, reject, or withdraw |
 
 All state-changing controls create one durable
@@ -1609,96 +1603,31 @@ Native browser undo may form a new direct-edit candidate only against the exact
 visible Frontier. There is no durable generic redo. Reapplication is a new
 command with a new Admission.
 
-## 9. RecoveryDraft and local recovery
+## 9. Local recovery
 
-Release 1 has exactly one reachable browser-to-Host ingress for recovered
-author-edit bytes: the existing
-`POST /api/v1/projects/{project_id}/manuscript/author-edits` route carrying the
-complete `ApplyAuthorEdit.author_edit_units` and submission bindings. Once that
-request is admitted, the Host already retains the exact command body and can
-create a `RecoveryDraft` while settling `RequiresReconfirmation`; the exact
-#58 response returns `recovery_draft_ref` when creation occurred, and the
-existing `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` projection
-exposes its `EditorRecovery.recovery_evidence_ref`. #70 adds no route, request
-field, upload, or hidden browser-to-Host channel.
+StoryOS has no Host-created Recovery Draft
+([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). No route,
+request field, upload, or Host Artifact preserves recovered author-edit bytes.
+A terminal `RequiresReconfirmation` carries no draft reference. Its settlement
+creates no Artifact, no Core edit invocation, and no Author Action.
 
-`EditorRecoveryEvidenceId` identifies the immutable Host-owned Operational
-Record for only that reachable path:
-
-```text
-EditorRecoveryEvidenceRecord {
-  editor_recovery_evidence_id
-  project_scope
-  editor_session_id
-  writer_generation
-
-  admitted_apply_author_edit {
-    route_template:
-      /api/v1/projects/{project_id}/manuscript/author-edits
-    command_id
-    author_command_admission_id
-    canonical_command_digest
-    digest_profile
-    application_wire_record_ref
-  }
-  complete_author_edit_units_ref
-  complete_payload_digest
-  editor_contract_revision
-  requires_reconfirmation {
-    reconfirmation_reason
-    recorded_at
-  }
-  host_created_at
-  resulting_recovery_draft_ref
-}
-```
-
-The Host writes the evidence record and resulting `RecoveryDraft` revision in
-one durable operation, so the record never points to a missing result and the
-Draft Creator's `recovery_evidence_ref` resolves to this exact identity. The
-`application_wire_record_ref` is #58's existing identity for the exact
-schema-valid, authorized command bytes retained at the application ingress; the
-evidence additionally binds those bytes to the complete Author Edit Units and
-canonical digest/profile. The evidence binds only Server-retained fields from
-the admitted `ApplyAuthorEdit` body and its real Admission settlement; it does
-not claim that browser journal, checkpoint, in-memory, or takeover bytes
-crossed an interface.
-
-A `RecoveryDraft` exists only when the StoryOS Host durably creates one Core
-Draft Artifact with:
-
-- Host-assigned `EditorRecovery` Creator;
-- exact Project Scope, Editor Session, and writer generation;
-- the complete structured author-edit payload and digest already retained from
-  the admitted `ApplyAuthorEdit` request;
-- exact `EditorRecoveryEvidenceId` and `RequiresReconfirmation` settlement; and
-- one immutable Artifact Revision and provenance closure.
-
-Creation causes no Core edit invocation and no Author Action. A browser-local
-record/group, in-memory text, copyable text, clipboard content, checkpoint, or
-pending projection is never a `RecoveryDraft` or another Artifact.
+The unsent author text stays in the browser: a Local Edit Journal record or
+group, in-memory text, copyable text, clipboard content, a checkpoint, or a
+pending projection. None of these is an Artifact. The local recovery panel shows
+the text, and the author can copy it.
 
 The ingress matrix is closed:
 
-| Recovery source | Release-1 Host ingress and result |
+| Recovery source | Release-1 result |
 | --- | --- |
-| admitted `ApplyAuthorEdit` body reaches terminal `RequiresReconfirmation` and the Host retains its complete verified payload | the existing author-edits command/settlement may atomically create the evidence record and `RecoveryDraft`; #58 returns non-null `recovery_draft_ref` |
-| the same settlement cannot verify a complete retained payload | `recovery_draft_ref: null`; preserve any complete browser copy locally |
-| frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission uncertainty | local journal/capsule only; no Host Artifact ingress and no `RecoveryDraft` claim |
-| takeover, fenced-writer journal payload, journal schema/persistence recovery, or explicit local preservation | local-only until a future wire owner adds an explicit semantic command and schema; takeover does not carry those bytes |
-| DOM, clipboard, or surviving in-memory text | copyable local material only; no Artifact or recovery-evidence record |
+| admitted `ApplyAuthorEdit` body reaches terminal `RequiresReconfirmation` | the browser keeps its complete local copy beside the reconfirmation controls; no Host Artifact |
+| frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission uncertainty | local journal/capsule only; no Host Artifact ingress |
+| takeover, fenced-writer journal payload, journal schema/persistence recovery, or explicit local preservation | local-only; takeover does not carry those bytes |
+| DOM, clipboard, or surviving in-memory text | copyable local material only; no Artifact |
 
-This contract therefore does not make journal, in-memory, or takeover evidence
-Host-creatable in Release 1. The broader Artifact classification remains
-reserved, but reachability requires a future public-protocol owner to add a
-real ingress before any such source may allocate `EditorRecovery`.
 A complete local journal group may still enter the ordinary
-author-confirmed/current-binding `ApplyAuthorEdit` flow; that is a normal edit
-attempt, not a RecoveryDraft-preservation channel.
-
-A `RecoveryDraft` has no Retry command. The author can copy its text into a new
-edit, which is a new `ApplyAuthorEdit` with a new Admission
-([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
+author-confirmed/current-binding `ApplyAuthorEdit` flow. That is a normal edit
+attempt with a new Admission.
 
 ## 10. Reload, crash, and takeover recovery matrix
 
@@ -1779,14 +1708,13 @@ dependencies are eligible for collection only when all of these are proven:
    again.
 
 Exact durable successors include the resulting Authoritative or Proposal
-Revision, a `RecoveryDraft` Artifact Revision, or another
+Revision, or another
 typed retained Core payload that contains the complete intent. A
 zero-authority Receipt alone is not a successor. `NoEffect` may use the exact
 digest-equal current durable Revision. A conflict, refusal, or
 `RequiresReconfirmation` with only one local complete copy is never eligible.
-Only section 9's admitted-`ApplyAuthorEdit` ingress can make a
-`RecoveryDraft` successor in Release 1; local-only takeover, journal, or
-in-memory payload does not.
+Local-only takeover, journal, or in-memory payload is never a durable successor
+(section 9).
 Clipboard copy, DOM text, cached response, Event payload, and an author-visible
 label are not durable successors.
 
@@ -1896,11 +1824,8 @@ Browser integration and the deterministic oracle cover:
 - positive classification of Admission/refusal/reconciliation evidence,
   Receipts, Draft Artifacts, Proposal conditions, local payload, projections,
   and authority;
-- the Release-1 `RecoveryDraft` ingress matrix: only an admitted
-  `ApplyAuthorEdit` body's terminal `RequiresReconfirmation` may return a
-  Host-created Draft, with exact authorized bytes named by
-  `application_wire_record_ref`; journal, takeover, and in-memory sources
-  remain local-only; and
+- the Release-1 local recovery ingress matrix: no source creates a Host
+  Artifact, and journal, takeover, and in-memory sources remain local-only; and
 - applied Activity-backed convergence, zero-authority Receipt-only result
   visibility, and no-Receipt refusal/reconfirmation convergence, including
   proof that `ApplyAuthorEdit` `ProposalRevised`, `NoEffect`,
@@ -1976,9 +1901,7 @@ advisory until their numerical values are accepted by the appropriate owner.
     `DomainReceiptRef`; both results settle with canonical Project Activity,
     and an applied result opens a new generation partition without rebinding an
     old one.
-14. A `RecoveryDraft` is a durable Core Draft Artifact created only by
-    Host-assigned `EditorRecovery` from a complete Server-retained admitted
-    `ApplyAuthorEdit` body and one exact `EditorRecoveryEvidenceRecord`.
+14. StoryOS creates no Recovery Draft ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)).
     Browser-only journal, takeover, and in-memory bytes have no Release-1 Host
     ingress.
 15. Journal payload collection requires terminal settlement, the applicable
@@ -2032,10 +1955,10 @@ key, or Admission. The old source remains available when the new edit settles.
 
 The author approved local terminal recovery and explicit manual re-entry in
 Issue [266](https://github.com/FrankQDWang/StoryOS/issues/266). Server RecoveryDraft
-creation and its production author workflow remain deferred to Issue
-[881](https://github.com/FrankQDWang/StoryOS/issues/881). The deferred work does not
-block this Stage 3 delivery and has no production PASS claim. This delivery note
-does not remove the specified RecoveryDraft contract or change the seven-state
+creation was deferred to Issue
+[881](https://github.com/FrankQDWang/StoryOS/issues/881). On 2026-10-31 the author
+decided not to build it, and [ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md) removes it. This delivery note
+does not change the seven-state
 prototype. The delivered refusal and conflict states and the separate local
 recovery flow retain their own evidence under Issue
 [391](https://github.com/FrankQDWang/StoryOS/issues/391).

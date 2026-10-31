@@ -27,7 +27,6 @@ it("explains a historical Update Project acknowledgement and does not retry it",
         projects: [{
           project_scope: { owner_user_id: OWNER, project_id: PROJECT },
           title: "Listed Novel",
-          lifecycle: { kind: "active" },
           revision: "2",
           open: { kind: "empty" },
         }],

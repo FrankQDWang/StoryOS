@@ -53,7 +53,6 @@ impl RefusalCode for CreateAgentRunRefusal {
     fn refusal_code(&self) -> &'static str {
         match self {
             Self::MissingProject => "missing_project",
-            Self::ArchivedProject => "archived_project",
             Self::AssistanceUnavailable => "assistance_unavailable",
             Self::InaccessibleConversation => "inaccessible_conversation",
             Self::ConversationBusy => "conversation_busy",
@@ -75,7 +74,7 @@ impl RefusalCode for AgentRunControlRefusal {
 impl RefusalCode for ArchiveExportRefusal {
     fn refusal_code(&self) -> &'static str {
         match self {
-            Self::Lifecycle(_) => "archive_lifecycle",
+            Self::Presence(_) => "missing_project",
             Self::ArchiveBuild(_) => "archive_build",
         }
     }
@@ -85,7 +84,6 @@ impl RefusalCode for ExportHumanReadableManuscriptRefusal {
     fn refusal_code(&self) -> &'static str {
         match self {
             Self::MissingProject => "missing_project",
-            Self::ArchivedProject => "archived_project",
         }
     }
 }

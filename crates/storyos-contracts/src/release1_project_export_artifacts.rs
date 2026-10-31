@@ -9,8 +9,8 @@ use crate::release1_operation_registry::{
 use crate::release1_project_export::{
     EXPORT_PROJECT_ARCHIVE, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
     EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID, ExportProjectArchiveEffect,
-    ExportProjectArchiveInput, ExportProjectArchiveRefusalReason, ExportProjectArchiveRequest,
-    ExportProjectArchiveResponse, ProjectExportRef,
+    ExportProjectArchiveInput, ExportProjectArchiveRequest, ExportProjectArchiveResponse,
+    ProjectExportRef,
 };
 use crate::release1_project_export_query::GET_EXPORT_OPERATION;
 use crate::release1_route_catalog::{
@@ -130,10 +130,9 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ExportProjectArchiveInput::decl(&config),
         ExportProjectArchiveRequest::decl(&config),
-        ExportProjectArchiveRefusalReason::decl(&config),
         ProjectExportRef::decl(&config),
         ExportProjectArchiveEffect::decl(&config),
         ExportProjectArchiveResponse::decl(&config),

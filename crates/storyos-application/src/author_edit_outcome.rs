@@ -48,7 +48,6 @@ pub struct RequiresReconfirmationApplyAuthorEdit {
     pub command_id: String,
     pub author_command_admission_id: String,
     pub reconfirmation_reason: ApplyAuthorEditReconfirmationReason,
-    pub recovery_draft_ref: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

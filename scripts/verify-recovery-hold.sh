@@ -169,20 +169,20 @@ if [ "$recovery_drill" = "mixed" ]; then
 
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
-  STORYOS_VITEST_FILE_ORDER=test/node-postgresql/recovery-archived-exports-http.integration.test.ts: \
+  STORYOS_VITEST_FILE_ORDER=test/node-postgresql/recovery-exports-http.integration.test.ts: \
   pnpm --dir apps/web exec vitest run --project node-postgresql \
-    test/node-postgresql/recovery-archived-exports-http.integration.test.ts
+    test/node-postgresql/recovery-exports-http.integration.test.ts
   STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/production-host.integration.test.ts
   stop_recovery_drill_server
-  archived_before=$(archived_export_facts "$primary")
-  if [ "$(printf '%s\n' "$archived_before" | wc -l | tr -d ' ')" != "2" ] \
-    || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Archive Archived\|[0-9a-f-]+\|archived\|1\|\|[0-9a-f-]+:sha256:[0-9a-f]{64}:[0-9a-f]+$' \
-    || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Readable Archived\|[0-9a-f-]+\|archived\|1\|[0-9a-f-]+:[0-9a-f]{64}:[0-9a-f]+\|$'; then
-    echo "Public export and archive paths did not retain both archived export families: $archived_before" >&2
+  exports_before=$(retained_export_facts "$primary")
+  if [ "$(printf '%s\n' "$exports_before" | wc -l | tr -d ' ')" != "2" ] \
+    || ! printf '%s\n' "$exports_before" | grep -Eq '^Recovery Archive Export\|[0-9a-f-]+\|\|[0-9a-f-]+:sha256:[0-9a-f]{64}:[0-9a-f]+$' \
+    || ! printf '%s\n' "$exports_before" | grep -Eq '^Recovery Readable Export\|[0-9a-f-]+\|[0-9a-f-]+:[0-9a-f]{64}:[0-9a-f]+\|$'; then
+    echo "Public export and archive paths did not retain both export families: $exports_before" >&2
     exit 1
   fi
 fi
@@ -387,8 +387,8 @@ if [ "$restored_title" != "$wal_marker" ]; then
 fi
 assert_mixed_empty_projects "$hold"
 if [ "$recovery_drill" = "mixed" ] \
-  && [ "$(archived_export_facts "$hold")" != "$archived_before" ]; then
-  echo "Isolated Recovery Copy changed the archived export history" >&2
+  && [ "$(retained_export_facts "$hold")" != "$exports_before" ]; then
+  echo "Isolated Recovery Copy changed the retained export history" >&2
   exit 1
 fi
 
@@ -490,36 +490,6 @@ if docker exec "$hold" env PGPASSWORD=runtime \
   echo "Incomplete Recovery Visibility Proof made the restore visible" >&2
   exit 1
 fi
-
-docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
-  psql -X -v ON_ERROR_STOP=1 -U postgres \
-  -c "UPDATE storyos.projects SET lifecycle_state = 'archived' WHERE project_id = '$project_id'" >/dev/null
-if docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
-  psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-  "BEGIN;
-   INSERT INTO storyos.recovery_copies (
-     recovery_copy_id, method, chain_sha256, required_wal_member, recovery_target_lsn
-   ) VALUES (
-     '$recovery_copy_id', 'pg_basebackup', '$chain_sha256', '$archived_wal', '$target_lsn'
-   );
-   INSERT INTO storyos.backup_wal_evidence (recovery_copy_id, path, sha256)
-   VALUES ('$recovery_copy_id', 'chain_manifest', '$chain_sha256');
-   INSERT INTO storyos.restore_proofs (
-     restore_proof_id, recovery_copy_id, isolated_target_identity, recovery_target_lsn, state
-   ) VALUES (
-     '$restore_proof_id', '$recovery_copy_id', '$hold', '$target_lsn', 'recovery_hold'
-   );
-   SELECT storyos.pass_recovery_visibility_proof(
-     '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
-     '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
-     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3');
-   COMMIT" >/dev/null 2>&1; then
-  echo "A missing lifecycle range became visible" >&2
-  exit 1
-fi
-docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
-  psql -X -v ON_ERROR_STOP=1 -U postgres \
-  -c "UPDATE storyos.projects SET lifecycle_state = 'active' WHERE project_id = '$project_id'" >/dev/null
 
 hold_scope=$(docker exec "$hold" psql -qX -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SET ROLE storyos_runtime;
@@ -649,8 +619,8 @@ esac
 assert_mixed_empty_projects "$hold"
 assert_mixed_populated_stays_separate "$hold"
 if [ "$recovery_drill" = "mixed" ] \
-  && [ "$(archived_export_facts "$hold")" != "$archived_before" ]; then
-  echo "Recovery Visibility changed archived export history" >&2
+  && [ "$(retained_export_facts "$hold")" != "$exports_before" ]; then
+  echo "Recovery Visibility changed the retained export history" >&2
   exit 1
 fi
 
@@ -694,15 +664,15 @@ if [ "$recovery_drill" = "mixed" ]; then
        JOIN storyos.human_readable_manuscript_exports AS export
          ON (export.owner_user_id, export.project_id) =
             (project.owner_user_id, project.project_id)
-      WHERE project.title = 'Recovery Readable Archived'")
+      WHERE project.title = 'Recovery Readable Export'")
   archive_pair=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
     "SELECT project.project_id || '/' || archive.export_id
        FROM storyos.projects AS project
        JOIN storyos.project_export_manifests AS archive
          ON (archive.owner_user_id, archive.project_id) =
             (project.owner_user_id, project.project_id)
-      WHERE project.title = 'Recovery Archive Archived'")
-  node scripts/inspect-recovered-archived-exports.mjs \
+      WHERE project.title = 'Recovery Archive Export'")
+  node scripts/inspect-recovered-exports.mjs \
     "$STORYOS_DEV_SERVER" "$readable_pair" "$archive_pair"
 fi
 acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")

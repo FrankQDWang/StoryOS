@@ -194,15 +194,6 @@ const COMMANDS: CommandRows = {
       } } };
     },
     expected: { effect: { kind: "initialized", availability: "available", revision: "1" } },  },
-  archiveProject: {
-    arrange: async () => {
-      const project = await createProject(server, { title: "Smoke Archive Novel" });
-      return { project, input: { request: {
-        command_schema: "storyos.command.archive-project.request.v1",
-        archive_project_input: { expected_project_revision: "1", ...project.binding() },
-      } } };
-    },
-    expected: { effect: { kind: "authoritative_applied", revision: "2" } },  },
   createEditorSession: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Session Novel" });

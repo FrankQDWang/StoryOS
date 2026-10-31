@@ -105,7 +105,6 @@ impl ProjectCommand for SetCurrentChapterInput {
         let expected_revision_exists = row.get::<_, bool>(/*idx*/ 2);
         let outcome = classify_set_current_chapter(&CoreSetCurrentChapter {
             chapter_join: chapter_join.clone(),
-            current_lifecycle: project.lifecycle,
             current_chapter_id: project.current_chapter_id.clone(),
             expected_current_chapter_id: self.expected_current_chapter_id.clone(),
             target_chapter_id: self.chapter_id.clone(),

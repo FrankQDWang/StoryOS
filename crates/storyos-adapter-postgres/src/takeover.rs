@@ -110,7 +110,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<Classification<Self>, ProjectCommandError> {
         let facts = load_takeover_facts(client, envelope).await?;
         let outcome = take_over_project_writer(&CoreTakeOverProjectWriter {
@@ -122,7 +122,6 @@ impl ProjectCommand for TakeOverProjectWriterInput {
                     is_requesting_session: facts.writer_session_id.as_deref()
                         == Some(self.editor_session_id.as_ref()),
                 }),
-            lifecycle: project.lifecycle,
             current_chapter_has_head: facts.current_head.is_some(),
         })
         .map_err(|_| ProjectCommandError::BindingConflict)?;

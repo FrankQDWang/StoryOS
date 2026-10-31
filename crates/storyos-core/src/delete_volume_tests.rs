@@ -3,7 +3,7 @@ use super::{
     DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
     delete_volume,
 };
-use crate::{ProjectLifecycle, VolumeJoin};
+use crate::VolumeJoin;
 
 fn command() -> DeleteVolume {
     DeleteVolume {
@@ -12,7 +12,6 @@ fn command() -> DeleteVolume {
         child_chapters: VolumeChildPolicy::Empty,
         expected_tree_revision: 4,
         current_tree_revision: 4,
-        current_lifecycle: ProjectLifecycle::Active,
     }
 }
 
@@ -70,17 +69,5 @@ fn an_invalid_volume_join_is_refused_with_zero_authority_effect() {
     assert_eq!(
         delete_volume(&invalid),
         DeleteVolumeResult::Refused(DeleteVolumeRefusal::InvalidVolumeJoin),
-    );
-}
-
-#[test]
-fn an_archived_project_is_refused_with_zero_authority_effect() {
-    let archived = DeleteVolume {
-        current_lifecycle: ProjectLifecycle::Archived,
-        ..command()
-    };
-    assert_eq!(
-        delete_volume(&archived),
-        DeleteVolumeResult::Refused(DeleteVolumeRefusal::ArchivedProject),
     );
 }

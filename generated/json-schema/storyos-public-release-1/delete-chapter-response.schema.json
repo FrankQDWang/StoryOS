@@ -118,7 +118,6 @@
     },
     "DeleteChapterRefusalReason": {
       "enum": [
-        "archived_project",
         "invalid_chapter_join"
       ],
       "type": "string"
@@ -266,7 +265,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",

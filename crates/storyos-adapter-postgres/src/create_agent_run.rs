@@ -120,7 +120,6 @@ impl ProjectCommand for CreateAgentRunInput {
         };
         let outcome = create_agent_run(&CoreCreateAgentRun {
             presence: ProjectPresence::Present,
-            lifecycle: project.lifecycle,
             assistance: match (&assistance, &self.destination) {
                 (Some(record), _) if record.availability == AssistanceAvailability::Unavailable => {
                     AssistanceAdmission::Unavailable

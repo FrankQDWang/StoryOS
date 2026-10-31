@@ -38,13 +38,13 @@ pub type ExportProjectArchiveAdmission = AdmittedProjectCommand<ArchiveExportOpe
 /// A refusal of exportProjectArchive before its Admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ArchiveExportRefusal {
-    /// The Core classification of the Project lifecycle refuses the export.
-    Lifecycle(ExportProjectArchiveRefusal),
+    /// The Core classification of the Project presence refuses the export.
+    Presence(ExportProjectArchiveRefusal),
     /// The exportable families cannot make a Project Export Archive.
     ArchiveBuild(ProjectArchiveBuildRefusal),
 }
 
-/// An archived Project and each archive build refusal refuse the export before its Admission.
+/// A missing Project and each archive build refusal refuse the export before its Admission.
 pub type ExportProjectArchiveError = RefusableCommandError<ArchiveExportRefusal>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -69,7 +69,6 @@ pub struct ExportOperationPage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GetExportOperation {
     Missing,
-    Archived,
     Expired,
     InProgress(Box<ExportOperationProgress>),
     Ready(Box<ExportOperationPage>),
@@ -95,7 +94,6 @@ pub trait ExportOperationReader: Sync {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VerifiedExportArchive {
     Missing,
-    Archived,
     Expired,
     Unsettled,
     Ready(Vec<u8>),

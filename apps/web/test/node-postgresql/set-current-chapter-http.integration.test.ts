@@ -80,15 +80,6 @@ test("setCurrentChapter applies, replays, refuses, and conflicts", async () => {
     { ...toB, chapterId: MISSING_CHAPTER, expectedCurrentChapterId: chapterB }));
   assert.deepEqual(missing.response.effect, { kind: "refused", reason: "invalid_chapter_join" });
   await assertForeignRefused(story, "setCurrentChapter", select(story, editorSessionId, toB));
-
-  const archived = await story.send("archiveProject", { request: {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: { expected_project_revision: "1", ...story.binding() },
-  } });
-  assert.equal(archived.response.effect.kind, "authoritative_applied");
-  const refused = await story.send("setCurrentChapter", select(story, editorSessionId,
-    { ...toB, chapterId: chapterA, expectedCurrentChapterId: chapterB }));
-  assert.deepEqual(refused.response.effect, { kind: "refused", reason: "archived_project" });
 });
 
 test("setCurrentChapter replays its first acknowledgement after later changes and a Server restart", async () => {

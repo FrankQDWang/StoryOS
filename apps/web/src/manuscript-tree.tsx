@@ -78,7 +78,6 @@ export function ManuscriptTree({
   baseUrl,
   fetchImpl,
   cryptoImpl,
-  createEnabled,
   selectedChapterId,
   onSelectChapter,
   onChapterCreated,
@@ -91,7 +90,6 @@ export function ManuscriptTree({
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-  createEnabled: boolean;
   selectedChapterId?: string;
   onSelectChapter?: (chapterId: string) => void;
   onChapterCreated: () => void;
@@ -123,8 +121,8 @@ export function ManuscriptTree({
     onCancel={() => setCreation(undefined)} onCreated={() => { setCreation(undefined); onChapterCreated(); }} />;
   return (
     <nav aria-label="稿件目录">
-      <div className="tree-heading">目录{createEnabled ? <button type="button" data-add-chapter
-        aria-label="目录菜单" onClick={openMenu}>＋</button> : null}</div>
+      <div className="tree-heading">目录<button type="button" data-add-chapter
+        aria-label="目录菜单" onClick={openMenu}>＋</button></div>
       {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
         <button type="button" data-create-volume-action onClick={() => { if (pendingCreation.current) return; setCreation(undefined); setCreatingVolume(true); }}>创建卷</button>
         <button type="button" data-chapter-placement="append" disabled={tree.volumes.length === 0}
@@ -157,8 +155,7 @@ export function ManuscriptTree({
               >
                 {expanded ? "▾" : "▸"}
               </button>
-              {createEnabled ? (
-                <VolumeTreeActions
+              <VolumeTreeActions
                   projectId={projectId}
                   volumeId={volume.volume_id}
                   title={volume.title}
@@ -171,9 +168,8 @@ export function ManuscriptTree({
                   onUpdated={onVolumeUpdated}
                   creationActions={<button type="button" data-chapter-placement="append"
                     onClick={() => begin(volume.volume_id)}>创建章</button>}
-                  onRemoveVolume={createEnabled ? onRemoveVolume : undefined}
+                  onRemoveVolume={onRemoveVolume}
                 />
-              ) : <span data-volume-title>{volume.title}</span>}
               </div>
               <ul>
                 {volume.chapters.map((chapter, index) => (
@@ -190,8 +186,7 @@ export function ManuscriptTree({
                     expectedTreeRevision={tree.tree_revision}
                     selectedChapterId={selectedChapterId}
                     onSelectChapter={onSelectChapter}
-                    createEnabled={createEnabled}
-                    onRemoveChapter={createEnabled ? onRemoveChapter : undefined}
+                    onRemoveChapter={onRemoveChapter}
                     baseUrl={baseUrl}
                     fetchImpl={fetchImpl}
                     cryptoImpl={cryptoImpl}

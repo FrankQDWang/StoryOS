@@ -1,7 +1,7 @@
 use super::{
     CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,
     CreateChapterOpen, CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult,
-    ProjectLifecycle, VolumeJoin, create_chapter,
+    VolumeJoin, create_chapter,
 };
 
 fn command() -> CreateChapter {
@@ -11,7 +11,6 @@ fn command() -> CreateChapter {
         volume_join: VolumeJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
-        current_lifecycle: ProjectLifecycle::Active,
         current_open: CreateChapterOpen::Empty,
         title: "Chapter A".to_owned(),
     }
@@ -64,16 +63,6 @@ fn an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect() {
     assert_eq!(
         create_chapter(&invalid),
         CreateChapterResult::Refused(CreateChapterRefusal::InvalidVolumeJoin)
-    );
-}
-
-#[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        create_chapter(&archived),
-        CreateChapterResult::Refused(CreateChapterRefusal::ArchivedProject)
     );
 }
 

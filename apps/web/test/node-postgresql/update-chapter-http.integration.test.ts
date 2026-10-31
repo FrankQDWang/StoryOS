@@ -51,14 +51,6 @@ test("updateChapter applies, replays, refuses, and conflicts", async () => {
   assert.deepEqual(missing.response.effect, { kind: "refused", reason: "invalid_chapter_join" });
   assert.equal((await problemOf(story.send("updateChapter", updateChapterInput(story, chapterId, "", "2", "5")))).status, 400);
   await assertForeignRefused(story, "updateChapter", updateChapterInput(story, chapterId, "Stolen Chapter", "1", "5"));
-
-  const archived = await story.send("archiveProject", { request: {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: { expected_project_revision: "1", ...story.binding() },
-  } });
-  assert.equal(archived.response.effect.kind, "authoritative_applied");
-  const refused = await story.send("updateChapter", updateChapterInput(story, chapterId, "Chapter A", "1", "5"));
-  assert.deepEqual(refused.response.effect, { kind: "refused", reason: "archived_project" });
 });
 
 test("updateChapter replays its first acknowledgements after later changes and a Server restart", async () => {

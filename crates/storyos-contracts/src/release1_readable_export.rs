@@ -57,12 +57,6 @@ pub struct ExportHumanReadableManuscriptRequest {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum ExportHumanReadableManuscriptRefusalReason {
-    ArchivedProject,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
 pub enum ExportAcknowledgement {
     Accepted,
 }
@@ -81,9 +75,6 @@ pub enum ExportHumanReadableManuscriptEffect {
         export_profile: String,
         #[ts(type = "SnapshotDescriptor")]
         source_snapshot: Box<SnapshotDescriptor>,
-    },
-    Refused {
-        reason: ExportHumanReadableManuscriptRefusalReason,
     },
 }
 

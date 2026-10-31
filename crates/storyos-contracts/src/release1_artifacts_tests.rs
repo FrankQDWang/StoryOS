@@ -291,7 +291,6 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "takeOverProjectWriter",
             "createProject",
             "updateProject",
-            "archiveProject",
             "createVolume",
             "createChapter",
             "updateVolume",

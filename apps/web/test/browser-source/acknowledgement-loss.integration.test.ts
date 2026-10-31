@@ -199,7 +199,6 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
             command_id: "018f0000-0000-7001-8000-000000000031",
             author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
             reconfirmation_reason: "direct_edit_intent_unrecoverable",
-            recovery_draft_ref: null,
           },
         };
       } else if (outcomeMode === "rejected") {
@@ -383,7 +382,6 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       command_id: "018f0000-0000-7001-8000-000000000031",
       author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
       reconfirmation_reason: "direct_edit_intent_unrecoverable",
-      recovery_draft_ref: null,
     });
     expect(closedSnapshot.records).toEqual(beforeReconfirmation.records);
     expect(projection).toMatchObject({ body: "Base!?", unsettled_intent_count: 1 });

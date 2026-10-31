@@ -129,7 +129,7 @@ pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work
 pub use get_proposal::{
     BlockProposalRecord, ProposalOperationRecord, ProposalReader, open_proposal,
 };
-pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
+pub use list_projects::{ProjectLibrary, ProjectListItem, list_owned_projects};
 pub use manuscript_search::{
     MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
     ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFactExtent,
@@ -190,9 +190,7 @@ pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
-pub use project_settings::{
-    ArchiveProjectInput, ArchiveProjectSettlement, UpdateProjectInput, UpdateProjectSettlement,
-};
+pub use project_settings::{UpdateProjectInput, UpdateProjectSettlement};
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
     ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,

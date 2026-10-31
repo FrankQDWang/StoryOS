@@ -2,7 +2,7 @@
 
 use std::convert::Infallible;
 
-use super::{ProjectLifecycle, TransitionOutcome};
+use super::TransitionOutcome;
 use crate::transition_outcome::reason_codes;
 
 /// The current writer of the Project, as the takeover observes it.
@@ -18,7 +18,6 @@ pub struct TakeOverProjectWriter {
     pub observed_writer_generation: u64,
     /// `None` when the Project has no writer generation.
     pub current_writer: Option<CurrentWriter>,
-    pub lifecycle: ProjectLifecycle,
     /// Whether the Current Chapter exists and has an Authoritative Revision head.
     pub current_chapter_has_head: bool,
 }
@@ -37,12 +36,12 @@ reason_codes!(TakeOverProjectWriterNoEffect { WriterTakeoverApplied => "writer_t
 /// A takeover that cannot proceed, and that records no Receipt.
 ///
 /// Either the observed writer generation is not the current one, or the requesting Editor
-/// Session is already the writer. The Project can also have no writer or be archived. The
+/// Session is already the writer. The Project can also have no writer. The
 /// Current Chapter can also have no head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaleWriterObservation;
 
-/// Classify one writer takeover against the current writer, lifecycle, and Current Chapter.
+/// Classify one writer takeover against the current writer and Current Chapter.
 pub fn take_over_project_writer(
     command: &TakeOverProjectWriter,
 ) -> Result<TakeOverProjectWriterResult, StaleWriterObservation> {
@@ -51,7 +50,6 @@ pub fn take_over_project_writer(
             writer_generation,
             is_requesting_session: false,
         }) if writer_generation == command.observed_writer_generation
-            && command.lifecycle == ProjectLifecycle::Active
             && command.current_chapter_has_head =>
         {
             Ok(TransitionOutcome::NoEffect(
