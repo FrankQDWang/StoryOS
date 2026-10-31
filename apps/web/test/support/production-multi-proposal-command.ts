@@ -10,6 +10,7 @@ import { acceptProposal, digestAcceptProposal, createProjectCommandChallenge, di
 import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalRequest, UpdateProjectAssistanceRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
+import { assertProjectReceipts } from "./project-receipts.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 function id() {
@@ -395,6 +396,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     assert.deepEqual(await retainedHistory(wholeBefore.revision_id), wholeHistory);
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
+    await assertProjectReceipts([projectId], { kinds: "listed", receipts: { updateProjectAssistance: 1,
+      createAgentRun: 3, acceptProposal: 3, rejectProposalOperations: 1, replanProposal: 0 } });
   } catch (error) {
     await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify({ phase, error: String(error), observed: await page.evaluate(() => {
       const surface = document.querySelector('[data-manuscript-editor]') as HTMLElement & { editor?: import('@tiptap/core').Editor };
