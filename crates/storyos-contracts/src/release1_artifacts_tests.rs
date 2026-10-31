@@ -560,6 +560,7 @@ fn assert_outcome_documents(generated: &GeneratedFiles) {
     let response = generated_validator(generated, "apply-author-edit-outcome-response.schema.json");
     let committed = golden_wire(generated, "getApplyAuthorEditOutcome");
     assert!(response.is_valid(&committed));
+    assert_each_present_field_is_required(&response, &committed, "");
     let admitted = serde_json::json!({
         "outcome_kind": "still_unknown",
         "observation": {
@@ -651,6 +652,7 @@ fn assert_takeover_documents(generated: &GeneratedFiles) {
     let response = generated_validator(generated, "take-over-project-writer-response.schema.json");
     let applied = golden_wire(generated, "takeOverProjectWriter");
     assert!(response.is_valid(&applied));
+    assert_each_present_field_is_required(&response, &applied, "");
     assert_each_present_field_is_required(&response, &applied, "/result");
     let compare_failed = with_value(
         &applied,
