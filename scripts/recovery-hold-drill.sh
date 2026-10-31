@@ -20,7 +20,6 @@ start_recovery_drill_server() {
     echo "Release package is required for the isolated recovery Server" >&2
     exit 1
   fi
-  unset STORYOS_STAGE1_AUTHORITY_ORACLE
   drill_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-server.XXXXXX")
   STORYOS_DATABASE_URL=$database_url \
   STORYOS_STORAGE_ADMIN_URL="postgres://postgres:wrong@127.0.0.1:1/postgres" \
