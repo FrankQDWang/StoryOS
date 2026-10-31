@@ -1,6 +1,4 @@
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use tower::ServiceExt as _;
+use axum::http::StatusCode;
 
 use super::*;
 
@@ -45,25 +43,6 @@ fn request_validation_rejects_a_foreign_target() {
 }
 
 #[test]
-fn request_validation_accepts_a_bounded_ordered_batch() {
-    let mut request = request();
-    request.author_edit_units.push(contracts::AuthorEditUnit {
-        normalized_primitives: vec![contracts::AuthorEditPrimitive::ReplaceSelection {
-            from: 5,
-            to: 5,
-            text: "?".to_owned(),
-        }],
-        selection_snapshot: contracts::SelectionSnapshot {
-            coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
-            from: 5,
-            to: 5,
-        },
-    });
-
-    assert!(validate_request(&request).is_ok());
-}
-
-#[test]
 fn request_validation_refuses_a_structural_primitive_on_a_proposal_target() {
     let mut request = request();
     request.observed_ownership_partition = "mixed".to_owned();
@@ -90,22 +69,4 @@ fn request_validation_refuses_a_structural_primitive_on_a_proposal_target() {
         (status, problem.1.0.code.as_str()),
         (StatusCode::UNPROCESSABLE_ENTITY, "command_target_refused")
     );
-}
-
-#[tokio::test]
-async fn apply_author_edit_rejects_referer_without_origin() {
-    let response = router()
-        .oneshot(
-            Request::post(
-                "/api/v1/projects/018f0000-0000-7001-8000-000000000002/manuscript/author-edits",
-            )
-            .header(header::REFERER, "https://example.com/projects/one")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from("{}"))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

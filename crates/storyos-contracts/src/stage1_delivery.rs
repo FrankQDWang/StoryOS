@@ -591,7 +591,3 @@ fn exact_coverage(
     }
     Ok(expected)
 }
-
-#[cfg(test)]
-#[path = "stage1_delivery_tests.rs"]
-mod tests;

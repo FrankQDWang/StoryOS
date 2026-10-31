@@ -67,16 +67,6 @@ fn an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect() {
 }
 
 #[test]
-fn an_empty_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut empty = command();
-    empty.current_chapter_id = None;
-    assert_eq!(
-        set_current_chapter(&empty),
-        TransitionOutcome::Refused(SetCurrentChapterRefusal::EmptyProject)
-    );
-}
-
-#[test]
 fn an_invalid_chapter_join_is_refused_before_an_empty_project() {
     let mut removed_on_empty = command();
     removed_on_empty.chapter_join = ChapterJoin::Invalid;

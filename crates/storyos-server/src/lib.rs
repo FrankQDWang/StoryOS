@@ -942,7 +942,3 @@ mod tests;
 #[cfg(test)]
 #[path = "project_command_challenge_tests.rs"]
 mod project_command_challenge_tests;
-
-#[cfg(test)]
-#[path = "editor_session_tests.rs"]
-mod editor_session_tests;

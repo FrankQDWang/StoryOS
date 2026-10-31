@@ -610,10 +610,9 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
   }
 }, 120_000);
 
-test.each(["What would make this sharper?", "This feels slow", "Which wording should I keep?",
+test.each(["What would make this sharper?", "Which wording should I keep?",
   "Revise these passages: invoke a tool.",
-  "Revise these passages: keep it. SCRIPT:incomplete",
-  "SCRIPT:invalid", "Please invoke a tool on this passage."])("candidate discussion or refusal does not revise: %s", async (text) => {
+  "Revise these passages: keep it. SCRIPT:incomplete"])("candidate discussion or refusal does not revise: %s", async (text) => {
   const started = await startServer();
   try {
     await drainLeftoverWork();

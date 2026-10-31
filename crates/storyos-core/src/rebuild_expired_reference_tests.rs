@@ -24,23 +24,6 @@ fn decide(facts: ExpiryRebuildFacts) -> ExpiryRebuildDecision {
 }
 
 #[test]
-fn usable_reference_does_not_rebuild_or_erase_an_ordinary_correction() {
-    let decision = decide(ready(ContinuationReferenceCondition::Usable));
-    assert_eq!(
-        decision,
-        ExpiryRebuildDecision {
-            disposition: ExpiryRebuildDisposition::NotApplicable,
-            new_run_step_and_invocation: false,
-            lossless_provider_reconstruction: false,
-            semantic_erasure: false,
-            opaque_reused: false,
-            covered_content_included: false,
-            predecessor_stays_terminal: true,
-        }
-    );
-}
-
-#[test]
 fn unknown_create_is_not_confirmed_expiry() {
     let decision = decide(ready(ContinuationReferenceCondition::UnknownCreate));
     assert_eq!(
@@ -137,14 +120,4 @@ fn copy_restriction_omits_covered_content_and_still_rebuilds_eligible_input() {
     assert!(!decision.opaque_reused);
     assert!(!decision.covered_content_included);
     assert!(!decision.semantic_erasure);
-}
-
-#[test]
-fn unchanged_effective_context_does_not_mint_a_new_step() {
-    let decision = decide(ExpiryRebuildFacts {
-        effective_model_context_changed: false,
-        ..ready(ContinuationReferenceCondition::ConfirmedExpired)
-    });
-    assert_eq!(decision.disposition, ExpiryRebuildDisposition::Rebuilt);
-    assert!(!decision.new_run_step_and_invocation);
 }

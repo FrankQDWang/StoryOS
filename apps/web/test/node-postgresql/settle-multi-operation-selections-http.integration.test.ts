@@ -48,7 +48,7 @@ import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
 } from "../support/acceptance.ts";
-import { heldWorker, postRun, problemCode, runRequest, settleRun, startServer } from "../support/http-harness.ts";
+import { heldWorker, postRun, problemCode, restartServer, runRequest, settleRun, startServer } from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -458,49 +458,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
   } finally { await stopRealServer(started.server); }
 });
 
-test("one request produces explained exact locations and keeps them after restart", async () => {
-  let started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Explained locations", `${ns}2`);
-    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
-    const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
-    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      "Revise these passages: keep the voice.", id(`${ns}41`));
-    assert.equal(run.decision.kind, "prose_change");
-    if (run.decision.kind !== "prose_change") throw new Error("expected prose change");
-    const locations = run.decision.locations;
-    assert.equal(locations?.length, 2);
-    assert.deepEqual(locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
-      candidate_text, explanation }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text, explanation })),
-      before.chapter.current_revision.blocks.map((block, index) => ({ chapter_id: chapterId,
-        manuscript_block_id: block.manuscript_block_id,
-        base_authoritative_revision_id: before.chapter.current_revision.revision_id,
-        candidate_text: index === 0 ? PROSE : SECOND_PROSE,
-        explanation: index === 0 ? "Preserve the narrator voice in the first passage." : "Keep the second passage consistent with the narrator voice.",
-      })));
-    const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
-      proposalId: openedProposal(run) });
-    assert.deepEqual(opened.proposal.operations.map((operation) =>
-      operation.candidate_text), [PROSE, SECOND_PROSE]);
-    assert.equal(opened.proposal.validation_receipt.kind, "present");
-    const after = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
-    assert.deepEqual(after.chapter, before.chapter);
-    await stopRealServer(started.server);
-    started = await startServer();
-    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
-    const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
-    assert.deepEqual(reloaded.decision, run.decision);
-    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId,
-      proposalId: opened.proposal.proposal_id, fetchImpl: reloadedFetch })).proposal, opened.proposal);
-    await settleOnce();
-    assert.deepEqual((await getAgentRun({ baseUrl: started.baseUrl, projectId,
-      runId: run.run_id, fetchImpl: reloadedFetch })).decision, run.decision);
-  } finally { await stopRealServer(started.server); }
-});
-
-test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
+test.each(["collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
   let started = await startServer();
@@ -624,7 +582,7 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
   }
 });
 
-test.each(["undeclared_location", "stale_location_base"])("scalar requests do not enter the typed script %s", async (script) => {
+test.each(["undeclared_location"])("scalar requests do not enter the typed script %s", async (script) => {
   const started = await startServer();
   try {
     await drainLeftoverWork();
@@ -717,7 +675,7 @@ test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Propos
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["", " SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
+test.each([" SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
   const started = await startServer();
   try {
     await drainLeftoverWork();
@@ -803,61 +761,7 @@ function acceptRequest(
   };
 }
 
-test("acceptProposal applies a reversed multi-operation set without using array order as authority", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("f3820111"), "Multi Operation Novel", "f3822");
-    const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, "f3823");
-    const queried = await admitPassages(
-      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
-      "Revise these passages: keep the voice.", id("f3820131"),
-    );
-    const opened = await getProposal({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: openedProposal(queried), fetchImpl: prepared.fetchImpl,
-    });
-    assert.equal(opened.proposal.operations.length, 2);
-    assert.deepEqual(opened.proposal.operations.map((operation) => operation.resolution), [
-      "pending", "pending",
-    ]);
-    const selected = [...opened.proposal.operations.map((operation) => operation.operation_id)].reverse();
-    const request = acceptRequest(
-      opened, selected, seeded.revisionId,
-      seeded.session.editor_session.editor_session_id, id("f3820151"),
-    );
-    const accepted = await challenged(
-      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      request.command_schema, await digestAcceptProposal(request), id("f3820152"),
-      (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl, projectId: prepared.projectId,
-        proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f3820152"), antiForgery, request,
-      }),
-    );
-    assert.equal(accepted.effect.kind, "applied");
-    assert.deepEqual(accepted.receipt.selected_operation_ids, selected);
-    if (accepted.effect.kind !== "applied") throw new Error("expected applied");
-    assert.equal(accepted.effect.authoritative_revision.body, `${PROSE}\n${SECOND_PROSE}`);
-    const inspected = await getProposal({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-    });
-    assert.deepEqual(inspected.proposal.operations.map((operation) => operation.resolution), [
-      "applied", "applied",
-    ]);
-    const after = await getChapter({
-      baseUrl: started.baseUrl, projectId: prepared.projectId,
-      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
-    });
-    assert.equal(after.chapter.current_revision.body, `${PROSE}\n${SECOND_PROSE}`);
-  } finally {
-    await stopRealServer(started.server);
-  }
-});
-
-for (const history of ["retained", "legacy_overwritten", "collection"]) {
+for (const history of ["legacy_overwritten", "collection"]) {
 test(`partial Acceptance preserves ${history} evidence and replaces the remaining Operation text`, async () => {
   const ns = randomBytes(3).toString("hex");
   let started = await startServer();
@@ -1117,21 +1021,42 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
 });
 }
 
-test("acceptProposal refuses incomplete atomic Bundle closure then applies the closed set", async () => {
-  const started = await startServer();
+test("acceptProposal keeps explained locations across a restart, refuses incomplete Bundle closure, then applies the closed set", async () => {
+  let started = await startServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820211"), "Bundle Operation Novel", "f3824");
     const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, "f3825");
+    const chapterOptions = { projectId: prepared.projectId, chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl };
+    const before = await getChapter({ baseUrl: started.baseUrl, ...chapterOptions });
     const queried = await admitPassages(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
       "Revise these passages as a bundle: keep the voice.", id("f3820231"),
     );
+    if (queried.decision.kind !== "prose_change") throw new Error("expected prose change");
+    assert.deepEqual(queried.decision.locations?.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
+      candidate_text, explanation }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text, explanation })),
+      before.chapter.current_revision.blocks.map((block, index) => ({ chapter_id: prepared.chapterId,
+        manuscript_block_id: block.manuscript_block_id,
+        base_authoritative_revision_id: before.chapter.current_revision.revision_id,
+        candidate_text: index === 0 ? PROSE : SECOND_PROSE,
+        explanation: index === 0 ? "Preserve the narrator voice in the first passage." : "Keep the second passage consistent with the narrator voice.",
+      })));
     const opened = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: openedProposal(queried), fetchImpl: prepared.fetchImpl,
     });
-    assert.equal(opened.proposal.operations.length, 2);
+    assert.deepEqual(opened.proposal.operations.map((operation) => operation.candidate_text), [PROSE, SECOND_PROSE]);
+    assert.deepEqual(opened.proposal.operations.map((operation) => operation.resolution), ["pending", "pending"]);
+    assert.equal(opened.proposal.validation_receipt.kind, "present");
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, ...chapterOptions })).chapter, before.chapter);
+    started = await restartServer(started);
+    const runOptions = { projectId: prepared.projectId, runId: queried.run_id, fetchImpl: prepared.fetchImpl };
+    assert.deepEqual((await getAgentRun({ baseUrl: started.baseUrl, ...runOptions })).decision, queried.decision);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, opened.proposal);
+    await settleOnce();
+    assert.deepEqual((await getAgentRun({ baseUrl: started.baseUrl, ...runOptions })).decision, queried.decision);
     const firstOperation = opened.proposal.operations[0];
     if (!firstOperation) throw new Error("expected first Operation");
     const incomplete = acceptRequest(
@@ -1149,10 +1074,9 @@ test("acceptProposal refuses incomplete atomic Bundle closure then applies the c
       }),
     );
     assert.deepEqual(refused.effect, { kind: "refused", reason: "incomplete_bundle_closure" });
+    const reversed = [...opened.proposal.operations.map((operation) => operation.operation_id)].reverse();
     const closed = acceptRequest(
-      opened,
-      [...opened.proposal.operations.map((operation) => operation.operation_id)].reverse(),
-      seeded.revisionId, seeded.session.editor_session.editor_session_id, id("f3820253"),
+      opened, reversed, seeded.revisionId, seeded.session.editor_session.editor_session_id, id("f3820253"),
     );
     const accepted = await challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
@@ -1165,8 +1089,14 @@ test("acceptProposal refuses incomplete atomic Bundle closure then applies the c
       }),
     );
     assert.equal(accepted.effect.kind, "applied");
+    assert.deepEqual(accepted.receipt.selected_operation_ids, reversed);
     if (accepted.effect.kind !== "applied") throw new Error("expected applied");
     assert.equal(accepted.effect.authoritative_revision.body, `${PROSE}\n${SECOND_PROSE}`);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal.operations
+      .map((operation) => operation.resolution), ["applied", "applied"]);
+    assert.equal((await getChapter({ baseUrl: started.baseUrl, ...chapterOptions })).chapter.current_revision.body,
+      `${PROSE}\n${SECOND_PROSE}`);
   } finally {
     await stopRealServer(started.server);
   }

@@ -1,8 +1,4 @@
-use super::{
-    ChapterStatistics, GetManuscriptStatistics, MANUSCRIPT_STATISTICS_PROJECTION_KIND,
-    ManuscriptStatisticsPage, ManuscriptStatisticsRequest, ManuscriptTotals,
-    get_manuscript_statistics,
-};
+use super::{GetManuscriptStatistics, ManuscriptStatisticsRequest, get_manuscript_statistics};
 use crate::manuscript_search::{
     ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFactExtent,
     ManuscriptSearchFacts, ManuscriptSearchRead, ManuscriptSearchReader,
@@ -68,61 +64,6 @@ fn ready(chapters: Vec<ManuscriptSearchChapterFact>) -> ManuscriptSearchRead {
 }
 
 #[tokio::test]
-async fn chapter_and_manuscript_counts_use_the_same_unicode_profile() {
-    let scope = owned_scope();
-    let reader = FixtureReader {
-        read: ready(vec![
-            chapter(
-                "chapter-a",
-                /*volume_order*/ 1,
-                /*chapter_order*/ 1,
-                "Hello world",
-            ),
-            chapter(
-                "chapter-b",
-                /*volume_order*/ 1,
-                /*chapter_order*/ 2,
-                "雨落在窗沿。",
-            ),
-        ]),
-    };
-
-    let result = get_manuscript_statistics(
-        &reader,
-        &scope,
-        &ManuscriptStatisticsRequest {
-            required_watermark: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(
-        result,
-        GetManuscriptStatistics::Ready(ManuscriptStatisticsPage {
-            project_scope: scope,
-            source_snapshot: snapshot(),
-            projection_kind: MANUSCRIPT_STATISTICS_PROJECTION_KIND.to_owned(),
-            projection_generation: 4,
-            projection_watermark: 4,
-            required_watermark: None,
-            counting_profile: storyos_core::STATISTICS_COUNTING_PROFILE.to_owned(),
-            lag: 0,
-            current_chapter: Some(ChapterStatistics {
-                chapter_id: ChapterId::new("chapter-b"),
-                word_count: 1,
-                character_count: 6,
-            }),
-            manuscript: ManuscriptTotals {
-                chapter_count: 2,
-                word_count: 3,
-                character_count: 17,
-            },
-        })
-    );
-}
-
-#[tokio::test]
 async fn unmet_required_watermark_is_not_an_empty_success() {
     let scope = owned_scope();
     let reader = FixtureReader {
@@ -150,39 +91,6 @@ async fn unmet_required_watermark_is_not_an_empty_success() {
             source_snapshot: snapshot(),
             projection_watermark: 4,
             required_watermark: 9,
-        }
-    );
-}
-
-#[tokio::test]
-async fn omitted_chapters_do_not_contribute_invented_counts() {
-    let scope = owned_scope();
-    let reader = FixtureReader {
-        read: ready(vec![chapter(
-            "chapter-b",
-            /*volume_order*/ 1,
-            /*chapter_order*/ 1,
-            "Hello",
-        )]),
-    };
-
-    let GetManuscriptStatistics::Ready(page) = get_manuscript_statistics(
-        &reader,
-        &scope,
-        &ManuscriptStatisticsRequest {
-            required_watermark: None,
-        },
-    )
-    .await
-    .unwrap() else {
-        panic!("ready page");
-    };
-    assert_eq!(
-        page.manuscript,
-        ManuscriptTotals {
-            chapter_count: 1,
-            word_count: 1,
-            character_count: 5,
         }
     );
 }

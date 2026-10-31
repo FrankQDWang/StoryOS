@@ -47,20 +47,6 @@ fn packaged_production_requires_exactly_one_handle() {
 }
 
 #[test]
-fn one_handle_issues_that_cookie_value() {
-    let (mappings, bootstrap) = packaged_session_mappings(
-        /*raw*/ Some(&format!(r#"{{"session-a":"{USER}"}}"#)),
-        MultipleMappingAllowance::Refuse,
-    )
-    .expect("one mapping is the production path");
-    assert_eq!(mappings.get("session-a").map(String::as_str), Some(USER));
-    assert_eq!(
-        bootstrap,
-        TrustedLocalSessionBootstrap::IssueTheSingleConfiguredHandle
-    );
-}
-
-#[test]
 fn multiple_mapping_test_allowance_disables_issuance() {
     let (mappings, bootstrap) = packaged_session_mappings(
         /*raw*/

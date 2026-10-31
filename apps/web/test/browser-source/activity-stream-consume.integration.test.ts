@@ -128,6 +128,7 @@ it("resumes a retained cursor and resynchronizes from an authorized Snapshot aft
   });
   const activity: { snapshotId: string; lastEventId: string | null }[] = [];
   let expired = false;
+  let foreignTree = false;
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const path = url.pathname;
@@ -146,7 +147,10 @@ it("resumes a retained cursor and resynchronizes from an authorized Snapshot aft
         schema_id: "storyos.query.editor-session.response.v1",
       });
     }
-    if (path.endsWith("/manuscript/tree")) return jsonResponse(treeResponse(snapshot));
+    if (path.endsWith("/manuscript/tree")) {
+      const scope = foreignTree ? { owner_user_id: OWNER, project_id: OWNER } : snapshot.project_scope;
+      return jsonResponse(treeResponse(snapshot, scope));
+    }
     if (path.endsWith(`/snapshots/${CANONICAL_SNAPSHOT}`)) {
       return jsonResponse(snapshotResponse(snapshot));
     }
@@ -194,6 +198,12 @@ it("resumes a retained cursor and resynchronizes from an authorized Snapshot aft
     });
     const retainedJournal = await readJournalSnapshot(workspace);
     expired = true;
+    foreignTree = true;
+    const beforeForeign = await readProjectActivityIngest(workspace);
+    await expect(consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl }))
+      .rejects.toThrow("Canonical Snapshot is invalid");
+    expect(await readProjectActivityIngest(workspace)).toEqual(beforeForeign);
+    foreignTree = false;
     const resynced = await consumeOwnedProjectActivity(workspace, {
       baseUrl: location.origin, fetchImpl,
     });
@@ -213,6 +223,7 @@ it("resumes a retained cursor and resynchronizes from an authorized Snapshot aft
     expect(await readJournalSnapshot(workspace)).toEqual(retainedJournal);
     expect(activity).toEqual([
       { snapshotId: EDITOR_SNAPSHOT, lastEventId: null },
+      { snapshotId: EDITOR_SNAPSHOT, lastEventId: "cursor-gen1-a" },
       { snapshotId: EDITOR_SNAPSHOT, lastEventId: "cursor-gen1-a" },
       { snapshotId: EDITOR_SNAPSHOT, lastEventId: "cursor-gen1-a" },
       { snapshotId: CANONICAL_SNAPSHOT, lastEventId: null },
@@ -265,51 +276,6 @@ it("does not treat an unrecoverable expired cursor as an empty successful replay
     expect(await consumeOwnedProjectActivity(workspace, {
       baseUrl: location.origin, fetchImpl,
     })).toEqual({ kind: "unavailable", code: "resource_unavailable" });
-    expect(await readProjectActivityIngest(workspace)).toEqual(before);
-    workspace.database.close();
-  } finally {
-    closeTrackedDatabases(openDatabases);
-    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
-    await deleteJournal(scenario.journalName);
-  }
-});
-
-it("refuses a Snapshot whose Scope does not match the Editor Session", async () => {
-  const scenario = createBrowserScenario();
-  const fetchImpl: typeof fetch = async (input, init) => {
-    const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith("/anti-forgery-challenges")) {
-      return jsonResponse({
-        nonce: "a".repeat(64),
-        expires_at: "2026-08-13T08:05:00.000Z",
-        limit_profile_revision: "storyos.foundation.absolute.v1",
-      });
-    }
-    if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
-    if (path.endsWith(`/editor-sessions/${SESSION}`)) {
-      return jsonResponse({
-        ...scenario.session,
-        schema_id: "storyos.query.editor-session.response.v1",
-      });
-    }
-    if (path.endsWith("/activity")) return problemResponse(409, "activity_cursor_too_old");
-    if (path.endsWith("/manuscript/tree")) {
-      return jsonResponse(treeResponse(
-        canonicalSnapshot({ project_scope: { owner_user_id: OWNER, project_id: OWNER } }),
-        { owner_user_id: OWNER, project_id: OWNER },
-      ));
-    }
-    throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
-  };
-  const openDatabases = new Set<IDBDatabase>();
-  await deleteJournal(scenario.journalName);
-  try {
-    const { workspace } = await openReadyWorkspace(fetchImpl);
-    trackDatabase(workspace.database, openDatabases);
-    const before = await readProjectActivityIngest(workspace);
-    await expect(consumeOwnedProjectActivity(workspace, {
-      baseUrl: location.origin, fetchImpl,
-    })).rejects.toThrow();
     expect(await readProjectActivityIngest(workspace)).toEqual(before);
     workspace.database.close();
   } finally {

@@ -83,6 +83,11 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   }
   await createNamedVolume(createdRoot, "Volume A");
   await expect.poll(() => volumeTitles(createdRoot.querySelector("#app"))).toEqual(["Volume A"]);
+  const oneVolumeRoot = createdRoot.querySelector("#app");
+  expect(oneVolumeRoot?.getAttribute("data-boot-state")).toBe("empty-project-ready");
+  const volumeItems = oneVolumeRoot?.querySelectorAll('nav[aria-label="稿件目录"] > ul > li');
+  expect(volumeItems).toHaveLength(1);
+  expect(volumeItems?.[0]?.querySelectorAll("li")).toHaveLength(0);
   await createNamedVolume(createdRoot, "Volume B");
   await expect.poll(() => volumeTitles(createdRoot.querySelector("#app"))).toEqual([
     "Volume A",

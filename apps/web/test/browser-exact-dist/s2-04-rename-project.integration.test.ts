@@ -96,4 +96,7 @@ it("the author renames one exact Project and the library plus opened title conve
   expect(root.querySelector("h1")?.textContent).toBe("Renamed Novel");
   expect(root.querySelector(".editor-panel textarea")).toBeNull();
   expect(root.textContent).toContain("空工作区");
+  const tree = root.querySelector('nav[aria-label="稿件目录"]');
+  expect(tree).not.toBeNull();
+  expect(tree?.querySelectorAll("li")).toHaveLength(0);
 });

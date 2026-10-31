@@ -53,6 +53,20 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
   ).toBe("INPUT");
+  const readyRoot = frame.contentDocument?.querySelector("#app");
+  expect({
+    alert: readyRoot?.querySelector('[role="alert"]') !== null,
+    bootState: readyRoot?.getAttribute("data-boot-state") ?? null,
+    heading: readyRoot?.querySelector("h1")?.textContent ?? null,
+    message: readyRoot?.querySelector("p")?.textContent ?? null,
+    editor: readyRoot?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null,
+  }).toEqual({
+    alert: false,
+    bootState: "protected-ready",
+    heading: "StoryOS",
+    message: "本地写作已就绪。",
+    editor: false,
+  });
   const title = frame.contentDocument?.querySelector<HTMLInputElement>('#app input[name="title"]');
   const form = title?.form;
   if (title === null || title === undefined || form === null || form === undefined) {

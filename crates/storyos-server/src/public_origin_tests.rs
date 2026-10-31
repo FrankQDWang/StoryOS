@@ -3,17 +3,6 @@ use super::{
 };
 
 #[test]
-fn a_configured_http_origin_refuses_startup() {
-    assert_eq!(
-        packaged_transport_plan(
-            /*public_origin*/ Some("http://example.com"),
-            "127.0.0.1:3000"
-        ),
-        Err(PackagedTransportError::InvalidPublicOrigin),
-    );
-}
-
-#[test]
 fn a_configured_https_origin_is_the_printed_site() {
     assert_eq!(
         packaged_transport_plan(

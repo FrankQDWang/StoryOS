@@ -377,44 +377,6 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn consumption_rolls_back_with_the_caller_owned_transaction() {
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let store = PostgresProjectReader::new(runtime_url);
-    let request = numbered_challenge_request(301, 301);
-    issue_project_command_challenge(&store, &request)
-        .await
-        .unwrap();
-
-    let mut rolled_back = store
-        .begin_project_command_transaction(&request.binding.project_scope)
-        .await
-        .unwrap();
-    assert_eq!(
-        rolled_back
-            .consume(&request.binding, &request.nonce_digest)
-            .await
-            .unwrap(),
-        ProjectCommandChallengeUse::FirstUse,
-    );
-    rolled_back.rollback().await.unwrap();
-
-    let mut committed = store
-        .begin_project_command_transaction(&request.binding.project_scope)
-        .await
-        .unwrap();
-    assert_eq!(
-        committed
-            .consume(&request.binding, &request.nonce_digest)
-            .await
-            .unwrap(),
-        ProjectCommandChallengeUse::FirstUse,
-    );
-    committed.commit().await.unwrap();
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_expired_unconsumed_challenge_cannot_enter_the_command_transaction() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");

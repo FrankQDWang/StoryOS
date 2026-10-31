@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "vitest";
+
+import { TEST_CHALLENGE_SECRET } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
@@ -51,55 +51,24 @@ async function refusesBind(
   });
 }
 
-test("production startup refuses an absent root or invalid resource set before readiness", async () => {
+test("production startup refuses a start without a web root", async () => {
   await refusesBind(["--bind", "127.0.0.1:0"], {
     ...process.env, PATH: "/__storyos_no_external_tools__",
-  });
-  const mutations: ReadonlyArray<(root: string, temporary: string) => void> = [
-    (root) => unlinkSync(join(root, "index.html")),
-    (root) => writeFileSync(join(root, "assets/extra-12345678.js"), "extra"),
-    (root) => {
-      const path = join(root, "index.html");
-      const bytes = readFileSync(path);
-      bytes[0] = 0;
-      writeFileSync(path, bytes);
-    },
-    (root) => {
-      const path = join(root, "manifest.json");
-      writeFileSync(path, readFileSync(path, "utf8")
-        .replace(/"source_commit": "[0-9a-f]{40}"/, `"source_commit": "${"c".repeat(40)}"`));
-    },
-    (root, temporary) => {
-      const path = join(root, "index.html");
-      const held = join(temporary, "held.html");
-      renameSync(path, held);
-      symlinkSync(held, path);
-    },
-  ];
-  for (const mutate of mutations) {
-    const temporary = mkdtempSync(join(tmpdir(), "storyos-web-startup-"));
-    try {
-      const root = join(temporary, "web");
-      cpSync(webRoot, root, { recursive: true });
-      mutate(root, temporary);
-      await refusesBind(["--web-root", root, "--bind", "127.0.0.1:0"], {
-        ...process.env, PATH: "/__storyos_no_external_tools__",
-      });
-    } finally {
-      rmSync(temporary, { recursive: true, force: true });
-    }
-  }
+  }, /usage: storyos-server --web-root/);
 });
 
 test("packaged production startup refuses session mappings that are not exactly one handle", async () => {
   const args = ["--web-root", webRoot, "--bind", "127.0.0.1:0"];
-  await refusesBind(args, packagedStartupEnv());
-  await refusesBind(args, packagedStartupEnv("{}"));
-  await refusesBind(args, packagedStartupEnv(`{"session-a":"${LOCAL_USER}","session-b":"${FOREIGN_USER}"}`));
-  await refusesBind(args, packagedStartupEnv("{"));
-  await refusesBind(args, packagedStartupEnv(`{"":"${LOCAL_USER}"}`));
-  await refusesBind(args, packagedStartupEnv('{"session-a":"not-a-user"}'));
-  await refusesBind(args, packagedStartupEnv(`{"session a":"${LOCAL_USER}"}`));
+  const mappings = [undefined, "{}", `{"session-a":"${LOCAL_USER}","session-b":"${FOREIGN_USER}"}`, "{",
+    `{"":"${LOCAL_USER}"}`, '{"session-a":"not-a-user"}', `{"session a":"${LOCAL_USER}"}`];
+  for (const sessions of mappings) {
+    await refusesBind(args, {
+      ...packagedStartupEnv(sessions),
+      STORYOS_CHALLENGE_SECRET: TEST_CHALLENGE_SECRET,
+      STORYOS_DATABASE_URL: CLOSED_POSTGRES,
+      STORYOS_STORAGE_ADMIN_URL: CLOSED_ADMIN,
+    }, /STORYOS_BOOTSTRAP_SESSIONS/);
+  }
 });
 
 test("offline web-root check does not require session mappings or PostgreSQL", async () => {

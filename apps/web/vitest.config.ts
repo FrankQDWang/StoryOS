@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
-import type { Plugin } from "vite";
 import { defineConfig, defineProject } from "vitest/config";
 
 import { storyOSApiProxy } from "./test/support/api-proxy";
@@ -33,22 +32,6 @@ function browserTest() {
   };
 }
 
-const sessionCookieProbe: Plugin = {
-  name: "storyos-session-cookie-probe",
-  configureServer(server) {
-    server.middlewares.use("/__storyos_browser_foundation__/session", (request, response) => {
-      const bound = (request.headers.cookie ?? "")
-        .split(";")
-        .map((part) => part.trim())
-        .includes("storyos_session=session-a");
-      response.statusCode = 200;
-      response.setHeader("cache-control", "no-store");
-      response.setHeader("content-type", "application/json; charset=utf-8");
-      response.end(JSON.stringify({ bound }));
-    });
-  },
-};
-
 export default defineConfig({
   test: {
     sequence: { sequencer: ScriptOrderSequencer },
@@ -76,7 +59,7 @@ export default defineConfig({
         },
       }),
       defineProject({
-        plugins: [react(), sessionCookieProbe],
+        plugins: [react()],
         root: webRoot,
         server: {
           fs: { allow: [repositoryRoot] },

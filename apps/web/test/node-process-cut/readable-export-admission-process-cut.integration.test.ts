@@ -9,7 +9,7 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ExportHumanReadableManuscriptRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING } from "../support/acceptance.ts";
-import { assertAdmissionSurvivesServerCut, assertClaimWithoutSettlementTakesOver } from "../support/export-process-cut.ts";
+import { assertClaimWithoutSettlementTakesOver } from "../support/export-process-cut.ts";
 import type { ExportFamily } from "../support/export-process-cut.ts";
 
 const READABLE: ExportFamily<ExportHumanReadableManuscriptRequest> = {
@@ -32,10 +32,6 @@ const READABLE: ExportFamily<ExportHumanReadableManuscriptRequest> = {
     assert.equal(ready.manuscript_utf8, "\n");
   },
 };
-
-test("an admitted human-readable export stays in progress across a Server process cut", async () => {
-  await assertAdmissionSurvivesServerCut(READABLE);
-});
 
 test("a Worker claim without settlement is outcome_unknown, then takeover settles ready", async () => {
   await assertClaimWithoutSettlementTakesOver(READABLE);

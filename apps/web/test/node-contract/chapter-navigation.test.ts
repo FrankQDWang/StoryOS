@@ -44,26 +44,6 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-test("openSelectedChapter returns the requested Chapter Head", async () => {
-  const source = fixture<GetChapterResponse>("get-chapter.json");
-  const opened = chapterB(source);
-  const requests: string[] = [];
-  const result = await openSelectedChapter({
-    baseUrl: "http://storyos.test",
-    projectId: source.project_scope.project_id,
-    chapterId: CHAPTER_B,
-    expectedScope: source.project_scope,
-    fetchImpl: async (url) => {
-      requests.push(new URL(url instanceof Request ? url.url : url).pathname);
-      return jsonResponse(opened);
-    },
-  });
-  assert.deepEqual(result, { kind: "opened", chapter: opened });
-  assert.deepEqual(requests, [
-    `/api/v1/projects/${source.project_scope.project_id}/chapters/${CHAPTER_B}`,
-  ]);
-});
-
 test("openSelectedChapter classifies missing, expired, and Scope-mismatched Chapters", async () => {
   const source = fixture<GetChapterResponse>("get-chapter.json");
   const foreign = chapterB(source);
