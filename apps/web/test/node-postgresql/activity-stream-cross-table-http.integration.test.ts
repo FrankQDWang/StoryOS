@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":[]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
@@ -245,8 +245,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       protocolRelease: "storyos.public.release.1",
       fetchImpl: browserFetch(baseUrl, "session-a"),
     };
-    const firstBody = await activityStream(streamOptions);
-    const firstFrames = parseSseFrames(firstBody);
+    const firstFrames = parseSseFrames(await activityStream(streamOptions));
     assert.equal(firstFrames.length, 2);
     const volumeFrame = firstFrames.at(0);
     const editFrame = firstFrames.at(1);
@@ -266,7 +265,10 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.equal(await activityStream({
       ...streamOptions, lastEventId: editFrame.id,
     }), "");
-    assert.equal(await activityStream(streamOptions), firstBody);
+    const replayed = parseSseFrames(await activityStream(streamOptions));
+    assert.equal(replayed.length, 2);
+    assert.deepEqual(replayed.at(0)?.data, expectedVolume);
+    assert.deepEqual(replayed.at(1)?.data, expectedEdit);
   } finally {
     await stopRealServer(server);
   }

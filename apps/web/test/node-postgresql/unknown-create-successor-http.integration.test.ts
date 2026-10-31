@@ -76,6 +76,97 @@ function assertClosedSuccessor(found: ReturnType<typeof successor>) {
   assert.equal(found.reuses_changed_context, false);
 }
 
+test("one successor shares the invocation and a restart does not add another", async () => {
+  const started = await startServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("a401"), "Successor Once Novel", "a4");
+    const created = await admitRun(started.baseUrl, prepared, id("a411"), "SCRIPT:successor-once");
+    await settleOnce();
+    const first = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
+    const found = successor(first);
+    const attempt = presentAttempt(first);
+    assert.equal(first.status, "completed");
+    assert.equal(first.usage.kind, "unknown");
+    assert.equal(first.decision.kind, "advisory");
+    if (first.decision.kind !== "advisory") throw new Error("expected advisory");
+    assert.equal(first.decision.text, ADVISORY);
+    assert.equal(first.items.every((item) => item.call_id === null), true);
+    assert.equal(attempt.model_attempt_id, found.predecessor_model_attempt_id);
+    assert.equal(attempt.dispatch_state, "uncertain");
+    assert.equal(attempt.model_invocation_id, found.model_invocation_id);
+    assert.notEqual(found.successor_model_attempt_id, found.predecessor_model_attempt_id);
+    assert.equal(found.disposition, "dispatched");
+    assert.equal(found.allowance_consumed, true);
+    assert.equal(found.predecessor_fenced, true);
+    assert.equal(found.predecessor_usage_kind, "unknown");
+    assert.equal(found.predecessor_reservation_released, false);
+    assert.equal(found.lookup_unavailable_reason ?? null, null);
+    assertClosedSuccessor(found);
+    if (first.original_result_retrieval.kind !== "present") throw new Error("expected retrieval");
+    assert.equal(first.original_result_retrieval.disposition, "kept_unknown");
+    assert.equal(first.original_result_retrieval.keep_reason, "unknown_result");
+    assert.equal(first.original_result_retrieval.supplies_decision, false);
+    assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
+    assert.equal(await predecessor(prepared.projectId, created.effect.run_id), "none uncertain unknown false");
+    assert.equal(await queryPostgres(`
+      SELECT (decision.model_invocation_id = successor.model_invocation_id
+              AND decision.model_attempt_id <> successor.model_attempt_id
+              AND decision.outbound_disclosure_event_id <> successor.outbound_disclosure_event_id
+              AND successor.decision_id IS NOT NULL)::text
+          || ' ' || (successor.payload->>'operation')
+          || ' ' || (successor.payload->>'settles_predecessor')
+          || ' ' || (successor.payload->'wire'->>'author_message')
+        FROM storyos.model_attempts AS decision
+        JOIN storyos.model_attempts AS successor
+          ON successor.project_id = decision.project_id
+         AND successor.run_id = decision.run_id
+         AND successor.attempt_role = 'successor'
+       WHERE decision.project_id = '${prepared.projectId}'::uuid
+         AND decision.run_id = '${created.effect.run_id}'::uuid
+         AND decision.attempt_role = 'decision';
+    `), "true unknown_create_successor false SCRIPT:successor-once");
+    assert.equal(await queryPostgres(`
+      SELECT (SELECT count(*)
+                FROM storyos.context_assembly_manifests
+               WHERE project_id = '${prepared.projectId}'::uuid
+                 AND run_id = '${created.effect.run_id}'::uuid
+                 AND manifest_role = 'successor')::text
+          || ' ' ||
+             (SELECT count(*)
+                FROM storyos.operation_requirements
+               WHERE project_id = '${prepared.projectId}'::uuid
+                 AND run_id = '${created.effect.run_id}'::uuid
+                 AND requirement_role = 'successor')::text;
+    `), "1 1");
+    await requeue(prepared.projectId, created.effect.run_id);
+    await settleOnce();
+    const repeated = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
+    const again = successor(repeated);
+    assert.equal(repeated.status, "completed");
+    assert.equal(again.recovery_id, found.recovery_id);
+    assert.equal(again.successor_model_attempt_id, found.successor_model_attempt_id);
+    if (repeated.decision.kind !== "advisory") throw new Error("expected advisory");
+    assert.equal(repeated.decision.decision_id, first.decision.decision_id);
+    assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
+    const foreignFetch = browserFetch(started.baseUrl, "session-b");
+    await assert.rejects(
+      () => getAgentRun({
+        baseUrl: started.baseUrl,
+        projectId: prepared.projectId,
+        runId: created.effect.run_id,
+        fetchImpl: foreignFetch,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+      },
+    );
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
 test("missing and unsupported lookup still permit one successor", async () => {
   const started = await startServer();
   try {
@@ -262,44 +353,9 @@ test("a crash after the fence resumes the same successor once", async () => {
     assert.equal(found.predecessor_reservation_released, false);
     assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
     assert.equal(await predecessor(prepared.projectId, created.effect.run_id), "none uncertain unknown false");
-    const attempt = presentAttempt(after);
-    assert.equal(after.usage.kind, "unknown");
-    if (after.decision.kind !== "advisory") throw new Error("expected advisory");
-    assert.equal(after.decision.text, ADVISORY);
-    assert.equal(after.items.every((item) => item.call_id === null), true);
-    assert.equal(attempt.model_attempt_id, found.predecessor_model_attempt_id);
-    assert.equal(attempt.dispatch_state, "uncertain");
-    assert.equal(attempt.model_invocation_id, found.model_invocation_id);
-    assert.notEqual(found.successor_model_attempt_id, found.predecessor_model_attempt_id);
-    assert.equal(found.predecessor_usage_kind, "unknown");
-    assert.equal(found.lookup_unavailable_reason ?? null, null);
-    assertClosedSuccessor(found);
-    if (after.original_result_retrieval.kind !== "present") throw new Error("expected retrieval");
-    assert.equal(after.original_result_retrieval.disposition, "kept_unknown");
-    assert.equal(after.original_result_retrieval.keep_reason, "unknown_result");
-    assert.equal(after.original_result_retrieval.supplies_decision, false);
     await requeue(prepared.projectId, created.effect.run_id);
     await settleOnce();
     assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
-    const repeated = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
-    const again = successor(repeated);
-    assert.equal(repeated.status, "completed");
-    assert.equal(again.recovery_id, found.recovery_id);
-    assert.equal(again.successor_model_attempt_id, found.successor_model_attempt_id);
-    if (repeated.decision.kind !== "advisory") throw new Error("expected advisory");
-    assert.equal(repeated.decision.decision_id, after.decision.decision_id);
-    await assert.rejects(
-      () => getAgentRun({
-        baseUrl: started.baseUrl,
-        projectId: prepared.projectId,
-        runId: created.effect.run_id,
-        fetchImpl: browserFetch(started.baseUrl, "session-b"),
-      }),
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
-      },
-    );
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     if (worker !== undefined) {
