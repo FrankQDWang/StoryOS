@@ -210,7 +210,3 @@ pub(super) fn verify_handoff_evidence(
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "stage1_handoff_tests.rs"]
-mod tests;

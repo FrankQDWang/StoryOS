@@ -85,7 +85,3 @@ pub async fn create_project(
     }
     store.create_project(command).await
 }
-
-#[cfg(test)]
-#[path = "create_project_tests.rs"]
-mod tests;

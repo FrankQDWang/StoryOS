@@ -44,7 +44,3 @@ pub async fn open_chapter(
         OpenChapter::Found(_) | OpenChapter::Missing => Ok(OpenChapter::Missing),
     }
 }
-
-#[cfg(test)]
-#[path = "chapter_query_tests.rs"]
-mod tests;

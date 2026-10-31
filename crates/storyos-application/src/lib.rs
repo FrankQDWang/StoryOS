@@ -542,7 +542,3 @@ pub async fn open_current_chapter(
     }
     reader.read_chapter(scope, chapter_id).await
 }
-
-#[cfg(test)]
-#[path = "project_read_tests.rs"]
-mod tests;

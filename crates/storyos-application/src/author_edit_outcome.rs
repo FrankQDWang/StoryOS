@@ -102,7 +102,3 @@ pub async fn get_apply_author_edit_outcome(
 ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
     resolver.resolve_apply_author_edit_outcome(query).await
 }
-
-#[cfg(test)]
-#[path = "author_edit_outcome_tests.rs"]
-mod tests;

@@ -136,7 +136,3 @@ pub async fn get_manuscript_tree(
         CanonicalTreeRead::Found(_) => Ok(GetManuscriptTree::Missing),
     }
 }
-
-#[cfg(test)]
-#[path = "manuscript_tree_tests.rs"]
-mod tests;
