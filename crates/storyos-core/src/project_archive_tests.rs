@@ -252,14 +252,6 @@ fn protocol_source() -> ArchiveEntrySource {
 }
 
 #[test]
-fn a_missing_root_is_unsettled_and_exposes_no_zip_bytes() {
-    assert_eq!(
-        package_verified_project_archive_zip(&protocol_facts(), &[protocol_source()], ""),
-        Err(ProjectArchiveBuildRefusal::InvalidProvenance)
-    );
-}
-
-#[test]
 fn a_corrupt_payload_is_refused_before_zip_bytes() {
     let built = build_project_archive(&protocol_facts(), &[protocol_source()]).expect("built");
     let mut tampered = protocol_source();

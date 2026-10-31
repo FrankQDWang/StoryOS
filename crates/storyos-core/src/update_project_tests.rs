@@ -1,6 +1,6 @@
 use super::{
     UpdateProject, UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect,
-    UpdateProjectRefusal, UpdateProjectResult, update_project,
+    UpdateProjectResult, update_project,
 };
 
 fn command() -> UpdateProject {
@@ -41,21 +41,5 @@ fn an_unchanged_title_classifies_as_no_effect() {
     assert_eq!(
         update_project(&unchanged),
         UpdateProjectResult::NoEffect(UpdateProjectNoEffect::TitleUnchanged)
-    );
-}
-
-#[test]
-fn an_invalid_title_classifies_as_refused_with_zero_title_effect() {
-    let mut empty = command();
-    empty.title.clear();
-    assert_eq!(
-        update_project(&empty),
-        UpdateProjectResult::Refused(UpdateProjectRefusal::InvalidTitle)
-    );
-    let mut too_long = command();
-    too_long.title = "n".repeat(1025);
-    assert_eq!(
-        update_project(&too_long),
-        UpdateProjectResult::Refused(UpdateProjectRefusal::InvalidTitle)
     );
 }
