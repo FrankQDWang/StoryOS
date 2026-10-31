@@ -13,7 +13,6 @@ CHECK_FAST_STEPS = cargo fmt --all -- --check; \
 	pnpm --dir apps/web exec vitest run --project node-contract $(foreach file,$(CHECK_PACKAGE_CONTRACT_FILES),--exclude $(file)); \
 	cargo run --quiet --locked -p storyos-contracts -- check; \
 	python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py; \
-	python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py; \
 	cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py; \
 	python3 scripts/verify-transaction-control-receivers.py; \
 	cargo run --quiet --locked -p storyos-literal-guard -- --tracing; \

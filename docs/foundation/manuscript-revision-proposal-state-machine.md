@@ -535,11 +535,10 @@ editor-contract revision, and the author-visible undo group. Any difference or u
 paste, cut, drop, every structural primitive, and an explicit command are
 unconditional flush boundaries.
 
-Release 1 uses the #70-owned structured
-[Author Edit prerelease policy](author-edit-batch-release-1-policy.json),
-revision `storyos.author-edit-batch.release-1.preview.v1`. The structured source
-owns its selected idle, unit, primitive, and inherited body ceilings plus its
-candidate set. The selected values are a replaceable conservative prerelease
+Release 1 uses the #70-owned Author Edit prerelease policy,
+revision `storyos.author-edit-batch.release-1.preview.v1`. The policy
+owns its selected idle, unit, primitive, and inherited body ceilings.
+The selected values are a replaceable conservative prerelease
 choice supported by synthetic browser evidence. They are not a batching target,
 permanent product default, real-user validation, or latency SLA.
 
