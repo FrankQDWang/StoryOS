@@ -25,6 +25,8 @@ The Project Archive export (`exportProjectArchive`), the human-readable export, 
 
 This record supersedes these parts of earlier records:
 
+- [AI-Independent Editor-First Release Baseline and Handoff Criteria](../foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md), section 5.1: "archive the Project" in `S2-REQ-002`.
+- [Deterministic Verification and Failure-Recovery Gates](../foundation/deterministic-verification-and-failure-recovery-gates.md), section 12.3: the Project archive and the archive state in `S2-REQ-002`.
 - [ADR 0019](0019-stage-pinned-export-source-at-admission.md): the `archived_project` settlement reason of an archived Project.
 - [ADR 0038](0038-separate-author-edit-challenge-admission-from-shared-command-admission.md): `archiveProject` in the Project settings and lifecycle commands.
 - [ADR 0043](0043-settle-every-project-command-through-declared-profiles-of-one-sequence.md): `archiveProject` in the Project setting commands, the archived Project refusal of the Manuscript Structure Transition commands and of `createAgentRun`, the `archived` value of the Project lifecycle, the `422 archived_project` refusal of the export admissions, and `archived_project` in the known export settlement reasons. Its other export rules stay.
