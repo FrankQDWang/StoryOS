@@ -8,6 +8,7 @@ import {
   parseClipboardPermissionRequest,
   parseCommandChallengeRateWindowsRequest,
   parseImeCompositionRequest,
+  parseListedProjectReceiptsRequest,
   parseProductionHostRequest,
   parseSettleWorkerOnceRequest,
   parseTrustedInputRequest,
@@ -24,6 +25,7 @@ import { verifyProductionComposerControls } from "./production-composer-controls
 
 import { verifyProductionMultiProposal } from "./production-multi-proposal-command.ts";
 import { verifyProductionSelectionReference } from "./production-selection-reference-command.ts";
+import { assertProjectReceipts } from "./project-receipts.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
@@ -90,6 +92,13 @@ export const storyOSBrowserCommands = {
         "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0",
       );
       return { kind: "command_challenge_rate_windows_reset" } as const;
+    },
+  ),
+  [storyOSBrowserCommandNames.listedProjectReceipts]: defineBrowserCommand<[request: unknown]>(
+    async (_context, value) => {
+      const request = parseListedProjectReceiptsRequest(value);
+      await assertProjectReceipts([request.projectId], { receipts: request.receipts, kinds: "listed" });
+      return { kind: "project_receipts_verified" } as const;
     },
   ),
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(

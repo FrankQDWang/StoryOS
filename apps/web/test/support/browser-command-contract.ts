@@ -4,6 +4,7 @@ export const storyOSBrowserCommandNames = {
   clientSessionCookie: "storyosClientSessionCookie",
   commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
   imeComposition: "storyosImeComposition",
+  listedProjectReceipts: "storyosListedProjectReceipts",
   trustedInput: "storyosTrustedInput",
   productionHost: "storyosProductionHost",
   settleWorkerOnce: "storyosSettleWorkerOnce",
@@ -44,6 +45,11 @@ export type ProductionHostRequest = Readonly<{
     | "selection_reference";
 }>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
+/** The expected Receipt count of each listed command kind of one Project. */
+export type ListedProjectReceiptsRequest = Readonly<{
+  projectId: string;
+  receipts: Readonly<Record<string, number>>;
+}>;
 export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
 export type CommandChallengeRateWindowsResult = Readonly<{
   kind: "command_challenge_rate_windows_reset";
@@ -260,4 +266,26 @@ export function parseSettleWorkerOnceRequest(value: unknown): void {
 
 export function parseSettleWorkerOnceResult(value: unknown): Readonly<{ kind: "worker_settled" }> {
   return parseResult(value, "worker_settled", "Worker settlement");
+}
+
+export function parseListedProjectReceiptsRequest(value: unknown): ListedProjectReceiptsRequest {
+  const request = exactObject(value, ["projectId", "receipts"], "Project Receipt request");
+  const projectId = boundedText(property(request, "projectId"), "Project ID");
+  const listed = property(request, "receipts");
+  if (typeof listed !== "object" || listed === null) throw new TypeError("Project Receipts must be an object");
+  const receipts: Record<string, number> = {};
+  for (const kind of Object.keys(listed)) {
+    const count = property(listed, kind);
+    if (typeof count !== "number" || !Number.isSafeInteger(count)) {
+      throw new TypeError("Project Receipt count must be an integer");
+    }
+    receipts[kind] = count;
+  }
+  return { projectId, receipts };
+}
+
+export function parseListedProjectReceiptsResult(
+  value: unknown,
+): Readonly<{ kind: "project_receipts_verified" }> {
+  return parseResult(value, "project_receipts_verified", "Project Receipts");
 }

@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { applyTrustedInput, assertListedProjectReceipts, updateClientSessionCookie }
+  from "../support/browser-command-client.ts";
 import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import {
   focusManuscriptEnd,
@@ -160,4 +161,5 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
   const saved = await getChapter({ baseUrl: page.location.origin, projectId, chapterId,
     fetchImpl: page.fetch.bind(page) });
   expect(saved.chapter.current_revision.body).toBe("接管后");
+  await assertListedProjectReceipts({ projectId, receipts: { takeOverProjectWriter: 1 } });
 });

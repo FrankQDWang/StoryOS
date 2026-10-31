@@ -209,8 +209,6 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
   pnpm --dir apps/web exec vitest run --project browser-exact-dist "$FILE"'
 ```
 
-To see the authority oracle counts, put `STORYOS_STAGE1_AUTHORITY_ORACLE=1` before the second command. The oracle compares the totals of all journeys. Thus with one journey it fails, and the `+` lines of its diff show the real counts.
-
 ## Live model requests
 
 Do not stop to ask before a live model request. The author gave a standing permission. [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.

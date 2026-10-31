@@ -6,6 +6,7 @@ import { getEditorSession }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { manuscriptBody as visibleChapterBody } from "./manuscript-surface.ts";
 import { queryStoryOSPostgres as queryPostgres } from "./node-integration";
+import { assertProjectReceipts } from "./project-receipts.ts";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -282,6 +283,8 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
+    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1,
+      createChapter: 1, applyAuthorEdit: 3, takeOverProjectWriter: 1 }, authorActions: 5 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
