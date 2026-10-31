@@ -474,4 +474,217 @@ fn every_registered_operation_matches_its_generated_wire() {
             "generated functions must follow the registry order"
         );
     }
+    assert_outcome_documents(&generated);
+    assert_activity_frame_documents(&generated);
+    assert_takeover_documents(&generated);
+}
+
+type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
+
+const SCHEMA_DIRECTORY: &str = "generated/json-schema/storyos-public-release-1";
+
+fn generated_validator(generated: &GeneratedFiles, file: &str) -> jsonschema::Validator {
+    let path = format!("{SCHEMA_DIRECTORY}/{file}");
+    let schema: serde_json::Value =
+        serde_json::from_slice(&generated[path.as_str()]).expect("generated schema must be JSON");
+    jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)
+        .expect("generated schema must compile")
+}
+
+fn golden_wire(generated: &GeneratedFiles, operation_id: &str) -> serde_json::Value {
+    let file = operation_id
+        .chars()
+        .flat_map(|character| {
+            let dash = character.is_ascii_uppercase().then_some('-');
+            dash.into_iter().chain([character.to_ascii_lowercase()])
+        })
+        .collect::<String>();
+    let path = format!("generated/golden-wire/storyos-public-release-1/{file}.json");
+    serde_json::from_slice(&generated[path.as_str()]).expect("golden-wire fixture must be JSON")
+}
+
+fn assert_each_present_field_is_required(
+    validator: &jsonschema::Validator,
+    valid: &serde_json::Value,
+    object_pointer: &str,
+) {
+    let object = valid
+        .pointer(object_pointer)
+        .and_then(serde_json::Value::as_object)
+        .expect("required-field target must be an object");
+    for field_name in object.keys() {
+        let mut invalid = valid.clone();
+        invalid
+            .pointer_mut(object_pointer)
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("required-field target must be an object")
+            .remove(field_name);
+        assert!(
+            !validator.is_valid(&invalid),
+            "{field_name} must be required at {object_pointer}"
+        );
+    }
+}
+
+fn with_value(
+    document: &serde_json::Value,
+    pointer: &str,
+    value: serde_json::Value,
+) -> serde_json::Value {
+    let mut changed = document.clone();
+    *changed
+        .pointer_mut(pointer)
+        .expect("the changed field must exist") = value;
+    changed
+}
+
+fn assert_outcome_documents(generated: &GeneratedFiles) {
+    let request = generated_validator(generated, "apply-author-edit-outcome-request.schema.json");
+    let valid_request = serde_json::json!({
+        "project_id": "018f0000-0000-7001-8000-000000000002",
+        "idempotency_key": "018f0000-0000-7001-8000-000000000037"
+    });
+    assert!(request.is_valid(&valid_request));
+    assert_each_present_field_is_required(&request, &valid_request, "");
+    let mut with_nonce = valid_request.clone();
+    with_nonce["nonce"] = serde_json::json!("a".repeat(64));
+    for invalid in [
+        with_nonce,
+        with_value(&valid_request, "/idempotency_key", serde_json::json!("key")),
+    ] {
+        assert!(!request.is_valid(&invalid), "{invalid}");
+    }
+
+    let response = generated_validator(generated, "apply-author-edit-outcome-response.schema.json");
+    let committed = golden_wire(generated, "getApplyAuthorEditOutcome");
+    assert!(response.is_valid(&committed));
+    let admitted = serde_json::json!({
+        "outcome_kind": "still_unknown",
+        "observation": {
+            "observation_kind": "admission_committed",
+            "command_id": "018f0000-0000-7001-8000-000000000031",
+            "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+            "reconciliation_required": true
+        }
+    });
+    for outcome in [
+        serde_json::json!({"outcome_kind": "rejected", "reason": "challenge_expired_unconsumed"}),
+        serde_json::json!({
+            "outcome_kind": "requires_reconfirmation",
+            "command_id": "018f0000-0000-7001-8000-000000000031",
+            "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+            "reconfirmation_reason": "direct_edit_intent_unrecoverable"
+        }),
+        serde_json::json!({
+            "outcome_kind": "still_unknown",
+            "observation": {
+                "observation_kind": "challenge_issued",
+                "expires_at": "2026-08-15T08:05:00.000Z"
+            }
+        }),
+        admitted.clone(),
+    ] {
+        let document = with_value(&committed, "/outcome", outcome);
+        assert!(response.is_valid(&document), "{document}");
+        assert_each_present_field_is_required(&response, &document, "/outcome");
+    }
+    for outcome in [
+        serde_json::json!({"outcome_kind": "rejected", "reason": "unknown_reason"}),
+        with_value(
+            &admitted,
+            "/observation/reconciliation_required",
+            serde_json::json!(false),
+        ),
+        with_value(
+            &committed["outcome"],
+            "/outcome_kind",
+            serde_json::json!("settled"),
+        ),
+    ] {
+        let document = with_value(&committed, "/outcome", outcome);
+        assert!(!response.is_valid(&document), "{document}");
+    }
+}
+
+fn assert_activity_frame_documents(generated: &GeneratedFiles) {
+    let frame = generated_validator(generated, "activity-stream-response.schema.json");
+    let valid = golden_wire(generated, "activityStream");
+    assert!(frame.is_valid(&valid));
+    assert_each_present_field_is_required(&frame, &valid, "");
+    for invalid in [
+        with_value(&valid, "/id", serde_json::json!("")),
+        with_value(&valid, "/event", serde_json::json!("message")),
+        with_value(&valid, "/data", serde_json::json!({})),
+    ] {
+        assert!(!frame.is_valid(&invalid), "{invalid}");
+    }
+}
+
+fn assert_takeover_documents(generated: &GeneratedFiles) {
+    let request = generated_validator(generated, "take-over-project-writer-request.schema.json");
+    let valid_request = serde_json::json!({
+        "command_schema": "storyos.command.take-over-project-writer.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "018f0000-0000-7001-8000-000000000038",
+        "editor_session_id": "018f0000-0000-7001-8000-000000000040",
+        "observed_writer_generation": "1",
+        "editor_contract_revision": "storyos.editor-contract.release-1.v3"
+    });
+    assert!(request.is_valid(&valid_request));
+    assert_each_present_field_is_required(&request, &valid_request, "");
+    let mut with_writer_generation = valid_request.clone();
+    with_writer_generation["writer_generation"] = serde_json::json!("1");
+    for invalid in [
+        with_writer_generation,
+        with_value(
+            &valid_request,
+            "/observed_writer_generation",
+            serde_json::json!(1),
+        ),
+    ] {
+        assert!(!request.is_valid(&invalid), "{invalid}");
+    }
+
+    let response = generated_validator(generated, "take-over-project-writer-response.schema.json");
+    let applied = golden_wire(generated, "takeOverProjectWriter");
+    assert!(response.is_valid(&applied));
+    assert_each_present_field_is_required(&response, &applied, "/result");
+    let compare_failed = with_value(
+        &applied,
+        "/result",
+        serde_json::json!({
+            "kind": "takeover_compare_failed",
+            "observed_writer_generation": "1",
+            "current_writer_generation": "2",
+            "current_writer_projection": {"kind": "current_writer", "writer_generation": "2"},
+            "current_snapshot_id": "018f0000-0000-7001-8000-000000000032",
+            "current_snapshot_activity_position": "1",
+            "current_heads": ["018f0000-0000-7001-8000-000000000004"],
+            "reason": "writer_generation_advanced_after_admission"
+        }),
+    );
+    assert!(response.is_valid(&compare_failed));
+    assert_each_present_field_is_required(&response, &compare_failed, "/result");
+    for invalid in [
+        with_value(
+            &applied,
+            "/result/resulting_writer_generation",
+            serde_json::json!(2),
+        ),
+        with_value(
+            &applied,
+            "/result/kind",
+            serde_json::json!("takeover_refused"),
+        ),
+        with_value(
+            &compare_failed,
+            "/result/reason",
+            serde_json::json!("writer_released"),
+        ),
+    ] {
+        assert!(!response.is_valid(&invalid), "{invalid}");
+    }
 }
