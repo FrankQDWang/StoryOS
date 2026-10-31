@@ -1,8 +1,8 @@
 use storyos_application::{
-    AcceptProposalInput, ArchiveProjectInput, CreateChapterInput, CreateVolumeInput,
-    DeleteChapterInput, DeleteVolumeInput, RejectProposalOperationsInput,
-    ReopenWithdrawnProposalInput, SetCurrentChapterInput, UpdateChapterInput,
-    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, WithdrawProposalInput,
+    AcceptProposalInput, CreateChapterInput, CreateVolumeInput, DeleteChapterInput,
+    DeleteVolumeInput, RejectProposalOperationsInput, ReopenWithdrawnProposalInput,
+    SetCurrentChapterInput, UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateVolumeInput, WithdrawProposalInput,
 };
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
@@ -19,8 +19,8 @@ use super::agent_run::{
     park_run, pause_agent_run, seed_run,
 };
 use super::project_session::{
-    ARCHIVE_PROJECT, TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
-    take_over_project_writer, take_over_project_writer_call,
+    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, take_over_project_writer,
+    take_over_project_writer_call,
 };
 use super::proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
@@ -210,22 +210,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         )
         .await;
         observed.push((UPDATE_PROJECT.kind, outcome));
-    }
-
-    let scope = seed_project(&store, "5d70").await;
-    for (suffix, expected_revision) in [(0x5d71, 2), (0x5d72, 1), (0x5d73, 2)] {
-        let input = ArchiveProjectInput { expected_revision };
-        let call = issued(&store, &scope, suffix, &ARCHIVE_PROJECT, input).await;
-        let outcome = replayed_outcome(
-            &store,
-            &admin,
-            &call,
-            async |store: &PostgresProjectReader, call: &CommandCall<ArchiveProjectInput>| {
-                store.archive_project(&call.envelope, &call.input).await
-            },
-        )
-        .await;
-        observed.push((ARCHIVE_PROJECT.kind, outcome));
     }
 
     let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
@@ -635,9 +619,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("updateProject", activity_applied),
             ("updateProject", no_effect),
             ("updateProject", conflicted),
-            ("archiveProject", conflicted),
-            ("archiveProject", activity_applied),
-            ("archiveProject", no_effect),
             ("setCurrentChapter", chapter_selection_applied),
             ("setCurrentChapter", no_effect),
             ("setCurrentChapter", conflicted),
@@ -714,19 +695,6 @@ async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() 
     let (retry, first) = &renames[0];
     let replayed = store.update_project(&retry.envelope, &retry.input).await;
 
-    let scope = seed_project(&store, "9850").await;
-    let mut archivals = Vec::new();
-    for (suffix, expected_revision) in [(0x9851, 1), (0x9852, 2)] {
-        let input = ArchiveProjectInput { expected_revision };
-        let call = issued(&store, &scope, suffix, &ARCHIVE_PROJECT, input).await;
-        let settled = store.archive_project(&call.envelope, &call.input).await;
-        archivals.push((with_new_request_ids(&call), settled.unwrap()));
-    }
-    let (archive_retry, first_archival) = &archivals[0];
-    let replayed_archival = store
-        .archive_project(&archive_retry.envelope, &archive_retry.input)
-        .await;
-
     // The later reorder writes a later Snapshot, Commit, and tree revision than the first one.
     let scope = seed_project(&store, "8c60").await;
     let first_volume = new_volume(&store, &scope, 0x8c61, /*expected_tree_revision*/ 1).await;
@@ -748,12 +716,8 @@ async fn an_exact_retry_after_a_later_settlement_returns_the_captured_project() 
     let (reorder_retry, first_reorder) = &reorders[0];
     let replayed_reorder = update_volume(&store, reorder_retry).await;
     assert_eq!(
-        (
-            replayed.unwrap(),
-            replayed_archival.unwrap(),
-            replayed_reorder.unwrap()
-        ),
-        (first.clone(), first_archival.clone(), first_reorder.clone())
+        (replayed.unwrap(), replayed_reorder.unwrap()),
+        (first.clone(), first_reorder.clone())
     );
 }
 

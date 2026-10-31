@@ -3,9 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import {
-  archiveProject,
   createVolume,
-  digestArchiveProject,
   digestCreateVolume,
   digestExportHumanReadableManuscript,
   digestExportProjectArchive,
@@ -17,7 +15,6 @@ import {
   updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  ArchiveProjectRequest,
   ExportHumanReadableManuscriptRequest,
   ExportProjectArchiveRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -313,17 +310,6 @@ test("a later Archive packs other in-progress Pinned Export Sources and not its 
   }
 });
 
-function archiveRequest(expectedProjectRevision: string, correlationId: string): ArchiveProjectRequest {
-  return {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: {
-      expected_project_revision: expectedProjectRevision,
-      ...BINDING,
-      correlation_id: correlationId,
-    },
-  };
-}
-
 async function postExport(
   baseUrl: string,
   fetchImpl: ReturnType<typeof browserFetch>,
@@ -343,27 +329,6 @@ async function postExport(
       request,
     }));
   return { nonce, admitted };
-}
-
-async function archiveOpenProject(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  expectedProjectRevision: string,
-  correlationId: string,
-  idempotencyKey: string,
-) {
-  const request = archiveRequest(expectedProjectRevision, correlationId);
-  return challenged(baseUrl, fetchImpl, projectId, "PUT", "/api/v1/projects/{project_id}/archival",
-    request.command_schema, await digestArchiveProject(request), idempotencyKey,
-    (antiForgery) => archiveProject({
-      baseUrl,
-      projectId,
-      fetchImpl,
-      idempotencyKey,
-      antiForgery,
-      request,
-    }));
 }
 
 async function insertHistoricalReady(options: {
@@ -627,55 +592,6 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
     assert.equal(ready.immutable_root, HISTORICAL_ROOT);
     assert.equal(ready.export_id, historical.admitted.effect.export_id);
 
-    const archived = await archiveOpenProject(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "1",
-      "018f0000-0000-7001-8000-000000000c16",
-      "018f0000-0000-7001-8000-000000000c26",
-    );
-    assert.equal(archived.effect.kind, "authoritative_applied");
-
-    const refusedRequest = exportRequest("018f0000-0000-7001-8000-000000000c17");
-    const refusedDigest = await digestExportProjectArchive(refusedRequest);
-    const refusedChallenge = await issueChallenge(baseUrl, first.fetchImpl, first.projectId, "POST",
-      "/api/v1/projects/{project_id}/exports", "storyos.command.export-project-archive.request.v1", refusedDigest,
-      "018f0000-0000-7001-8000-000000000c27");
-    await assert.rejects(
-      exportProjectArchive({
-        baseUrl,
-        projectId: first.projectId,
-        fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000c27",
-        antiForgery: refusedChallenge.nonce,
-        request: refusedRequest,
-      }),
-      (error) => requireStoryOSProtocolError(error).status === 422,
-    );
-    await assert.rejects(
-      exportProjectArchive({
-        baseUrl,
-        projectId: first.projectId,
-        fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000c27",
-        antiForgery: refusedChallenge.nonce,
-        request: refusedRequest,
-      }),
-      (error) => requireStoryOSProtocolError(error).status === 422,
-    );
-
-    const afterArchive = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(afterArchive.status, "in_progress");
-    assert.equal("immutable_root" in afterArchive, false);
-    const archivedZip = await first.fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
-    assert.equal(archivedZip.status, 422);
-
     const historicalReady = await getExportOperation({
       baseUrl,
       projectId: first.projectId,
@@ -783,104 +699,6 @@ test("the in-process Worker settles an admitted Project Export Archive to ready"
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillReady.status, "ready");
-
-    const archived = await archiveOpenProject(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "1",
-      "018f0000-0000-7001-8000-00000000d016",
-      "018f0000-0000-7001-8000-00000000d026",
-    );
-    assert.equal(archived.effect.kind, "authoritative_applied");
-    const readyAfterArchive = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(readyAfterArchive.status, "ready");
-    const archivedZip = await first.fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
-    assert.equal(archivedZip.status, 200);
-  } finally {
-    await stopRealServer(server);
-  }
-});
-
-test("the Worker settles failed when the Project is archived after admission", async () => {
-  const { baseUrl, server } = await startServer();
-  try {
-    await settleOnce({ STORYOS_EXPORT_LEASE_TTL_SECS: "0" });
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00001309d002", "Archive After",
-      "018f0000-0000-7001-8000-000000000c10");
-    const applied = await postExport(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-00000000d022",
-      exportRequest("018f0000-0000-7001-8000-00000000d012"),
-    );
-    if (applied.admitted.effect.kind !== "admitted") {
-      throw new Error("Project Export must admit");
-    }
-    await archiveOpenProject(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "1",
-      "018f0000-0000-7001-8000-00000000d032",
-      "018f0000-0000-7001-8000-00000000d036",
-    );
-    const waiting = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(waiting.status, "in_progress");
-    await settleOnce();
-    const failed = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(failed.status, "failed");
-    assert.equal("immutable_root" in failed, false);
-    assert.equal(
-      await exportSettlementReceipt({
-        ownerUserId: USER_A,
-        projectId: first.projectId,
-        exportId: applied.admitted.effect.export_id,
-        operationsTable: "project_export_operations",
-      }),
-      "refused archived_project",
-    );
-    const exportUrl = `${baseUrl}/api/v1/projects/${encodeURIComponent(first.projectId)}/exports/${encodeURIComponent(applied.admitted.effect.export_id)}`;
-    const failedZip = await first.fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
-    assert.equal(failedZip.status, 422);
-
-    const replay = await exportProjectArchive({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000d022",
-      antiForgery: applied.nonce,
-      request: exportRequest("018f0000-0000-7001-8000-00000000d012"),
-    });
-    assert.equal(replay.acknowledgement, "accepted");
-    assert.equal("receipt" in replay, false);
-    if (replay.effect.kind !== "admitted") {
-      throw new Error("retry after failed settlement must return the same admitted operation");
-    }
-    assert.equal(replay.effect.export_id, applied.admitted.effect.export_id);
-    const stillFailed = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(stillFailed.status, "failed");
   } finally {
     await stopRealServer(server);
   }

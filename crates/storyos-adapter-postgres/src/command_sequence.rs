@@ -7,7 +7,7 @@ use storyos_application::{
     DiagnosticField, DiagnosticId, ProjectCommandEnvelope, ProjectCommandError,
     ProjectCommandSettlement, ProjectScope,
 };
-use storyos_core::{ProjectLifecycle, ReasonCode, ReceiptResult, TransitionOutcome};
+use storyos_core::{ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -135,7 +135,6 @@ pub(crate) struct CommandSpec {
 
 /// The Project row that the sequence locks before a command loads its own facts.
 pub(crate) struct LockedProject {
-    pub(crate) lifecycle: ProjectLifecycle,
     pub(crate) tree_revision: u64,
     pub(crate) current_chapter_id: Option<String>,
 }

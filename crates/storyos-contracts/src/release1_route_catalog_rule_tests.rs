@@ -95,8 +95,12 @@ fn every_event_has_an_owner_a_profile_and_an_operation_mapping() {
         .iter()
         .map(|event| text(&event["schema_id"]))
         .collect::<BTreeSet<_>>();
+    // ADR 0078: no command writes this Event, and stored history still replays it.
+    let historical = BTreeSet::from(["storyos.event.project-archival-changed.v1"]);
+    assert!(mapped.is_disjoint(&historical));
     assert_eq!(
-        mapped, schema_ids,
+        mapped.union(&historical).copied().collect::<BTreeSet<_>>(),
+        schema_ids,
         "each Event and each Activity reference must match"
     );
     for event in events {

@@ -107,7 +107,6 @@
     },
     "CreateChapterRefusalReason": {
       "enum": [
-        "archived_project",
         "invalid_title",
         "invalid_volume_join",
         "invalid_placement"
@@ -257,7 +256,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",

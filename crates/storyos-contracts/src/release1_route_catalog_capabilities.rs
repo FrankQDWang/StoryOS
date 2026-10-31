@@ -21,7 +21,6 @@ const CAPABILITIES: &[Capability] = &[
             "listProjects",
             "getProject",
             "updateProject",
-            "archiveProject",
             "getProjectAssistance",
             "updateProjectAssistance",
         ],

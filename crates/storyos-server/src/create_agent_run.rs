@@ -884,11 +884,6 @@ fn refusal_problem(refusal: CreateAgentRunRefusal) -> ApiError {
             "assistance_unavailable",
             "Project assistance is unavailable.",
         ),
-        CreateAgentRunRefusal::ArchivedProject => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "archived_project",
-            "The Project is archived.",
-        ),
         CreateAgentRunRefusal::ConversationBusy => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "conversation_busy",

@@ -195,7 +195,6 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
               ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))
             AND command_kind <> 'createProject'
             AND command_kind <> 'updateProject'
-            AND command_kind <> 'archiveProject'
             AND command_kind <> 'createVolume'
             AND command_kind <> 'createChapter'
             AND command_kind <> 'updateVolume'

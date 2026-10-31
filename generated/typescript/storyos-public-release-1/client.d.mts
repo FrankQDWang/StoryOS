@@ -35,9 +35,7 @@ export type CreateProjectCommandChallengeRequest = { method: string, route_templ
 
 export type CreateProjectCommandChallengeResponse = { nonce: string, expires_at: string, limit_profile_revision: string, };
 
-export type ProjectLifecycleState = { "kind": "active" } | { "kind": "archived" };
-
-export type ProjectListItem = { project_scope: ProjectScope, title: string, lifecycle: ProjectLifecycleState, revision: string, open: ProjectOpenState, };
+export type ProjectListItem = { project_scope: ProjectScope, title: string, revision: string, open: ProjectOpenState, };
 
 export type ListProjectsResponse = { schema_id: string, correlation_id: string, owner_user_id: string, projects: Array<ProjectListItem>, };
 
@@ -77,18 +75,6 @@ export type UpdateProjectAssistanceEffect = { "kind": "initialized", availabilit
 
 export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
 
-export type ArchiveProjectInput = { expected_project_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type ArchiveProjectRequest = { command_schema: string, archive_project_input: ArchiveProjectInput, };
-
-export type ArchiveProjectNoEffectReason = "already_archived";
-
-export type ArchiveProjectConflictReason = "stale_project_revision";
-
-export type ArchiveProjectEffect = { "kind": "authoritative_applied", revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: ArchiveProjectNoEffectReason, } | { "kind": "conflicted", reason: ArchiveProjectConflictReason, };
-
-export type ArchiveProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: ArchiveProjectEffect, };
-
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
@@ -117,7 +103,7 @@ export type CreateVolumeRequest = { command_schema: string, create_volume_input:
 
 export type CreateVolumeConflictReason = "stale_tree_revision";
 
-export type CreateVolumeRefusalReason = "archived_project" | "invalid_title";
+export type CreateVolumeRefusalReason = "invalid_title";
 
 export type CreateVolumeEffect = { "kind": "authoritative_applied", volume_id: string, title: string, tree_revision: string, order: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateVolumeConflictReason, } | { "kind": "refused", reason: CreateVolumeRefusalReason, };
 
@@ -131,7 +117,7 @@ export type UpdateVolumeNoEffectReason = "unchanged";
 
 export type UpdateVolumeConflictReason = "stale_tree_revision";
 
-export type UpdateVolumeRefusalReason = "archived_project" | "invalid_title" | "invalid_order" | "invalid_volume_join";
+export type UpdateVolumeRefusalReason = "invalid_title" | "invalid_order" | "invalid_volume_join";
 
 export type UpdateVolumeEffect = { "kind": "authoritative_applied", volume_id: string, title: string, tree_revision: string, order: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateVolumeNoEffectReason, } | { "kind": "conflicted", reason: UpdateVolumeConflictReason, } | { "kind": "refused", reason: UpdateVolumeRefusalReason, };
 
@@ -145,7 +131,7 @@ export type DeleteVolumeNoEffectReason = "already_removed";
 
 export type DeleteVolumeConflictReason = "stale_tree_revision";
 
-export type DeleteVolumeRefusalReason = "archived_project" | "invalid_volume_join" | "nonempty_volume";
+export type DeleteVolumeRefusalReason = "invalid_volume_join" | "nonempty_volume";
 
 export type DeleteVolumeEffect = { "kind": "authoritative_applied", volume_id: string, tree_revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: DeleteVolumeNoEffectReason, } | { "kind": "conflicted", reason: DeleteVolumeConflictReason, } | { "kind": "refused", reason: DeleteVolumeRefusalReason, };
 
@@ -159,7 +145,7 @@ export type CreateChapterRequest = { command_schema: string, create_chapter_inpu
 
 export type CreateChapterConflictReason = "stale_tree_revision";
 
-export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join" | "invalid_placement";
+export type CreateChapterRefusalReason = "invalid_title" | "invalid_volume_join" | "invalid_placement";
 
 export type CreateChapterEffect = { "kind": "authoritative_applied", volume_id: string, chapter_id: string, title: string, tree_revision: string, order: string, current_chapter_id: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateChapterConflictReason, } | { "kind": "refused", reason: CreateChapterRefusalReason, };
 
@@ -173,7 +159,7 @@ export type UpdateChapterNoEffectReason = "unchanged";
 
 export type UpdateChapterConflictReason = "stale_tree_revision";
 
-export type UpdateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_order" | "invalid_chapter_join";
+export type UpdateChapterRefusalReason = "invalid_title" | "invalid_order" | "invalid_chapter_join";
 
 export type UpdateChapterEffect = { "kind": "authoritative_applied", chapter_id: string, title: string, tree_revision: string, order: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateChapterNoEffectReason, } | { "kind": "conflicted", reason: UpdateChapterConflictReason, } | { "kind": "refused", reason: UpdateChapterRefusalReason, };
 
@@ -187,7 +173,7 @@ export type DeleteChapterNoEffectReason = "already_removed";
 
 export type DeleteChapterConflictReason = "stale_tree_revision";
 
-export type DeleteChapterRefusalReason = "archived_project" | "invalid_chapter_join";
+export type DeleteChapterRefusalReason = "invalid_chapter_join";
 
 export type DeleteChapterEffect = { "kind": "authoritative_applied", chapter_id: string, volume_id: string, tree_revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: DeleteChapterNoEffectReason, } | { "kind": "conflicted", reason: DeleteChapterConflictReason, } | { "kind": "refused", reason: DeleteChapterRefusalReason, };
 
@@ -201,7 +187,7 @@ export type SetCurrentChapterNoEffectReason = "already_current";
 
 export type SetCurrentChapterConflictReason = "stale_current_chapter" | "wrong_target_head";
 
-export type SetCurrentChapterRefusalReason = "archived_project" | "invalid_chapter_join" | "empty_project";
+export type SetCurrentChapterRefusalReason = "invalid_chapter_join" | "empty_project";
 
 export type SetCurrentChapterEffect = { "kind": "authoritative_applied", current_chapter_id: string, base_snapshot_id: string, project_activity_position: string, } | { "kind": "no_effect", reason: SetCurrentChapterNoEffectReason, } | { "kind": "conflicted", reason: SetCurrentChapterConflictReason, } | { "kind": "refused", reason: SetCurrentChapterRefusalReason, };
 
@@ -217,7 +203,7 @@ export type AuthorEditProposalTarget = { proposal_id: string, operation_id: stri
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -557,11 +543,9 @@ export type ExportProjectArchiveInput = { client_contract_revision: string, secu
 
 export type ExportProjectArchiveRequest = { command_schema: string, export_project_archive_input: ExportProjectArchiveInput, };
 
-export type ExportProjectArchiveRefusalReason = "archived_project";
-
 export type ProjectExportRef = { "kind": "project_export", export_id: string, };
 
-export type ExportProjectArchiveEffect = { "kind": "admitted", export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, } | { "kind": "refused", reason: ExportProjectArchiveRefusalReason, };
+export type ExportProjectArchiveEffect = { "kind": "admitted", export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, };
 
 export type ExportProjectArchiveResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: ProjectExportRef | null, project: ControlledProject, effect: ExportProjectArchiveEffect, };
 
@@ -569,13 +553,11 @@ export type ExportHumanReadableManuscriptInput = { client_contract_revision: str
 
 export type ExportHumanReadableManuscriptRequest = { command_schema: string, export_human_readable_manuscript_input: ExportHumanReadableManuscriptInput, };
 
-export type ExportHumanReadableManuscriptRefusalReason = "archived_project";
-
 export type ExportAcknowledgement = "accepted";
 
 export type HumanReadableManuscriptExportRef = { "kind": "human_readable_manuscript_export", export_id: string, };
 
-export type ExportHumanReadableManuscriptEffect = { "kind": "admitted", export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, } | { "kind": "refused", reason: ExportHumanReadableManuscriptRefusalReason, };
+export type ExportHumanReadableManuscriptEffect = { "kind": "admitted", export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, };
 
 export type ExportHumanReadableManuscriptResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: HumanReadableManuscriptExportRef | null, project: ControlledProject, effect: ExportHumanReadableManuscriptEffect, };
 
@@ -688,8 +670,6 @@ export declare function updateProject(options: StoryOSQueryOptions & { projectId
 export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
 export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
-export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;

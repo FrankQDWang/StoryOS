@@ -14,7 +14,6 @@ use crate::command_sequence::tests::{
     DELETE_CHAPTER, DELETE_VOLUME, applied, delete_chapter, delete_volume, named_call,
     outcome_code, seed_project, stores, undo_named,
 };
-use crate::create_structure_tests::archive;
 use crate::set_current_chapter_authority_tests::open_session;
 use crate::update_structure_tests::{Seeded, Sibling, tree};
 
@@ -212,14 +211,10 @@ async fn each_delete_classifies_its_outcomes_and_writes_its_effect_rows() {
             codes.push(deleted.code);
         }
         assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-        // An archived Project has no readable Manuscript Tree, so this step is the last.
-        archive(&admin, &scope).await;
-        codes.push(delete(kind, &store, &scope, &suffix(9), &a, 5).await.code);
         let mut expected = vec![
             (ReceiptResult::NoEffect, Some("already_removed")),
             (ReceiptResult::Conflicted, Some("stale_tree_revision")),
             (ReceiptResult::Refused, Some(kind.join_refusal())),
-            (ReceiptResult::Refused, Some("archived_project")),
         ];
         if kind == Sibling::Volume {
             expected.insert(0, (ReceiptResult::Refused, Some("nonempty_volume")));

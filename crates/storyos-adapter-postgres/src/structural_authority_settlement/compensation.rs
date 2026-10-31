@@ -128,7 +128,7 @@ async fn restore_prior_tree(
                 "UPDATE storyos.projects
                     SET tree_revision = $3::text::bigint
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                    AND tree_revision = $4::text::bigint",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -147,7 +147,7 @@ async fn restore_prior_tree(
                     SET tree_revision = $3::text::bigint,
                         current_chapter_id = $5::text::uuid
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                    AND tree_revision = $4::text::bigint",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -167,7 +167,7 @@ async fn restore_prior_tree(
                           ELSE current_chapter_id
                         END
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                    AND tree_revision = $4::text::bigint",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),

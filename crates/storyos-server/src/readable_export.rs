@@ -54,13 +54,6 @@ pub(super) async fn export_human_readable_manuscript(
         .await
         .map_err(|error| match error {
             RefusableCommandError::RefusedBeforeAdmission(
-                ExportHumanReadableManuscriptRefusal::ArchivedProject,
-            ) => problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "archived_project",
-                "The Project is archived.",
-            ),
-            RefusableCommandError::RefusedBeforeAdmission(
                 ExportHumanReadableManuscriptRefusal::MissingProject,
             ) => resource_unavailable(),
             RefusableCommandError::Command(error) => {
@@ -114,11 +107,6 @@ pub(super) async fn get_human_readable_manuscript_export_query(
         .map_err(service_unavailable)?
     {
         GetHumanReadableManuscriptExport::Missing => Err(resource_unavailable()),
-        GetHumanReadableManuscriptExport::Archived => Err(problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "archived_project",
-            "The Project is archived.",
-        )),
         GetHumanReadableManuscriptExport::Expired => Err(problem(
             StatusCode::CONFLICT,
             "snapshot_expired",

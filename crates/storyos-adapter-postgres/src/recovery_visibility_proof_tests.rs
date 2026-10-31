@@ -468,10 +468,17 @@ async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
         .await
         .unwrap();
 
+    // A Project that is not active breaks the lifecycle range. Only a damaged row can have it,
+    // because the lifecycle check refuses each other value.
+    admin
+        .batch_execute(
+            "ALTER TABLE storyos.projects DROP CONSTRAINT projects_lifecycle_state_check",
+        )
+        .await
+        .unwrap();
     admin
         .execute(
-            "UPDATE storyos.projects
-                SET lifecycle_state = 'archived'
+            "UPDATE storyos.projects SET lifecycle_state = 'archived'
               WHERE project_id = $1::text::uuid",
             &[&project_id],
         )
@@ -488,10 +495,16 @@ async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
     .await;
     admin
         .execute(
-            "UPDATE storyos.projects
-                SET lifecycle_state = 'active'
+            "UPDATE storyos.projects SET lifecycle_state = 'active'
               WHERE project_id = $1::text::uuid",
             &[&project_id],
+        )
+        .await
+        .unwrap();
+    admin
+        .batch_execute(
+            "ALTER TABLE storyos.projects
+               ADD CONSTRAINT projects_lifecycle_state_check CHECK (lifecycle_state = 'active')",
         )
         .await
         .unwrap();

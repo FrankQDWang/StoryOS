@@ -37,7 +37,7 @@ const RELEASE_PROFILE_MODULE_PATH: &str =
 const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:1d681ea8932ca205974b73054821469a0faaec627ded74c02336a79d7738005c";
+    "sha256:977c148ced4b8b2f774795aa3c577fa3e2e0b3b23b560fb62c8113cd907539a2";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 

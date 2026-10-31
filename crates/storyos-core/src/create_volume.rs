@@ -1,6 +1,6 @@
 //! Pure Core classification for Create Volume.
 
-use super::{ProjectLifecycle, TransitionOutcome};
+use super::TransitionOutcome;
 use crate::transition_outcome::reason_codes;
 use std::convert::Infallible;
 
@@ -8,7 +8,6 @@ use std::convert::Infallible;
 pub struct CreateVolume {
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
     pub title: String,
 }
 
@@ -27,7 +26,6 @@ pub enum CreateVolumeConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateVolumeRefusal {
-    ArchivedProject,
     InvalidTitle,
 }
 
@@ -36,17 +34,13 @@ reason_codes!(CreateVolumeConflict {
 });
 
 reason_codes!(CreateVolumeRefusal {
-    ArchivedProject => "archived_project",
     InvalidTitle => "invalid_title",
 });
 
-/// Classify one Create Volume against lifecycle, expected tree revision, and title.
+/// Classify one Create Volume against expected tree revision and title.
 pub fn create_volume(command: &CreateVolume) -> CreateVolumeResult {
     if command.title.is_empty() || command.title.len() > 1024 {
         return CreateVolumeResult::Refused(CreateVolumeRefusal::InvalidTitle);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return CreateVolumeResult::Refused(CreateVolumeRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
         return CreateVolumeResult::Conflicted(CreateVolumeConflict::StaleTreeRevision);

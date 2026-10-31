@@ -298,7 +298,6 @@ pub(super) async fn insert_admission(
                           SELECT 1 FROM storyos.projects AS project
                            WHERE project.owner_user_id = session.owner_user_id
                              AND project.project_id = session.project_id
-                             AND project.lifecycle_state = 'active'
                         )",
                     &[
                         &owner_user_id,

@@ -123,7 +123,6 @@ impl ProjectCommand for DeleteVolumeInput {
             child_chapters,
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
-            current_lifecycle: project.lifecycle,
         });
         Ok(Classification::project_command(
             classified.map_applied(|applied| (applied, ())),

@@ -55,14 +55,7 @@ pub(super) async fn export_project_archive(
         .export_project_archive(&admitted.envelope, &admitted.input)
         .await
         .map_err(|error| match error {
-            RefusableCommandError::RefusedBeforeAdmission(ArchiveExportRefusal::Lifecycle(
-                ExportProjectArchiveRefusal::ArchivedProject,
-            )) => problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "archived_project",
-                "The Project is archived.",
-            ),
-            RefusableCommandError::RefusedBeforeAdmission(ArchiveExportRefusal::Lifecycle(
+            RefusableCommandError::RefusedBeforeAdmission(ArchiveExportRefusal::Presence(
                 ExportProjectArchiveRefusal::MissingProject,
             )) => resource_unavailable(),
             RefusableCommandError::RefusedBeforeAdmission(ArchiveExportRefusal::ArchiveBuild(
@@ -114,11 +107,6 @@ pub(super) async fn get_export_operation_query(
             .map_err(service_unavailable)?
         {
             VerifiedExportArchive::Missing => Err(resource_unavailable()),
-            VerifiedExportArchive::Archived => Err(problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "archived_project",
-                "The Project is archived.",
-            )),
             VerifiedExportArchive::Expired => Err(problem(
                 StatusCode::CONFLICT,
                 "snapshot_expired",
@@ -149,11 +137,6 @@ pub(super) async fn get_export_operation_query(
         .map_err(service_unavailable)?
     {
         GetExportOperation::Missing => Err(resource_unavailable()),
-        GetExportOperation::Archived => Err(problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "archived_project",
-            "The Project is archived.",
-        )),
         GetExportOperation::Expired => Err(problem(
             StatusCode::CONFLICT,
             "snapshot_expired",

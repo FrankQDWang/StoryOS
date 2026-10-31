@@ -134,7 +134,6 @@ function ProjectReadyView({
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState<string>();
-  const [lifecycle, setLifecycle] = useState<"active" | "archived">();
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
@@ -178,7 +177,6 @@ function ProjectReadyView({
         entry.project_scope.project_id === state.project.project.project_id);
       if (item === undefined) return;
       setRevision(item.revision);
-      setLifecycle(item.lifecycle.kind);
     }).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
   useEffect(() => {
@@ -199,7 +197,7 @@ function ProjectReadyView({
     ? command(null).then((result) => ({ kind: "ran" as const, result }))
     : writing.runAfterQuiesce(condition, command);
 
-  // Without a writer or in an archived Project, a selected Chapter opens read-only.
+  // Without a writer, a selected Chapter opens read-only.
   const browseChapter = (chapterId: string) => {
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
@@ -242,7 +240,7 @@ function ProjectReadyView({
   const selectChapter = (chapterId: string) => {
     if (structureInFlightRef.current) return;
     if (chapterId === selectedChapterIdRef.current) return;
-    if (lifecycle === "archived" || state.editor.kind !== "editor-ready" || writing === undefined) {
+    if (state.editor.kind !== "editor-ready" || writing === undefined) {
       browseChapter(chapterId);
       return;
     }
@@ -360,7 +358,6 @@ function ProjectReadyView({
     baseUrl, fetchImpl, cryptoImpl, projectId: state.project.project.project_id, volumeId, expectedTreeRevision,
   }));
 
-  const archived = lifecycle === "archived";
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
     : state.editor.writer;
@@ -411,7 +408,7 @@ function ProjectReadyView({
         scope: state.project.project_scope,
         chapterId: currentChapterId, tree,
         canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
-          && saveState === "saved" && !readOnly && !archived,
+          && saveState === "saved" && !readOnly,
         baseUrl, fetchImpl, cryptoImpl,
       }}
       tree={(
@@ -419,7 +416,6 @@ function ProjectReadyView({
           <RenameProjectForm
                 title={title}
                 workspace
-                disabled={archived}
                 projectId={state.project.project.project_id}
                 revision={revision}
                 baseUrl={baseUrl}
@@ -444,7 +440,6 @@ function ProjectReadyView({
               baseUrl={baseUrl}
               fetchImpl={fetchImpl}
               cryptoImpl={cryptoImpl}
-              createEnabled={!archived}
               selectedChapterId={selectedChapter.chapter.chapter_id}
               onSelectChapter={selectChapter}
               onChapterCreated={refreshTree}
@@ -516,7 +511,7 @@ function ProjectReadyView({
                 || saveState === "saved",
               tree,
             }}
-            editable={!readOnly && !archived}
+            editable={!readOnly}
             persistWorkspace={
               state.editor.kind === "editor-ready"
                 && selectedChapter.chapter.chapter_id === currentChapterId
@@ -616,7 +611,7 @@ function ProjectReadyView({
 }
 
 function RenameProjectForm({
-  title, workspace = false, disabled = false,
+  title, workspace = false,
   projectId,
   revision,
   baseUrl,
@@ -626,7 +621,6 @@ function RenameProjectForm({
 }: {
   title?: string;
   workspace?: boolean;
-  disabled?: boolean;
   projectId: string;
   revision: string | undefined;
   baseUrl: string;
@@ -654,7 +648,7 @@ function RenameProjectForm({
       }).finally(() => { pending.current = false; setSaving(false); });
   };
   return (
-    <div className={workspace ? "project-heading" : undefined} data-project-id={projectId} onContextMenu={disabled ? undefined : (event) => {
+    <div className={workspace ? "project-heading" : undefined} data-project-id={projectId} onContextMenu={(event) => {
       event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY });
     }}>
       {editing ?
@@ -667,9 +661,9 @@ function RenameProjectForm({
           if (event.key === "Escape" && !pending.current) { cancelled.current = true; setEditing(false); }
         }} />
     </form> : workspace ? <h1>{title}</h1> : null}
-      {disabled ? null : <button type="button" data-project-menu aria-label="项目菜单" onClick={(event) => {
+      <button type="button" data-project-menu aria-label="项目菜单" onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left, y: rect.bottom + 4 });
-      }}>⋯</button>}
+      }}>⋯</button>
       {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
         <button type="button" data-begin-rename-project disabled={revision === undefined}
           onClick={() => { cancelled.current = false; setEditing(true); }}>重命名</button>
@@ -742,7 +736,6 @@ function EmptyProjectReadyView({
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
-            createEnabled
             onChapterCreated={onChapterCreated}
             onVolumeUpdated={onVolumeCreated}
             onRemoveChapter={(chapterId) => {
@@ -875,45 +868,35 @@ function ProtectedReadyView({
       <p>本地写作已就绪。</p>
       {library !== null && library.length > 0 ? (
         <ul>
-          {library.map((item) => {
-            const archived = item.lifecycle.kind === "archived";
-            return (
-              <li key={item.project_scope.project_id}>
-                <button
-                  type="button"
-                  data-project-id={item.project_scope.project_id}
-                  data-open={item.open.kind}
-                  data-lifecycle={item.lifecycle.kind}
-                  data-revision={item.revision}
-                  disabled={archived}
-                  onClick={() => {
-                    if (archived) return;
-                    void openControlledProject({
-                      baseUrl,
-                      projectId: item.project_scope.project_id,
-                      fetchImpl,
-                      cryptoImpl,
-                    }).then(setCurrent);
-                  }}
-                >
-                  {item.title}
-                </button>
-                {archived ? null : (
-                  <>
-                    <RenameProjectForm
-                      title={item.title}
-                      projectId={item.project_scope.project_id}
-                      revision={item.revision}
-                      baseUrl={baseUrl}
-                      fetchImpl={fetchImpl}
-                      cryptoImpl={cryptoImpl}
-                      onRenamed={refreshLibrary}
-                    />
-                  </>
-                )}
-              </li>
-            );
-          })}
+          {library.map((item) => (
+            <li key={item.project_scope.project_id}>
+              <button
+                type="button"
+                data-project-id={item.project_scope.project_id}
+                data-open={item.open.kind}
+                data-revision={item.revision}
+                onClick={() => {
+                  void openControlledProject({
+                    baseUrl,
+                    projectId: item.project_scope.project_id,
+                    fetchImpl,
+                    cryptoImpl,
+                  }).then(setCurrent);
+                }}
+              >
+                {item.title}
+              </button>
+              <RenameProjectForm
+                title={item.title}
+                projectId={item.project_scope.project_id}
+                revision={item.revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onRenamed={refreshLibrary}
+              />
+            </li>
+          ))}
         </ul>
       ) : null}
       <form

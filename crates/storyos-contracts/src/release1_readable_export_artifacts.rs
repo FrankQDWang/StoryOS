@@ -9,8 +9,8 @@ use crate::release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT, EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID, ExportAcknowledgement,
     ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptInput,
-    ExportHumanReadableManuscriptRefusalReason, ExportHumanReadableManuscriptRequest,
-    ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
+    ExportHumanReadableManuscriptRequest, ExportHumanReadableManuscriptResponse,
+    HumanReadableManuscriptExportRef,
 };
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
 use crate::release1_route_catalog::{
@@ -136,10 +136,9 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ExportHumanReadableManuscriptInput::decl(&config),
         ExportHumanReadableManuscriptRequest::decl(&config),
-        ExportHumanReadableManuscriptRefusalReason::decl(&config),
         ExportAcknowledgement::decl(&config),
         HumanReadableManuscriptExportRef::decl(&config),
         ExportHumanReadableManuscriptEffect::decl(&config),

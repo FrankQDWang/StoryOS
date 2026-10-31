@@ -2,7 +2,7 @@
 
 use std::convert::Infallible;
 
-use super::{ProjectLifecycle, ProjectPresence, TransitionOutcome};
+use super::{ProjectPresence, TransitionOutcome};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssistanceAdmission {
@@ -28,7 +28,6 @@ pub enum ChapterAdmission {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateAgentRun {
     pub presence: ProjectPresence,
-    pub lifecycle: ProjectLifecycle,
     pub assistance: AssistanceAdmission,
     pub conversation: ConversationAdmission,
     pub chapter: ChapterAdmission,
@@ -37,7 +36,6 @@ pub struct CreateAgentRun {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CreateAgentRunRefusal {
     MissingProject,
-    ArchivedProject,
     AssistanceUnavailable,
     InaccessibleConversation,
     ConversationBusy,
@@ -55,9 +53,6 @@ pub fn create_agent_run(
 ) -> Result<CreateAgentRunOutcome, CreateAgentRunRefusal> {
     if command.presence == ProjectPresence::Absent {
         return Err(CreateAgentRunRefusal::MissingProject);
-    }
-    if command.lifecycle == ProjectLifecycle::Archived {
-        return Err(CreateAgentRunRefusal::ArchivedProject);
     }
     if command.assistance != AssistanceAdmission::Available {
         return Err(CreateAgentRunRefusal::AssistanceUnavailable);

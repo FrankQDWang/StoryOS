@@ -128,7 +128,6 @@ impl ProjectCommand for DeleteChapterInput {
             chapter_lifecycle,
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
-            current_lifecycle: project.lifecycle,
             chapter_id: self.chapter_id.as_ref().to_owned(),
             current_chapter_id: project.current_chapter_id.clone(),
             ordered_active_chapter_ids,

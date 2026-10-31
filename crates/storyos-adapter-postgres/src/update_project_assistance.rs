@@ -52,11 +52,8 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<Classification<Self>, ProjectCommandError> {
-        if project.lifecycle == storyos_core::ProjectLifecycle::Archived {
-            return Err(ProjectCommandError::BindingConflict);
-        }
         let current = read_assistance_record(client, &envelope.project_scope)
             .await
             .map_err(unavailable)?;

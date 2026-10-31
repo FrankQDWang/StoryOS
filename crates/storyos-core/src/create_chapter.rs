@@ -1,6 +1,6 @@
 //! Pure Core classification for Create Chapter.
 
-use super::{ProjectLifecycle, TransitionOutcome};
+use super::TransitionOutcome;
 use crate::transition_outcome::reason_codes;
 use std::convert::Infallible;
 
@@ -34,7 +34,6 @@ pub struct CreateChapter {
     pub volume_join: VolumeJoin,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
     pub current_open: CreateChapterOpen,
     pub title: String,
     pub placement: CreateChapterPlacement,
@@ -62,7 +61,6 @@ pub enum CreateChapterConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateChapterRefusal {
-    ArchivedProject,
     InvalidTitle,
     InvalidVolumeJoin,
     InvalidPlacement,
@@ -73,19 +71,15 @@ reason_codes!(CreateChapterConflict {
 });
 
 reason_codes!(CreateChapterRefusal {
-    ArchivedProject => "archived_project",
     InvalidTitle => "invalid_title",
     InvalidVolumeJoin => "invalid_volume_join",
     InvalidPlacement => "invalid_placement",
 });
 
-/// Classify one Create Chapter against exact Scope, Volume join, lifecycle, tree revision, and title.
+/// Classify one Create Chapter against exact Scope, Volume join, tree revision, and title.
 pub fn create_chapter(command: &CreateChapter) -> CreateChapterResult {
     if command.title.is_empty() || command.title.len() > 1024 {
         return CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return CreateChapterResult::Refused(CreateChapterRefusal::ArchivedProject);
     }
     if command.volume_join == VolumeJoin::Invalid {
         return CreateChapterResult::Refused(CreateChapterRefusal::InvalidVolumeJoin);

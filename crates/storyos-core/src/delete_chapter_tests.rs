@@ -1,7 +1,7 @@
 use super::{
     ChapterJoin, ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied,
     DeleteChapterConflict, DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal,
-    DeleteChapterResult, ProjectLifecycle, delete_chapter,
+    DeleteChapterResult, delete_chapter,
 };
 
 fn command() -> DeleteChapter {
@@ -10,7 +10,6 @@ fn command() -> DeleteChapter {
         chapter_lifecycle: ChapterRemovalLifecycle::Active,
         expected_tree_revision: 4,
         current_tree_revision: 4,
-        current_lifecycle: ProjectLifecycle::Active,
         chapter_id: "b".to_owned(),
         current_chapter_id: Some("a".to_owned()),
         ordered_active_chapter_ids: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
@@ -105,15 +104,5 @@ fn an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect() {
     assert_eq!(
         delete_chapter(&invalid),
         DeleteChapterResult::Refused(DeleteChapterRefusal::InvalidChapterJoin)
-    );
-}
-
-#[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        delete_chapter(&archived),
-        DeleteChapterResult::Refused(DeleteChapterRefusal::ArchivedProject)
     );
 }

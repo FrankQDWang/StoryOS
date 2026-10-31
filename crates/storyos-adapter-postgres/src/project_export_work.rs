@@ -4,13 +4,12 @@ use storyos_application::{
     PROJECT_EXPORT_ARCHIVE_PROFILE, PinnedExportSource, PinnedExportSourceFacts, ProjectId,
     ProjectReadError, ProjectScope, UserId,
 };
-use storyos_core::ProjectLifecycle;
 use uuid::Uuid;
 
 use super::*;
 use crate::pinned_export_source::{
-    EXPORT_REFUSED_RECEIPT_REASON, PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
-    PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
+    PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON, PinnedExportSourceCompleteness,
+    PinnedExportSourceLoad, load_pinned_export_source,
 };
 use crate::snapshot::PinnedSnapshot;
 
@@ -159,9 +158,9 @@ pub(crate) async fn complete_claimed_export(
         .await
         .map_err(complete_database_error)?
         .get(0);
-    let Some(project) = client
+    if client
         .query_opt(
-            "SELECT lifecycle_state FROM storyos.projects
+            "SELECT 1 FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -171,32 +170,11 @@ pub(crate) async fn complete_claimed_export(
         )
         .await
         .map_err(complete_database_error)?
-    else {
-        return persist_failed_export(
-            client,
-            claim,
-            &canonical_command_digest,
-            EXPORT_REFUSED_RECEIPT_REASON,
-        )
-        .await;
-    };
-    let lifecycle = match project.get::<_, String>(0).as_str() {
-        "active" => ProjectLifecycle::Active,
-        "archived" => ProjectLifecycle::Archived,
-        other => {
-            return Err(CompleteArchiveExportError::unavailable(
-                std::io::Error::other(format!("unsupported Project lifecycle {other}")),
-            ));
-        }
-    };
-    if lifecycle == ProjectLifecycle::Archived {
-        return persist_failed_export(
-            client,
-            claim,
-            &canonical_command_digest,
-            EXPORT_REFUSED_RECEIPT_REASON,
-        )
-        .await;
+        .is_none()
+    {
+        return Err(CompleteArchiveExportError::unavailable(
+            std::io::Error::other("the Project of a claimed export is required"),
+        ));
     }
     match crate::snapshot::load_pinned_snapshot(
         client,

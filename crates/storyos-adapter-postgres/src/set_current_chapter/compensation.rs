@@ -149,7 +149,6 @@ async fn persist_current_chapter_compensation(
             "UPDATE storyos.projects
                 SET current_chapter_id = $3::text::uuid
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND lifecycle_state = 'active'
                 AND current_chapter_id = $4::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),

@@ -81,7 +81,6 @@ it("keeps a version 4 Journal that cannot upgrade, shows local recovery, and exp
         projects: [{
           project_scope: { owner_user_id: OWNER, project_id: PROJECT },
           title: "Project A",
-          lifecycle: { kind: "active" },
           revision: "1",
           open: { kind: "current_chapter", current_chapter_id: CHAPTER },
         }],

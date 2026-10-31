@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:bdea6f1badb620c9b85c8c08c5f68b3447d47bc76d17a4718e0bbedb33b1b1ae",
+    "migration_chain_digest": "sha256:fdfca65b3ee6ef9fe7437b8b1045269c8eee1f1be9ab9c5932190e76ab3d6503",
     "protocol_binding": {
       "source": "generated/route-catalog/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -233,7 +233,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:868931ab583c7b2636159614904bcdfa00914cea744112ec76035ef80ab59216",
+      "manifest_sha256": "sha256:ce320a6e58a2da12e05c992d699e771784f33db3de504cec9b01cc8b64c54604",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -642,6 +642,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0102_remove_recovery_draft_reference.sql",
           "lf_sha256": "sha256:83caa90c0e264ba56f4bbff38e7bfc9b40899fccdbe29a5baa40cd796b64c3c0"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0103_remove_archived_project.sql",
+          "lf_sha256": "sha256:bc391d4431aef7bd0a4ebd1e116d5bbf3ee10961f882380ef8a47f506e9c0d6b"
         }
       ]
     },
@@ -815,7 +819,7 @@
       "head": "current_writer_generation",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "admission_and_writer_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "createEditorSession", "getEditorSession", "getProposal", "getApplyAuthorEditOutcome", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "createEditorSession", "getEditorSession", "getProposal", "getApplyAuthorEditOutcome", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-run-mailbox",
@@ -911,7 +915,7 @@
       "head": "lifecycle_current_projection",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": ["projection-generation-control"], "rebuild": "not_applicable", "visibility_gate": "lifecycle_floor_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify_before_visibility", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["archiveProject", "deleteChapter", "deleteVolume"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["deleteChapter", "deleteVolume"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "projection-generation-control",

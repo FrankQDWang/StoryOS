@@ -68,7 +68,6 @@ pub enum DeleteChapterConflictReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DeleteChapterRefusalReason {
-    ArchivedProject,
     InvalidChapterJoin,
 }
 

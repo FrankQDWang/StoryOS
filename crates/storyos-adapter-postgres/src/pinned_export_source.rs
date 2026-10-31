@@ -13,10 +13,6 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::AppliedVariant;
 use crate::command_sequence::unavailable;
 
-/// Receipt reason when export settlement refuses an archived Project, or when
-/// settlement finds no Project row.
-pub(crate) const EXPORT_REFUSED_RECEIPT_REASON: &str = "archived_project";
-
 /// Receipt reason when settlement cannot prove the Pinned Export Source.
 pub(crate) const PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON: &str =
     "pinned_export_source_unavailable";
@@ -24,20 +20,18 @@ pub(crate) const PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON: &str =
 /// A refusal reason that the Worker settlement of an export writes on its Domain Receipt.
 #[derive(Debug)]
 pub(crate) enum ExportSettlementRefusal {
-    ArchivedProject,
     PinnedExportSourceUnavailable,
 }
 
 impl ReasonCode for ExportSettlementRefusal {
     fn code(&self) -> &'static str {
         match self {
-            Self::ArchivedProject => EXPORT_REFUSED_RECEIPT_REASON,
             Self::PinnedExportSourceUnavailable => PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
         }
     }
 
     fn from_code(code: &str) -> Option<Self> {
-        [Self::ArchivedProject, Self::PinnedExportSourceUnavailable]
+        [Self::PinnedExportSourceUnavailable]
             .into_iter()
             .find(|reason| reason.code() == code)
     }

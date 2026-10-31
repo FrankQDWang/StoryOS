@@ -11,8 +11,6 @@ mod release1_agent_run;
 mod release1_agent_run_artifacts;
 mod release1_agent_run_control;
 mod release1_agent_run_control_artifacts;
-mod release1_archive_project;
-mod release1_archive_project_artifacts;
 mod release1_artifacts;
 mod release1_author_edit;
 mod release1_author_edit_artifacts;
@@ -162,12 +160,6 @@ pub use release1_agent_run_control::{
     STEER_AGENT_RUN_REQUEST_SCHEMA_ID, STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect,
     SteerAgentRunInput, SteerAgentRunRequest, SteerAgentRunResponse,
 };
-pub use release1_archive_project::{
-    ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,
-    ARCHIVE_PROJECT_REQUEST_SCHEMA_ID, ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
-    ArchiveProjectConflictReason, ArchiveProjectEffect, ArchiveProjectInput,
-    ArchiveProjectNoEffectReason, ArchiveProjectRequest, ArchiveProjectResponse,
-};
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,
 };
@@ -220,7 +212,7 @@ pub use release1_delete_volume::{
 };
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
-    LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
+    LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectListItem,
 };
 pub use release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
@@ -258,8 +250,8 @@ pub use release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,
     EXPORT_PROJECT_ARCHIVE_PATH, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
     EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID, ExportProjectArchiveEffect,
-    ExportProjectArchiveInput, ExportProjectArchiveRefusalReason, ExportProjectArchiveRequest,
-    ExportProjectArchiveResponse, ProjectExportRef,
+    ExportProjectArchiveInput, ExportProjectArchiveRequest, ExportProjectArchiveResponse,
+    ProjectExportRef,
 };
 pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
@@ -292,8 +284,8 @@ pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH, EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID, ExportAcknowledgement,
     ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptInput,
-    ExportHumanReadableManuscriptRefusalReason, ExportHumanReadableManuscriptRequest,
-    ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
+    ExportHumanReadableManuscriptRequest, ExportHumanReadableManuscriptResponse,
+    HumanReadableManuscriptExportRef,
 };
 pub use release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD, GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_PATH,

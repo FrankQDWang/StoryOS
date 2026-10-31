@@ -1,13 +1,12 @@
 use super::{
     CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
-    CreateVolumeResult, ProjectLifecycle, create_volume,
+    CreateVolumeResult, create_volume,
 };
 
 fn command() -> CreateVolume {
     CreateVolume {
         expected_tree_revision: 1,
         current_tree_revision: 1,
-        current_lifecycle: ProjectLifecycle::Active,
         title: "Volume A".to_owned(),
     }
 }
@@ -28,16 +27,6 @@ fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     assert_eq!(
         create_volume(&stale),
         CreateVolumeResult::Conflicted(CreateVolumeConflict::StaleTreeRevision)
-    );
-}
-
-#[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        create_volume(&archived),
-        CreateVolumeResult::Refused(CreateVolumeRefusal::ArchivedProject)
     );
 }
 

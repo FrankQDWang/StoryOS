@@ -1,6 +1,6 @@
 //! Pure Core classification for Update Chapter (rename and reorder).
 
-use super::{ProjectLifecycle, TransitionOutcome};
+use super::TransitionOutcome;
 use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,7 +14,6 @@ pub struct UpdateChapter {
     pub chapter_join: ChapterJoin,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
     pub title: String,
     pub current_title: String,
     pub order: u64,
@@ -49,7 +48,6 @@ pub enum UpdateChapterConflict {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateChapterRefusal {
     InvalidChapterJoin,
-    ArchivedProject,
     InvalidTitle,
     InvalidOrder,
 }
@@ -64,7 +62,6 @@ reason_codes!(UpdateChapterConflict {
 
 reason_codes!(UpdateChapterRefusal {
     InvalidChapterJoin => "invalid_chapter_join",
-    ArchivedProject => "archived_project",
     InvalidTitle => "invalid_title",
     InvalidOrder => "invalid_order",
 });
@@ -79,9 +76,6 @@ pub fn update_chapter(command: &UpdateChapter) -> UpdateChapterResult {
     }
     if command.order < 1 || command.order > command.chapter_count {
         return UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidOrder);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return UpdateChapterResult::Refused(UpdateChapterRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
         return UpdateChapterResult::Conflicted(UpdateChapterConflict::StaleTreeRevision);

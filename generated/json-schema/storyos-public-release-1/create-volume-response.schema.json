@@ -99,7 +99,6 @@
     },
     "CreateVolumeRefusalReason": {
       "enum": [
-        "archived_project",
         "invalid_title"
       ],
       "type": "string"
@@ -247,7 +246,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",

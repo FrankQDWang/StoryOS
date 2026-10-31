@@ -7,15 +7,14 @@ import { test } from "vitest";
 import { promisify } from "node:util";
 
 import {
-  applyAuthorEdit, archiveProject, createEditorSession, createProject, createProjectChallenge,
-  createProjectCommandChallenge, digestApplyAuthorEdit, digestArchiveProject, digestCreateEditorSession,
+  applyAuthorEdit, createEditorSession, createProject, createProjectChallenge,
+  createProjectCommandChallenge, digestApplyAuthorEdit, digestCreateEditorSession,
   digestUpdateProject, getApplyAuthorEditOutcome, getChapter, getEditorSession, getManuscriptTree, getProject,
   listProjects, updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
-  ArchiveProjectRequest,
   CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
   CreateProjectCommandChallengeRequest,
@@ -117,18 +116,6 @@ function createChallengeRequest(
   };
 }
 
-function archiveRequest(expectedProjectRevision: string, correlationId: string): ArchiveProjectRequest {
-  return {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: {
-      expected_project_revision: expectedProjectRevision,
-      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: correlationId,
-    },
-  };
-}
-
 function renameRequest(title: string, expectedProjectRevision: string, correlationId: string): UpdateProjectRequest {
   return {
     command_schema: "storyos.command.update-project.request.v1",
@@ -151,26 +138,6 @@ async function projectEffectSnapshot() {
       'activities', (SELECT count(*) FROM storyos.project_activity_events),
       'chapters', (SELECT count(*) FROM storyos.manuscript_objects)
     )::text`));
-}
-
-async function archive(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  idempotencyKey: string,
-  request: ArchiveProjectRequest,
-) {
-  const challenge = await issueChallenge(baseUrl, fetchImpl, projectId, "PUT",
-    "/api/v1/projects/{project_id}/archival", request.command_schema, await digestArchiveProject(request), idempotencyKey);
-  const archived = await archiveProject({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request,
-  });
-  return { challenge, archived };
 }
 
 test("two authenticated Users open only their own Project and current Chapter over real HTTP", async () => {
@@ -1270,146 +1237,6 @@ test("createProjectChallenge refuses a missing Origin without disclosing User id
     assert.equal(response.status, 403);
     assert.doesNotMatch(body, new RegExp(USER_A));
     assert.doesNotMatch(body, /nonce/);
-  } finally {
-    await stopRealServer(server);
-  }
-});
-
-test("archiveProject settles lifecycle, replays, lists archived, and fails closed", async () => {
-  const ns = freshNamespace();
-  const { baseUrl, server } = await startServer();
-  try {
-    const first = await createEmpty(baseUrl, "session-a", id(`${ns}0901`), "Empty Novel",
-      "018f0000-0000-7001-8000-000000000910");
-    const request = archiveRequest("1", "018f0000-0000-7001-8000-000000000911");
-    const applied = await archive(baseUrl, first.fetchImpl, first.projectId, id(`${ns}0921`), request);
-    assert.equal(applied.archived.schema_id, "storyos.command.archive-project.response.v1");
-    assert.equal(applied.archived.receipt.command_kind, "archiveProject");
-    assert.equal(applied.archived.receipt.result, "authoritative_applied");
-    assert.equal(applied.archived.effect.kind, "authoritative_applied");
-    assert.match(applied.archived.command_id, UUID_V7);
-    if (applied.archived.effect.kind === "authoritative_applied") {
-      assert.equal(applied.archived.effect.revision, "2");
-    }
-
-    const replay = await archiveProject({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: id(`${ns}0921`),
-      antiForgery: applied.challenge.nonce,
-      request,
-    });
-    assert.equal(replay.command_id, applied.archived.command_id);
-    assert.equal(replay.receipt.receipt_id, applied.archived.receipt.receipt_id);
-
-    const listed = await listProjects({ baseUrl, fetchImpl: first.fetchImpl });
-    const listedItem = listed.projects.find((item) => item.project_scope.project_id === first.projectId);
-    assert.equal(listedItem?.lifecycle.kind, "archived");
-    assert.equal(listedItem?.revision, "2");
-
-    const archivedProject = await getProject({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
-    assert.equal(archivedProject.project.title, "Empty Novel");
-    await assert.rejects(
-      getManuscriptTree({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
-      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
-    );
-
-    const already = await archive(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      id(`${ns}0922`),
-      archiveRequest("2", "018f0000-0000-7001-8000-000000000912"),
-    );
-    assert.equal(already.archived.receipt.result, "no_effect");
-    assert.equal(already.archived.effect.kind, "no_effect");
-
-    const stale = await archive(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      id(`${ns}0923`),
-      archiveRequest("1", "018f0000-0000-7001-8000-000000000913"),
-    );
-    assert.equal(stale.archived.receipt.result, "conflicted");
-    assert.equal(stale.archived.effect.kind, "conflicted");
-
-    await assert.rejects(
-      archiveProject({
-        baseUrl,
-        projectId: first.projectId,
-        fetchImpl: first.fetchImpl,
-        idempotencyKey: id(`${ns}0921`),
-        antiForgery: applied.challenge.nonce,
-        request: archiveRequest("2", "018f0000-0000-7001-8000-000000000911"),
-      }),
-      (error) => requireStoryOSProtocolError(error).status === 422,
-    );
-
-    const blockedRename = renameRequest("Stolen Title", "2", "018f0000-0000-7001-8000-000000000914");
-    const blockedDigest = await digestUpdateProject(blockedRename);
-    await assert.rejects(
-      challenged(baseUrl, first.fetchImpl, first.projectId, "PATCH", "/api/v1/projects/{project_id}",
-        "storyos.command.update-project.request.v1", blockedDigest, id(`${ns}0924`), (antiForgery) => updateProject({
-          baseUrl,
-          projectId: first.projectId,
-          fetchImpl: first.fetchImpl,
-          idempotencyKey: id(`${ns}0924`),
-          antiForgery,
-          request: blockedRename,
-        })),
-      (error) => requireStoryOSProtocolError(error).status === 409,
-    );
-
-    const foreign = await createEmpty(baseUrl, "session-b", id(`${ns}0902`), "Other Novel",
-      "018f0000-0000-7001-8000-000000000910");
-    await assert.rejects(
-      archive(
-        baseUrl,
-        foreign.fetchImpl,
-        first.projectId,
-        id(`${ns}0925`),
-        archiveRequest("2", "018f0000-0000-7001-8000-000000000915"),
-      ),
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
-      },
-    );
-
-    const second = await createEmpty(baseUrl, "session-a", id(`${ns}0903`), "Ack Novel",
-      "018f0000-0000-7001-8000-000000000910");
-    const lostRequest = archiveRequest("1", "018f0000-0000-7001-8000-000000000916");
-    const lostKey = id(`${ns}0926`);
-    const lostDigest = await digestArchiveProject(lostRequest);
-    const lostChallenge = await issueChallenge(baseUrl, first.fetchImpl, second.projectId, "PUT",
-      "/api/v1/projects/{project_id}/archival", "storyos.command.archive-project.request.v1", lostDigest, lostKey);
-    await assert.rejects(
-      archiveProject({
-        baseUrl,
-        projectId: second.projectId,
-        fetchImpl: async (input, init) => {
-          const response = await first.fetchImpl(input, init);
-          await response.arrayBuffer();
-          throw new Error("simulated acknowledgement delivery loss");
-        },
-        idempotencyKey: lostKey,
-        antiForgery: lostChallenge.nonce,
-        request: lostRequest,
-      }),
-      /simulated acknowledgement delivery loss/,
-    );
-    const recovered = await archiveProject({
-      baseUrl,
-      projectId: second.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: lostKey,
-      antiForgery: lostChallenge.nonce,
-      request: lostRequest,
-    });
-    assert.equal(recovered.receipt.result, "authoritative_applied");
-    assert.equal(recovered.effect.kind, "authoritative_applied");
   } finally {
     await stopRealServer(server);
   }

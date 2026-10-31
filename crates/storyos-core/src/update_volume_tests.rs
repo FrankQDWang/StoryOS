@@ -1,6 +1,6 @@
 use super::{
-    ProjectLifecycle, UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict,
-    UpdateVolumeNoEffect, UpdateVolumeRefusal, UpdateVolumeResult, VolumeJoin, update_volume,
+    UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,
+    UpdateVolumeRefusal, UpdateVolumeResult, VolumeJoin, update_volume,
 };
 
 fn command() -> UpdateVolume {
@@ -8,7 +8,6 @@ fn command() -> UpdateVolume {
         volume_join: VolumeJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
-        current_lifecycle: ProjectLifecycle::Active,
         title: "Volume B".to_owned(),
         current_title: "Volume A".to_owned(),
         order: 2,
@@ -73,16 +72,6 @@ fn an_invalid_order_classifies_as_refused_with_zero_authority_effect() {
     assert_eq!(
         update_volume(&past_end),
         UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder)
-    );
-}
-
-#[test]
-fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut archived = command();
-    archived.current_lifecycle = ProjectLifecycle::Archived;
-    assert_eq!(
-        update_volume(&archived),
-        UpdateVolumeResult::Refused(UpdateVolumeRefusal::ArchivedProject)
     );
 }
 

@@ -114,7 +114,6 @@
     },
     "DeleteVolumeRefusalReason": {
       "enum": [
-        "archived_project",
         "invalid_volume_join",
         "nonempty_volume"
       ],
@@ -263,7 +262,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",

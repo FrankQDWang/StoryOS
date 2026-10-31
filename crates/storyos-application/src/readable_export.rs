@@ -30,7 +30,7 @@ pub struct ReadableExportOperation {
 
 pub type ExportHumanReadableManuscriptAdmission = AdmittedProjectCommand<ReadableExportOperation>;
 
-/// An archived Project refuses the export before its Admission.
+/// A missing Project refuses the export before its Admission.
 pub type ExportHumanReadableManuscriptError =
     RefusableCommandError<storyos_core::ExportHumanReadableManuscriptRefusal>;
 
@@ -92,7 +92,6 @@ pub struct HumanReadableManuscriptExportPage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GetHumanReadableManuscriptExport {
     Missing,
-    Archived,
     Expired,
     InProgress(Box<HumanReadableManuscriptExportProgress>),
     Ready(Box<HumanReadableManuscriptExportPage>),

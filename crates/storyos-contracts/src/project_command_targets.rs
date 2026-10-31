@@ -34,12 +34,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.update-project-assistance.request.v1",
     ),
     target(
-        "archiveProject",
-        "PUT",
-        "/api/v1/projects/{project_id}/archival",
-        "storyos.command.archive-project.request.v1",
-    ),
-    target(
         "createEditorSession",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",

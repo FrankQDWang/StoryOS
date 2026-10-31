@@ -68,7 +68,7 @@ mod author_edit;
 mod secondary_operation;
 
 pub(crate) use agent_run::CREATE_AGENT_RUN;
-pub(crate) use project_session::{ARCHIVE_PROJECT, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
+pub(crate) use project_session::{UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
 pub(crate) use structure::{
     CREATE_CHAPTER, CREATE_VOLUME, DELETE_CHAPTER, DELETE_VOLUME, SET_CURRENT_CHAPTER,
     UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_chapter_call, create_volume,

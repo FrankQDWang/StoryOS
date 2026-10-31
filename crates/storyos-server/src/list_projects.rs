@@ -1,4 +1,4 @@
-use storyos_application::{ProjectLifecycle, list_owned_projects};
+use storyos_application::list_owned_projects;
 
 use super::*;
 
@@ -29,10 +29,6 @@ pub(super) async fn list_projects(
             .map(|item| contracts::ProjectListItem {
                 project_scope: contract_scope(&item.project_scope),
                 title: item.title,
-                lifecycle: match item.lifecycle {
-                    ProjectLifecycle::Active => contracts::ProjectLifecycleState::Active,
-                    ProjectLifecycle::Archived => contracts::ProjectLifecycleState::Archived,
-                },
                 revision: item.revision.to_string(),
                 open: match item.current_chapter_id {
                     Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {

@@ -1,6 +1,6 @@
 //! Pure Core classification for author-initiated Volume removal.
 
-use super::{ProjectLifecycle, TransitionOutcome, VolumeJoin};
+use super::{TransitionOutcome, VolumeJoin};
 use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,7 +22,6 @@ pub struct DeleteVolume {
     pub child_chapters: VolumeChildPolicy,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,7 +49,6 @@ pub enum DeleteVolumeConflict {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteVolumeRefusal {
     InvalidVolumeJoin,
-    ArchivedProject,
     NonemptyVolume,
 }
 
@@ -64,7 +62,6 @@ reason_codes!(DeleteVolumeConflict {
 
 reason_codes!(DeleteVolumeRefusal {
     InvalidVolumeJoin => "invalid_volume_join",
-    ArchivedProject => "archived_project",
     NonemptyVolume => "nonempty_volume",
 });
 
@@ -72,9 +69,6 @@ reason_codes!(DeleteVolumeRefusal {
 pub fn delete_volume(command: &DeleteVolume) -> DeleteVolumeResult {
     if command.volume_join == VolumeJoin::Invalid {
         return DeleteVolumeResult::Refused(DeleteVolumeRefusal::InvalidVolumeJoin);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return DeleteVolumeResult::Refused(DeleteVolumeRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
         return DeleteVolumeResult::Conflicted(DeleteVolumeConflict::StaleTreeRevision);
