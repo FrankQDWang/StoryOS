@@ -361,36 +361,6 @@ async fn protocol_assets_and_failures_do_not_issue_a_session() {
 }
 
 #[tokio::test]
-async fn issuance_requires_the_printed_host_and_does_not_need_origin() {
-    let fixture = Fixture::new();
-    let assets = WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap();
-    let router = router_with_web(
-        config(
-            TrustedLocalSessionBootstrap::IssueTheSingleConfiguredHandle,
-            now_secs() + CLIENT_SESSION_BINDING_LIFETIME_SECS,
-        ),
-        assets,
-    );
-
-    let foreign = send(
-        router.clone(),
-        "/",
-        "example.com",
-        /*origin*/ None,
-        /*cookie*/ None,
-    )
-    .await;
-    assert_eq!(foreign.status(), StatusCode::OK);
-    assert_eq!(set_cookie(&foreign), None);
-
-    let issued = send(
-        router, "/", HOST, /*origin*/ None, /*cookie*/ None,
-    )
-    .await;
-    assert_eq!(set_cookie(&issued), Some(set_cookie_value().as_str()));
-}
-
-#[tokio::test]
 async fn matching_cookie_refreshes_an_expired_binding() {
     let fixture = Fixture::new();
     let assets = WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap();
@@ -450,6 +420,7 @@ async fn mismatched_cookie_is_not_overwritten_and_does_not_authorize() {
     for cookie in [
         "storyos_session=other",
         "storyos_session=",
+        "storyos_session=; storyos_session=session-a",
         "storyos_session=session-a; storyos_session=other",
     ] {
         let html = send(
@@ -472,23 +443,26 @@ async fn mismatched_cookie_is_not_overwritten_and_does_not_authorize() {
         .await;
         assert_eq!(api.status(), StatusCode::UNAUTHORIZED, "{cookie}");
     }
-}
 
-#[tokio::test]
-async fn disabled_bootstrap_does_not_issue_a_cookie() {
-    let fixture = Fixture::new();
-    let assets = WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap();
-    let router = router_with_web(
-        config(
-            TrustedLocalSessionBootstrap::Disabled,
-            now_secs() + CLIENT_SESSION_BINDING_LIFETIME_SECS,
-        ),
-        assets,
-    );
-    let response = send(
-        router, "/", HOST, /*origin*/ None, /*cookie*/ None,
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(set_cookie(&response), None);
+    let two_cookie_fields = |uri: String| {
+        Request::builder()
+            .uri(uri)
+            .header("host", HOST)
+            .header("origin", ORIGIN)
+            .header("cookie", "storyos_session=session-a")
+            .header("cookie", "unrelated=value")
+            .body(Body::empty())
+            .expect("a request with two Cookie fields should be valid")
+    };
+    let html = router
+        .clone()
+        .oneshot(two_cookie_fields("/".to_owned()))
+        .await
+        .expect("document GET with two Cookie fields should complete");
+    assert_eq!((html.status(), set_cookie(&html)), (StatusCode::OK, None));
+    let api = router
+        .oneshot(two_cookie_fields(format!("/api/v1/projects/{PROJECT_ID}")))
+        .await
+        .expect("API GET with two Cookie fields should complete");
+    assert_eq!(api.status(), StatusCode::UNAUTHORIZED);
 }

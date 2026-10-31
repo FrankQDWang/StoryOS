@@ -84,25 +84,6 @@ async fn a_combined_export_claim_takes_readable_work_before_archive_work() {
         .unwrap();
     assert_eq!(archive.get::<_, i64>(0), 0);
     assert!(archive.get::<_, bool>(1));
-    remove_export_work_rows(&admin).await;
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_combined_export_claim_falls_back_to_archive_work() {
-    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let store = PostgresProjectReader::new(&runtime_url);
-    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    remove_export_work_rows(&admin).await;
-    let archive_export_id = admit_archive_export(&store, &scope).await;
 
     let claimed = claim_next_export_work(&store)
         .await

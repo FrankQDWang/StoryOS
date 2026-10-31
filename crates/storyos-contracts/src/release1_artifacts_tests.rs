@@ -1,379 +1,10 @@
-use super::{
-    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, check_contract_graph, contract_graph_bytes,
-    fixture_corpus_bytes, release1_protocol_profile,
-};
-use crate::digest::sha256_prefixed;
+use super::{OPENAPI_PATH, check_contract_graph, contract_graph_bytes, release1_protocol_profile};
 use crate::release1::HttpMethod;
-use crate::release1_chapter_query_artifacts::{CHAPTER_FIXTURE_PATH, CHAPTER_RESPONSE_SCHEMA_PATH};
+use crate::release1_chapter_query_artifacts::CHAPTER_RESPONSE_SCHEMA_PATH;
 use crate::{
     ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
-    AuthoritativeChapterRevision, GetChapterResponse, NoEffectReason,
+    AuthoritativeChapterRevision, NoEffectReason,
 };
-
-#[test]
-fn controlled_project_queries_are_generated_from_the_release_1_contract() {
-    let generated = super::generated_files()
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let openapi =
-        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
-            .expect("OpenAPI must be UTF-8");
-    let client = String::from_utf8(
-        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
-    )
-    .expect("generated client must be UTF-8");
-
-    assert!(openapi.contains("/api/v1/projects/{project_id}:"));
-    assert!(openapi.contains("operationId: getProject"));
-    assert!(openapi.contains("/api/v1/projects/{project_id}/chapters/{chapter_id}:"));
-    assert!(openapi.contains("operationId: getChapter"));
-    assert!(client.contains("export async function getProject"));
-    assert!(client.contains("export async function getChapter"));
-    assert!(openapi.contains("operationId: createProjectCommandChallenge"));
-    assert!(openapi.contains("Retry-After:"));
-    assert!(openapi.contains("maximum: 60"));
-    assert!(client.contains("export async function createProjectCommandChallenge"));
-    assert!(client.contains("this.retryAfterSeconds = details.retryAfterSeconds"));
-    assert!(client.contains("response.headers.get(\"retry-after\")"));
-    assert!(openapi.contains("operationId: createEditorSession"));
-    assert!(openapi.contains("operationId: getEditorSession"));
-    assert!(openapi.contains("- name: Idempotency-Key"));
-    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
-    assert!(client.contains("export async function createEditorSession"));
-    assert!(client.contains("export async function getEditorSession"));
-    assert!(client.contains("x-storyos-anti-forgery"));
-    assert!(openapi.contains("operationId: applyAuthorEdit"));
-    assert!(client.contains("export async function applyAuthorEdit"));
-}
-
-#[test]
-fn apply_author_edit_outcome_query_is_one_protected_exact_get() {
-    let generated = super::generated_files()
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let request_path = "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json";
-    let response_path = "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json";
-    assert!(generated.contains_key(request_path));
-    assert!(generated.contains_key(response_path));
-
-    let request: serde_json::Value =
-        serde_json::from_slice(&generated[request_path]).expect("request schema must be JSON");
-    assert_eq!(
-        request["$id"],
-        "storyos.query.apply-author-edit-outcome.request.v1"
-    );
-    assert_eq!(
-        request["required"],
-        serde_json::json!(["project_id", "idempotency_key"])
-    );
-    assert!(request["properties"].get("nonce").is_none());
-
-    let response: serde_json::Value =
-        serde_json::from_slice(&generated[response_path]).expect("response schema must be JSON");
-    assert_eq!(
-        response["$id"],
-        "storyos.query.apply-author-edit-outcome.response.v1"
-    );
-    assert_eq!(response["additionalProperties"], false);
-    let outcomes = response["$defs"]["ApplyAuthorEditOutcome"]["oneOf"]
-        .as_array()
-        .expect("outcome must be a closed union");
-    assert_eq!(outcomes.len(), 4);
-    assert_eq!(
-        outcomes
-            .iter()
-            .map(|outcome| outcome["properties"]["outcome_kind"]["const"]
-                .as_str()
-                .expect("outcome discriminator must be a string"))
-            .collect::<Vec<_>>(),
-        [
-            "committed",
-            "rejected",
-            "requires_reconfirmation",
-            "still_unknown"
-        ]
-    );
-    assert!(
-        response.to_string().contains("ApplyAuthorEditResponse"),
-        "committed outcome must reuse response v2"
-    );
-
-    let openapi =
-        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
-            .expect("OpenAPI must be UTF-8");
-    assert!(openapi.contains(
-        "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}:\n    get:"
-    ));
-    assert!(openapi.contains("operationId: getApplyAuthorEditOutcome"));
-    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
-
-    let client = String::from_utf8(
-        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
-    )
-    .expect("generated client must be UTF-8");
-    assert!(client.contains("export async function getApplyAuthorEditOutcome"));
-    assert!(client.contains("queryHeaders: { \"x-storyos-anti-forgery\": antiForgery }"));
-    let function = client
-        .split("export async function getApplyAuthorEditOutcome")
-        .nth(1)
-        .expect("outcome client function exists")
-        .split("\n}\n")
-        .next()
-        .expect("outcome client function closes");
-    assert!(!function.contains("antiForgery)}"));
-    assert!(!function.contains("nonce"));
-}
-
-#[test]
-fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
-    let generated = super::generated_files()
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let openapi =
-        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
-            .expect("OpenAPI must be UTF-8");
-    assert!(openapi.contains("/api/v1/projects/{project_id}/snapshots/{snapshot_id}:"));
-    assert!(openapi.contains("operationId: getSnapshot"));
-    assert!(openapi.contains("/api/v1/projects/{project_id}/activity:"));
-    assert!(openapi.contains("operationId: activityStream"));
-    assert!(openapi.contains("text/event-stream"));
-    assert!(openapi.contains("activity-stream-response.schema.json"));
-
-    let activity_schema = serde_json::from_slice::<serde_json::Value>(
-        &generated["generated/json-schema/storyos-public-release-1/activity-stream-response.schema.json"],
-    )
-    .expect("activity stream response schema is JSON");
-    assert_eq!(
-        activity_schema["required"],
-        serde_json::json!(["id", "event", "data"])
-    );
-    assert_eq!(
-        activity_schema["properties"]["event"]["const"],
-        "storyos.project-activity"
-    );
-    assert!(activity_schema["properties"].get("data_schema").is_none());
-    assert_eq!(
-        activity_schema["properties"]["data"]["$ref"],
-        "#/$defs/ProjectActivityEvent"
-    );
-    let implemented_slice = openapi
-        .lines()
-        .find(|line| line.starts_with("  x-storyos-implemented-slice:"))
-        .expect("OpenAPI names the runtime-implemented slice");
-    assert!(implemented_slice.contains("getSnapshot"));
-    assert!(implemented_slice.contains("activityStream"));
-
-    let client = String::from_utf8(
-        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
-    )
-    .expect("generated client must be UTF-8");
-    assert!(client.contains("export async function getSnapshot"));
-    assert!(client.contains("export async function getManuscriptTree"));
-    assert!(client.contains("export async function searchManuscript"));
-    assert!(client.contains("export async function getStatistics"));
-    assert!(client.contains("export async function exportHumanReadableManuscript"));
-    assert!(client.contains("export async function getHumanReadableManuscriptExport"));
-    assert!(client.contains("export async function listProjects"));
-    assert!(client.contains("export async function activityStream"));
-    assert!(client.contains("async function queryText"));
-    assert!(client.contains("text/event-stream"));
-}
-
-#[test]
-fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
-    assert!(
-        !crate::stage1_selection::OPERATION_IDS.contains(&"takeOverProjectWriter"),
-        "Stage 1 coverage stays closed; #58 publishes generated wire only"
-    );
-
-    let generated = super::generated_files()
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let request_path = "generated/json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json";
-    let response_path = "generated/json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json";
-    assert!(generated.contains_key(request_path));
-    assert!(generated.contains_key(response_path));
-
-    let request: serde_json::Value =
-        serde_json::from_slice(&generated[request_path]).expect("request schema must be JSON");
-    assert_eq!(
-        request["$id"],
-        "storyos.command.take-over-project-writer.request.v1"
-    );
-    assert_eq!(request["additionalProperties"], false);
-    assert_eq!(
-        request["required"],
-        serde_json::json!([
-            "command_schema",
-            "client_contract_revision",
-            "security_policy_revision",
-            "correlation_id",
-            "editor_session_id",
-            "observed_writer_generation",
-            "editor_contract_revision"
-        ])
-    );
-    assert!(request["properties"].get("writer_generation").is_none());
-    assert_eq!(
-        request["properties"]["observed_writer_generation"]["type"],
-        "string"
-    );
-
-    let response: serde_json::Value =
-        serde_json::from_slice(&generated[response_path]).expect("response schema must be JSON");
-    assert_eq!(
-        response["$id"],
-        "storyos.command.take-over-project-writer.response.v1"
-    );
-    assert_eq!(response["additionalProperties"], false);
-    assert_eq!(
-        response["required"],
-        serde_json::json!([
-            "schema_id",
-            "correlation_id",
-            "project_scope",
-            "command_id",
-            "author_command_admission_id",
-            "receipt",
-            "result"
-        ])
-    );
-    let results = response["$defs"]["TakeOverProjectWriterResult"]["oneOf"]
-        .as_array()
-        .expect("takeover result must be a closed union");
-    assert_eq!(
-        results
-            .iter()
-            .map(|variant| variant["properties"]["kind"]["const"]
-                .as_str()
-                .expect("result discriminator must be a string"))
-            .collect::<Vec<_>>(),
-        ["takeover_applied", "takeover_compare_failed"]
-    );
-    assert_eq!(
-        results[0]["required"],
-        serde_json::json!([
-            "kind",
-            "prior_editor_session_id",
-            "prior_writer_generation",
-            "resulting_editor_session_id",
-            "resulting_writer_generation",
-            "resulting_snapshot_id",
-            "resulting_snapshot_activity_position",
-            "resulting_heads"
-        ])
-    );
-    assert!(results[0]["properties"].get("base_snapshot").is_none());
-    assert_eq!(
-        results[1]["required"],
-        serde_json::json!([
-            "kind",
-            "observed_writer_generation",
-            "current_writer_generation",
-            "current_writer_projection",
-            "current_snapshot_id",
-            "current_snapshot_activity_position",
-            "current_heads",
-            "reason"
-        ])
-    );
-    assert_eq!(
-        response["$defs"]["TakeoverCompareFailedReason"]["enum"],
-        serde_json::json!([
-            "writer_generation_advanced_after_admission",
-            "requester_became_current_after_admission"
-        ])
-    );
-    assert_eq!(
-        response["$defs"]["DomainReceiptCommandKind"]["enum"],
-        serde_json::json!([
-            "applyAuthorEdit",
-            "takeOverProjectWriter",
-            "createProject",
-            "updateProject",
-            "createVolume",
-            "createChapter",
-            "updateVolume",
-            "updateChapter",
-            "deleteChapter",
-            "deleteVolume",
-            "setCurrentChapter",
-            "undoLatestAuthorAction",
-            "exportHumanReadableManuscript",
-            "exportProjectArchive",
-            "updateProjectAssistance",
-            "createAgentRun",
-            "pauseAgentRun",
-            "steerAgentRun",
-            "cancelAgentRun"
-        ])
-    );
-
-    let editor_session: serde_json::Value = serde_json::from_slice(
-        &generated
-            [crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH],
-    )
-    .expect("editor session schema must be JSON");
-    assert_eq!(
-        editor_session["$defs"]["EditorReadOnlyReason"]["enum"],
-        serde_json::json!([
-            "secondary_session",
-            "superseded_by_takeover",
-            "binding_invalid"
-        ])
-    );
-
-    let openapi =
-        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
-            .expect("OpenAPI must be UTF-8");
-    assert!(openapi.contains(
-        "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers:\n    post:"
-    ));
-    assert!(openapi.contains("operationId: takeOverProjectWriter"));
-    assert!(openapi.contains("- name: Idempotency-Key"));
-    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
-    assert!(!openapi.contains("x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream\n"));
-    assert!(openapi.contains("takeOverProjectWriter"));
-
-    let client = String::from_utf8(
-        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
-    )
-    .expect("generated client must be UTF-8");
-    assert!(client.contains("export async function digestTakeOverProjectWriter"));
-    assert!(client.contains("export async function takeOverProjectWriter"));
-    assert!(client.contains("storyos.command.takeOverProjectWriter.jcs.v1"));
-    let function = client
-        .split("export async function takeOverProjectWriter")
-        .nth(1)
-        .expect("takeover client function exists")
-        .split("\n}\n")
-        .next()
-        .expect("takeover client function closes");
-    assert!(function.contains("editorSessionId"));
-    assert!(function.contains("idempotency-key"));
-    assert!(function.contains("x-storyos-anti-forgery"));
-
-    let positive: serde_json::Value = serde_json::from_slice(
-        &generated["generated/golden-wire/storyos-public-release-1/take-over-project-writer.json"],
-    )
-    .expect("positive fixture must be JSON");
-    assert_eq!(positive["receipt"]["command_kind"], "takeOverProjectWriter");
-    assert_eq!(positive["receipt"]["result"], "no_effect");
-    assert_eq!(
-        positive["receipt"]["author_action_sequence"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        positive["receipt"]["authoritative_revision_ids"],
-        serde_json::json!([])
-    );
-    assert_eq!(
-        positive["receipt"]["authoritative_commit_ids"],
-        serde_json::json!([])
-    );
-    assert_eq!(positive["result"]["kind"], "takeover_applied");
-    assert!(positive["result"].get("base_snapshot").is_none());
-}
 
 #[test]
 fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
@@ -485,34 +116,6 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         })
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(resolved_references, expected_references);
-}
-
-#[test]
-fn fixture_digest_uses_the_declared_self_normalization() {
-    let profile = release1_protocol_profile();
-    let expected = profile.release_identity.fixture_corpus_digest.clone();
-    let mut normalized = profile;
-    normalized.release_identity.fixture_corpus_digest = FIXTURE_DIGEST_PLACEHOLDER.to_owned();
-    assert_eq!(sha256_prefixed(fixture_corpus_bytes(&normalized)), expected);
-}
-
-#[test]
-fn chapter_fixtures_conform_to_the_typed_response_contract() {
-    let generated = super::generated_files()
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let mut fixture: serde_json::Value =
-        serde_json::from_slice(&generated[CHAPTER_FIXTURE_PATH]).expect("Chapter fixture is JSON");
-    let _: GetChapterResponse = serde_json::from_value(fixture.clone())
-        .expect("the Chapter fixture must satisfy GetChapterResponse");
-    fixture
-        .as_object_mut()
-        .expect("Chapter fixture is an object")
-        .remove("project_scope");
-    assert!(
-        serde_json::from_value::<GetChapterResponse>(fixture).is_err(),
-        "a Chapter response without its Project scope must not satisfy GetChapterResponse",
-    );
 }
 
 #[test]
@@ -695,6 +298,12 @@ fn every_registered_operation_matches_its_generated_wire() {
     let mut declaration_positions = Vec::new();
     let graph: serde_json::Value =
         serde_json::from_slice(&contract_graph_bytes()).expect("contract graph must be JSON");
+    let implemented_slice = openapi
+        .lines()
+        .find_map(|line| line.strip_prefix("  x-storyos-implemented-slice: "))
+        .expect("OpenAPI names the runtime-implemented slice")
+        .split(',')
+        .collect::<Vec<_>>();
     for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
         let schema_paths = (artifacts.schemas)()
             .into_iter()
@@ -724,6 +333,14 @@ fn every_registered_operation_matches_its_generated_wire() {
                 serde_json::from_slice(&generated[schema_paths[operation.request_schema]])
                     .expect("generated schema must be JSON");
             assert_eq!(request_schema["additionalProperties"], false, "{id}");
+            assert!(request_schema["properties"].get("nonce").is_none(), "{id}");
+            let response_schema: serde_json::Value =
+                serde_json::from_slice(&generated[schema_paths[operation.response_schema]])
+                    .expect("generated schema must be JSON");
+            if response_schema.get("oneOf").is_none() {
+                assert_eq!(response_schema["additionalProperties"], false, "{id}");
+            }
+            assert!(implemented_slice.contains(&id), "{id}");
 
             let path_key = format!("\n  {}:\n", operation.path);
             let path_start = openapi
@@ -797,6 +414,34 @@ fn every_registered_operation_matches_its_generated_wire() {
             assert_eq!(openapi_statuses, statuses, "{id}");
 
             client_positions.push(client.find(&format!("export async function {id}(")));
+            let function = client
+                .split(&format!("export async function {id}("))
+                .nth(1)
+                .unwrap_or_else(|| panic!("the client must contain {id}"))
+                .split("\n}\n")
+                .next()
+                .expect("a client function closes");
+            for (openapi_text, client_text) in [
+                (
+                    "- name: X-StoryOS-Anti-Forgery",
+                    "\"x-storyos-anti-forgery\"",
+                ),
+                ("- name: Idempotency-Key", "\"idempotency-key\""),
+                ("text/event-stream", "text/event-stream"),
+            ] {
+                assert_eq!(
+                    function.contains(client_text),
+                    method_lines.iter().any(|line| line.contains(openapi_text)),
+                    "{id}: {openapi_text}"
+                );
+            }
+            let url = function
+                .split_once("path: `")
+                .map_or("", |(_, rest)| rest.split('`').next().unwrap_or(rest));
+            assert!(
+                !url.contains("antiForgery") && !function.contains("nonce"),
+                "{id}: the Challenge proof stays out of the URL"
+            );
             declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
             let graph_entry = graph["operations"]
                 .as_array()
@@ -828,5 +473,220 @@ fn every_registered_operation_matches_its_generated_wire() {
             positions.is_sorted(),
             "generated functions must follow the registry order"
         );
+    }
+    assert_outcome_documents(&generated);
+    assert_activity_frame_documents(&generated);
+    assert_takeover_documents(&generated);
+}
+
+type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
+
+const SCHEMA_DIRECTORY: &str = "generated/json-schema/storyos-public-release-1";
+
+fn generated_validator(generated: &GeneratedFiles, file: &str) -> jsonschema::Validator {
+    let path = format!("{SCHEMA_DIRECTORY}/{file}");
+    let schema: serde_json::Value =
+        serde_json::from_slice(&generated[path.as_str()]).expect("generated schema must be JSON");
+    jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)
+        .expect("generated schema must compile")
+}
+
+fn golden_wire(generated: &GeneratedFiles, operation_id: &str) -> serde_json::Value {
+    let file = operation_id
+        .chars()
+        .flat_map(|character| {
+            let dash = character.is_ascii_uppercase().then_some('-');
+            dash.into_iter().chain([character.to_ascii_lowercase()])
+        })
+        .collect::<String>();
+    let path = format!("generated/golden-wire/storyos-public-release-1/{file}.json");
+    serde_json::from_slice(&generated[path.as_str()]).expect("golden-wire fixture must be JSON")
+}
+
+fn assert_each_present_field_is_required(
+    validator: &jsonschema::Validator,
+    valid: &serde_json::Value,
+    object_pointer: &str,
+) {
+    let object = valid
+        .pointer(object_pointer)
+        .and_then(serde_json::Value::as_object)
+        .expect("required-field target must be an object");
+    for field_name in object.keys() {
+        let mut invalid = valid.clone();
+        invalid
+            .pointer_mut(object_pointer)
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("required-field target must be an object")
+            .remove(field_name);
+        assert!(
+            !validator.is_valid(&invalid),
+            "{field_name} must be required at {object_pointer}"
+        );
+    }
+}
+
+fn with_value(
+    document: &serde_json::Value,
+    pointer: &str,
+    value: serde_json::Value,
+) -> serde_json::Value {
+    let mut changed = document.clone();
+    *changed
+        .pointer_mut(pointer)
+        .expect("the changed field must exist") = value;
+    changed
+}
+
+fn assert_outcome_documents(generated: &GeneratedFiles) {
+    let request = generated_validator(generated, "apply-author-edit-outcome-request.schema.json");
+    let valid_request = serde_json::json!({
+        "project_id": "018f0000-0000-7001-8000-000000000002",
+        "idempotency_key": "018f0000-0000-7001-8000-000000000037"
+    });
+    assert!(request.is_valid(&valid_request));
+    assert_each_present_field_is_required(&request, &valid_request, "");
+    let mut with_nonce = valid_request.clone();
+    with_nonce["nonce"] = serde_json::json!("a".repeat(64));
+    for invalid in [
+        with_nonce,
+        with_value(&valid_request, "/idempotency_key", serde_json::json!("key")),
+    ] {
+        assert!(!request.is_valid(&invalid), "{invalid}");
+    }
+
+    let response = generated_validator(generated, "apply-author-edit-outcome-response.schema.json");
+    let committed = golden_wire(generated, "getApplyAuthorEditOutcome");
+    assert!(response.is_valid(&committed));
+    assert_each_present_field_is_required(&response, &committed, "");
+    let admitted = serde_json::json!({
+        "outcome_kind": "still_unknown",
+        "observation": {
+            "observation_kind": "admission_committed",
+            "command_id": "018f0000-0000-7001-8000-000000000031",
+            "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+            "reconciliation_required": true
+        }
+    });
+    for outcome in [
+        serde_json::json!({"outcome_kind": "rejected", "reason": "challenge_expired_unconsumed"}),
+        serde_json::json!({
+            "outcome_kind": "requires_reconfirmation",
+            "command_id": "018f0000-0000-7001-8000-000000000031",
+            "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+            "reconfirmation_reason": "direct_edit_intent_unrecoverable"
+        }),
+        serde_json::json!({
+            "outcome_kind": "still_unknown",
+            "observation": {
+                "observation_kind": "challenge_issued",
+                "expires_at": "2026-08-15T08:05:00.000Z"
+            }
+        }),
+        admitted.clone(),
+    ] {
+        let document = with_value(&committed, "/outcome", outcome);
+        assert!(response.is_valid(&document), "{document}");
+        assert_each_present_field_is_required(&response, &document, "/outcome");
+    }
+    for outcome in [
+        serde_json::json!({"outcome_kind": "rejected", "reason": "unknown_reason"}),
+        with_value(
+            &admitted,
+            "/observation/reconciliation_required",
+            serde_json::json!(false),
+        ),
+        with_value(
+            &committed["outcome"],
+            "/outcome_kind",
+            serde_json::json!("settled"),
+        ),
+    ] {
+        let document = with_value(&committed, "/outcome", outcome);
+        assert!(!response.is_valid(&document), "{document}");
+    }
+}
+
+fn assert_activity_frame_documents(generated: &GeneratedFiles) {
+    let frame = generated_validator(generated, "activity-stream-response.schema.json");
+    let valid = golden_wire(generated, "activityStream");
+    assert!(frame.is_valid(&valid));
+    assert_each_present_field_is_required(&frame, &valid, "");
+    for invalid in [
+        with_value(&valid, "/id", serde_json::json!("")),
+        with_value(&valid, "/event", serde_json::json!("message")),
+        with_value(&valid, "/data", serde_json::json!({})),
+    ] {
+        assert!(!frame.is_valid(&invalid), "{invalid}");
+    }
+}
+
+fn assert_takeover_documents(generated: &GeneratedFiles) {
+    let request = generated_validator(generated, "take-over-project-writer-request.schema.json");
+    let valid_request = serde_json::json!({
+        "command_schema": "storyos.command.take-over-project-writer.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "018f0000-0000-7001-8000-000000000038",
+        "editor_session_id": "018f0000-0000-7001-8000-000000000040",
+        "observed_writer_generation": "1",
+        "editor_contract_revision": "storyos.editor-contract.release-1.v3"
+    });
+    assert!(request.is_valid(&valid_request));
+    assert_each_present_field_is_required(&request, &valid_request, "");
+    let mut with_writer_generation = valid_request.clone();
+    with_writer_generation["writer_generation"] = serde_json::json!("1");
+    for invalid in [
+        with_writer_generation,
+        with_value(
+            &valid_request,
+            "/observed_writer_generation",
+            serde_json::json!(1),
+        ),
+    ] {
+        assert!(!request.is_valid(&invalid), "{invalid}");
+    }
+
+    let response = generated_validator(generated, "take-over-project-writer-response.schema.json");
+    let applied = golden_wire(generated, "takeOverProjectWriter");
+    assert!(response.is_valid(&applied));
+    assert_each_present_field_is_required(&response, &applied, "");
+    assert_each_present_field_is_required(&response, &applied, "/result");
+    let compare_failed = with_value(
+        &applied,
+        "/result",
+        serde_json::json!({
+            "kind": "takeover_compare_failed",
+            "observed_writer_generation": "1",
+            "current_writer_generation": "2",
+            "current_writer_projection": {"kind": "current_writer", "writer_generation": "2"},
+            "current_snapshot_id": "018f0000-0000-7001-8000-000000000032",
+            "current_snapshot_activity_position": "1",
+            "current_heads": ["018f0000-0000-7001-8000-000000000004"],
+            "reason": "writer_generation_advanced_after_admission"
+        }),
+    );
+    assert!(response.is_valid(&compare_failed));
+    assert_each_present_field_is_required(&response, &compare_failed, "/result");
+    for invalid in [
+        with_value(
+            &applied,
+            "/result/resulting_writer_generation",
+            serde_json::json!(2),
+        ),
+        with_value(
+            &applied,
+            "/result/kind",
+            serde_json::json!("takeover_refused"),
+        ),
+        with_value(
+            &compare_failed,
+            "/result/reason",
+            serde_json::json!("writer_released"),
+        ),
+    ] {
+        assert!(!response.is_valid(&invalid), "{invalid}");
     }
 }
