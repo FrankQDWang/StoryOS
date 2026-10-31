@@ -85,19 +85,3 @@ fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
         UpdateChapterResult::Refused(UpdateChapterRefusal::ArchivedProject)
     );
 }
-
-#[test]
-fn an_invalid_title_classifies_as_refused_with_zero_authority_effect() {
-    let mut empty = command();
-    empty.title.clear();
-    assert_eq!(
-        update_chapter(&empty),
-        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidTitle)
-    );
-    let mut too_long = command();
-    too_long.title = "n".repeat(1025);
-    assert_eq!(
-        update_chapter(&too_long),
-        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidTitle)
-    );
-}

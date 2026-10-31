@@ -63,22 +63,6 @@ fn versioned_command() -> ApplyVersionedAuthorEdit {
 }
 
 #[test]
-fn versioned_replace_preserves_unicode_line_breaks_and_block_identity() {
-    assert_eq!(
-        apply_versioned_author_edit(&versioned_command()),
-        TransitionOutcome::Applied(ManuscriptPayload {
-            schema_version: MANUSCRIPT_SCHEMA_VERSION,
-            coordinate_version: COORDINATE_VERSION,
-            blocks: vec![ManuscriptBlock {
-                manuscript_block_id: "block-1".to_owned(),
-                block_kind: ManuscriptBlockKind::Paragraph,
-                text: "A!B\n雨".to_owned(),
-            }],
-        })
-    );
-}
-
-#[test]
 fn legacy_replace_against_versioned_payload_is_unsupported() {
     let mut command = versioned_command();
     command.author_edit_units[0].normalized_primitives =

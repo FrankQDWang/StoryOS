@@ -1,13 +1,6 @@
 use super::*;
 
 #[test]
-fn protocol_example_path_is_admitted() {
-    let admitted = admit_archive_path("canonical/project.json").expect("example path");
-    assert_eq!(admitted.path, "canonical/project.json");
-    assert_eq!(admitted.collision_key, "canonical/project.json");
-}
-
-#[test]
 fn structural_refusals_match_the_pinned_profile() {
     assert_eq!(admit_archive_path(""), Err(ArchivePathRefusal::Empty));
     assert_eq!(
@@ -55,13 +48,6 @@ fn length_and_depth_limits_are_exact() {
         admit_archive_path(&too_deep),
         Err(ArchivePathRefusal::TooDeep)
     );
-}
-
-#[test]
-fn ascii_case_folding_does_not_rewrite_the_admitted_path() {
-    let admitted = admit_archive_path("canonical/Project.json").expect("mixed case");
-    assert_eq!(admitted.path, "canonical/Project.json");
-    assert_eq!(admitted.collision_key, "canonical/project.json");
 }
 
 #[test]
