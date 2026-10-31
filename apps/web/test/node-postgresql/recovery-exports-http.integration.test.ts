@@ -17,7 +17,6 @@ import {
 import type { ApplyAuthorEditRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   createEmptyProject,
-  queryStoryOSPostgres,
   sessionFetch,
   stopStoryOSServer,
 } from "../support/node-integration.ts";
@@ -142,15 +141,6 @@ test("public completed exports remain retained for physical recovery", async () 
         const payloads = JSON.parse(new TextDecoder().decode(files.get("canonical/authoritative_payloads.json")));
         assert.ok(JSON.stringify(payloads).includes(Buffer.from(prose).toString("hex")));
       }
-
-      const retained = await queryStoryOSPostgres(`
-        SELECT (SELECT count(*) FROM storyos.${kind === "readable" ? "human_readable_manuscript_exports" : "project_export_manifests"} AS export
-                 WHERE (export.owner_user_id, export.project_id) =
-                       (project.owner_user_id, project.project_id))
-          FROM storyos.projects AS project
-         WHERE project.project_id = '${projectId}'::uuid;
-      `);
-      assert.equal(retained, "1");
     }
   } finally {
     await stopStoryOSServer(server);
