@@ -39,8 +39,9 @@ fact.
 The exact baseline is intentionally recorded here so that a later proof cannot
 silently mix a newer contract revision, a different route catalog, or a
 different persistence identity with this crosswalk. A future release must
-create a new contract revision and re-run the source, generated, wire, and
-crosswalk checks.
+create a new contract revision and re-run the source, generated, and wire
+checks. The historical crosswalk evidence is on the tag
+`evidence/pre-cleanup-round-2`.
 
 ### 1.2 What a deterministic gate may claim
 
