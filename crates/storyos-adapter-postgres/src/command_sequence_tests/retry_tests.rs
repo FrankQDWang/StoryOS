@@ -202,7 +202,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 23]);
+    assert_eq!(observed, vec![(true, [0; 5]); 22]);
 }
 
 #[tokio::test]

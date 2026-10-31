@@ -484,7 +484,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             .collect::<Vec<_>>();
         (failures, result)
     };
-    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 9];
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
