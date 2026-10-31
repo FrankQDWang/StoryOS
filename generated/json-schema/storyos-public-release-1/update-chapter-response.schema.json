@@ -163,7 +163,6 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject",
         "createVolume",
         "createChapter",
         "updateVolume",
@@ -350,7 +349,6 @@
     },
     "UpdateChapterRefusalReason": {
       "enum": [
-        "archived_project",
         "invalid_title",
         "invalid_order",
         "invalid_chapter_join"

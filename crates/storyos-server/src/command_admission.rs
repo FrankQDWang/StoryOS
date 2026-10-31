@@ -116,7 +116,6 @@ project_command_request!(contracts::CreateChapterRequest, nested create_chapter_
 project_command_request!(contracts::UpdateChapterRequest, nested update_chapter_input);
 project_command_request!(contracts::DeleteChapterRequest, nested delete_chapter_input);
 project_command_request!(contracts::UpdateProjectRequest, nested update_project_input);
-project_command_request!(contracts::ArchiveProjectRequest, nested archive_project_input);
 project_command_request!(contracts::SetCurrentChapterRequest, nested set_current_chapter_input);
 project_command_request!(
     contracts::UpdateProjectAssistanceRequest,

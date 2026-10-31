@@ -1,6 +1,13 @@
 //! Pure Core classification for Project Export Archive admission.
 
-use super::{ProjectLifecycle, ProjectPresence};
+use super::ProjectPresence;
+
+/// The Project lifecycle that the export admissions read. ADR 0078 keeps it for the exports only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProjectLifecycle {
+    Active,
+    Archived,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportProjectArchive {

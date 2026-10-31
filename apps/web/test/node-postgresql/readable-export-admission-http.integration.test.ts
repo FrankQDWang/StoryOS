@@ -22,14 +22,6 @@ function exportInput(project: TestProject): CommandInput<"exportHumanReadableMan
   } };
 }
 
-async function archive(project: TestProject) {
-  const archived = await project.send("archiveProject", { request: {
-    command_schema: "storyos.command.archive-project.request.v1",
-    archive_project_input: { expected_project_revision: "1", ...project.binding() },
-  } });
-  assert.equal(archived.response.effect.kind, "authoritative_applied");
-}
-
 /** Admits one export and returns its exact retry and a reader of its operation. */
 async function admitted(project: TestProject) {
   const sent = await project.send("exportHumanReadableManuscript", exportInput(project));
@@ -48,7 +40,7 @@ async function settled(read: () => ReturnType<typeof getHumanReadableManuscriptE
   }, (page) => page.status !== "in_progress", { attempts: 16, intervalMs: 0 });
 }
 
-test("exportHumanReadableManuscript admits, replays, and refuses", async () => {
+test("exportHumanReadableManuscript admits and replays", async () => {
   const project = await createProject(server, { title: "Readable Export Novel" });
   const { sent, exportId, read } = await admitted(project);
   const { effect } = sent.response;
@@ -76,12 +68,6 @@ test("exportHumanReadableManuscript admits, replays, and refuses", async () => {
   assert.equal(foreignRead.status, 404);
   assert.ok(!foreignRead.body.includes(USER_A));
   await assertForeignRefused(project, "exportHumanReadableManuscript", exportInput(project));
-
-  await archive(project);
-  const refused = await project.challenge("exportHumanReadableManuscript", exportInput(project));
-  assert.equal((await problemOf(refused.send())).status, 422);
-  assert.equal((await problemOf(refused.send())).status, 422);
-  assert.equal((await read()).status, "in_progress");
 });
 
 test("exportHumanReadableManuscript replays its first acknowledgement after later changes, settlement, and a Server restart",
@@ -119,16 +105,4 @@ test("the in-process Worker settles an admitted human-readable export to ready",
   } finally {
     await worker.stop();
   }
-});
-
-test("the Worker settles failed when the Project is archived after admission", async () => {
-  const project = await createProject(server, { title: "Archive After Novel" });
-  const { sent, read } = await admitted(project);
-  await archive(project);
-  assert.equal((await read()).status, "in_progress");
-  const failed = await settled(read);
-  assert.equal(failed.status, "failed");
-  assert.equal("manuscript_utf8" in failed, false);
-  assert.deepEqual(await sent.command.send(), { response: sent.response, body: sent.body });
-  assert.equal((await read()).status, "failed");
 });

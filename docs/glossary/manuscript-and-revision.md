@@ -25,7 +25,7 @@ The Project Scope-local generation of Authoritative manuscript structure. A new 
 _Avoid_: Authoritative Revision, Canonical Sibling Order, Canonical Query Snapshot, physical tree_order
 
 **Canonical Manuscript Tree**:
-The current live Volume and Chapter hierarchy under one Project Scope. A read uses only the latest Canonical Query Snapshot that committed with those facts. A stale Snapshot is not a historical tree. An archived Project has no readable tree, and its tree query gives HTTP 404 `resource_unavailable` ([ADR 0066](../adr/0066-record-the-answers-to-the-reference-model-contract-questions.md)). Its Project query stays readable.
+The current live Volume and Chapter hierarchy under one Project Scope. A read uses only the latest Canonical Query Snapshot that committed with those facts. A stale Snapshot is not a historical tree.
 _Avoid_: Embedded Snapshot tree, versioned historical tree, live rows beside an older Snapshot
 
 **Structural Authority Settlement**:

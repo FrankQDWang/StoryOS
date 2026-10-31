@@ -103,13 +103,10 @@ assert_mixed_populated_stays_separate() {
   fi
 }
 
-archived_export_facts() {
+retained_export_facts() {
   export_container=$1
   docker exec "$export_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-    "SELECT project.title || '|' || project.project_id || '|' || project.lifecycle_state || '|' ||
-            (SELECT count(*) FROM storyos.project_archival_decisions AS decision
-              WHERE (decision.owner_user_id, decision.project_id) =
-                    (project.owner_user_id, project.project_id)) || '|' ||
+    "SELECT project.title || '|' || project.project_id || '|' ||
             coalesce((SELECT export.export_id || ':' || export.content_sha256 || ':' ||
                              encode(convert_to(export.manuscript_utf8, 'UTF8'), 'hex')
                         FROM storyos.human_readable_manuscript_exports AS export
@@ -125,7 +122,7 @@ archived_export_facts() {
               WHERE (manifest.owner_user_id, manifest.project_id) =
                     (project.owner_user_id, project.project_id)), '')
        FROM storyos.projects AS project
-      WHERE project.title IN ('Recovery Readable Archived', 'Recovery Archive Archived')
+      WHERE project.title IN ('Recovery Readable Export', 'Recovery Archive Export')
       ORDER BY project.title"
 }
 

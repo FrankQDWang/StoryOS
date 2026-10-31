@@ -1,12 +1,11 @@
 //! Pure Core classification for Set Current Chapter.
 
-use super::{ChapterJoin, ProjectLifecycle, TransitionOutcome};
+use super::{ChapterJoin, TransitionOutcome};
 use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SetCurrentChapter {
     pub chapter_join: ChapterJoin,
-    pub current_lifecycle: ProjectLifecycle,
     pub current_chapter_id: Option<String>,
     pub expected_current_chapter_id: String,
     pub target_chapter_id: String,
@@ -35,7 +34,6 @@ pub enum SetCurrentChapterConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SetCurrentChapterRefusal {
-    ArchivedProject,
     InvalidChapterJoin,
     EmptyProject,
 }
@@ -46,16 +44,12 @@ reason_codes!(SetCurrentChapterConflict {
     WrongTargetHead => "wrong_target_head",
 });
 reason_codes!(SetCurrentChapterRefusal {
-    ArchivedProject => "archived_project",
     InvalidChapterJoin => "invalid_chapter_join",
     EmptyProject => "empty_project",
 });
 
 /// Classify one Set Current Chapter against Scope, current Chapter, and target Head.
 pub fn set_current_chapter(command: &SetCurrentChapter) -> SetCurrentChapterResult {
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return TransitionOutcome::Refused(SetCurrentChapterRefusal::ArchivedProject);
-    }
     if command.chapter_join == ChapterJoin::Invalid || command.target_chapter_id.is_empty() {
         return TransitionOutcome::Refused(SetCurrentChapterRefusal::InvalidChapterJoin);
     }

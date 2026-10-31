@@ -4,7 +4,6 @@ use storyos_application::{
     GetManuscriptTree, ProjectId, ProjectScope, UserId, create_project, get_manuscript_tree,
     issue_create_project_challenge,
 };
-use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -17,8 +16,6 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         .lock()
         .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
     let issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000610", "0610");
@@ -67,23 +64,6 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         )
         .await
         .unwrap(),
-        GetManuscriptTree::Missing
-    );
-
-    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        admin_connection.await.unwrap();
-    });
-    admin
-        .execute(
-            "UPDATE storyos.projects SET lifecycle_state = 'archived'
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER_A, &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        get_manuscript_tree(&store, &scope).await.unwrap(),
         GetManuscriptTree::Missing
     );
 }

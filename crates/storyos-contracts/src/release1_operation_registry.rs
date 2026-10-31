@@ -156,7 +156,6 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_project_query_artifacts::ARTIFACTS,
     &crate::release1_update_project_artifacts::ARTIFACTS,
     &crate::release1_project_assistance_artifacts::ARTIFACTS,
-    &crate::release1_archive_project_artifacts::ARTIFACTS,
     &crate::release1_editor_session_artifacts::ARTIFACTS,
     &crate::release1_takeover_artifacts::ARTIFACTS,
     &crate::release1_create_volume_artifacts::ARTIFACTS,

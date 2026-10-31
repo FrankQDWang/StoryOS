@@ -1019,72 +1019,6 @@
       "wire_owner": "protocol"
     },
     {
-      "action_class": "explicit_project_command",
-      "activity": {
-        "no_effect": [],
-        "pre_admission": "none",
-        "success": [
-          "storyos.event.project-archival-changed.v1"
-        ],
-        "visibility": "only after the durable transition or async settlement named by the operation"
-      },
-      "admission": "author_command",
-      "editor": {
-        "session": "none",
-        "takeover": "none",
-        "writer_generation": "none"
-      },
-      "error_profile": "command_sync",
-      "fixtures": {
-        "positive": "storyos.golden.archiveProject.positive.v1"
-      },
-      "idempotency": "header_and_admission_record",
-      "kind": "command",
-      "method": "PUT",
-      "operation_id": "archiveProject",
-      "path": "/api/v1/projects/{project_id}/archival",
-      "preconditions": [
-        "server_derived_project_scope",
-        "expected_project_revision",
-        "project_not_deleted"
-      ],
-      "schemas": {
-        "request": "storyos.command.archive-project.request.v1",
-        "request_source": "protocol",
-        "response": "storyos.command.archive-project.response.v1",
-        "response_source": "protocol",
-        "semantic_source": "retention"
-      },
-      "semantic_owner": "retention",
-      "settlement": {
-        "acknowledgements": [
-          "committed",
-          "requires_reconfirmation"
-        ],
-        "http_statuses": [
-          200,
-          400,
-          401,
-          403,
-          404,
-          405,
-          409,
-          412,
-          413,
-          415,
-          422,
-          428,
-          429,
-          503
-        ],
-        "mode": "sync",
-        "operation_ref": null,
-        "settlement_query": null
-      },
-      "shape": "project:archive",
-      "wire_owner": "protocol"
-    },
-    {
       "action_class": "session_control",
       "activity": {
         "no_effect": [],
@@ -3806,7 +3740,6 @@
           "listProjects",
           "getProject",
           "updateProject",
-          "archiveProject",
           "getProjectAssistance",
           "updateProjectAssistance"
         ]

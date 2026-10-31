@@ -1,6 +1,6 @@
 //! Pure Core classification for author-initiated Chapter removal.
 
-use super::{ChapterJoin, ProjectLifecycle, TransitionOutcome};
+use super::{ChapterJoin, TransitionOutcome};
 use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,7 +22,6 @@ pub struct DeleteChapter {
     pub chapter_lifecycle: ChapterRemovalLifecycle,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
     pub chapter_id: String,
     pub current_chapter_id: Option<String>,
     pub ordered_active_chapter_ids: Vec<String>,
@@ -54,7 +53,6 @@ pub enum DeleteChapterConflict {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteChapterRefusal {
     InvalidChapterJoin,
-    ArchivedProject,
 }
 
 reason_codes!(DeleteChapterNoEffect {
@@ -67,16 +65,12 @@ reason_codes!(DeleteChapterConflict {
 
 reason_codes!(DeleteChapterRefusal {
     InvalidChapterJoin => "invalid_chapter_join",
-    ArchivedProject => "archived_project",
 });
 
 /// Classify one Chapter removal against exact Scope, join, revision, and remaining manuscript order.
 pub fn delete_chapter(command: &DeleteChapter) -> DeleteChapterResult {
     if command.chapter_join == ChapterJoin::Invalid {
         return DeleteChapterResult::Refused(DeleteChapterRefusal::InvalidChapterJoin);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return DeleteChapterResult::Refused(DeleteChapterRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
         return DeleteChapterResult::Conflicted(DeleteChapterConflict::StaleTreeRevision);

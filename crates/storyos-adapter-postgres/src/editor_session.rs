@@ -65,7 +65,6 @@ impl EditorSessionStore for PostgresProjectReader {
                        ON (counters.owner_user_id, counters.project_id) =
                           (project.owner_user_id, project.project_id)
                      WHERE project.owner_user_id = $1::text::uuid AND project.project_id = $2::text::uuid
-                       AND project.lifecycle_state = 'active'
                      RETURNING project_activity_position::text",
                     &[&request.project_scope.owner_user_id.as_ref(), &request.project_scope.project_id.as_ref(),
                       &request.snapshot_id, &request.editor_session_id.as_ref()],

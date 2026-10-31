@@ -28,8 +28,6 @@ async fn search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_
         .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
     let issue = create_project_issue(USER_A, "018f0000-0000-7001-8000-000000000d90", "0d90");
     let issued = issue_create_project_challenge(&store, &issue)
@@ -121,25 +119,6 @@ async fn search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_
         panic!("a later search must remain ready");
     };
     assert_eq!(after_page.projection_watermark, watermark);
-
-    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        admin_connection.await.unwrap();
-    });
-    admin
-        .execute(
-            "UPDATE storyos.projects SET lifecycle_state = 'archived'
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&USER_A, &scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        search_manuscript(&store, &scope, &manuscript_query("alpha"))
-            .await
-            .unwrap(),
-        SearchManuscript::Missing
-    );
 }
 
 const FIXTURE_USER: &str = "018f0000-0000-7001-8000-000000000001";

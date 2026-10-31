@@ -81,7 +81,6 @@ async function createThenBlur(options: {
         projects: [{
           project_scope: { owner_user_id: OWNER, project_id: PROJECT },
           title: "Listed Novel",
-          lifecycle: { kind: "active" },
           revision: "1",
           open: { kind: "empty" },
         }],

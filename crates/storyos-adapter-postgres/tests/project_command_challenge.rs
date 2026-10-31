@@ -281,13 +281,13 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
         },
         |value: &mut ProjectCommandChallengeBinding| value.method = "POST".to_owned(),
         |value: &mut ProjectCommandChallengeBinding| {
-            value.route_template = "/api/v1/projects/{project_id}/archival".to_owned()
+            value.route_template = "/api/v1/projects/{project_id}/assistance".to_owned()
         },
         |value: &mut ProjectCommandChallengeBinding| {
-            value.command_schema = "storyos.command.archive-project.request.v1".to_owned()
+            value.command_schema = "storyos.command.update-project-assistance.request.v1".to_owned()
         },
         |value: &mut ProjectCommandChallengeBinding| {
-            value.command_kind = "archiveProject".to_owned()
+            value.command_kind = "updateProjectAssistance".to_owned()
         },
         |value: &mut ProjectCommandChallengeBinding| {
             value.canonical_command_digest = format!(

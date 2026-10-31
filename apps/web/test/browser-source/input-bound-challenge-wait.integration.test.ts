@@ -82,7 +82,7 @@ function rateLimitedServer(scenario: ReturnType<typeof createBrowserScenario>,
         correlation_id: "018f0000-0000-7001-8000-000000000013",
         owner_user_id: OWNER,
         projects: [{ project_scope: { owner_user_id: OWNER, project_id: PROJECT }, title: "Project A",
-          lifecycle: { kind: "active" }, revision: "1", open: { kind: "current_chapter", current_chapter_id: CHAPTER } }],
+          revision: "1", open: { kind: "current_chapter", current_chapter_id: CHAPTER } }],
       });
     }
     if (path === `/api/v1/projects/${PROJECT}`) return jsonResponse(scenario.project);

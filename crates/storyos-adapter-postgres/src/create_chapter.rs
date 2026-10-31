@@ -114,7 +114,6 @@ impl ProjectCommand for CreateChapterInput {
             volume_join,
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
-            current_lifecycle: project.lifecycle,
             current_open: match project.current_chapter_id {
                 None => CreateChapterOpen::Empty,
                 Some(_) => CreateChapterOpen::CurrentChapter,

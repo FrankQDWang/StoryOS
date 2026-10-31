@@ -1,7 +1,5 @@
 use storyos_application::EditorSessionId;
-use storyos_application::{
-    ArchiveProjectInput, ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput,
-};
+use storyos_application::{ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::AssistanceAvailability;
 
@@ -41,13 +39,6 @@ pub(crate) const UPDATE_PROJECT: Route = Route {
     method: storyos_contracts::UPDATE_PROJECT_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
-};
-
-pub(crate) const ARCHIVE_PROJECT: Route = Route {
-    kind: "archiveProject",
-    method: storyos_contracts::ARCHIVE_PROJECT_METHOD,
-    path: storyos_contracts::ARCHIVE_PROJECT_PATH,
-    schema: storyos_contracts::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
 };
 
 /// One applicable writer takeover by a second Editor Session in a new Project.
@@ -90,18 +81,6 @@ pub(super) async fn update_project_call(
         expected_revision: 1,
     };
     issued(store, &scope, base + 9, &UPDATE_PROJECT, input).await
-}
-
-/// One applicable Archive Project in a new Project.
-pub(super) async fn archive_project_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<ArchiveProjectInput> {
-    let scope = seed_project(store, &format!("{base:04x}")).await;
-    let input = ArchiveProjectInput {
-        expected_revision: 1,
-    };
-    issued(store, &scope, base + 9, &ARCHIVE_PROJECT, input).await
 }
 
 #[tokio::test]

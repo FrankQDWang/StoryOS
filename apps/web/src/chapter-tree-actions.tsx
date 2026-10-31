@@ -16,7 +16,6 @@ export function ChapterTreeActions({
   expectedTreeRevision,
   selectedChapterId,
   onSelectChapter,
-  createEnabled,
   onRemoveChapter,
   baseUrl,
   fetchImpl,
@@ -32,7 +31,6 @@ export function ChapterTreeActions({
   expectedTreeRevision: string;
   selectedChapterId?: string | undefined;
   onSelectChapter?: ((chapterId: string) => void) | undefined;
-  createEnabled: boolean;
   onRemoveChapter?: ((chapterId: string) => void) | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -82,7 +80,7 @@ export function ChapterTreeActions({
     }).finally(() => { pending.current = false; setSaving(false); });
   };
   return (
-    <li data-chapter-id={chapterId} data-chapter-order={order} onContextMenu={createEnabled ? openMenu : undefined}>
+    <li data-chapter-id={chapterId} data-chapter-order={order} onContextMenu={openMenu}>
       {editing ? (
           <form
             data-rename-chapter={chapterId}
@@ -104,7 +102,7 @@ export function ChapterTreeActions({
         <button type="button" data-chapter-id={chapterId} data-chapter-title
           aria-current={chapterId === selectedChapterId} onClick={() => onSelectChapter(chapterId)}>{title}</button>
       )}
-      {createEnabled ? <button type="button" data-chapter-menu={chapterId} aria-label="章菜单" onClick={openMenu}>⋯</button> : null}
+      <button type="button" data-chapter-menu={chapterId} aria-label="章菜单" onClick={openMenu}>⋯</button>
       {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
         {creationActions}
         <button type="button" data-begin-rename-chapter={chapterId}

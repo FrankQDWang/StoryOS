@@ -68,7 +68,6 @@ pub enum DeleteVolumeConflictReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DeleteVolumeRefusalReason {
-    ArchivedProject,
     InvalidVolumeJoin,
     NonemptyVolume,
 }

@@ -129,21 +129,6 @@ export async function updateProjectAssistance({ projectId, request, idempotencyK
   return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/assistance`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
-export async function digestArchiveProject(request, cryptoImpl = globalThis.crypto) {
-  if (!request || typeof request !== "object") throw new TypeError("digestArchiveProject requires request");
-  const canonical = canonicalJson(request);
-  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return { algorithm: "sha256", profile: "storyos.command.archiveProject.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
-}
-
-export async function archiveProject({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
-  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("archiveProject requires projectId");
-  if (!request || typeof request !== "object") throw new TypeError("archiveProject requires request");
-  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("archiveProject requires security bindings");
-  return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/archival`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
-}
-
 export async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestCreateEditorSession requires request");
   const canonical = { client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision };

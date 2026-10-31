@@ -4,7 +4,7 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateProjectInput, UpdateProjectSettlement,
 };
 use storyos_core::{
-    ProjectLifecycle, TransitionOutcome, UpdateProject as CoreUpdateProject, UpdateProjectApplied,
+    TransitionOutcome, UpdateProject as CoreUpdateProject, UpdateProjectApplied,
     UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
     update_project as classify_update_project,
 };
@@ -51,11 +51,8 @@ impl ProjectCommand for UpdateProjectInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<Classification<Self>, ProjectCommandError> {
-        if project.lifecycle == ProjectLifecycle::Archived {
-            return Err(ProjectCommandError::BindingConflict);
-        }
         let row = client
             .query_one(
                 "SELECT title, revision::text FROM storyos.projects

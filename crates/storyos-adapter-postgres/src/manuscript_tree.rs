@@ -24,8 +24,7 @@ impl ManuscriptTreeReader for PostgresProjectReader {
                     "SELECT tree_revision::text
                        FROM storyos.projects
                       WHERE owner_user_id = $1::text::uuid
-                        AND project_id = $2::text::uuid
-                        AND lifecycle_state = 'active'",
+                        AND project_id = $2::text::uuid",
                     &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
                 )
                 .await

@@ -4,10 +4,8 @@ import { test } from "vitest";
 
 import {
   applyAuthorEdit,
-  archiveProject,
   createEditorSession,
   digestApplyAuthorEdit,
-  digestArchiveProject,
   digestCreateEditorSession,
   digestExportHumanReadableManuscript,
   digestExportProjectArchive,
@@ -26,7 +24,7 @@ import {
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, TestProject, TestServer, addVolume, challenged, settleOnce, startServer } from "../support/http-harness.ts";
 
-const prose = "The archived chapter keeps its own words.";
+const prose = "The recovered chapter keeps its own words.";
 
 async function addProse(command: { baseUrl: string; projectId: string; fetchImpl: typeof fetch }, suffix: string) {
   const { baseUrl, projectId, fetchImpl } = command;
@@ -71,13 +69,13 @@ async function addProse(command: { baseUrl: string; projectId: string; fetchImpl
   assert.equal(edited.effect.kind, "authoritative_applied");
 }
 
-test("public completed exports remain retained after lawful archive for physical recovery", async () => {
+test("public completed exports remain retained for physical recovery", async () => {
   const { baseUrl, server } = await startServer();
   try {
     const fetchImpl = sessionFetch(baseUrl, "session-a");
     for (const [kind, key, title] of [
-      ["readable", "e801", "Recovery Readable Archived"],
-      ["archive", "e802", "Recovery Archive Archived"],
+      ["readable", "e801", "Recovery Readable Export"],
+      ["archive", "e802", "Recovery Archive Export"],
     ] as const) {
       const projectId = await createEmptyProject({
         baseUrl,
@@ -134,7 +132,7 @@ test("public completed exports remain retained after lawful archive for physical
         const document = await getHumanReadableManuscriptExport({ ...command, exportId });
         assert.equal(document.status, "ready");
         if (document.status !== "ready") throw new Error("readable export did not settle");
-        assert.match(document.manuscript_utf8, /The archived chapter keeps its own words\./);
+        assert.match(document.manuscript_utf8, /The recovered chapter keeps its own words\./);
       } else {
         const response = await fetchImpl(`${baseUrl}/api/v1/projects/${projectId}/exports/${exportId}`, {
           headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' },
@@ -145,41 +143,14 @@ test("public completed exports remain retained after lawful archive for physical
         assert.ok(JSON.stringify(payloads).includes(Buffer.from(prose).toString("hex")));
       }
 
-      const archiveRequest = {
-        command_schema: "storyos.command.archive-project.request.v1" as const,
-        archive_project_input: {
-          ...BINDING,
-          expected_project_revision: "1",
-          correlation_id: `018f0000-0000-7001-8000-00000000${kind === "readable" ? "e841" : "e842"}`,
-        },
-      };
-      const archiveKey = `018f0000-0000-7001-8000-00000000${kind === "readable" ? "e851" : "e852"}`;
-      const archived = await challenged(baseUrl, fetchImpl, projectId, "PUT",
-        "/api/v1/projects/{project_id}/archival", archiveRequest.command_schema,
-        await digestArchiveProject(archiveRequest), archiveKey,
-        (antiForgery) => archiveProject({
-          ...command,
-          request: archiveRequest,
-          idempotencyKey: archiveKey,
-          antiForgery,
-        }));
-      assert.equal(archived.effect.kind, "authoritative_applied");
-      const retainedOperation = kind === "readable"
-        ? await getHumanReadableManuscriptExport({ ...command, exportId })
-        : await getExportOperation({ ...command, exportId });
-      assert.equal(retainedOperation.status, "ready");
       const retained = await queryStoryOSPostgres(`
-        SELECT project.lifecycle_state || '/' ||
-               (SELECT count(*) FROM storyos.project_archival_decisions AS decision
-                 WHERE (decision.owner_user_id, decision.project_id) =
-                       (project.owner_user_id, project.project_id)) || '/' ||
-               (SELECT count(*) FROM storyos.${kind === "readable" ? "human_readable_manuscript_exports" : "project_export_manifests"} AS export
+        SELECT (SELECT count(*) FROM storyos.${kind === "readable" ? "human_readable_manuscript_exports" : "project_export_manifests"} AS export
                  WHERE (export.owner_user_id, export.project_id) =
                        (project.owner_user_id, project.project_id))
           FROM storyos.projects AS project
          WHERE project.project_id = '${projectId}'::uuid;
       `);
-      assert.equal(retained, "archived/1/1");
+      assert.equal(retained, "1");
     }
   } finally {
     await stopStoryOSServer(server);

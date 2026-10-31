@@ -8,9 +8,7 @@ use storyos_application::{
     PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandEnvelope,
     ProjectCommandError, ReadableExportOperation, ReadableExportWorkStore, RefusableCommandError,
 };
-use storyos_core::{
-    ExportHumanReadableManuscriptRefusal, ExportProjectArchiveRefusal, ProjectArchiveBuildRefusal,
-};
+use storyos_core::{ExportHumanReadableManuscriptRefusal, ProjectArchiveBuildRefusal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -44,7 +42,6 @@ trait ExportInput: Clone + Sized {
     /// The admitted work of a first use that pins the Snapshot of `admitted`.
     fn work(&self, admitted: &Self::Work) -> Self::Work;
     fn snapshot_id(work: &Self::Work) -> &str;
-    fn is_archived(refusal: &Self::Refusal) -> bool;
     fn admit(
         &self,
         store: &PostgresProjectReader,
@@ -103,13 +100,6 @@ impl ExportInput for ExportHumanReadableManuscriptInput {
         &work.source_snapshot.snapshot_id
     }
 
-    fn is_archived(refusal: &ExportHumanReadableManuscriptRefusal) -> bool {
-        matches!(
-            refusal,
-            ExportHumanReadableManuscriptRefusal::ArchivedProject
-        )
-    }
-
     async fn admit(
         &self,
         store: &PostgresProjectReader,
@@ -162,13 +152,6 @@ impl ExportInput for ExportProjectArchiveInput {
 
     fn snapshot_id(work: &ArchiveExportOperation) -> &str {
         &work.source_snapshot.snapshot_id
-    }
-
-    fn is_archived(refusal: &ArchiveExportRefusal) -> bool {
-        matches!(
-            refusal,
-            ArchiveExportRefusal::Lifecycle(ExportProjectArchiveRefusal::ArchivedProject)
-        )
     }
 
     async fn admit(
@@ -379,7 +362,7 @@ async fn keeps_the_fence_open<E: ExportInput>(base: u16) {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_failed_or_refused_admission_writes_no_row_and_keeps_the_challenge_unused() {
+async fn a_failed_admission_writes_no_row_and_keeps_the_challenge_unused() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -417,19 +400,6 @@ async fn writes_no_row<E: ExportInput>(base: u16) {
     let after_failure = export(&store, &failing).await.unwrap();
     settle(&store, &failing, &after_failure).await;
 
-    let archived = export_call::<E>(&store, base + 0x10).await;
-    admin
-        .execute(
-            "UPDATE storyos.projects SET lifecycle_state = 'archived'
-              WHERE project_id = $1::text::uuid",
-            &[&archived.envelope.project_scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let refused = archived.input.admit(&store, &archived.envelope).await;
-    let ([admissions, operations, sources, receipts, _, unused], fence) =
-        admitted_rows(&admin, &archived).await;
-
     assert!(
         matches!(
             failed,
@@ -447,15 +417,6 @@ async fn writes_no_row<E: ExportInput>(base: u16) {
         )
     );
     assert_eq!(after_failure.work, failing.input.work(&after_failure.work));
-    assert!(
-        matches!(&refused, Err(RefusableCommandError::RefusedBeforeAdmission(refusal))
-            if E::is_archived(refusal)),
-        "an archived Project must refuse before the Admission: {refused:?}"
-    );
-    assert_eq!(
-        ([admissions, operations, sources, receipts, unused], fence),
-        ([0, 0, 0, 0, 1], Some("pending none".to_owned()))
-    );
 }
 
 #[tokio::test]

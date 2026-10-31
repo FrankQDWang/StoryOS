@@ -3,16 +3,9 @@ use std::future::Future;
 use crate::{ChapterId, ProjectReadError, ProjectScope, UserId};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProjectLifecycle {
-    Active,
-    Archived,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectListItem {
     pub project_scope: ProjectScope,
     pub title: String,
-    pub lifecycle: ProjectLifecycle,
     pub revision: u64,
     pub current_chapter_id: Option<ChapterId>,
 }

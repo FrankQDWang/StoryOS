@@ -1,8 +1,8 @@
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    Chapter, ChapterId, OpenChapter, Project, ProjectId, ProjectLifecycle, ProjectListItem,
-    ProjectReader, ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter,
-    open_current_chapter, open_project,
+    Chapter, ChapterId, OpenChapter, Project, ProjectId, ProjectListItem, ProjectReader,
+    ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter, open_current_chapter,
+    open_project,
 };
 use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 use tokio_postgres::NoTls;
@@ -346,14 +346,12 @@ async fn user_level_list_is_isolated_from_exact_project_scope_reads() {
             ProjectListItem {
                 project_scope: ProjectScope::new(owner_a.clone(), ProjectId::new(PROJECT_A)),
                 title: "Project A".to_owned(),
-                lifecycle: ProjectLifecycle::Active,
                 revision: 1,
                 current_chapter_id: Some(ChapterId::new(CHAPTER_A)),
             },
             ProjectListItem {
                 project_scope: ProjectScope::new(owner_a.clone(), ProjectId::new(EMPTY_A)),
                 title: "Empty Novel".to_owned(),
-                lifecycle: ProjectLifecycle::Active,
                 revision: 1,
                 current_chapter_id: None,
             },
@@ -364,7 +362,6 @@ async fn user_level_list_is_isolated_from_exact_project_scope_reads() {
         vec![ProjectListItem {
             project_scope: ProjectScope::new(owner_b.clone(), ProjectId::new(PROJECT_B)),
             title: "Project B secret".to_owned(),
-            lifecycle: ProjectLifecycle::Active,
             revision: 1,
             current_chapter_id: Some(ChapterId::new("018f0000-0000-7001-8000-000000000103")),
         }]

@@ -1,41 +1,8 @@
 {
   "$defs": {
-    "ProjectLifecycleState": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "active",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "archived",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        }
-      ]
-    },
     "ProjectListItem": {
       "additionalProperties": false,
       "properties": {
-        "lifecycle": {
-          "$ref": "#/$defs/ProjectLifecycleState"
-        },
         "open": {
           "$ref": "#/$defs/ProjectOpenState"
         },
@@ -55,7 +22,6 @@
       "required": [
         "project_scope",
         "title",
-        "lifecycle",
         "revision",
         "open"
       ],

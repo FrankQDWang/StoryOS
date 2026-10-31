@@ -124,7 +124,6 @@ impl ProjectCommand for UpdateChapterInput {
             chapter_join,
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
-            current_lifecycle: project.lifecycle,
             title: self.title.clone(),
             current_title: siblings.current_title.clone(),
             order: self.order,

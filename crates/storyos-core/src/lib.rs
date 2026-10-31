@@ -4,7 +4,6 @@ mod accept_proposal;
 mod agent_run_control;
 mod append_proposal_generation_batch;
 mod archive_path;
-mod archive_project;
 mod archive_zip;
 mod assemble_context;
 mod compact_active_context;
@@ -72,10 +71,6 @@ pub use append_proposal_generation_batch::{
 pub use archive_path::{
     ARCHIVE_PATH_MAX_BYTES, ARCHIVE_PATH_MAX_SEGMENTS, ARCHIVE_PATH_PROFILE, AdmittedArchivePath,
     ArchivePathRefusal, admit_archive_path,
-};
-pub use archive_project::{
-    ArchiveProject, ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect,
-    ArchiveProjectResult, ProjectLifecycle, archive_project,
 };
 pub use assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
@@ -186,7 +181,7 @@ pub use project_archive::{
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
-    export_project_archive,
+    ProjectLifecycle, export_project_archive,
 };
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
@@ -550,10 +545,6 @@ mod create_project_tests;
 #[cfg(test)]
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
-
-#[cfg(test)]
-#[path = "archive_project_tests.rs"]
-mod archive_project_tests;
 
 #[cfg(test)]
 #[path = "create_volume_tests.rs"]

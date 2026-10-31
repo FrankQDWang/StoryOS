@@ -332,19 +332,12 @@ async fn each_update_classifies_its_outcomes_and_writes_its_effect_rows() {
             codes.push(updated.code);
         }
         assert_eq!(tree(&store, &scope).await.volumes, live.volumes);
-        // An archived Project has no readable Manuscript Tree, so this step is the last.
-        crate::create_structure_tests::archive(&admin, &scope).await;
-        let archived = kind
-            .update(&store, &scope, &suffix(8), &a, &renamed, 2, 5)
-            .await;
-        codes.push(archived.code);
         assert_eq!(
             codes,
             [
                 (ReceiptResult::Conflicted, Some("stale_tree_revision")),
                 (ReceiptResult::Refused, Some(kind.join_refusal())),
                 (ReceiptResult::Refused, Some("invalid_order")),
-                (ReceiptResult::Refused, Some("archived_project")),
             ],
             "{kind:?}"
         );

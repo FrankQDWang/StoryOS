@@ -8,7 +8,7 @@ use storyos_application::{
     UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
 };
 use storyos_core::{
-    AuthorUndoFrontier, ProjectLifecycle, TransitionOutcome, UndoLatestAuthorAction as CoreUndo,
+    AuthorUndoFrontier, TransitionOutcome, UndoLatestAuthorAction as CoreUndo,
     UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable,
     undo_latest_author_action as classify_undo,
 };
@@ -78,12 +78,8 @@ impl ProjectCommand for UndoLatestAuthorAction {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
-        project: &LockedProject,
+        _project: &LockedProject,
     ) -> Result<Classification<Self>, ProjectCommandError> {
-        match project.lifecycle {
-            ProjectLifecycle::Active => {}
-            ProjectLifecycle::Archived => return Err(ProjectCommandError::BindingConflict),
-        }
         let request = UndoRequest::new(envelope, &self.input);
         let observed = load_observed_frontier(client, &request).await?;
         let current_head = observed

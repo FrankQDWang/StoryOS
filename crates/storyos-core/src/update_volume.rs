@@ -1,6 +1,6 @@
 //! Pure Core classification for Update Volume (rename and reorder).
 
-use super::{ProjectLifecycle, TransitionOutcome, VolumeJoin};
+use super::{TransitionOutcome, VolumeJoin};
 use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -8,7 +8,6 @@ pub struct UpdateVolume {
     pub volume_join: VolumeJoin,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
-    pub current_lifecycle: ProjectLifecycle,
     pub title: String,
     pub current_title: String,
     pub order: u64,
@@ -43,7 +42,6 @@ pub enum UpdateVolumeConflict {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateVolumeRefusal {
     InvalidVolumeJoin,
-    ArchivedProject,
     InvalidTitle,
     InvalidOrder,
 }
@@ -52,7 +50,6 @@ reason_codes!(UpdateVolumeNoEffect { Unchanged => "unchanged" });
 reason_codes!(UpdateVolumeConflict { StaleTreeRevision => "stale_tree_revision" });
 reason_codes!(UpdateVolumeRefusal {
     InvalidVolumeJoin => "invalid_volume_join",
-    ArchivedProject => "archived_project",
     InvalidTitle => "invalid_title",
     InvalidOrder => "invalid_order",
 });
@@ -67,9 +64,6 @@ pub fn update_volume(command: &UpdateVolume) -> UpdateVolumeResult {
     }
     if command.order < 1 || command.order > command.volume_count {
         return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder);
-    }
-    if command.current_lifecycle == ProjectLifecycle::Archived {
-        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
         return UpdateVolumeResult::Conflicted(UpdateVolumeConflict::StaleTreeRevision);

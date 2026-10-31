@@ -3,20 +3,19 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CancelAgentRunConflict, CancelAgentRunNoEffect,
-    CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal,
-    DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict,
-    DeleteVolumeNoEffect, DeleteVolumeRefusal, PauseAgentRunConflict, PauseAgentRunNoEffect,
-    ReasonCode, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
-    ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
-    SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
-    SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict, UpdateChapterNoEffect,
-    UpdateChapterRefusal, UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
-    UpdateProjectConflict, UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal, WithdrawProposalConflict, WithdrawProposalNoEffect,
-    WithdrawProposalRefusal,
+    CancelAgentRunConflict, CancelAgentRunNoEffect, CreateChapterConflict, CreateChapterRefusal,
+    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
+    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
+    PauseAgentRunConflict, PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
+    RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
+    ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
+    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
+    ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
+    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
+    WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
 
 use storyos_core::{
@@ -43,16 +42,10 @@ fn every_volume_reason_maps_to_its_public_reason() {
         CreateVolumeConflict::StaleTreeRevision,
         contracts::CreateVolumeConflictReason::StaleTreeRevision,
     )]);
-    assert_maps(vec![
-        (
-            CreateVolumeRefusal::ArchivedProject,
-            contracts::CreateVolumeRefusalReason::ArchivedProject,
-        ),
-        (
-            CreateVolumeRefusal::InvalidTitle,
-            contracts::CreateVolumeRefusalReason::InvalidTitle,
-        ),
-    ]);
+    assert_maps(vec![(
+        CreateVolumeRefusal::InvalidTitle,
+        contracts::CreateVolumeRefusalReason::InvalidTitle,
+    )]);
     assert_maps(vec![(
         UpdateVolumeNoEffect::Unchanged,
         contracts::UpdateVolumeNoEffectReason::Unchanged,
@@ -62,10 +55,6 @@ fn every_volume_reason_maps_to_its_public_reason() {
         contracts::UpdateVolumeConflictReason::StaleTreeRevision,
     )]);
     assert_maps(vec![
-        (
-            UpdateVolumeRefusal::ArchivedProject,
-            contracts::UpdateVolumeRefusalReason::ArchivedProject,
-        ),
         (
             UpdateVolumeRefusal::InvalidTitle,
             contracts::UpdateVolumeRefusalReason::InvalidTitle,
@@ -89,10 +78,6 @@ fn every_volume_reason_maps_to_its_public_reason() {
     )]);
     assert_maps(vec![
         (
-            DeleteVolumeRefusal::ArchivedProject,
-            contracts::DeleteVolumeRefusalReason::ArchivedProject,
-        ),
-        (
             DeleteVolumeRefusal::InvalidVolumeJoin,
             contracts::DeleteVolumeRefusalReason::InvalidVolumeJoin,
         ),
@@ -110,10 +95,6 @@ fn every_chapter_reason_maps_to_its_public_reason() {
         contracts::CreateChapterConflictReason::StaleTreeRevision,
     )]);
     assert_maps(vec![
-        (
-            CreateChapterRefusal::ArchivedProject,
-            contracts::CreateChapterRefusalReason::ArchivedProject,
-        ),
         (
             CreateChapterRefusal::InvalidTitle,
             contracts::CreateChapterRefusalReason::InvalidTitle,
@@ -137,10 +118,6 @@ fn every_chapter_reason_maps_to_its_public_reason() {
     )]);
     assert_maps(vec![
         (
-            UpdateChapterRefusal::ArchivedProject,
-            contracts::UpdateChapterRefusalReason::ArchivedProject,
-        ),
-        (
             UpdateChapterRefusal::InvalidTitle,
             contracts::UpdateChapterRefusalReason::InvalidTitle,
         ),
@@ -161,16 +138,10 @@ fn every_chapter_reason_maps_to_its_public_reason() {
         DeleteChapterConflict::StaleTreeRevision,
         contracts::DeleteChapterConflictReason::StaleTreeRevision,
     )]);
-    assert_maps(vec![
-        (
-            DeleteChapterRefusal::ArchivedProject,
-            contracts::DeleteChapterRefusalReason::ArchivedProject,
-        ),
-        (
-            DeleteChapterRefusal::InvalidChapterJoin,
-            contracts::DeleteChapterRefusalReason::InvalidChapterJoin,
-        ),
-    ]);
+    assert_maps(vec![(
+        DeleteChapterRefusal::InvalidChapterJoin,
+        contracts::DeleteChapterRefusalReason::InvalidChapterJoin,
+    )]);
 }
 
 #[test]
@@ -182,14 +153,6 @@ fn every_project_setting_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         UpdateProjectConflict::StaleProjectRevision,
         contracts::UpdateProjectConflictReason::StaleProjectRevision,
-    )]);
-    assert_maps(vec![(
-        ArchiveProjectNoEffect::AlreadyArchived,
-        contracts::ArchiveProjectNoEffectReason::AlreadyArchived,
-    )]);
-    assert_maps(vec![(
-        ArchiveProjectConflict::StaleProjectRevision,
-        contracts::ArchiveProjectConflictReason::StaleProjectRevision,
     )]);
     assert_maps(vec![(
         UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
@@ -218,10 +181,6 @@ fn every_current_chapter_reason_maps_to_its_public_reason() {
         ),
     ]);
     assert_maps(vec![
-        (
-            SetCurrentChapterRefusal::ArchivedProject,
-            contracts::SetCurrentChapterRefusalReason::ArchivedProject,
-        ),
         (
             SetCurrentChapterRefusal::InvalidChapterJoin,
             contracts::SetCurrentChapterRefusalReason::InvalidChapterJoin,

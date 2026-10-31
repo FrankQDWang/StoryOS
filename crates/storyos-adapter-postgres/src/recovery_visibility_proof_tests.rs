@@ -467,34 +467,6 @@ async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
         .batch_execute("ALTER TABLE storyos.projects FORCE ROW LEVEL SECURITY")
         .await
         .unwrap();
-
-    admin
-        .execute(
-            "UPDATE storyos.projects
-                SET lifecycle_state = 'archived'
-              WHERE project_id = $1::text::uuid",
-            &[&project_id],
-        )
-        .await
-        .unwrap();
-    prove_keeps_hold(
-        &admin,
-        &proof_ids(
-            "018f0000-0000-7001-8000-00000000f8d4",
-            "018f0000-0000-7001-8000-00000000f8d5",
-            "018f0000-0000-7001-8000-00000000f8d6",
-        ),
-    )
-    .await;
-    admin
-        .execute(
-            "UPDATE storyos.projects
-                SET lifecycle_state = 'active'
-              WHERE project_id = $1::text::uuid",
-            &[&project_id],
-        )
-        .await
-        .unwrap();
     assert_eq!(
         empty_project_facts(&admin, &project_id).await,
         expected_empty_project()

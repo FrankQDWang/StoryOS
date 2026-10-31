@@ -83,7 +83,7 @@ pub(super) async fn persist_structural_records(
             "UPDATE storyos.projects
                 SET tree_revision = $3::text::bigint, current_chapter_id = $5::text::uuid
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'
+                AND tree_revision = $4::text::bigint
                 AND current_chapter_id IS NOT DISTINCT FROM $6::text::uuid",
             &[
                 &scope.owner_user_id.as_ref(),

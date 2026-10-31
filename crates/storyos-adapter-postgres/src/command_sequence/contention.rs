@@ -53,7 +53,6 @@ impl RefusalCode for CreateAgentRunRefusal {
     fn refusal_code(&self) -> &'static str {
         match self {
             Self::MissingProject => "missing_project",
-            Self::ArchivedProject => "archived_project",
             Self::AssistanceUnavailable => "assistance_unavailable",
             Self::InaccessibleConversation => "inaccessible_conversation",
             Self::ConversationBusy => "conversation_busy",

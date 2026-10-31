@@ -155,14 +155,12 @@ test("a Canonical Query tree with a foreign Project Scope fails closed", async (
   ]);
 });
 
-test("an archived Project fails closed without opening a workspace", async () => {
+test("a Project that the library does not list fails closed without opening a workspace", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
   const listed = fixture<ListProjectsResponse>("list-projects.json");
-  const archivedItem = listed.projects.find((entry) =>
-    entry.project_scope.project_id === project.project.project_id);
-  assert.ok(archivedItem);
-  archivedItem.lifecycle = { kind: "archived" };
+  listed.projects = listed.projects.filter((entry) =>
+    entry.project_scope.project_id !== project.project.project_id);
   const requests: string[] = [];
   const responses: unknown[] = [profile, project, listed];
   const fetchImpl: typeof fetch = async (url) => {
