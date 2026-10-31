@@ -144,14 +144,22 @@ async function openUndoEditor() {
 // One macrotask lets every continuation of an abandoned Undo run.
 const drain = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
-it("keeps the editor editable while an Author Undo waits for Challenge admission and retries the same Undo", async () => {
+it("keeps the editor editable and ignores another Undo while an Author Undo waits for Challenge admission, then retries it", async () => {
   const undo = await openUndoEditor();
   try {
+    undo.gates.firstChallenge = gate();
     undo.pressUndo();
+    await expect.poll(() => undo.undoChallengeKeys.length).toBe(1);
+    undo.pressUndo();
+    undo.gates.firstChallenge.open();
     await undo.waitForRetryTimer();
+    undo.pressUndo();
+    await drain();
     expect({ failures: undo.failures, editable: undo.surface.getAttribute("contenteditable"),
-      saveState: undo.projections.at(-1)?.save_state, undoRequests: undo.undoKeys.length })
-      .toEqual({ failures: [], editable: "true", saveState: "saving", undoRequests: 0 });
+      saveState: undo.projections.at(-1)?.save_state, undoRequests: undo.undoKeys.length,
+      challengeKeys: undo.undoChallengeKeys.length, retryTimers: undo.retryTimers().length })
+      .toEqual({ failures: [], editable: "true", saveState: "saving", undoRequests: 0,
+        challengeKeys: 1, retryTimers: 1 });
 
     await act(async () => { undo.retryTimers()[0]!.callback(); });
     await expect.poll(() => undo.projections.at(-1)?.save_state).toBe("saved");
@@ -180,25 +188,6 @@ it("shows the saved state again when an Author Undo after a Challenge wait is un
       failure: undo.failures[0] instanceof AuthorUndoUnavailableError ? undo.failures[0].reason : undo.failures[0],
       editable: undo.surface.getAttribute("contenteditable") })
       .toEqual({ saveState: "saved", failure: "barrier", editable: "true" });
-  } finally {
-    await undo.close();
-  }
-});
-
-it("ignores another Ctrl/Cmd+Z while an Author Undo is in progress", async () => {
-  const undo = await openUndoEditor();
-  try {
-    undo.gates.firstChallenge = gate();
-    undo.pressUndo();
-    await expect.poll(() => undo.undoChallengeKeys.length).toBe(1);
-    undo.pressUndo();
-    undo.gates.firstChallenge.open();
-    await undo.waitForRetryTimer();
-    undo.pressUndo();
-    await drain();
-
-    expect({ challengeKeys: undo.undoChallengeKeys.length, retryTimers: undo.retryTimers().length,
-      failures: undo.failures }).toEqual({ challengeKeys: 1, retryTimers: 1, failures: [] });
   } finally {
     await undo.close();
   }

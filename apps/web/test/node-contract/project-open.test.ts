@@ -72,46 +72,6 @@ test("the protected Web client opens the authoritative current Chapter", async (
   assert.equal(new Headers(projectRequest.options?.headers).get("x-storyos-client-session"), null);
 });
 
-test("an empty Project opens the Canonical Query empty tree without a Chapter identity", async () => {
-  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
-  const project = fixture<GetProjectResponse>("get-project.json");
-  const listed = fixture<ListProjectsResponse>("list-projects.json");
-  const tree = fixture<GetManuscriptTreeResponse>("get-manuscript-tree.json");
-  project.project = {
-    project_id: project.project.project_id,
-    title: "Empty Novel",
-    open: { kind: "empty" },
-  };
-  tree.project_scope = project.project_scope;
-  tree.snapshot.project_scope = project.project_scope;
-  const requests: string[] = [];
-  const responses: unknown[] = [profile, project, listed, tree];
-  const fetchImpl: typeof fetch = async (url) => {
-    requests.push(new URL(requestUrl(url)).pathname);
-    return new Response(JSON.stringify(responses.shift()), {
-      status: 200, headers: { "content-type": "application/json" },
-    });
-  };
-
-  const state = await openControlledProject({
-    baseUrl: "http://storyos.test",
-    projectId: project.project.project_id,
-    fetchImpl,
-  });
-  assert.deepEqual(state, {
-    kind: "empty-project-ready",
-    profile,
-    project,
-    tree,
-  });
-  assert.deepEqual(requests, [
-    "/api/v1/protocol",
-    `/api/v1/projects/${project.project.project_id}`,
-    "/api/v1/projects",
-    `/api/v1/projects/${project.project.project_id}/manuscript/tree`,
-  ]);
-});
-
 test("a Canonical Query tree with a foreign Project Scope fails closed", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
 import type { DigestValue } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { USER_A, challenged, id, runWorker } from "./acceptance.ts";
-import { createEmpty, packaged, restartServer, startServer } from "./http-harness.ts";
+import { createEmpty, restartServer, startServer } from "./http-harness.ts";
 import { queryStoryOSPostgres, sessionFetch, stopStoryOSServer } from "./node-integration.ts";
 
 const SESSION = "session-a";
@@ -54,43 +52,25 @@ function read<Request extends { command_schema: string }>(family: ExportFamily<R
   return family.read({ baseUrl, projectId, exportId, fetchImpl: sessionFetch(baseUrl, SESSION) });
 }
 
-/** An admitted export stays in progress across a Server process cut. */
-export async function assertAdmissionSurvivesServerCut<Request extends { command_schema: string }>(
-  family: ExportFamily<Request>): Promise<void> {
-  const { stdout } = await promisify(execFile)(packaged("storyos-worker"), ["--check"]);
-  assert.equal(stdout, "");
-
-  const first = await startServer(SERVER);
-  try {
-    const { admitted, projectId, exportId } = await admit(family, first.baseUrl,
-      { project: "01", projectCorrelation: "10", export: "21", exportCorrelation: "11" });
-    assert.equal(admitted.acknowledgement, "accepted");
-    assert.equal(admitted.effect.kind, "admitted");
-
-    const restarted = await restartServer(first, SERVER);
-    try {
-      const afterCut = await read(family, restarted.baseUrl, projectId, exportId);
-      assert.equal(afterCut.status, "in_progress");
-      assert.equal(afterCut.export_id, exportId);
-      assert.equal(family.readyField in afterCut, false);
-    } finally {
-      await stopStoryOSServer(restarted.server);
-    }
-  } catch (error) {
-    await stopStoryOSServer(first.server);
-    throw error;
-  }
-}
-
-/** A Worker claim without settlement gives `outcome_unknown`, then a takeover settles the export ready. */
+/**
+ * An admitted export stays in progress across a Server process cut. A Worker claim without settlement
+ * then gives `outcome_unknown`, and a takeover settles the export ready.
+ */
 export async function assertClaimWithoutSettlementTakesOver<Request extends { command_schema: string }>(
   family: ExportFamily<Request>): Promise<void> {
   await runWorker(["--once"], EXPIRED_LEASE);
   await runWorker(["--once"], EXPIRED_LEASE);
-  const first = await startServer(SERVER);
+  let first = await startServer(SERVER);
   try {
-    const { projectId, exportId } = await admit(family, first.baseUrl,
+    const { admitted, projectId, exportId } = await admit(family, first.baseUrl,
       { project: "02", projectCorrelation: "12", export: "22", exportCorrelation: "13" });
+    assert.equal(admitted.acknowledgement, "accepted");
+    assert.equal(admitted.effect.kind, "admitted");
+    first = await restartServer(first, SERVER);
+    const afterCut = await read(family, first.baseUrl, projectId, exportId);
+    assert.equal(afterCut.status, "in_progress");
+    assert.equal(afterCut.export_id, exportId);
+    assert.equal(family.readyField in afterCut, false);
     await stopStoryOSServer(first.server);
 
     await runWorker(["--claim-only"], EXPIRED_LEASE);

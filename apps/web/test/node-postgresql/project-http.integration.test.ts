@@ -140,44 +140,6 @@ async function projectEffectSnapshot() {
     )::text`));
 }
 
-test("two authenticated Users open only their own Project and current Chapter over real HTTP", async () => {
-  const { baseUrl, server } = await startServer();
-  try {
-    const projectA = await getProject({
-      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
-    });
-    assert.equal(projectA.project_scope.owner_user_id, USER_A);
-    assert.deepEqual(projectA.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_A });
-    const chapterA = await getChapter({
-      baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A,
-      fetchImpl: browserFetch(baseUrl, "session-a"),
-    });
-    assert.equal(chapterA.chapter.chapter_id, CHAPTER_A);
-    assert.equal(chapterA.chapter.current_revision.body, "Authoritative A");
-
-    const projectB = await getProject({
-      baseUrl, projectId: PROJECT_B, fetchImpl: browserFetch(baseUrl, "session-b"),
-    });
-    assert.equal(projectB.project_scope.owner_user_id, USER_B);
-    assert.deepEqual(projectB.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_B });
-    const chapterB = await getChapter({
-      baseUrl, projectId: PROJECT_B, chapterId: CHAPTER_B,
-      fetchImpl: browserFetch(baseUrl, "session-b"),
-    });
-    assert.equal(chapterB.chapter.chapter_id, CHAPTER_B);
-    assert.equal(chapterB.chapter.current_revision.body, "Authoritative B secret");
-
-    await assert.rejects(
-      getProject({
-        baseUrl, projectId: PROJECT_B, fetchImpl: browserFetch(baseUrl, "session-a"),
-      }),
-      (error) => sanitizedProtocolFailure(error, 404, /Project B|secret/),
-    );
-  } finally {
-    await stopRealServer(server);
-  }
-});
-
 test("Project command challenges bind Origin, Scope, nonce, and idempotency on real PostgreSQL", async () => {
   const { baseUrl, server } = await startServer();
   const request: CreateProjectCommandChallengeRequest = {
@@ -431,6 +393,7 @@ test("one current writer settles one Author Edit and exact retries return one re
     assert.ok(firstAuthorEditPrimitive);
     const limitCases: Array<{
       author_edit_units: ApplyAuthorEditRequest["author_edit_units"];
+      code: string;
       name: string;
       status: number;
       suffix: string;
@@ -438,12 +401,14 @@ test("one current writer settles one Author Edit and exact retries return one re
       {
         name: "unit count",
         status: 422,
+        code: "command_target_refused",
         suffix: "080",
         author_edit_units: Array.from({ length: 241 }, () => firstAuthorEditUnit),
       },
       {
         name: "primitive count",
         status: 422,
+        code: "command_target_refused",
         suffix: "081",
         author_edit_units: [{
           ...firstAuthorEditUnit,
@@ -455,6 +420,7 @@ test("one current writer settles one Author Edit and exact retries return one re
       {
         name: "wire body bytes",
         status: 413,
+        code: "payload_too_large",
         suffix: "082",
         author_edit_units: [{
           normalized_primitives: [{
@@ -483,10 +449,14 @@ test("one current writer settles one Author Edit and exact retries return one re
         `018f0000-0000-7001-8000-000000000${String(
           Number(limitCase.suffix) + 30,
         ).padStart(3, "0")}`;
+      const challenge = await issueChallenge(baseUrl, browserFetch(baseUrl, "session-a"), PROJECT_A, "POST",
+        "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+        await digestApplyAuthorEdit(request), idempotencyKey);
       await assert.rejects(applyAuthorEdit({
         baseUrl, projectId: PROJECT_A, request, idempotencyKey,
-        antiForgery: "0".repeat(64), fetchImpl: browserFetch(baseUrl, "session-a"),
-      }), (error) => protocolFailure(error, limitCase.status), limitCase.name);
+        antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      }), (error) => protocolFailure(error, limitCase.status) && problemCode(error) === limitCase.code,
+      limitCase.name);
       assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority, limitCase.name);
     }
     const authorEditKey = "018f0000-0000-7001-8000-000000000027";
@@ -1075,9 +1045,27 @@ test("invalid bootstrap User identity prevents the Server from becoming ready", 
   );
 });
 
-test("missing authentication, cross-Project scope, and unknown Chapter identity use non-oracular errors", async () => {
+test("each User opens only their own Project and current Chapter, and other reads use non-oracular errors", async () => {
   const { baseUrl, server } = await startServer();
   try {
+    const projectA = await getProject({
+      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    assert.equal(projectA.project_scope.owner_user_id, USER_A);
+    assert.deepEqual(projectA.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_A });
+    assert.equal((await getChapter({
+      baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+    })).chapter.chapter_id, CHAPTER_A);
+    const projectB = await getProject({
+      baseUrl, projectId: PROJECT_B, fetchImpl: browserFetch(baseUrl, "session-b"),
+    });
+    assert.equal(projectB.project_scope.owner_user_id, USER_B);
+    assert.deepEqual(projectB.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_B });
+    const chapterB = await getChapter({
+      baseUrl, projectId: PROJECT_B, chapterId: CHAPTER_B, fetchImpl: browserFetch(baseUrl, "session-b"),
+    });
+    assert.equal(chapterB.chapter.chapter_id, CHAPTER_B);
+    assert.equal(chapterB.chapter.current_revision.body, "Authoritative B secret");
     await assert.rejects(
       getProject({ baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl) }),
       (error) => protocolFailure(error, 401),

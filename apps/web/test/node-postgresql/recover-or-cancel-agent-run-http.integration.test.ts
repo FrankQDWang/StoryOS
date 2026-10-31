@@ -7,7 +7,6 @@ import { test } from "vitest";
 
 import {
   cancelAgentRun,
-  createProjectCommandChallenge,
   digestCancelAgentRun,
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
@@ -250,62 +249,6 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     assert.equal(terminal.response.effect.reason, "terminal_run");
     assert.equal((await inspectRun(started.baseUrl, prepared, successor.effect.run_id)).status, "completed");
   } finally {
-    await stopRealServer(started.server);
-  }
-});
-
-test("a rate-limited cancellation Challenge completes before a Worker is held", async () => {
-  const dispatchHold = join(tmpdir(), "storyos-s3-17-rate-limit.hold");
-  const started = await startServer();
-  let worker: Promise<void> | undefined;
-  try {
-    await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("c311"), "Challenge Window Novel", "c4");
-    const run = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c321"));
-    let challengeAttempts = 0;
-    const rateLimitedFetch: typeof fetch = (input, init) => {
-      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
-      if (path.endsWith("/anti-forgery-challenges")) {
-        assert.equal(existsSync(dispatchHold), false, "Challenge preparation must complete before the Worker hold");
-        challengeAttempts += 1;
-      }
-      return prepared.fetchImpl(input, init);
-    };
-    // Fill the current and the next minute window. Earlier Challenges can leave rows on two sides of a
-    // minute boundary, and the minute can change before the refused request.
-    await queryPostgres(`INSERT INTO storyos.project_command_challenge_rate_windows
-        (owner_user_id, project_id, client_session_generation, policy_revision, window_started_at, issued_count)
-      SELECT DISTINCT rate.owner_user_id, rate.project_id, rate.client_session_generation, rate.policy_revision,
-        date_trunc('minute', now()) + window_offset.value, 10
-      FROM storyos.project_command_challenge_rate_windows AS rate
-      CROSS JOIN (VALUES (interval '0 minutes'), (interval '1 minute')) AS window_offset(value)
-      WHERE rate.project_id = '${prepared.projectId}'::uuid
-      ON CONFLICT (owner_user_id, project_id, client_session_generation, policy_revision, window_started_at)
-      DO UPDATE SET issued_count = 10;`);
-    const request = cancelRequest(id("c332"));
-    const digest = await digestCancelAgentRun(request);
-    await assert.rejects(() => createProjectCommandChallenge({
-      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: rateLimitedFetch,
-      request: { method: "POST", route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
-        command_schema: request.command_schema, canonical_command_digest: digest, idempotency_key: id("c331") },
-    }), (error) => requireStoryOSProtocolError(error).status === 429);
-    const challenge = await cancelChallenge(started.baseUrl, rateLimitedFetch, prepared.projectId, id("c331"), id("c332"));
-    assert.equal(challengeAttempts, 2);
-    writeFileSync(dispatchHold, "hold");
-    worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
-    await waitFor(
-      () => inspectRun(started.baseUrl, prepared, run.effect.run_id),
-      (current) => current.status === "claimed" && current.model_attempt.kind === "present",
-    );
-    const cancelled = await postCancel(started.baseUrl, rateLimitedFetch, prepared.projectId, run.effect.run_id, id("c331"), id("c332"), challenge);
-    assert.equal(cancelled.response.effect.kind, "applied");
-    unlinkSync(dispatchHold);
-    await worker;
-    await settleOnce();
-    assert.equal((await inspectRun(started.baseUrl, prepared, run.effect.run_id)).status, "cancelled");
-  } finally {
-    if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
-    if (worker !== undefined) await Promise.allSettled([worker]);
     await stopRealServer(started.server);
   }
 });

@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
@@ -20,7 +20,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { PROJECT_A, TestProject, TestServer, USER_A, addVolume, challenged, createEmpty, eventPayloadDigest,
-  parseSseFrames, postRun, runRequest, startServer } from "../support/http-harness.ts";
+  manuscriptAuthority, parseSseFrames, postRun, runRequest, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
@@ -245,7 +245,8 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       protocolRelease: "storyos.public.release.1",
       fetchImpl: browserFetch(baseUrl, "session-a"),
     };
-    const firstFrames = parseSseFrames(await activityStream(streamOptions));
+    const firstBody = await activityStream(streamOptions);
+    const firstFrames = parseSseFrames(firstBody);
     assert.equal(firstFrames.length, 2);
     const volumeFrame = firstFrames.at(0);
     const editFrame = firstFrames.at(1);
@@ -257,6 +258,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.equal(editFrame.event, "storyos.project-activity");
     assert.deepEqual(volumeFrame.data, expectedVolume);
     assert.deepEqual(editFrame.data, expectedEdit);
+    const authorityAfterFirst = await manuscriptAuthority();
     const resumed = parseSseFrames(await activityStream({
       ...streamOptions, lastEventId: volumeFrame.id,
     }));
@@ -265,10 +267,8 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.equal(await activityStream({
       ...streamOptions, lastEventId: editFrame.id,
     }), "");
-    const replayed = parseSseFrames(await activityStream(streamOptions));
-    assert.equal(replayed.length, 2);
-    assert.deepEqual(replayed.at(0)?.data, expectedVolume);
-    assert.deepEqual(replayed.at(1)?.data, expectedEdit);
+    assert.equal(await activityStream(streamOptions), firstBody);
+    assert.deepEqual(await manuscriptAuthority(), authorityAfterFirst);
   } finally {
     await stopRealServer(server);
   }

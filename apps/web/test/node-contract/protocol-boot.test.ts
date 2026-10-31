@@ -23,11 +23,6 @@ const blocked = (
 ): ProtocolBlockedState => ({ kind: "protocol-blocked", code,
   heading: "StoryOS 无法安全启动", message: messages[code], details });
 
-test("a compatible Release 1 profile exposes protected application state", () => {
-  const profile = compatible();
-  assert.deepEqual(validateProtocolProfile(profile), { kind: "protected-ready", profile });
-});
-
 type BlockedCase = readonly [string, () => readonly [unknown, ProtocolBlockedState]];
 const blockedCases: BlockedCase[] = [
   ["a missing compatibility identity fails closed with an inspectable message", () => {

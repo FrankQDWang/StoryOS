@@ -6,6 +6,7 @@ import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance }
   from "../../src/accept-block-proposal.ts";
 import { acceptanceJournalProposals, readAcceptanceJournal }
   from "../../src/acceptance-journal.ts";
+import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { jsonResponse } from "./scenario.ts";
 
@@ -106,6 +107,12 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       crash.onabort = () => reject(crash.error);
     });
     await competing;
+    const pendingJournal = await readJournalSnapshot(workspace);
+    expect(pendingJournal.explicitAcceptance?.records).toHaveLength(1);
+    expect(pendingJournal.explicitAcceptance?.groups).toHaveLength(1);
+    expect(pendingJournal.explicitAcceptance?.records[0]?.local_intent_sequence).toBe(1);
+    expect(await rebuildPendingProjection(workspace))
+      .toMatchObject({ save_state: "needs_attention", unsettled_intent_count: 1 });
 
     const response = await retryPendingDisplayedAcceptance({ baseUrl: location.origin,
       fetchImpl, cryptoImpl: crypto, workspace, proposalId });

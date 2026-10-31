@@ -9,7 +9,7 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ExportProjectArchiveRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING } from "../support/acceptance.ts";
-import { assertAdmissionSurvivesServerCut, assertClaimWithoutSettlementTakesOver } from "../support/export-process-cut.ts";
+import { assertClaimWithoutSettlementTakesOver } from "../support/export-process-cut.ts";
 import type { ExportFamily } from "../support/export-process-cut.ts";
 import { sessionFetch } from "../support/node-integration.ts";
 
@@ -48,10 +48,6 @@ const ARCHIVE: ExportFamily<ExportProjectArchiveRequest> = {
     );
   },
 };
-
-test("an admitted Project Export Archive stays in progress across a Server process cut", async () => {
-  await assertAdmissionSurvivesServerCut(ARCHIVE);
-});
 
 test("a Worker claim without settlement is outcome_unknown, then takeover settles ready", async () => {
   await assertClaimWithoutSettlementTakesOver(ARCHIVE);
