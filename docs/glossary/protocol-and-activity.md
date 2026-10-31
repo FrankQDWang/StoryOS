@@ -69,5 +69,5 @@ The one Rust list in `storyos-contracts` of the public operations that the Story
 _Avoid_: Hand-kept route list, planned operation, second copy of a route fact
 
 **Route Catalog**:
-The generated JSON description of the Release 1 public protocol: the served operations with their owners, admission, idempotency, settlement, error profile, and Project Activity mapping, and the Events that the code can persist. The generator writes it from the Operation Registry. It lists no planned operation and no Event without a producer.
+The generated JSON description of the Release 1 public protocol: the served operations with their owners, admission, idempotency, settlement, error profile, and Project Activity mapping, and the Events that the code can persist. The generator writes it from the Operation Registry. It lists no planned operation. It lists no Event without a producer, except a historical Event that stored Activity still replays (ADR 0078).
 _Avoid_: Reviewed catalog, hand-kept catalog, protocol plan, Event wish list
