@@ -92,14 +92,13 @@ typed producer cause is closed in section 8.6.
 | --- | --- | --- | --- |
 | Authoritative State | Author-owned current truth projected from current Heads for object families that use Authoritative Revisions and from the current Manuscript Tree Revision for manuscript structure; it has no Artifact or Operational Record lifecycle | StoryOS Core only, through the closed authority-changing transitions | this specification |
 | `Artifact` | Durable typed content/evidence/view with immutable linear revisions, provenance, and the lifecycle owned by its Core family or safe extension envelope | one exact closed Artifact Creator | this specification |
-| `Draft` | Non-authoritative Core Artifact with immutable revisions, common retention, and reversible `open \| closed` Draft closure | `Author \| AgentRunStep \| ToolCall \| CoreTransition \| EditorRecovery`, further restricted by Draft subtype | this specification |
+| `Draft` | Non-authoritative Core Artifact with immutable revisions, common retention, and reversible `open \| closed` Draft closure | `Author \| AgentRunStep \| ToolCall \| CoreTransition`, further restricted by Draft subtype | this specification |
 | Operational Record | Durable execution/context/authorization/usage/validation/transition evidence with only its owning record's append-only or immutable lifecycle and no Artifact lifecycle | the exact StoryOS component named by the closed record type | this specification |
 | `AuthorCommandAdmission` | Operational Record whose exact append-only lifecycle permits `pending` to reach `ReceiptSettled`, `RequiresReconfirmation`, or nonterminal `outcome_unknown`, which may repeat before one terminal settlement; pre-admission refusal is a separate immutable Operational Record and not an Admission state | StoryOS Server admission and reconciliation boundary | [Author Command Admission](author-command-admission.md) |
 | `PreAdmissionRefusalRecord` | Immutable, bounded, sanitized Operational Record outside the Admission lifecycle; it positively proves that no Admission, Command, nonce consumption, Receipt, or Core effect exists | StoryOS Server pre-admission validation boundary | [Author Command Admission](author-command-admission.md) |
 | `EditorInputFence` | Immutable Operational Record and automatic safety cause; it is recorded once and never receives an Author Action Sequence | StoryOS Host at the protected editor-input boundary; Core consumes the exact identity as its safety cause | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `AuthorActionRef` | Immutable Author Action Operational Record created only for a successfully committed author-owned Core Transition, with one Project Scope-local sequence and `Forward \| Compensation` disposition | StoryOS Core, atomically with the successful Transition | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | typed Receipt | Immutable Operational Record for one Core validation or domain-command attempt; it has no Artifact revision, derivation, retention, or Acceptance lifecycle | StoryOS Core only | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) for the current closed Receipt kinds |
-| `RecoveryDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure; it preserves complete author text without proving invocation or commit | StoryOS Host-assigned `EditorRecovery` bound to one exact Editor Session, writer generation, complete recovered intent, and journal, admission-settlement, takeover, or in-memory recovery evidence as applicable | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns recovery evidence and presentation |
 | `ProposalConflict` | The `conflicted` condition on an exact Proposal Revision's validation axis, projected from immutable Core Receipt/Event evidence; the condition is not a fourth durable space, another Artifact, or the Operational Record that detected it | StoryOS Core validation or target-drift detection | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `ProposalRecoveryConflict` | Fail-closed recovery condition on a preserved Proposal surface when exact Heads, stream/fence order, Anchors, digests, or checkpoint evidence cannot prove one review projection; it is neither an Artifact nor a Receipt | StoryOS Core recovery classification over exact durable Core and Host recovery evidence | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns journal, checkpoint, and takeover evidence |
 | `Proposal` | `Proposal` Core Artifact with immutable revisions, retention, and the orthogonal generation, validation, closure, and per-Operation resolution axes | `Author \| AgentRunStep \| ToolCall`, plus `CoreTransition` only for a typed Reversal Proposal | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
@@ -150,8 +149,7 @@ CandidateKind
 └── OperationalLesson
 
 DraftKind
-├── PlanDraft
-└── RecoveryDraft
+└── PlanDraft
 
 ResearchArtifactKind
 ├── ExternalSourceSnapshot
@@ -160,8 +158,9 @@ ResearchArtifactKind
 └── ResearchSynthesis
 ```
 
-`RecoveryDraft` is the only Draft kind in the manuscript editor recovery flow.
-[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft and `InlineEditProposal`. `PlanDraft` belongs to plan authoring
+The manuscript editor recovery flow has no Draft kind.
+[ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md) removes the Refused Edit Draft and `InlineEditProposal`, and
+[ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md) removes the Host-created `RecoveryDraft`. `PlanDraft` belongs to plan authoring
 and is not an alternative outcome for an Author Edit.
 
 One Candidate represents one independently reviewable semantic candidate. A batch of such candidates creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
@@ -277,11 +276,6 @@ AgentRunStep { run_step_id }
 ToolCall { tool_call_id }
 Import { operational_record_ref }
 CoreTransition { receipt_ref }
-EditorRecovery {
-  editor_session_id
-  writer_generation
-  recovery_evidence_ref
-}
 ```
 
 Each revision has one direct Creator. There is no generic `System`, browser,
@@ -293,18 +287,15 @@ model, MCP, extension, or local-projection Creator.
 | model | resolves through `AgentRunStep` |
 | author | binds the exact Author Command Admission |
 | Core | binds the exact Receipt |
-| Host recovery | binds the exact recovery Operational Record |
 
-A durably created `RecoveryDraft` uses Host-assigned `EditorRecovery`. Its evidence reference
-binds the complete recovery boundary that the Web Editor Session contract
-owns: journal, admission settlement, takeover, or in-memory. If an author edits
+If an author edits
 an Agent-produced revision, the new revision's Creator is the Author. A
 `derived_from` edge keeps the Agent-produced source.
 Contributor history is derived from the provenance graph rather than stored as
 a mutable list.
 
 Creator eligibility remains subtype-specific. `Import` creates imported source
-Artifacts, never a Proposal. `EditorRecovery` creates only a `RecoveryDraft`.
+Artifacts, never a Proposal.
 `CoreTransition` creates only the exact Core Artifact that its Receipt
 identifies, for example a `ReversalProposal`.
 
@@ -700,7 +691,7 @@ author-owned creative state.
 19. Every project-scoped durable object, reference, command, idempotency record, index, cache, and read projection binds and validates one exact Project Scope.
 20. No cross-Project Scope reference, join, retrieval result, cache reuse, or disclosure is valid merely because an opaque ID or content digest matches.
 21. Admission issuance, pre-admission refusal, OutcomeUnknown, reconciliation, terminal settlement, Editor Input Fences, Author Actions, and typed Receipts remain Operational Records; none can be promoted into Authoritative State or reused as authority.
-22. `RecoveryDraft` is a Draft Artifact. Its payload existence never proves or applies an author-owned Core Transition.
+22. The manuscript editor recovery flow creates no Draft Artifact ([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). Browser-local unsent text never proves or applies an author-owned Core Transition.
 23. Proposal Conflict and Proposal Recovery Conflict are conditions on preserved Proposal surfaces projected from exact evidence, never new Artifacts, Receipts, or authority states.
 24. Artifact Creator and Core `ProducerCause` are separate closed unions with no generic `System`, browser, model, MCP, extension, or local-projection fallback.
 

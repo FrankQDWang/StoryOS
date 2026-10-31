@@ -1780,7 +1780,7 @@
       "idempotency": "header_and_admission_record",
       "kind": "command",
       "method": "POST",
-      "notes": "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body.",
+      "notes": "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal.",
       "operation_id": "applyAuthorEdit",
       "path": "/api/v1/projects/{project_id}/manuscript/author-edits",
       "preconditions": [
@@ -1996,7 +1996,7 @@
           "idempotency": "header_and_admission_record",
           "recovery": {
             "requires_reconfirmation": "allowed",
-            "rule": "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only."
+            "rule": "Only the protected author cause may use the Author Command Admission recovery path."
           },
           "request_schema": "storyos.command.withdraw-proposal.author-cause.request.v1",
           "request_schema_source": "protocol",
@@ -2166,7 +2166,7 @@
           "idempotency": "header_and_admission_record",
           "recovery": {
             "requires_reconfirmation": "allowed",
-            "rule": "Only the protected author cause may use the Author Command Admission recovery path; RecoveryDraft ingress remains ApplyAuthorEdit only."
+            "rule": "Only the protected author cause may use the Author Command Admission recovery path."
           },
           "request_schema": "storyos.command.replan-proposal.author-cause.request.v1",
           "request_schema_source": "protocol",

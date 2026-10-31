@@ -19,7 +19,7 @@ use crate::release1_route_catalog::{
 };
 use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
-const APPLY_AUTHOR_EDIT_NOTES: &str = "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal. A terminal RequiresReconfirmation may carry a RecoveryDraft reference only from the admitted body.";
+const APPLY_AUTHOR_EDIT_NOTES: &str = "This is the only author-edit ingress. Core classifies the whole command as AuthoritativeApplied, ProposalRevised, Refused, Conflicted, or NoEffect. The Web Client never chooses an authoritative-vs-Proposal route. A current single match may settle directly; selected multi-match or cross-location replacement remains on this route and is classified as a Core Proposal.";
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(

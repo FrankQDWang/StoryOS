@@ -175,7 +175,6 @@ AuthorCommandAdmissionSettlement =
         | admission_expired
         | binding_changed
         | direct_edit_intent_unrecoverable,
-      recovery_draft_ref | null,
       settled_at
     }
 ```
@@ -296,8 +295,9 @@ committed domain outcome.
   reconfirmation when non-execution is proven. Reconciliation never silently
   repeats an Author Action.
 - **Browser continuity.** A pending edit remains author-visible through the Web
-  Editor Session contract until settlement and projection convergence, or
-  until it becomes a Recovery Draft.
+  Editor Session contract until settlement and projection convergence. After
+  `RequiresReconfirmation`, its text stays only in the browser Local Edit
+  Journal and its local recovery panel.
 
 ## 8. Verification
 

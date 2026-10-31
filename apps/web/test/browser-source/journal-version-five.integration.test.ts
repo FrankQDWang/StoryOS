@@ -252,7 +252,7 @@ async function openAfterFailedUpgrade(edit: Parameters<typeof appendAuthorEdit>[
               correlation_id: "018f0000-0000-7001-8000-000000000082", project_scope: scenario.project.project_scope,
               outcome: { outcome_kind: "requires_reconfirmation", command_id: "018f0000-0000-7001-8000-000000000031",
                 author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
-                reconfirmation_reason: "direct_edit_intent_unrecoverable", recovery_draft_ref: null } });
+                reconfirmation_reason: "direct_edit_intent_unrecoverable" } });
           }
           if (!path.endsWith("/manuscript/author-edits")) throw new Error(`unexpected request: ${path}`);
           if (settlement === "kept_for_manual_reentry") throw new TypeError("Failed to fetch");

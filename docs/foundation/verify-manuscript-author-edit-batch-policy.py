@@ -540,7 +540,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "d0e3a704dd3802328c0fcab6688d763bbb9ccd8cd59658f3bfa6bd4a2f17078d":
+    ).encode()).hexdigest() != "ecb48d232de41de9f421e7e4e2d2633bb6c95393520e85bce927db1aa2f97765":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
@@ -564,7 +564,7 @@ def apply_author_edit_outcome_contract_errors(
         "rejected": {"outcome_kind", "reason"},
         "requires_reconfirmation": {
             "outcome_kind", "command_id", "author_command_admission_id",
-            "reconfirmation_reason", "recovery_draft_ref",
+            "reconfirmation_reason",
         },
         "still_unknown": {"outcome_kind", "observation"},
     }
@@ -682,7 +682,7 @@ def apply_author_edit_outcome_contract_errors(
          'ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: '
          'ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", '
          'command_id: string, author_command_admission_id: string, reconfirmation_reason: '
-         'ApplyAuthorEditReconfirmationReason, recovery_draft_ref: string | null, } | '
+         'ApplyAuthorEditReconfirmationReason, } | '
          '{ "outcome_kind": "still_unknown", observation: '
          'ApplyAuthorEditUnknownObservation, };'),
         ("GetApplyAuthorEditOutcomeResponse",
@@ -752,7 +752,7 @@ def apply_author_edit_outcome_contract_errors(
          "ApplyAuthorEditOutcomeQueryObservation =",
          "e02c80e55ce08c985c2af6a461787c0d13a59fe9cf3dec706b598a72367d7773"),
         ("observation", "ApplyAuthorEditOutcomeQueryObservation =", "OutcomeQueryReducer =",
-         "cd84dea55893f42811ff80b03e8122dce5f7d002b4d256c749ccbbdbb84a394e"),
+         "90be15a6804c76b9f89bc0d1624e38c4c2e4b4fb21f4a2ea48df7832cd737f0e"),
     ):
         block = re.search(
             rf"{re.escape(start)}.*?(?=\n\n{re.escape(end)})",
@@ -843,7 +843,7 @@ def web_reload_get_first_errors(canonical_web: str) -> list[str]:
         "Server or PostgreSQL process interruption uses this same section 10 matrix",
         "frozen/unsubmitted journal group, pre-admission refusal, or "
         "delivery/Admission uncertainty | local journal/capsule only; no Host Artifact "
-        "ingress and no `RecoveryDraft` claim",
+        "ingress |",
         "takeover delivery unknown | exact transport replay is allowed only with its "
         "available capsule and current binding",
         "Event arrival alone does not settle the local group",
@@ -1664,10 +1664,9 @@ def self_test() -> None:
          "after reload or process restart; and no second command invocation;",
          "Web reload GET-first meaning drifted"),
         ("frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission "
-         "uncertainty | local journal/capsule only; no Host Artifact ingress and no "
-         "`RecoveryDraft` claim",
+         "uncertainty | local journal/capsule only; no Host Artifact ingress |",
          "frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission "
-         "uncertainty | create a `RecoveryDraft` from reload, journal, or capsule evidence",
+         "uncertainty | create a Host Artifact from reload, journal, or capsule evidence |",
          "Web reload GET-first meaning drifted"),
         ("takeover delivery unknown | exact transport replay is allowed only with its "
          "available capsule and current binding; never obtain a fresh challenge until "

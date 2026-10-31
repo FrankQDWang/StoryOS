@@ -202,7 +202,6 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
             author_command_admission_id: command.ids.author_command_admission_id.clone(),
             reconfirmation_reason:
                 ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable,
-            recovery_draft_ref: None,
         });
     assert_eq!(queried, expected);
 
@@ -255,7 +254,6 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         rows[0]["reconfirmation_reason"],
         "direct_edit_intent_unrecoverable"
     );
-    assert!(rows[0]["recovery_draft_ref"].is_null());
     assert!(rows[0]["settled_at"].is_string());
 
     admin

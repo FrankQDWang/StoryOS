@@ -163,12 +163,6 @@
             },
             "reconfirmation_reason": {
               "$ref": "#/$defs/ApplyAuthorEditReconfirmationReason"
-            },
-            "recovery_draft_ref": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           },
           "required": [
