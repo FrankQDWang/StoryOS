@@ -4,6 +4,7 @@ import { activityStream } from "../../../../generated/typescript/storyos-public-
 import { JOURNAL_DATABASE_VERSION } from "../../src/local-edit-journal.ts";
 import {
   applyTrustedInput,
+  assertPageProjectReceipts,
   updateAuthorEditSubmissionHold,
   updateClientSessionCookie,
   updateClipboardPermission,
@@ -448,4 +449,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
     },
   };
   expect(normalizeStage1Journey(observed)).toEqual(expectedStage1Journey());
+  // The fixture Project A holds only the four Receipts of this journey.
+  await assertPageProjectReceipts({ projectId: PROJECT_A, kinds: "all",
+    receipts: { applyAuthorEdit: 4 }, authorActions: 4 });
 });

@@ -4,7 +4,7 @@ import { afterEach, expect, it } from "vitest";
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   applyTrustedInput,
-  assertListedProjectReceipts,
+  assertPageProjectReceipts,
   resetCommandChallengeRateWindows,
   settleWorkerOnce,
   updateClientSessionCookie,
@@ -228,5 +228,5 @@ it("keeps a taken-over writer editable after structure changes, a readable expor
   const saved = await getChapter({ baseUrl: realm.location.origin, projectId,
     chapterId: ids["Chapter C"]!, fetchImpl: applicationWindow(frame).fetch.bind(applicationWindow(frame)) });
   expect(saved.chapter.current_revision.body).toBe(`${texts["Chapter C"]}+`);
-  await assertListedProjectReceipts({ projectId, receipts: { takeOverProjectWriter: 1 } });
+  await assertPageProjectReceipts({ projectId, kinds: "listed", receipts: { takeOverProjectWriter: 1 } });
 });

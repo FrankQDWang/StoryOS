@@ -210,7 +210,7 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     } finally {
       await observer.close();
     }
-    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1, createChapter: 1,
       updateProjectAssistance: 1, applyAuthorEdit: 1, createAgentRun: 3, pauseAgentRun: 2, steerAgentRun: 1,
       cancelAgentRun: 1, takeOverProjectWriter: 1 }, authorActions: 3 });
   } finally {

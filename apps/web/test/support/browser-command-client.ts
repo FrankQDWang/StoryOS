@@ -9,7 +9,7 @@ import {
   type CommandChallengeRateWindowsResult,
   type ImeCompositionRequest,
   type ImeCompositionResult,
-  type ListedProjectReceiptsRequest,
+  type ProjectReceiptsRequest,
   type ProductionHostRequest,
   type ProductionHostResult,
   type TrustedInputRequest,
@@ -19,7 +19,7 @@ import {
   parseClipboardPermissionResult,
   parseCommandChallengeRateWindowsResult,
   parseImeCompositionResult,
-  parseListedProjectReceiptsResult,
+  parseProjectReceiptsResult,
   parseProductionHostResult,
   parseSettleWorkerOnceResult,
   parseTrustedInputResult,
@@ -98,8 +98,8 @@ export async function settleWorkerOnce(): Promise<void> {
   );
 }
 
-export async function assertListedProjectReceipts(request: ListedProjectReceiptsRequest): Promise<void> {
-  parseListedProjectReceiptsResult(
-    await invokeStoryOSCommand(storyOSBrowserCommandNames.listedProjectReceipts, request),
+export async function assertPageProjectReceipts(request: ProjectReceiptsRequest): Promise<void> {
+  parseProjectReceiptsResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.projectReceipts, request),
   );
 }

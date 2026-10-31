@@ -283,7 +283,7 @@ export async function verifyProductionHostJourney(sharedContext: BrowserContext)
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
-    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1,
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
       createChapter: 1, applyAuthorEdit: 3, takeOverProjectWriter: 1 }, authorActions: 5 });
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));

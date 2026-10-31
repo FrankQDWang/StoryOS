@@ -8,7 +8,7 @@ import {
   parseClipboardPermissionRequest,
   parseCommandChallengeRateWindowsRequest,
   parseImeCompositionRequest,
-  parseListedProjectReceiptsRequest,
+  parseProjectReceiptsRequest,
   parseProductionHostRequest,
   parseSettleWorkerOnceRequest,
   parseTrustedInputRequest,
@@ -94,10 +94,15 @@ export const storyOSBrowserCommands = {
       return { kind: "command_challenge_rate_windows_reset" } as const;
     },
   ),
-  [storyOSBrowserCommandNames.listedProjectReceipts]: defineBrowserCommand<[request: unknown]>(
+  [storyOSBrowserCommandNames.projectReceipts]: defineBrowserCommand<[request: unknown]>(
     async (_context, value) => {
-      const request = parseListedProjectReceiptsRequest(value);
-      await assertProjectReceipts([request.projectId], { receipts: request.receipts, kinds: "listed" });
+      const request = parseProjectReceiptsRequest(value);
+      await assertProjectReceipts([request.projectId], {
+        projects: 1,
+        receipts: request.receipts,
+        kinds: request.kinds,
+        ...(request.authorActions === undefined ? {} : { authorActions: request.authorActions }),
+      });
       return { kind: "project_receipts_verified" } as const;
     },
   ),

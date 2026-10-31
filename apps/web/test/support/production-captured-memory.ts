@@ -153,7 +153,7 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await writeFile(join(evidence, "captured-settings.json"), JSON.stringify({ first: historical, second: current,
       unavailable: await inspect(second.effect.run_id) }, null, 2));
     assert.deepEqual(pageErrors, []);
-    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1, createChapter: 1,
       updateProjectAssistance: 1, createAgentRun: 2, cancelAgentRun: 1 }, authorActions: 2 });
   } finally {
     try {

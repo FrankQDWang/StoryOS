@@ -255,7 +255,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     assert.equal(blocked.model_attempt.kind, "absent");
     await page.reload();
     assert.deepEqual((await inspect(blockedId)).context, blocked.context);
-    await assertProjectReceipts(projectIds, { receipts: { createProject: 13, createVolume: 13, createChapter: 13,
+    await assertProjectReceipts(projectIds, { projects: 13, receipts: { createProject: 13, createVolume: 13, createChapter: 13,
       updateProjectAssistance: 13, applyAuthorEdit: 4, createAgentRun: 19, cancelAgentRun: 2 }, authorActions: 30 });
     assert.deepEqual(errors, []);
   } finally {

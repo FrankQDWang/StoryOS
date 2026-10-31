@@ -246,7 +246,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       await verifyConflictedProposalRecovery({ page, context, origin, projectId, chapterId,
         proposalId: firstProposalId, proposal: firstProposal, chapterRevisionId:
           before.chapter.current_revision.revision_id });
-      await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1,
+      await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
         createChapter: 1, applyAuthorEdit: 4, updateProjectAssistance: 1, createAgentRun: 1,
         acceptProposal: 1, takeOverProjectWriter: 1 }, authorActions: 7 });
       assert.deepEqual(errors, []);
@@ -732,7 +732,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       [MESSAGE, CORRECTION, "Help with this passage.", followUp]);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, freshChapter.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-851-plain-follow-up.png"), fullPage: true });
-    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1,
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1,
       createChapter: 1, applyAuthorEdit: 4, undoLatestAuthorAction: 1, updateProjectAssistance: 1,
       createAgentRun: 4, acceptProposal: 1, rejectProposalOperations: 1 }, authorActions: 9 });
     assert.deepEqual(errors, []);

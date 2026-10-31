@@ -4,7 +4,7 @@ export const storyOSBrowserCommandNames = {
   clientSessionCookie: "storyosClientSessionCookie",
   commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
   imeComposition: "storyosImeComposition",
-  listedProjectReceipts: "storyosListedProjectReceipts",
+  projectReceipts: "storyosProjectReceipts",
   trustedInput: "storyosTrustedInput",
   productionHost: "storyosProductionHost",
   settleWorkerOnce: "storyosSettleWorkerOnce",
@@ -45,10 +45,12 @@ export type ProductionHostRequest = Readonly<{
     | "selection_reference";
 }>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
-/** The expected Receipt count of each listed command kind of one Project. */
-export type ListedProjectReceiptsRequest = Readonly<{
+/** The expected Receipts of one Project. `listed` counts only the command kinds of `receipts`. */
+export type ProjectReceiptsRequest = Readonly<{
   projectId: string;
   receipts: Readonly<Record<string, number>>;
+  kinds: "all" | "listed";
+  authorActions?: number;
 }>;
 export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
 export type CommandChallengeRateWindowsResult = Readonly<{
@@ -268,9 +270,22 @@ export function parseSettleWorkerOnceResult(value: unknown): Readonly<{ kind: "w
   return parseResult(value, "worker_settled", "Worker settlement");
 }
 
-export function parseListedProjectReceiptsRequest(value: unknown): ListedProjectReceiptsRequest {
-  const request = exactObject(value, ["projectId", "receipts"], "Project Receipt request");
+export function parseProjectReceiptsRequest(value: unknown): ProjectReceiptsRequest {
+  const withAuthorActions = typeof value === "object" && value !== null && "authorActions" in value;
+  const request = exactObject(value, withAuthorActions
+    ? ["projectId", "receipts", "kinds", "authorActions"]
+    : ["projectId", "receipts", "kinds"], "Project Receipt request");
   const projectId = boundedText(property(request, "projectId"), "Project ID");
+  const kinds = property(request, "kinds");
+  if (kinds !== "all" && kinds !== "listed") throw new TypeError("Project Receipt kinds must be all or listed");
+  let authorActions: number | undefined;
+  if (withAuthorActions) {
+    const count = property(request, "authorActions");
+    if (typeof count !== "number" || !Number.isSafeInteger(count)) {
+      throw new TypeError("Author Action count must be an integer");
+    }
+    authorActions = count;
+  }
   const listed = property(request, "receipts");
   if (typeof listed !== "object" || listed === null) throw new TypeError("Project Receipts must be an object");
   const receipts: Record<string, number> = {};
@@ -281,10 +296,12 @@ export function parseListedProjectReceiptsRequest(value: unknown): ListedProject
     }
     receipts[kind] = count;
   }
-  return { projectId, receipts };
+  return authorActions === undefined
+    ? { projectId, receipts, kinds }
+    : { projectId, receipts, kinds, authorActions };
 }
 
-export function parseListedProjectReceiptsResult(
+export function parseProjectReceiptsResult(
   value: unknown,
 ): Readonly<{ kind: "project_receipts_verified" }> {
   return parseResult(value, "project_receipts_verified", "Project Receipts");

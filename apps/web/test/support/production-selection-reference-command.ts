@@ -157,7 +157,7 @@ export async function verifyProductionSelectionReference(context: BrowserContext
     assert.equal(run.status, "completed");
     assert.deepEqual(run.context.selection_references?.map((item) => [item.reference, item.availability.kind]),
       [[reference([0, 4], [1, 2]), "current"], [reference([2, 0], [2, 2]), "current"]]);
-    await assertProjectReceipts([projectId], { receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+    await assertProjectReceipts([projectId], { projects: 1, receipts: { createProject: 1, createVolume: 1, createChapter: 1,
       updateProjectAssistance: 1, applyAuthorEdit: 6, createAgentRun: 1, steerAgentRun: 1 }, authorActions: 8 });
     assert.deepEqual(errors, []);
   } finally {
