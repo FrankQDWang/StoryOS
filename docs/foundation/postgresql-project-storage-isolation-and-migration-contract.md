@@ -9,8 +9,7 @@
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Operational lifecycle contract: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
 - Release 1 persistence catalog: [`postgresql-release-1-persistence-catalog.json`](postgresql-release-1-persistence-catalog.json)
-- Review-time catalog verifier entry: [`verify-postgresql-release-1-persistence-catalog.py`](verify-postgresql-release-1-persistence-catalog.py)
-- Verifier modules: [`postgresql_persistence_verifier_common.py`](postgresql_persistence_verifier_common.py), [`postgresql_persistence_verifier_storage.py`](postgresql_persistence_verifier_storage.py), and [`postgresql_persistence_verifier_route.py`](postgresql_persistence_verifier_route.py)
+- Catalog check: the migration digest check of the `storyos-adapter-postgres` build script
 
 ## 0. Release 1 closure and compatibility identity
 
@@ -141,14 +140,6 @@ credential material. A deployment secret sets the runtime credential only
 after the atomic bootstrap commits and before runtime traffic starts. The local
 verification deployment injects one disposable test password after it proves
 that the tracked bootstrap stored no password.
-
-The entry verifier above remains the only public review command:
-`python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py
---self-test`. It delegates shared source/link/digest helpers, storage and
-physical-ledger validation, and route/settlement/Activity coverage to the
-three sibling modules named in the header. Those modules are review-time
-implementation detail, not additional catalog or contract authorities and have
-no independent CLI or alternate validation path.
 
 ### 0.3 Durable `takeOverProjectWriter` Admission and Activity
 
@@ -1550,9 +1541,7 @@ covers at least:
     gate; deletion and rebuild cannot expose a partial generation;
 24. backup, whole-service restore, Project Export, Project Restore, projection
     rebuild, secret-exclusion, settlement, and predecessor classifications are
-    mutually consistent; a negative self-test proves that duplicate identity,
-    broken owner anchor, invalid settlement, invalid portability, predecessor
-    bypass, and invented table-family inputs are rejected;
+    mutually consistent;
 25. the catalog's protocol route-catalog digest and migration-chain digest
     agree with the checked-in Release 1 inputs, so a same-release activation
     cannot skip storage migration by reusing a public protocol identity.
@@ -1630,8 +1619,8 @@ covers at least:
     dependency closure, current generation, source watermark, and valid
     invalidation state; a restored Project requires a fresh Snapshot/resync and
     Recovery Visibility Proof before live traffic.
-19. The machine-readable persistence catalog and its verifier are review-time
-    contract proof, not production DDL or executable recovery. Their derived
+19. The machine-readable persistence catalog is review-time
+    contract proof, not production DDL or executable recovery. Its derived
     statistics never become hard limits, retention defaults, or RPO/RTO claims.
 20. Exact retry reads the idempotency result reference and Receipt first, then
     validates the result-specific relation cardinality. It never reconstructs
@@ -1668,7 +1657,7 @@ defined here, and this contract does not decide their unowned semantics.
 
 ### 12.2 Requirement traceability
 
-| Requirement | Contract closure | Catalog/verifier proof |
+| Requirement | Contract closure | Catalog proof |
 |---|---|---|
 | PGS-REL-001 | Sections 0, 9.3–9.4, invariant 15, and the activation gates | `schema_identity`, protocol binding, route/migration digest checks |
 | PGS-MIG-002 | Sections 9.1–9.4 and failure-state table | `migration_chain`, empty-edge/bootstrap path, `state_machine`, and future-edge boundary checks |
@@ -1678,6 +1667,6 @@ defined here, and this contract does not decide their unowned semantics.
 | PGS-PROJ-006 | Sections 7.3–7.5 and 10.5 | generation/dependency/watermark/invalidation/rebuild/visibility checks |
 | PGS-REC-007 | Sections 8–10.5 | portability and secret-exclusion classification checks |
 | PGS-BOUND-008 | Sections 10.1, 10.5, and 12.1 | owner anchors plus explicit non-normative measurement/retention boundaries |
-| PGS-VERIFY-009 | Sections 0, 11.19–11.25, and 12.2 | positive verifier, route/Event cross-check, Markdown links, and negative self-test |
+| PGS-VERIFY-009 | Sections 0, 11.19–11.25, and 12.2 | The migration digest check of the `storyos-adapter-postgres` build script |
 | PGS-RECEIPT-010 | Sections 4.5, 5.4, 11.26, and invariants 5 and 20 | `author_edit_receipt_activity`, SQL constraints, bootstrap checksums, and PostgreSQL/HTTP exact-retry gates |
 | PGS-MEMORY-011 | Sections 0.5, 3.4, 5.7, 7.2–7.5, 8.2–8.3, 11.27–11.29, and invariant 21 | Existing family ownership and registry digest; runtime publication, copy-restriction, and recovery proof remains with later implementation |

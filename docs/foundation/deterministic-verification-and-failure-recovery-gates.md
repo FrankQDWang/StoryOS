@@ -232,13 +232,13 @@ that source.
 The tracked Release 1 catalog and verifier inputs are:
 
 - [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
-  and its checked-in verifier/self-test;
+  and the migration digest check of the `storyos-adapter-postgres` build script;
 - the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
   and the registry tests of `storyos-contracts`; and
 - the source contracts, generated outputs, golden wire corpus, and exact
   same-release identity owned by `OWN-PROTO` and `OWN-PG`.
 
-The catalog files are executable verification inputs. Their parse/self-tests
+The catalog files are executable verification inputs. Their checks
 are necessary catalog checks, not a substitute for the crosswalk or for later
 product implementation evidence.
 
@@ -1148,8 +1148,8 @@ state:
   reference resolves to this document or the companion catalogue;
 - every relative link and internal anchor resolves, and every named tracked
   owner/catalog/verifier path exists;
-- the checked-in PostgreSQL and route catalog parse/self-tests both pass,
-  including their negative self-tests;
+- the PostgreSQL catalog migration digest check and the route catalog
+  registry tests pass;
 - the target document is UTF-8, LF-only, has exactly one final newline, and
   passes `git diff --check`;
 - no `.reference/**` file changes or dependency enters the proof input, and
@@ -1172,7 +1172,7 @@ This contract consumes the exact-baseline versions of:
 - [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md);
 - the owner contracts listed in section 4;
 - [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
-  with [its verifier](verify-postgresql-release-1-persistence-catalog.py); and
+  with the migration digest check of the `storyos-adapter-postgres` build script; and
 - the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
   with the registry tests of `storyos-contracts`.
 
