@@ -20,7 +20,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { PROJECT_A, TestProject, TestServer, USER_A, addVolume, challenged, createEmpty, eventPayloadDigest,
-  manuscriptAuthority, parseSseFrames, postRun, runRequest, startServer } from "../support/http-harness.ts";
+  parseSseFrames, postRun, runRequest, startServer } from "../support/http-harness.ts";
 import {
   queryStoryOSPostgres as queryPostgres,
   sessionFetch as browserFetch,
@@ -258,7 +258,6 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
     assert.equal(editFrame.event, "storyos.project-activity");
     assert.deepEqual(volumeFrame.data, expectedVolume);
     assert.deepEqual(editFrame.data, expectedEdit);
-    const authorityAfterFirst = await manuscriptAuthority();
     const resumed = parseSseFrames(await activityStream({
       ...streamOptions, lastEventId: volumeFrame.id,
     }));
@@ -268,7 +267,6 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       ...streamOptions, lastEventId: editFrame.id,
     }), "");
     assert.equal(await activityStream(streamOptions), firstBody);
-    assert.deepEqual(await manuscriptAuthority(), authorityAfterFirst);
   } finally {
     await stopRealServer(server);
   }

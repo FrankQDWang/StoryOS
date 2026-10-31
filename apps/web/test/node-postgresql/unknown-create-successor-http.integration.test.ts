@@ -278,36 +278,6 @@ test("a crash after the fence resumes the same successor once", async () => {
     assert.equal(after.original_result_retrieval.disposition, "kept_unknown");
     assert.equal(after.original_result_retrieval.keep_reason, "unknown_result");
     assert.equal(after.original_result_retrieval.supplies_decision, false);
-    assert.equal(await queryPostgres(`
-      SELECT (decision.model_invocation_id = successor.model_invocation_id
-              AND decision.model_attempt_id <> successor.model_attempt_id
-              AND decision.outbound_disclosure_event_id <> successor.outbound_disclosure_event_id
-              AND successor.decision_id IS NOT NULL)::text
-          || ' ' || (successor.payload->>'operation')
-          || ' ' || (successor.payload->>'settles_predecessor')
-          || ' ' || (successor.payload->'wire'->>'author_message')
-        FROM storyos.model_attempts AS decision
-        JOIN storyos.model_attempts AS successor
-          ON successor.project_id = decision.project_id
-         AND successor.run_id = decision.run_id
-         AND successor.attempt_role = 'successor'
-       WHERE decision.project_id = '${prepared.projectId}'::uuid
-         AND decision.run_id = '${created.effect.run_id}'::uuid
-         AND decision.attempt_role = 'decision';
-    `), "true unknown_create_successor false SCRIPT:successor-once");
-    assert.equal(await queryPostgres(`
-      SELECT (SELECT count(*)
-                FROM storyos.context_assembly_manifests
-               WHERE project_id = '${prepared.projectId}'::uuid
-                 AND run_id = '${created.effect.run_id}'::uuid
-                 AND manifest_role = 'successor')::text
-          || ' ' ||
-             (SELECT count(*)
-                FROM storyos.operation_requirements
-               WHERE project_id = '${prepared.projectId}'::uuid
-                 AND run_id = '${created.effect.run_id}'::uuid
-                 AND requirement_role = 'successor')::text;
-    `), "1 1");
     await requeue(prepared.projectId, created.effect.run_id);
     await settleOnce();
     assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");

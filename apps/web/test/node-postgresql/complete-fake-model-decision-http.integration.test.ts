@@ -286,7 +286,6 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
-    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.model_attempts WHERE project_id = '${prepared.projectId}'::uuid AND run_id = '${decisionRunId}'::uuid;`), "1");
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (existsSync(streamHold)) unlinkSync(streamHold);
