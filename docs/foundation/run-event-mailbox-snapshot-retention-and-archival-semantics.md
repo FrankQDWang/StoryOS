@@ -144,8 +144,8 @@ The retention decision is made against a logical record class, never against a
 hand-maintained list of tables. The Release 1 persistence catalog remains the
 single physical source of truth. The family identifiers below are a review
 crosswalk to that catalog; they are not a second table ledger, and their
-derived family/table counts must continue to come from the existing catalog
-verifier. For each named sub-class, its existing contract remains the sole
+derived family/table counts must continue to come from the existing catalog.
+For each named sub-class, its existing contract remains the sole
 owner of meaning; #64 is the sole owner of the Retention Profile, Decision,
 and availability treatment, while #56 remains the physical-storage owner.
 Artifact Tombstone remains owned by the Artifact contract. Section 2.10
@@ -815,7 +815,7 @@ obligations without creating a second physical-table, route, or Event ledger.
 | RET-011 | Archive/export manifest, root digest, provenance closure, known gaps, and integrity proof stay distinct from Recovery Copy and Project Restore; restore validates lifecycle before visibility. | #56 physical restore, #58 archive wire, #64 lifecycle inclusion. |
 | RET-012 | The read-only audit inspection Query for Run evidence reports retained/archived/compacted/redacted/tombstoned/recovery-hold/deletion state without inventing completeness or dispatch. It is not an author view (ADR 0040). | #64 and the editor-first journey verification. |
 | RET-013 | Every numeric input is classified as accepted hard contract, observation, controlled synthetic result, modelled projection, or candidate band with workload/environment/headroom/owner; unmeasured values remain unresolved. | #64 adoption rule; #76 evidence only. |
-| RET-014 | The #56/#58 catalogs and their verifiers remain the mechanical source for physical-family, route/settlement, public Event, and Activity/Snapshot/cursor consistency; this document adds only a reviewable retention crosswalk and owner boundary, not a second ledger or verifier claim. | Existing catalog verifiers for mechanical facts; review of this crosswalk for retention semantics; #60 later supplies executable proof. |
+| RET-014 | The #56/#58 catalogs remain the mechanical source for physical-family, route/settlement, public Event, and Activity/Snapshot/cursor consistency; this document adds only a reviewable retention crosswalk and owner boundary, not a second ledger or verifier claim. | Existing catalog checks for mechanical facts; review of this crosswalk for retention semantics; #60 later supplies executable proof. |
 | RET-015 | Generated Memory payload cleanup preserves current publications, Artifact Heads, author records, unsettled work, shared retained bytes, and exact identity/use/Decision/gap evidence. | #64 eligibility; Artifact and storage owners retain their lifecycle and physical boundaries. |
 | RET-016 | Active context compaction may occur between calls in an active Run without deleting history; its immutable evidence is not a disposable cache. Later operational-byte cleanup requires settlement and Seal where applicable. | Context owner for active compaction; #64 for retention. |
 | RET-017 | Ordinary corrections and Memory Notes do not cause semantic suppression or a continuation reset. Real covered-copy restrictions fence all owned access and reconstruction paths before cleanup. | Memory/Context/storage owners for meaning and fences; #64 for cleanup and retained evidence. |
@@ -886,8 +886,8 @@ consumes the finalized semantics, and the terminal audit remains downstream.
 
 The logical record-class table above is a reviewable crosswalk: each referenced
 family identifier is checked against the single #56 JSON catalog at review
-time, but the existing persistence verifier does not parse this Markdown or
-mechanically verify its classifications. The #56 catalog and verifier remain
+time, but no check parses this Markdown or
+mechanically verifies its classifications. The #56 catalog remains
 the mechanical source for physical-family coverage and owner anchors.
 
 The #58 route/Event catalog and its verifier remain the mechanical source for
@@ -897,7 +897,7 @@ preserves their owner boundary and consumes the established Activity,
 Snapshot, cursor-floor, and `activity_cursor_too_old` meanings for lifecycle
 availability. Retention semantics do not add or rename a route, DTO, Event, or
 physical family. A future catalog change requires a fresh review of this
-crosswalk; the existing verifiers may pass without reading this document.
+crosswalk; the existing catalog checks may pass without reading this document.
 
 Exact quantitative values remain Retention Profile inputs calibrated through
 [PER-001, PER-002, and PER-006 through PER-008](../../EXPERIMENTAL-TUNING-REGISTER.md). They
