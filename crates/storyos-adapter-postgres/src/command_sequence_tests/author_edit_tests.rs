@@ -769,7 +769,6 @@ async fn the_outcome_query_settles_an_expired_or_unrecoverable_admission_as_requ
                     command_id: command.ids.command_id.clone(),
                     author_command_admission_id: command.ids.author_command_admission_id.clone(),
                     reconfirmation_reason,
-                    recovery_draft_ref: None,
                 },
             );
         // The Admission has one reconfirmation, no Receipt, and no Receipt settlement.

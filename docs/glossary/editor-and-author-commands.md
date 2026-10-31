@@ -39,10 +39,6 @@ _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor
 The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. `outcome_unknown` is a reported condition, never a settlement. Missing response never proves non-commit.
 _Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token, missing response as failure
 
-**Editor Recovery Creator**:
-The closed StoryOS Host Artifact Creator used only for a Recovery Draft, binding one exact Editor Session, writer generation, complete recovered intent, and its Local Edit Journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It causes no Core invocation or Author Action, turns no browser cache into authority, and grants no reusable authorization.
-_Avoid_: Author Command Admission, automatic edit replay, browser cache as truth, generic System
-
 **Pre-Admission Refusal Record**:
 An immutable, bounded, sanitized Operational Record created when StoryOS refuses an author command before Author Command Admission, carrying only the safe reached boundary, typed reason, applicable server-derived in-Scope identity, contract identities, correlation, and audit time. It proves there is no Admission, Command, nonce consumption, Receipt, or Core effect and is not an Admission lifecycle state.
 _Avoid_: Author Command Admission, rejected request copy, foreign-object audit oracle

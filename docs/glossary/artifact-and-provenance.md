@@ -33,7 +33,7 @@ A typed relationship from an Artifact Revision to an exact source or cause. Its 
 _Avoid_: Source list, citation text
 
 **Creator**:
-The single closed producer identity that directly created an Artifact Revision: exact admitted Author, AgentRunStep, ToolCall, Import Operational Record, Core Transition Receipt, or Editor Recovery Creator. MCP and extension work resolves through ToolCall, model work through AgentRunStep, and raw browser-local state is never a Creator; earlier contributions remain visible through Provenance Edges.
+The single closed producer identity that directly created an Artifact Revision: exact admitted Author, AgentRunStep, ToolCall, Import Operational Record, or Core Transition Receipt. MCP and extension work resolves through ToolCall, model work through AgentRunStep, and raw browser-local state is never a Creator; earlier contributions remain visible through Provenance Edges.
 _Avoid_: Generic System, browser event, model, MCP App, contributors array
 
 **External Source Snapshot**:
@@ -125,7 +125,7 @@ A non-binding account of a potentially useful execution outcome, with relevant s
 _Avoid_: Executable instruction, promoted Skill, verified general rule
 
 **Draft**:
-A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, including Plan and Recovery Drafts. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.
+A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, for example a Plan. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.
 _Avoid_: Proposal, authoritative draft
 
 **Message**:

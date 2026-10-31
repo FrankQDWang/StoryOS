@@ -65,7 +65,7 @@ const RETRY_SOURCE = { kind: "draft_retry", source_draft_kind: "refused_edit", s
     to: { block_index: 0, offset: 1 }, slice_digest: "b".repeat(64) } } as const;
 const RECONFIRMATION = { kind: "outcome_query_requires_reconfirmation", command_id: "018f0000-0000-7001-8000-000000000031",
   author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
-  reconfirmation_reason: "direct_edit_intent_unrecoverable", recovery_draft_ref: null } as JournalSubmissionGroup["settlement"];
+  reconfirmation_reason: "direct_edit_intent_unrecoverable" } as JournalSubmissionGroup["settlement"];
 
 /** Gives the frozen group as the Draft retry group that an earlier client stored. */
 async function earlierDraftRetryGroup(frozen: JournalSubmissionGroup, settlement: JournalSubmissionGroup["settlement"]) {
