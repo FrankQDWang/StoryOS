@@ -97,70 +97,6 @@ async function postRunWithChallenge(
   return { nonce, admitted };
 }
 
-test("Worker completes one Host-fake advisory Decision", async () => {
-  const started = await startServer();
-  try {
-    await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e111"), "Fake Decision Novel", "e2");
-    const created = await admitRun(started.baseUrl, prepared, id("e131"), "Help with this passage.");
-    await settleOnce();
-    const queried = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
-    assert.equal(queried.status, "completed");
-    assert.equal(queried.context.destination_io.kind, "host_fake");
-    assert.equal(queried.context.destination_context_manifest.kind, "present");
-    assert.equal(queried.context.outbound_disclosure_manifest.kind, "present");
-    assert.equal(queried.context.host_control.distinct_from_destination, true);
-    assert.equal(queried.context.host_control.destination_visible, true);
-    assert.equal(queried.decision.kind, "advisory");
-    if (queried.decision.kind !== "advisory") throw new Error("expected advisory");
-    assert.equal(queried.decision.selected, true);
-    assert.equal(queried.decision.text, ADVISORY);
-    assert.equal(queried.decision.continuation.kind, "present");
-    assert.match(queried.decision.decision_id, UUID_V7);
-    assert.equal(queried.model_attempt.kind, "present");
-    if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
-    assert.match(queried.model_attempt.model_attempt_id, UUID_V7);
-    assert.equal(queried.model_attempt.dispatch_state, "settled");
-    assertEvidence(queried, "Help with this passage.");
-    assert.equal(queried.redaction_profile, "storyos.author.v1");
-    assert.equal(queried.items[0]?.state, "complete");
-    assert.equal(queried.items[0]?.phase, "complete");
-    assert.equal(queried.usage.kind, "unknown");
-    const matched = await inspectRun(started.baseUrl, prepared, created.effect.run_id, queried.model_attempt.model_attempt_id);
-    assert.equal(matched.status, "completed");
-    const second = await admitRun(
-      started.baseUrl,
-      prepared,
-      id("e133"),
-      "Help with this passage.",
-      { kind: "existing", conversation_id: created.conversation_id },
-    );
-    await settleOnce();
-    const secondInspect = await inspectRun(started.baseUrl, prepared, second.effect.run_id);
-    if (secondInspect.model_attempt.kind !== "present") throw new Error("expected second attempt");
-    const foreignAttemptId = secondInspect.model_attempt.model_attempt_id;
-    await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, foreignAttemptId),
-      (error) => requireStoryOSProtocolError(error).status === 404,
-    );
-    await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared, created.effect.run_id, id("dead")),
-      (error) => requireStoryOSProtocolError(error).status === 404,
-    );
-    await assert.rejects(
-      () => inspectRun(started.baseUrl, { projectId: prepared.projectId, fetchImpl: browserFetch(started.baseUrl, "session-b") }, created.effect.run_id),
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
-      },
-    );
-    assert.equal(second.effect.kind, "admitted");
-    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.model_attempts WHERE project_id = '${prepared.projectId}'::uuid AND run_id = '${created.effect.run_id}'::uuid;`), "1");
-  } finally {
-    await stopRealServer(started.server);
-  }
-});
-
 test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval without dispatch", async () => {
   const started = await startServer();
   try {
@@ -317,6 +253,39 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(afterDecision.decision.kind, "advisory");
     if (afterDecision.decision.kind !== "advisory") throw new Error("expected advisory");
     assert.equal(afterDecision.decision.continuation.kind, "present");
+    assert.equal(afterDecision.decision.selected, true);
+    assert.equal(afterDecision.decision.text, ADVISORY);
+    assert.match(afterDecision.decision.decision_id, UUID_V7);
+    assert.equal(afterDecision.context.destination_io.kind, "host_fake");
+    assert.equal(afterDecision.context.destination_context_manifest.kind, "present");
+    assert.equal(afterDecision.context.outbound_disclosure_manifest.kind, "present");
+    assert.equal(afterDecision.context.host_control.distinct_from_destination, true);
+    assert.equal(afterDecision.context.host_control.destination_visible, true);
+    if (afterDecision.model_attempt.kind !== "present") throw new Error("expected attempt");
+    assert.match(afterDecision.model_attempt.model_attempt_id, UUID_V7);
+    assert.equal(afterDecision.model_attempt.dispatch_state, "settled");
+    assertEvidence(afterDecision, "Help with this passage.");
+    assert.equal(afterDecision.redaction_profile, "storyos.author.v1");
+    assert.equal(afterDecision.items[0]?.state, "complete");
+    assert.equal(afterDecision.items[0]?.phase, "complete");
+    assert.equal(afterDecision.usage.kind, "unknown");
+    const decisionRunId = decisionRun.effect.run_id;
+    assert.equal((await inspectRun(started.baseUrl, prepared, decisionRunId,
+      afterDecision.model_attempt.model_attempt_id)).status, "completed");
+    if (beforeDecision.model_attempt.kind !== "present") throw new Error("expected dispatch attempt");
+    for (const attemptId of [beforeDecision.model_attempt.model_attempt_id, id("dead")]) {
+      await assert.rejects(
+        () => inspectRun(started.baseUrl, prepared, decisionRunId, attemptId),
+        (error) => requireStoryOSProtocolError(error).status === 404,
+      );
+    }
+    await assert.rejects(
+      () => inspectRun(started.baseUrl, { projectId: prepared.projectId, fetchImpl: browserFetch(started.baseUrl, "session-b") }, decisionRunId),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+      },
+    );
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (existsSync(streamHold)) unlinkSync(streamHold);

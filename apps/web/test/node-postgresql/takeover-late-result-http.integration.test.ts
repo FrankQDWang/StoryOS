@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/takeover-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
@@ -77,7 +77,9 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     if (observer.writer.kind !== "read_only") {
       throw new Error("the observer unexpectedly became the current writer");
     }
+    assert.equal(observer.writer.reason, "secondary_session");
     const priorGeneration = writer.writer.writer_generation;
+    const resultingGeneration = String(BigInt(priorGeneration) + 1n);
     const from = writer.base_snapshot.materialized_revision.body.length;
     const expectedBody = `${writer.base_snapshot.materialized_revision.body}!`;
     const authorEditRequest: ApplyAuthorEditRequest = {
@@ -149,6 +151,58 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       takeoverRequest.command_schema, takeoverDigest, takeoverKey,
       (antiForgery) => takeOverProjectWriter({ ...takeoverOptions, antiForgery: (takeoverNonce = antiForgery) }));
     if (takeover.result.kind !== "takeover_applied") throw new Error("Takeover did not apply");
+    assert.match(takeover.command_id, UUID);
+    assert.match(takeover.author_command_admission_id, UUID);
+    assert.match(takeover.receipt.receipt_id, UUID);
+    assert.match(takeover.receipt.created_at, ISO_INSTANT);
+    assert.match(takeover.receipt.command_digest.value_hex_lowercase, DIGEST_HEX);
+    assert.match(takeover.result.resulting_snapshot_id, UUID);
+    assert.match(takeover.result.resulting_snapshot_activity_position, /^[1-9][0-9]*$/);
+    const heads = takeover.result.resulting_heads;
+    assert.equal(heads.length, 1);
+    assert.match(heads[0]!, UUID);
+    assert.deepEqual(takeover, {
+      schema_id: "storyos.command.take-over-project-writer.response.v1",
+      correlation_id: takeoverRequest.correlation_id,
+      project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
+      command_id: takeover.command_id,
+      author_command_admission_id: takeover.author_command_admission_id,
+      receipt: {
+        receipt_id: takeover.receipt.receipt_id,
+        project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
+        command_kind: "takeOverProjectWriter",
+        command_digest: {
+          algorithm: "sha256",
+          profile: "storyos.command.takeOverProjectWriter.jcs.v1",
+          value_hex_lowercase: takeover.receipt.command_digest.value_hex_lowercase,
+        },
+        idempotency_key: takeoverKey,
+        producer_cause: "author_command_admission",
+        author_command_admission_id: takeover.author_command_admission_id,
+        expected_heads: heads,
+        prior_heads: heads,
+        resulting_heads: heads,
+        authoritative_revision_ids: [],
+        proposal_revision_ids: [],
+        authoritative_commit_ids: [],
+        author_action_sequence: null,
+        draft_artifact_refs: [],
+        artifact_lifecycle_event_refs: [],
+        condition_refs: [],
+        result: "no_effect",
+        created_at: takeover.receipt.created_at,
+      },
+      result: {
+        kind: "takeover_applied",
+        prior_editor_session_id: writer.editor_session.editor_session_id,
+        prior_writer_generation: priorGeneration,
+        resulting_editor_session_id: observer.editor_session.editor_session_id,
+        resulting_writer_generation: resultingGeneration,
+        resulting_snapshot_id: takeover.result.resulting_snapshot_id,
+        resulting_snapshot_activity_position: takeover.result.resulting_snapshot_activity_position,
+        resulting_heads: heads,
+      },
+    });
     const winner = await getEditorSession({
       baseUrl, projectId: PROJECT_A, editorSessionId: observer.editor_session.editor_session_id,
       fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -203,10 +257,14 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     assert.deepEqual(Object.fromEntries(Object.keys(oldSnapshots)
       .map((id) => [id, newSnapshots[id]])), oldSnapshots);
     assert.equal(Object.keys(newSnapshots).length, Object.keys(oldSnapshots).length + 1);
-    assert.deepEqual((await getEditorSession({
+    const fencedWriter = await getEditorSession({
       baseUrl, projectId: PROJECT_A, editorSessionId: writer.editor_session.editor_session_id,
       fetchImpl: browserFetch(baseUrl, "session-a"),
-    })).base_snapshot, priorWriter.base_snapshot);
+    });
+    assert.deepEqual(fencedWriter.writer, {
+      kind: "read_only", observed_writer_generation: resultingGeneration, reason: "superseded_by_takeover",
+    });
+    assert.deepEqual(fencedWriter.base_snapshot, priorWriter.base_snapshot);
     assert.deepEqual(await takeOverProjectWriter({ ...takeoverOptions, antiForgery: takeoverNonce }), takeover);
     assert.deepEqual((await getEditorSession({
       baseUrl, projectId: PROJECT_A, editorSessionId: observer.editor_session.editor_session_id,

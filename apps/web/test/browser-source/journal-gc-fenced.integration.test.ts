@@ -14,6 +14,7 @@ import { collectEligibleJournalPayload } from "../../src/journal-payload-collect
 import {
   readJournalSnapshot,
   rebuildPendingProjection,
+  validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
 import {
   OWNER,
@@ -26,6 +27,7 @@ import {
   deleteJournal,
   jsonResponse,
   requestHeaders,
+  requestResult,
   requireDigestValue,
   requireEditorReady,
   requireRequestBody,
@@ -158,6 +160,29 @@ it("collects a fenced partition under its immutable old writer generation", asyn
       disposition: "read_only_observer",
     });
     expect(workspace.session.writer).toEqual(fencedSession.writer);
+    expect(await requestResult(workspace.database.transaction("partitions").objectStore("partitions")
+      .get(openPartition.journal_partition_id))).toEqual({ ...openPartition, disposition: "read_only_observer" });
+    const validated = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+    expect(validated.groups).toHaveLength(1);
+    expect(validated.groups[0]).toMatchObject({
+      journal_partition_id: openPartition.journal_partition_id,
+      project_scope: scenario.project.project_scope,
+      editor_session_id: SESSION,
+      writer_generation: "1",
+      batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+      action_class: "direct_editor_action",
+      method: "POST",
+      command_kind: "applyAuthorEdit",
+      settlement: {
+        kind: "applied_receipt_settled",
+        command_id: "018f0000-0000-7001-8000-000000000031",
+        author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+        authoritative_revision: chapterRevision(NEXT_REVISION, "Base!?"),
+        project_activity_position: "1",
+        installed_base_snapshot: fencedSession.base_snapshot,
+      },
+    });
+    expect(validated.groups[0]?.ordered_coverage).toHaveLength(validated.records.length);
     const settled = await readJournalSnapshot(workspace);
     const record = settled.records[0];
     const chain = settled.payloadChains[0];
