@@ -69,3 +69,4 @@ The command kind string of a command was written in six places, and no test comp
 - A new project command declares five types, one `CommandSpec`, and three methods. It implements the zero-authority side trait only when it writes zero-authority rows.
 - A new command kind is one `CommandKind` variant, one registry entry, and one `ALTER DOMAIN`. The two cross-check tests fail when one is missing.
 - The project command section of `CODING_STANDARDS.md` names the new surface.
+- The framework under `command_sequence` grew by the declared surface, from 3,708 lines at the integration base to 3,831 lines. The 23 files of the 24 command implementations went from 6,475 to 6,277 lines. Each command declares fewer types and hooks, and its `CommandSpec` has three more fields.
