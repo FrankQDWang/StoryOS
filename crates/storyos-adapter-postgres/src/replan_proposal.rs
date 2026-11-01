@@ -14,14 +14,23 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
+    ProjectCommand, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
+    unavailable,
 };
+use crate::proposal_decision::{decision_classification, decode_decision};
+use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
 use crate::undo_compensation::ForwardCommand;
 
-mod compensation;
-pub(crate) use compensation::ReplanCompensation;
+/// The Compensation of a Replan restores the Proposal Revision before the Replan: base,
+/// candidate, generation, closure, and validation (ADR 0068).
+pub(crate) type ReplanCompensation = RevisionDecisionCompensation;
+
+/// The decision records of a Replan, which its Compensation reads.
+pub(crate) const REPLAN_HISTORY: DecisionHistory = DecisionHistory {
+    table: "proposal_replans",
+    receipt_column: "replan_receipt_id",
+};
 
 impl PostgresProjectReader {
     /// Settles one author Replan of a conflicted Proposal.
@@ -171,24 +180,12 @@ impl ProjectCommand for ReplanProposalInput {
             candidate_text: row.get(/*idx*/ 4),
             candidate_blocks: row.get(/*idx*/ 5),
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), conflicted)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(chapter_id),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
-            },
-            zero_receipt: ZeroReceipt::Reason,
-        })
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), conflicted)),
+            &self.editor_session_id,
+            chapter_id,
+            &self.expected_authoritative_revision_id,
+        ))
     }
 
     fn applied_receipt_payload(&self, _applied: &String, _plan: &ConflictedRevision) -> String {
@@ -293,30 +290,13 @@ impl ProjectCommand for ReplanProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReplanned, ReplayFault> {
-        replay.require_receipt_text("transition", "replan")?;
-        match (
-            replay.effect_text("state_event_id")?,
-            replay.effect_text("resulting_proposal_revision_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_closure")?,
-        ) {
-            (
-                Some(state_event_id),
-                Some(resulting_proposal_revision_id),
-                Some(preserved_generation),
-                Some(preserved_closure),
-            ) => Ok(ProposalReplanned {
-                resulting_proposal_revision_id,
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
-                state_event_id,
-            }),
-            (Some(_), Some(_), None, None) => {
-                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
-            }
-            _ => Err(ReplayFault::Unavailable(
-                "the applied replan record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(replay, ("transition", "replan"), |record| {
+            Ok(ProposalReplanned {
+                resulting_proposal_revision_id: record.text("resulting_proposal_revision_id")?,
+                preserved_generation: record.preserved(StateAxis::Generation)?,
+                preserved_closure: record.preserved(StateAxis::Closure)?,
+                state_event_id: record.text("state_event_id")?,
+            })
+        })
     }
 }

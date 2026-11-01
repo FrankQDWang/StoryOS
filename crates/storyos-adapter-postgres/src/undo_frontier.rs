@@ -6,8 +6,8 @@ use crate::author_edit::{ObservedProseFrontier, ProseCompensation};
 use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
 use crate::proposal_decision_compensation::ObservedProposalDecision;
 use crate::reopen_rejected_operations::{ObservedOperationReopening, ReopenRejectedCompensation};
-use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
-use crate::replan_proposal::ReplanCompensation;
+use crate::reopen_withdrawn_proposal::{REOPEN_WITHDRAWN_HISTORY, ReopenWithdrawnCompensation};
+use crate::replan_proposal::{REPLAN_HISTORY, ReplanCompensation};
 use crate::set_current_chapter::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
 use crate::structural_authority_settlement::{ObservedStructureFrontier, StructureCompensation};
 use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition, UndoRequest};
@@ -95,16 +95,18 @@ pub(crate) async fn load_observed_frontier(
                 .await?
                 .map(ObservedFrontier::Proposal)
         }
-        UndoDisposition::Replan => ReplanCompensation::load(client, command, (), sequence)
-            .await?
-            .map(ObservedFrontier::Replan),
+        UndoDisposition::Replan => {
+            ReplanCompensation::load(client, command, REPLAN_HISTORY, sequence)
+                .await?
+                .map(ObservedFrontier::Replan)
+        }
         UndoDisposition::ReopenRejectedOperations => {
             ReopenRejectedCompensation::load(client, command, (), sequence)
                 .await?
                 .map(ObservedFrontier::ReopenRejectedOperations)
         }
         UndoDisposition::ReopenWithdrawnProposal => {
-            ReopenWithdrawnCompensation::load(client, command, (), sequence)
+            ReopenWithdrawnCompensation::load(client, command, REOPEN_WITHDRAWN_HISTORY, sequence)
                 .await?
                 .map(ObservedFrontier::ReopenWithdrawnProposal)
         }

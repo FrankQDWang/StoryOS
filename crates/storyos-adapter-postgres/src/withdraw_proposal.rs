@@ -12,10 +12,10 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReplayEffect,
-    ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
+    ProjectCommand, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
 };
+use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
@@ -122,24 +122,12 @@ impl ProjectCommand for WithdrawProposalInput {
             generation: row.get(/*idx*/ 1),
             validation: row.get(/*idx*/ 2),
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), open)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(chapter_object_id),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
-            },
-            zero_receipt: ZeroReceipt::Reason,
-        })
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), open)),
+            &self.editor_session_id,
+            chapter_object_id,
+            &self.expected_authoritative_revision_id,
+        ))
     }
 
     fn applied_receipt_payload(&self, _applied: &String, _plan: &OpenRevision) -> String {
@@ -222,23 +210,12 @@ impl ProjectCommand for WithdrawProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalWithdrawn, ReplayFault> {
-        replay.require_receipt_text("transition", "withdraw")?;
-        match (
-            replay.effect_text("withdrawal_event_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_validation")?,
-        ) {
-            (Some(withdrawal_event_id), Some(preserved_generation), Some(preserved_validation)) => {
-                Ok(ProposalWithdrawn {
-                    preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                    preserved_validation: StateAxis::Validation.preserved(preserved_validation)?,
-                    withdrawal_event_id,
-                })
-            }
-            (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
-            _ => Err(ReplayFault::Unavailable(
-                "the applied Withdrawal record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(replay, ("transition", "withdraw"), |record| {
+            Ok(ProposalWithdrawn {
+                preserved_generation: record.preserved(StateAxis::Generation)?,
+                preserved_validation: record.preserved(StateAxis::Validation)?,
+                withdrawal_event_id: record.text("withdrawal_event_id")?,
+            })
+        })
     }
 }
