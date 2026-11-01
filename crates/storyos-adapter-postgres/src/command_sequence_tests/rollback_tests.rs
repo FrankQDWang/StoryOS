@@ -9,11 +9,12 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::surface::Effect;
 use crate::command_sequence::{
     ActivitySequences, Admission, AdmittedCommand, AdmittedRefusal, AppliedReceipt, Classification,
-    CommandSpec, CommandWrite, Effect, LockedProject, ProfileSequences, ProjectCommand,
-    ZeroAuthority, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroEffect, ZeroOutcome,
-    settle_project_command, unavailable,
+    CommandSpec, CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ZeroAuthority,
+    ZeroAuthorityRows, ZeroAuthorityWrite, ZeroEffect, ZeroOutcome, settle_project_command,
+    unavailable,
 };
 
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};

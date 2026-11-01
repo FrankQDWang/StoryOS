@@ -8,9 +8,10 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::surface::Effect;
 use crate::command_sequence::{
     ActivityOnly, AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
-    Effect, LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, ZeroAuthority,
+    LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, ZeroAuthority,
     ZeroAuthorityRows, ZeroOutcome, settle_project_command, unavailable,
 };
 
@@ -19,7 +20,7 @@ use super::rollback::failed_then_settled;
 use super::support::{CommandCall, issued, replayed_outcome, stores};
 
 /// An Update Project on the declared surface of ADR 0080. It classifies, writes, and decodes as
-/// Update Project, and adds the parts that only the declared surface has: a constant Receipt
+/// Update Project, and adds the surface parts that Update Project does not use: a constant Receipt
 /// payload, a check after the profile records, and a zero-authority effect of a no-effect outcome.
 #[derive(Clone)]
 struct DeclaredRename(UpdateProjectInput);

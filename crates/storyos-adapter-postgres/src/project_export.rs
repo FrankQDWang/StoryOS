@@ -16,7 +16,7 @@ use tokio_postgres::Client;
 use super::*;
 use crate::command_replay::{CommandReplay, EffectRecord, ReplayFault};
 use crate::command_sequence::{
-    Admission, AdmitCommand, AdmitSpec, LockedProject, ProjectActionClass, ProjectResponse,
+    Admission, AdmitCommand, AdmitSpec, CommandResponse, LockedProject, ProjectActionClass,
     admit_project_command, unavailable,
 };
 use crate::pinned_export_source::check_export_settlement;
@@ -47,9 +47,10 @@ impl AdmitCommand for ExportProjectArchiveInput {
     const SPEC: AdmitSpec = AdmitSpec {
         kind: CommandKind::ExportProjectArchive,
         work_query: ARCHIVE_EXPORT_WORK,
+        response: CommandResponse::Project,
     };
     type Error = ExportProjectArchiveError;
-    type Response = ProjectResponse;
+    type Response = Project;
     type Facts = ArchiveExportFacts;
     type Work = ArchiveExportOperation;
 

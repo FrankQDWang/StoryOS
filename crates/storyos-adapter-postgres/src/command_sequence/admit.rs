@@ -4,26 +4,20 @@
 use std::future::Future;
 
 use storyos_application::{
-    AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, Project, ProjectCommandEnvelope,
+    AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, ProjectCommandEnvelope,
     ProjectCommandError,
 };
 use tokio_postgres::Client;
 
 use super::admission::insert_admission;
 use super::records::lock_project;
-use super::response::read_response_project;
+use super::response::ResponseValue;
 use super::skeleton::{ChallengeUse, FirstUse, consume_challenge, record_result, replay_problem};
-use super::{
-    Admission, CommandError, LockedProject, ProjectResponse, ReplayEffect, ResponseRecord,
-    unavailable,
-};
+use super::{Admission, CommandError, CommandResponse, LockedProject, ReplayEffect};
 use crate::PostgresProjectReader;
 use crate::command_replay::{
     CommandReplay, EffectKey, EffectRecord, ReplayFault, read_command_replay, read_effect,
-    read_snapshot, response_project,
-};
-use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+    read_snapshot,
 };
 
 pub(crate) struct AdmitSpec {
@@ -31,13 +25,13 @@ pub(crate) struct AdmitSpec {
     /// The query of the work rows. It takes the owner, Project, and Admission identities as `$1`,
     /// `$2`, and `$3`. Its optional row holds one JSON object text.
     pub(crate) work_query: &'static str,
+    /// The response record that the admit step records on the fence.
+    pub(crate) response: CommandResponse,
 }
 
 /// The first admission that every path of the admit step returns.
-pub(crate) type Admitted<C> = AdmittedProjectCommand<
-    <C as AdmitCommand>::Work,
-    <<C as AdmitCommand>::Response as ResponseRecord>::Response,
->;
+pub(crate) type Admitted<C> =
+    AdmittedProjectCommand<<C as AdmitCommand>::Work, <C as AdmitCommand>::Response>;
 
 /// One project command whose first use commits its Admission and work rows and leaves the
 /// Command Idempotency Fence `in_progress`. A later step settles the fence.
@@ -49,7 +43,8 @@ pub(crate) trait AdmitCommand: Sync {
     /// The admit error. A command that refuses before its Admission declares
     /// `RefusableCommandError` with its refusal type.
     type Error: CommandError;
-    type Response: AdmittedResponse;
+    /// The type of the response record of `SPEC`, which converts the record.
+    type Response: TryFrom<ResponseValue> + Send;
     /// The facts that the command loads under the Project lock.
     type Facts: Send;
     /// The admitted work, equal on first use and on each exact retry.
@@ -81,56 +76,6 @@ pub(crate) trait AdmitCommand: Sync {
     /// Accepts the Domain Receipt of the later settlement. A result kind or reason that the
     /// settlement does not write is a binding conflict.
     fn check_settlement(&self, replay: &CommandReplay) -> Result<(), ReplayFault>;
-}
-
-/// The acknowledgement record that the admit step records on the fence, which stays
-/// `in_progress`. The later settlement keeps the record.
-pub(crate) trait AdmittedResponse: ResponseRecord {
-    fn record(
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        command_kind: &'static str,
-    ) -> impl Future<Output = Result<Self::Response, ProjectCommandError>> + Send;
-
-    /// Decodes the record from the fence columns `acknowledgement_format` and
-    /// `response_project`.
-    fn in_progress(
-        format: Option<&str>,
-        payload: Option<&str>,
-    ) -> Result<Self::Response, ReplayFault>;
-}
-
-impl AdmittedResponse for ProjectResponse {
-    async fn record(
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        command_kind: &'static str,
-    ) -> Result<Project, ProjectCommandError> {
-        let project = read_response_project(client, envelope).await?;
-        let scope = &envelope.project_scope;
-        client
-            .execute(
-                "UPDATE storyos.command_idempotency
-                    SET acknowledgement_format = $3, response_project = $4::text::jsonb
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND command_kind = $5 AND idempotency_key = $6::text::uuid",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &COMMAND_RESPONSE_PROJECT_FORMAT,
-                    &encode_command_response_project(&project),
-                    &command_kind,
-                    &envelope.challenge_binding.idempotency_key,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        Ok(project)
-    }
-
-    fn in_progress(format: Option<&str>, payload: Option<&str>) -> Result<Project, ReplayFault> {
-        response_project(format, payload)
-    }
 }
 
 #[tracing::instrument(skip_all, fields(
@@ -167,7 +112,7 @@ pub(crate) async fn admit_project_command<C: AdmitCommand>(
                     command_id: replay.ids.command_id.clone(),
                     author_command_admission_id: replay.ids.author_command_admission_id.clone(),
                     work: command.decode_work(replay.effect())?,
-                    response: C::Response::RESPONSE.replay(&replay)?,
+                    response: C::SPEC.response.replay(&replay)?,
                 })
             })
             .map_err(|fault| replay_problem(fault).into()),
@@ -199,18 +144,14 @@ impl<C: AdmitCommand> FirstUse for Admit<'_, C> {
         let command = self.0;
         let project = lock_project(client, envelope).await?;
         let facts = command.load_facts(client, envelope, &project).await?;
-        if !insert_admission(
-            client,
-            envelope,
-            C::SPEC.kind.as_str(),
-            &command.admission(&facts),
-        )
-        .await?
-        {
+        if !insert_admission(client, envelope, C::SPEC.kind, &command.admission(&facts)).await? {
             return Err(ProjectCommandError::InvalidChallenge.into());
         }
         let work = command.write_work(client, envelope, facts).await?;
-        let response = C::Response::record(client, envelope, C::SPEC.kind.as_str()).await?;
+        let response = C::SPEC
+            .response
+            .record_admitted(client, envelope, C::SPEC.kind.as_str())
+            .await?;
         Ok(AdmittedProjectCommand {
             command_id: envelope.ids.command_id.clone(),
             author_command_admission_id: envelope.ids.author_command_admission_id.clone(),
@@ -281,7 +222,7 @@ async fn read_in_progress<C: AdmitCommand>(
         command_id,
         author_command_admission_id,
         work: command.decode_work(&EffectRecord::parse(work)?)?,
-        response: C::Response::in_progress(
+        response: C::SPEC.response.in_progress(
             fence.get::<_, Option<&str>>(/*idx*/ 2),
             fence.get::<_, Option<&str>>(/*idx*/ 3),
         )?,
