@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
-    ProjectCommand, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
+    ProfileSequences, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
@@ -86,8 +86,8 @@ const TRANSITION_REPLAY: ReplayEffect = ReplayEffect::Query(
         AND transition.receipt_id = $3::text::uuid",
 );
 
-impl ProjectCommand for CompleteReadyPartialProposalInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::CompleteReadyPartialProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::CompleteReadyPartialProposal,
@@ -204,8 +204,8 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
     }
 }
 
-impl ProjectCommand for ContinueProposalGenerationInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for ContinueProposalGenerationInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::ContinueProposalGeneration,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ContinueProposalGeneration,

@@ -16,7 +16,7 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, NoResponse, ProjectCommand, ReceiptHeads, ReplayEffect,
+    LegacyProjectCommand, LegacySpec, LockedProject, NoResponse, ReceiptHeads, ReplayEffect,
     TakeoverAdmission, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
     settle_project_command, unavailable,
 };
@@ -81,8 +81,8 @@ async fn load_takeover_facts(
     })
 }
 
-impl ProjectCommand for TakeOverProjectWriterInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for TakeOverProjectWriterInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::TakeOverProjectWriter,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "writer_takeover_applied",

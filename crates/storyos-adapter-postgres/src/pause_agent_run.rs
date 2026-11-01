@@ -13,8 +13,8 @@ use crate::agent_run_control::{FencedStatus, fence_agent_run, lock_agent_run};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroReceipt, settle_project_command,
+    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
+    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
 };
 
 impl PostgresProjectReader {
@@ -28,8 +28,8 @@ impl PostgresProjectReader {
     }
 }
 
-impl ProjectCommand for PauseAgentRunInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for PauseAgentRunInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::PauseAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_paused",

@@ -16,8 +16,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
+    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
+    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
     WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
@@ -37,8 +37,8 @@ impl PostgresProjectReader {
 /// The live Chapter order of the target Volume, locked by `classify`.
 pub(crate) struct LiveChapters(Vec<String>);
 
-impl ProjectCommand for CreateChapterInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for CreateChapterInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::CreateChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateChapter,

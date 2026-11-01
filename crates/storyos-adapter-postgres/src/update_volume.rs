@@ -11,8 +11,8 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
+    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
+    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
     WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
@@ -36,8 +36,8 @@ pub(crate) struct LiveVolumes {
     current_order: u64,
 }
 
-impl ProjectCommand for UpdateVolumeInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for UpdateVolumeInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::UpdateVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateVolume,

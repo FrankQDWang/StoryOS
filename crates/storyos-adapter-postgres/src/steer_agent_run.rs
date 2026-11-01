@@ -16,8 +16,8 @@ use crate::agent_run_control::lock_agent_run;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
+    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
+    ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
     settle_project_command, unavailable,
 };
 
@@ -36,8 +36,8 @@ impl PostgresProjectReader {
     }
 }
 
-impl ProjectCommand for SteerAgentRunInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for SteerAgentRunInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::SteerAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: ACTIVITY_KIND,

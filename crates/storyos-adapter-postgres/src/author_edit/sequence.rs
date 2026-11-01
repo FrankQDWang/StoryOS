@@ -1,6 +1,8 @@
 //! `applyAuthorEdit` through the admit step and the settle step of the command sequence
 //! (ADR 0076).
 
+use std::future::Future;
+
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
 };
@@ -19,8 +21,8 @@ use crate::author_edit_proposal::{ProposalEditContext, append_proposal_revision_
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification, CommandError,
-    CommandSpec, DirectEditorAdmission, LockedProject, NoResponse, ProfileSequences,
-    ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    DirectEditorAdmission, LegacyProjectCommand, LegacySpec, LockedProject, NoResponse,
+    ProfileSequences, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
     RevisionWrite, ZeroReceipt, unavailable,
 };
 use crate::undo_compensation::{AuthorEditVariant, ForwardCommand};
@@ -185,8 +187,8 @@ impl<'a> AuthorEdit<'a> {
     }
 }
 
-impl ProjectCommand for AuthorEdit<'_> {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for AuthorEdit<'_> {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::ApplyAuthorEdit,
         applied: &[
             AppliedVariant::Forward(ForwardCommand::AuthorEdit(
@@ -211,125 +213,133 @@ impl ProjectCommand for AuthorEdit<'_> {
     type Conflict = AuthorEditConflict;
     type Refusal = AuthorEditRefusal;
 
-    async fn classify(
+    #[expect(
+        clippy::manual_async_fn,
+        reason = "rustc refuses an `async fn` with a lifetime in `Self` under the where clause"
+    )]
+    fn classify(
         &self,
         client: &Client,
         _envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
-    ) -> Result<Classification<Self>, AuthorEditFailure> {
-        let command = self.command;
-        let scope = &command.project_scope;
-        // The Admission, its current writer, and the Chapter head, under the head lock, as on
-        // `main`. A writer takeover can settle while this query waits.
-        let row = client
-            .query_opt(
-                "SELECT head.current_revision_id::text,
-                        convert_from(payload.canonical_bytes, 'UTF8')
-                   FROM storyos.author_command_admissions AS admission
-                   JOIN storyos.project_writer_generations AS writer
-                     ON (writer.owner_user_id, writer.project_id,
-                         writer.current_editor_session_id, writer.writer_generation) =
-                        (admission.owner_user_id, admission.project_id,
-                         admission.editor_session_id, admission.writer_generation)
-                    AND writer.writer_generation = (
-                      SELECT max(current_writer.writer_generation)
-                        FROM storyos.project_writer_generations AS current_writer
-                       WHERE (current_writer.owner_user_id, current_writer.project_id) =
-                             (admission.owner_user_id, admission.project_id)
-                    )
-                   JOIN storyos.authoritative_heads AS head
-                     ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
-                        (admission.owner_user_id, admission.project_id,
-                         admission.chapter_object_id)
-                   JOIN storyos.authoritative_revisions AS revision
-                     ON (revision.owner_user_id, revision.project_id,
-                         revision.manuscript_object_id, revision.revision_id) =
-                        (head.owner_user_id, head.project_id,
-                         head.manuscript_object_id, head.current_revision_id)
-                   JOIN storyos.authoritative_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
-                        (revision.owner_user_id, revision.project_id, revision.payload_id)
-                  WHERE admission.owner_user_id = $1::text::uuid
-                    AND admission.project_id = $2::text::uuid
-                    AND admission.author_command_admission_id = $3::text::uuid
-                    AND admission.challenge_expires_at > clock_timestamp()
-                   AND NOT EXISTS (
-                     SELECT 1 FROM storyos.author_command_admission_settlements AS settlement
-                      WHERE (settlement.owner_user_id, settlement.project_id,
-                             settlement.author_command_admission_id) =
+    ) -> impl Future<Output = Result<Classification<Self>, AuthorEditFailure>> + Send {
+        async move {
+            let command = self.command;
+            let scope = &command.project_scope;
+            // The Admission, its current writer, and the Chapter head, under the head lock, as on
+            // `main`. A writer takeover can settle while this query waits.
+            let row = client
+                .query_opt(
+                    "SELECT head.current_revision_id::text,
+                            convert_from(payload.canonical_bytes, 'UTF8')
+                       FROM storyos.author_command_admissions AS admission
+                       JOIN storyos.project_writer_generations AS writer
+                         ON (writer.owner_user_id, writer.project_id,
+                             writer.current_editor_session_id, writer.writer_generation) =
                             (admission.owner_user_id, admission.project_id,
-                             admission.author_command_admission_id)
-                   )
-                  FOR UPDATE OF head",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &command.ids.author_command_admission_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        let Some(row) = row else {
-            return Err(self.diagnose_closed_admission(client).await);
-        };
-        let current_revision_id: String = row.get(/*idx*/ 0);
-        let current_body: String = row.get(/*idx*/ 1);
-        let ClassifiedAuthorEdit {
-            result,
-            successor_blocks,
-            proposal_context,
-        } = classify_author_edit(client, command, &current_revision_id, current_body).await?;
-        let heads = ReceiptHeads {
-            expected: vec![command.expected_authoritative_revision_id.clone()],
-            prior: vec![current_revision_id.clone()],
-            resulting: vec![current_revision_id.clone()],
-        };
-        let mut fields = serde_json::Map::new();
-        let outcome = match result {
-            TransitionOutcome::Applied(applied) => {
-                let kind = match &applied {
-                    AuthorEditApplied::AuthoritativeApplied { .. } => AuthorEditSelector::Revision,
-                    AuthorEditApplied::ProposalRevised { .. } => {
-                        if proposal_context.is_none() {
-                            return Err(ProjectCommandError::BindingConflict.into());
+                             admission.editor_session_id, admission.writer_generation)
+                        AND writer.writer_generation = (
+                          SELECT max(current_writer.writer_generation)
+                            FROM storyos.project_writer_generations AS current_writer
+                           WHERE (current_writer.owner_user_id, current_writer.project_id) =
+                                 (admission.owner_user_id, admission.project_id)
+                        )
+                       JOIN storyos.authoritative_heads AS head
+                         ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
+                            (admission.owner_user_id, admission.project_id,
+                             admission.chapter_object_id)
+                       JOIN storyos.authoritative_revisions AS revision
+                         ON (revision.owner_user_id, revision.project_id,
+                             revision.manuscript_object_id, revision.revision_id) =
+                            (head.owner_user_id, head.project_id,
+                             head.manuscript_object_id, head.current_revision_id)
+                       JOIN storyos.authoritative_payloads AS payload
+                         ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                            (revision.owner_user_id, revision.project_id, revision.payload_id)
+                      WHERE admission.owner_user_id = $1::text::uuid
+                        AND admission.project_id = $2::text::uuid
+                        AND admission.author_command_admission_id = $3::text::uuid
+                        AND admission.challenge_expires_at > clock_timestamp()
+                       AND NOT EXISTS (
+                         SELECT 1 FROM storyos.author_command_admission_settlements AS settlement
+                          WHERE (settlement.owner_user_id, settlement.project_id,
+                                 settlement.author_command_admission_id) =
+                                (admission.owner_user_id, admission.project_id,
+                                 admission.author_command_admission_id)
+                       )
+                      FOR UPDATE OF head",
+                    &[
+                        &scope.owner_user_id.as_ref(),
+                        &scope.project_id.as_ref(),
+                        &command.ids.author_command_admission_id,
+                    ],
+                )
+                .await
+                .map_err(unavailable)?;
+            let Some(row) = row else {
+                return Err(self.diagnose_closed_admission(client).await);
+            };
+            let current_revision_id: String = row.get(/*idx*/ 0);
+            let current_body: String = row.get(/*idx*/ 1);
+            let ClassifiedAuthorEdit {
+                result,
+                successor_blocks,
+                proposal_context,
+            } = classify_author_edit(client, command, &current_revision_id, current_body).await?;
+            let heads = ReceiptHeads {
+                expected: vec![command.expected_authoritative_revision_id.clone()],
+                prior: vec![current_revision_id.clone()],
+                resulting: vec![current_revision_id.clone()],
+            };
+            let mut fields = serde_json::Map::new();
+            let outcome = match result {
+                TransitionOutcome::Applied(applied) => {
+                    let kind = match &applied {
+                        AuthorEditApplied::AuthoritativeApplied { .. } => {
+                            AuthorEditSelector::Revision
                         }
-                        AuthorEditSelector::Proposal
-                    }
-                };
-                TransitionOutcome::Applied((
-                    applied,
-                    AuthorEditPlan {
-                        kind,
-                        current_revision_id: current_revision_id.clone(),
-                        successor_blocks,
-                        proposal_context,
-                    },
-                ))
-            }
-            TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
-            TransitionOutcome::Conflicted(reason) => {
-                fields.insert(
-                    "current_authoritative_revision_id".to_owned(),
-                    current_revision_id.clone().into(),
-                );
-                TransitionOutcome::Conflicted(reason)
-            }
-            TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
-        };
-        let effect = AuthorEditZeroEffect {
-            record: self.record(),
-            current_authoritative_revision_id: current_revision_id,
-        };
-        Ok(Classification {
-            outcome,
-            admission: self.direct_editor_admission(),
-            heads,
-            zero_receipt: ZeroReceipt::Observed {
-                fields,
-                refs: ReceiptRefs::default(),
-                effect,
-            },
-        })
+                        AuthorEditApplied::ProposalRevised { .. } => {
+                            if proposal_context.is_none() {
+                                return Err(ProjectCommandError::BindingConflict.into());
+                            }
+                            AuthorEditSelector::Proposal
+                        }
+                    };
+                    TransitionOutcome::Applied((
+                        applied,
+                        AuthorEditPlan {
+                            kind,
+                            current_revision_id: current_revision_id.clone(),
+                            successor_blocks,
+                            proposal_context,
+                        },
+                    ))
+                }
+                TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
+                TransitionOutcome::Conflicted(reason) => {
+                    fields.insert(
+                        "current_authoritative_revision_id".to_owned(),
+                        current_revision_id.clone().into(),
+                    );
+                    TransitionOutcome::Conflicted(reason)
+                }
+                TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
+            };
+            let effect = AuthorEditZeroEffect {
+                record: self.record(),
+                current_authoritative_revision_id: current_revision_id,
+            };
+            Ok(Classification {
+                outcome,
+                admission: self.direct_editor_admission(),
+                heads,
+                zero_receipt: ZeroReceipt::Observed {
+                    fields,
+                    refs: ReceiptRefs::default(),
+                    effect,
+                },
+            })
+        }
     }
 
     async fn diagnose_missing_admission(

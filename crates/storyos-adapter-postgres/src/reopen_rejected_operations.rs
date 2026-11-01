@@ -15,8 +15,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
-    ProjectCommand, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
+    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
+    ProfileSequences, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
     unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
@@ -45,8 +45,8 @@ pub(crate) struct RejectedRevision {
     base_authoritative_revision_id: String,
 }
 
-impl ProjectCommand for ReopenRejectedOperationsInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for ReopenRejectedOperationsInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::ReopenRejectedOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenRejectedOperations,

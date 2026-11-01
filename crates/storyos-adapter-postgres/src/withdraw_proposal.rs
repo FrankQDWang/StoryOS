@@ -13,8 +13,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
-    ProjectCommand, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
+    ProfileSequences, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
@@ -39,8 +39,8 @@ pub(crate) struct OpenRevision {
     validation: String,
 }
 
-impl ProjectCommand for WithdrawProposalInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for WithdrawProposalInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::WithdrawProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::WithdrawProposal)],
         // The ActionOnly profile writes no Activity record.

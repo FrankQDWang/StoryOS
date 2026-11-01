@@ -20,9 +20,10 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
-    CommandSpec, EditorAdmission, LockedProject, ProfileSequences, ProjectCommand, ProjectResponse,
-    ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    EditorAdmission, LegacyProjectCommand, LegacySpec, LockedProject, ProfileSequences,
+    ProjectResponse, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    RevisionWrite, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command,
+    unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -82,8 +83,8 @@ pub(crate) struct AcceptedRevision {
     resolution: AcceptanceTargetResolution,
 }
 
-impl ProjectCommand for AcceptProposal {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for AcceptProposal {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::AcceptProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
         // The AuthoritativeRevision profile writes its own Activity record.

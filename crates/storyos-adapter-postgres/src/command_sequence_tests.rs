@@ -34,6 +34,9 @@ mod retry;
 #[path = "command_sequence_tests/rollback_tests.rs"]
 mod rollback;
 
+#[path = "command_sequence_tests/declared_surface_tests.rs"]
+mod declared_surface;
+
 #[path = "command_sequence_tests/damaged_evidence_tests.rs"]
 mod damaged_evidence;
 

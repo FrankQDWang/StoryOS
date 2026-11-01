@@ -16,8 +16,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, AppliedVariant, Classification, CommandSpec, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
+    ActionOnly, ActionSequence, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec,
+    LockedProject, ProjectResponse, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
     settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
@@ -100,8 +100,8 @@ async fn insert_rejection_record(
     Ok(())
 }
 
-impl ProjectCommand for RejectProposalOperationsInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for RejectProposalOperationsInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::RejectProposalOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::RejectProposalOperations,
