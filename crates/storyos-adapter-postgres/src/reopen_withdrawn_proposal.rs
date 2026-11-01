@@ -3,19 +3,16 @@ use storyos_application::{
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
 use storyos_contracts::CommandKind;
-use storyos_core::{
-    ReopenWithdrawnProposal as CoreReopen, ReopenWithdrawnProposalConflict,
-    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, reopen_withdrawn_proposal,
-};
+use storyos_core::{ReopenWithdrawnProposal as CoreReopen, reopen_withdrawn_proposal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
-    ProfileSequences, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
-    unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
@@ -156,8 +153,8 @@ pub(crate) async fn head_withdrawals(
         .collect())
 }
 
-impl LegacyProjectCommand for ReopenWithdrawnProposalInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for ReopenWithdrawnProposalInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::ReopenWithdrawnProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenWithdrawnProposal,
@@ -173,18 +170,16 @@ impl LegacyProjectCommand for ReopenWithdrawnProposalInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND reopen_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"reopen_withdrawn"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending open Proposal Revision.
     type Applied = String;
     type Plan = WithdrawnRevision;
-    type Effect = ProposalReopened;
-    type NoEffect = ReopenWithdrawnProposalNoEffect;
-    type Conflict = ReopenWithdrawnProposalConflict;
-    type Refusal = ReopenWithdrawnProposalRefusal;
+    type Settlement = ReopenWithdrawnProposalSettlement;
 
     async fn classify(
         &self,
@@ -271,14 +266,14 @@ impl LegacyProjectCommand for ReopenWithdrawnProposalInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &WithdrawnRevision) -> String {
-        r#"{"transition":"reopen_withdrawn"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &WithdrawnRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
+    fn applied_receipt(&self, applied: &String, _plan: &WithdrawnRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
+            },
         }
     }
 
@@ -290,7 +285,7 @@ impl LegacyProjectCommand for ReopenWithdrawnProposalInput {
         sequence: &ProfileSequences<Self>,
         withdrawn: WithdrawnRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<ProposalReopened, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -357,10 +352,13 @@ impl LegacyProjectCommand for ReopenWithdrawnProposalInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(ProposalReopened {
-            resulting_proposal_revision_id,
-            preserved_generation: withdrawn.generation,
-            preserved_operation_resolution: withdrawn.operation_resolution,
+        Ok(CommandWrite {
+            profile: ProposalReopened {
+                resulting_proposal_revision_id,
+                preserved_generation: withdrawn.generation,
+                preserved_operation_resolution: withdrawn.operation_resolution,
+            },
+            after_authority: None,
         })
     }
 

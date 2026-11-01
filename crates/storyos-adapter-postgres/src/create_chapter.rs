@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -6,9 +5,9 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError,
 };
 use storyos_core::{
-    CreateChapter as CoreCreateChapter, CreateChapterApplied, CreateChapterConflict,
-    CreateChapterCurrent, CreateChapterOpen, CreateChapterPlacement, CreateChapterRefusal,
-    VolumeJoin, create_chapter as classify_create_chapter,
+    CreateChapter as CoreCreateChapter, CreateChapterApplied, CreateChapterCurrent,
+    CreateChapterOpen, CreateChapterPlacement, VolumeJoin,
+    create_chapter as classify_create_chapter,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -16,9 +15,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
-    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReceiptRefs, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -37,25 +36,24 @@ impl PostgresProjectReader {
 /// The live Chapter order of the target Volume, locked by `classify`.
 pub(crate) struct LiveChapters(Vec<String>);
 
-impl LegacyProjectCommand for CreateChapterInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for CreateChapterInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::CreateChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateChapter,
         ))],
         activity_kind: "chapter_created",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        // `applied_receipt` gives the order payload.
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = CreateChapterApplied;
     type Plan = LiveChapters;
-    type Effect = ChapterCreated;
-    type NoEffect = Infallible;
-    type Conflict = CreateChapterConflict;
-    type Refusal = CreateChapterRefusal;
+    type Settlement = CreateChapterSettlement;
 
     async fn classify(
         &self,
@@ -128,12 +126,16 @@ impl LegacyProjectCommand for CreateChapterInput {
         )))
     }
 
-    fn applied_receipt_payload(
+    fn applied_receipt(
         &self,
         applied: &CreateChapterApplied,
         _plan: &LiveChapters,
-    ) -> String {
-        serde_json::json!({ "order": applied.order.to_string() }).to_string()
+    ) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: serde_json::json!({ "order": applied.order.to_string() }).to_string(),
+            refs: ReceiptRefs::default(),
+        }
     }
 
     async fn apply(
@@ -144,7 +146,7 @@ impl LegacyProjectCommand for CreateChapterInput {
         _sequences: &StructureTransitionSequences,
         LiveChapters(mut ordered_chapter_ids): LiveChapters,
         applied: CreateChapterApplied,
-    ) -> Result<StructureWrite<ChapterCreated>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let owner = scope.owner_user_id.as_ref();
         let project_id = scope.project_id.as_ref();
@@ -231,27 +233,30 @@ impl LegacyProjectCommand for CreateChapterInput {
                 project.current_chapter_id.clone(),
             ),
         };
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::ChapterInitialRevision {
-                chapter_id: chapter_id.clone(),
-                revision_id,
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::ChapterInitialRevision {
+                    chapter_id: chapter_id.clone(),
+                    revision_id,
+                },
+                current_chapter,
+                writer_base: WriterBase::Keep,
+                activity: serde_json::json!({
+                    "volume_id": self.volume_id,
+                    "chapter_id": chapter_id,
+                    "title": self.title,
+                    "order": applied.order.to_string(),
+                    "current_chapter_id": resulting_current,
+                }),
+                effect: ChapterCreated {
+                    chapter_id,
+                    tree_revision: applied.tree_revision,
+                    current: applied.current,
+                    order: CreateChapterPublicOrder::CanonicalSiblingOrder(applied.order),
+                },
             },
-            current_chapter,
-            writer_base: WriterBase::Keep,
-            activity: serde_json::json!({
-                "volume_id": self.volume_id,
-                "chapter_id": chapter_id,
-                "title": self.title,
-                "order": applied.order.to_string(),
-                "current_chapter_id": resulting_current,
-            }),
-            effect: ChapterCreated {
-                chapter_id,
-                tree_revision: applied.tree_revision,
-                current: applied.current,
-                order: CreateChapterPublicOrder::CanonicalSiblingOrder(applied.order),
-            },
+            after_authority: None,
         })
     }
 

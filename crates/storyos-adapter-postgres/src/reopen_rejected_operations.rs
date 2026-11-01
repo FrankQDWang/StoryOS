@@ -1,23 +1,19 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, RejectedOperationsReopened,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
-use storyos_core::{
-    ReopenRejectedOperations as CoreReopen, ReopenRejectedOperationsConflict,
-    ReopenRejectedOperationsRefusal, reopen_rejected_operations,
-};
+use storyos_core::{ReopenRejectedOperations as CoreReopen, reopen_rejected_operations};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
-    ProfileSequences, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
-    unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
@@ -45,8 +41,8 @@ pub(crate) struct RejectedRevision {
     base_authoritative_revision_id: String,
 }
 
-impl LegacyProjectCommand for ReopenRejectedOperationsInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for ReopenRejectedOperationsInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::ReopenRejectedOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenRejectedOperations,
@@ -63,18 +59,16 @@ impl LegacyProjectCommand for ReopenRejectedOperationsInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND reopen_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"reopen_rejected"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending Proposal Revision.
     type Applied = String;
     type Plan = RejectedRevision;
-    type Effect = RejectedOperationsReopened;
-    type NoEffect = Infallible;
-    type Conflict = ReopenRejectedOperationsConflict;
-    type Refusal = ReopenRejectedOperationsRefusal;
+    type Settlement = ReopenRejectedOperationsSettlement;
 
     async fn classify(
         &self,
@@ -177,14 +171,14 @@ impl LegacyProjectCommand for ReopenRejectedOperationsInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &RejectedRevision) -> String {
-        r#"{"transition":"reopen_rejected"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &RejectedRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
+    fn applied_receipt(&self, applied: &String, _plan: &RejectedRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
+            },
         }
     }
 
@@ -196,7 +190,7 @@ impl LegacyProjectCommand for ReopenRejectedOperationsInput {
         sequence: &ProfileSequences<Self>,
         rejected: RejectedRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<RejectedOperationsReopened, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -286,11 +280,14 @@ impl LegacyProjectCommand for ReopenRejectedOperationsInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(RejectedOperationsReopened {
-            resulting_proposal_revision_id,
-            preserved_generation: rejected.generation,
-            preserved_closure: rejected.closure,
-            state_event_id,
+        Ok(CommandWrite {
+            profile: RejectedOperationsReopened {
+                resulting_proposal_revision_id,
+                preserved_generation: rejected.generation,
+                preserved_closure: rejected.closure,
+                state_event_id,
+            },
+            after_authority: None,
         })
     }
 
