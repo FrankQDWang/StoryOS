@@ -235,7 +235,6 @@ fn archive_build_problem(reason: storyos_core::ProjectArchiveBuildRefusal) -> Ap
             storyos_core::ProjectArchiveBuildRefusal::ForeignMaterial => "foreign_material",
             storyos_core::ProjectArchiveBuildRefusal::CorruptDigest => "corrupt_digest",
             storyos_core::ProjectArchiveBuildRefusal::MissingFamily => "missing_family",
-            storyos_core::ProjectArchiveBuildRefusal::IneligibleLifecycle => "ineligible_lifecycle",
             storyos_core::ProjectArchiveBuildRefusal::InvalidProvenance => "invalid_provenance",
             storyos_core::ProjectArchiveBuildRefusal::Collision
             | storyos_core::ProjectArchiveBuildRefusal::DirectoryPrefixCollision

@@ -64,7 +64,6 @@ pub enum ProjectArchiveBuildRefusal {
     CorruptDigest,
     ForeignMaterial,
     MissingFamily,
-    IneligibleLifecycle,
     InvalidProvenance,
 }
 
@@ -161,21 +160,17 @@ pub fn verify_entry_digest(
     }
 }
 
-/// Classify one candidate archive record against exact Scope, lifecycle, and gap facts.
+/// Classify one candidate archive record against exact Scope and gap facts.
 pub fn classify_export_record(
     row_owner_user_id: &str,
     row_project_id: &str,
     scope_owner_user_id: &str,
     scope_project_id: &str,
-    lifecycle_eligible: bool,
     payload_present: bool,
     gap_documented: bool,
 ) -> Result<(), ProjectArchiveBuildRefusal> {
     if row_owner_user_id != scope_owner_user_id || row_project_id != scope_project_id {
         return Err(ProjectArchiveBuildRefusal::ForeignMaterial);
-    }
-    if !lifecycle_eligible {
-        return Err(ProjectArchiveBuildRefusal::IneligibleLifecycle);
     }
     if !payload_present && !gap_documented {
         return Err(ProjectArchiveBuildRefusal::InvalidProvenance);

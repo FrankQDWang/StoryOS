@@ -260,8 +260,7 @@ fn reconstruct_command(
 ) -> Option<ApplyAuthorEditCommand> {
     let payload: serde_json::Value = serde_json::from_str(&admission.payload).ok()?;
     let units = payload.get("author_edit_units").and_then(parse_units)?;
-    // ADR 0073: an admission that names a removed Refused Edit Draft has no recoverable intent.
-    if units.is_empty() || payload.get("retry_source").is_some() {
+    if units.is_empty() {
         return None;
     }
     Some(ApplyAuthorEditCommand {

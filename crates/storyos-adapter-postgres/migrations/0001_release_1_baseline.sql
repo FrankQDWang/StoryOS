@@ -980,7 +980,6 @@ CREATE TABLE storyos.domain_receipts (
     result_kind storyos.result_kind NOT NULL,
     result_payload jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    source_draft_disposition jsonb,
     CONSTRAINT domain_receipts_common_shape CHECK ((
         ((((result_kind <> 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 0)) OR ((result_kind = 'proposal_revised'::text) AND (cardinality(proposal_revision_ids) = 1) AND (array_dims(proposal_revision_ids) = '[1:1]'::text)))
             AND cardinality(draft_artifact_refs) = 0
@@ -1536,7 +1535,6 @@ END
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
     ) IS TRUE),
-    CONSTRAINT draft_retry_disposition_shape CHECK ((source_draft_disposition IS NULL)),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_ad_key1 UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_ad_key2 UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_adm_key UNIQUE (owner_user_id, project_id, author_command_admission_id),
@@ -4054,10 +4052,7 @@ CREATE TABLE storyos.proposals (
     source_run_id uuid,
     source_decision_id uuid,
     bundle_policy text DEFAULT 'none'::text NOT NULL,
-    source_draft_id uuid,
-    source_draft_revision_id uuid,
-    source_draft_payload_digest text,
-    CONSTRAINT proposal_source_shape CHECK (((((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL) AND (source_draft_id IS NULL) AND (source_draft_revision_id IS NULL) AND (source_draft_payload_digest IS NULL))) IS TRUE)),
+    CONSTRAINT proposal_source_shape CHECK (((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL))),
     CONSTRAINT proposals_bundle_policy_check CHECK ((bundle_policy = ANY (ARRAY['none'::text, 'atomic'::text]))),
     CONSTRAINT proposals_kind_check CHECK ((kind = ANY (ARRAY['block_edit'::text, 'reversal'::text]))),
     CONSTRAINT proposals_pkey PRIMARY KEY (owner_user_id, project_id, proposal_id),
