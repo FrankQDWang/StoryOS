@@ -8,6 +8,7 @@ use storyos_application::{
     complete_archive_export, create_editor_session, get_apply_author_edit_outcome,
     get_verified_export_archive, issue_project_command_challenge,
 };
+use storyos_core::PROJECT_EXPORT_TABLES;
 use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
@@ -94,6 +95,35 @@ fn export_command(scope: &ProjectScope) -> (ProjectCommandEnvelope, ExportProjec
         export_id: "018f0000-0000-7001-8000-0000000009e6".to_owned(),
     };
     (envelope, input)
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn each_project_export_table_is_a_live_table() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (client, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    let live: std::collections::BTreeSet<String> = client
+        .query(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'storyos'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+
+    let missing: Vec<&str> = PROJECT_EXPORT_TABLES
+        .into_iter()
+        .filter(|table| !live.contains(*table))
+        .collect();
+
+    assert_eq!(missing, Vec::<&str>::new());
 }
 
 #[tokio::test]

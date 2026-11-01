@@ -8,28 +8,27 @@
 - Research input: [PostgreSQL Project Storage, Isolation, and Migration Source Audit](../research/postgresql-project-storage-isolation-and-migration-source-audit.md)
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Operational lifecycle contract: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
-- Release 1 persistence catalog: [`postgresql-release-1-persistence-catalog.json`](postgresql-release-1-persistence-catalog.json)
-- Catalog check: the migration digest check of the `storyos-adapter-postgres` build script
+- Release 1 source set: the SQL files of [`crates/storyos-adapter-postgres/migrations/`](../../crates/storyos-adapter-postgres/migrations/) and the migration chain digest that the `storyos-adapter-postgres` build script derives from them ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md))
+- Removed catalog: [ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md) removed the hand-kept persistence catalog. The tag `evidence/pre-cleanup-round-2` keeps its last version. The catalog family IDs of this document refer to that version.
 
 ## 0. Release 1 closure and compatibility identity
 
 Sections 1–12 preserve the accepted Foundation decisions. This Release 1
 revision closes the physical gaps exposed by the completed Core, Author Command
-Admission, Web Editor Session, and public protocol contracts. The JSON catalog
-is part of this contract: it is not production DDL and it does not create a
-second semantic owner. A table family, schema identity, migration edge, or
-projection not represented there is not an admitted Release 1 persistence
-surface.
+Admission, Web Editor Session, and public protocol contracts. The migrations
+directory is the authority of the Release 1 source set. A table, schema
+identity, migration edge, or projection that the migrations directory does not
+create is not an admitted Release 1 persistence surface.
 
 The active storage identity is the exact tuple below:
 
 ```text
 StorageCompatibilityIdentity {
-  database_schema_identity: storyos.postgresql.schema.v3
+  database_schema_identity: the migration_chain_digest
   active_schema_version: storyos.persistence.release-1.v3
-  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v3
+  persisted_format_catalog_id: storyos.persistence.release-1
   migration_chain_id: storyos.persistence.bootstrap.release-1.v3
-  migration_chain_digest: sha256 over the catalogued chain and LF-normalized bootstrap manifest
+  migration_chain_digest: sha256 over the ordered path and LF-normalized checksum pairs of the migrations directory, which the storage build computes
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
   route_catalog_contract_revision: release1-wire-catalog-2026-09-14-responses-memory
@@ -52,9 +51,15 @@ traffic. A matching semantic version alone is never sufficient.
 Release 1 is the initial persisted baseline. It has no supported stored
 predecessor and no migration edge. A new installation creates the schema,
 catalog, roles, forced-RLS policies, constraints, and administrative records in
-one atomic bootstrap before verification and activation. The catalog names the
-closed SQL source set and the LF-normalized SHA-256 for every source. Its
-manifest checksum is part of the migration-chain digest. A future Release 2
+one atomic bootstrap before verification and activation. The migrations
+directory holds the closed SQL source set. The build script sorts the SQL files
+by name and computes the LF-normalized SHA-256 of each file. The migration
+chain digest is the SHA-256 of the ordered pairs of path and checksum, one line
+for each value. The activation identity uses this digest as its
+`catalog_checksum` and its `database_schema_identity`. While no database that
+holds data exists, a Stage release can squash the source set into a new
+baseline again. When the first database that holds data exists, the baseline
+freezes, and each change is one forward migration ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). A future Release 2
 can add a real edge only with a source-backed predecessor catalog, schema,
 persisted rows, and checksums. A semantic version or invented predecessor name
 never creates compatibility.
@@ -194,10 +199,9 @@ handler, or generated feature schema and changes no released editor persistence.
 The later implementation owner must supply typed physical relations within the
 families below and the corresponding schema, export, and recovery proof.
 
-The table-family registry digest binds the planning ledger. It is distinct from
-the packaged activation identity: the current runner's `catalog_checksum` is
-the bootstrap manifest digest, not a hash of the whole JSON catalog. Updating
-only this ledger and its review-time revision does not change that identity.
+The `catalog_checksum` of the current runner is the migration chain digest.
+A change to a table-family name in this document alone does not change that
+identity.
 The existing protocol route digest remains part of the activation identity.
 The preceding protocol revision changed that digest; an older activation proof
 does not authorize the current package.
@@ -331,8 +335,8 @@ and authorization never depend on wall time.
 
 ### 3.2 Normative aggregate and family boundary
 
-The JSON persistence catalog linked in the header is the sole exhaustive
-Release 1 physical table-family ledger. This prose section intentionally names
+The migrations directory is the exhaustive Release 1 physical table list. This
+prose section intentionally names
 only catalog family identities and aggregate rules; it is not a second table
 list. An implementation may add narrow subtype tables or split a catalog family
 for size and access patterns only when the family identity, authority class,
@@ -350,20 +354,15 @@ bucket, or remove Project Scope from a project-bearing row.
 | Global definitions and credential references | `global-definitions`, `credential-references` | Global definitions are project-free; Credential References are opaque, scoped, non-secret binding metadata and never an authorization or secret store |
 | Migration, recovery, and portability administration | `admin-migration`, `admin-recovery-copy`, `admin-project-portability` | Maintenance records are isolated from the request path; Recovery Copy, restore proof, export manifests, and restore staging never become live Project authority |
 
-The JSON catalog's unique table-family check is the only exhaustive physical
-ownership proof. Logical facts that belong to an Artifact or Operational Record
-may use typed subtype relations referencing that catalog family rather than
-duplicating payload. Globally reusable ToolSpecs, schemas, mapping profiles,
+Logical facts that belong to an Artifact or Operational Record may use typed
+subtype relations referencing that catalog family rather than duplicating
+payload. Globally reusable ToolSpecs, schemas, mapping profiles,
 and adapter definitions use content-addressed or versioned global identities;
 their project enablement, use, evidence, and cached effects remain scoped.
-The catalog's `table_family_registry` digest mechanically binds each physical
-table-family name to its family ID, semantic owner, authority class, and
-durability class; changing, inventing, moving, or omitting a table family
-without changing the checked-in contract revision and digest is rejected.
 
 ### 3.3 Release 1 family responsibility map
 
-The catalog remains the sole physical ledger. This responsibility map explains
+The migrations directory remains the sole physical table list. This responsibility map explains
 the semantic boundary of the same family identities; it does not enumerate
 tables or create an additional physical source of truth. Families are
 deliberately coarse enough to keep ownership reviewable and narrow enough that
@@ -1194,10 +1193,11 @@ deletion system and gives no guarantee against a similar future inference.
 migration ID, checksum, required StoryOS release identity, runner version,
 start and finish evidence, and final status. `migration_phases` records each
 future transactional or nontransactional migration phase and its verified
-postcondition; the initial Release 1 bootstrap has the separate catalogued
-`bootstrap_phases` contract. The migrator acquires one database-level advisory
-lock only to exclude another migrator, verifies the entire applied checksum
-chain and every catalogued LF-normalized bootstrap source, and refuses drift.
+postcondition; the initial Release 1 bootstrap writes the four phases of the
+table below from constants of the adapter. The migrator acquires one
+database-level advisory lock only to exclude another migrator, verifies the
+entire applied checksum chain and every LF-normalized source of the migrations
+directory, and refuses drift.
 
 Transactional DDL commits atomically. Operations such as concurrent index
 builds run as explicit resumable phases, detect and remove invalid remnants,
@@ -1231,7 +1231,7 @@ it does not claim a production data backfill or a migration Recovery Copy.
 
 ### 9.3 Release 1 initial baseline and future migration boundary
 
-The active Release 1 persistence contract is an initial baseline, catalogued as
+The active Release 1 persistence contract is an initial baseline, identified as
 `storyos.persistence.bootstrap.release-1.v3`. It has no supported stored
 predecessor, no migration edge, and no production data migration claim. A fresh
 database enters the positive path by creating the schema, catalog, roles,
@@ -1240,18 +1240,20 @@ atomic bootstrap. The empty migration-chain identity and digest are still
 checked against the public same-release identity; a matching semantic version
 alone never activates storage.
 
-The active bootstrap uses the catalogued ordered SQL source set under
-`crates/storyos-adapter-postgres/migrations/`. The Release 1 persistence
-catalog is the sole exhaustive authority for the membership and order of that
-set. The sources contain no inner transaction boundary. The runner executes
-the catalogued ordered set in one PostgreSQL transaction. The catalog stores
-each LF-normalized source SHA-256 and the canonical manifest SHA-256. An
-unlisted SQL file, a missing file, source drift, manifest drift, or partial
-transaction blocks activation.
+The active bootstrap uses the ordered SQL source set under
+`crates/storyos-adapter-postgres/migrations/`. The migrations directory is the
+sole exhaustive authority for the membership of that set, and the file names
+give its order. The sources contain no inner transaction boundary. The runner
+executes the ordered set in one PostgreSQL transaction. The build script embeds
+each source with its LF-normalized SHA-256 and derives the migration chain
+digest from the ordered pairs of path and checksum. An added, removed, or
+changed SQL file changes the digest, so an activated database with the earlier
+digest refuses with `identity_mismatch`. A partial transaction blocks
+activation.
 
 The role source contains no password or secret material. Runtime credential
 provisioning is a deployment-secret step after the atomic bootstrap. It is not
-part of the catalogued SQL manifest, a schema default, or a repository fixture.
+part of the SQL source set, a schema default, or a repository fixture.
 
 Future Release 2 or later may introduce a migration edge only after its owning
 contract supplies a real predecessor schema identity, persisted-format catalog,
@@ -1521,10 +1523,10 @@ covers at least:
 18. database corruption, failed invariant validation, missing recovery chain,
     or unsupported contract keeps the service read-only or unavailable rather
     than guessing or repairing history.
-19. the Release 1 persistence catalog parses as UTF-8/LF JSON, has one identity
-    per family/table/schema/migration edge, proves the empty initial edge set
-    and bootstrap path, binds its sole physical ledger to this section, and
-    resolves every declared Markdown owner and anchor;
+19. the build script embeds each SQL file of the migrations directory in file
+    name order with its LF-normalized checksum, and the activation identity
+    carries the migration chain digest of those files, with no supported
+    predecessor and no migration edge;
 20. every project-bearing catalog family has the complete Project Scope,
     forced-RLS, runtime-grant, and `MATCH FULL` composite-reference profile,
     while global and maintenance families are explicitly unscoped or isolated;
@@ -1542,7 +1544,7 @@ covers at least:
 24. backup, whole-service restore, Project Export, Project Restore, projection
     rebuild, secret-exclusion, settlement, and predecessor classifications are
     mutually consistent;
-25. the catalog's protocol route-catalog digest and migration-chain digest
+25. the activation identity's route-catalog digest and migration-chain digest
     agree with the checked-in Release 1 inputs, so a same-release activation
     cannot skip storage migration by reusing a public protocol identity.
 26. one `ApplyAuthorEdit.AuthoritativeApplied` plus `NoEffect`, `Conflicted`,
@@ -1619,9 +1621,9 @@ covers at least:
     dependency closure, current generation, source watermark, and valid
     invalidation state; a restored Project requires a fresh Snapshot/resync and
     Recovery Visibility Proof before live traffic.
-19. The machine-readable persistence catalog is review-time
-    contract proof, not production DDL or executable recovery. Its derived
-    statistics never become hard limits, retention defaults, or RPO/RTO claims.
+19. The generated persistence catalog of ADR 0079 is a description for
+    readers, not production DDL or executable recovery. Its counts never
+    become hard limits, retention defaults, or RPO/RTO claims.
 20. Exact retry reads the idempotency result reference and Receipt first, then
     validates the result-specific relation cardinality. It never reconstructs
     a result from a fake Activity, nullable or sentinel authority value,

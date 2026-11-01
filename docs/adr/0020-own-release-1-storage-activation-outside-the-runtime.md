@@ -4,6 +4,8 @@ status: accepted
 
 # Own Release 1 Storage Activation Outside the Runtime
 
+[ADR 0079](0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md) partly supersedes this ADR. The embedded SQL set now comes from the migrations directory, and the build script derives the checksums and the migration chain digest. The hand-kept persistence catalog is removed. The activation state machine does not change.
+
 The production package must prove Release 1 Storage Activation before Server or Worker traffic. A maintenance owner, not the Server or Worker, runs the catalogued state machine from `NewInstallRequired` to `Active` on an empty baseline. That owner persists the ledger and the activation record. Runtime processes only consume that proof: they refuse to bind or claim when it is absent, and they refuse again on a protected request or Worker claim. They never run DDL.
 
 ## Considered options

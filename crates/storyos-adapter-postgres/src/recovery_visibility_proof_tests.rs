@@ -6,7 +6,7 @@ use tokio_postgres::{Client, NoTls};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const TITLE: &str = "Lawful Empty";
-const CATALOG: &str = "storyos.persistence.catalog.release-1.v3";
+const CATALOG: &str = crate::storage_activation::CATALOG_ID;
 const METHOD: &str = "pg_basebackup";
 const ISOLATED_TARGET: &str = "storyos-recovery-hold-empty-null";
 const CHAIN_SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -81,30 +81,16 @@ pub(crate) fn repo_root() -> PathBuf {
         .expect("adapter crate lives under the repository root")
 }
 
-fn catalogued_schema_sql(stop_before: Option<&str>) -> String {
-    let root = repo_root();
-    let catalog: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(root.join("docs/foundation/postgresql-release-1-persistence-catalog.json"))
-            .expect("read persistence catalog"),
-    )
-    .expect("persistence catalog must be JSON");
+fn migrations_schema_sql(stop_before: Option<&str>) -> String {
     let mut sql = String::from("BEGIN;\n");
-    for source in catalog["migration_chain"]["bootstrap"]["sources"]
-        .as_array()
-        .expect("catalogued bootstrap sources")
-    {
-        let path = source["path"].as_str().expect("bootstrap source path");
-        if stop_before.is_some_and(|stop| path.ends_with(stop)) {
+    for source in crate::storage_activation::EMBEDDED_SOURCES {
+        if stop_before.is_some_and(|stop| source.path.ends_with(stop)) {
             break;
         }
-        if path.ends_with("/0000_roles.sql") {
+        if source.path.ends_with("/0000_roles.sql") {
             continue;
         }
-        sql.push_str(
-            &std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
-                panic!("read {path}: {error}");
-            }),
-        );
+        sql.push_str(source.sql);
         sql.push('\n');
     }
     sql.push_str("COMMIT;\n");
@@ -141,7 +127,7 @@ pub(crate) async fn open_isolated_proof(
     let isolated_runtime_url = with_database_name(&cluster_runtime_url, database_name);
     let admin = connect_admin(&isolated_admin_url).await;
     admin
-        .batch_execute(&catalogued_schema_sql(stop_before))
+        .batch_execute(&migrations_schema_sql(stop_before))
         .await
         .unwrap();
     admin
