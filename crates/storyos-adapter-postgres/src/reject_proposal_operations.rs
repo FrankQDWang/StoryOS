@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -7,8 +6,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionIntent, ReceiptResult,
-    RejectProposalOperations as CoreReject, RejectProposalOperationsConflict,
-    RejectProposalOperationsRefusal, classify_proposal_selection, reject_proposal_operations,
+    RejectProposalOperations as CoreReject, classify_proposal_selection,
+    reject_proposal_operations,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -16,9 +15,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec,
-    LockedProject, ProjectResponse, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
-    settle_project_command, unavailable,
+    ActionOnly, ActionSequence, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProjectCommand, ReplayEffect, ZeroAuthority, ZeroAuthorityRows,
+    ZeroOutcome, settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
@@ -100,8 +99,8 @@ async fn insert_rejection_record(
     Ok(())
 }
 
-impl LegacyProjectCommand for RejectProposalOperationsInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for RejectProposalOperationsInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::RejectProposalOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::RejectProposalOperations,
@@ -124,17 +123,15 @@ impl LegacyProjectCommand for RejectProposalOperationsInput {
                 AND rejection.project_id = $2::text::uuid
                 AND rejection.rejection_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"rejection_reason":"author_declined"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = RejectedRevision;
-    type Effect = ProposalOperationsRejected;
-    type NoEffect = Infallible;
-    type Conflict = RejectProposalOperationsConflict;
-    type Refusal = RejectProposalOperationsRefusal;
+    type Settlement = RejectProposalOperationsSettlement;
 
     async fn classify(
         &self,
@@ -227,10 +224,6 @@ impl LegacyProjectCommand for RejectProposalOperationsInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &(), _plan: &RejectedRevision) -> String {
-        r#"{"rejection_reason":"author_declined"}"#.to_owned()
-    }
-
     async fn apply(
         &self,
         client: &Client,
@@ -239,7 +232,7 @@ impl LegacyProjectCommand for RejectProposalOperationsInput {
         ActionSequence(author_action_sequence): &ActionSequence,
         rejected: RejectedRevision,
         _applied: (),
-    ) -> Result<ProposalOperationsRejected, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let updated = client
             .execute(
@@ -292,11 +285,14 @@ impl LegacyProjectCommand for RejectProposalOperationsInput {
         }
         let resolution_event_id =
             resolution_event_id.ok_or(ProjectCommandError::BindingConflict)?;
-        Ok(ProposalOperationsRejected {
-            preserved_generation: rejected.generation,
-            preserved_validation: rejected.validation,
-            preserved_closure: rejected.closure,
-            resolution_event_id,
+        Ok(CommandWrite {
+            profile: ProposalOperationsRejected {
+                preserved_generation: rejected.generation,
+                preserved_validation: rejected.validation,
+                preserved_closure: rejected.closure,
+                resolution_event_id,
+            },
+            after_authority: None,
         })
     }
 
@@ -311,6 +307,13 @@ impl LegacyProjectCommand for RejectProposalOperationsInput {
         })
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+/// A conflicted or refused rejection writes its rejection record.
+impl ZeroAuthority<RejectProposalOperationsInput> for RejectProposalOperationsInput {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::NoEffect(reason) => match **reason {},

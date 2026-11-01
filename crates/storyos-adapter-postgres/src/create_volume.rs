@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -6,8 +5,8 @@ use storyos_application::{
     ProjectCommandError, VolumeCreated,
 };
 use storyos_core::{
-    CreateVolume as CoreCreateVolume, CreateVolumeApplied, CreateVolumeConflict,
-    CreateVolumeRefusal, TransitionOutcome, create_volume as classify_create_volume,
+    CreateVolume as CoreCreateVolume, CreateVolumeApplied, TransitionOutcome,
+    create_volume as classify_create_volume,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -15,9 +14,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
-    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReceiptRefs, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -36,25 +35,24 @@ impl PostgresProjectReader {
 /// The Canonical Sibling Order of the new Volume among the live Volumes.
 pub(crate) struct NewVolumeOrder(u64);
 
-impl LegacyProjectCommand for CreateVolumeInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for CreateVolumeInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::CreateVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateVolume,
         ))],
         activity_kind: "volume_created",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        // `applied_receipt` gives the order payload.
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = CreateVolumeApplied;
     type Plan = NewVolumeOrder;
-    type Effect = VolumeCreated;
-    type NoEffect = Infallible;
-    type Conflict = CreateVolumeConflict;
-    type Refusal = CreateVolumeRefusal;
+    type Settlement = CreateVolumeSettlement;
 
     async fn classify(
         &self,
@@ -99,12 +97,16 @@ impl LegacyProjectCommand for CreateVolumeInput {
         }))
     }
 
-    fn applied_receipt_payload(
+    fn applied_receipt(
         &self,
         _applied: &CreateVolumeApplied,
         order: &NewVolumeOrder,
-    ) -> String {
-        serde_json::json!({ "order": order.0.to_string() }).to_string()
+    ) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: serde_json::json!({ "order": order.0.to_string() }).to_string(),
+            refs: ReceiptRefs::default(),
+        }
     }
 
     async fn apply(
@@ -115,7 +117,7 @@ impl LegacyProjectCommand for CreateVolumeInput {
         _sequences: &StructureTransitionSequences,
         order: NewVolumeOrder,
         applied: CreateVolumeApplied,
-    ) -> Result<StructureWrite<VolumeCreated>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let volume_id = Uuid::now_v7().to_string();
         client
@@ -136,21 +138,24 @@ impl LegacyProjectCommand for CreateVolumeInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::Volume(volume_id.clone()),
-            current_chapter: CurrentChapterChange::Preserve,
-            writer_base: WriterBase::Keep,
-            activity: serde_json::json!({
-                "volume_id": volume_id,
-                "title": self.title,
-                "order": order.0.to_string(),
-            }),
-            effect: VolumeCreated {
-                volume_id,
-                tree_revision: applied.tree_revision,
-                order: CreateVolumePublicOrder::CanonicalSiblingOrder(order.0),
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::Volume(volume_id.clone()),
+                current_chapter: CurrentChapterChange::Preserve,
+                writer_base: WriterBase::Keep,
+                activity: serde_json::json!({
+                    "volume_id": volume_id,
+                    "title": self.title,
+                    "order": order.0.to_string(),
+                }),
+                effect: VolumeCreated {
+                    volume_id,
+                    tree_revision: applied.tree_revision,
+                    order: CreateVolumePublicOrder::CanonicalSiblingOrder(order.0),
+                },
             },
+            after_authority: None,
         })
     }
 
