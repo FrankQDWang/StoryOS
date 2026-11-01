@@ -15,10 +15,10 @@ Release 1 contract:
 does not match the closed request schema of `applyAuthorEdit`. The Server
 answers HTTP 422 `invalid_request_shape` before Admission and writes nothing.
 
-Migration `0099_remove_refused_edit_draft.sql` keeps the dormant Draft tables
-and adds guard constraints. A stored Draft row, or a stored Domain Receipt of a
-Draft command or result, stops the migration. The migration deletes no data,
-and the tables stay in the Project archive format.
+The Release 1 baseline has no Draft table
+([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)).
+The command kind and result kind domains refuse a Domain Receipt of a Draft
+command or result. The Project archive format has no Draft table family.
 
 These rules of the earlier profile stay:
 

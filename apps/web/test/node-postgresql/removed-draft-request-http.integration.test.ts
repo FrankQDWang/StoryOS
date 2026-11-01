@@ -16,7 +16,7 @@ type EarlierClientRequest = Omit<ApplyAuthorEditRequest, "author_edit_units"> & 
 
 async function retainedState(projectId: string) {
   const tables = ["authoritative_heads", "authoritative_revisions", "author_command_admissions", "domain_receipts",
-    "author_action_entries", "project_activity_events", "proposal_heads", "proposal_revisions", "draft_artifacts"];
+    "author_action_entries", "project_activity_events", "proposal_heads", "proposal_revisions"];
   return queryPostgres(`SELECT jsonb_build_object(${tables.map((table) =>
     `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
       FROM storyos.${table} AS record WHERE record.owner_user_id = '${USER_A}'::uuid
@@ -67,6 +67,5 @@ test("an earlier crossing edit or Draft retry gets invalid_request_shape and cha
       assert.deepEqual(refused, { status: 422, code: "invalid_request_shape" });
     }
     assert.equal(await retainedState(projectId), before);
-    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.draft_artifacts`), "0");
   } finally { await stopRealServer(started.server); }
 });

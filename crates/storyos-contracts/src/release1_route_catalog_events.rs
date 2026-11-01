@@ -37,7 +37,6 @@ fn event_owner(kind: ProjectActivityKind) -> Owner {
         | ProjectActivityKind::ChapterUpdated
         | ProjectActivityKind::ChapterDeleted
         | ProjectActivityKind::HumanReadableManuscriptExportSettled => Owner::Release,
-        ProjectActivityKind::ProjectArchivalChanged => Owner::Retention,
         ProjectActivityKind::ProjectExportSettled => Owner::Storage,
         ProjectActivityKind::AgentRunCreated
         | ProjectActivityKind::AgentRunSteeringRetained
@@ -53,9 +52,6 @@ fn event_description(schema_id: &str) -> &'static str {
         }
         "storyos.event.volume-created.v2" | "storyos.event.chapter-created.v2" => {
             "New create Activity. The order field is Canonical Sibling Order."
-        }
-        "storyos.event.project-archival-changed.v1" => {
-            "Historical archive Activity. No command writes it since ADR 0078."
         }
         "storyos.event.agent-run-steering-retained.v1" => {
             "Ordered author input retained for the next safe decision."

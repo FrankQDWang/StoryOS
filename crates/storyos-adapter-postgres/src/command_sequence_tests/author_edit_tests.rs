@@ -1023,3 +1023,34 @@ async fn a_candidate_edit_on_an_earlier_base_is_valid_and_its_undo_keeps_the_bas
         )
     );
 }
+
+/// ADR 0079: the removed Draft retry trigger refused a stored `applyAuthorEdit` Admission with a
+/// `retry_source`; the Admission check refuses that payload now.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_admission_payload_cannot_carry_a_draft_retry_source() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let command = edit_command(&store, &admin, Edit::Prose, /*base*/ 0x7e00).await;
+    store.apply_author_edit(&command).await.unwrap();
+    let refused = admin
+        .execute(
+            r#"UPDATE storyos.author_command_admissions
+                   SET command_payload = command_payload
+                     || '{"retry_source": {"kind": "draft_retry"}}'::jsonb
+                 WHERE author_command_admission_id = $1::text::uuid"#,
+            &[&command.ids.author_command_admission_id],
+        )
+        .await
+        .unwrap_err();
+    let refused = refused.as_db_error().unwrap();
+    assert_eq!(
+        (refused.code().code(), refused.constraint()),
+        (
+            "23514",
+            Some("author_command_admissions_no_draft_retry_source")
+        )
+    );
+}

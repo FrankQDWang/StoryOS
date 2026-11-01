@@ -54,7 +54,6 @@ activity_kinds! {
     WriterTakeoverCompareFailed => ("writer_takeover_compare_failed", "storyos.event.writer-takeover-compare-failed.v1"),
     ProjectCreated => ("project_created", "storyos.event.project-created.v1"),
     ProjectUpdated => ("project_updated", "storyos.event.project-updated.v1"),
-    ProjectArchivalChanged => ("project_archival_changed", "storyos.event.project-archival-changed.v1"),
     ProjectAssistanceUpdated => ("project_assistance_updated", "storyos.event.project-assistance-updated.v1"),
     VolumeCreated => ("volume_created", "storyos.event.volume-created.v1", "storyos.event.volume-created.v2"),
     VolumeUpdated => ("volume_updated", "storyos.event.volume-updated.v1"),

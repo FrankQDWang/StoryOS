@@ -110,24 +110,31 @@ fi
 
 . "$repository_root/scripts/lib/exact-dist.sh"
 
-copy_catalogued_sql() {
+copy_migrations_sql() {
   docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
     "$1:/tmp/storyos-release1-bootstrap" >/dev/null
 }
 
-apply_catalogued_sql() {
+apply_migrations_sql() {
   python3 - "$1" "${2:-}" <<'PY'
-import json, subprocess, sys
+import subprocess, sys
 from pathlib import Path
 container, mode = sys.argv[1], sys.argv[2]
-catalog = json.loads(Path("docs/foundation/postgresql-release-1-persistence-catalog.json").read_text())
 args = ["docker", "exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
         "--single-transaction", "-U", "postgres"]
-for source in catalog["migration_chain"]["bootstrap"]["sources"]:
-    name = source["path"].rsplit("/", 1)[-1]
+for source in sorted(Path("crates/storyos-adapter-postgres/migrations").glob("*.sql")):
+    name = source.name
+    if mode == "fault" and name == "0001_release_1_baseline.sql":
+        # The fault follows the first table of the baseline, so it runs inside the bootstrap transaction.
+        sql = source.read_text()
+        cut = sql.index("\n);\n", sql.index("CREATE TABLE")) + len("\n);\n")
+        name = "faulted_baseline.sql"
+        subprocess.run(
+            ["docker", "exec", "-i", container, "sh", "-c", f"cat > /tmp/storyos-release1-bootstrap/{name}"],
+            input=(sql[:cut] + "SELECT 1 / 0;\n" + sql[cut:]).encode(),
+            check=True,
+        )
     args.extend(["-f", f"/tmp/storyos-release1-bootstrap/{name}"])
-    if mode == "fault" and name == "0002_project_command_challenges.sql":
-        args.extend(["-c", "SELECT 1 / 0"])
 raise SystemExit(subprocess.call(
     args,
     stdout=subprocess.DEVNULL,
@@ -354,10 +361,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 cleanup
 
-echo "Running catalogued SQL apply and faulted rollback without Server or Worker"
+echo "Running migrations SQL apply and faulted rollback without Server or Worker"
 start_postgres "$oracle_container"
-copy_catalogued_sql "$oracle_container"
-if apply_catalogued_sql "$oracle_container" fault; then
+copy_migrations_sql "$oracle_container"
+if apply_migrations_sql "$oracle_container" fault; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -369,7 +376,7 @@ if [ "$rollback_state" != "0/absent" ]; then
   echo "The faulted Release 1 bootstrap exposed partial state: $rollback_state" >&2
   exit 1
 fi
-apply_catalogued_sql "$oracle_container"
+apply_migrations_sql "$oracle_container"
 oracle_secret=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
      FROM pg_authid WHERE rolname = 'storyos_runtime'")
@@ -444,12 +451,7 @@ STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
   "$storage_bin"
 STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
   "$storage_bin"
-expected_sources=$(python3 -c "
-import json
-from pathlib import Path
-catalog = json.loads(Path('docs/foundation/postgresql-release-1-persistence-catalog.json').read_text())
-print(len(catalog['migration_chain']['bootstrap']['sources']))
-")
+expected_sources=$(find crates/storyos-adapter-postgres/migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
 activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT proof.phase || '/' ||
           CASE WHEN owner.rolcanlogin THEN 'login' ELSE 'nologin' END || '/' ||

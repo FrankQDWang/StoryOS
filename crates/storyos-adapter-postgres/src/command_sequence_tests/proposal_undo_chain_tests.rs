@@ -509,7 +509,7 @@ async fn a_proposal_head_that_the_records_cannot_explain_stops_the_chain() {
     );
 }
 
-/// Runs the Receipt trigger function of migration 0096 on one recorded Undo Receipt.
+/// Runs the Proposal compensation identity check of the baseline on one recorded Undo Receipt.
 async fn check_undo_receipt(admin: &Client, receipt_id: &str) -> Result<(), String> {
     let checked = admin
         .batch_execute(&format!(
@@ -517,7 +517,7 @@ async fn check_undo_receipt(admin: &Client, receipt_id: &str) -> Result<(), Stri
              CREATE TEMPORARY TABLE receipt_probe
                (owner_user_id uuid, project_id uuid, receipt_id uuid) ON COMMIT DROP;
              CREATE TRIGGER receipt_probe_check AFTER INSERT ON receipt_probe
-               FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_retry_settlement();
+               FOR EACH ROW EXECUTE FUNCTION storyos.require_proposal_compensation_identity();
              INSERT INTO receipt_probe
                SELECT owner_user_id, project_id, receipt_id FROM storyos.domain_receipts
                 WHERE receipt_id = '{receipt_id}';

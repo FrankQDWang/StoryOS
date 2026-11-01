@@ -60,7 +60,7 @@ impl SettlementProfile for ActionOnly {
                    (owner_user_id, project_id, author_action_sequence, disposition,
                     receipt_id, receipt_result_kind)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
-                         $4::text::uuid, $5)",
+                         $4::text::uuid, $5::text)",
                 &[
                     &envelope.project_scope.owner_user_id.as_ref(),
                     &envelope.project_scope.project_id.as_ref(),

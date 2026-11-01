@@ -92,7 +92,7 @@ pub(crate) async fn commit(
                 model_invocation_id, conversation_id, dispatch_state, payload, attempt_role)
              SELECT owner_user_id, project_id, run_id, $4::text::uuid, $5::text::uuid,
                     $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid,
-                    model_invocation_id, conversation_id, 'uncertain', $10::text::jsonb, $11
+                    model_invocation_id, conversation_id, 'uncertain', $10::text::jsonb, $11::text
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid

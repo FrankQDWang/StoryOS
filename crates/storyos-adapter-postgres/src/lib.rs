@@ -21,6 +21,14 @@ mod create_project_challenge_tests;
 mod postgres_test_lock_tests;
 
 #[cfg(test)]
+#[path = "closed_list_domain_tests.rs"]
+mod closed_list_domain_tests;
+
+#[cfg(test)]
+#[path = "persistence_catalog_tests.rs"]
+mod persistence_catalog_tests;
+
+#[cfg(test)]
 #[path = "create_project_tests.rs"]
 mod create_project_tests;
 
@@ -130,8 +138,6 @@ mod passage_collection;
 mod pause_agent_run;
 mod pinned_export_source;
 mod project_archive_build;
-mod project_archive_draft;
-mod project_archive_draft_copies;
 mod project_destination_binding;
 mod project_export;
 mod project_export_work;

@@ -260,7 +260,7 @@ async fn insert_receipt(
                      'agent_run_decision', ARRAY[$7::text::uuid], ARRAY[$7::text::uuid],
                      ARRAY[$7::text::uuid], '{}'::uuid[], '{}'::uuid[],
                      '{}'::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
-                     $8, $9::text::jsonb)
+                     $8::text, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[

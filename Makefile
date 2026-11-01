@@ -50,6 +50,12 @@ release-package:
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 
+.PHONY: generate-persistence-catalog
+# Rewrites generated/persistence-catalog/ from a new database that the committed migrations activate (ADR 0079).
+# The goal packages the release first, so commit the migration change before you run it.
+generate-persistence-catalog: release-package
+	scripts/dev-postgres.sh with env STORYOS_UPDATE_GENERATED=1 cargo test --locked -p storyos-adapter-postgres --all-features --lib -- --ignored --exact persistence_catalog_tests::the_committed_persistence_catalog_matches_the_activated_schema
+
 .PHONY: review
 # One Codex review round on a pull request (ADR 0070). WAIT is the seconds to wait for the GitHub verify check.
 WAIT ?= 1200

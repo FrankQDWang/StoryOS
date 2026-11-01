@@ -264,15 +264,6 @@
       "wire_profile": "storyos.project-activity.v1"
     },
     {
-      "description": "Historical archive Activity. No command writes it since ADR 0078.",
-      "event_kind": "project_archival_changed",
-      "negative_fixture": "storyos.golden.storyos.event.project-archival-changed.v1.negative.v1",
-      "positive_fixture": "storyos.golden.storyos.event.project-archival-changed.v1.positive.v1",
-      "schema_id": "storyos.event.project-archival-changed.v1",
-      "semantic_owner": "retention",
-      "wire_profile": "storyos.project-activity.v1"
-    },
-    {
       "description": "",
       "event_kind": "project_assistance_updated",
       "negative_fixture": "storyos.golden.storyos.event.project-assistance-updated.v1.negative.v1",

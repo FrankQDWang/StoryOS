@@ -31,9 +31,6 @@ export const IMPLEMENTED_PROJECT_ACTIVITY_EVENTS = Object.freeze({
   "human_readable_manuscript_export_settled": [
     "storyos.event.human-readable-manuscript-export-settled.v1"
   ],
-  "project_archival_changed": [
-    "storyos.event.project-archival-changed.v1"
-  ],
   "project_assistance_updated": [
     "storyos.event.project-assistance-updated.v1"
   ],

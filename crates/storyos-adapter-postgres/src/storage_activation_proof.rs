@@ -2,9 +2,7 @@
 
 use std::fmt;
 
-use crate::storage_activation::{
-    StorageActivationError, packaged_catalog, packaged_identity, read_proof,
-};
+use crate::storage_activation::{StorageActivationError, packaged_identity, read_proof};
 
 #[derive(Debug)]
 pub enum StorageActivationProofError {
@@ -61,8 +59,7 @@ pub async fn require_release1_storage_activation_proof(
 pub(crate) async fn require_release1_storage_activation_proof_on(
     client: &tokio_postgres::Client,
 ) -> Result<(), StorageActivationProofError> {
-    let catalog = packaged_catalog().map_err(catalog_error)?;
-    let identity = packaged_identity(&catalog).map_err(catalog_error)?;
+    let identity = packaged_identity();
     let proof = match read_proof(client).await {
         Ok(proof) => proof,
         Err(StorageActivationError::Unavailable(source)) => {
@@ -76,17 +73,6 @@ pub(crate) async fn require_release1_storage_activation_proof_on(
         Some(existing) if existing == identity => Ok(()),
         Some(_) => Err(StorageActivationProofError::IdentityMismatch),
         None => Err(StorageActivationProofError::MissingOrInactive),
-    }
-}
-
-fn catalog_error(error: StorageActivationError) -> StorageActivationProofError {
-    match error {
-        StorageActivationError::Unavailable(source) => {
-            StorageActivationProofError::Unavailable(source)
-        }
-        StorageActivationError::AdminUrlMissing | StorageActivationError::Refused { .. } => {
-            unavailable(error)
-        }
     }
 }
 

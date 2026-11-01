@@ -205,15 +205,11 @@ type Seed = {
   validation?: "pending" | "valid" | "invalid" | "conflicted";
   generation?: "generating" | "ready_partial" | "ready";
   resolutions?: readonly ("pending" | "applied" | "rejected")[];
-  draftSource?: boolean;
 };
 
 // Each seed copies the scope, the source, and the base of the opened Proposal. The fixed test identities sort before it.
 function seedSql(template: string, seed: Seed): string {
   const revisionId = seed.proposalId.replace(/-0000c7d/, "-0000c7e");
-  const source = seed.draftSource === true
-    ? "NULL, NULL, gen_random_uuid(), gen_random_uuid(), repeat('a', 64)"
-    : "source_run_id, source_decision_id, NULL, NULL, NULL";
   const operations = (seed.resolutions ?? ["pending"]).map((resolution) =>
     `INSERT INTO storyos.proposal_operations (owner_user_id, project_id, proposal_id, operation_id,
        manuscript_block_id, resolution, reservation_state, candidate_text)
@@ -222,10 +218,9 @@ function seedSql(template: string, seed: Seed): string {
        FROM storyos.proposals WHERE proposal_id = '${template}';`).join("\n");
   return `
     INSERT INTO storyos.proposals (owner_user_id, project_id, proposal_id, kind, chapter_id,
-      manuscript_block_id, source_run_id, source_decision_id, source_draft_id,
-      source_draft_revision_id, source_draft_payload_digest)
+      manuscript_block_id, source_run_id, source_decision_id)
     SELECT owner_user_id, project_id, '${seed.proposalId}', kind,
-      ${seed.chapterId === undefined ? "chapter_id" : `'${seed.chapterId}'`}, manuscript_block_id, ${source}
+      ${seed.chapterId === undefined ? "chapter_id" : `'${seed.chapterId}'`}, manuscript_block_id, source_run_id, source_decision_id
       FROM storyos.proposals WHERE proposal_id = '${template}';
     INSERT INTO storyos.proposal_revisions (owner_user_id, project_id, proposal_id, revision_id,
       generation, validation, closure, candidate_text, base_authoritative_revision_id)
@@ -267,7 +262,6 @@ test("listChapterOpenProposals gives the open Proposals of one Chapter in identi
     { proposalId: seeded(6), closure: "withdrawn" },
     { proposalId: seeded(7), closure: "superseded" },
     { proposalId: seeded(8), chapterId: id("c7f1") },
-    { proposalId: seeded(9), draftSource: true },
   ]);
   const list = () => listChapterOpenProposals({ baseUrl: started.baseUrl, projectId: prepared.projectId,
     chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });

@@ -560,7 +560,7 @@ pub(crate) async fn update_run(
     client
         .execute(
             "UPDATE storyos.agent_runs
-                SET status = $4,
+                SET status = $4::text,
                     settlement = COALESCE($5::text::jsonb, settlement),
                     lease_expires_at = CASE WHEN $6 THEN NULL ELSE lease_expires_at END,
                     wakeup_pending = false
