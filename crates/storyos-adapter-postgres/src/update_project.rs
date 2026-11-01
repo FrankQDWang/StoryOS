@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -6,8 +5,7 @@ use storyos_application::{
 };
 use storyos_core::{
     TransitionOutcome, UpdateProject as CoreUpdateProject, UpdateProjectApplied,
-    UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
-    update_project as classify_update_project,
+    UpdateProjectRefusal, update_project as classify_update_project,
 };
 use tokio_postgres::Client;
 
@@ -15,7 +13,7 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification,
-    LegacyProjectCommand, LegacySpec, LockedProject, ProjectResponse, ReplayEffect,
+    CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectCommand, ReplayEffect,
     settle_project_command, unavailable,
 };
 
@@ -30,23 +28,21 @@ impl PostgresProjectReader {
     }
 }
 
-impl LegacyProjectCommand for UpdateProjectInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for UpdateProjectInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::UpdateProject,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "project_updated",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = UpdateProjectApplied;
     type Plan = ();
-    type Effect = UpdateProjectApplied;
-    type NoEffect = UpdateProjectNoEffect;
-    type Conflict = UpdateProjectConflict;
-    type Refusal = Infallible;
+    type Settlement = UpdateProjectSettlement;
 
     async fn classify(
         &self,
@@ -93,7 +89,7 @@ impl LegacyProjectCommand for UpdateProjectInput {
         _sequences: &ActivitySequences,
         _plan: (),
         applied: UpdateProjectApplied,
-    ) -> Result<ActivityWrite<UpdateProjectApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let updated = client
             .execute(
                 "UPDATE storyos.projects
@@ -113,12 +109,15 @@ impl LegacyProjectCommand for UpdateProjectInput {
         if updated != 1 {
             return Err(unavailable("Project revision changed under FOR UPDATE"));
         }
-        Ok(ActivityWrite {
-            activity: serde_json::json!({
-                "title": applied.title,
-                "revision": applied.revision.to_string(),
-            }),
-            effect: applied,
+        Ok(CommandWrite {
+            profile: ActivityWrite {
+                activity: serde_json::json!({
+                    "title": applied.title,
+                    "revision": applied.revision.to_string(),
+                }),
+                effect: applied,
+            },
+            after_authority: None,
         })
     }
 

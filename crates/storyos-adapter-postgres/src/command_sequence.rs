@@ -45,9 +45,7 @@ pub(crate) use contention::CommandError;
 pub(crate) use legacy::{LegacyProjectCommand, LegacySpec};
 pub(crate) use records::{CommitCounters, allocate_commit_counters, insert_author_action};
 use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
-pub(crate) use response::{
-    CommandResponse, NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord,
-};
+pub(crate) use response::{CommandResponse, NoResponse, ProjectResponse, ResponseRecord};
 pub(crate) use settle::{
     AdmittedCommand, AdmittedRefusal, admit_and_settle, replay_settled as replay_settled_command,
     settle_admitted_command,

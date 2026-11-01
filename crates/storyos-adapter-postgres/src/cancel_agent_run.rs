@@ -1,11 +1,10 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
     CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput, CancelAgentRunSettlement,
     ProjectCommandEnvelope, ProjectCommandError,
 };
-use storyos_core::{CancelAgentRunConflict, CancelAgentRunNoEffect, classify_cancel_agent_run};
+use storyos_core::classify_cancel_agent_run;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -15,7 +14,7 @@ use crate::agent_run_successor::prohibit_automatic_successor;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
+    CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand,
     ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 
@@ -30,23 +29,21 @@ impl PostgresProjectReader {
     }
 }
 
-impl LegacyProjectCommand for CancelAgentRunInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for CancelAgentRunInput {
+    const SPEC: CommandSpec<CancelAgentRunError> = CommandSpec {
         kind: CommandKind::CancelAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_cancelled",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = CancelAgentRunError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = ();
-    type Effect = CancelAgentRunApplied;
-    type NoEffect = CancelAgentRunNoEffect;
-    type Conflict = CancelAgentRunConflict;
-    type Refusal = Infallible;
+    type Settlement = CancelAgentRunSettlement;
 
     async fn classify(
         &self,
@@ -73,7 +70,7 @@ impl LegacyProjectCommand for CancelAgentRunInput {
         _sequences: &ActivitySequences,
         _plan: (),
         _applied: (),
-    ) -> Result<ActivityWrite<CancelAgentRunApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let in_flight = in_flight_attempt(client, scope, &self.run_id)
             .await
@@ -88,15 +85,18 @@ impl LegacyProjectCommand for CancelAgentRunInput {
         prohibit_automatic_successor(client, scope, &self.run_id)
             .await
             .map_err(unavailable)?;
-        Ok(ActivityWrite {
-            activity: serde_json::json!({
-                "run_id": self.run_id,
-                "fence_generation": fence_generation.to_string(),
-            }),
-            effect: CancelAgentRunApplied {
-                run_id: self.run_id.clone(),
-                fence_generation,
+        Ok(CommandWrite {
+            profile: ActivityWrite {
+                activity: serde_json::json!({
+                    "run_id": self.run_id,
+                    "fence_generation": fence_generation.to_string(),
+                }),
+                effect: CancelAgentRunApplied {
+                    run_id: self.run_id.clone(),
+                    fence_generation,
+                },
             },
+            after_authority: None,
         })
     }
 

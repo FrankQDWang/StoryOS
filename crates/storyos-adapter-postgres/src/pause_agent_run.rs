@@ -1,11 +1,10 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
     PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput, PauseAgentRunSettlement,
     ProjectCommandEnvelope, ProjectCommandError,
 };
-use storyos_core::{PauseAgentRunConflict, PauseAgentRunNoEffect, classify_pause_agent_run};
+use storyos_core::classify_pause_agent_run;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -13,7 +12,7 @@ use crate::agent_run_control::{FencedStatus, fence_agent_run, lock_agent_run};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
+    CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand,
     ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
 };
 
@@ -28,23 +27,21 @@ impl PostgresProjectReader {
     }
 }
 
-impl LegacyProjectCommand for PauseAgentRunInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for PauseAgentRunInput {
+    const SPEC: CommandSpec<PauseAgentRunError> = CommandSpec {
         kind: CommandKind::PauseAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_paused",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = PauseAgentRunError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = ();
-    type Effect = PauseAgentRunApplied;
-    type NoEffect = PauseAgentRunNoEffect;
-    type Conflict = PauseAgentRunConflict;
-    type Refusal = Infallible;
+    type Settlement = PauseAgentRunSettlement;
 
     async fn classify(
         &self,
@@ -69,7 +66,7 @@ impl LegacyProjectCommand for PauseAgentRunInput {
         _sequences: &ActivitySequences,
         _plan: (),
         _applied: (),
-    ) -> Result<ActivityWrite<PauseAgentRunApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let fence_generation = fence_agent_run(
             client,
             &envelope.project_scope,
@@ -77,15 +74,18 @@ impl LegacyProjectCommand for PauseAgentRunInput {
             FencedStatus::Paused,
         )
         .await?;
-        Ok(ActivityWrite {
-            activity: serde_json::json!({
-                "run_id": self.run_id,
-                "fence_generation": fence_generation.to_string(),
-            }),
-            effect: PauseAgentRunApplied {
-                run_id: self.run_id.clone(),
-                fence_generation,
+        Ok(CommandWrite {
+            profile: ActivityWrite {
+                activity: serde_json::json!({
+                    "run_id": self.run_id,
+                    "fence_generation": fence_generation.to_string(),
+                }),
+                effect: PauseAgentRunApplied {
+                    run_id: self.run_id.clone(),
+                    fence_generation,
+                },
             },
+            after_authority: None,
         })
     }
 
