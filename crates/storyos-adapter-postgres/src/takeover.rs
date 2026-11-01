@@ -15,10 +15,10 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    LegacyProjectCommand, LegacySpec, LockedProject, NoResponse, ReceiptHeads, ReplayEffect,
-    TakeoverAdmission, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
-    settle_project_command, unavailable,
+    ActivityOnly, ActivitySequences, Admission, AppliedVariant, Classification, CommandResponse,
+    CommandSpec, CommandWrite, LockedProject, ProjectCommand, ReceiptHeads, ReplayEffect,
+    TakeoverAdmission, ZeroAuthority, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome,
+    ZeroReceipt, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -81,23 +81,21 @@ async fn load_takeover_facts(
     })
 }
 
-impl LegacyProjectCommand for TakeOverProjectWriterInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for TakeOverProjectWriterInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::TakeOverProjectWriter,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "writer_takeover_applied",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::None,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = ActivityOnly;
-    type Response = NoResponse;
-    type ZeroEffect = WriterTakeover;
-    type Applied = Infallible;
     type Plan = ();
-    type Effect = Infallible;
-    type NoEffect = TakeOverProjectWriterNoEffect;
-    type Conflict = Infallible;
-    type Refusal = Infallible;
+    type Applied = Infallible;
+    type Settlement = TakeOverProjectWriterSettlement;
 
     async fn diagnose_missing_admission(
         &self,
@@ -151,7 +149,7 @@ impl LegacyProjectCommand for TakeOverProjectWriterInput {
         _sequences: &ActivitySequences,
         _plan: (),
         applied: Infallible,
-    ) -> Result<ActivityWrite<Infallible>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         match applied {}
     }
 
@@ -166,6 +164,12 @@ impl LegacyProjectCommand for TakeOverProjectWriterInput {
         Err(ReplayFault::BindingConflict)
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl ZeroAuthority<Self> for TakeOverProjectWriterInput {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::NoEffect(TakeOverProjectWriterNoEffect::WriterTakeoverApplied) => {
