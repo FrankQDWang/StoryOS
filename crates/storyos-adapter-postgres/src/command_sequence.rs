@@ -200,12 +200,11 @@ impl<C: ProjectCommand> FirstUse for Settle<'_, C> {
             outcome,
             admission,
             heads,
-            zero_receipt,
+            zero_receipt: zero,
         } = command.classify(client, envelope, &project).await?;
         if !insert_admission(client, envelope, C::SPEC.kind, &admission).await? {
             return Err(command.diagnose_missing_admission(client, envelope).await);
         }
-        let zero = zero_receipt;
         settle_classified(client, envelope, command, &project, outcome, heads, zero).await
     }
 }
