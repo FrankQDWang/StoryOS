@@ -729,11 +729,11 @@ async fn generation_replay_without_preserved_values<
     error.sequence().into()
 }
 
+// The two Proposal Generation decisions came after the capture of the preserved Proposal State
+// Axes, so no record of theirs has the pre-capture form (ADR 0076, replay rule).
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_generation_decision_record_without_its_preserved_values_is_damaged_evidence() {
-    // The two Proposal Generation decisions came after the capture of the preserved Proposal
-    // State Axes, so no record of theirs has the pre-capture form (ADR 0076, replay rule).
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
