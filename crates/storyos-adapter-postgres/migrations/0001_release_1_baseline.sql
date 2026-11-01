@@ -2715,7 +2715,7 @@ BEGIN
         MESSAGE = 'createAgentRun with zero admission effect cannot have an authority or Activity relation';
     END IF;
 
-  
+
   ELSIF scoped_command_kind = 'steerAgentRun' THEN
     SELECT payload.event_kind INTO payload_event_kind FROM storyos.project_activity_event_payloads AS payload
       WHERE payload.owner_user_id=scoped_owner_user_id AND payload.project_id=scoped_project_id AND payload.receipt_id=scoped_receipt_id;
