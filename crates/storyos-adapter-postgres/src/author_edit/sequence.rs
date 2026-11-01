@@ -2,14 +2,11 @@
 //! (ADR 0076).
 
 use storyos_application::{
-    ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectCommandSettlement,
+    ApplyAuthorEditCommand, AuthorEditCommandSettlement, AuthorEditError, ProjectCommandEnvelope,
+    ProjectCommandError,
 };
 use storyos_contracts::CommandKind;
-use storyos_core::{
-    AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, ManuscriptBlock,
-    TransitionOutcome,
-};
+use storyos_core::{AuthorEditApplied, ManuscriptBlock, TransitionOutcome};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -188,18 +185,6 @@ impl<'a> AuthorEdit<'a> {
     }
 }
 
-/// The settlement type of an Author Edit in the command sequence. The application crate has no
-/// alias for it, because `AuthorEditSettlement` is the acknowledgement that
-/// `author_edit_settlement` makes from this settlement. An Author Edit has no response record.
-type AuthorEditCommandSettlement = ProjectCommandSettlement<
-    AuthorEditProfileApplied<AuthorEditEffect>,
-    AuthorEditNoEffect,
-    AuthorEditConflict,
-    AuthorEditRefusal,
-    (),
-    AuthorEditZeroEffect,
->;
-
 impl ProjectCommand for AuthorEdit<'_> {
     const SPEC: CommandSpec<AuthorEditFailure> = CommandSpec {
         kind: CommandKind::ApplyAuthorEdit,
@@ -222,7 +207,10 @@ impl ProjectCommand for AuthorEdit<'_> {
     type Profile = AuthorEditProfile;
     type Plan = AuthorEditPlan;
     type Applied = AuthorEditApplied;
-    type Settlement = AuthorEditCommandSettlement;
+    type Settlement = AuthorEditCommandSettlement<
+        AuthorEditProfileApplied<AuthorEditEffect>,
+        AuthorEditZeroEffect,
+    >;
 
     async fn classify(
         &self,

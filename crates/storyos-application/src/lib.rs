@@ -82,8 +82,9 @@ mod update_project_assistance;
 mod withdraw_proposal;
 
 pub use author_edit::{
-    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
-    AuthorEditSettlement, AuthorEditSettlementEffect, AuthoritativeAppliedIds,
+    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditCommandSettlement,
+    AuthorEditError, AuthorEditProposalTarget, AuthorEditSettlement, AuthorEditSettlementEffect,
+    AuthoritativeAppliedIds,
 };
 pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
