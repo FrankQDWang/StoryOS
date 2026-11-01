@@ -19,7 +19,7 @@ use crate::command_sequence::{
     LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, settle_project_command,
     unavailable,
 };
-use crate::proposal_decision::{decision_classification, decode_decision};
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 #[path = "proposal_generation_decision_write.rs"]
@@ -188,15 +188,21 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationCompleted, ReplayFault> {
-        decode_decision(replay, ("transition", "generation_completed"), |record| {
-            Ok(ProposalGenerationCompleted {
-                generation_id: record.text("resulting_generation_id")?,
-                preserved_validation: record.preserved(StateAxis::Validation)?,
-                preserved_closure: record.preserved(StateAxis::Closure)?,
-                preserved_operation_resolution: record.preserved(StateAxis::OperationResolution)?,
-                generation_event_id: record.text("transition_id")?,
-            })
-        })
+        decode_decision(
+            replay,
+            ("transition", "generation_completed"),
+            PreCaptureRecords::None,
+            |record| {
+                Ok(ProposalGenerationCompleted {
+                    generation_id: record.text("resulting_generation_id")?,
+                    preserved_validation: record.preserved(StateAxis::Validation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    preserved_operation_resolution: record
+                        .preserved(StateAxis::OperationResolution)?,
+                    generation_event_id: record.text("transition_id")?,
+                })
+            },
+        )
     }
 }
 
@@ -373,20 +379,26 @@ impl ProjectCommand for ContinueProposalGenerationInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationStarted, ReplayFault> {
-        decode_decision(replay, ("transition", "generation_started"), |record| {
-            Ok(ProposalGenerationStarted {
-                prior_generation_id: record.text("prior_generation_id")?,
-                new_generation_id: record.text("resulting_generation_id")?,
-                prior_generation_state: record
-                    .state("prior_generation_state", StateAxis::Generation)?,
-                prior_run_id: record.text("prior_run_id")?,
-                resulting_run_id: record.text("resulting_run_id")?,
-                preserved_validation: record.preserved(StateAxis::Validation)?,
-                preserved_closure: record.preserved(StateAxis::Closure)?,
-                preserved_operation_resolution: record.preserved(StateAxis::OperationResolution)?,
-                generation_event_id: record.text("transition_id")?,
-            })
-        })
+        decode_decision(
+            replay,
+            ("transition", "generation_started"),
+            PreCaptureRecords::None,
+            |record| {
+                Ok(ProposalGenerationStarted {
+                    prior_generation_id: record.text("prior_generation_id")?,
+                    new_generation_id: record.text("resulting_generation_id")?,
+                    prior_generation_state: record
+                        .state("prior_generation_state", StateAxis::Generation)?,
+                    prior_run_id: record.text("prior_run_id")?,
+                    resulting_run_id: record.text("resulting_run_id")?,
+                    preserved_validation: record.preserved(StateAxis::Validation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    preserved_operation_resolution: record
+                        .preserved(StateAxis::OperationResolution)?,
+                    generation_event_id: record.text("transition_id")?,
+                })
+            },
+        )
     }
 }
 

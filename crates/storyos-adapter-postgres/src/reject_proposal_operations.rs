@@ -19,7 +19,7 @@ use crate::command_sequence::{
     CommandWrite, LockedProject, ProjectCommand, ReplayEffect, ZeroAuthority, ZeroAuthorityRows,
     ZeroOutcome, settle_project_command, unavailable,
 };
-use crate::proposal_decision::{decision_classification, decode_decision};
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 impl PostgresProjectReader {
@@ -297,14 +297,19 @@ impl ProjectCommand for RejectProposalOperationsInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalOperationsRejected, ReplayFault> {
-        decode_decision(replay, ("rejection_reason", "author_declined"), |record| {
-            Ok(ProposalOperationsRejected {
-                preserved_generation: record.preserved(StateAxis::Generation)?,
-                preserved_validation: record.preserved(StateAxis::Validation)?,
-                preserved_closure: record.preserved(StateAxis::Closure)?,
-                resolution_event_id: record.text("resolution_event_id")?,
-            })
-        })
+        decode_decision(
+            replay,
+            ("rejection_reason", "author_declined"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalOperationsRejected {
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_validation: record.preserved(StateAxis::Validation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    resolution_event_id: record.text("resolution_event_id")?,
+                })
+            },
+        )
     }
 
     fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {

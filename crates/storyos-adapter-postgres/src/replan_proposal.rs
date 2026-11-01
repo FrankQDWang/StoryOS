@@ -16,7 +16,7 @@ use crate::command_sequence::{
     CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
     settle_project_command, unavailable,
 };
-use crate::proposal_decision::{decision_classification, decode_decision};
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
 use crate::undo_compensation::ForwardCommand;
 
@@ -289,13 +289,19 @@ impl ProjectCommand for ReplanProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReplanned, ReplayFault> {
-        decode_decision(replay, ("transition", "replan"), |record| {
-            Ok(ProposalReplanned {
-                resulting_proposal_revision_id: record.text("resulting_proposal_revision_id")?,
-                preserved_generation: record.preserved(StateAxis::Generation)?,
-                preserved_closure: record.preserved(StateAxis::Closure)?,
-                state_event_id: record.text("state_event_id")?,
-            })
-        })
+        decode_decision(
+            replay,
+            ("transition", "replan"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalReplanned {
+                    resulting_proposal_revision_id: record
+                        .text("resulting_proposal_revision_id")?,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    state_event_id: record.text("state_event_id")?,
+                })
+            },
+        )
     }
 }

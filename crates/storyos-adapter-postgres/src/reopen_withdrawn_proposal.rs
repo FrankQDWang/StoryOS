@@ -14,7 +14,7 @@ use crate::command_sequence::{
     CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
     settle_project_command, unavailable,
 };
-use crate::proposal_decision::{decision_classification, decode_decision};
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
 use crate::undo_compensation::ForwardCommand;
 
@@ -363,12 +363,19 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReopened, ReplayFault> {
-        decode_decision(replay, ("transition", "reopen_withdrawn"), |record| {
-            Ok(ProposalReopened {
-                resulting_proposal_revision_id: record.text("resulting_proposal_revision_id")?,
-                preserved_generation: record.preserved(StateAxis::Generation)?,
-                preserved_operation_resolution: record.preserved(StateAxis::OperationResolution)?,
-            })
-        })
+        decode_decision(
+            replay,
+            ("transition", "reopen_withdrawn"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalReopened {
+                    resulting_proposal_revision_id: record
+                        .text("resulting_proposal_revision_id")?,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_operation_resolution: record
+                        .preserved(StateAxis::OperationResolution)?,
+                })
+            },
+        )
     }
 }
