@@ -142,6 +142,7 @@ mod project_archive_build;
 mod project_destination_binding;
 mod project_export;
 mod project_export_work;
+mod proposal_decision;
 mod proposal_decision_compensation;
 mod proposal_generation_decision;
 mod prose_change_decision;

@@ -15,10 +15,11 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandSpec,
-    EditorAdmission, LockedProject, ProjectCommand, ProjectResponse, ReceiptHeads, ReplayEffect,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, ActionSequence, AppliedVariant, Classification, CommandSpec, LockedProject,
+    ProjectCommand, ProjectResponse, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
+    settle_project_command, unavailable,
 };
+use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 impl PostgresProjectReader {
@@ -217,24 +218,12 @@ impl ProjectCommand for RejectProposalOperationsInput {
             expected_target_matches_head: row.get::<_, Option<String>>(/*idx*/ 5).as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), rejected)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(row.get(/*idx*/ 4)),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
-            },
-            zero_receipt: ZeroReceipt::Reason,
-        })
+        Ok(decision_classification(
+            outcome.map_applied(|()| ((), rejected)),
+            &self.editor_session_id,
+            row.get(/*idx*/ 4),
+            &self.expected_authoritative_revision_id,
+        ))
     }
 
     fn applied_receipt_payload(&self, _applied: &(), _plan: &RejectedRevision) -> String {
@@ -311,29 +300,14 @@ impl ProjectCommand for RejectProposalOperationsInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalOperationsRejected, ReplayFault> {
-        replay.require_receipt_text("rejection_reason", "author_declined")?;
-        match (
-            replay.effect_text("resolution_event_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_validation")?,
-            replay.effect_text("preserved_closure")?,
-        ) {
-            (
-                Some(resolution_event_id),
-                Some(preserved_generation),
-                Some(preserved_validation),
-                Some(preserved_closure),
-            ) => Ok(ProposalOperationsRejected {
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_validation: StateAxis::Validation.preserved(preserved_validation)?,
-                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
-                resolution_event_id,
-            }),
-            (Some(_), None, None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
-            _ => Err(ReplayFault::Unavailable(
-                "the applied rejection record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(replay, ("rejection_reason", "author_declined"), |record| {
+            Ok(ProposalOperationsRejected {
+                preserved_generation: record.preserved(StateAxis::Generation)?,
+                preserved_validation: record.preserved(StateAxis::Validation)?,
+                preserved_closure: record.preserved(StateAxis::Closure)?,
+                resolution_event_id: record.text("resolution_event_id")?,
+            })
+        })
     }
 
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {

@@ -2,14 +2,13 @@ use std::convert::Infallible;
 
 use storyos_application::{
     CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
-    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement, EditorSessionId,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalGenerationCompleted,
-    ProposalGenerationStarted,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectScope, ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 use storyos_core::{
     CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal, ContinueProposalGeneration,
-    ContinueProposalGenerationRefusal, ProposalGenerationConflict, TransitionOutcome,
-    complete_ready_partial_proposal, continue_proposal_generation, hex_sha256,
+    ContinueProposalGenerationRefusal, ProposalGenerationConflict, complete_ready_partial_proposal,
+    continue_proposal_generation, hex_sha256,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -17,10 +16,10 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReplayEffect,
-    ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
+    ProjectCommand, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
 };
+use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 #[path = "proposal_generation_decision_write.rs"]
@@ -114,6 +113,7 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
         _project: &LockedProject,
     ) -> Result<Classification<Self>, ProjectCommandError> {
         let loaded = load_generation(client, &envelope.project_scope, &self.proposal_id).await?;
+        let chapter_id = loaded.chapter_id.clone();
         let outcome = complete_ready_partial_proposal(&CompleteReadyPartialProposal {
             revision_current: loaded.revision_id == self.proposal_revision_id,
             closure_open: loaded.closure == "open",
@@ -125,10 +125,10 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
             expected_target_matches_head: loaded.head_revision_id.as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
-        Ok(editor_classification(
-            outcome,
-            loaded,
+        Ok(decision_classification(
+            outcome.map_applied(|()| ((), loaded)),
             &self.editor_session_id,
+            chapter_id,
             &self.expected_authoritative_revision_id,
         ))
     }
@@ -191,21 +191,14 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationCompleted, ReplayFault> {
-        replay.require_receipt_text("transition", "generation_completed")?;
-        // The transition record has no nullable stored value, so it has no pre-capture form.
-        let field = |key| {
-            replay.effect_text(key)?.ok_or_else(|| {
-                ReplayFault::Unavailable("the applied transition record is missing".into())
+        decode_decision(replay, ("transition", "generation_completed"), |record| {
+            Ok(ProposalGenerationCompleted {
+                generation_id: record.text("resulting_generation_id")?,
+                preserved_validation: record.preserved(StateAxis::Validation)?,
+                preserved_closure: record.preserved(StateAxis::Closure)?,
+                preserved_operation_resolution: record.preserved(StateAxis::OperationResolution)?,
+                generation_event_id: record.text("transition_id")?,
             })
-        };
-        Ok(ProposalGenerationCompleted {
-            generation_id: field("resulting_generation_id")?,
-            preserved_validation: StateAxis::Validation
-                .preserved(field("preserved_validation")?)?,
-            preserved_closure: StateAxis::Closure.preserved(field("preserved_closure")?)?,
-            preserved_operation_resolution: StateAxis::OperationResolution
-                .preserved(field("preserved_operation_resolution")?)?,
-            generation_event_id: field("transition_id")?,
         })
     }
 }
@@ -239,6 +232,7 @@ impl ProjectCommand for ContinueProposalGenerationInput {
     ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let loaded = load_generation(client, scope, &self.proposal_id).await?;
+        let chapter_id = loaded.chapter_id.clone();
         let pending = client
             .query(
                 "SELECT operation_id::text
@@ -273,10 +267,10 @@ impl ProjectCommand for ContinueProposalGenerationInput {
             expected_target_matches_head: loaded.head_revision_id.as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
-        Ok(editor_classification(
-            outcome,
-            loaded,
+        Ok(decision_classification(
+            outcome.map_applied(|()| ((), loaded)),
             &self.editor_session_id,
+            chapter_id,
             &self.expected_authoritative_revision_id,
         ))
     }
@@ -385,52 +379,20 @@ impl ProjectCommand for ContinueProposalGenerationInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationStarted, ReplayFault> {
-        replay.require_receipt_text("transition", "generation_started")?;
-        // The transition record has no nullable stored value, so it has no pre-capture form.
-        let field = |key| {
-            replay.effect_text(key)?.ok_or_else(|| {
-                ReplayFault::Unavailable("the applied transition record is missing".into())
+        decode_decision(replay, ("transition", "generation_started"), |record| {
+            Ok(ProposalGenerationStarted {
+                prior_generation_id: record.text("prior_generation_id")?,
+                new_generation_id: record.text("resulting_generation_id")?,
+                prior_generation_state: record
+                    .state("prior_generation_state", StateAxis::Generation)?,
+                prior_run_id: record.text("prior_run_id")?,
+                resulting_run_id: record.text("resulting_run_id")?,
+                preserved_validation: record.preserved(StateAxis::Validation)?,
+                preserved_closure: record.preserved(StateAxis::Closure)?,
+                preserved_operation_resolution: record.preserved(StateAxis::OperationResolution)?,
+                generation_event_id: record.text("transition_id")?,
             })
-        };
-        Ok(ProposalGenerationStarted {
-            prior_generation_id: field("prior_generation_id")?,
-            new_generation_id: field("resulting_generation_id")?,
-            prior_generation_state: StateAxis::Generation
-                .preserved(field("prior_generation_state")?)?,
-            prior_run_id: field("prior_run_id")?,
-            resulting_run_id: field("resulting_run_id")?,
-            preserved_validation: StateAxis::Validation
-                .preserved(field("preserved_validation")?)?,
-            preserved_closure: StateAxis::Closure.preserved(field("preserved_closure")?)?,
-            preserved_operation_resolution: StateAxis::OperationResolution
-                .preserved(field("preserved_operation_resolution")?)?,
-            generation_event_id: field("transition_id")?,
         })
-    }
-}
-
-/// The editor Admission and the one-head Receipt arrays of a generation decision.
-fn editor_classification<C: ProjectCommand<Applied = (), Plan = LoadedGeneration>>(
-    outcome: TransitionOutcome<(), C::NoEffect, C::Conflict, C::Refusal>,
-    loaded: LoadedGeneration,
-    editor_session_id: &EditorSessionId,
-    expected_authoritative_revision_id: &str,
-) -> Classification<C> {
-    let head = vec![expected_authoritative_revision_id.to_owned()];
-    Classification {
-        admission: Admission::ExplicitEditorCommand(EditorAdmission {
-            editor_session_id: editor_session_id.as_ref().to_owned(),
-            chapter_object_id: Some(loaded.chapter_id.clone()),
-            expected_authoritative_revision_id: Some(expected_authoritative_revision_id.to_owned()),
-            target_refs: Vec::new(),
-        }),
-        heads: ReceiptHeads {
-            expected: head.clone(),
-            prior: head.clone(),
-            resulting: head,
-        },
-        zero_receipt: ZeroReceipt::Reason,
-        outcome: outcome.map_applied(|()| ((), loaded)),
     }
 }
 
