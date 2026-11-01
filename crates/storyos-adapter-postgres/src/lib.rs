@@ -91,6 +91,7 @@ mod agent_run_abort;
 mod agent_run_attempt;
 mod agent_run_compaction;
 mod agent_run_continuation;
+mod agent_run_control;
 mod agent_run_create_dispatch;
 mod agent_run_dispatch;
 mod agent_run_expiry;
