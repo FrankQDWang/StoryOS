@@ -7419,7 +7419,7 @@
         }
       },
       "constraints": {
-        "recovery_visibility_proofs_catalog_identity_check": "CHECK ((catalog_identity = 'storyos.persistence.catalog.release-1.v3'::text))",
+        "recovery_visibility_proofs_catalog_identity_check": "CHECK ((catalog_identity = 'storyos.persistence.release-1'::text))",
         "recovery_visibility_proofs_isolated_target_identity_check": "CHECK (((octet_length(isolated_target_identity) >= 1) AND (octet_length(isolated_target_identity) <= 256)))",
         "recovery_visibility_proofs_pkey": "PRIMARY KEY (visibility_proof_id)",
         "recovery_visibility_proofs_recovery_copy_id_fkey": "FOREIGN KEY (recovery_copy_id) REFERENCES storyos.recovery_copies(recovery_copy_id)",
