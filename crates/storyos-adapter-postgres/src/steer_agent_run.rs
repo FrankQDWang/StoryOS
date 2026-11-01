@@ -15,9 +15,9 @@ use crate::PostgresProjectReader;
 use crate::agent_run_control::lock_agent_run;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
-    ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
+    ActivityOnly, ActivitySequences, Admission, AppliedVariant, Classification, CommandResponse,
+    CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand, ReceiptHeads,
+    ReplayEffect, ZeroAuthority, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
     settle_project_command, unavailable,
 };
 
@@ -36,23 +36,21 @@ impl PostgresProjectReader {
     }
 }
 
-impl LegacyProjectCommand for SteerAgentRunInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for SteerAgentRunInput {
+    const SPEC: CommandSpec<SteerAgentRunError> = CommandSpec {
         kind: CommandKind::SteerAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: ACTIVITY_KIND,
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = SteerAgentRunError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = SteeringRetained;
-    type Applied = Infallible;
     type Plan = ();
-    type Effect = Infallible;
-    type NoEffect = SteerAgentRunNoEffect;
-    type Conflict = SteerAgentRunConflict;
-    type Refusal = Infallible;
+    type Applied = Infallible;
+    type Settlement = SteerAgentRunSettlement;
 
     async fn classify(
         &self,
@@ -121,7 +119,7 @@ impl LegacyProjectCommand for SteerAgentRunInput {
         _sequences: &ActivitySequences,
         _plan: (),
         applied: Infallible,
-    ) -> Result<ActivityWrite<Infallible>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         match applied {}
     }
 
@@ -129,6 +127,12 @@ impl LegacyProjectCommand for SteerAgentRunInput {
         Err(ReplayFault::BindingConflict)
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl ZeroAuthority<Self> for SteerAgentRunInput {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) => {
