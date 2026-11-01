@@ -113,14 +113,7 @@ impl<C: AdmittedCommand> FirstUse for Admit<'_, C> {
         // The Admission insert requires an active Project. As on `main`, the admit step locks no
         // Project row, so a concurrent transaction that holds a key share of it does not stop it.
         read_project(client, envelope).await?;
-        if insert_admission(
-            client,
-            envelope,
-            C::SPEC.kind.as_str(),
-            &command.admission(envelope),
-        )
-        .await?
-        {
+        if insert_admission(client, envelope, C::SPEC.kind, &command.admission(envelope)).await? {
             return Ok(());
         }
         Err(command.diagnose_missing_admission(client, envelope).await)

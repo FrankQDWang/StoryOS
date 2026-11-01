@@ -66,7 +66,10 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 ## Project commands
 
 - A project command consumes one Project Command Challenge and settles one Author Command Admission. It settles through `command_sequence` in `storyos-adapter-postgres`. Do not write its transaction, its replay query, an application Store trait, or a binding self-check. ADR 0076 lists the operations that stay outside the sequence.
-- Implement `ProjectCommand` for a command that settles in one transaction. Implement `AdmittedCommand` for a command that has an admit step and a settle step. Declare its `SettlementProfile`, its applied variants, and its zero-authority outcomes.
+- Implement `ProjectCommand` for a command that settles in one transaction (ADR 0080). Declare its five types: `Error`, `Profile` (a `SettlementProfile`), `Plan`, `Applied`, and `Settlement` (the settlement type of the application crate). Declare one `CommandSpec`: the command kind, the applied variants, the Activity kind, the replay effect query, the `CommandResponse` value, the contention refusal, and the constant Receipt payload. Implement `classify`, `apply`, and `decode`. Override `applied_receipt`, `diagnose_missing_admission`, or `check_replay_binding` only when the command needs it.
+- Implement `AdmittedCommand` on the same command when it has an admit step and a settle step, as the Author Edit does.
+- Implement the side trait `ZeroAuthority` only when a zero-authority outcome writes effect or Activity rows. Then return it from `ProjectCommand::zero_authority`.
+- Name the command kind with a `storyos_contracts::CommandKind` variant. Do not write a command kind string.
 - An applied variant that writes a Forward Author Action names its own `ForwardCommand` entry. Give that entry its Author Undo Disposition in `ForwardCommand::disposition`: a compensation in the module of the forward command, or a Barrier. Record the disposition in an ADR.
 - Add rows to the table-driven contract suite (`command_sequence_tests/`) for each applied variant and zero-authority outcome. The rows prove replay equality, the declared records only, rollback, an in-progress exact retry, and pre-capture versus damaged evidence.
 

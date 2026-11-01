@@ -7,7 +7,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::unavailable;
-use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_replay::{CommandReplay, ReplayFault, response_project};
 use crate::command_response_assistance::{
     COMMAND_RESPONSE_ASSISTANCE_FORMAT, encode_command_response_assistance,
 };
@@ -41,19 +41,8 @@ pub(crate) enum ResponseValue {
     None,
 }
 
-/// The acknowledgement record type of one command before ADR 0080, and of each `AdmitCommand`.
-pub(crate) trait ResponseRecord {
-    type Response: TryFrom<ResponseValue> + Send;
-    const RESPONSE: CommandResponse;
-}
-
-/// The Command-response Project.
-pub(crate) struct ProjectResponse;
-
-impl ResponseRecord for ProjectResponse {
-    type Response = Project;
-    const RESPONSE: CommandResponse = CommandResponse::Project;
-}
+/// The refusal of a response record that the admit step does not record.
+const ADMIT_RESPONSE: &str = "the admit step records only the Command-response Project";
 
 impl CommandResponse {
     /// Reads the response record after the writes of a first use, and settles the fence.
@@ -118,6 +107,53 @@ impl CommandResponse {
         };
         P::try_from(value).map_err(|_| ReplayFault::Unavailable(RESPONSE_MISMATCH.into()))
     }
+
+    /// Reads the response record after the work rows of an admit step, and records it on the
+    /// fence, which stays `in_progress`. The later settlement keeps the record.
+    pub(super) async fn record_admitted<P: TryFrom<ResponseValue>>(
+        self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        command_kind: &'static str,
+    ) -> Result<P, ProjectCommandError> {
+        let Self::Project = self else {
+            return Err(unavailable(ADMIT_RESPONSE));
+        };
+        let project = read_response_project(client, envelope).await?;
+        let scope = &envelope.project_scope;
+        client
+            .execute(
+                "UPDATE storyos.command_idempotency
+                    SET acknowledgement_format = $3, response_project = $4::text::jsonb
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND command_kind = $5 AND idempotency_key = $6::text::uuid",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &COMMAND_RESPONSE_PROJECT_FORMAT,
+                    &encode_command_response_project(&project),
+                    &command_kind,
+                    &envelope.challenge_binding.idempotency_key,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        P::try_from(ResponseValue::Project(project)).map_err(|_| unavailable(RESPONSE_MISMATCH))
+    }
+
+    /// Decodes the response record of an admit step from the fence columns
+    /// `acknowledgement_format` and `response_project` of an `in_progress` fence.
+    pub(super) fn in_progress<P: TryFrom<ResponseValue>>(
+        self,
+        format: Option<&str>,
+        payload: Option<&str>,
+    ) -> Result<P, ReplayFault> {
+        let Self::Project = self else {
+            return Err(ReplayFault::Unavailable(ADMIT_RESPONSE.into()));
+        };
+        P::try_from(ResponseValue::Project(response_project(format, payload)?))
+            .map_err(|_| ReplayFault::Unavailable(RESPONSE_MISMATCH.into()))
+    }
 }
 
 impl TryFrom<ResponseValue> for Project {
@@ -178,7 +214,7 @@ async fn settle_fence_without_response(
     Ok(())
 }
 
-pub(super) async fn read_response_project(
+async fn read_response_project(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
 ) -> Result<Project, ProjectCommandError> {
