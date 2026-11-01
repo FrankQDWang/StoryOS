@@ -13,7 +13,7 @@ use super::*;
 
 const STEER_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "AgentRun control",
-    command_kind: "steerAgentRun",
+    command_kind: contracts::CommandKind::SteerAgentRun,
     method: contracts::STEER_AGENT_RUN_METHOD,
     path: contracts::STEER_AGENT_RUN_PATH,
     schema_id: contracts::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,

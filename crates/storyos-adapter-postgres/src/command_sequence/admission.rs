@@ -1,6 +1,7 @@
 //! The Author Command Admission row of the sequence, for project, AgentRun, and editor commands.
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
+use storyos_contracts::CommandKind;
 use tokio_postgres::Client;
 
 use super::{
@@ -13,9 +14,10 @@ use super::{
 pub(super) async fn insert_admission(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
-    command_kind: &str,
+    command_kind: CommandKind,
     admission: &Admission,
 ) -> Result<bool, ProjectCommandError> {
+    let command_kind = command_kind.as_str();
     let binding = &envelope.client_binding;
     let challenge = &envelope.challenge_binding;
     let session_generation = binding.session_generation.to_string();

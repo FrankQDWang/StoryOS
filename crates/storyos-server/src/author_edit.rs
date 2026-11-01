@@ -84,7 +84,7 @@ pub(super) async fn apply_author_edit(
         method: contracts::APPLY_AUTHOR_EDIT_METHOD.to_owned(),
         route_template: contracts::APPLY_AUTHOR_EDIT_PATH.to_owned(),
         command_schema: contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
-        command_kind: "applyAuthorEdit".to_owned(),
+        command_kind: contracts::CommandKind::ApplyAuthorEdit.as_str().to_owned(),
         canonical_command_digest: format!(
             "sha256:storyos.command.applyAuthorEdit.jcs.v1:{digest_hex}"
         ),

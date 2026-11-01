@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalOperationsRejected,
@@ -6,8 +6,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionIntent, ReceiptResult,
-    RejectProposalOperations as CoreReject, RejectProposalOperationsConflict,
-    RejectProposalOperationsRefusal, classify_proposal_selection, reject_proposal_operations,
+    RejectProposalOperations as CoreReject, classify_proposal_selection,
+    reject_proposal_operations,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -15,10 +15,11 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandSpec,
-    EditorAdmission, LockedProject, ProjectCommand, ProjectResponse, ReceiptHeads, ReplayEffect,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, ActionSequence, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProjectCommand, ReplayEffect, ZeroAuthority, ZeroAuthorityRows,
+    ZeroOutcome, settle_project_command, unavailable,
 };
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 impl PostgresProjectReader {
@@ -100,7 +101,7 @@ async fn insert_rejection_record(
 
 impl ProjectCommand for RejectProposalOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "rejectProposalOperations",
+        kind: CommandKind::RejectProposalOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::RejectProposalOperations,
         )],
@@ -122,17 +123,15 @@ impl ProjectCommand for RejectProposalOperationsInput {
                 AND rejection.project_id = $2::text::uuid
                 AND rejection.rejection_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"rejection_reason":"author_declined"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = RejectedRevision;
-    type Effect = ProposalOperationsRejected;
-    type NoEffect = Infallible;
-    type Conflict = RejectProposalOperationsConflict;
-    type Refusal = RejectProposalOperationsRefusal;
+    type Settlement = RejectProposalOperationsSettlement;
 
     async fn classify(
         &self,
@@ -217,28 +216,12 @@ impl ProjectCommand for RejectProposalOperationsInput {
             expected_target_matches_head: row.get::<_, Option<String>>(/*idx*/ 5).as_deref()
                 == Some(self.expected_authoritative_revision_id.as_str()),
         });
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), rejected)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(row.get(/*idx*/ 4)),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
-            },
-            zero_receipt: ZeroReceipt::Reason,
-        })
-    }
-
-    fn applied_receipt_payload(&self, _applied: &(), _plan: &RejectedRevision) -> String {
-        r#"{"rejection_reason":"author_declined"}"#.to_owned()
+        Ok(decision_classification(
+            outcome.map_applied(|()| ((), rejected)),
+            &self.editor_session_id,
+            row.get(/*idx*/ 4),
+            &self.expected_authoritative_revision_id,
+        ))
     }
 
     async fn apply(
@@ -249,7 +232,7 @@ impl ProjectCommand for RejectProposalOperationsInput {
         ActionSequence(author_action_sequence): &ActionSequence,
         rejected: RejectedRevision,
         _applied: (),
-    ) -> Result<ProposalOperationsRejected, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let updated = client
             .execute(
@@ -302,40 +285,40 @@ impl ProjectCommand for RejectProposalOperationsInput {
         }
         let resolution_event_id =
             resolution_event_id.ok_or(ProjectCommandError::BindingConflict)?;
-        Ok(ProposalOperationsRejected {
-            preserved_generation: rejected.generation,
-            preserved_validation: rejected.validation,
-            preserved_closure: rejected.closure,
-            resolution_event_id,
+        Ok(CommandWrite {
+            profile: ProposalOperationsRejected {
+                preserved_generation: rejected.generation,
+                preserved_validation: rejected.validation,
+                preserved_closure: rejected.closure,
+                resolution_event_id,
+            },
+            after_authority: None,
         })
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalOperationsRejected, ReplayFault> {
-        replay.require_receipt_text("rejection_reason", "author_declined")?;
-        match (
-            replay.effect_text("resolution_event_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_validation")?,
-            replay.effect_text("preserved_closure")?,
-        ) {
-            (
-                Some(resolution_event_id),
-                Some(preserved_generation),
-                Some(preserved_validation),
-                Some(preserved_closure),
-            ) => Ok(ProposalOperationsRejected {
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_validation: StateAxis::Validation.preserved(preserved_validation)?,
-                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
-                resolution_event_id,
-            }),
-            (Some(_), None, None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
-            _ => Err(ReplayFault::Unavailable(
-                "the applied rejection record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(
+            replay,
+            ("rejection_reason", "author_declined"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalOperationsRejected {
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_validation: record.preserved(StateAxis::Validation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    resolution_event_id: record.text("resolution_event_id")?,
+                })
+            },
+        )
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+/// A conflicted or refused rejection writes its rejection record.
+impl ZeroAuthority<RejectProposalOperationsInput> for RejectProposalOperationsInput {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::NoEffect(reason) => match **reason {},

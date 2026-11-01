@@ -13,7 +13,7 @@ use super::*;
 
 const COMPLETE_READY_PARTIAL_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "generation decision",
-    command_kind: "completeReadyPartialProposal",
+    command_kind: contracts::CommandKind::CompleteReadyPartialProposal,
     method: contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
     path: contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
     schema_id: contracts::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
@@ -27,7 +27,7 @@ const COMPLETE_READY_PARTIAL_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute
 
 const CONTINUE_PROPOSAL_GENERATION: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "generation decision",
-    command_kind: "continueProposalGeneration",
+    command_kind: contracts::CommandKind::ContinueProposalGeneration,
     method: contracts::CONTINUE_PROPOSAL_GENERATION_METHOD,
     path: contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
     schema_id: contracts::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,

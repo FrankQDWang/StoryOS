@@ -2,25 +2,26 @@
 //! (ADR 0076).
 
 use storyos_application::{
-    ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
+    ApplyAuthorEditCommand, AuthorEditCommandSettlement, AuthorEditError, ProjectCommandEnvelope,
+    ProjectCommandError,
 };
-use storyos_core::{
-    AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, ManuscriptBlock,
-    TransitionOutcome,
-};
+use storyos_contracts::CommandKind;
+use storyos_core::{AuthorEditApplied, ManuscriptBlock, TransitionOutcome};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::profile::{AuthorEditProfile, AuthorEditSelector, AuthorEditWrite, project_error};
+use super::profile::{
+    AuthorEditProfile, AuthorEditProfileApplied, AuthorEditSelector, AuthorEditWrite, project_error,
+};
 use super::replay::{AUTHOR_EDIT_REPLAY_EFFECT, check_replay_records, replayed_record};
 use super::{AuthorEditFault, ClassifiedAuthorEdit, classify_author_edit, fault_error};
 use crate::author_edit_proposal::{ProposalEditContext, append_proposal_revision_as};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification, CommandError,
-    CommandSpec, DirectEditorAdmission, LockedProject, NoResponse, ProfileSequences,
-    ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
-    RevisionWrite, ZeroReceipt, unavailable,
+    Admission, AdmittedCommand, AdmittedRefusal, AppliedReceipt, AppliedVariant, Classification,
+    CommandError, CommandResponse, CommandSpec, CommandWrite, DirectEditorAdmission, LockedProject,
+    ProfileSequences, ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase,
+    RevisionMembers, RevisionWrite, ZeroAuthority, ZeroReceipt, unavailable,
 };
 use crate::undo_compensation::{AuthorEditVariant, ForwardCommand};
 
@@ -185,8 +186,8 @@ impl<'a> AuthorEdit<'a> {
 }
 
 impl ProjectCommand for AuthorEdit<'_> {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "applyAuthorEdit",
+    const SPEC: CommandSpec<AuthorEditFailure> = CommandSpec {
+        kind: CommandKind::ApplyAuthorEdit,
         applied: &[
             AppliedVariant::Forward(ForwardCommand::AuthorEdit(
                 AuthorEditVariant::AuthoritativeApplied,
@@ -198,17 +199,18 @@ impl ProjectCommand for AuthorEdit<'_> {
         // The `AuthoritativeRevision` profile writes the Activity record.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(AUTHOR_EDIT_REPLAY_EFFECT),
+        response: CommandResponse::None,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = AuthorEditFailure;
     type Profile = AuthorEditProfile;
-    type Response = NoResponse;
-    type ZeroEffect = AuthorEditZeroEffect;
-    type Applied = AuthorEditApplied;
     type Plan = AuthorEditPlan;
-    type Effect = AuthorEditEffect;
-    type NoEffect = AuthorEditNoEffect;
-    type Conflict = AuthorEditConflict;
-    type Refusal = AuthorEditRefusal;
+    type Applied = AuthorEditApplied;
+    type Settlement = AuthorEditCommandSettlement<
+        AuthorEditProfileApplied<AuthorEditEffect>,
+        AuthorEditZeroEffect,
+    >;
 
     async fn classify(
         &self,
@@ -371,29 +373,26 @@ impl ProjectCommand for AuthorEdit<'_> {
         })
     }
 
-    fn applied_variant(
+    fn applied_receipt(
         &self,
         applied: &AuthorEditApplied,
-        _plan: &AuthorEditPlan,
-    ) -> AppliedVariant {
-        AppliedVariant::Forward(ForwardCommand::AuthorEdit(match applied {
+        plan: &AuthorEditPlan,
+    ) -> AppliedReceipt {
+        let variant = AppliedVariant::Forward(ForwardCommand::AuthorEdit(match applied {
             AuthorEditApplied::AuthoritativeApplied { .. } => {
                 AuthorEditVariant::AuthoritativeApplied
             }
             AuthorEditApplied::ProposalRevised { .. } => AuthorEditVariant::ProposalRevised,
-        }))
-    }
-
-    fn applied_receipt_refs(
-        &self,
-        _applied: &AuthorEditApplied,
-        plan: &AuthorEditPlan,
-    ) -> ReceiptRefs {
+        }));
         let mut refs = ReceiptRefs::default();
         if let AuthorEditSelector::Proposal = plan.kind {
             refs.proposal_revision_ids = vec![self.proposal_revision_id.clone()];
         }
-        refs
+        AppliedReceipt {
+            variant,
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs,
+        }
     }
 
     async fn apply(
@@ -404,10 +403,10 @@ impl ProjectCommand for AuthorEdit<'_> {
         _sequences: &ProfileSequences<Self>,
         plan: AuthorEditPlan,
         applied: AuthorEditApplied,
-    ) -> Result<AuthorEditWrite<AuthorEditEffect>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let command = self.command;
         let record = self.record();
-        match applied {
+        let profile = match applied {
             AuthorEditApplied::AuthoritativeApplied { body } => {
                 let (payload, members) = match plan.successor_blocks {
                     Some(blocks) => (
@@ -419,7 +418,7 @@ impl ProjectCommand for AuthorEdit<'_> {
                         RevisionMembers::CopyFrom(plan.current_revision_id.clone()),
                     ),
                 };
-                Ok(AuthorEditWrite::Revision(Box::new(RevisionWrite {
+                AuthorEditWrite::Revision(Box::new(RevisionWrite {
                     effect: AuthorEditEffect {
                         record,
                         proposal_revision_id: None,
@@ -431,7 +430,7 @@ impl ProjectCommand for AuthorEdit<'_> {
                     disposition: crate::command_sequence::ActionDisposition::Forward,
                     editor_session_id: command.editor_session_id.as_ref().to_owned(),
                     writer_base: RevisionBase::Required,
-                })))
+                }))
             }
             AuthorEditApplied::ProposalRevised { candidate_text } => {
                 let context = plan
@@ -446,14 +445,18 @@ impl ProjectCommand for AuthorEdit<'_> {
                 )
                 .await
                 .map_err(project_error)?;
-                Ok(AuthorEditWrite::Proposal {
+                AuthorEditWrite::Proposal {
                     effect: AuthorEditEffect {
                         record,
                         proposal_revision_id: Some(proposal_revision_id),
                     },
-                })
+                }
             }
-        }
+        };
+        Ok(CommandWrite {
+            profile,
+            after_authority: None,
+        })
     }
 
     /// Requires the request payload, the Admission facts, and the expected head of the stored
@@ -496,6 +499,12 @@ impl ProjectCommand for AuthorEdit<'_> {
         })
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl<'a> ZeroAuthority<AuthorEdit<'a>> for AuthorEdit<'a> {
     fn decode_zero_authority_effect(
         &self,
         replay: &CommandReplay,

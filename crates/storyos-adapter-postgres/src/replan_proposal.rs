@@ -1,27 +1,34 @@
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalReplanned, ReplanProposalInput,
     ReplanProposalSettlement,
 };
 use storyos_contracts::ReplanSourceCondition;
-use storyos_core::{
-    ReplanProposal as CoreReplan, ReplanProposalConflict, ReplanProposalRefusal, replan_proposal,
-};
+use storyos_core::{ReplanProposal as CoreReplan, replan_proposal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
+use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
 use crate::undo_compensation::ForwardCommand;
 
-mod compensation;
-pub(crate) use compensation::ReplanCompensation;
+/// The Compensation of a Replan restores the Proposal Revision before the Replan: base,
+/// candidate, generation, closure, and validation (ADR 0068).
+pub(crate) type ReplanCompensation = RevisionDecisionCompensation;
+
+/// The decision records of a Replan, which its Compensation reads.
+pub(crate) const REPLAN_HISTORY: DecisionHistory = DecisionHistory {
+    table: "proposal_replans",
+    receipt_column: "replan_receipt_id",
+};
 
 impl PostgresProjectReader {
     /// Settles one author Replan of a conflicted Proposal.
@@ -59,7 +66,7 @@ fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &
 
 impl ProjectCommand for ReplanProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "replanProposal",
+        kind: CommandKind::ReplanProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::ReplanProposal)],
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",
@@ -73,18 +80,16 @@ impl ProjectCommand for ReplanProposalInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND replan_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"replan"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending Proposal Revision.
     type Applied = String;
     type Plan = ConflictedRevision;
-    type Effect = ProposalReplanned;
-    type NoEffect = Infallible;
-    type Conflict = ReplanProposalConflict;
-    type Refusal = ReplanProposalRefusal;
+    type Settlement = ReplanProposalSettlement;
 
     async fn classify(
         &self,
@@ -171,34 +176,22 @@ impl ProjectCommand for ReplanProposalInput {
             candidate_text: row.get(/*idx*/ 4),
             candidate_blocks: row.get(/*idx*/ 5),
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), conflicted)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(chapter_id),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), conflicted)),
+            &self.editor_session_id,
+            chapter_id,
+            &self.expected_authoritative_revision_id,
+        ))
+    }
+
+    fn applied_receipt(&self, applied: &String, _plan: &ConflictedRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
             },
-            zero_receipt: ZeroReceipt::Reason,
-        })
-    }
-
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &ConflictedRevision) -> String {
-        r#"{"transition":"replan"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &ConflictedRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
         }
     }
 
@@ -210,7 +203,7 @@ impl ProjectCommand for ReplanProposalInput {
         sequence: &ProfileSequences<Self>,
         conflicted: ConflictedRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<ProposalReplanned, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         // A Resolved Replan matched the Chapter head to the expected revision.
         client
@@ -284,39 +277,31 @@ impl ProjectCommand for ReplanProposalInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(ProposalReplanned {
-            resulting_proposal_revision_id,
-            preserved_generation: conflicted.generation,
-            preserved_closure: conflicted.closure,
-            state_event_id,
+        Ok(CommandWrite {
+            profile: ProposalReplanned {
+                resulting_proposal_revision_id,
+                preserved_generation: conflicted.generation,
+                preserved_closure: conflicted.closure,
+                state_event_id,
+            },
+            after_authority: None,
         })
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReplanned, ReplayFault> {
-        replay.require_receipt_text("transition", "replan")?;
-        match (
-            replay.effect_text("state_event_id")?,
-            replay.effect_text("resulting_proposal_revision_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_closure")?,
-        ) {
-            (
-                Some(state_event_id),
-                Some(resulting_proposal_revision_id),
-                Some(preserved_generation),
-                Some(preserved_closure),
-            ) => Ok(ProposalReplanned {
-                resulting_proposal_revision_id,
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
-                state_event_id,
-            }),
-            (Some(_), Some(_), None, None) => {
-                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
-            }
-            _ => Err(ReplayFault::Unavailable(
-                "the applied replan record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(
+            replay,
+            ("transition", "replan"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalReplanned {
+                    resulting_proposal_revision_id: record
+                        .text("resulting_proposal_revision_id")?,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    state_event_id: record.text("state_event_id")?,
+                })
+            },
+        )
     }
 }

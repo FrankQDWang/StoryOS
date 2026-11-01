@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AgentRunReadStore, AgentRunRecord, ConversationSelection, CreateAgentRunApplied,
@@ -15,8 +15,8 @@ use tokio_postgres::Client;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand,
+    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -77,8 +77,8 @@ impl AgentRunReadStore for PostgresProjectReader {
 }
 
 impl ProjectCommand for CreateAgentRunInput {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "createAgentRun",
+    const SPEC: CommandSpec<CreateAgentRunCommandError> = CommandSpec {
+        kind: CommandKind::CreateAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_created",
         replay_effect: ReplayEffect::Query(
@@ -87,20 +87,17 @@ impl ProjectCommand for CreateAgentRunInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: Some(|| {
+            RefusableCommandError::RefusedBeforeAdmission(CreateAgentRunRefusal::ConversationBusy)
+        }),
+        receipt_payload: "{}",
     };
     type Error = CreateAgentRunCommandError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = AssistancePlan;
-    type Effect = CreateAgentRunApplied;
-    type NoEffect = Infallible;
-    type Conflict = Infallible;
-    type Refusal = Infallible;
-    const CONTENTION_REFUSAL: Option<CreateAgentRunCommandError> = Some(
-        RefusableCommandError::RefusedBeforeAdmission(CreateAgentRunRefusal::ConversationBusy),
-    );
+    type Settlement = CreateAgentRunSettlement;
 
     async fn classify(
         &self,
@@ -172,7 +169,7 @@ impl ProjectCommand for CreateAgentRunInput {
         _sequences: &ActivitySequences,
         assistance: AssistancePlan,
         _applied: (),
-    ) -> Result<ActivityWrite<CreateAgentRunApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let assistance = match assistance {
             AssistancePlan::Current(record) => record,
             AssistancePlan::Bind {
@@ -206,14 +203,17 @@ impl ProjectCommand for CreateAgentRunInput {
         )
         .await
         .map_err(sequence_error)?;
-        Ok(ActivityWrite {
-            activity: serde_json::json!({
-                "project_agent_id": applied.project_agent_id,
-                "conversation_id": applied.conversation_id,
-                "memory_settings_revision": applied.memory_settings_revision,
-                "run_id": applied.run_id,
-            }),
-            effect: applied,
+        Ok(CommandWrite {
+            profile: ActivityWrite {
+                activity: serde_json::json!({
+                    "project_agent_id": applied.project_agent_id,
+                    "conversation_id": applied.conversation_id,
+                    "memory_settings_revision": applied.memory_settings_revision,
+                    "run_id": applied.run_id,
+                }),
+                effect: applied,
+            },
+            after_authority: None,
         })
     }
 

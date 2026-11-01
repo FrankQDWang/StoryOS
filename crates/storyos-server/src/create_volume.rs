@@ -10,7 +10,7 @@ use super::*;
 
 const CREATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Create Volume",
-    command_kind: "createVolume",
+    command_kind: contracts::CommandKind::CreateVolume,
     method: contracts::CREATE_VOLUME_METHOD,
     path: contracts::CREATE_VOLUME_PATH,
     schema_id: contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,

@@ -1,7 +1,7 @@
 //! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0076). The
 //! compensation adapter of the Forward command kind writes its Compensation records.
 
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AuthorUndoFrontierPosition, EditorSessionError, ProjectCommandEnvelope, ProjectCommandError,
@@ -9,17 +9,17 @@ use storyos_application::{
 };
 use storyos_core::{
     AuthorUndoFrontier, TransitionOutcome, UndoLatestAuthorAction as CoreUndo,
-    UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable,
-    undo_latest_author_action as classify_undo,
+    UndoLatestAuthorActionUnavailable, undo_latest_author_action as classify_undo,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission, LockedProject,
-    ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs, ReplayEffect,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    Admission, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, EditorAdmission, LockedProject, ProfileSequences, ProjectCommand, ReceiptHeads,
+    ReceiptRefs, ReplayEffect, ZeroAuthority, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
 use crate::undo_frontier::{ObservedFrontier, head_lineage_revision, load_observed_frontier};
@@ -53,8 +53,8 @@ pub(crate) struct UndoLatestAuthorAction {
 }
 
 impl ProjectCommand for UndoLatestAuthorAction {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "undoLatestAuthorAction",
+    const SPEC: CommandSpec<ProjectCommandError> = CommandSpec {
+        kind: CommandKind::UndoLatestAuthorAction,
         applied: &[
             AppliedVariant::Compensation,
             AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),
@@ -62,17 +62,15 @@ impl ProjectCommand for UndoLatestAuthorAction {
         // The compensation adapters write their own Activity records.
         activity_kind: "",
         replay_effect: ReplayEffect::Query(replay::UNDO_REPLAY_EFFECT),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = UndoCompensation;
-    type Response = ProjectResponse;
-    type ZeroEffect = AuthorUndoFrontierPosition;
-    type Applied = ();
     type Plan = UndoPlan;
-    type Effect = ();
-    type NoEffect = Infallible;
-    type Conflict = UndoLatestAuthorActionConflict;
-    type Refusal = UndoLatestAuthorActionUnavailable;
+    type Applied = ();
+    type Settlement = UndoLatestAuthorActionSettlement;
 
     async fn classify(
         &self,
@@ -152,12 +150,12 @@ impl ProjectCommand for UndoLatestAuthorAction {
         })
     }
 
-    fn applied_variant(&self, (): &(), plan: &UndoPlan) -> AppliedVariant {
-        plan.variant()
-    }
-
-    fn applied_receipt_payload(&self, (): &(), plan: &UndoPlan) -> String {
-        serde_json::Value::Object(plan.receipt_payload()).to_string()
+    fn applied_receipt(&self, (): &(), plan: &UndoPlan) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: plan.variant(),
+            payload: serde_json::Value::Object(plan.receipt_payload()).to_string(),
+            refs: ReceiptRefs::default(),
+        }
     }
 
     async fn apply(
@@ -168,11 +166,14 @@ impl ProjectCommand for UndoLatestAuthorAction {
         _sequences: &ProfileSequences<Self>,
         plan: UndoPlan,
         (): (),
-    ) -> Result<UndoWrite<()>, ProjectCommandError> {
-        Ok(UndoWrite {
-            effect: (),
-            request: UndoRequest::new(envelope, &self.input),
-            plan,
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
+        Ok(CommandWrite {
+            profile: UndoWrite {
+                effect: (),
+                request: UndoRequest::new(envelope, &self.input),
+                plan,
+            },
+            after_authority: None,
         })
     }
 
@@ -180,6 +181,12 @@ impl ProjectCommand for UndoLatestAuthorAction {
         Ok(())
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl ZeroAuthority<UndoLatestAuthorAction> for UndoLatestAuthorAction {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::Refused(_) => ZeroAuthorityRows::Effect,

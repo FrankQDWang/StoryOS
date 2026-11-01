@@ -10,7 +10,7 @@ use super::*;
 
 const DELETE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Delete Chapter",
-    command_kind: "deleteChapter",
+    command_kind: contracts::CommandKind::DeleteChapter,
     method: contracts::DELETE_CHAPTER_METHOD,
     path: contracts::DELETE_CHAPTER_PATH,
     schema_id: contracts::DELETE_CHAPTER_REQUEST_SCHEMA_ID,

@@ -2,7 +2,7 @@ use super::*;
 
 const STANDARD_ROUTE: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Project",
-    command_kind: "updateProject",
+    command_kind: contracts::CommandKind::UpdateProject,
     method: "POST",
     path: "/api/v1/projects/{project_id}/updates",
     schema_id: "storyos.command.update-project.request.v1",

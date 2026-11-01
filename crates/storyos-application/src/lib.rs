@@ -82,8 +82,9 @@ mod update_project_assistance;
 mod withdraw_proposal;
 
 pub use author_edit::{
-    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
-    AuthorEditSettlement, AuthorEditSettlementEffect, AuthoritativeAppliedIds,
+    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditCommandSettlement,
+    AuthorEditError, AuthorEditProposalTarget, AuthorEditSettlement, AuthorEditSettlementEffect,
+    AuthoritativeAppliedIds,
 };
 pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
@@ -109,13 +110,13 @@ pub use create_agent_run::{
     ActiveCompactionInspect, ActiveCompactionInstallState, ActiveCompactionKnownInput,
     ActiveCompactionMappingKind, AgentRunContext, AgentRunContinuationAdmission,
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunInputMapping, AgentRunModelInspect,
-    AgentRunReadSelection, AgentRunReadStore, AgentRunRecord, AgentRunStatus,
-    AgentRunSteeringInspect, AgentRunStreamItem, AttemptCache, CapturedMemorySettings,
-    ConversationSelection, CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunError,
-    CreateAgentRunInput, CreateAgentRunSettlement, EvidenceAvailability,
-    OriginalResultRetrievalDisposition, OriginalResultRetrievalInspect,
-    ReferenceRecoveryDisposition, ReferenceRecoveryInspect, UnknownCreateSuccessorDisposition,
-    UnknownCreateSuccessorInspect, WorkingTargetAvailability, inspect_agent_run, open_agent_run,
+    AgentRunReadSelection, AgentRunReadStore, AgentRunRecord, AgentRunSteeringInspect,
+    AgentRunStreamItem, AttemptCache, CapturedMemorySettings, ConversationSelection,
+    CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput,
+    CreateAgentRunSettlement, EvidenceAvailability, OriginalResultRetrievalDisposition,
+    OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
+    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
+    inspect_agent_run, open_agent_run, wire_agent_run_status,
 };
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,

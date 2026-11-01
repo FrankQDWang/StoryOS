@@ -1,18 +1,19 @@
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateChapterInput, UpdateChapterSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
-    ChapterJoin, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied, UpdateChapterConflict,
-    UpdateChapterNoEffect, UpdateChapterRefusal, update_chapter as classify_update_chapter,
+    ChapterJoin, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied,
+    update_chapter as classify_update_chapter,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -40,23 +41,21 @@ pub(crate) struct LiveSiblings {
 
 impl ProjectCommand for UpdateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "updateChapter",
+        kind: CommandKind::UpdateChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateChapter,
         ))],
         activity_kind: "chapter_updated",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = UpdateChapterApplied;
     type Plan = LiveSiblings;
-    type Effect = UpdateChapterApplied;
-    type NoEffect = UpdateChapterNoEffect;
-    type Conflict = UpdateChapterConflict;
-    type Refusal = UpdateChapterRefusal;
+    type Settlement = UpdateChapterSettlement;
 
     async fn classify(
         &self,
@@ -143,7 +142,7 @@ impl ProjectCommand for UpdateChapterInput {
         _sequences: &StructureTransitionSequences,
         siblings: LiveSiblings,
         applied: UpdateChapterApplied,
-    ) -> Result<StructureWrite<UpdateChapterApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let renamed = client
             .execute(
@@ -171,19 +170,22 @@ impl ProjectCommand for UpdateChapterInput {
                 .await
                 .map_err(unavailable)?;
         }
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
-            current_chapter: CurrentChapterChange::Preserve,
-            writer_base: WriterBase::Keep,
-            activity: serde_json::json!({
-                "chapter_id": self.chapter_id.as_ref(),
-                "title": applied.title,
-                "order": applied.order.to_string(),
-                "prior_title": siblings.current_title,
-                "prior_order": siblings.current_order.to_string(),
-            }),
-            effect: applied,
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
+                current_chapter: CurrentChapterChange::Preserve,
+                writer_base: WriterBase::Keep,
+                activity: serde_json::json!({
+                    "chapter_id": self.chapter_id.as_ref(),
+                    "title": applied.title,
+                    "order": applied.order.to_string(),
+                    "prior_title": siblings.current_title,
+                    "prior_order": siblings.current_order.to_string(),
+                }),
+                effect: applied,
+            },
+            after_authority: None,
         })
     }
 

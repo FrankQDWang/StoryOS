@@ -10,7 +10,7 @@ use super::*;
 
 const DELETE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Delete Volume",
-    command_kind: "deleteVolume",
+    command_kind: contracts::CommandKind::DeleteVolume,
     method: contracts::DELETE_VOLUME_METHOD,
     path: contracts::DELETE_VOLUME_PATH,
     schema_id: contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,

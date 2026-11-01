@@ -5,9 +5,9 @@ use std::convert::Infallible;
 use super::TransitionOutcome;
 use crate::transition_outcome::reason_codes;
 
-/// Current lifecycle of one AgentRun for pause and cancel classification.
+/// The durable status of one AgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunLifecycle {
+pub enum AgentRunStatus {
     Queued,
     Claimed,
     Waiting,
@@ -17,7 +17,7 @@ pub enum AgentRunLifecycle {
     Cancelled,
 }
 
-impl AgentRunLifecycle {
+impl AgentRunStatus {
     /// Parses one durable AgentRun status token.
     pub fn parse(status: &str) -> Option<Self> {
         Some(match status {
@@ -80,18 +80,14 @@ reason_codes!(SteerAgentRunConflict { TerminalRun => "terminal_run" });
 
 /// Classifies pause without treating it as cancellation.
 pub fn classify_pause_agent_run(
-    lifecycle: AgentRunLifecycle,
+    lifecycle: AgentRunStatus,
 ) -> TransitionOutcome<(), PauseAgentRunNoEffect, PauseAgentRunConflict, Infallible> {
     match lifecycle {
-        AgentRunLifecycle::Queued | AgentRunLifecycle::Claimed | AgentRunLifecycle::Waiting => {
+        AgentRunStatus::Queued | AgentRunStatus::Claimed | AgentRunStatus::Waiting => {
             TransitionOutcome::Applied(())
         }
-        AgentRunLifecycle::Paused => {
-            TransitionOutcome::NoEffect(PauseAgentRunNoEffect::AlreadyPaused)
-        }
-        AgentRunLifecycle::Completed
-        | AgentRunLifecycle::Refused
-        | AgentRunLifecycle::Cancelled => {
+        AgentRunStatus::Paused => TransitionOutcome::NoEffect(PauseAgentRunNoEffect::AlreadyPaused),
+        AgentRunStatus::Completed | AgentRunStatus::Refused | AgentRunStatus::Cancelled => {
             TransitionOutcome::Conflicted(PauseAgentRunConflict::TerminalRun)
         }
     }
@@ -99,17 +95,17 @@ pub fn classify_pause_agent_run(
 
 /// Classifies cancel as the irreversible fence, including a paused Run.
 pub fn classify_cancel_agent_run(
-    lifecycle: AgentRunLifecycle,
+    lifecycle: AgentRunStatus,
 ) -> TransitionOutcome<(), CancelAgentRunNoEffect, CancelAgentRunConflict, Infallible> {
     match lifecycle {
-        AgentRunLifecycle::Queued
-        | AgentRunLifecycle::Claimed
-        | AgentRunLifecycle::Waiting
-        | AgentRunLifecycle::Paused => TransitionOutcome::Applied(()),
-        AgentRunLifecycle::Cancelled => {
+        AgentRunStatus::Queued
+        | AgentRunStatus::Claimed
+        | AgentRunStatus::Waiting
+        | AgentRunStatus::Paused => TransitionOutcome::Applied(()),
+        AgentRunStatus::Cancelled => {
             TransitionOutcome::NoEffect(CancelAgentRunNoEffect::AlreadyCancelled)
         }
-        AgentRunLifecycle::Completed | AgentRunLifecycle::Refused => {
+        AgentRunStatus::Completed | AgentRunStatus::Refused => {
             TransitionOutcome::Conflicted(CancelAgentRunConflict::TerminalRun)
         }
     }
@@ -117,18 +113,16 @@ pub fn classify_cancel_agent_run(
 
 /// Classifies steering. A Run that is not terminal retains the input and changes no authority.
 pub fn classify_steer_agent_run(
-    lifecycle: AgentRunLifecycle,
+    lifecycle: AgentRunStatus,
 ) -> TransitionOutcome<Infallible, SteerAgentRunNoEffect, SteerAgentRunConflict, Infallible> {
     match lifecycle {
-        AgentRunLifecycle::Queued
-        | AgentRunLifecycle::Claimed
-        | AgentRunLifecycle::Waiting
-        | AgentRunLifecycle::Paused => {
+        AgentRunStatus::Queued
+        | AgentRunStatus::Claimed
+        | AgentRunStatus::Waiting
+        | AgentRunStatus::Paused => {
             TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained)
         }
-        AgentRunLifecycle::Completed
-        | AgentRunLifecycle::Refused
-        | AgentRunLifecycle::Cancelled => {
+        AgentRunStatus::Completed | AgentRunStatus::Refused | AgentRunStatus::Cancelled => {
             TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun)
         }
     }

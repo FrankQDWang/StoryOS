@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectAssistanceRecord, ProjectCommandEnvelope, ProjectCommandError, ProjectReadError,
@@ -7,15 +7,15 @@ use storyos_application::{
 use storyos_core::{
     AssistanceAvailability, AssistanceBindingPresence, DestinationKind, RuntimeQualification,
     UpdateProjectAssistance as CoreUpdateProjectAssistance, UpdateProjectAssistanceApplied,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, update_project_assistance,
+    update_project_assistance,
 };
 use tokio_postgres::Client;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification, CommandSpec,
-    LockedProject, ProjectAssistanceResponse, ProjectCommand, ReplayEffect, settle_project_command,
-    unavailable,
+    ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification,
+    CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectCommand, ReplayEffect,
+    settle_project_command, unavailable,
 };
 use crate::{PostgresProjectReader, read_error};
 
@@ -32,21 +32,19 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for UpdateProjectAssistanceInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "updateProjectAssistance",
+        kind: CommandKind::UpdateProjectAssistance,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "project_assistance_updated",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::ProjectAssistance,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = ActivityOnly;
-    type Response = ProjectAssistanceResponse;
-    type ZeroEffect = ();
     type Applied = UpdateProjectAssistanceApplied;
     type Plan = ();
-    type Effect = UpdateProjectAssistanceApplied;
-    type NoEffect = UpdateProjectAssistanceNoEffect;
-    type Conflict = UpdateProjectAssistanceConflict;
-    type Refusal = Infallible;
+    type Settlement = UpdateProjectAssistanceSettlement;
 
     async fn classify(
         &self,
@@ -85,7 +83,7 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         _sequences: &ActivitySequences,
         _plan: (),
         applied: UpdateProjectAssistanceApplied,
-    ) -> Result<ActivityWrite<UpdateProjectAssistanceApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let (availability, revision) = match applied {
             UpdateProjectAssistanceApplied::Initialized {
                 availability,
@@ -121,12 +119,15 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
                 (availability, revision)
             }
         };
-        Ok(ActivityWrite {
-            effect: applied,
-            activity: serde_json::json!({
-                "availability": availability_text(availability),
-                "revision": revision.to_string(),
-            }),
+        Ok(CommandWrite {
+            profile: ActivityWrite {
+                effect: applied,
+                activity: serde_json::json!({
+                    "availability": availability_text(availability),
+                    "revision": revision.to_string(),
+                }),
+            },
+            after_authority: None,
         })
     }
 

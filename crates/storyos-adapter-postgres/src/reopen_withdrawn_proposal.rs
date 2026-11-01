@@ -2,24 +2,31 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalReopened,
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
-use storyos_core::{
-    ReopenWithdrawnProposal as CoreReopen, ReopenWithdrawnProposalConflict,
-    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, reopen_withdrawn_proposal,
-};
+use storyos_contracts::CommandKind;
+use storyos_core::{ReopenWithdrawnProposal as CoreReopen, reopen_withdrawn_proposal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
+use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
 use crate::undo_compensation::ForwardCommand;
 
-mod compensation;
-pub(crate) use compensation::ReopenWithdrawnCompensation;
+/// The Compensation of a reopen withdraws the reopened Proposal again with the Proposal Revision
+/// before the reopen (ADR 0068).
+pub(crate) type ReopenWithdrawnCompensation = RevisionDecisionCompensation;
+
+/// The decision records of a withdrawn Proposal reopen, which its Compensation reads.
+pub(crate) const REOPEN_WITHDRAWN_HISTORY: DecisionHistory = DecisionHistory {
+    table: "proposal_withdrawal_reopenings",
+    receipt_column: "reopen_receipt_id",
+};
 
 impl PostgresProjectReader {
     /// Settles one author reopen of a withdrawn Proposal.
@@ -148,7 +155,7 @@ pub(crate) async fn head_withdrawals(
 
 impl ProjectCommand for ReopenWithdrawnProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "reopenWithdrawnProposal",
+        kind: CommandKind::ReopenWithdrawnProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenWithdrawnProposal,
         )],
@@ -163,18 +170,16 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND reopen_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"reopen_withdrawn"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending open Proposal Revision.
     type Applied = String;
     type Plan = WithdrawnRevision;
-    type Effect = ProposalReopened;
-    type NoEffect = ReopenWithdrawnProposalNoEffect;
-    type Conflict = ReopenWithdrawnProposalConflict;
-    type Refusal = ReopenWithdrawnProposalRefusal;
+    type Settlement = ReopenWithdrawnProposalSettlement;
 
     async fn classify(
         &self,
@@ -253,34 +258,22 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
             base_authoritative_revision_id: row.get(/*idx*/ 5),
             operation_resolution,
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), withdrawn)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(row.get(/*idx*/ 3)),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), withdrawn)),
+            &self.editor_session_id,
+            row.get(/*idx*/ 3),
+            &self.expected_authoritative_revision_id,
+        ))
+    }
+
+    fn applied_receipt(&self, applied: &String, _plan: &WithdrawnRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
             },
-            zero_receipt: ZeroReceipt::Reason,
-        })
-    }
-
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &WithdrawnRevision) -> String {
-        r#"{"transition":"reopen_withdrawn"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &WithdrawnRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
         }
     }
 
@@ -292,7 +285,7 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
         sequence: &ProfileSequences<Self>,
         withdrawn: WithdrawnRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<ProposalReopened, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -359,34 +352,30 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(ProposalReopened {
-            resulting_proposal_revision_id,
-            preserved_generation: withdrawn.generation,
-            preserved_operation_resolution: withdrawn.operation_resolution,
+        Ok(CommandWrite {
+            profile: ProposalReopened {
+                resulting_proposal_revision_id,
+                preserved_generation: withdrawn.generation,
+                preserved_operation_resolution: withdrawn.operation_resolution,
+            },
+            after_authority: None,
         })
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReopened, ReplayFault> {
-        replay.require_receipt_text("transition", "reopen_withdrawn")?;
-        match (
-            replay.effect_text("resulting_proposal_revision_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_operation_resolution")?,
-        ) {
-            (
-                Some(resulting_proposal_revision_id),
-                Some(preserved_generation),
-                Some(preserved_operation_resolution),
-            ) => Ok(ProposalReopened {
-                resulting_proposal_revision_id,
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_operation_resolution: StateAxis::OperationResolution
-                    .preserved(preserved_operation_resolution)?,
-            }),
-            (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
-            _ => Err(ReplayFault::Unavailable(
-                "the applied reopening record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(
+            replay,
+            ("transition", "reopen_withdrawn"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(ProposalReopened {
+                    resulting_proposal_revision_id: record
+                        .text("resulting_proposal_revision_id")?,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_operation_resolution: record
+                        .preserved(StateAxis::OperationResolution)?,
+                })
+            },
+        )
     }
 }

@@ -4,6 +4,7 @@ use storyos_application::{
     ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectId, ProjectScope,
     RevisionNonce, UserId, issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -42,7 +43,7 @@ fn challenge_request(digest_byte: char) -> IssueProjectCommandChallenge {
             method: "PATCH".to_owned(),
             route_template: "/api/v1/projects/{project_id}".to_owned(),
             command_schema: "storyos.command.update-project.request.v1".to_owned(),
-            command_kind: "updateProject".to_owned(),
+            command_kind: CommandKind::UpdateProject.as_str().to_owned(),
             canonical_command_digest,
             idempotency_key: idempotency_key.to_owned(),
         },
@@ -287,7 +288,7 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
             value.command_schema = "storyos.command.update-project-assistance.request.v1".to_owned()
         },
         |value: &mut ProjectCommandChallengeBinding| {
-            value.command_kind = "updateProjectAssistance".to_owned()
+            value.command_kind = CommandKind::UpdateProjectAssistance.as_str().to_owned()
         },
         |value: &mut ProjectCommandChallengeBinding| {
             value.canonical_command_digest = format!(
@@ -429,10 +430,11 @@ async fn an_author_edit_challenge_issued_under_the_shared_revision_stays_consuma
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
     binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
-    binding.command_kind = "applyAuthorEdit".to_owned();
-    binding.canonical_command_digest = binding
-        .canonical_command_digest
-        .replace("updateProject", "applyAuthorEdit");
+    binding.command_kind = CommandKind::ApplyAuthorEdit.as_str().to_owned();
+    binding.canonical_command_digest = binding.canonical_command_digest.replace(
+        CommandKind::UpdateProject.as_str(),
+        CommandKind::ApplyAuthorEdit.as_str(),
+    );
     issue_project_command_challenge(&store, &issued_before_deployment)
         .await
         .unwrap();
@@ -466,10 +468,11 @@ async fn an_author_undo_challenge_issued_under_the_shared_revision_stays_consuma
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/author-actions/undo".to_owned();
     binding.command_schema = "storyos.command.undo-latest-author-action.request.v1".to_owned();
-    binding.command_kind = "undoLatestAuthorAction".to_owned();
-    binding.canonical_command_digest = binding
-        .canonical_command_digest
-        .replace("updateProject", "undoLatestAuthorAction");
+    binding.command_kind = CommandKind::UndoLatestAuthorAction.as_str().to_owned();
+    binding.canonical_command_digest = binding.canonical_command_digest.replace(
+        CommandKind::UpdateProject.as_str(),
+        CommandKind::UndoLatestAuthorAction.as_str(),
+    );
     issue_project_command_challenge(&store, &issued_before_deployment)
         .await
         .unwrap();
@@ -511,7 +514,7 @@ fn shared_revision_challenge(
     binding.command_kind = command_kind.to_owned();
     binding.canonical_command_digest = binding
         .canonical_command_digest
-        .replace("updateProject", command_kind);
+        .replace(CommandKind::UpdateProject.as_str(), command_kind);
     binding.idempotency_key = format!("018f0000-0000-7001-8000-0000b6{lead:06}");
     request.nonce = format!("opaque-shared-nonce-{lead}");
     request.nonce_digest = format!("sha256:shared-nonce-{lead}");
@@ -563,13 +566,13 @@ async fn a_repeated_request_across_the_rate_policy_revision_returns_the_original
     for (lead, command_kind, route_template, command_schema) in [
         (
             1,
-            "applyAuthorEdit",
+            CommandKind::ApplyAuthorEdit.as_str(),
             "/api/v1/projects/{project_id}/manuscript/author-edits",
             "storyos.command.apply-author-edit.request.v1",
         ),
         (
             2,
-            "undoLatestAuthorAction",
+            CommandKind::UndoLatestAuthorAction.as_str(),
             "/api/v1/projects/{project_id}/author-actions/undo",
             "storyos.command.undo-latest-author-action.request.v1",
         ),
@@ -603,7 +606,7 @@ async fn a_changed_binding_still_conflicts_across_the_rate_policy_revision() {
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
     let original = shared_revision_challenge(
-        "applyAuthorEdit",
+        CommandKind::ApplyAuthorEdit.as_str(),
         "/api/v1/projects/{project_id}/manuscript/author-edits",
         "storyos.command.apply-author-edit.request.v1",
         /*lead*/ 3,

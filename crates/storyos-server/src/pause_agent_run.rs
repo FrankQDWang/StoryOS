@@ -11,7 +11,7 @@ use super::*;
 
 const PAUSE_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "AgentRun control",
-    command_kind: "pauseAgentRun",
+    command_kind: contracts::CommandKind::PauseAgentRun,
     method: contracts::PAUSE_AGENT_RUN_METHOD,
     path: contracts::PAUSE_AGENT_RUN_PATH,
     schema_id: contracts::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,

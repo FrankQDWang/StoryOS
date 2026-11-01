@@ -6,9 +6,9 @@ use storyos_application::{
     AcceptProposalInput, AcceptProposalSettlement, AcceptanceRefusalBoundary,
     AcceptanceRefusalReason, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
-    AcceptProposal as CoreAccept, AcceptProposalConflict, AcceptProposalInvalid,
-    AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
+    AcceptProposal as CoreAccept, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
     AcceptanceValidation, ProposalBundlePolicy, ProposalOperationSelection,
     ProposalSelectionIntent, TransitionOutcome, accept_proposal as classify_acceptance,
     classify_proposal_selection,
@@ -19,9 +19,10 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
-    CommandSpec, EditorAdmission, LockedProject, ProfileSequences, ProjectCommand, ProjectResponse,
-    ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite,
-    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
+    CommandResponse, CommandSpec, CommandWrite, EditorAdmission, LockedProject, ProfileSequences,
+    ProjectCommand, ReceiptHeads, ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers,
+    RevisionWrite, ZeroAuthority, ZeroAuthorityRows, ZeroOutcome, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -82,8 +83,8 @@ pub(crate) struct AcceptedRevision {
 }
 
 impl ProjectCommand for AcceptProposal {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "acceptProposal",
+    const SPEC: CommandSpec<RefusableCommandError<AcceptanceRefusalReason>> = CommandSpec {
+        kind: CommandKind::AcceptProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
         // The AuthoritativeRevision profile writes its own Activity record.
         activity_kind: "",
@@ -93,18 +94,15 @@ impl ProjectCommand for AcceptProposal {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND acceptance_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = RefusableCommandError<AcceptanceRefusalReason>;
     type Profile = AuthoritativeRevision;
-    type Response = ProjectResponse;
-    /// The condition references of the Receipt.
-    type ZeroEffect = Vec<String>;
-    type Applied = ();
     type Plan = AcceptedRevision;
-    type Effect = AcceptanceTargetResolution;
-    type NoEffect = AcceptProposalInvalid;
-    type Conflict = AcceptProposalConflict;
-    type Refusal = AcceptProposalRefusal;
+    type Applied = ();
+    type Settlement = AcceptProposalSettlement;
 
     async fn classify(
         &self,
@@ -263,7 +261,7 @@ impl ProjectCommand for AcceptProposal {
         _sequences: &ProfileSequences<Self>,
         plan: AcceptedRevision,
         (): (),
-    ) -> Result<RevisionWrite<AcceptanceTargetResolution>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let input = &self.input;
         client
             .execute(
@@ -310,15 +308,20 @@ impl ProjectCommand for AcceptProposal {
         {
             return Err(ProjectCommandError::BindingConflict);
         }
-        Ok(RevisionWrite {
-            effect: plan.resolution,
-            chapter_id: plan.chapter_id,
-            prior_revision_id: input.expected_authoritative_revision_id.clone(),
-            payload: plan.payload,
-            members: RevisionMembers::CopyFrom(input.expected_authoritative_revision_id.clone()),
-            disposition: ActionDisposition::Forward,
-            editor_session_id: input.editor_session_id.as_ref().to_owned(),
-            writer_base: RevisionBase::WhenOnPrior,
+        Ok(CommandWrite {
+            profile: RevisionWrite {
+                effect: plan.resolution,
+                chapter_id: plan.chapter_id,
+                prior_revision_id: input.expected_authoritative_revision_id.clone(),
+                payload: plan.payload,
+                members: RevisionMembers::CopyFrom(
+                    input.expected_authoritative_revision_id.clone(),
+                ),
+                disposition: ActionDisposition::Forward,
+                editor_session_id: input.editor_session_id.as_ref().to_owned(),
+                writer_base: RevisionBase::WhenOnPrior,
+            },
+            after_authority: None,
         })
     }
 
@@ -337,6 +340,12 @@ impl ProjectCommand for AcceptProposal {
             })
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl ZeroAuthority<Self> for AcceptProposal {
     fn zero_authority_rows(&self, _outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         ZeroAuthorityRows::Effect
     }

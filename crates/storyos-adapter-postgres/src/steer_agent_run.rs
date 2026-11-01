@@ -1,21 +1,23 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
     SteerAgentRunError, SteerAgentRunInput, SteerAgentRunSettlement, SteeringRetained,
 };
 use storyos_core::{
-    AgentRunLifecycle, CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect,
-    TransitionOutcome, classify_steer_agent_run,
+    CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect, TransitionOutcome,
+    classify_steer_agent_run,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_control::lock_agent_run;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
+    ActivityOnly, ActivitySequences, Admission, AppliedVariant, Classification, CommandResponse,
+    CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand, ReceiptHeads,
+    ReplayEffect, ZeroAuthority, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
     settle_project_command, unavailable,
 };
 
@@ -35,22 +37,20 @@ impl PostgresProjectReader {
 }
 
 impl ProjectCommand for SteerAgentRunInput {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "steerAgentRun",
+    const SPEC: CommandSpec<SteerAgentRunError> = CommandSpec {
+        kind: CommandKind::SteerAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: ACTIVITY_KIND,
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = SteerAgentRunError;
     type Profile = ActivityOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = SteeringRetained;
-    type Applied = Infallible;
     type Plan = ();
-    type Effect = Infallible;
-    type NoEffect = SteerAgentRunNoEffect;
-    type Conflict = SteerAgentRunConflict;
-    type Refusal = Infallible;
+    type Applied = Infallible;
+    type Settlement = SteerAgentRunSettlement;
 
     async fn classify(
         &self,
@@ -59,32 +59,13 @@ impl ProjectCommand for SteerAgentRunInput {
         _project: &LockedProject,
     ) -> Result<Classification<Self>, SteerAgentRunError> {
         let scope = &envelope.project_scope;
-        let missing_run =
-            || RefusableCommandError::RefusedBeforeAdmission(AgentRunControlRefusal::MissingRun);
-        let run = client
-            .query_opt(
-                "SELECT status, conversation_id::text, author_message,
-                        active_decision_position::text
-                   FROM storyos.agent_runs
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                  FOR UPDATE",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &self.run_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?
-            .ok_or_else(missing_run)?;
-        let status = run.get::<_, String>(/*idx*/ 0);
-        let lifecycle = AgentRunLifecycle::parse(&status)
-            .ok_or_else(|| unavailable(format!("unsupported AgentRun status {status}")))?;
-        if self.conversation_id != run.get::<_, String>(/*idx*/ 1) {
-            return Err(missing_run());
+        let run = lock_agent_run(client, scope, &self.run_id).await?;
+        if self.conversation_id != run.conversation_id {
+            return Err(RefusableCommandError::RefusedBeforeAdmission(
+                AgentRunControlRefusal::MissingRun,
+            ));
         }
-        let outcome = classify_steer_agent_run(lifecycle);
+        let outcome = classify_steer_agent_run(run.lifecycle);
         if let TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) = outcome {
             let retained = client
                 .query_one(
@@ -104,7 +85,7 @@ impl ProjectCommand for SteerAgentRunInput {
                 .get::<_, String>(/*idx*/ 0)
                 .parse::<u64>()
                 .map_err(unavailable)?;
-            let run_message = run.get::<_, String>(/*idx*/ 2).chars().count() as u64;
+            let run_message = run.author_message.chars().count() as u64;
             let message = self.author_message.chars().count() as u64;
             if run_message + retained + message + 1 > CONTEXT_ITEM_TOKEN_LIMIT {
                 return Err(RefusableCommandError::RefusedBeforeAdmission(
@@ -112,8 +93,8 @@ impl ProjectCommand for SteerAgentRunInput {
                 ));
             }
             if let Some(added) = &self.selection_references {
-                let position = run.get::<_, String>(/*idx*/ 3);
-                let current = run_references(client, envelope, &self.run_id, &position).await?;
+                let position = &run.active_decision_position;
+                let current = run_references(client, envelope, &self.run_id, position).await?;
                 let merged = storyos_core::merge_steering_references(current, added);
                 if merged.len() > storyos_core::SELECTION_REFERENCE_LIMIT {
                     return Err(RefusableCommandError::RefusedBeforeAdmission(
@@ -138,7 +119,7 @@ impl ProjectCommand for SteerAgentRunInput {
         _sequences: &ActivitySequences,
         _plan: (),
         applied: Infallible,
-    ) -> Result<ActivityWrite<Infallible>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         match applied {}
     }
 
@@ -146,6 +127,12 @@ impl ProjectCommand for SteerAgentRunInput {
         Err(ReplayFault::BindingConflict)
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl ZeroAuthority<Self> for SteerAgentRunInput {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
             ZeroOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) => {

@@ -59,7 +59,7 @@ pub use accept_proposal::{
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use agent_run_control::{
-    AgentRunLifecycle, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
+    AgentRunStatus, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
     PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_cancel_agent_run,
     classify_pause_agent_run, classify_steer_agent_run,
 };

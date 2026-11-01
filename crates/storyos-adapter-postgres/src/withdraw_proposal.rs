@@ -1,21 +1,20 @@
 use storyos_application::{
-    ActionApplied, ProjectCommandEnvelope, ProjectCommandError, ProposalWithdrawn,
-    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
+    ProjectCommandEnvelope, ProjectCommandError, ProposalWithdrawn, WithdrawProposalInput,
+    WithdrawProposalSettlement, WithdrawalNote,
 };
-use storyos_core::{
-    WithdrawProposal as CoreWithdraw, WithdrawProposalConflict, WithdrawProposalNoEffect,
-    WithdrawProposalRefusal, WithdrawalCause, withdraw_proposal,
-};
+use storyos_contracts::CommandKind;
+use storyos_core::{WithdrawProposal as CoreWithdraw, WithdrawalCause, withdraw_proposal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReplayEffect,
-    ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, settle_project_command,
+    unavailable,
 };
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
@@ -40,7 +39,7 @@ pub(crate) struct OpenRevision {
 
 impl ProjectCommand for WithdrawProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "withdrawProposal",
+        kind: CommandKind::WithdrawProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::WithdrawProposal)],
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",
@@ -53,18 +52,16 @@ impl ProjectCommand for WithdrawProposalInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND withdrawal_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"withdraw"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
+    type Plan = OpenRevision;
     /// The identity of the new Proposal Withdrawal record.
     type Applied = String;
-    type Plan = OpenRevision;
-    type Effect = ProposalWithdrawn;
-    type NoEffect = WithdrawProposalNoEffect;
-    type Conflict = WithdrawProposalConflict;
-    type Refusal = WithdrawProposalRefusal;
+    type Settlement = WithdrawProposalSettlement;
 
     async fn classify(
         &self,
@@ -122,28 +119,12 @@ impl ProjectCommand for WithdrawProposalInput {
             generation: row.get(/*idx*/ 1),
             validation: row.get(/*idx*/ 2),
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), open)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(chapter_object_id),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
-            },
-            zero_receipt: ZeroReceipt::Reason,
-        })
-    }
-
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &OpenRevision) -> String {
-        r#"{"transition":"withdraw"}"#.to_owned()
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), open)),
+            &self.editor_session_id,
+            chapter_object_id,
+            &self.expected_authoritative_revision_id,
+        ))
     }
 
     async fn apply(
@@ -154,7 +135,7 @@ impl ProjectCommand for WithdrawProposalInput {
         _sequence: &ProfileSequences<Self>,
         open: OpenRevision,
         withdrawal_event_id: String,
-    ) -> Result<ProposalWithdrawn, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let updated = client
             .execute(
@@ -175,70 +156,63 @@ impl ProjectCommand for WithdrawProposalInput {
         if updated != 1 {
             return Err(ProjectCommandError::BindingConflict);
         }
-        Ok(ProposalWithdrawn {
+        let withdrawn = ProposalWithdrawn {
             preserved_generation: open.generation,
             preserved_validation: open.validation,
             withdrawal_event_id,
-        })
-    }
-
-    async fn apply_after_authority(
-        &self,
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        applied: &ActionApplied<ProposalWithdrawn>,
-    ) -> Result<(), ProjectCommandError> {
-        let scope = &envelope.project_scope;
-        let note = match &self.withdrawal_note {
-            WithdrawalNote::Omitted => None,
-            WithdrawalNote::Present { text } => Some(text.as_str()),
         };
-        client
-            .execute(
-                "INSERT INTO storyos.proposal_withdrawals
-                   (owner_user_id, project_id, withdrawal_event_id, proposal_id,
-                    proposal_revision_id, withdrawal_reason, author_note,
-                    withdrawal_receipt_id, author_action_sequence, preserved_generation,
-                    preserved_validation)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, 'author_withdrew', $6, $7::text::uuid,
-                         $8::text::numeric, $9, $10)",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &applied.effect.withdrawal_event_id,
-                    &self.proposal_id,
-                    &self.proposal_revision_id,
-                    &note,
-                    &envelope.ids.receipt_id,
-                    &applied.author_action_sequence.to_string(),
-                    &applied.effect.preserved_generation,
-                    &applied.effect.preserved_validation,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        Ok(())
+        Ok(CommandWrite::after_authority(
+            withdrawn,
+            |command: &Self, client, envelope, applied| {
+                Box::pin(async move {
+                    let scope = &envelope.project_scope;
+                    let note = match &command.withdrawal_note {
+                        WithdrawalNote::Omitted => None,
+                        WithdrawalNote::Present { text } => Some(text.as_str()),
+                    };
+                    client
+                        .execute(
+                            "INSERT INTO storyos.proposal_withdrawals
+                           (owner_user_id, project_id, withdrawal_event_id, proposal_id,
+                            proposal_revision_id, withdrawal_reason, author_note,
+                            withdrawal_receipt_id, author_action_sequence, preserved_generation,
+                            preserved_validation)
+                         VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                                 $5::text::uuid, 'author_withdrew', $6, $7::text::uuid,
+                                 $8::text::numeric, $9, $10)",
+                            &[
+                                &scope.owner_user_id.as_ref(),
+                                &scope.project_id.as_ref(),
+                                &applied.effect.withdrawal_event_id,
+                                &command.proposal_id,
+                                &command.proposal_revision_id,
+                                &note,
+                                &envelope.ids.receipt_id,
+                                &applied.author_action_sequence.to_string(),
+                                &applied.effect.preserved_generation,
+                                &applied.effect.preserved_validation,
+                            ],
+                        )
+                        .await
+                        .map_err(unavailable)?;
+                    Ok(())
+                })
+            },
+        ))
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalWithdrawn, ReplayFault> {
-        replay.require_receipt_text("transition", "withdraw")?;
-        match (
-            replay.effect_text("withdrawal_event_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_validation")?,
-        ) {
-            (Some(withdrawal_event_id), Some(preserved_generation), Some(preserved_validation)) => {
+        decode_decision(
+            replay,
+            ("transition", "withdraw"),
+            PreCaptureRecords::Possible,
+            |record| {
                 Ok(ProposalWithdrawn {
-                    preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                    preserved_validation: StateAxis::Validation.preserved(preserved_validation)?,
-                    withdrawal_event_id,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_validation: record.preserved(StateAxis::Validation)?,
+                    withdrawal_event_id: record.text("withdrawal_event_id")?,
                 })
-            }
-            (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
-            _ => Err(ReplayFault::Unavailable(
-                "the applied Withdrawal record is missing or damaged".into(),
-            )),
-        }
+            },
+        )
     }
 }

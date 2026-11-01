@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ReceiptResult;
@@ -8,10 +9,11 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::surface::Effect;
 use crate::command_sequence::{
-    ActivitySequences, Admission, AdmittedCommand, AdmittedRefusal, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProfileApplied, ProfileSequences, ProfileWrite, ProjectCommand,
-    ReceiptRefs, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
+    ActivitySequences, Admission, AdmittedCommand, AdmittedRefusal, AppliedReceipt, Classification,
+    CommandSpec, CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ZeroAuthority,
+    ZeroAuthorityRows, ZeroAuthorityWrite, ZeroEffect, ZeroOutcome, settle_project_command,
     unavailable,
 };
 
@@ -60,23 +62,23 @@ impl std::error::Error for Injected {}
 
 /// The command spec that `Failing` declares for the wrapped command `C`.
 pub(super) trait DeclaredSpec<C: ProjectCommand>: Send + Sync {
-    const SPEC: CommandSpec;
+    const SPEC: CommandSpec<C::Error>;
 }
 
 /// The spec of the wrapped command.
 pub(super) struct WrappedSpec;
 
 impl<C: ProjectCommand> DeclaredSpec<C> for WrappedSpec {
-    const SPEC: CommandSpec = C::SPEC;
+    const SPEC: CommandSpec<C::Error> = C::SPEC;
 }
 
-/// The spec of the wrapped command with a kind that no Command Challenge has, so the Admission
-/// insert writes no row.
+/// The spec of the wrapped command with the Create Project kind, which no Project Command Challenge
+/// has, so the Admission insert writes no row.
 pub(super) struct UnchallengedKind;
 
 impl<C: ProjectCommand> DeclaredSpec<C> for UnchallengedKind {
-    const SPEC: CommandSpec = CommandSpec {
-        kind: "unchallengedCommand",
+    const SPEC: CommandSpec<C::Error> = CommandSpec {
+        kind: CommandKind::CreateProject,
         applied: &[],
         ..C::SPEC
     };
@@ -90,18 +92,12 @@ pub(super) struct Failing<C, S = WrappedSpec> {
 }
 
 impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
-    const SPEC: CommandSpec = S::SPEC;
-    const CONTENTION_REFUSAL: Option<Self::Error> = C::CONTENTION_REFUSAL;
+    const SPEC: CommandSpec<C::Error> = S::SPEC;
     type Error = C::Error;
     type Profile = C::Profile;
-    type Response = C::Response;
-    type ZeroEffect = C::ZeroEffect;
-    type Applied = C::Applied;
     type Plan = C::Plan;
-    type Effect = C::Effect;
-    type NoEffect = C::NoEffect;
-    type Conflict = C::Conflict;
-    type Refusal = C::Refusal;
+    type Applied = C::Applied;
+    type Settlement = C::Settlement;
 
     async fn classify(
         &self,
@@ -134,16 +130,8 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
             .await
     }
 
-    fn applied_variant(&self, applied: &Self::Applied, plan: &Self::Plan) -> AppliedVariant {
-        self.command.applied_variant(applied, plan)
-    }
-
-    fn applied_receipt_payload(&self, applied: &Self::Applied, plan: &Self::Plan) -> String {
-        self.command.applied_receipt_payload(applied, plan)
-    }
-
-    fn applied_receipt_refs(&self, applied: &Self::Applied, plan: &Self::Plan) -> ReceiptRefs {
-        self.command.applied_receipt_refs(applied, plan)
+    fn applied_receipt(&self, applied: &Self::Applied, plan: &Self::Plan) -> AppliedReceipt {
+        self.command.applied_receipt(applied, plan)
     }
 
     async fn apply(
@@ -154,8 +142,11 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
         sequences: &ProfileSequences<Self>,
         plan: Self::Plan,
         applied: Self::Applied,
-    ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
-        let write = self
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
+        let CommandWrite {
+            profile,
+            after_authority,
+        } = self
             .command
             .apply(client, envelope, project, sequences, plan, applied)
             .await?;
@@ -164,29 +155,29 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
             FailurePoint::Classify
             | FailurePoint::AfterAuthority
             | FailurePoint::ContendedClassify
-            | FailurePoint::NoFailure => Ok(write),
-        }
-    }
-
-    fn apply_after_authority(
-        &self,
-        client: &Client,
-        envelope: &ProjectCommandEnvelope,
-        applied: &ProfileApplied<Self>,
-    ) -> impl std::future::Future<Output = Result<(), ProjectCommandError>> + Send {
-        // The applied value need not be `Sync`, so only the inner future holds it.
-        let written = self
-            .command
-            .apply_after_authority(client, envelope, applied);
-        async move {
-            written.await?;
-            match self.at {
-                FailurePoint::AfterAuthority => Err(unavailable(Injected("after authority"))),
-                FailurePoint::Classify
-                | FailurePoint::Apply
-                | FailurePoint::ContendedClassify
-                | FailurePoint::NoFailure => Ok(()),
-            }
+            | FailurePoint::NoFailure => Ok(CommandWrite::after_authority(
+                profile,
+                move |failing: &Self, client, envelope, applied| {
+                    // The applied value need not be `Sync`, so only the inner future holds it.
+                    let written = after_authority
+                        .map(|write| write(&failing.command, client, envelope, applied));
+                    let at = failing.at;
+                    Box::pin(async move {
+                        if let Some(written) = written {
+                            written.await?;
+                        }
+                        match at {
+                            FailurePoint::AfterAuthority => {
+                                Err(unavailable(Injected("after authority")))
+                            }
+                            FailurePoint::Classify
+                            | FailurePoint::Apply
+                            | FailurePoint::ContendedClassify
+                            | FailurePoint::NoFailure => Ok(()),
+                        }
+                    })
+                },
+            )),
         }
     }
 
@@ -194,12 +185,22 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
         self.command.check_replay_binding(replay)
     }
 
-    fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
+    fn decode(&self, replay: &CommandReplay) -> Result<Effect<Self>, ReplayFault> {
         self.command.decode(replay)
     }
 
+    fn zero_authority(&self) -> Option<&(impl ZeroAuthority<Self> + Sync)> {
+        Some(self)
+    }
+}
+
+impl<C: ProjectCommand, S: DeclaredSpec<C>> ZeroAuthority<Self> for Failing<C, S> {
     fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
-        self.command.zero_authority_rows(&inner_outcome(outcome))
+        self.command
+            .zero_authority()
+            .map_or(ZeroAuthorityRows::None, |zero| {
+                zero.zero_authority_rows(&inner_outcome(outcome))
+            })
     }
 
     async fn write_zero_authority_effect(
@@ -207,10 +208,11 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         outcome: &ZeroOutcome<'_, Self>,
-    ) -> Result<Self::ZeroEffect, ProjectCommandError> {
-        self.command
-            .write_zero_authority_effect(client, envelope, &inner_outcome(outcome))
-            .await?;
+    ) -> Result<ZeroEffect<Self>, ProjectCommandError> {
+        if let Some(zero) = self.command.zero_authority() {
+            zero.write_zero_authority_effect(client, envelope, &inner_outcome(outcome))
+                .await?;
+        }
         Err(unavailable(Injected("zero-authority write")))
     }
 
@@ -220,18 +222,21 @@ impl<C: ProjectCommand, S: DeclaredSpec<C>> ProjectCommand for Failing<C, S> {
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
         activity: &ActivitySequences,
-    ) -> Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError> {
-        self.command
-            .write_zero_authority_activity(client, envelope, project, activity)
-            .await?;
+    ) -> Result<ZeroAuthorityWrite<ZeroEffect<Self>>, ProjectCommandError> {
+        if let Some(zero) = self.command.zero_authority() {
+            zero.write_zero_authority_activity(client, envelope, project, activity)
+                .await?;
+        }
         Err(unavailable(Injected("zero-authority write")))
     }
 
     fn decode_zero_authority_effect(
         &self,
         replay: &CommandReplay,
-    ) -> Result<Option<Self::ZeroEffect>, ReplayFault> {
-        self.command.decode_zero_authority_effect(replay)
+    ) -> Result<Option<ZeroEffect<Self>>, ReplayFault> {
+        self.command
+            .zero_authority()
+            .map_or(Ok(None), |zero| zero.decode_zero_authority_effect(replay))
     }
 }
 

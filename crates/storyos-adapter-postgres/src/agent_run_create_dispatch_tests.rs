@@ -1,6 +1,7 @@
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunStatus, NoContractFaults, complete_agent_run, open_agent_run,
+    AgentRunDecisionInspect, NoContractFaults, complete_agent_run, open_agent_run,
 };
+use storyos_core::AgentRunStatus;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_retrieval::tests::{adapter, destination, real_run};

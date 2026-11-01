@@ -12,7 +12,7 @@ use super::*;
 
 const EXPORT_HUMAN_READABLE_MANUSCRIPT: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "human-readable export",
-    command_kind: "exportHumanReadableManuscript",
+    command_kind: contracts::CommandKind::ExportHumanReadableManuscript,
     method: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,
     path: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH,
     schema_id: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,

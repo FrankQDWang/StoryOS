@@ -2,6 +2,7 @@ use storyos_application::{
     AcceptProposalInput, AcceptProposalSettlement, EditorSessionId, ManuscriptBlock,
     ManuscriptBlockKind, ProjectCommandError, ProjectScope,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{AcceptProposalRefusal, AcceptanceTargetResolution, TransitionOutcome};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -16,7 +17,7 @@ use super::support::{
 };
 
 pub(crate) const ACCEPT_PROPOSAL: Route = Route {
-    kind: "acceptProposal",
+    kind: CommandKind::AcceptProposal,
     method: storyos_contracts::ACCEPT_PROPOSAL_METHOD,
     path: storyos_contracts::ACCEPT_PROPOSAL_PATH,
     schema: storyos_contracts::ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,

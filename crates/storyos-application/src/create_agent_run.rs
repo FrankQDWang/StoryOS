@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::future::Future;
 
-use storyos_core::CreateAgentRunRefusal;
+use storyos_core::{AgentRunStatus, CreateAgentRunRefusal};
 
 use crate::{ActivityApplied, ProjectCommandSettlement, ProjectScope, RefusableCommandError};
 
@@ -218,15 +218,17 @@ pub struct UnknownCreateSuccessorInspect {
     pub reuses_changed_context: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunStatus {
-    Queued,
-    Claimed,
-    Waiting,
-    Paused,
-    Completed,
-    Refused,
-    Cancelled,
+/// Returns the wire status of one AgentRun status.
+pub fn wire_agent_run_status(status: AgentRunStatus) -> storyos_contracts::AgentRunStatus {
+    match status {
+        AgentRunStatus::Queued => storyos_contracts::AgentRunStatus::Queued,
+        AgentRunStatus::Claimed => storyos_contracts::AgentRunStatus::Claimed,
+        AgentRunStatus::Waiting => storyos_contracts::AgentRunStatus::Waiting,
+        AgentRunStatus::Paused => storyos_contracts::AgentRunStatus::Paused,
+        AgentRunStatus::Completed => storyos_contracts::AgentRunStatus::Completed,
+        AgentRunStatus::Refused => storyos_contracts::AgentRunStatus::Refused,
+        AgentRunStatus::Cancelled => storyos_contracts::AgentRunStatus::Cancelled,
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

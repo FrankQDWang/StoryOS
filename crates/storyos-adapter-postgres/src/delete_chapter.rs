@@ -2,10 +2,10 @@ use storyos_application::{
     ChapterDeleted, DeleteChapterInput, DeleteChapterSettlement, ProjectCommandEnvelope,
     ProjectCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterApplied,
-    DeleteChapterConflict, DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal,
-    delete_chapter as classify_delete_chapter,
+    DeleteChapterCurrent, delete_chapter as classify_delete_chapter,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -36,23 +36,21 @@ pub(crate) struct ParentVolume(String);
 
 impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "deleteChapter",
+        kind: CommandKind::DeleteChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteChapter,
         ))],
         activity_kind: "chapter_deleted",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = DeleteChapterApplied;
     type Plan = ParentVolume;
-    type Effect = ChapterDeleted;
-    type NoEffect = DeleteChapterNoEffect;
-    type Conflict = DeleteChapterConflict;
-    type Refusal = DeleteChapterRefusal;
+    type Settlement = DeleteChapterSettlement;
 
     async fn classify(
         &self,
@@ -145,7 +143,7 @@ impl ProjectCommand for DeleteChapterInput {
         _sequences: &StructureTransitionSequences,
         ParentVolume(volume_id): ParentVolume,
         applied: DeleteChapterApplied,
-    ) -> Result<StructureWrite<ChapterDeleted>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -177,22 +175,25 @@ impl ProjectCommand for DeleteChapterInput {
             ),
             DeleteChapterCurrent::Empty => (CurrentChapterChange::Clear, None),
         };
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
-            current_chapter,
-            writer_base: WriterBase::RebindToCurrentChapter,
-            activity: serde_json::json!({
-                "chapter_id": self.chapter_id.as_ref(),
-                "volume_id": volume_id,
-                "current_chapter_id": resulting_current,
-                "prior_current_chapter_id": project.current_chapter_id,
-            }),
-            effect: ChapterDeleted {
-                volume_id,
-                tree_revision: applied.tree_revision,
-                current: applied.current,
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
+                current_chapter,
+                writer_base: WriterBase::RebindToCurrentChapter,
+                activity: serde_json::json!({
+                    "chapter_id": self.chapter_id.as_ref(),
+                    "volume_id": volume_id,
+                    "current_chapter_id": resulting_current,
+                    "prior_current_chapter_id": project.current_chapter_id,
+                }),
+                effect: ChapterDeleted {
+                    volume_id,
+                    tree_revision: applied.tree_revision,
+                    current: applied.current,
+                },
             },
+            after_authority: None,
         })
     }
 

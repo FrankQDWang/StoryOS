@@ -2,9 +2,9 @@ use storyos_application::{
     DeleteVolumeInput, DeleteVolumeSettlement, ProjectCommandEnvelope, ProjectCommandError,
     VolumeDeleted,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
-    DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict,
-    DeleteVolumeNoEffect, DeleteVolumeRefusal, VolumeChildPolicy, VolumeJoin,
+    DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, VolumeChildPolicy, VolumeJoin,
     VolumeRemovalLifecycle, delete_volume as classify_delete_volume,
 };
 use tokio_postgres::Client;
@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -33,23 +33,21 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "deleteVolume",
+        kind: CommandKind::DeleteVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteVolume,
         ))],
         activity_kind: "volume_deleted",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = DeleteVolumeApplied;
     type Plan = ();
-    type Effect = VolumeDeleted;
-    type NoEffect = DeleteVolumeNoEffect;
-    type Conflict = DeleteVolumeConflict;
-    type Refusal = DeleteVolumeRefusal;
+    type Settlement = DeleteVolumeSettlement;
 
     async fn classify(
         &self,
@@ -137,7 +135,7 @@ impl ProjectCommand for DeleteVolumeInput {
         _sequences: &StructureTransitionSequences,
         _plan: (),
         applied: DeleteVolumeApplied,
-    ) -> Result<StructureWrite<VolumeDeleted>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -157,16 +155,19 @@ impl ProjectCommand for DeleteVolumeInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
-            current_chapter: CurrentChapterChange::Preserve,
-            writer_base: WriterBase::RebindToCurrentChapter,
-            activity: serde_json::json!({ "volume_id": self.volume_id.as_ref() }),
-            effect: VolumeDeleted {
-                volume_id: self.volume_id.as_ref().to_owned(),
-                tree_revision: applied.tree_revision,
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
+                current_chapter: CurrentChapterChange::Preserve,
+                writer_base: WriterBase::RebindToCurrentChapter,
+                activity: serde_json::json!({ "volume_id": self.volume_id.as_ref() }),
+                effect: VolumeDeleted {
+                    volume_id: self.volume_id.as_ref().to_owned(),
+                    tree_revision: applied.tree_revision,
+                },
             },
+            after_authority: None,
         })
     }
 

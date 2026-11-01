@@ -20,7 +20,7 @@ use super::*;
 /// The fixed public identity and admission options of one project command route.
 pub(super) struct ProjectCommandRoute {
     pub(super) display_name: &'static str,
-    pub(super) command_kind: &'static str,
+    pub(super) command_kind: contracts::CommandKind,
     pub(super) method: &'static str,
     pub(super) path: &'static str,
     pub(super) schema_id: &'static str,
@@ -439,14 +439,14 @@ pub(super) async fn admit_body<
             security_policy_revision: session.security_policy_revision.clone(),
             limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
             challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(
-                route.command_kind,
+                route.command_kind.as_str(),
             )
             .policy_revision()
             .to_owned(),
             method: route.method.to_owned(),
             route_template: route.path.to_owned(),
             command_schema: body.command_schema().to_owned(),
-            command_kind: route.command_kind.to_owned(),
+            command_kind: route.command_kind.as_str().to_owned(),
             canonical_command_digest: format!("sha256:{}:{digest_hex}", route.digest_profile),
             idempotency_key: idempotency_key.to_owned(),
         },

@@ -1,23 +1,21 @@
-use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, RejectedOperationsReopened,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
-use storyos_core::{
-    ReopenRejectedOperations as CoreReopen, ReopenRejectedOperationsConflict,
-    ReopenRejectedOperationsRefusal, reopen_rejected_operations,
-};
+use storyos_core::{ReopenRejectedOperations as CoreReopen, reopen_rejected_operations};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission,
-    LockedProject, ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
+use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
@@ -45,7 +43,7 @@ pub(crate) struct RejectedRevision {
 
 impl ProjectCommand for ReopenRejectedOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "reopenRejectedOperations",
+        kind: CommandKind::ReopenRejectedOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenRejectedOperations,
         )],
@@ -61,18 +59,16 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND reopen_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"reopen_rejected"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending Proposal Revision.
     type Applied = String;
     type Plan = RejectedRevision;
-    type Effect = RejectedOperationsReopened;
-    type NoEffect = Infallible;
-    type Conflict = ReopenRejectedOperationsConflict;
-    type Refusal = ReopenRejectedOperationsRefusal;
+    type Settlement = ReopenRejectedOperationsSettlement;
 
     async fn classify(
         &self,
@@ -167,34 +163,22 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
             candidate_text: row.get(/*idx*/ 5),
             base_authoritative_revision_id: row.get(/*idx*/ 6),
         };
-        let head = vec![self.expected_authoritative_revision_id.clone()];
-        Ok(Classification {
-            outcome: outcome.map_applied(|()| (Uuid::now_v7().to_string(), rejected)),
-            admission: Admission::ExplicitEditorCommand(EditorAdmission {
-                editor_session_id: self.editor_session_id.as_ref().to_owned(),
-                chapter_object_id: Some(row.get(/*idx*/ 3)),
-                expected_authoritative_revision_id: Some(
-                    self.expected_authoritative_revision_id.clone(),
-                ),
-                target_refs: Vec::new(),
-            }),
-            heads: ReceiptHeads {
-                expected: head.clone(),
-                prior: head.clone(),
-                resulting: head,
+        Ok(decision_classification(
+            outcome.map_applied(|()| (Uuid::now_v7().to_string(), rejected)),
+            &self.editor_session_id,
+            row.get(/*idx*/ 3),
+            &self.expected_authoritative_revision_id,
+        ))
+    }
+
+    fn applied_receipt(&self, applied: &String, _plan: &RejectedRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
             },
-            zero_receipt: ZeroReceipt::Reason,
-        })
-    }
-
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &RejectedRevision) -> String {
-        r#"{"transition":"reopen_rejected"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &RejectedRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
         }
     }
 
@@ -206,7 +190,7 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
         sequence: &ProfileSequences<Self>,
         rejected: RejectedRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<RejectedOperationsReopened, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         client
             .execute(
@@ -296,39 +280,31 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(RejectedOperationsReopened {
-            resulting_proposal_revision_id,
-            preserved_generation: rejected.generation,
-            preserved_closure: rejected.closure,
-            state_event_id,
+        Ok(CommandWrite {
+            profile: RejectedOperationsReopened {
+                resulting_proposal_revision_id,
+                preserved_generation: rejected.generation,
+                preserved_closure: rejected.closure,
+                state_event_id,
+            },
+            after_authority: None,
         })
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<RejectedOperationsReopened, ReplayFault> {
-        replay.require_receipt_text("transition", "reopen_rejected")?;
-        match (
-            replay.effect_text("state_event_id")?,
-            replay.effect_text("resulting_proposal_revision_id")?,
-            replay.effect_text("preserved_generation")?,
-            replay.effect_text("preserved_closure")?,
-        ) {
-            (
-                Some(state_event_id),
-                Some(resulting_proposal_revision_id),
-                Some(preserved_generation),
-                Some(preserved_closure),
-            ) => Ok(RejectedOperationsReopened {
-                resulting_proposal_revision_id,
-                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
-                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
-                state_event_id,
-            }),
-            (Some(_), Some(_), None, None) => {
-                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
-            }
-            _ => Err(ReplayFault::Unavailable(
-                "the applied reopening record is missing or damaged".into(),
-            )),
-        }
+        decode_decision(
+            replay,
+            ("transition", "reopen_rejected"),
+            PreCaptureRecords::Possible,
+            |record| {
+                Ok(RejectedOperationsReopened {
+                    resulting_proposal_revision_id: record
+                        .text("resulting_proposal_revision_id")?,
+                    preserved_generation: record.preserved(StateAxis::Generation)?,
+                    preserved_closure: record.preserved(StateAxis::Closure)?,
+                    state_event_id: record.text("state_event_id")?,
+                })
+            },
+        )
     }
 }

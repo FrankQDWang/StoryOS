@@ -6,6 +6,7 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProjectReadError, ProjectScope,
     RefusableCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectPresence,
     export_project_archive as classify_export,
@@ -15,7 +16,7 @@ use tokio_postgres::Client;
 use super::*;
 use crate::command_replay::{CommandReplay, EffectRecord, ReplayFault};
 use crate::command_sequence::{
-    Admission, AdmitCommand, AdmitSpec, LockedProject, ProjectActionClass, ProjectResponse,
+    Admission, AdmitCommand, AdmitSpec, CommandResponse, LockedProject, ProjectActionClass,
     admit_project_command, unavailable,
 };
 use crate::pinned_export_source::check_export_settlement;
@@ -44,11 +45,12 @@ pub(crate) struct ArchiveExportFacts {
 
 impl AdmitCommand for ExportProjectArchiveInput {
     const SPEC: AdmitSpec = AdmitSpec {
-        kind: "exportProjectArchive",
+        kind: CommandKind::ExportProjectArchive,
         work_query: ARCHIVE_EXPORT_WORK,
+        response: CommandResponse::Project,
     };
     type Error = ExportProjectArchiveError;
-    type Response = ProjectResponse;
+    type Response = Project;
     type Facts = ArchiveExportFacts;
     type Work = ArchiveExportOperation;
 

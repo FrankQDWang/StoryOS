@@ -5,6 +5,7 @@ use storyos_application::{
     ProjectCommandChallengeBinding, RequiresReconfirmationApplyAuthorEdit,
     ResolveApplyAuthorEditOutcome,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::AuthorEditUnit;
 use uuid::Uuid;
 
@@ -279,7 +280,7 @@ fn reconstruct_command(
             method: admission.method.clone(),
             route_template: admission.route_template.clone(),
             command_schema: admission.command_schema.clone(),
-            command_kind: "applyAuthorEdit".to_owned(),
+            command_kind: CommandKind::ApplyAuthorEdit.as_str().to_owned(),
             canonical_command_digest: admission.canonical_command_digest.clone(),
             idempotency_key: query.idempotency_key.clone(),
         },

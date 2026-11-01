@@ -10,7 +10,7 @@ use super::*;
 
 const SET_CURRENT_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Set Current Chapter",
-    command_kind: "setCurrentChapter",
+    command_kind: contracts::CommandKind::SetCurrentChapter,
     method: contracts::SET_CURRENT_CHAPTER_METHOD,
     path: contracts::SET_CURRENT_CHAPTER_PATH,
     schema_id: contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,

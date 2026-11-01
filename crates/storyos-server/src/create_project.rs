@@ -67,7 +67,7 @@ pub(super) async fn create_project(
         method: contracts::CREATE_PROJECT_METHOD.to_owned(),
         route_template: contracts::CREATE_PROJECT_PATH.to_owned(),
         command_schema: body.command_schema.clone(),
-        command_kind: "createProject".to_owned(),
+        command_kind: contracts::CommandKind::CreateProject.as_str().to_owned(),
         create_input_digest: create_input_digest(&body.create_project_input)?,
         canonical_command_digest: canonical_command_digest.clone(),
         idempotency_key: idempotency_key.to_owned(),

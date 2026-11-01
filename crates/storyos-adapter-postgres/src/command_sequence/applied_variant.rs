@@ -1,5 +1,7 @@
 //! The applied variant that a command declares (ADR 0076).
 
+use storyos_contracts::CommandKind;
+
 use crate::undo_compensation::ForwardCommand;
 
 /// The applied variant of a command: its Receipt result kind and its Author Action disposition
@@ -26,7 +28,7 @@ impl AppliedVariant {
 
     /// Whether each Forward variant of a command declaration names the Forward command of its
     /// command kind.
-    pub(super) const fn all_name_kind(variants: &[Self], kind: &str) -> bool {
+    pub(super) const fn all_name_kind(variants: &[Self], kind: CommandKind) -> bool {
         let mut index = 0;
         while index < variants.len() {
             if !variants[index].names_kind(kind) {
@@ -37,23 +39,11 @@ impl AppliedVariant {
         true
     }
 
-    const fn names_kind(self, kind: &str) -> bool {
+    const fn names_kind(self, kind: CommandKind) -> bool {
         match self {
             Self::NoAuthorAction | Self::Compensation => true,
-            Self::Forward(forward) => {
-                let (expected, actual) = (forward.command_kind().as_bytes(), kind.as_bytes());
-                if expected.len() != actual.len() {
-                    return false;
-                }
-                let mut index = 0;
-                while index < expected.len() {
-                    if expected[index] != actual[index] {
-                        return false;
-                    }
-                    index += 1;
-                }
-                true
-            }
+            // A const fn cannot call `PartialEq`, so it compares the variant discriminants.
+            Self::Forward(forward) => forward.command_kind() as u8 == kind as u8,
         }
     }
 }

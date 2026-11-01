@@ -2,9 +2,9 @@ use storyos_application::{
     CurrentChapterSelected, ProjectCommandEnvelope, ProjectCommandError, SetCurrentChapterInput,
     SetCurrentChapterSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
-    ChapterJoin, SetCurrentChapter as CoreSetCurrentChapter, SetCurrentChapterConflict,
-    SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
+    ChapterJoin, SetCurrentChapter as CoreSetCurrentChapter,
     set_current_chapter as classify_set_current_chapter,
 };
 use tokio_postgres::Client;
@@ -13,8 +13,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedVariant, ChapterSelection, ChapterSelectionWrite, Classification,
-    CommandSpec, EditorAdmission, LockedProject, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    CommandResponse, CommandSpec, CommandWrite, EditorAdmission, LockedProject, ProjectCommand,
+    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 use crate::undo_compensation::ForwardCommand;
@@ -38,21 +38,19 @@ pub(crate) struct ChapterHead(String);
 
 impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "setCurrentChapter",
+        kind: CommandKind::SetCurrentChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::SetCurrentChapter)],
         activity_kind: "current_chapter_set",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = ChapterSelection;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = String;
     type Plan = ChapterHead;
-    type Effect = CurrentChapterSelected;
-    type NoEffect = SetCurrentChapterNoEffect;
-    type Conflict = SetCurrentChapterConflict;
-    type Refusal = SetCurrentChapterRefusal;
+    type Settlement = SetCurrentChapterSettlement;
 
     async fn classify(
         &self,
@@ -154,16 +152,19 @@ impl ProjectCommand for SetCurrentChapterInput {
         sequences: &CurrentChapterSequences,
         ChapterHead(chapter_revision_id): ChapterHead,
         chapter_id: String,
-    ) -> Result<ChapterSelectionWrite<CurrentChapterSelected>, ProjectCommandError> {
-        Ok(ChapterSelectionWrite {
-            effect: CurrentChapterSelected {
-                current_chapter_id: chapter_id.clone(),
-                base_snapshot_id: sequences.snapshot_id.clone(),
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
+        Ok(CommandWrite {
+            profile: ChapterSelectionWrite {
+                effect: CurrentChapterSelected {
+                    current_chapter_id: chapter_id.clone(),
+                    base_snapshot_id: sequences.snapshot_id.clone(),
+                },
+                editor_session_id: self.editor_session_id.as_ref().to_owned(),
+                prior_chapter_id: self.expected_current_chapter_id.clone(),
+                chapter_id,
+                chapter_revision_id,
             },
-            editor_session_id: self.editor_session_id.as_ref().to_owned(),
-            prior_chapter_id: self.expected_current_chapter_id.clone(),
-            chapter_id,
-            chapter_revision_id,
+            after_authority: None,
         })
     }
 
