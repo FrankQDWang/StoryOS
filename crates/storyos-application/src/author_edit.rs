@@ -1,6 +1,9 @@
 use storyos_core::{AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, AuthorEditUnit};
 
-use crate::{EditorClientBinding, EditorSessionId, ProjectCommandChallengeBinding, ProjectScope};
+use crate::{
+    EditorClientBinding, EditorSessionId, ProjectCommandChallengeBinding, ProjectCommandSettlement,
+    ProjectScope,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorCommandAdmissionIds {
@@ -49,6 +52,14 @@ pub struct ApplyAuthorEditCommand {
     pub local_intent_sequence: u64,
     pub author_edit_units: Vec<AuthorEditUnit>,
 }
+
+/// The settled outcome of one Author Edit in the command sequence. It has no response record.
+///
+/// `A` is the applied record of the Author Edit profile and `Z` is the zero-authority effect.
+/// The adapter owns both. `AuthorEditSettlement` is the acknowledgement that the adapter makes
+/// from this settlement.
+pub type AuthorEditCommandSettlement<A, Z> =
+    ProjectCommandSettlement<A, AuthorEditNoEffect, AuthorEditConflict, AuthorEditRefusal, (), Z>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorEditSettlement {

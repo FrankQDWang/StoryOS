@@ -50,17 +50,9 @@ pub(crate) trait ResponseRecord {
 /// The Command-response Project.
 pub(crate) struct ProjectResponse;
 
-/// No response record.
-pub(crate) struct NoResponse;
-
 impl ResponseRecord for ProjectResponse {
     type Response = Project;
     const RESPONSE: CommandResponse = CommandResponse::Project;
-}
-
-impl ResponseRecord for NoResponse {
-    type Response = ();
-    const RESPONSE: CommandResponse = CommandResponse::None;
 }
 
 impl CommandResponse {
