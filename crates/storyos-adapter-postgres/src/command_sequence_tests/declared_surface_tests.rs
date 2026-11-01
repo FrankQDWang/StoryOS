@@ -24,7 +24,8 @@ use super::support::{CommandCall, issued, replayed_outcome, stores};
 #[derive(Clone)]
 struct DeclaredRename(UpdateProjectInput);
 
-const DECLARED_PAYLOAD: &str = r#"{"surface":"declared"}"#;
+/// The Receipt shape constraint of Update Project permits only the empty payload.
+const DECLARED_PAYLOAD: &str = "{}";
 
 impl ProjectCommand for DeclaredRename {
     const SPEC: CommandSpec = CommandSpec {
@@ -206,7 +207,7 @@ async fn a_command_on_the_declared_surface_settles_replays_and_rolls_back_throug
         ),
         (
             ("authoritative_applied".to_owned(), [1, 0, 1, 0, 0]),
-            DECLARED_PAYLOAD.replace(':', ": "),
+            DECLARED_PAYLOAD.to_owned(),
             ("no_effect".to_owned(), [1, 0, 0, 0, 0]),
             Some(()),
             (
