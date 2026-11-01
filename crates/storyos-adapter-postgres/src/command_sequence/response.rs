@@ -53,9 +53,6 @@ pub(crate) struct ProjectResponse;
 /// No response record.
 pub(crate) struct NoResponse;
 
-/// The Command-response Project and the Project assistance record after the writes.
-pub(crate) struct ProjectAssistanceResponse;
-
 impl ResponseRecord for ProjectResponse {
     type Response = Project;
     const RESPONSE: CommandResponse = CommandResponse::Project;
@@ -64,11 +61,6 @@ impl ResponseRecord for ProjectResponse {
 impl ResponseRecord for NoResponse {
     type Response = ();
     const RESPONSE: CommandResponse = CommandResponse::None;
-}
-
-impl ResponseRecord for ProjectAssistanceResponse {
-    type Response = ProjectAssistanceAcknowledgement;
-    const RESPONSE: CommandResponse = CommandResponse::ProjectAssistance;
 }
 
 impl CommandResponse {
