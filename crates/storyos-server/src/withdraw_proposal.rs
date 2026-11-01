@@ -15,7 +15,7 @@ use super::*;
 
 const WITHDRAW_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Withdrawal",
-    command_kind: "withdrawProposal",
+    command_kind: contracts::CommandKind::WithdrawProposal,
     method: contracts::WITHDRAW_PROPOSAL_METHOD,
     path: contracts::WITHDRAW_PROPOSAL_PATH,
     schema_id: contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,

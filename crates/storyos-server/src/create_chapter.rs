@@ -10,7 +10,7 @@ use super::*;
 
 const CREATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Create Chapter",
-    command_kind: "createChapter",
+    command_kind: contracts::CommandKind::CreateChapter,
     method: contracts::CREATE_CHAPTER_METHOD,
     path: contracts::CREATE_CHAPTER_PATH,
     schema_id: contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,

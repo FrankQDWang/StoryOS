@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     CreateVolumeInput, CreateVolumePublicOrder, CreateVolumeSettlement, ProjectCommandEnvelope,
@@ -37,7 +38,7 @@ pub(crate) struct NewVolumeOrder(u64);
 
 impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "createVolume",
+        kind: CommandKind::CreateVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateVolume,
         ))],

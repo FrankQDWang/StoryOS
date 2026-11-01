@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalOperationsRejected,
@@ -101,7 +102,7 @@ async fn insert_rejection_record(
 
 impl ProjectCommand for RejectProposalOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "rejectProposalOperations",
+        kind: CommandKind::RejectProposalOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::RejectProposalOperations,
         )],

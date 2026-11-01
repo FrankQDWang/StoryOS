@@ -1,6 +1,7 @@
 use storyos_application::EditorSessionId;
 use storyos_application::{ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
+use storyos_contracts::CommandKind;
 use storyos_core::AssistanceAvailability;
 
 use crate::PostgresProjectReader;
@@ -21,21 +22,21 @@ pub(super) async fn take_over_project_writer(
 }
 
 pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
-    kind: "updateProjectAssistance",
+    kind: CommandKind::UpdateProjectAssistance,
     method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
-    kind: "takeOverProjectWriter",
+    kind: CommandKind::TakeOverProjectWriter,
     method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
     path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
     schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const UPDATE_PROJECT: Route = Route {
-    kind: "updateProject",
+    kind: CommandKind::UpdateProject,
     method: storyos_contracts::UPDATE_PROJECT_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,

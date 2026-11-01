@@ -10,7 +10,7 @@ use super::*;
 
 const UPDATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Chapter",
-    command_kind: "updateChapter",
+    command_kind: contracts::CommandKind::UpdateChapter,
     method: contracts::UPDATE_CHAPTER_METHOD,
     path: contracts::UPDATE_CHAPTER_PATH,
     schema_id: contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,

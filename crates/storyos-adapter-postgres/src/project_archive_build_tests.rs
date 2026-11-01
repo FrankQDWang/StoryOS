@@ -8,6 +8,7 @@ use storyos_application::{
     complete_archive_export, create_editor_session, get_apply_author_edit_outcome,
     get_verified_export_archive, issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::PROJECT_EXPORT_TABLES;
 use tokio_postgres::NoTls;
 
@@ -140,7 +141,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     let session_nonce_digest = "sha256:session-export-reconfirm";
     let session_binding = binding(
         &scope,
-        "createEditorSession",
+        CommandKind::CreateEditorSession.as_str(),
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         session_key,

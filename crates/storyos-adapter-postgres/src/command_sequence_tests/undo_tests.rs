@@ -3,6 +3,7 @@ use storyos_application::{
     ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
     UpdateProjectInput,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
@@ -29,7 +30,7 @@ use super::support::{
 };
 
 pub(crate) const UNDO_LATEST_AUTHOR_ACTION: Route = Route {
-    kind: "undoLatestAuthorAction",
+    kind: CommandKind::UndoLatestAuthorAction,
     method: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD,
     path: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
     schema: storyos_contracts::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,

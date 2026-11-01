@@ -2,6 +2,7 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProjectScope, ProposalReopened,
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ReopenWithdrawnProposal as CoreReopen, ReopenWithdrawnProposalConflict,
     ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, reopen_withdrawn_proposal,
@@ -157,7 +158,7 @@ pub(crate) async fn head_withdrawals(
 
 impl ProjectCommand for ReopenWithdrawnProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "reopenWithdrawnProposal",
+        kind: CommandKind::ReopenWithdrawnProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenWithdrawnProposal,
         )],

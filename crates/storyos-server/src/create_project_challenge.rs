@@ -13,7 +13,6 @@ use super::*;
 
 const CREATE_PROJECT_ROUTE: &str = "/api/v1/projects";
 const CREATE_PROJECT_METHOD: &str = "POST";
-const CREATE_PROJECT_KIND: &str = "createProject";
 const NONCE_HMAC_PROFILE: &str = "storyos.project-command-challenge.nonce.hmac-sha256.v1";
 
 pub(super) async fn create_project_challenge(
@@ -71,7 +70,7 @@ pub(super) async fn create_project_challenge(
         method: CREATE_PROJECT_METHOD.to_owned(),
         route_template: CREATE_PROJECT_ROUTE.to_owned(),
         command_schema: request.command_schema,
-        command_kind: CREATE_PROJECT_KIND.to_owned(),
+        command_kind: contracts::CommandKind::CreateProject.as_str().to_owned(),
         create_input_digest: create_input_digest(&request.create_project_input)?,
         canonical_command_digest,
         idempotency_key: request.idempotency_key,

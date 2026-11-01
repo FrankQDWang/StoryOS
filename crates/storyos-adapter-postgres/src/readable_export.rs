@@ -6,6 +6,7 @@ use storyos_application::{
     ProjectReadError, ProjectScope, ReadableExportOperation, RefusableCommandError,
     readable_volumes_from_canonical_facts,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ExportHumanReadableManuscript as CoreExport, ExportHumanReadableManuscriptResult,
     ProjectPresence, READABLE_EXPORT_PROFILE, ReadableExportVolume,
@@ -40,7 +41,7 @@ pub(crate) struct ReadableExportFacts {
 
 impl AdmitCommand for ExportHumanReadableManuscriptInput {
     const SPEC: AdmitSpec = AdmitSpec {
-        kind: "exportHumanReadableManuscript",
+        kind: CommandKind::ExportHumanReadableManuscript,
         work_query: READABLE_EXPORT_WORK,
     };
     type Error = ExportHumanReadableManuscriptError;

@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalReplanned, ReplanProposalInput,
@@ -68,7 +69,7 @@ fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &
 
 impl ProjectCommand for ReplanProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "replanProposal",
+        kind: CommandKind::ReplanProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::ReplanProposal)],
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",

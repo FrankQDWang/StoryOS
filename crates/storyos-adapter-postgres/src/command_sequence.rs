@@ -126,7 +126,7 @@ pub(crate) enum ReplayEffect {
 }
 
 pub(crate) struct CommandSpec {
-    pub(crate) kind: &'static str,
+    pub(crate) kind: storyos_contracts::CommandKind,
     /// The closed set of applied variants. A command of one variant names only it.
     pub(crate) applied: &'static [AppliedVariant],
     pub(crate) activity_kind: &'static str,
@@ -532,7 +532,7 @@ async fn first_use<C: ProjectCommand>(
         heads,
         zero_receipt,
     } = command.classify(client, envelope, &project).await?;
-    if !insert_admission(client, envelope, C::SPEC.kind, &admission).await? {
+    if !insert_admission(client, envelope, C::SPEC.kind.as_str(), &admission).await? {
         return Err(command.diagnose_missing_admission(client, envelope).await);
     }
     settle_classified(
@@ -582,7 +582,7 @@ async fn settle_classified<C: ProjectCommand>(
             }
             serde_json::Value::Object(zero_fields).to_string()
         },
-        command_kind: C::SPEC.kind,
+        command_kind: C::SPEC.kind.as_str(),
         heads,
         refs: zero_refs,
         revision_ids: Vec::new(),
@@ -674,7 +674,7 @@ async fn settle_classified<C: ProjectCommand>(
             }
         },
     };
-    let response = C::Response::settle(client, envelope, C::SPEC.kind).await?;
+    let response = C::Response::settle(client, envelope, C::SPEC.kind.as_str()).await?;
     Ok(ProjectCommandSettlement {
         ids: envelope.ids.clone(),
         receipt_created_at,

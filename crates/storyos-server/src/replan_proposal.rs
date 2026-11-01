@@ -10,7 +10,7 @@ use super::*;
 
 const REPLAN_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Replan",
-    command_kind: "replanProposal",
+    command_kind: contracts::CommandKind::ReplanProposal,
     method: contracts::REPLAN_PROPOSAL_METHOD,
     path: contracts::REPLAN_PROPOSAL_PATH,
     schema_id: contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,

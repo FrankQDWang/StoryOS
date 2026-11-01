@@ -1,8 +1,8 @@
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunModelInspect, AgentRunRecord,
-    AgentRunStatus, AgentRunStreamItem, CreateAgentRunError, EvidenceAvailability, ProjectScope,
+    AgentRunStreamItem, CreateAgentRunError, EvidenceAvailability, ProjectScope,
 };
-use storyos_core::AgentRunLifecycle;
+use storyos_core::AgentRunStatus;
 
 use super::{agent_run_database_error, agent_run_parse_error};
 
@@ -211,18 +211,11 @@ pub(super) async fn load_agent_run(
 }
 
 fn parse_run_status(status: &str) -> Result<AgentRunStatus, CreateAgentRunError> {
-    match AgentRunLifecycle::parse(status) {
-        Some(AgentRunLifecycle::Queued) => Ok(AgentRunStatus::Queued),
-        Some(AgentRunLifecycle::Claimed) => Ok(AgentRunStatus::Claimed),
-        Some(AgentRunLifecycle::Waiting) => Ok(AgentRunStatus::Waiting),
-        Some(AgentRunLifecycle::Paused) => Ok(AgentRunStatus::Paused),
-        Some(AgentRunLifecycle::Completed) => Ok(AgentRunStatus::Completed),
-        Some(AgentRunLifecycle::Refused) => Ok(AgentRunStatus::Refused),
-        Some(AgentRunLifecycle::Cancelled) => Ok(AgentRunStatus::Cancelled),
-        None => Err(CreateAgentRunError::Unavailable(Box::new(
-            std::io::Error::other("The AgentRun status is unknown"),
-        ))),
-    }
+    AgentRunStatus::parse(status).ok_or_else(|| {
+        CreateAgentRunError::Unavailable(Box::new(std::io::Error::other(
+            "The AgentRun status is unknown",
+        )))
+    })
 }
 
 fn inspect_decision(

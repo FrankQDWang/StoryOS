@@ -2,6 +2,7 @@
 //! compensation adapter of the Forward command kind writes its Compensation records.
 
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AuthorUndoFrontierPosition, EditorSessionError, ProjectCommandEnvelope, ProjectCommandError,
@@ -54,7 +55,7 @@ pub(crate) struct UndoLatestAuthorAction {
 
 impl ProjectCommand for UndoLatestAuthorAction {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "undoLatestAuthorAction",
+        kind: CommandKind::UndoLatestAuthorAction,
         applied: &[
             AppliedVariant::Compensation,
             AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),

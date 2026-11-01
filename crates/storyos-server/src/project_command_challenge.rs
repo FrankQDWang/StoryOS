@@ -65,7 +65,8 @@ pub(super) async fn create_project_command_challenge(
         &request.route_template,
         &request.command_schema,
     )
-    .ok_or_else(command_target_refused)?;
+    .ok_or_else(command_target_refused)?
+    .as_str();
     if !valid_command_digest(&request.canonical_command_digest, command_kind)
         || !valid_uuid_v7(&request.idempotency_key)
     {

@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{AuthorEditError, EditorSessionId, TakeOverProjectWriterInput};
 use tokio_postgres::Client;
@@ -48,14 +49,14 @@ struct DeclaredErrors {
 async fn declared_errors<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     call: &CommandCall<C>,
-) -> (&'static str, DeclaredErrors) {
+) -> (CommandKind, DeclaredErrors) {
     let contended = Failing {
         command: call.input.clone(),
         at: FailurePoint::ContendedClassify,
         spec: PhantomData::<WrappedSpec>,
     };
     let Err(contention) = settle_project_command(store, &call.envelope, &contended).await else {
-        panic!("a contended {} must fail", C::SPEC.kind);
+        panic!("a contended {} must fail", C::SPEC.kind.as_str());
     };
     let unadmitted = Failing {
         command: call.input.clone(),
@@ -64,7 +65,7 @@ async fn declared_errors<C: ProjectCommand + Clone>(
     };
     let Err(missing_admission) = settle_project_command(store, &call.envelope, &unadmitted).await
     else {
-        panic!("an unadmitted {} must fail", C::SPEC.kind);
+        panic!("an unadmitted {} must fail", C::SPEC.kind.as_str());
     };
     let sqlstate = match contention.sequence_error() {
         Some(storyos_application::ProjectCommandError::Unavailable(source)) => {
@@ -105,7 +106,7 @@ async fn author_edit_declared_errors(
     admin: &Client,
     writer: Writer,
     base: u16,
-) -> (&'static str, DeclaredErrors) {
+) -> (CommandKind, DeclaredErrors) {
     let (scope, chapter_a, _chapter_b, _revision_b, editor_session_id) =
         two_chapter_writer(store, base).await;
     let head = session_chapter_head(admin, &editor_session_id).await;
@@ -292,37 +293,69 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         author_edit_declared_errors(&store, &admin, Writer::Replaced, /*base*/ 0x8c20).await,
     ];
     let expected = [
-        ("createVolume", None, "invalid_challenge"),
-        ("updateVolume", None, "invalid_challenge"),
-        ("deleteVolume", None, "invalid_challenge"),
-        ("createChapter", None, "invalid_challenge"),
-        ("updateChapter", None, "invalid_challenge"),
-        ("deleteChapter", None, "invalid_challenge"),
-        ("updateProject", None, "invalid_challenge"),
-        ("setCurrentChapter", None, "invalid_challenge"),
-        ("updateProjectAssistance", None, "invalid_challenge"),
-        ("takeOverProjectWriter", None, "binding_conflict"),
-        ("reopenWithdrawnProposal", None, "invalid_challenge"),
-        ("rejectProposalOperations", None, "invalid_challenge"),
-        ("rejectProposalOperations", None, "invalid_challenge"),
-        ("replanProposal", None, "invalid_challenge"),
-        ("reopenRejectedOperations", None, "invalid_challenge"),
-        ("withdrawProposal", None, "invalid_challenge"),
-        ("completeReadyPartialProposal", None, "invalid_challenge"),
-        ("continueProposalGeneration", None, "invalid_challenge"),
-        ("pauseAgentRun", None, "invalid_challenge"),
-        ("cancelAgentRun", None, "invalid_challenge"),
+        (CommandKind::CreateVolume, None, "invalid_challenge"),
+        (CommandKind::UpdateVolume, None, "invalid_challenge"),
+        (CommandKind::DeleteVolume, None, "invalid_challenge"),
+        (CommandKind::CreateChapter, None, "invalid_challenge"),
+        (CommandKind::UpdateChapter, None, "invalid_challenge"),
+        (CommandKind::DeleteChapter, None, "invalid_challenge"),
+        (CommandKind::UpdateProject, None, "invalid_challenge"),
+        (CommandKind::SetCurrentChapter, None, "invalid_challenge"),
         (
-            "createAgentRun",
+            CommandKind::UpdateProjectAssistance,
+            None,
+            "invalid_challenge",
+        ),
+        (CommandKind::TakeOverProjectWriter, None, "binding_conflict"),
+        (
+            CommandKind::ReopenWithdrawnProposal,
+            None,
+            "invalid_challenge",
+        ),
+        (
+            CommandKind::RejectProposalOperations,
+            None,
+            "invalid_challenge",
+        ),
+        (
+            CommandKind::RejectProposalOperations,
+            None,
+            "invalid_challenge",
+        ),
+        (CommandKind::ReplanProposal, None, "invalid_challenge"),
+        (
+            CommandKind::ReopenRejectedOperations,
+            None,
+            "invalid_challenge",
+        ),
+        (CommandKind::WithdrawProposal, None, "invalid_challenge"),
+        (
+            CommandKind::CompleteReadyPartialProposal,
+            None,
+            "invalid_challenge",
+        ),
+        (
+            CommandKind::ContinueProposalGeneration,
+            None,
+            "invalid_challenge",
+        ),
+        (CommandKind::PauseAgentRun, None, "invalid_challenge"),
+        (CommandKind::CancelAgentRun, None, "invalid_challenge"),
+        (
+            CommandKind::CreateAgentRun,
             Some("conversation_busy"),
             "invalid_challenge",
         ),
-        ("steerAgentRun", None, "invalid_challenge"),
-        ("acceptProposal", None, "stale_writer"),
-        ("acceptProposal", None, "stale_writer"),
-        ("undoLatestAuthorAction", None, "invalid_challenge"),
-        ("applyAuthorEdit", None, "binding_conflict"),
-        ("applyAuthorEdit", None, "stale_writer"),
+        (CommandKind::SteerAgentRun, None, "invalid_challenge"),
+        (CommandKind::AcceptProposal, None, "stale_writer"),
+        (CommandKind::AcceptProposal, None, "stale_writer"),
+        (
+            CommandKind::UndoLatestAuthorAction,
+            None,
+            "invalid_challenge",
+        ),
+        (CommandKind::ApplyAuthorEdit, None, "binding_conflict"),
+        (CommandKind::ApplyAuthorEdit, None, "stale_writer"),
     ]
     .map(|(kind, contention_refusal, missing_admission)| {
         let contention = contention_refusal.map_or_else(

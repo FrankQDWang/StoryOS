@@ -1,5 +1,6 @@
 use super::*;
 use storyos_application::{UserId, issue_project_command_challenge};
+use storyos_contracts::CommandKind;
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -28,7 +29,7 @@ fn numbered_request(index: u64, generation: u64) -> IssueProjectCommandChallenge
             method: "PATCH".to_owned(),
             route_template: "/api/v1/projects/{project_id}".to_owned(),
             command_schema: "storyos.command.update-project.request.v1".to_owned(),
-            command_kind: "updateProject".to_owned(),
+            command_kind: CommandKind::UpdateProject.as_str().to_owned(),
             canonical_command_digest: format!(
                 "sha256:storyos.command.updateProject.jcs.v1:{}",
                 char::from_digit((index % 16) as u32, 16)
@@ -210,10 +211,11 @@ fn author_edit_request(index: u64, generation: u64) -> IssueProjectCommandChalle
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
     binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
-    binding.command_kind = "applyAuthorEdit".to_owned();
-    binding.canonical_command_digest = binding
-        .canonical_command_digest
-        .replace("updateProject", "applyAuthorEdit");
+    binding.command_kind = CommandKind::ApplyAuthorEdit.as_str().to_owned();
+    binding.canonical_command_digest = binding.canonical_command_digest.replace(
+        CommandKind::UpdateProject.as_str(),
+        CommandKind::ApplyAuthorEdit.as_str(),
+    );
     request
 }
 
@@ -273,7 +275,7 @@ async fn author_edit_and_shared_challenges_use_separate_rate_budgets() {
 fn undo_request(index: u64, generation: u64) -> IssueProjectCommandChallenge {
     let mut request = numbered_request(index, generation);
     let binding = &mut request.binding;
-    binding.command_kind = "undoLatestAuthorAction".to_owned();
+    binding.command_kind = CommandKind::UndoLatestAuthorAction.as_str().to_owned();
     binding.challenge_rate_policy_revision =
         ChallengeRateClass::for_command_kind(&binding.command_kind)
             .policy_revision()
@@ -281,9 +283,10 @@ fn undo_request(index: u64, generation: u64) -> IssueProjectCommandChallenge {
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/author-actions/undo".to_owned();
     binding.command_schema = "storyos.command.undo-latest-author-action.request.v1".to_owned();
-    binding.canonical_command_digest = binding
-        .canonical_command_digest
-        .replace("updateProject", "undoLatestAuthorAction");
+    binding.canonical_command_digest = binding.canonical_command_digest.replace(
+        CommandKind::UpdateProject.as_str(),
+        CommandKind::UndoLatestAuthorAction.as_str(),
+    );
     request
 }
 

@@ -55,7 +55,7 @@ pub(super) async fn get_project_assistance(
 
 const UPDATE_PROJECT_ASSISTANCE: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Project Assistance",
-    command_kind: "updateProjectAssistance",
+    command_kind: contracts::CommandKind::UpdateProjectAssistance,
     method: contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
     path: contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema_id: contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,

@@ -10,7 +10,7 @@ use super::*;
 
 const REJECT_PROPOSAL_OPERATIONS: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Rejection",
-    command_kind: "rejectProposalOperations",
+    command_kind: contracts::CommandKind::RejectProposalOperations,
     method: contracts::REJECT_PROPOSAL_OPERATIONS_METHOD,
     path: contracts::REJECT_PROPOSAL_OPERATIONS_PATH,
     schema_id: contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,

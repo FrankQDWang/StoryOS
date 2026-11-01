@@ -2,6 +2,7 @@ use storyos_application::{
     ActionApplied, ProjectCommandEnvelope, ProjectCommandError, ProposalWithdrawn,
     WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     WithdrawProposal as CoreWithdraw, WithdrawProposalConflict, WithdrawProposalNoEffect,
     WithdrawProposalRefusal, WithdrawalCause, withdraw_proposal,
@@ -40,7 +41,7 @@ pub(crate) struct OpenRevision {
 
 impl ProjectCommand for WithdrawProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "withdrawProposal",
+        kind: CommandKind::WithdrawProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::WithdrawProposal)],
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",

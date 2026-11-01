@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ChapterCreated, CreateChapterInput, CreateChapterPublicOrder, CreateChapterSettlement,
@@ -38,7 +39,7 @@ pub(crate) struct LiveChapters(Vec<String>);
 
 impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "createChapter",
+        kind: CommandKind::CreateChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateChapter,
         ))],

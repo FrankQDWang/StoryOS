@@ -2,6 +2,7 @@ use storyos_application::{
     DeleteVolumeInput, DeleteVolumeSettlement, ProjectCommandEnvelope, ProjectCommandError,
     VolumeDeleted,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict,
     DeleteVolumeNoEffect, DeleteVolumeRefusal, VolumeChildPolicy, VolumeJoin,
@@ -33,7 +34,7 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "deleteVolume",
+        kind: CommandKind::DeleteVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteVolume,
         ))],

@@ -30,7 +30,7 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
         .iter()
         .map(|target| {
             (
-                target.command_kind,
+                target.command_kind.as_str(),
                 target.method,
                 target.route_template,
                 target.command_schema,

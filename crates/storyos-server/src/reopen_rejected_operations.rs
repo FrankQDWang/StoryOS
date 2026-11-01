@@ -10,7 +10,7 @@ use super::*;
 
 const REOPEN_REJECTED_OPERATIONS: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Reopen",
-    command_kind: "reopenRejectedOperations",
+    command_kind: contracts::CommandKind::ReopenRejectedOperations,
     method: contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
     path: contracts::REOPEN_REJECTED_OPERATIONS_PATH,
     schema_id: contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,

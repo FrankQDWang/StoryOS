@@ -10,7 +10,7 @@ use super::*;
 
 const REOPEN_WITHDRAWN_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Reopen",
-    command_kind: "reopenWithdrawnProposal",
+    command_kind: contracts::CommandKind::ReopenWithdrawnProposal,
     method: contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     path: contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
     schema_id: contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,

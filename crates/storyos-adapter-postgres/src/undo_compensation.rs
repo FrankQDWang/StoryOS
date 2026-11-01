@@ -1,6 +1,7 @@
 //! The selection of an Author Undo compensation by the Forward command kind (ADR 0076).
 
 use std::future::Future;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorSessionId, ProjectCommandEnvelope, ProjectCommandError,
@@ -197,52 +198,62 @@ pub(crate) enum UndoDisposition {
 impl ForwardCommand {
     /// Reads the Forward command from the command kind and result kind of its Domain Receipt.
     pub(crate) fn from_receipt(command_kind: &str, result_kind: &str) -> Option<Self> {
-        Some(match command_kind {
-            "applyAuthorEdit" => Self::AuthorEdit(match result_kind {
+        Some(match CommandKind::parse(command_kind)? {
+            CommandKind::ApplyAuthorEdit => Self::AuthorEdit(match result_kind {
                 "authoritative_applied" => AuthorEditVariant::AuthoritativeApplied,
                 "proposal_revised" => AuthorEditVariant::ProposalRevised,
                 _ => return None,
             }),
-            "acceptProposal" => Self::AcceptProposal,
-            "createVolume" => Self::Structure(StructureCommand::CreateVolume),
-            "updateVolume" => Self::Structure(StructureCommand::UpdateVolume),
-            "deleteVolume" => Self::Structure(StructureCommand::DeleteVolume),
-            "createChapter" => Self::Structure(StructureCommand::CreateChapter),
-            "updateChapter" => Self::Structure(StructureCommand::UpdateChapter),
-            "deleteChapter" => Self::Structure(StructureCommand::DeleteChapter),
-            "setCurrentChapter" => Self::SetCurrentChapter,
-            "withdrawProposal" => Self::WithdrawProposal,
-            "replanProposal" => Self::ReplanProposal,
-            "reopenRejectedOperations" => Self::ReopenRejectedOperations,
-            "reopenWithdrawnProposal" => Self::ReopenWithdrawnProposal,
-            "rejectProposalOperations" => Self::RejectProposalOperations,
-            "completeReadyPartialProposal" => Self::CompleteReadyPartialProposal,
-            "continueProposalGeneration" => Self::ContinueProposalGeneration,
-            "undoLatestAuthorAction" => Self::UndoReversalRequired,
-            _ => return None,
+            CommandKind::AcceptProposal => Self::AcceptProposal,
+            CommandKind::CreateVolume => Self::Structure(StructureCommand::CreateVolume),
+            CommandKind::UpdateVolume => Self::Structure(StructureCommand::UpdateVolume),
+            CommandKind::DeleteVolume => Self::Structure(StructureCommand::DeleteVolume),
+            CommandKind::CreateChapter => Self::Structure(StructureCommand::CreateChapter),
+            CommandKind::UpdateChapter => Self::Structure(StructureCommand::UpdateChapter),
+            CommandKind::DeleteChapter => Self::Structure(StructureCommand::DeleteChapter),
+            CommandKind::SetCurrentChapter => Self::SetCurrentChapter,
+            CommandKind::WithdrawProposal => Self::WithdrawProposal,
+            CommandKind::ReplanProposal => Self::ReplanProposal,
+            CommandKind::ReopenRejectedOperations => Self::ReopenRejectedOperations,
+            CommandKind::ReopenWithdrawnProposal => Self::ReopenWithdrawnProposal,
+            CommandKind::RejectProposalOperations => Self::RejectProposalOperations,
+            CommandKind::CompleteReadyPartialProposal => Self::CompleteReadyPartialProposal,
+            CommandKind::ContinueProposalGeneration => Self::ContinueProposalGeneration,
+            CommandKind::UndoLatestAuthorAction => Self::UndoReversalRequired,
+            CommandKind::CreateProject
+            | CommandKind::UpdateProject
+            | CommandKind::UpdateProjectAssistance
+            | CommandKind::CreateEditorSession
+            | CommandKind::TakeOverProjectWriter
+            | CommandKind::CreateAgentRun
+            | CommandKind::SteerAgentRun
+            | CommandKind::PauseAgentRun
+            | CommandKind::CancelAgentRun
+            | CommandKind::ExportProjectArchive
+            | CommandKind::ExportHumanReadableManuscript => return None,
         })
     }
 
     /// The command kind of the Forward Author Action.
-    pub(crate) const fn command_kind(self) -> &'static str {
+    pub(crate) const fn command_kind(self) -> CommandKind {
         match self {
-            Self::AuthorEdit(_) => "applyAuthorEdit",
-            Self::AcceptProposal => "acceptProposal",
-            Self::Structure(StructureCommand::CreateVolume) => "createVolume",
-            Self::Structure(StructureCommand::UpdateVolume) => "updateVolume",
-            Self::Structure(StructureCommand::DeleteVolume) => "deleteVolume",
-            Self::Structure(StructureCommand::CreateChapter) => "createChapter",
-            Self::Structure(StructureCommand::UpdateChapter) => "updateChapter",
-            Self::Structure(StructureCommand::DeleteChapter) => "deleteChapter",
-            Self::SetCurrentChapter => "setCurrentChapter",
-            Self::WithdrawProposal => "withdrawProposal",
-            Self::ReplanProposal => "replanProposal",
-            Self::ReopenRejectedOperations => "reopenRejectedOperations",
-            Self::ReopenWithdrawnProposal => "reopenWithdrawnProposal",
-            Self::RejectProposalOperations => "rejectProposalOperations",
-            Self::CompleteReadyPartialProposal => "completeReadyPartialProposal",
-            Self::ContinueProposalGeneration => "continueProposalGeneration",
-            Self::UndoReversalRequired => "undoLatestAuthorAction",
+            Self::AuthorEdit(_) => CommandKind::ApplyAuthorEdit,
+            Self::AcceptProposal => CommandKind::AcceptProposal,
+            Self::Structure(StructureCommand::CreateVolume) => CommandKind::CreateVolume,
+            Self::Structure(StructureCommand::UpdateVolume) => CommandKind::UpdateVolume,
+            Self::Structure(StructureCommand::DeleteVolume) => CommandKind::DeleteVolume,
+            Self::Structure(StructureCommand::CreateChapter) => CommandKind::CreateChapter,
+            Self::Structure(StructureCommand::UpdateChapter) => CommandKind::UpdateChapter,
+            Self::Structure(StructureCommand::DeleteChapter) => CommandKind::DeleteChapter,
+            Self::SetCurrentChapter => CommandKind::SetCurrentChapter,
+            Self::WithdrawProposal => CommandKind::WithdrawProposal,
+            Self::ReplanProposal => CommandKind::ReplanProposal,
+            Self::ReopenRejectedOperations => CommandKind::ReopenRejectedOperations,
+            Self::ReopenWithdrawnProposal => CommandKind::ReopenWithdrawnProposal,
+            Self::RejectProposalOperations => CommandKind::RejectProposalOperations,
+            Self::CompleteReadyPartialProposal => CommandKind::CompleteReadyPartialProposal,
+            Self::ContinueProposalGeneration => CommandKind::ContinueProposalGeneration,
+            Self::UndoReversalRequired => CommandKind::UndoLatestAuthorAction,
         }
     }
 

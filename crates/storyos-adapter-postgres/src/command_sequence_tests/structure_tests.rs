@@ -9,6 +9,7 @@ use storyos_application::{
     UpdateChapterInput, UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
     get_manuscript_tree, issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
@@ -66,49 +67,49 @@ pub(crate) async fn delete_chapter(
 }
 
 pub(crate) const CREATE_VOLUME: Route = Route {
-    kind: "createVolume",
+    kind: CommandKind::CreateVolume,
     method: storyos_contracts::CREATE_VOLUME_METHOD,
     path: storyos_contracts::CREATE_VOLUME_PATH,
     schema: storyos_contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const UPDATE_VOLUME: Route = Route {
-    kind: "updateVolume",
+    kind: CommandKind::UpdateVolume,
     method: storyos_contracts::UPDATE_VOLUME_METHOD,
     path: storyos_contracts::UPDATE_VOLUME_PATH,
     schema: storyos_contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const DELETE_VOLUME: Route = Route {
-    kind: "deleteVolume",
+    kind: CommandKind::DeleteVolume,
     method: storyos_contracts::DELETE_VOLUME_METHOD,
     path: storyos_contracts::DELETE_VOLUME_PATH,
     schema: storyos_contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const CREATE_CHAPTER: Route = Route {
-    kind: "createChapter",
+    kind: CommandKind::CreateChapter,
     method: storyos_contracts::CREATE_CHAPTER_METHOD,
     path: storyos_contracts::CREATE_CHAPTER_PATH,
     schema: storyos_contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const UPDATE_CHAPTER: Route = Route {
-    kind: "updateChapter",
+    kind: CommandKind::UpdateChapter,
     method: storyos_contracts::UPDATE_CHAPTER_METHOD,
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const SET_CURRENT_CHAPTER: Route = Route {
-    kind: "setCurrentChapter",
+    kind: CommandKind::SetCurrentChapter,
     method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
     path: storyos_contracts::SET_CURRENT_CHAPTER_PATH,
     schema: storyos_contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const DELETE_CHAPTER: Route = Route {
-    kind: "deleteChapter",
+    kind: CommandKind::DeleteChapter,
     method: storyos_contracts::DELETE_CHAPTER_METHOD,
     path: storyos_contracts::DELETE_CHAPTER_PATH,
     schema: storyos_contracts::DELETE_CHAPTER_REQUEST_SCHEMA_ID,
@@ -207,7 +208,7 @@ pub(crate) async fn named_call<I>(
         scope,
         suffix,
         route,
-        &format!("sha256:{}:{suffix}", route.kind),
+        &format!("sha256:{}:{suffix}", route.kind.as_str()),
     );
     issue_project_command_challenge(store, &issue)
         .await
@@ -656,7 +657,11 @@ async fn kept_state(
                       WHERE project_id = $1::text::uuid),
                     (SELECT count(*) FROM storyos.project_snapshots
                       WHERE project_id = $1::text::uuid)",
-            &[&scope.project_id.as_ref(), &spec.kind, &spec.activity_kind],
+            &[
+                &scope.project_id.as_ref(),
+                &spec.kind.as_str(),
+                &spec.activity_kind,
+            ],
         )
         .await
         .unwrap();

@@ -5,6 +5,7 @@ use storyos_application::{
     ResolveApplyAuthorEditOutcome, UserId, get_apply_author_edit_outcome,
     issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 
 use super::*;
 
@@ -28,7 +29,7 @@ fn challenge_binding(idempotency_key: &str) -> ProjectCommandChallengeBinding {
         method: "POST".to_owned(),
         route_template: "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned(),
         command_schema: "storyos.command.apply-author-edit.request.v1".to_owned(),
-        command_kind: "applyAuthorEdit".to_owned(),
+        command_kind: CommandKind::ApplyAuthorEdit.as_str().to_owned(),
         canonical_command_digest:
             "sha256:storyos.command.applyAuthorEdit.jcs.v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 .to_owned(),

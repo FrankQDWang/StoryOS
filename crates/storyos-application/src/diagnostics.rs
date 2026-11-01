@@ -38,6 +38,14 @@ impl DiagnosticField for u64 {
     }
 }
 
+impl DiagnosticField for storyos_contracts::CommandKind {
+    type Value<'a> = &'static str;
+
+    fn diagnostic(&self) -> Self::Value<'_> {
+        self.as_str()
+    }
+}
+
 impl DiagnosticField for crate::ProjectId {
     type Value<'a> = &'a str;
 

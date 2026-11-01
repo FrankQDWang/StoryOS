@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, RejectedOperationsReopened,
@@ -46,7 +47,7 @@ pub(crate) struct RejectedRevision {
 
 impl ProjectCommand for ReopenRejectedOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "reopenRejectedOperations",
+        kind: CommandKind::ReopenRejectedOperations,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ReopenRejectedOperations,
         )],

@@ -4,14 +4,14 @@
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandError, ProjectScope, RefusableCommandError,
 };
-use storyos_core::AgentRunLifecycle;
+use storyos_core::AgentRunStatus;
 use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 
 /// The AgentRun row that a control command locked.
 pub(crate) struct LockedAgentRun {
-    pub lifecycle: AgentRunLifecycle,
+    pub lifecycle: AgentRunStatus,
     pub conversation_id: String,
     pub author_message: String,
     pub active_decision_position: String,
@@ -50,7 +50,7 @@ pub(crate) async fn lock_agent_run(
             AgentRunControlRefusal::MissingRun,
         ))?;
     let status = run.get::<_, String>(/*idx*/ 0);
-    let lifecycle = AgentRunLifecycle::parse(&status)
+    let lifecycle = AgentRunStatus::parse(&status)
         .ok_or_else(|| unavailable(format!("unsupported AgentRun status {status}")))?;
     Ok(LockedAgentRun {
         lifecycle,

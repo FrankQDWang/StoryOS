@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AgentRunReadStore, AgentRunRecord, ConversationSelection, CreateAgentRunApplied,
@@ -78,7 +79,7 @@ impl AgentRunReadStore for PostgresProjectReader {
 
 impl ProjectCommand for CreateAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "createAgentRun",
+        kind: CommandKind::CreateAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_created",
         replay_effect: ReplayEffect::Query(

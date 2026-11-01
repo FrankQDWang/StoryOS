@@ -6,6 +6,7 @@ use storyos_application::{
     IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectScope,
     issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 
 use crate::PostgresProjectReader;
@@ -79,7 +80,7 @@ pub(crate) async fn adjusted_edit_command(
             method: "POST".to_owned(),
             route_template: "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned(),
             command_schema: "storyos.command.apply-author-edit.request.v1".to_owned(),
-            command_kind: "applyAuthorEdit".to_owned(),
+            command_kind: CommandKind::ApplyAuthorEdit.as_str().to_owned(),
             canonical_command_digest: String::new(),
             idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
         },

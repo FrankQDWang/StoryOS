@@ -2,6 +2,7 @@
 
 #![recursion_limit = "256"]
 
+mod command_kind;
 mod digest;
 mod project_command_targets;
 mod release1;
@@ -84,6 +85,7 @@ mod release1_withdraw_proposal;
 mod release1_withdraw_proposal_artifacts;
 mod web_assets;
 
+pub use command_kind::CommandKind;
 pub use release1_project_activity::ProjectActivityKind;
 pub use web_assets::{
     RELEASE_1_SECURITY_POLICY_REVISION, WEB_ASSET_MANIFEST, WEB_ASSET_SCHEMA, WebAssetManifest,

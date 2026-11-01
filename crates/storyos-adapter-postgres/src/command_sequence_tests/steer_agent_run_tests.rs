@@ -2,6 +2,7 @@ use storyos_application::{
     AgentRunControlRefusal, ProjectCommandError, RefusableCommandError, SteerAgentRunInput,
     SteerAgentRunSettlement, SteeringRetained,
 };
+use storyos_contracts::CommandKind;
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -11,7 +12,7 @@ use super::agent_run::{request_rows, seed_run};
 use super::support::{CommandCall, Route, SequenceError, issued, seed_project, stores};
 
 pub(crate) const STEER_AGENT_RUN: Route = Route {
-    kind: "steerAgentRun",
+    kind: CommandKind::SteerAgentRun,
     method: storyos_contracts::STEER_AGENT_RUN_METHOD,
     path: storyos_contracts::STEER_AGENT_RUN_PATH,
     schema: storyos_contracts::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,

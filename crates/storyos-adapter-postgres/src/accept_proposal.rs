@@ -6,6 +6,7 @@ use storyos_application::{
     AcceptProposalInput, AcceptProposalSettlement, AcceptanceRefusalBoundary,
     AcceptanceRefusalReason, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     AcceptProposal as CoreAccept, AcceptProposalConflict, AcceptProposalInvalid,
     AcceptProposalRefusal, AcceptanceBase, AcceptanceCondition, AcceptanceTargetResolution,
@@ -83,7 +84,7 @@ pub(crate) struct AcceptedRevision {
 
 impl ProjectCommand for AcceptProposal {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "acceptProposal",
+        kind: CommandKind::AcceptProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
         // The AuthoritativeRevision profile writes its own Activity record.
         activity_kind: "",

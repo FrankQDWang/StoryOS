@@ -11,7 +11,7 @@ use super::*;
 
 const CANCEL_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "AgentRun control",
-    command_kind: "cancelAgentRun",
+    command_kind: contracts::CommandKind::CancelAgentRun,
     method: contracts::CANCEL_AGENT_RUN_METHOD,
     path: contracts::CANCEL_AGENT_RUN_PATH,
     schema_id: contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,

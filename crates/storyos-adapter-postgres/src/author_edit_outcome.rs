@@ -3,6 +3,7 @@ use storyos_application::{
     ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
     ResolveApplyAuthorEditOutcome,
 };
+use storyos_contracts::CommandKind;
 
 use super::author_edit::sha256_hex;
 use super::author_edit_admission_recovery::OpenAdmission;
@@ -68,8 +69,11 @@ impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
             && arbiter.get::<_, String>(2) == query.client_binding.client_contract_revision
             && arbiter.get::<_, String>(3) == query.client_binding.security_policy_revision
             && arbiter.get::<_, String>(4) == query.limit_profile_revision
-            && ChallengeRateClass::accepting("applyAuthorEdit", &arbiter.get::<_, String>(5))
-                .is_some()
+            && ChallengeRateClass::accepting(
+                CommandKind::ApplyAuthorEdit.as_str(),
+                &arbiter.get::<_, String>(5),
+            )
+            .is_some()
             && arbiter.get::<_, String>(6) == "POST"
             && arbiter.get::<_, String>(7)
                 == "/api/v1/projects/{project_id}/manuscript/author-edits"
