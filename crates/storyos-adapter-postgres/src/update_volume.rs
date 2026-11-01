@@ -3,17 +3,17 @@ use storyos_application::{
 };
 use storyos_contracts::CommandKind;
 use storyos_core::{
-    UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict,
-    UpdateVolumeNoEffect, UpdateVolumeRefusal, VolumeJoin, update_volume as classify_update_volume,
+    UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, VolumeJoin,
+    update_volume as classify_update_volume,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
-    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
-    WriterBase, settle_project_command, unavailable,
+    AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    CurrentChapterChange, LockedProject, ProjectCommand, ReplayEffect, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 use crate::undo_compensation::{ForwardCommand, StructureCommand};
@@ -36,25 +36,23 @@ pub(crate) struct LiveVolumes {
     current_order: u64,
 }
 
-impl LegacyProjectCommand for UpdateVolumeInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for UpdateVolumeInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::UpdateVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateVolume,
         ))],
         activity_kind: "volume_updated",
         replay_effect: ReplayEffect::NoQuery,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: "{}",
     };
     type Error = ProjectCommandError;
     type Profile = Structural;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = UpdateVolumeApplied;
     type Plan = LiveVolumes;
-    type Effect = UpdateVolumeApplied;
-    type NoEffect = UpdateVolumeNoEffect;
-    type Conflict = UpdateVolumeConflict;
-    type Refusal = UpdateVolumeRefusal;
+    type Settlement = UpdateVolumeSettlement;
 
     async fn classify(
         &self,
@@ -130,7 +128,7 @@ impl LegacyProjectCommand for UpdateVolumeInput {
         _sequences: &StructureTransitionSequences,
         live: LiveVolumes,
         applied: UpdateVolumeApplied,
-    ) -> Result<StructureWrite<UpdateVolumeApplied>, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let renamed = client
             .execute(
@@ -158,19 +156,22 @@ impl LegacyProjectCommand for UpdateVolumeInput {
                 .await
                 .map_err(ProjectCommandError::Unavailable)?;
         }
-        Ok(StructureWrite {
-            resulting_tree_revision: applied.tree_revision,
-            identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
-            current_chapter: CurrentChapterChange::Preserve,
-            writer_base: WriterBase::Keep,
-            activity: serde_json::json!({
-                "volume_id": self.volume_id.as_ref(),
-                "title": applied.title,
-                "order": applied.order.to_string(),
-                "prior_title": live.current_title,
-                "prior_order": live.current_order.to_string(),
-            }),
-            effect: applied,
+        Ok(CommandWrite {
+            profile: StructureWrite {
+                resulting_tree_revision: applied.tree_revision,
+                identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
+                current_chapter: CurrentChapterChange::Preserve,
+                writer_base: WriterBase::Keep,
+                activity: serde_json::json!({
+                    "volume_id": self.volume_id.as_ref(),
+                    "title": applied.title,
+                    "order": applied.order.to_string(),
+                    "prior_title": live.current_title,
+                    "prior_order": live.current_order.to_string(),
+                }),
+                effect: applied,
+            },
+            after_authority: None,
         })
     }
 
