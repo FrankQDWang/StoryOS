@@ -504,6 +504,7 @@ CREATE TABLE storyos.author_command_admissions (
     issued_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT author_command_admissions_client_session_generation_check CHECK (((client_session_generation >= (0)::numeric) AND (client_session_generation <= '18446744073709551615'::numeric))),
     CONSTRAINT author_command_admissions_command_payload_check CHECK ((jsonb_typeof(command_payload) = 'object'::text)),
+    CONSTRAINT author_command_admissions_no_draft_retry_source CHECK ((NOT (command_payload ? 'retry_source'::text))),
     CONSTRAINT author_command_admissions_command_shape CHECK ((
         (command_kind = 'applyAuthorEdit'::text
             AND action_class = 'direct_editor_action'::text
