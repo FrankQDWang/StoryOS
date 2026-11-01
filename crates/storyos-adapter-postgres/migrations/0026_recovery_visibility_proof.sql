@@ -37,7 +37,7 @@ CREATE TABLE storyos.recovery_visibility_proofs (
   isolated_target_identity text NOT NULL
     CHECK (octet_length(isolated_target_identity) BETWEEN 1 AND 256),
   catalog_identity text NOT NULL
-    CHECK (catalog_identity = 'storyos.persistence.catalog.release-1.v3'),
+    CHECK (catalog_identity = 'storyos.persistence.release-1'),
   checks jsonb NOT NULL,
   search_rebuild jsonb NOT NULL,
   statistics_rebuild jsonb NOT NULL,
@@ -82,7 +82,7 @@ DECLARE
   live_stats jsonb;
 BEGIN
   IF p_method IS DISTINCT FROM 'pg_basebackup'
-     OR p_catalog_identity IS DISTINCT FROM 'storyos.persistence.catalog.release-1.v3'
+     OR p_catalog_identity IS DISTINCT FROM 'storyos.persistence.release-1'
      OR p_chain_sha256 !~ '^[0-9a-f]{64}$'
      OR octet_length(p_isolated_target_identity) = 0 THEN
     RAISE EXCEPTION 'recovery_visibility_incomplete: recovery input';

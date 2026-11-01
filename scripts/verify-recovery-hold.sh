@@ -481,7 +481,7 @@ if docker exec "$hold" env PGPASSWORD=restore \
   "SELECT storyos.pass_recovery_visibility_proof(
      '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
      '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
-     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3')" >/dev/null 2>&1; then
+     'pg_basebackup', 'storyos.persistence.release-1')" >/dev/null 2>&1; then
   echo "Recovery Visibility Proof passed without Recovery Copy evidence" >&2
   exit 1
 fi
@@ -532,7 +532,7 @@ pass_state=$(docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$h
   "SELECT storyos.pass_recovery_visibility_proof(
      '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
      '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
-     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3')")
+     'pg_basebackup', 'storyos.persistence.release-1')")
 if [ "$pass_state" != "visible" ]; then
   echo "Complete Recovery Visibility Proof did not permit visibility: $pass_state" >&2
   exit 1
@@ -573,7 +573,7 @@ if docker exec "$hold" env PGPASSWORD=runtime \
         catalog_identity, checks, search_rebuild, statistics_rebuild, lifecycle_range
       ) VALUES (
         '018f0000-0000-7001-8000-0000000000c4', '$restore_proof_id', '$recovery_copy_id',
-        '$hold', 'storyos.persistence.catalog.release-1.v3', '{}', '{}', '{}', '{}'
+        '$hold', 'storyos.persistence.release-1', '{}', '{}', '{}', '{}'
       )" >/dev/null 2>&1; then
   echo "storyos_runtime wrote Recovery Visibility Proof on the request path" >&2
   exit 1
@@ -726,7 +726,7 @@ payload = {
         "writes_after_enable": "accepted",
     },
     "physical_input": {
-        "catalog_identity": "storyos.persistence.catalog.release-1.v3",
+        "catalog_identity": "storyos.persistence.release-1",
         "chain_sha256": chain_sha256,
         "destination_kind": destination_kind,
         "isolated_target_identity": isolated_target,

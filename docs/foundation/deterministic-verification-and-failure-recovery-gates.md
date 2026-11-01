@@ -232,8 +232,8 @@ that source.
 
 The tracked Release 1 catalog and verifier inputs are:
 
-- [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
-  and the migration digest check of the `storyos-adapter-postgres` build script;
+- the SQL files of `crates/storyos-adapter-postgres/migrations/` and the migration chain
+  digest that the `storyos-adapter-postgres` build script derives from them ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md));
 - the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
   and the registry tests of `storyos-contracts`; and
 - the source contracts, generated outputs, golden wire corpus, and exact
@@ -1172,8 +1172,8 @@ This contract consumes the exact-baseline versions of:
 - [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md);
 - [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md);
 - the owner contracts listed in section 4;
-- [PostgreSQL Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
-  with the migration digest check of the `storyos-adapter-postgres` build script; and
+- the SQL files of `crates/storyos-adapter-postgres/migrations/` with the migration chain
+  digest that the `storyos-adapter-postgres` build script derives from them ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)); and
 - the generated [Versioned Protocol Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
   with the registry tests of `storyos-contracts`.
 

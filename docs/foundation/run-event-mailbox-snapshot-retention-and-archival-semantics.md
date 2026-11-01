@@ -5,7 +5,7 @@
 - Wayfinder resolution: [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64)
 - Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Storage and isolation boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
-- Persistence family source of truth: [Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
+- Persistence source of truth: the SQL files of `crates/storyos-adapter-postgres/migrations/` ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md))
 - Protocol boundary: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
 - Public route/Event source of truth: the generated [Release 1 route catalog](../../generated/route-catalog/versioned-protocol-release-1-route-catalog.json)
 - Context and disclosure boundary: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
@@ -141,10 +141,9 @@ authorize cleanup.
 ### 2.2 Logical record classes and the PostgreSQL owner boundary
 
 The retention decision is made against a logical record class, never against a
-hand-maintained list of tables. The Release 1 persistence catalog remains the
-single physical source of truth. The family identifiers below are a review
-crosswalk to that catalog; they are not a second table ledger, and their
-derived family/table counts must continue to come from the existing catalog.
+hand-maintained list of tables. The migrations directory remains the single
+physical source of truth. The family identifiers below are a review crosswalk
+to the family IDs of the storage contract; they are not a second table ledger.
 For each named sub-class, its existing contract remains the sole
 owner of meaning; #64 is the sole owner of the Retention Profile, Decision,
 and availability treatment, while #56 remains the physical-storage owner.

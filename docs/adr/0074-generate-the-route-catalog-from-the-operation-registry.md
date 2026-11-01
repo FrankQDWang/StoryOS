@@ -49,7 +49,7 @@ ADR 0042 took the registry order from the position of each operation in the hand
 - Keep the hand-kept catalog as a reviewed input and check it against the registry. Rejected: each route change still edits two files, and the catalog keeps the planned operations as if they were served.
 - Keep the planned operations in the generated catalog with a planned marker. Rejected: the protocol document already holds the plan, and a client must not expect an operation that the Server does not serve.
 - Keep the hand-kept values where they differed from the registry. Rejected: the registry produces the served OpenAPI document and the client, so it is the served contract.
-- Let the generator write the route catalog digest into the persistence catalog. Rejected: the persistence catalog is a hand-kept file, so the digest would stay a copy that a person or a tool must keep current. The storage build reads the generated catalog that it embeds, so no copy exists.
+- Let the generator write the route catalog digest into the persistence catalog. Rejected: the persistence catalog is a hand-kept file, so the digest would stay a copy that a person or a tool must keep current. The storage build reads the generated catalog that it embeds, so no copy exists. [ADR 0079](0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md) later removed the hand-kept persistence catalog, and the activation identity takes the route catalog identifier from the generated route catalog.
 
 ## Consequences
 

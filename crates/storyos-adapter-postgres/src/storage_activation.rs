@@ -11,6 +11,38 @@ const RUNNER_REVISION: &str = "storyos-storage";
 const ADVISORY_LOCK_CLASS: i32 = 0x5354_4f53;
 const ADVISORY_LOCK_OBJECT: i32 = 0x4143_5431;
 const PROOF_ID: &str = "release-1";
+pub(crate) const CATALOG_ID: &str = "storyos.persistence.release-1";
+const MIGRATION_CHAIN_ID: &str = "storyos.persistence.bootstrap.release-1.v3";
+const ACTIVE_SCHEMA_VERSION: &str = "storyos.persistence.release-1.v3";
+
+struct BootstrapPhase {
+    phase_id: &'static str,
+    class: &'static str,
+    postcondition: &'static str,
+}
+
+const BOOTSTRAP_PHASES: [BootstrapPhase; 4] = [
+    BootstrapPhase {
+        phase_id: "preflight",
+        class: "control_read",
+        postcondition: "new_install_active_catalog_and_empty_migration_chain_verified",
+    },
+    BootstrapPhase {
+        phase_id: "initial_schema_bootstrap",
+        class: "transactional_ddl",
+        postcondition: "release1_schema_catalog_roles_rls_and_constraints_created_atomically",
+    },
+    BootstrapPhase {
+        phase_id: "validate_transaction",
+        class: "transactional_validation",
+        postcondition: "constraints_indexes_digests_roles_and_catalog_bindings_valid",
+    },
+    BootstrapPhase {
+        phase_id: "activate",
+        class: "controlled_cutover",
+        postcondition: "one_exact_release_identity_active_and_traffic_fenced_until_proof",
+    },
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageActivation {
@@ -22,7 +54,6 @@ pub enum StorageActivation {
 pub enum StorageActivationRefusal {
     NonEmptyWithoutLedger,
     IdentityMismatch,
-    CatalogChecksumMismatch,
 }
 
 impl StorageActivationRefusal {
@@ -30,7 +61,6 @@ impl StorageActivationRefusal {
         match self {
             Self::NonEmptyWithoutLedger => "non_empty_without_ledger",
             Self::IdentityMismatch => "identity_mismatch",
-            Self::CatalogChecksumMismatch => "catalog_checksum_mismatch",
         }
     }
 }
@@ -90,8 +120,7 @@ pub async fn activate_release1_storage(
     if admin_url.is_empty() {
         return Err(StorageActivationError::AdminUrlMissing);
     }
-    let catalog = packaged_catalog()?;
-    let identity = packaged_identity(&catalog)?;
+    let identity = packaged_identity();
     let (client, connection) = tokio_postgres::connect(admin_url, NoTls)
         .await
         .map_err(unavailable)?;
@@ -105,7 +134,7 @@ pub async fn activate_release1_storage(
         )
         .await
         .map_err(unavailable)?;
-    let outcome = run_state_machine(&client, &catalog, &identity).await;
+    let outcome = run_state_machine(&client, &identity).await;
     let _unlock = client
         .execute(
             "SELECT pg_advisory_unlock($1, $2)",
@@ -117,7 +146,6 @@ pub async fn activate_release1_storage(
 
 async fn run_state_machine(
     client: &tokio_postgres::Client,
-    catalog: &serde_json::Value,
     identity: &PackagedIdentity,
 ) -> Result<StorageActivation, StorageActivationError> {
     if let Some(existing) = read_proof(client).await? {
@@ -127,20 +155,11 @@ async fn run_state_machine(
             Err(refused(StorageActivationRefusal::IdentityMismatch))
         };
     }
-    let predecessors = catalog["migration_chain"]["supported_predecessors"]
-        .as_array()
-        .filter(|items| !items.is_empty());
-    let edges = catalog["migration_chain"]["edges"]
-        .as_array()
-        .filter(|items| !items.is_empty());
-    if predecessors.is_some() || edges.is_some() {
-        return Err(refused(StorageActivationRefusal::IdentityMismatch));
-    }
     if database_has_user_state(client).await? {
         return Err(refused(StorageActivationRefusal::NonEmptyWithoutLedger));
     }
     client.batch_execute("BEGIN").await.map_err(unavailable)?;
-    match persist_activation(client, catalog, identity).await {
+    match persist_activation(client, identity).await {
         Ok(()) => {
             client.batch_execute("COMMIT").await.map_err(unavailable)?;
             Ok(StorageActivation::Active)
@@ -154,7 +173,6 @@ async fn run_state_machine(
 
 async fn persist_activation(
     client: &tokio_postgres::Client,
-    catalog: &serde_json::Value,
     identity: &PackagedIdentity,
 ) -> Result<(), StorageActivationError> {
     for source in EMBEDDED_SOURCES {
@@ -217,19 +235,18 @@ async fn persist_activation(
         )
         .await
         .map_err(unavailable)?;
-    for phase in catalog["bootstrap_phases"]
-        .as_array()
-        .ok_or_else(|| refused(StorageActivationRefusal::CatalogChecksumMismatch))?
-    {
-        let phase_id = required_str(phase, "phase_id")?;
-        let class = required_str(phase, "class")?;
-        let postcondition = required_str(phase, "postcondition")?;
+    for phase in &BOOTSTRAP_PHASES {
         client
             .execute(
                 "INSERT INTO storyos.migration_phases (
                    attempt_id, phase_id, class, postcondition, disposition, recorded_at
                  ) VALUES ($1, $2, $3, $4, 'passed', clock_timestamp())",
-                &[&attempt_id, &phase_id, &class, &postcondition],
+                &[
+                    &attempt_id,
+                    &phase.phase_id,
+                    &phase.class,
+                    &phase.postcondition,
+                ],
             )
             .await
             .map_err(unavailable)?;
@@ -332,61 +349,23 @@ async fn database_has_user_state(
         .get(0))
 }
 
-pub(crate) fn packaged_catalog() -> Result<serde_json::Value, StorageActivationError> {
-    let catalog: serde_json::Value = serde_json::from_str(CATALOG_JSON).map_err(unavailable)?;
-    let sources = catalog["migration_chain"]["bootstrap"]["sources"]
-        .as_array()
-        .ok_or_else(|| refused(StorageActivationRefusal::CatalogChecksumMismatch))?;
-    if sources.len() != EMBEDDED_SOURCES.len() {
-        return Err(refused(StorageActivationRefusal::CatalogChecksumMismatch));
-    }
-    for (source, embedded) in sources.iter().zip(EMBEDDED_SOURCES) {
-        let path = required_str(source, "path")?;
-        let checksum = required_str(source, "lf_sha256")?;
-        if path != embedded.path
-            || checksum != embedded.lf_sha256
-            || lf_sha256(embedded.sql) != embedded.lf_sha256
-        {
-            return Err(refused(StorageActivationRefusal::CatalogChecksumMismatch));
-        }
-    }
-    Ok(catalog)
+pub(crate) fn packaged_identity() -> PackagedIdentity {
+    identity(MIGRATION_CHAIN_DIGEST, ROUTE_CATALOG_JSON)
 }
 
-pub(crate) fn packaged_identity(
-    catalog: &serde_json::Value,
-) -> Result<PackagedIdentity, StorageActivationError> {
-    identity(catalog, ROUTE_CATALOG_JSON)
-}
-
-/// The route catalog digest comes from the generated route catalog, not from a copy in the persistence catalog.
-fn identity(
-    catalog: &serde_json::Value,
-    route_catalog: &str,
-) -> Result<PackagedIdentity, StorageActivationError> {
-    let schema = &catalog["schema_identity"];
-    let binding = &schema["protocol_binding"];
-    Ok(PackagedIdentity {
-        catalog_id: required_str(catalog, "catalog_id")?,
-        catalog_checksum: required_str(
-            &catalog["migration_chain"]["bootstrap"],
-            "manifest_sha256",
-        )?,
-        migration_chain_id: required_str(schema, "migration_chain_id")?,
-        migration_chain_digest: required_str(schema, "migration_chain_digest")?,
-        database_schema_identity: required_str(schema, "database_schema_identity")?,
-        active_schema_version: required_str(schema, "active_schema_version")?,
-        public_release: required_str(binding, "public_release")?,
-        route_catalog_id: required_str(binding, "route_catalog_id")?,
+/// The migrations directory gives the chain digest, and the generated route catalog gives its digest.
+fn identity(migration_chain_digest: &str, route_catalog: &str) -> PackagedIdentity {
+    PackagedIdentity {
+        catalog_id: CATALOG_ID.to_owned(),
+        catalog_checksum: migration_chain_digest.to_owned(),
+        migration_chain_id: MIGRATION_CHAIN_ID.to_owned(),
+        migration_chain_digest: migration_chain_digest.to_owned(),
+        database_schema_identity: migration_chain_digest.to_owned(),
+        active_schema_version: ACTIVE_SCHEMA_VERSION.to_owned(),
+        public_release: storyos_contracts::PUBLIC_PROTOCOL_RELEASE.to_owned(),
+        route_catalog_id: ROUTE_CATALOG_ID.to_owned(),
         route_catalog_sha256: lf_sha256(route_catalog),
-    })
-}
-
-fn required_str(value: &serde_json::Value, key: &str) -> Result<String, StorageActivationError> {
-    value[key]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| refused(StorageActivationRefusal::CatalogChecksumMismatch))
+    }
 }
 
 fn lf_sha256(text: &str) -> String {

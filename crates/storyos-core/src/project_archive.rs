@@ -196,49 +196,75 @@ pub fn require_delivered_families(
     Ok(())
 }
 
-/// Table names in catalog families whose `project_export` policy is exactly `include`.
-pub fn catalog_include_table_names(catalog: &serde_json::Value) -> Vec<String> {
-    let Some(families) = catalog
-        .get("families")
-        .and_then(serde_json::Value::as_array)
-    else {
-        return Vec::new();
-    };
-    let mut names = std::collections::BTreeSet::new();
-    for family in families {
-        let policy = family
-            .pointer("/portability/project_export")
-            .and_then(serde_json::Value::as_str);
-        if policy != Some("include") {
-            continue;
-        }
-        let Some(tables) = family
-            .get("table_families")
-            .and_then(serde_json::Value::as_array)
-        else {
-            continue;
-        };
-        for table in tables {
-            if let Some(name) = table.as_str() {
-                names.insert(name.to_owned());
-            }
-        }
-    }
-    names.into_iter().collect()
-}
-
-/// Live tables that a catalog `include` family currently names.
-pub fn required_export_tables(include_names: &[&str], live_tables: &[&str]) -> Vec<String> {
-    let live: std::collections::BTreeSet<&str> = live_tables.iter().copied().collect();
-    include_names
-        .iter()
-        .copied()
-        .filter(|name| live.contains(name))
-        .map(str::to_owned)
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect()
-}
+/// The tables that each Project Export Archive must carry.
+pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
+    "acceptance_receipts",
+    "acceptance_refusals",
+    "agent_runs",
+    "author_action_entries",
+    "author_command_admission_outcome_unknown_observations",
+    "author_command_admission_reconfirmations",
+    "author_command_admission_settlements",
+    "author_command_admissions",
+    "authoritative_commits",
+    "authoritative_heads",
+    "authoritative_payloads",
+    "authoritative_revision_envelopes",
+    "authoritative_revisions",
+    "authority_history_floors",
+    "chapter_removal_decisions",
+    "command_idempotency",
+    "conversation_memory_settings",
+    "domain_receipts",
+    "draft_artifact_revisions",
+    "draft_artifacts",
+    "draft_close_events",
+    "draft_lifecycle_events",
+    "draft_reopen_events",
+    "draft_reopen_receipts",
+    "editor_input_fences",
+    "editor_session_base_snapshots",
+    "editor_sessions",
+    "human_readable_manuscript_export_operations",
+    "human_readable_manuscript_exports",
+    "manuscript_blocks",
+    "manuscript_objects",
+    "manuscript_revision_members",
+    "pinned_export_sources",
+    "project_activity_event_payloads",
+    "project_activity_events",
+    "project_agents",
+    "project_archival_decisions",
+    "project_conversations",
+    "project_destination_grants",
+    "project_export_operations",
+    "project_policy_revisions",
+    "project_writer_generations",
+    "projects",
+    "proposal_anchors",
+    "proposal_generation_heads",
+    "proposal_generation_transitions",
+    "proposal_generations",
+    "proposal_heads",
+    "proposal_operation_reopenings",
+    "proposal_operation_resolutions",
+    "proposal_operations",
+    "proposal_pause_fences",
+    "proposal_rejection_receipts",
+    "proposal_replans",
+    "proposal_revisions",
+    "proposal_stream_events",
+    "proposal_validation_conditions",
+    "proposal_withdrawal_reopenings",
+    "proposal_withdrawals",
+    "proposals",
+    "replay_floors",
+    "replay_generations",
+    "scope_counters",
+    "undo_acceptance_receipts",
+    "validation_receipts",
+    "volume_removal_decisions",
+];
 
 pub fn hex_sha256(bytes: &[u8]) -> String {
     #[cfg(test)]
