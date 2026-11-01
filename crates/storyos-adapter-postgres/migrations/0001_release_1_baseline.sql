@@ -52,7 +52,6 @@ CREATE DOMAIN storyos.event_kind AS text CHECK (VALUE IN (
     'chapter_updated',
     'current_chapter_set',
     'human_readable_manuscript_export_settled',
-    'project_archival_changed',
     'project_assistance_updated',
     'project_created',
     'project_export_settled',
@@ -996,34 +995,6 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
             AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
-        OR (command_kind = 'applyAuthorEdit'::text
-            AND (source_draft_disposition ->> 'kind'::text) = 'closed_superseded'::text
-            AND result_kind = ANY (ARRAY['authoritative_applied'::text, 'proposal_revised'::text])
-            AND array_dims(expected_heads) = '[1:1]'::text
-            AND array_dims(prior_heads) = '[1:1]'::text
-            AND array_dims(resulting_heads) = '[1:1]'::text
-            AND array_position(expected_heads, NULL::uuid) IS NULL
-            AND array_position(prior_heads, NULL::uuid) IS NULL
-            AND array_position(resulting_heads, NULL::uuid) IS NULL
-            AND condition_refs = '{}'::text[]
-            AND array_position(draft_artifact_refs, NULL::text) IS NULL
-            AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
-            AND (((result_kind = 'authoritative_applied'::text) AND (cardinality(draft_artifact_refs) = 1) AND (cardinality(artifact_lifecycle_event_refs) = 1) AND (proposal_revision_ids = '{}'::uuid[])) OR ((result_kind = 'proposal_revised'::text) AND (cardinality(draft_artifact_refs) = 1) AND (cardinality(artifact_lifecycle_event_refs) = 1) AND (cardinality(proposal_revision_ids) = 1) AND (authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (prior_heads = expected_heads) AND (resulting_heads = expected_heads))))
-        OR (command_kind = 'undoLatestAuthorAction'::text
-            AND result_kind = 'authoritative_applied'::text
-            AND array_dims(expected_heads) = '[1:1]'::text
-            AND array_dims(prior_heads) = '[1:1]'::text
-            AND array_dims(resulting_heads) = '[1:1]'::text
-            AND array_position(expected_heads, NULL::uuid) IS NULL
-            AND array_position(prior_heads, NULL::uuid) IS NULL
-            AND array_position(resulting_heads, NULL::uuid) IS NULL
-            AND proposal_revision_ids = '{}'::uuid[]
-            AND condition_refs = '{}'::text[]
-            AND (((cardinality(authoritative_revision_ids) = 1) AND (cardinality(authoritative_commit_ids) = 1)) OR ((authoritative_revision_ids = '{}'::uuid[]) AND (authoritative_commit_ids = '{}'::uuid[]) AND (prior_heads = expected_heads) AND (resulting_heads = expected_heads)))
-            AND array_dims(draft_artifact_refs) = '[1:1]'::text
-            AND draft_artifact_refs[1] IS NOT NULL
-            AND array_dims(artifact_lifecycle_event_refs) = '[1:1]'::text
-            AND artifact_lifecycle_event_refs[1] IS NOT NULL)
         OR (command_kind = 'replanProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1146,7 +1117,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_title'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'createChapter'::text
@@ -1175,7 +1146,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_title'::text, 'invalid_volume_join'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_volume_join'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'updateVolume'::text
@@ -1202,7 +1173,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_title'::text, 'invalid_order'::text, 'invalid_volume_join'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_volume_join'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'updateChapter'::text
@@ -1229,7 +1200,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_title'::text, 'invalid_order'::text, 'invalid_chapter_join'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_title'::text, 'invalid_order'::text, 'invalid_chapter_join'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'deleteChapter'::text
@@ -1256,7 +1227,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_chapter_join'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'deleteVolume'::text
@@ -1283,7 +1254,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_volume_join'::text, 'nonempty_volume'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_volume_join'::text, 'nonempty_volume'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'setCurrentChapter'::text
@@ -1313,7 +1284,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'invalid_chapter_join'::text, 'empty_project'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['invalid_chapter_join'::text, 'empty_project'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0
             AND prior_heads = resulting_heads)
@@ -1358,7 +1329,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'pinned_export_source_unavailable'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'exportProjectArchive'::text
@@ -1370,7 +1341,7 @@ CREATE TABLE storyos.domain_receipts (
             AND result_kind = 'refused'::text
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['archived_project'::text, 'pinned_export_source_unavailable'::text])
+            AND (result_payload ->> 'reason'::text) = ANY (ARRAY['pinned_export_source_unavailable'::text])
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'undoLatestAuthorAction'::text
@@ -1564,12 +1535,7 @@ END
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
     ) IS TRUE),
-    CONSTRAINT draft_retry_disposition_shape CHECK ((
-        (source_draft_disposition IS NULL)
-        OR (command_kind = 'applyAuthorEdit'::text
-            AND (source_draft_disposition ->> 'kind'::text) = ANY (ARRAY['unchanged'::text, 'closed_superseded'::text]))
-    ) IS TRUE),
-    CONSTRAINT domain_receipts_draft_source_key UNIQUE (owner_user_id, project_id, receipt_id, author_command_admission_id, command_id, result_kind),
+    CONSTRAINT draft_retry_disposition_shape CHECK ((source_draft_disposition IS NULL)),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_ad_key1 UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_ad_key2 UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind),
     CONSTRAINT domain_receipts_owner_user_id_project_id_author_command_adm_key UNIQUE (owner_user_id, project_id, author_command_admission_id),
@@ -1940,13 +1906,6 @@ CREATE TABLE storyos.project_activity_event_payloads (
             AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
             AND (((payload - 'kind'::text) - 'title'::text) - 'revision'::text) = '{}'::jsonb)
         OR (jsonb_typeof(payload) = 'object'::text
-            AND event_kind = 'project_archival_changed'::text
-            AND receipt_result_kind = 'authoritative_applied'::text
-            AND (payload ->> 'kind'::text) = 'project_archival_changed'::text
-            AND (payload ->> 'lifecycle'::text) = 'archived'::text
-            AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
-            AND (((payload - 'kind'::text) - 'lifecycle'::text) - 'revision'::text) = '{}'::jsonb)
-        OR (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'volume_created'::text
             AND receipt_result_kind = 'authoritative_applied'::text
             AND (payload ->> 'kind'::text) = 'volume_created'::text
@@ -2215,36 +2174,7 @@ $$;
 
 CREATE TRIGGER author_command_admissions_create_project_challenge BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW EXECUTE FUNCTION storyos.require_create_project_challenge_admission();
 
--- Removed Project archival decisions
-
-CREATE TABLE storyos.project_archival_decisions (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    archival_decision_id uuid NOT NULL,
-    receipt_id uuid NOT NULL,
-    prior_lifecycle_state text NOT NULL,
-    resulting_lifecycle_state text NOT NULL,
-    project_revision bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT project_archival_decisions_prior_lifecycle_state_check CHECK ((prior_lifecycle_state = 'active'::text)),
-    CONSTRAINT project_archival_decisions_project_revision_check CHECK ((project_revision >= 1)),
-    CONSTRAINT project_archival_decisions_resulting_lifecycle_state_check CHECK ((resulting_lifecycle_state = 'archived'::text)),
-    CONSTRAINT project_archival_decisions_owner_user_id_project_id_receipt_key UNIQUE (owner_user_id, project_id, receipt_id),
-    CONSTRAINT project_archival_decisions_pkey PRIMARY KEY (owner_user_id, project_id, archival_decision_id),
-    CONSTRAINT project_archival_decisions_owner_user_id_project_id_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL,
-    CONSTRAINT project_archival_decisions_owner_user_id_project_id_receip_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
-);
-
-ALTER TABLE storyos.project_archival_decisions
-    ADD CONSTRAINT project_archival_decisions_removed CHECK (false);
-
-ALTER TABLE storyos.project_archival_decisions ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.project_archival_decisions FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY project_archival_decisions_exact_scope ON storyos.project_archival_decisions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.project_archival_decisions TO storyos_runtime;
+-- Receipt relations of the Author Command kinds
 
 CREATE FUNCTION storyos.require_author_edit_receipt_relation() RETURNS trigger
     LANGUAGE plpgsql
@@ -2263,7 +2193,6 @@ DECLARE
   action_count bigint;
   commit_count bigint;
   revision_envelope_count bigint;
-  archival_count bigint;
   payload_event_kind text;
 BEGIN
   SELECT receipt.result_kind, receipt.command_kind, receipt.result_payload->>'reason',
@@ -2302,11 +2231,6 @@ BEGIN
    WHERE envelope.owner_user_id = scoped_owner_user_id
      AND envelope.project_id = scoped_project_id
      AND envelope.receipt_id = scoped_receipt_id;
-  SELECT count(*) INTO archival_count
-    FROM storyos.project_archival_decisions AS archival
-   WHERE archival.owner_user_id = scoped_owner_user_id
-     AND archival.project_id = scoped_project_id
-     AND archival.receipt_id = scoped_receipt_id;
 
   IF scoped_command_kind = 'takeOverProjectWriter' THEN
     SELECT payload.event_kind
@@ -2317,8 +2241,8 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind <> 'no_effect'
        OR (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-          <> (0, 0, 0, 0, 1, 0)
+           payload_count)
+          <> (0, 0, 0, 0, 1)
        OR payload_event_kind IS DISTINCT FROM scoped_reason THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
@@ -2333,8 +2257,8 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind <> 'authoritative_applied'
        OR (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-          <> (0, 0, 0, 0, 1, 0)
+           payload_count)
+          <> (0, 0, 0, 0, 1)
        OR payload_event_kind IS DISTINCT FROM 'project_created' THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
@@ -2349,42 +2273,19 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'project_updated' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'updateProject applied requires one project-updated Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProject with zero title effect cannot have an authority or Activity relation';
-    END IF;
-  ELSIF scoped_command_kind = 'archiveProject' THEN
-    SELECT payload.event_kind
-      INTO payload_event_kind
-      FROM storyos.project_activity_event_payloads AS payload
-     WHERE payload.owner_user_id = scoped_owner_user_id
-       AND payload.project_id = scoped_project_id
-       AND payload.receipt_id = scoped_receipt_id;
-    IF scoped_result_kind = 'authoritative_applied' THEN
-      IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 1)
-         OR payload_event_kind IS DISTINCT FROM 'project_archival_changed' THEN
-        RAISE EXCEPTION USING
-          ERRCODE = '23514',
-          MESSAGE = 'archiveProject applied requires one archival decision, Activity, and zero manuscript authority';
-      END IF;
-    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'archiveProject with zero lifecycle effect cannot have an authority or Activity relation';
     END IF;
   ELSIF scoped_command_kind = 'createVolume' THEN
     SELECT payload.event_kind
@@ -2396,7 +2297,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2409,8 +2309,8 @@ BEGIN
           MESSAGE = 'createVolume applied requires one volume-created Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'createVolume with zero tree effect cannot have an authority or Activity relation';
@@ -2425,7 +2325,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2438,8 +2337,8 @@ BEGIN
           MESSAGE = 'updateVolume applied requires one volume-updated Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateVolume with zero tree effect cannot have an authority or Activity relation';
@@ -2454,7 +2353,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2467,8 +2365,8 @@ BEGIN
           MESSAGE = 'updateChapter applied requires one chapter-updated Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateChapter with zero tree effect cannot have an authority or Activity relation';
@@ -2484,7 +2382,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR commit_count <> 0
          OR revision_envelope_count <> 0
          OR action_count NOT IN (0, 1)
@@ -2494,8 +2391,8 @@ BEGIN
           MESSAGE = 'setCurrentChapter applied requires one current-chapter-set Activity, no Commit, and at most one Author Action';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'setCurrentChapter with zero current-chapter effect cannot have an authority or Activity relation';
@@ -2510,7 +2407,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2523,8 +2419,8 @@ BEGIN
           MESSAGE = 'createChapter applied requires one chapter-created Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'createChapter with zero tree effect cannot have an authority or Activity relation';
@@ -2540,7 +2436,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2553,8 +2448,8 @@ BEGIN
           MESSAGE = 'deleteChapter applied requires one chapter-deleted Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'deleteChapter with zero tree effect cannot have an authority or Activity relation';
@@ -2569,7 +2464,6 @@ BEGIN
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF activity_count <> 0
          OR payload_count <> 1
-         OR archival_count <> 0
          OR NOT (
            (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
            OR (action_count = 1
@@ -2582,8 +2476,8 @@ BEGIN
           MESSAGE = 'deleteVolume applied requires one volume-deleted Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'deleteVolume with zero tree effect cannot have an authority or Activity relation';
@@ -2598,16 +2492,16 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'human_readable_manuscript_export_settled' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'exportHumanReadableManuscript applied requires one export-settled Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'exportHumanReadableManuscript with zero export effect cannot have an authority or Activity relation';
@@ -2622,42 +2516,38 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'project_export_settled' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'exportProjectArchive applied requires one export-settled Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'exportProjectArchive with zero export effect cannot have an authority or Activity relation';
     END IF;
 
   ELSIF scoped_command_kind = 'undoLatestAuthorAction' THEN
-    IF scoped_result_kind = 'draft_closure_changed' THEN
-      IF (activity_count, action_count, commit_count, revision_envelope_count, payload_count, archival_count) <> (0, 1, 0, 0, 0, 0) THEN
-        RAISE EXCEPTION 'Draft reopen requires one compensation and zero manuscript authority' USING ERRCODE='23514';
-      END IF;
-    ELSIF scoped_result_kind = 'authoritative_applied' THEN
+    IF scoped_result_kind = 'authoritative_applied' THEN
       IF NOT (
         (activity_count, action_count, commit_count, revision_envelope_count,
-         payload_count, archival_count) = (1, 1, 1, 1, 0, 0)
+         payload_count) = (1, 1, 1, 1, 0)
         OR (activity_count, action_count, commit_count, revision_envelope_count,
-            payload_count, archival_count) = (0, 1, 1, 0, 0, 0)
+            payload_count) = (0, 1, 1, 0, 0)
         OR (activity_count, action_count, commit_count, revision_envelope_count,
-            payload_count, archival_count) = (0, 1, 0, 0, 0, 0)
+            payload_count) = (0, 1, 0, 0, 0)
       ) THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'undoLatestAuthorAction applied requires prose, structure, or Current Chapter compensation authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'undoLatestAuthorAction with zero authority cannot have an authority or Activity relation';
@@ -2672,16 +2562,16 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'project_assistance_updated' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'updateProjectAssistance applied requires one assistance Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProjectAssistance with zero availability effect cannot have an authority or Activity relation';
@@ -2696,16 +2586,16 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'agent_run_created' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'createAgentRun applied requires one AgentRun Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'createAgentRun with zero admission effect cannot have an authority or Activity relation';
@@ -2715,7 +2605,7 @@ BEGIN
   ELSIF scoped_command_kind = 'steerAgentRun' THEN
     SELECT payload.event_kind INTO payload_event_kind FROM storyos.project_activity_event_payloads AS payload
       WHERE payload.owner_user_id=scoped_owner_user_id AND payload.project_id=scoped_project_id AND payload.receipt_id=scoped_receipt_id;
-    IF (activity_count,action_count,commit_count,revision_envelope_count,archival_count) <> (0,0,0,0,0)
+    IF (activity_count,action_count,commit_count,revision_envelope_count) <> (0,0,0,0)
       OR (scoped_result_kind='no_effect' AND (payload_count<>1 OR payload_event_kind IS DISTINCT FROM 'agent_run_steering_retained'))
       OR (scoped_result_kind='conflicted' AND payload_count<>0) THEN
       RAISE EXCEPTION 'Steering retention requires exact Activity and zero authority';
@@ -2729,16 +2619,16 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'agent_run_paused' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'pauseAgentRun applied requires one paused Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'pauseAgentRun with zero transition cannot have an authority or Activity relation';
@@ -2753,16 +2643,16 @@ BEGIN
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
       IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+          payload_count)
+           <> (0, 0, 0, 0, 1)
          OR payload_event_kind IS DISTINCT FROM 'agent_run_cancelled' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
           MESSAGE = 'cancelAgentRun applied requires one cancelled Activity and zero manuscript authority';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-           payload_count, archival_count)
-            <> (0, 0, 0, 0, 0, 0) THEN
+           payload_count)
+            <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'cancelAgentRun with zero transition cannot have an authority or Activity relation';
@@ -2771,8 +2661,8 @@ BEGIN
   ELSIF scoped_command_kind = 'rejectProposalOperations'
         AND scoped_result_kind = 'proposal_operations_resolved' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'rejectProposalOperations resolved requires one Author Action and zero authority';
@@ -2780,8 +2670,8 @@ BEGIN
   ELSIF scoped_command_kind = 'rejectProposalOperations'
         AND scoped_result_kind IN ('conflicted', 'refused') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'rejectProposalOperations with zero effect cannot have an authority or Activity relation';
@@ -2789,8 +2679,8 @@ BEGIN
   ELSIF scoped_command_kind = 'reopenRejectedOperations'
         AND scoped_result_kind = 'proposal_revised' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'reopenRejectedOperations resolved requires one Author Action and zero authority';
@@ -2798,8 +2688,8 @@ BEGIN
   ELSIF scoped_command_kind = 'reopenRejectedOperations'
         AND scoped_result_kind IN ('conflicted', 'refused') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'reopenRejectedOperations with zero effect cannot have an authority or Activity relation';
@@ -2807,8 +2697,8 @@ BEGIN
   ELSIF scoped_command_kind = 'replanProposal'
         AND scoped_result_kind = 'proposal_revised' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'replanProposal resolved requires one Author Action and zero authority';
@@ -2816,8 +2706,8 @@ BEGIN
   ELSIF scoped_command_kind = 'replanProposal'
         AND scoped_result_kind IN ('conflicted', 'refused') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'replanProposal with zero effect cannot have an authority or Activity relation';
@@ -2826,8 +2716,8 @@ BEGIN
         AND scoped_result_kind = 'proposal_closure_changed'
         AND scoped_producer_cause = 'author_command_admission' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'withdrawProposal resolved requires one Author Action and zero authority';
@@ -2836,8 +2726,8 @@ BEGIN
         AND scoped_result_kind = 'proposal_closure_changed'
         AND scoped_producer_cause = 'agent_run_decision' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'withdrawProposal current-producer resolved requires zero Author Actions and zero authority';
@@ -2845,8 +2735,8 @@ BEGIN
   ELSIF scoped_command_kind = 'withdrawProposal'
         AND scoped_result_kind IN ('conflicted', 'refused', 'no_effect') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'withdrawProposal with zero effect cannot have an authority or Activity relation';
@@ -2854,8 +2744,8 @@ BEGIN
   ELSIF scoped_command_kind = 'reopenWithdrawnProposal'
         AND scoped_result_kind = 'proposal_revised' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'reopenWithdrawnProposal resolved requires one Author Action and zero authority';
@@ -2863,8 +2753,8 @@ BEGIN
   ELSIF scoped_command_kind = 'reopenWithdrawnProposal'
         AND scoped_result_kind IN ('conflicted', 'refused', 'no_effect') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'reopenWithdrawnProposal with zero effect cannot have an authority or Activity relation';
@@ -2872,8 +2762,8 @@ BEGIN
   ELSIF scoped_command_kind = 'completeReadyPartialProposal'
         AND scoped_result_kind = 'proposal_generation_completed' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'completeReadyPartialProposal completed requires one Author Action and zero authority';
@@ -2881,8 +2771,8 @@ BEGIN
   ELSIF scoped_command_kind = 'completeReadyPartialProposal'
         AND scoped_result_kind IN ('conflicted', 'refused') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'completeReadyPartialProposal with zero effect cannot have an authority or Activity relation';
@@ -2890,8 +2780,8 @@ BEGIN
   ELSIF scoped_command_kind = 'continueProposalGeneration'
         AND scoped_result_kind = 'proposal_generation_started' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'continueProposalGeneration started requires one Author Action and zero authority';
@@ -2899,8 +2789,8 @@ BEGIN
   ELSIF scoped_command_kind = 'continueProposalGeneration'
         AND scoped_result_kind IN ('conflicted', 'refused') THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 0, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 0, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'continueProposalGeneration with zero effect cannot have an authority or Activity relation';
@@ -2908,32 +2798,23 @@ BEGIN
   ELSIF scoped_command_kind = 'applyAuthorEdit'
         AND scoped_result_kind = 'proposal_revised' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
+        payload_count)
+         <> (0, 1, 0, 0, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'applyAuthorEdit ProposalRevised requires one Author Action and zero authority';
     END IF;
   ELSIF scoped_result_kind = 'authoritative_applied' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (1, 1, 1, 1, 0, 0) THEN
+        payload_count)
+         <> (1, 1, 1, 1, 0) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'AuthoritativeApplied requires one complete authority and Activity relation';
     END IF;
-  ELSIF (scoped_command_kind = 'closeEditorFlowDraft' AND scoped_result_kind = 'draft_closure_changed')
-     OR (scoped_command_kind = 'expandRefusedEditDraftToProposal' AND scoped_result_kind = 'proposal_created_from_draft') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count, archival_count)
-         <> (0, 1, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'DraftClosureChanged requires one Author Action and zero authority';
-    END IF;
   ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
-         payload_count, archival_count)
-          <> (0, 0, 0, 0, 0, 0) THEN
+         payload_count)
+          <> (0, 0, 0, 0, 0) THEN
     RAISE EXCEPTION USING
       ERRCODE = '23514',
       MESSAGE = 'A zero-authority Receipt cannot have an authority or Activity relation';
@@ -2947,8 +2828,6 @@ CREATE CONSTRAINT TRIGGER domain_receipts_author_edit_relation_complete AFTER IN
 CREATE CONSTRAINT TRIGGER project_activity_author_edit_relation_complete AFTER INSERT OR DELETE OR UPDATE ON storyos.project_activity_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_author_edit_receipt_relation();
 
 CREATE CONSTRAINT TRIGGER project_activity_event_payloads_receipt_relation_complete AFTER INSERT OR DELETE OR UPDATE ON storyos.project_activity_event_payloads DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_author_edit_receipt_relation();
-
-CREATE CONSTRAINT TRIGGER project_archival_decisions_receipt_relation_complete AFTER INSERT OR DELETE OR UPDATE ON storyos.project_archival_decisions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_author_edit_receipt_relation();
 
 -- Manuscript Blocks
 
@@ -4177,7 +4056,7 @@ CREATE TABLE storyos.proposals (
     source_draft_id uuid,
     source_draft_revision_id uuid,
     source_draft_payload_digest text,
-    CONSTRAINT proposal_source_shape CHECK (((((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL) AND (source_draft_id IS NULL) AND (source_draft_revision_id IS NULL) AND (source_draft_payload_digest IS NULL)) OR ((source_run_id IS NULL) AND (source_decision_id IS NULL) AND (source_draft_id IS NOT NULL) AND (source_draft_revision_id IS NOT NULL) AND (source_draft_payload_digest ~ '^[0-9a-f]{64}$'::text))) IS TRUE)),
+    CONSTRAINT proposal_source_shape CHECK (((((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL) AND (source_draft_id IS NULL) AND (source_draft_revision_id IS NULL) AND (source_draft_payload_digest IS NULL))) IS TRUE)),
     CONSTRAINT proposals_bundle_policy_check CHECK ((bundle_policy = ANY (ARRAY['none'::text, 'atomic'::text]))),
     CONSTRAINT proposals_kind_check CHECK ((kind = ANY (ARRAY['block_edit'::text, 'reversal'::text]))),
     CONSTRAINT proposals_pkey PRIMARY KEY (owner_user_id, project_id, proposal_id),
@@ -4526,42 +4405,6 @@ CREATE POLICY proposal_operation_reopenings_exact_scope ON storyos.proposal_oper
 
 GRANT SELECT,INSERT ON TABLE storyos.proposal_operation_reopenings TO storyos_runtime;
 
--- Removed inline Proposal Anchors
-
-CREATE TABLE storyos.proposal_anchors (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    proposal_id uuid NOT NULL,
-    operation_id uuid NOT NULL,
-    anchor_order integer NOT NULL,
-    manuscript_block_id uuid NOT NULL,
-    base_authoritative_revision_id uuid NOT NULL,
-    manuscript_schema_version integer NOT NULL,
-    coordinate_profile text NOT NULL,
-    range_from integer NOT NULL,
-    range_to integer NOT NULL,
-    boundary_profile text NOT NULL,
-    base_slice_digest text NOT NULL,
-    proposal_revision_id uuid NOT NULL,
-    CONSTRAINT proposal_anchors_anchor_order_check CHECK ((anchor_order >= 1)),
-    CONSTRAINT proposal_anchors_check CHECK ((range_to > range_from)),
-    CONSTRAINT proposal_anchors_range_from_check CHECK ((range_from >= 0)),
-    CONSTRAINT proposal_anchors_removed CHECK (false),
-    CONSTRAINT proposal_anchors_pkey PRIMARY KEY (owner_user_id, project_id, proposal_id, proposal_revision_id, operation_id, anchor_order),
-    CONSTRAINT proposal_anchors_owner_user_id_project_id_base_authoritati_fkey FOREIGN KEY (owner_user_id, project_id, base_authoritative_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, revision_id) MATCH FULL,
-    CONSTRAINT proposal_anchors_owner_user_id_project_id_manuscript_block_fkey FOREIGN KEY (owner_user_id, project_id, manuscript_block_id) REFERENCES storyos.manuscript_blocks(owner_user_id, project_id, manuscript_block_id) MATCH FULL,
-    CONSTRAINT proposal_anchors_owner_user_id_project_id_proposal_id_oper_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id, operation_id) REFERENCES storyos.proposal_operations(owner_user_id, project_id, proposal_id, operation_id) MATCH FULL,
-    CONSTRAINT proposal_anchors_owner_user_id_project_id_proposal_id_prop_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id, proposal_revision_id) REFERENCES storyos.proposal_revisions(owner_user_id, project_id, proposal_id, revision_id) MATCH FULL
-);
-
-ALTER TABLE storyos.proposal_anchors ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.proposal_anchors FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY proposal_anchors_exact_scope ON storyos.proposal_anchors USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.proposal_anchors TO storyos_runtime;
-
 -- Proposal Generations, stream events, and input fences
 
 CREATE TABLE storyos.proposal_generations (
@@ -4717,253 +4560,12 @@ CREATE POLICY proposal_generation_transitions_exact_scope ON storyos.proposal_ge
 
 GRANT SELECT,INSERT ON TABLE storyos.proposal_generation_transitions TO storyos_runtime;
 
--- Removed Refused Edit Drafts
+-- Proposal compensation identity
 
-CREATE TABLE storyos.draft_artifacts (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    draft_id uuid NOT NULL,
-    draft_kind text DEFAULT 'refused_edit'::text NOT NULL,
-    current_revision_id uuid NOT NULL,
-    closure text DEFAULT 'open'::text NOT NULL,
-    retention_state text DEFAULT 'retained'::text NOT NULL,
-    close_event_id uuid,
-    reopen_event_id uuid,
-    CONSTRAINT draft_artifacts_closure_check CHECK ((closure = ANY (ARRAY['open'::text, 'closed'::text]))),
-    CONSTRAINT draft_artifacts_draft_kind_check CHECK ((draft_kind = 'refused_edit'::text)),
-    CONSTRAINT draft_artifacts_removed CHECK (false),
-    CONSTRAINT draft_artifacts_retention_state_check CHECK ((retention_state = ANY (ARRAY['retained'::text, 'archived'::text, 'tombstoned'::text]))),
-    CONSTRAINT draft_artifacts_pkey PRIMARY KEY (owner_user_id, project_id, draft_id),
-    CONSTRAINT draft_artifacts_owner_user_id_project_id_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
-);
-
-CREATE TABLE storyos.draft_artifact_revisions (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    draft_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
-    payload jsonb NOT NULL,
-    payload_digest text NOT NULL,
-    payload_digest_profile text DEFAULT 'storyos.refused-edit-payload.jcs.v1'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
-    CONSTRAINT draft_artifact_revisions_payload_check CHECK ((((jsonb_typeof(payload) = 'object'::text) AND ((payload ->> 'schema_revision'::text) = 'storyos.refused-edit-payload.v1'::text) AND (payload ?& ARRAY['schema_revision'::text, 'chapter_id'::text, 'expected_authoritative_revision_id'::text, 'expected_proposal_head_revision_ids'::text, 'target_refs'::text, 'author_edit_units'::text, 'undo_group_id'::text, 'completed_intent_record_id'::text, 'local_intent_sequence'::text]) AND ((payload - ARRAY['schema_revision'::text, 'chapter_id'::text, 'expected_authoritative_revision_id'::text, 'expected_proposal_head_revision_ids'::text, 'target_refs'::text, 'author_edit_units'::text, 'undo_group_id'::text, 'completed_intent_record_id'::text, 'local_intent_sequence'::text]) = '{}'::jsonb)) IS TRUE)),
-    CONSTRAINT draft_artifact_revisions_payload_digest_check CHECK ((payload_digest ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT draft_artifact_revisions_payload_digest_profile_check CHECK ((payload_digest_profile = 'storyos.refused-edit-payload.jcs.v1'::text)),
-    CONSTRAINT draft_artifact_revisions_owner_user_id_project_id_draft_id__key UNIQUE (owner_user_id, project_id, draft_id, revision_id, payload_digest),
-    CONSTRAINT draft_artifact_revisions_owner_user_id_project_id_draft_id_key UNIQUE (owner_user_id, project_id, draft_id),
-    CONSTRAINT draft_artifact_revisions_pkey PRIMARY KEY (owner_user_id, project_id, draft_id, revision_id),
-    CONSTRAINT draft_artifact_revisions_owner_user_id_project_id_draft_id_fkey FOREIGN KEY (owner_user_id, project_id, draft_id) REFERENCES storyos.draft_artifacts(owner_user_id, project_id, draft_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED
-);
-
--- FORCE ROW LEVEL SECURITY on storyos.proposals blocks the validation of this key as storyos_owner.
-RESET ROLE;
-ALTER TABLE storyos.proposals
-    ADD CONSTRAINT proposals_owner_user_id_project_id_source_draft_id_source__fkey FOREIGN KEY (owner_user_id, project_id, source_draft_id, source_draft_revision_id, source_draft_payload_digest) REFERENCES storyos.draft_artifact_revisions(owner_user_id, project_id, draft_id, revision_id, payload_digest);
-SET LOCAL ROLE storyos_owner;
-
-ALTER TABLE storyos.draft_artifacts
-    ADD CONSTRAINT draft_artifacts_exact_revision_fk FOREIGN KEY (owner_user_id, project_id, draft_id, current_revision_id) REFERENCES storyos.draft_artifact_revisions(owner_user_id, project_id, draft_id, revision_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE storyos.draft_artifacts ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_artifacts FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_artifacts_exact_scope ON storyos.draft_artifacts USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_artifacts TO storyos_runtime;
-
-GRANT UPDATE(closure) ON TABLE storyos.draft_artifacts TO storyos_runtime;
-
-GRANT UPDATE(close_event_id) ON TABLE storyos.draft_artifacts TO storyos_runtime;
-
-GRANT UPDATE(reopen_event_id) ON TABLE storyos.draft_artifacts TO storyos_runtime;
-
-ALTER TABLE storyos.draft_artifact_revisions ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_artifact_revisions FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_artifact_revisions_exact_scope ON storyos.draft_artifact_revisions USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_artifact_revisions TO storyos_runtime;
-
-CREATE TABLE storyos.draft_lifecycle_events (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    creation_event_id uuid NOT NULL,
-    event_kind text DEFAULT 'refused_edit_draft_created'::text NOT NULL,
-    draft_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
-    receipt_id uuid NOT NULL,
-    author_command_admission_id uuid NOT NULL,
-    command_id uuid NOT NULL,
-    receipt_result_kind text DEFAULT 'refused_to_draft'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
-    CONSTRAINT draft_lifecycle_events_event_kind_check CHECK ((event_kind = 'refused_edit_draft_created'::text)),
-    CONSTRAINT draft_lifecycle_events_receipt_result_kind_check CHECK ((receipt_result_kind = 'refused_to_draft'::text)),
-    CONSTRAINT draft_lifecycle_events_owner_user_id_project_id_draft_id_re_key UNIQUE (owner_user_id, project_id, draft_id, revision_id),
-    CONSTRAINT draft_lifecycle_events_owner_user_id_project_id_receipt_id_key UNIQUE (owner_user_id, project_id, receipt_id),
-    CONSTRAINT draft_lifecycle_events_pkey PRIMARY KEY (owner_user_id, project_id, creation_event_id),
-    CONSTRAINT draft_lifecycle_events_owner_user_id_project_id_draft_id_r_fkey FOREIGN KEY (owner_user_id, project_id, draft_id, revision_id) REFERENCES storyos.draft_artifact_revisions(owner_user_id, project_id, draft_id, revision_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_lifecycle_events_owner_user_id_project_id_receipt_id_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id, author_command_admission_id, command_id, receipt_result_kind) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id, author_command_admission_id, command_id, result_kind) MATCH FULL DEFERRABLE INITIALLY DEFERRED
-);
-
-ALTER TABLE storyos.draft_lifecycle_events ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_lifecycle_events FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_lifecycle_events_exact_scope ON storyos.draft_lifecycle_events USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_lifecycle_events TO storyos_runtime;
-
-CREATE FUNCTION storyos.require_refused_draft_settlement() RETURNS trigger
+CREATE FUNCTION storyos.require_proposal_compensation_identity() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  target_receipt uuid;
-BEGIN
-  IF TG_TABLE_NAME = 'draft_artifacts' THEN
-    SELECT receipt_id INTO target_receipt FROM storyos.draft_lifecycle_events
-     WHERE owner_user_id = NEW.owner_user_id AND project_id = NEW.project_id
-       AND draft_id = NEW.draft_id AND revision_id = NEW.current_revision_id;
-  ELSE
-    target_receipt := NEW.receipt_id;
-  END IF;
-  IF TG_TABLE_NAME = 'domain_receipts' THEN
-    IF NEW.result_kind <> 'refused_to_draft' THEN RETURN NULL; END IF;
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM storyos.domain_receipts AS receipt
-      JOIN storyos.draft_lifecycle_events AS event USING (owner_user_id, project_id, receipt_id)
-      JOIN storyos.draft_artifact_revisions AS revision
-        ON (revision.owner_user_id, revision.project_id, revision.draft_id, revision.revision_id) =
-           (event.owner_user_id, event.project_id, event.draft_id, event.revision_id)
-      JOIN storyos.author_command_admissions AS admission
-        ON (admission.owner_user_id, admission.project_id, admission.author_command_admission_id) =
-           (event.owner_user_id, event.project_id, event.author_command_admission_id)
-     WHERE receipt.owner_user_id = NEW.owner_user_id AND receipt.project_id = NEW.project_id
-       AND receipt.receipt_id = target_receipt AND receipt.result_kind = 'refused_to_draft'
-       AND receipt.draft_artifact_refs = ARRAY[event.draft_id::text] || CASE WHEN receipt.source_draft_disposition->>'kind'='closed_superseded' THEN ARRAY[receipt.source_draft_disposition->>'source_draft_id'] ELSE '{}'::text[] END
-       AND receipt.artifact_lifecycle_event_refs = ARRAY[event.creation_event_id::text] || CASE WHEN receipt.source_draft_disposition->>'kind'='closed_superseded' THEN ARRAY[receipt.source_draft_disposition->>'closure_event_ref'] ELSE '{}'::text[] END
-       AND receipt.result_payload->>'draft_revision_id' = event.revision_id::text
-       AND revision.payload->>'completed_intent_record_id' = admission.completed_intent_record_id::text
-       AND revision.payload->>'local_intent_sequence' = admission.local_intent_sequence::text
-       AND revision.payload->>'undo_group_id' = admission.undo_group_id::text
-       AND revision.payload->>'chapter_id' = admission.chapter_object_id::text
-       AND revision.payload->>'expected_authoritative_revision_id' = admission.expected_authoritative_revision_id::text
-       AND revision.payload->'expected_proposal_head_revision_ids' = to_jsonb(admission.expected_proposal_head_revision_ids)
-       AND revision.payload->'target_refs' = to_jsonb(admission.target_refs)
-       AND revision.payload->'author_edit_units' = admission.command_payload->'author_edit_units'
-       AND revision.created_at = event.created_at
-  ) THEN RAISE EXCEPTION 'Incomplete Refused Edit Draft settlement' USING ERRCODE = '23514'; END IF;
-  RETURN NULL;
-END
-$$;
-
-CREATE CONSTRAINT TRIGGER refused_draft_receipt_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_refused_draft_settlement();
-
-CREATE CONSTRAINT TRIGGER refused_draft_artifact_complete AFTER INSERT ON storyos.draft_artifacts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_refused_draft_settlement();
-
-CREATE CONSTRAINT TRIGGER refused_draft_creation_complete AFTER INSERT ON storyos.draft_lifecycle_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_refused_draft_settlement();
-
--- Removed Draft close events
-
-CREATE TABLE storyos.draft_close_events (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    event_id uuid NOT NULL,
-    draft_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
-    payload_digest text NOT NULL,
-    receipt_id uuid NOT NULL,
-    receipt_result_kind text DEFAULT 'draft_closure_changed'::text NOT NULL,
-    author_action_sequence numeric(20,0),
-    created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
-    close_reason text DEFAULT 'abandoned'::text NOT NULL,
-    CONSTRAINT draft_close_events_payload_digest_check CHECK ((payload_digest ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT draft_close_reason_shape CHECK ((((((close_reason = 'abandoned'::text) AND (receipt_result_kind = 'draft_closure_changed'::text) AND (author_action_sequence IS NOT NULL)) OR ((close_reason = 'superseded'::text) AND (receipt_result_kind = ANY (ARRAY['authoritative_applied'::text, 'proposal_revised'::text])) AND (author_action_sequence IS NOT NULL)) OR ((close_reason = 'superseded'::text) AND (receipt_result_kind = 'refused_to_draft'::text) AND (author_action_sequence IS NULL))) IS TRUE) OR (((close_reason = 'superseded'::text) AND (receipt_result_kind = 'proposal_created_from_draft'::text) AND (author_action_sequence IS NOT NULL)) IS TRUE))),
-    CONSTRAINT draft_close_events_owner_user_id_project_id_receipt_id_key UNIQUE (owner_user_id, project_id, receipt_id),
-    CONSTRAINT draft_close_events_pkey PRIMARY KEY (owner_user_id, project_id, event_id),
-    CONSTRAINT draft_close_action_fk FOREIGN KEY (owner_user_id, project_id, author_action_sequence) REFERENCES storyos.author_action_entries(owner_user_id, project_id, author_action_sequence) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_close_events_owner_user_id_project_id_draft_id_revis_fkey FOREIGN KEY (owner_user_id, project_id, draft_id, revision_id) REFERENCES storyos.draft_artifact_revisions(owner_user_id, project_id, draft_id, revision_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_close_events_owner_user_id_project_id_receipt_id_rec_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id, receipt_result_kind) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id, result_kind) MATCH FULL DEFERRABLE INITIALLY DEFERRED
-);
-
--- FORCE ROW LEVEL SECURITY on storyos.draft_artifacts blocks the validation of this key as storyos_owner.
-RESET ROLE;
-ALTER TABLE storyos.draft_artifacts
-    ADD CONSTRAINT draft_exact_close_event_fk FOREIGN KEY (owner_user_id, project_id, close_event_id) REFERENCES storyos.draft_close_events(owner_user_id, project_id, event_id) DEFERRABLE INITIALLY DEFERRED;
-SET LOCAL ROLE storyos_owner;
-
-ALTER TABLE storyos.draft_close_events ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_close_events FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_close_scope ON storyos.draft_close_events USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_close_events TO storyos_runtime;
-
-CREATE FUNCTION storyos.require_draft_expansion_settlement() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $_$
 DECLARE receipt storyos.domain_receipts;
-BEGIN
-  IF TG_TABLE_NAME='proposals' THEN
-    IF NEW.source_draft_id IS NULL THEN RETURN NULL; END IF;
-    SELECT * INTO STRICT receipt FROM storyos.domain_receipts AS r WHERE
-      (r.owner_user_id,r.project_id,r.result_payload->>'proposal_id')=(NEW.owner_user_id,NEW.project_id,NEW.proposal_id::text)
-      AND r.command_kind='expandRefusedEditDraftToProposal' AND r.result_kind='proposal_created_from_draft';
-  ELSE receipt:=NEW;
-    IF receipt.command_kind<>'expandRefusedEditDraftToProposal' OR receipt.result_kind<>'proposal_created_from_draft' THEN RETURN NULL; END IF;
-  END IF;
-  IF NOT EXISTS(SELECT 1 FROM storyos.proposals AS proposal
-    JOIN storyos.proposal_revisions AS candidate USING(owner_user_id,project_id,proposal_id)
-    JOIN storyos.proposal_heads AS head USING(owner_user_id,project_id,proposal_id)
-    JOIN storyos.proposal_operations AS operation USING(owner_user_id,project_id,proposal_id)
-    JOIN storyos.draft_artifact_revisions AS source ON
-      (source.owner_user_id,source.project_id,source.draft_id,source.revision_id,source.payload_digest)=
-      (proposal.owner_user_id,proposal.project_id,proposal.source_draft_id,proposal.source_draft_revision_id,proposal.source_draft_payload_digest)
-    JOIN storyos.draft_artifacts AS draft ON
-      (draft.owner_user_id,draft.project_id,draft.draft_id)=(source.owner_user_id,source.project_id,source.draft_id)
-    JOIN storyos.draft_close_events AS closed ON
-      (closed.owner_user_id,closed.project_id,closed.draft_id)=(draft.owner_user_id,draft.project_id,draft.draft_id)
-    JOIN storyos.author_action_entries AS action ON
-      (action.owner_user_id,action.project_id,action.receipt_id)=(closed.owner_user_id,closed.project_id,closed.receipt_id)
-    JOIN storyos.author_command_admissions AS admission ON
-      (admission.owner_user_id,admission.project_id,admission.author_command_admission_id)=(receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id)
-    WHERE proposal.owner_user_id=receipt.owner_user_id AND proposal.project_id=receipt.project_id
-      AND proposal.proposal_id::text=receipt.result_payload->>'proposal_id' AND candidate.revision_id=head.current_revision_id
-      AND receipt.proposal_revision_ids=ARRAY[candidate.revision_id] AND candidate.validation='pending' AND candidate.closure='open'
-      AND candidate.candidate_blocks=jsonb_path_query_array(source.payload,'$.author_edit_units[*].normalized_primitives[*].replacement[*]')
-      AND operation.candidate_blocks=candidate.candidate_blocks AND operation.candidate_text=candidate.candidate_text
-      AND candidate.candidate_text=(SELECT string_agg(block->>'text',E'\n' ORDER BY position)
-        FROM jsonb_array_elements(candidate.candidate_blocks) WITH ORDINALITY AS blocks(block,position))
-      AND draft.closure='closed' AND draft.retention_state='retained' AND draft.current_revision_id=source.revision_id
-      AND draft.close_event_id=closed.event_id AND closed.revision_id=source.revision_id AND closed.receipt_id=receipt.receipt_id
-      AND receipt.artifact_lifecycle_event_refs=ARRAY[closed.event_id::text] AND receipt.draft_artifact_refs=ARRAY[draft.draft_id::text]
-      AND closed.close_reason='superseded' AND action.disposition='forward' AND action.author_action_sequence=closed.author_action_sequence
-      AND admission.command_payload->'expand_refused_edit_draft_to_proposal_input'->>'source_current_draft_revision_id'=source.revision_id::text
-      AND admission.command_payload->'expand_refused_edit_draft_to_proposal_input'->>'source_draft_payload_digest'=source.payload_digest
-      AND EXISTS(SELECT 1 FROM storyos.author_command_admission_settlements AS settled WHERE
-        (settled.owner_user_id,settled.project_id,settled.author_command_admission_id,settled.receipt_id)=
-        (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id,receipt.receipt_id) AND settled.settlement_kind='receipt_settled')
-      AND EXISTS(SELECT 1 FROM storyos.command_idempotency AS replay WHERE
-        (replay.owner_user_id,replay.project_id,replay.command_kind,replay.idempotency_key)=
-        (receipt.owner_user_id,receipt.project_id,receipt.command_kind,receipt.idempotency_key)
-        AND replay.outcome_kind='settled' AND replay.result_reference=receipt.receipt_id::text))
-  THEN RAISE EXCEPTION 'Incomplete whole Draft expansion settlement' USING ERRCODE='23514'; END IF;
-  RETURN NULL;
-END $_$;
-
-CREATE CONSTRAINT TRIGGER draft_expansion_receipt_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_expansion_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_expansion_proposal_complete AFTER INSERT ON storyos.proposals DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_expansion_settlement();
-
-CREATE FUNCTION storyos.require_draft_retry_settlement() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE receipt storyos.domain_receipts; admission storyos.author_command_admissions;
-  source jsonb; disposition jsonb; draft storyos.draft_artifacts; revision storyos.draft_artifact_revisions;
-  event storyos.draft_close_events; creation storyos.draft_lifecycle_events;
 BEGIN
   IF TG_TABLE_NAME='domain_receipts' THEN receipt:=NEW;
   ELSE SELECT * INTO STRICT receipt FROM storyos.domain_receipts AS r WHERE
@@ -4987,247 +4589,11 @@ BEGIN
         AND receipt.result_payload->>'proposal_revision_id'=restored.revision_id::text
         AND receipt.result_payload->>'source_proposal_revision_id'=parent.revision_id::text)
     THEN RAISE EXCEPTION 'Incomplete Proposal compensation identity' USING ERRCODE='23514'; END IF;
-    RETURN NULL;
   END IF;
-  IF receipt.command_kind<>'applyAuthorEdit' THEN RETURN NULL; END IF;
-  SELECT * INTO STRICT admission FROM storyos.author_command_admissions AS a WHERE
-    (a.owner_user_id,a.project_id,a.author_command_admission_id)=(receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id);
-  source:=admission.command_payload->'retry_source'; disposition:=receipt.source_draft_disposition;
-  IF source IS NULL THEN
-    IF disposition IS NOT NULL THEN RAISE EXCEPTION 'Fresh intent cannot close a retry source' USING ERRCODE='23514'; END IF;
-    RETURN NULL;
-  END IF;
-  SELECT * INTO STRICT draft FROM storyos.draft_artifacts AS d WHERE
-    (d.owner_user_id,d.project_id,d.draft_id::text)=(receipt.owner_user_id,receipt.project_id,source->>'source_draft_id');
-  SELECT * INTO STRICT revision FROM storyos.draft_artifact_revisions AS r WHERE
-    (r.owner_user_id,r.project_id,r.draft_id,r.revision_id)=(draft.owner_user_id,draft.project_id,draft.draft_id,draft.current_revision_id);
-  IF NOT (source->>'kind'='draft_retry' AND source->>'source_draft_kind'='refused_edit'
-    AND source->>'expected_source_draft_closure'='open' AND draft.retention_state='retained'
-    AND disposition->>'source_draft_kind'='refused_edit' AND disposition->>'source_draft_id'=draft.draft_id::text
-    AND admission.command_kind=receipt.command_kind AND admission.command_id=receipt.command_id
-    AND admission.canonical_command_digest=receipt.command_digest AND admission.idempotency_key=receipt.idempotency_key
-    AND EXISTS(SELECT 1 FROM storyos.author_command_admission_settlements AS s WHERE
-      (s.owner_user_id,s.project_id,s.author_command_admission_id,s.receipt_id)=
-      (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id,receipt.receipt_id) AND s.settlement_kind='receipt_settled')
-    AND EXISTS(SELECT 1 FROM storyos.command_idempotency AS replay WHERE
-      (replay.owner_user_id,replay.project_id,replay.command_kind,replay.idempotency_key)=
-      (receipt.owner_user_id,receipt.project_id,receipt.command_kind,receipt.idempotency_key)
-      AND replay.outcome_kind='settled' AND replay.result_reference=receipt.receipt_id::text AND replay.canonical_command_digest=receipt.command_digest)
-  ) IS TRUE THEN RAISE EXCEPTION 'Incomplete Draft retry source binding' USING ERRCODE='23514'; END IF;
-  IF disposition->>'kind'='unchanged' THEN
-    IF NOT (receipt.result_kind IN ('no_effect','conflicted','refused')
-      AND disposition->>'requested_source_draft_revision_id'=source->>'source_current_draft_revision_id'
-      AND disposition->>'current_source_draft_revision_id'=draft.current_revision_id::text
-      AND disposition->>'current_source_draft_payload_digest'=revision.payload_digest
-      AND disposition->'current_closure'->>'kind'=draft.closure
-      AND (draft.closure='open' OR EXISTS(SELECT 1 FROM storyos.draft_close_events AS c WHERE
-        (c.owner_user_id,c.project_id,c.event_id)=(draft.owner_user_id,draft.project_id,draft.close_event_id)
-        AND disposition->'current_closure'->>'closure_event_ref'=c.event_id::text AND disposition->'current_closure'->>'close_reason'=c.close_reason))
-      AND NOT EXISTS(SELECT 1 FROM storyos.draft_close_events AS c WHERE
-        (c.owner_user_id,c.project_id,c.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id))
-    ) IS TRUE THEN RAISE EXCEPTION 'Draft retry must keep its source unchanged' USING ERRCODE='23514'; END IF;
-    RETURN NULL;
-  END IF;
-  SELECT * INTO STRICT event FROM storyos.draft_close_events AS c WHERE
-    (c.owner_user_id,c.project_id,c.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id);
-  IF receipt.result_kind='refused_to_draft' THEN
-    SELECT * INTO STRICT creation FROM storyos.draft_lifecycle_events AS c WHERE
-      (c.owner_user_id,c.project_id,c.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id);
-  END IF;
-  IF NOT (disposition=jsonb_build_object('kind','closed_superseded','source_draft_kind','refused_edit',
-      'source_draft_id',draft.draft_id::text,'source_draft_revision_id',revision.revision_id::text,
-      'source_draft_payload_digest',revision.payload_digest,'prior_closure','open','resulting_closure','closed',
-      'close_reason','superseded','closure_event_ref',event.event_id::text)
-    AND source->>'source_current_draft_revision_id'=revision.revision_id::text AND source->>'source_draft_payload_digest'=revision.payload_digest
-    AND draft.closure='closed' AND draft.close_event_id=event.event_id AND draft.reopen_event_id IS NULL
-    AND (event.draft_id,event.revision_id,event.payload_digest,event.close_reason,event.receipt_result_kind)=
-      (draft.draft_id,revision.revision_id,revision.payload_digest,'superseded',receipt.result_kind)
-    AND event.created_at=receipt.created_at AND receipt.result_kind IN ('authoritative_applied','proposal_revised','refused_to_draft')
-    AND ((receipt.result_kind='refused_to_draft' AND event.author_action_sequence IS NULL AND creation.draft_id<>draft.draft_id
-        AND receipt.draft_artifact_refs=ARRAY[creation.draft_id::text,draft.draft_id::text]
-        AND receipt.artifact_lifecycle_event_refs=ARRAY[creation.creation_event_id::text,event.event_id::text])
-      OR (receipt.result_kind IN ('authoritative_applied','proposal_revised')
-        AND receipt.draft_artifact_refs=ARRAY[draft.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]
-        AND EXISTS(SELECT 1 FROM storyos.author_action_entries AS a WHERE
-          (a.owner_user_id,a.project_id,a.receipt_id,a.author_action_sequence)=
-          (event.owner_user_id,event.project_id,event.receipt_id,event.author_action_sequence) AND a.disposition='forward')))
-  ) IS TRUE THEN RAISE EXCEPTION 'Incomplete atomic Draft retry settlement' USING ERRCODE='23514'; END IF;
   RETURN NULL;
 END $$;
 
-CREATE CONSTRAINT TRIGGER draft_retry_receipt_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_retry_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_retry_close_complete AFTER INSERT ON storyos.draft_close_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_retry_settlement();
-
--- Removed Draft reopen events
-
-CREATE TABLE storyos.draft_reopen_receipts (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    receipt_id uuid NOT NULL,
-    author_undo_receipt_id uuid NOT NULL,
-    source_close_event_id uuid NOT NULL,
-    event_id uuid NOT NULL,
-    payload jsonb NOT NULL,
-    CONSTRAINT draft_reopen_receipts_owner_user_id_project_id_author_undo__key UNIQUE (owner_user_id, project_id, author_undo_receipt_id),
-    CONSTRAINT draft_reopen_receipts_pkey PRIMARY KEY (owner_user_id, project_id, receipt_id),
-    CONSTRAINT draft_reopen_receipts_owner_user_id_project_id_author_undo_fkey FOREIGN KEY (owner_user_id, project_id, author_undo_receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_reopen_receipts_owner_user_id_project_id_source_clos_fkey FOREIGN KEY (owner_user_id, project_id, source_close_event_id) REFERENCES storyos.draft_close_events(owner_user_id, project_id, event_id) DEFERRABLE INITIALLY DEFERRED
-);
-
-CREATE TABLE storyos.draft_reopen_events (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    event_id uuid NOT NULL,
-    draft_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
-    source_close_event_id uuid NOT NULL,
-    handler_receipt_id uuid NOT NULL,
-    author_action_sequence numeric(20,0) NOT NULL,
-    payload jsonb NOT NULL,
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_handler_receip_key UNIQUE (owner_user_id, project_id, handler_receipt_id),
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_source_close_e_key UNIQUE (owner_user_id, project_id, source_close_event_id),
-    CONSTRAINT draft_reopen_events_pkey PRIMARY KEY (owner_user_id, project_id, event_id),
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_author_action_fkey FOREIGN KEY (owner_user_id, project_id, author_action_sequence) REFERENCES storyos.author_action_entries(owner_user_id, project_id, author_action_sequence) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_draft_id_revi_fkey FOREIGN KEY (owner_user_id, project_id, draft_id, revision_id) REFERENCES storyos.draft_artifact_revisions(owner_user_id, project_id, draft_id, revision_id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_handler_recei_fkey FOREIGN KEY (owner_user_id, project_id, handler_receipt_id) REFERENCES storyos.draft_reopen_receipts(owner_user_id, project_id, receipt_id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT draft_reopen_events_owner_user_id_project_id_source_close__fkey FOREIGN KEY (owner_user_id, project_id, source_close_event_id) REFERENCES storyos.draft_close_events(owner_user_id, project_id, event_id) DEFERRABLE INITIALLY DEFERRED
-);
-
--- FORCE ROW LEVEL SECURITY on storyos.draft_artifacts blocks the validation of this key as storyos_owner.
-RESET ROLE;
-ALTER TABLE storyos.draft_artifacts
-    ADD CONSTRAINT draft_artifacts_owner_user_id_project_id_reopen_event_id_fkey FOREIGN KEY (owner_user_id, project_id, reopen_event_id) REFERENCES storyos.draft_reopen_events(owner_user_id, project_id, event_id) DEFERRABLE INITIALLY DEFERRED;
-SET LOCAL ROLE storyos_owner;
-
-ALTER TABLE storyos.draft_reopen_receipts
-    ADD CONSTRAINT draft_reopen_receipts_owner_user_id_project_id_event_id_fkey FOREIGN KEY (owner_user_id, project_id, event_id) REFERENCES storyos.draft_reopen_events(owner_user_id, project_id, event_id) DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE storyos.draft_reopen_receipts ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_reopen_receipts FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_reopen_receipt_scope ON storyos.draft_reopen_receipts USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_reopen_receipts TO storyos_runtime;
-
-ALTER TABLE storyos.draft_reopen_events ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.draft_reopen_events FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY draft_reopen_event_scope ON storyos.draft_reopen_events USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text, true))::uuid) AND (project_id = (current_setting('storyos.project_id'::text, true))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.draft_reopen_events TO storyos_runtime;
-
-CREATE FUNCTION storyos.keep_refused_draft_revision_immutable() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  RAISE EXCEPTION 'Refused Edit Draft Revision and creation are immutable' USING ERRCODE = '23514';
-END
-$$;
-
-CREATE TRIGGER refused_draft_revision_immutable BEFORE DELETE OR UPDATE ON storyos.draft_artifact_revisions FOR EACH ROW EXECUTE FUNCTION storyos.keep_refused_draft_revision_immutable();
-
-CREATE TRIGGER refused_draft_creation_immutable BEFORE DELETE OR UPDATE ON storyos.draft_lifecycle_events FOR EACH ROW EXECUTE FUNCTION storyos.keep_refused_draft_revision_immutable();
-
-CREATE TRIGGER draft_close_event_immutable BEFORE DELETE OR UPDATE ON storyos.draft_close_events FOR EACH ROW EXECUTE FUNCTION storyos.keep_refused_draft_revision_immutable();
-
-CREATE TRIGGER draft_reopen_receipt_immutable BEFORE DELETE OR UPDATE ON storyos.draft_reopen_receipts FOR EACH ROW EXECUTE FUNCTION storyos.keep_refused_draft_revision_immutable();
-
-CREATE TRIGGER draft_reopen_event_immutable BEFORE DELETE OR UPDATE ON storyos.draft_reopen_events FOR EACH ROW EXECUTE FUNCTION storyos.keep_refused_draft_revision_immutable();
-
-CREATE FUNCTION storyos.require_draft_close_settlement() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE target_event uuid; target_draft uuid; target_revision uuid; target_receipt uuid;
-  prior_reopen_event text; validate_lifecycle boolean := false;
-BEGIN
-  IF TG_TABLE_NAME='draft_artifacts' THEN
-    target_draft := NEW.draft_id;
-    target_revision := NEW.current_revision_id;
-    IF TG_OP='UPDATE' THEN
-      IF OLD.closure='closed' AND NEW.closure='closed' AND NEW.close_event_id IS DISTINCT FROM OLD.close_event_id THEN
-        RAISE EXCEPTION 'Draft Discard requires open source' USING ERRCODE='23514';
-      END IF;
-      validate_lifecycle := OLD.closure='open' AND NEW.closure='closed';
-      prior_reopen_event := OLD.reopen_event_id::text;
-    END IF;
-    IF NEW.closure='open' THEN
-      IF TG_OP='UPDATE' AND OLD.closure='closed' AND
-        (NEW.close_event_id IS DISTINCT FROM OLD.close_event_id OR NEW.reopen_event_id IS NULL) THEN
-        RAISE EXCEPTION 'Draft Discard requires exact compensation' USING ERRCODE='23514';
-      END IF;
-      IF NEW.close_event_id IS NULL AND NEW.reopen_event_id IS NULL THEN RETURN NULL; END IF;
-      IF NOT EXISTS(SELECT 1 FROM storyos.draft_reopen_events AS reopened WHERE
-        (reopened.owner_user_id,reopened.project_id,reopened.event_id,reopened.draft_id,reopened.revision_id,reopened.source_close_event_id)=
-        (NEW.owner_user_id,NEW.project_id,NEW.reopen_event_id,NEW.draft_id,NEW.current_revision_id,NEW.close_event_id))
-      THEN RAISE EXCEPTION 'Draft reopen requires exact compensation' USING ERRCODE='23514'; END IF;
-      RETURN NULL;
-    END IF;
-    IF NEW.reopen_event_id IS NOT NULL THEN RAISE EXCEPTION 'Closed Draft cannot project reopen' USING ERRCODE='23514'; END IF;
-    IF NEW.closure <> 'closed' OR NEW.close_event_id IS NULL THEN
-      RAISE EXCEPTION 'Incomplete Draft Discard settlement' USING ERRCODE='23514';
-    END IF;
-    target_event := NEW.close_event_id;
-  ELSIF TG_TABLE_NAME='domain_receipts' THEN
-    IF NEW.command_kind <> 'closeEditorFlowDraft' OR NEW.result_kind <> 'draft_closure_changed' THEN RETURN NULL; END IF;
-    target_event := (NEW.result_payload->>'event_id')::uuid;
-    target_receipt := NEW.receipt_id;
-  ELSE
-    target_event := NEW.event_id;
-  END IF;
-  IF EXISTS(SELECT 1 FROM storyos.draft_close_events AS event WHERE
-    (event.owner_user_id,event.project_id,event.event_id)=(NEW.owner_user_id,NEW.project_id,target_event) AND event.close_reason='superseded') THEN
-    IF NOT EXISTS(SELECT 1 FROM storyos.draft_close_events AS event JOIN storyos.domain_receipts AS receipt USING(owner_user_id,project_id,receipt_id)
-      WHERE (event.owner_user_id,event.project_id,event.event_id)=(NEW.owner_user_id,NEW.project_id,target_event)
-      AND (target_draft IS NULL OR (event.draft_id,event.revision_id)=(target_draft,target_revision))
-      AND receipt.source_draft_disposition->>'closure_event_ref'=event.event_id::text)
-    THEN RAISE EXCEPTION 'Incomplete Draft retry closure' USING ERRCODE='23514'; END IF;
-    RETURN NULL;
-  END IF;
-  IF NOT EXISTS(SELECT 1 FROM storyos.draft_close_events AS event
-    JOIN storyos.domain_receipts AS receipt USING(owner_user_id,project_id,receipt_id)
-    JOIN storyos.author_action_entries AS action USING(owner_user_id,project_id,receipt_id)
-    JOIN storyos.draft_artifact_revisions AS revision ON (revision.owner_user_id,revision.project_id,revision.draft_id,revision.revision_id)=
-      (event.owner_user_id,event.project_id,event.draft_id,event.revision_id)
-    JOIN storyos.author_command_admissions AS admission ON (admission.owner_user_id,admission.project_id,admission.author_command_admission_id)=
-      (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id)
-    WHERE event.owner_user_id=NEW.owner_user_id AND event.project_id=NEW.project_id AND event.event_id=target_event
-      AND (target_draft IS NULL OR (event.draft_id=target_draft AND event.revision_id=target_revision))
-      AND (target_receipt IS NULL OR event.receipt_id=target_receipt)
-      AND receipt.command_kind='closeEditorFlowDraft' AND receipt.result_kind='draft_closure_changed'
-      AND receipt.draft_artifact_refs=ARRAY[event.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]
-      AND receipt.result_payload->>'draft_revision_id'=event.revision_id::text AND receipt.result_payload->>'payload_digest'=event.payload_digest
-      AND event.payload_digest=revision.payload_digest AND action.disposition='forward' AND action.author_action_sequence=event.author_action_sequence
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'draft_id'=event.draft_id::text
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'source_current_draft_revision_id'=event.revision_id::text
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'source_draft_payload_digest'=event.payload_digest
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'expected_closure'='open'
-      AND (NOT validate_lifecycle OR (admission.command_payload->'close_editor_flow_draft_input'->>'source_reopen_event_id') IS NOT DISTINCT FROM prior_reopen_event)
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'close_reason'='abandoned'
-      AND admission.command_payload->'close_editor_flow_draft_input'->>'draft_kind'='refused_edit'
-      AND admission.command_kind=receipt.command_kind AND admission.canonical_command_digest=receipt.command_digest
-      AND admission.idempotency_key=receipt.idempotency_key AND admission.command_id=receipt.command_id
-      AND event.created_at=receipt.created_at AND receipt.result_payload->>'event_id'=event.event_id::text
-      AND receipt.result_payload->>'observed_closure'='open'
-      AND EXISTS(SELECT 1 FROM storyos.author_command_admission_settlements AS settlement
-        WHERE (settlement.owner_user_id,settlement.project_id,settlement.author_command_admission_id,settlement.receipt_id)=
-        (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id,receipt.receipt_id) AND settlement.settlement_kind='receipt_settled')
-      AND EXISTS(SELECT 1 FROM storyos.command_idempotency AS replay
-        WHERE (replay.owner_user_id,replay.project_id,replay.command_kind,replay.idempotency_key)=
-        (receipt.owner_user_id,receipt.project_id,receipt.command_kind,receipt.idempotency_key)
-        AND replay.canonical_command_digest=receipt.command_digest
-        AND replay.outcome_kind='settled' AND replay.result_reference=receipt.receipt_id::text))
-  THEN RAISE EXCEPTION 'Incomplete Draft Discard settlement' USING ERRCODE='23514'; END IF;
-  RETURN NULL;
-END $$;
-
-CREATE CONSTRAINT TRIGGER draft_close_receipt_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_close_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_close_projection_complete AFTER INSERT OR UPDATE OF closure, close_event_id, reopen_event_id ON storyos.draft_artifacts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_close_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_close_complete AFTER INSERT ON storyos.draft_close_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_close_settlement();
+CREATE CONSTRAINT TRIGGER proposal_compensation_receipt_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_proposal_compensation_identity();
 
 -- Proposal replans
 
@@ -5428,113 +4794,6 @@ END;
 $$;
 
 CREATE TRIGGER undo_acceptance_receipt_immutable BEFORE DELETE OR UPDATE ON storyos.undo_acceptance_receipts FOR EACH ROW EXECUTE FUNCTION storyos.keep_undo_acceptance_receipt_immutable();
-
-CREATE FUNCTION storyos.require_draft_reopen_settlement() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE target_event uuid;
-BEGIN
-  IF TG_TABLE_NAME='domain_receipts' THEN
-    IF NEW.command_kind<>'undoLatestAuthorAction' OR cardinality(NEW.artifact_lifecycle_event_refs)=0 THEN RETURN NULL; END IF;
-    target_event:=NEW.artifact_lifecycle_event_refs[1]::uuid;
-  ELSE target_event:=NEW.event_id;
-  END IF;
-  IF NOT EXISTS(SELECT 1 FROM storyos.draft_reopen_events AS event
-    JOIN storyos.draft_reopen_receipts AS handler ON (handler.owner_user_id,handler.project_id,handler.receipt_id)=
-      (event.owner_user_id,event.project_id,event.handler_receipt_id)
-    JOIN storyos.draft_close_events AS closed ON (closed.owner_user_id,closed.project_id,closed.event_id)=
-      (event.owner_user_id,event.project_id,event.source_close_event_id)
-    JOIN storyos.domain_receipts AS receipt ON (receipt.owner_user_id,receipt.project_id,receipt.receipt_id)=
-      (handler.owner_user_id,handler.project_id,handler.author_undo_receipt_id)
-    JOIN storyos.author_action_entries AS action ON (action.owner_user_id,action.project_id,action.author_action_sequence)=
-      (event.owner_user_id,event.project_id,event.author_action_sequence)
-    JOIN storyos.author_command_admissions AS admission ON (admission.owner_user_id,admission.project_id,admission.author_command_admission_id)=
-      (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id)
-    JOIN storyos.draft_artifacts AS draft ON (draft.owner_user_id,draft.project_id,draft.draft_id)=
-      (event.owner_user_id,event.project_id,event.draft_id)
-    WHERE event.owner_user_id=NEW.owner_user_id AND event.project_id=NEW.project_id AND event.event_id=target_event
-      AND draft.closure='open' AND draft.retention_state='retained' AND draft.current_revision_id=event.revision_id
-      AND draft.close_event_id=closed.event_id AND draft.reopen_event_id=event.event_id
-      AND admission.command_kind=receipt.command_kind AND admission.command_id=receipt.command_id
-      AND admission.canonical_command_digest=receipt.command_digest AND admission.idempotency_key=receipt.idempotency_key
-      AND EXISTS(SELECT 1 FROM storyos.author_command_admission_settlements AS settlement WHERE
-        (settlement.owner_user_id,settlement.project_id,settlement.author_command_admission_id,settlement.receipt_id)=
-        (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id,receipt.receipt_id) AND settlement.settlement_kind='receipt_settled')
-      AND receipt.command_kind='undoLatestAuthorAction'
-      AND ((receipt.result_kind='draft_closure_changed' AND closed.close_reason='abandoned'
-        AND receipt.authoritative_revision_ids='{}' AND receipt.authoritative_commit_ids='{}' AND receipt.proposal_revision_ids='{}'
-        AND receipt.result_payload->>'event_id'=event.event_id::text AND receipt.result_payload->>'handler_receipt_id'=handler.receipt_id::text)
-       OR (receipt.result_kind='draft_closure_changed' AND closed.close_reason='superseded'
-        AND receipt.authoritative_revision_ids='{}' AND receipt.authoritative_commit_ids='{}' AND receipt.proposal_revision_ids='{}'
-        AND receipt.result_payload->>'event_id'=event.event_id::text AND receipt.result_payload->>'handler_receipt_id'=handler.receipt_id::text
-        AND EXISTS(SELECT 1 FROM storyos.domain_receipts AS source
-          JOIN storyos.proposals AS proposal ON (proposal.owner_user_id,proposal.project_id,proposal.proposal_id::text)=
-            (source.owner_user_id,source.project_id,source.result_payload->>'proposal_id')
-          JOIN storyos.proposal_heads AS head ON (head.owner_user_id,head.project_id,head.proposal_id)=
-            (proposal.owner_user_id,proposal.project_id,proposal.proposal_id)
-          JOIN storyos.proposal_revisions AS candidate ON (candidate.owner_user_id,candidate.project_id,candidate.proposal_id,candidate.revision_id)=
-            (head.owner_user_id,head.project_id,head.proposal_id,head.current_revision_id)
-          WHERE (source.owner_user_id,source.project_id,source.receipt_id)=(closed.owner_user_id,closed.project_id,closed.receipt_id)
-            AND source.command_kind='expandRefusedEditDraftToProposal' AND source.result_kind='proposal_created_from_draft'
-            AND cardinality(source.proposal_revision_ids)=1 AND candidate.closure='withdrawn'
-            AND (candidate.revision_id=source.proposal_revision_ids[1]
-              OR EXISTS(SELECT 1 FROM storyos.author_action_entries AS appended
-                JOIN storyos.domain_receipts AS appended_receipt ON (appended_receipt.owner_user_id,appended_receipt.project_id,appended_receipt.receipt_id)=
-                  (appended.owner_user_id,appended.project_id,appended.receipt_id)
-                WHERE (appended.owner_user_id,appended.project_id)=(candidate.owner_user_id,candidate.project_id) AND appended.disposition='compensation'
-                  AND appended_receipt.result_payload->>'proposal_revision_id'=candidate.revision_id::text
-                  AND appended_receipt.result_payload->>'source_proposal_revision_id'=candidate.parent_revision_id::text)
-              OR EXISTS(SELECT 1 FROM storyos.undo_acceptance_receipts AS reopened WHERE
-                (reopened.owner_user_id,reopened.project_id,reopened.proposal_id,reopened.proposal_revision_id)=
-                (candidate.owner_user_id,candidate.project_id,candidate.proposal_id,candidate.revision_id) AND reopened.outcome='compensated'))
-            AND (proposal.source_draft_id,proposal.source_draft_revision_id,proposal.source_draft_payload_digest)=
-              (event.draft_id,event.revision_id,closed.payload_digest)
-            AND source.source_draft_disposition->>'closure_event_ref'=closed.event_id::text
-            AND NOT EXISTS(SELECT 1 FROM storyos.proposal_operations AS operation WHERE
-              (operation.owner_user_id,operation.project_id,operation.proposal_id)=(proposal.owner_user_id,proposal.project_id,proposal.proposal_id)
-              AND (operation.resolution<>'pending' OR operation.reservation_state<>'resolved'))))
-       OR (receipt.result_kind='authoritative_applied' AND closed.close_reason='superseded'
-        AND EXISTS(SELECT 1 FROM storyos.domain_receipts AS source WHERE
-          (source.owner_user_id,source.project_id,source.receipt_id)=(closed.owner_user_id,closed.project_id,closed.receipt_id)
-          AND source.command_kind='applyAuthorEdit' AND source.result_kind IN ('authoritative_applied','proposal_revised')
-          AND source.source_draft_disposition->>'closure_event_ref'=closed.event_id::text
-          AND source.source_draft_disposition->>'source_draft_id'=event.draft_id::text
-          AND source.source_draft_disposition->>'source_draft_revision_id'=event.revision_id::text)))
-      AND receipt.draft_artifact_refs=ARRAY[event.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]
-      AND action.disposition='compensation' AND action.compensated_source_sequence=closed.author_action_sequence AND action.receipt_id=receipt.receipt_id
-      AND (closed.draft_id,closed.revision_id)=(event.draft_id,event.revision_id)
-      AND (handler.event_id,handler.source_close_event_id)=(event.event_id,event.source_close_event_id)
-      AND admission.command_payload->'undo_latest_author_action_input'->>'expected_author_undo_frontier_sequence'=closed.author_action_sequence::text
-      AND closed.author_action_sequence=(SELECT max(source.author_action_sequence) FROM storyos.author_action_entries AS source
-        WHERE source.owner_user_id=event.owner_user_id AND source.project_id=event.project_id AND source.disposition='forward'
-        AND source.author_action_sequence<action.author_action_sequence AND NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS prior
-          WHERE prior.owner_user_id=source.owner_user_id AND prior.project_id=source.project_id AND prior.disposition='compensation'
-          AND prior.compensated_source_sequence=source.author_action_sequence AND prior.author_action_sequence<action.author_action_sequence))
-      AND handler.payload=jsonb_build_object('schema_id','storyos.receipt.draft-reopen.v1','receipt_id',handler.receipt_id::text,
-        'project_scope',jsonb_build_object('owner_user_id',event.owner_user_id::text,'project_id',event.project_id::text),
-        'author_undo_receipt_id',receipt.receipt_id::text,'source_close_event_id',closed.event_id::text,'event_id',event.event_id::text,
-        'result','draft_reopened','created_at',to_char(receipt.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
-      AND event.payload=jsonb_build_object('schema_id','storyos.event.editor-flow-draft-reopened.v1','event_kind','editor_flow_draft_reopened',
-        'event_id',event.event_id::text,'project_scope',handler.payload->'project_scope','draft_id',event.draft_id::text,
-        'draft_revision_id',event.revision_id::text,'payload_digest',closed.payload_digest,'source_close_event_id',closed.event_id::text,
-        'prior_closure','closed','closure','open','handler_receipt',handler.payload,'source_author_action_sequence',closed.author_action_sequence::text,
-        'author_action_sequence',action.author_action_sequence::text,'created_at',handler.payload->>'created_at',
-        'source',jsonb_build_object('command_id',receipt.command_id::text,'author_command_admission_id',receipt.author_command_admission_id::text,
-          'receipt_id',receipt.receipt_id::text,'idempotency_key',receipt.idempotency_key::text,'command_digest',jsonb_build_object(
-          'algorithm','sha256','profile','storyos.command.undoLatestAuthorAction.jcs.v1','value_hex_lowercase',split_part(receipt.command_digest,':',3))))
-      AND EXISTS(SELECT 1 FROM storyos.command_idempotency AS replay WHERE
-        (replay.owner_user_id,replay.project_id,replay.command_kind,replay.idempotency_key)=
-        (receipt.owner_user_id,receipt.project_id,receipt.command_kind,receipt.idempotency_key)
-        AND replay.outcome_kind='settled' AND replay.result_reference=receipt.receipt_id::text AND replay.canonical_command_digest=receipt.command_digest))
-  THEN RAISE EXCEPTION 'Incomplete Draft reopen settlement' USING ERRCODE='23514'; END IF;
-  RETURN NULL;
-END $$;
-
-CREATE CONSTRAINT TRIGGER draft_reopen_root_complete AFTER INSERT ON storyos.domain_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_reopen_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_reopen_handler_complete AFTER INSERT ON storyos.draft_reopen_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_reopen_settlement();
-
-CREATE CONSTRAINT TRIGGER draft_reopen_complete AFTER INSERT ON storyos.draft_reopen_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.require_draft_reopen_settlement();
 
 -- Proposal withdrawal reopenings
 

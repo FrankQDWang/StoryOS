@@ -138,8 +138,6 @@ mod passage_collection;
 mod pause_agent_run;
 mod pinned_export_source;
 mod project_archive_build;
-mod project_archive_draft;
-mod project_archive_draft_copies;
 mod project_destination_binding;
 mod project_export;
 mod project_export_work;
