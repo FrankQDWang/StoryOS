@@ -5,12 +5,13 @@ use storyos_application::{
     SteerAgentRunError, SteerAgentRunInput, SteerAgentRunSettlement, SteeringRetained,
 };
 use storyos_core::{
-    AgentRunLifecycle, CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect,
-    TransitionOutcome, classify_steer_agent_run,
+    CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect, TransitionOutcome,
+    classify_steer_agent_run,
 };
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_control::lock_agent_run;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
@@ -59,32 +60,13 @@ impl ProjectCommand for SteerAgentRunInput {
         _project: &LockedProject,
     ) -> Result<Classification<Self>, SteerAgentRunError> {
         let scope = &envelope.project_scope;
-        let missing_run =
-            || RefusableCommandError::RefusedBeforeAdmission(AgentRunControlRefusal::MissingRun);
-        let run = client
-            .query_opt(
-                "SELECT status, conversation_id::text, author_message,
-                        active_decision_position::text
-                   FROM storyos.agent_runs
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                  FOR UPDATE",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &self.run_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?
-            .ok_or_else(missing_run)?;
-        let status = run.get::<_, String>(/*idx*/ 0);
-        let lifecycle = AgentRunLifecycle::parse(&status)
-            .ok_or_else(|| unavailable(format!("unsupported AgentRun status {status}")))?;
-        if self.conversation_id != run.get::<_, String>(/*idx*/ 1) {
-            return Err(missing_run());
+        let run = lock_agent_run(client, scope, &self.run_id).await?;
+        if self.conversation_id != run.conversation_id {
+            return Err(RefusableCommandError::RefusedBeforeAdmission(
+                AgentRunControlRefusal::MissingRun,
+            ));
         }
-        let outcome = classify_steer_agent_run(lifecycle);
+        let outcome = classify_steer_agent_run(run.lifecycle);
         if let TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) = outcome {
             let retained = client
                 .query_one(
@@ -104,7 +86,7 @@ impl ProjectCommand for SteerAgentRunInput {
                 .get::<_, String>(/*idx*/ 0)
                 .parse::<u64>()
                 .map_err(unavailable)?;
-            let run_message = run.get::<_, String>(/*idx*/ 2).chars().count() as u64;
+            let run_message = run.author_message.chars().count() as u64;
             let message = self.author_message.chars().count() as u64;
             if run_message + retained + message + 1 > CONTEXT_ITEM_TOKEN_LIMIT {
                 return Err(RefusableCommandError::RefusedBeforeAdmission(
@@ -112,8 +94,8 @@ impl ProjectCommand for SteerAgentRunInput {
                 ));
             }
             if let Some(added) = &self.selection_references {
-                let position = run.get::<_, String>(/*idx*/ 3);
-                let current = run_references(client, envelope, &self.run_id, &position).await?;
+                let position = &run.active_decision_position;
+                let current = run_references(client, envelope, &self.run_id, position).await?;
                 let merged = storyos_core::merge_steering_references(current, added);
                 if merged.len() > storyos_core::SELECTION_REFERENCE_LIMIT {
                     return Err(RefusableCommandError::RefusedBeforeAdmission(
