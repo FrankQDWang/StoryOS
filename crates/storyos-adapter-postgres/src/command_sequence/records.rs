@@ -128,7 +128,7 @@ pub(super) async fn insert_activity_payload(
                 project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
                 payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     $5::text, $6::text::uuid, $7::text, $8::text::jsonb)",
+                     $5::text, $6::text::uuid, $7, $8::text::jsonb)",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
