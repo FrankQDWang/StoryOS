@@ -293,9 +293,9 @@ Chapter block.
 Release 1 has no Inline Proposal and no Proposal Anchor
 ([ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md)).
 Each Operation of a Block Proposal targets one complete Chapter Block by its
-`ManuscriptBlockId`. The dormant Anchor table stays in storage. Migration
-`0100_remove_inline_proposal.sql` refuses each stored Anchor row and each stored
-`inline_edit` Proposal.
+`ManuscriptBlockId`. The dormant Anchor table stays in storage. The
+`CHECK (false)` guard of the Release 1 baseline refuses each Anchor row, and the
+Proposal kind check refuses each `inline_edit` Proposal.
 
 ### 6.3 Four orthogonal state axes
 

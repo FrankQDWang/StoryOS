@@ -364,7 +364,7 @@ async fn insert_export_receipt(
                      $5::text::uuid, 'exportHumanReadableManuscript', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
                      '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)",
+                     '{}'::text[], $8::text, $9::text::jsonb)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

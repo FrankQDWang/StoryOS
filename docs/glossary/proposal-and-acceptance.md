@@ -41,7 +41,7 @@ One exhaustive StoryOS Core command-and-event change to a Proposal State Axis un
 _Avoid_: Status assignment, implicit transition, mutable historical resolution
 
 **Proposal Anchor**:
-A removed block-relative address of an Inline Proposal Operation. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), it bound a Manuscript Block, a base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. Release 1 has no Proposal Anchor: no command writes or reads one, and a stored Anchor row stops migration 0100.
+A removed block-relative address of an Inline Proposal Operation. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), it bound a Manuscript Block, a base Authoritative Revision, a coordinate and boundary contract, a range, and a base-slice digest. Release 1 has no Proposal Anchor: no command writes or reads one, and the storage refuses an Anchor row.
 _Avoid_: Absolute editor position, DOM range, Decoration identity, visible-text match
 
 **Proposal Boundary Ownership**:
@@ -57,7 +57,7 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A removed Draft Core Artifact kind. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), the refused `ApplyAuthorEdit` Core Transition created one when one author edit crossed Authoritative State and Proposal ownership. Release 1 has no Refused Edit Draft: no command creates, retries, expands, discards, or undoes one, and a stored Draft row stops migration 0099.
+A removed Draft Core Artifact kind. Before [ADR 0073](../adr/0073-remove-the-refused-edit-draft-and-the-inline-proposal.md), the refused `ApplyAuthorEdit` Core Transition created one when one author edit crossed Authoritative State and Proposal ownership. Release 1 has no Refused Edit Draft: no command creates, retries, expands, discards, or undoes one, and the storage refuses a Draft row.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:

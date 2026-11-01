@@ -43,7 +43,7 @@ pub(super) async fn insert_admission(
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                     NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    $17, $9, $10, $11, $16,
+                    $17::text, $9, $10, $11, $16::text,
                     $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
@@ -96,7 +96,7 @@ pub(super) async fn insert_admission(
                     session.editor_session_id, writer.writer_generation,
                     session.client_session_binding_ref, $6::text::numeric,
                     session.client_contract_revision, session.security_policy_revision,
-                    'explicit_editor_command', $7, $8, $9, $19,
+                    'explicit_editor_command', $7, $8, $9, $19::text,
                     $10, $11::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], $20::text[],
                     NULL, session.client_contract_revision, NULL, NULL, NULL,
@@ -179,7 +179,7 @@ pub(super) async fn insert_admission(
                             session.editor_session_id, current_writer.writer_generation,
                             session.client_session_binding_ref, $7::text::numeric,
                             session.client_contract_revision, session.security_policy_revision,
-                            'explicit_editor_command', $8, $9, $10, $19,
+                            'explicit_editor_command', $8, $9, $10, $19::text,
                             $11, $12::text::uuid, challenge.consumed_at, challenge.expires_at,
                             $13::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $14,
                             NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
@@ -253,7 +253,7 @@ pub(super) async fn insert_admission(
                             session.editor_session_id, $6::text::numeric,
                             session.client_session_binding_ref, $7::text::numeric,
                             session.client_contract_revision, session.security_policy_revision,
-                            'direct_editor_action', $8, $9, $10, $27, $11,
+                            'direct_editor_action', $8, $9, $10, $27::text, $11,
                             $12::text::uuid, challenge.consumed_at, challenge.expires_at,
                             $25::text::uuid, $13::text::uuid, $14::text::uuid,
                             $15::text[]::uuid[], $16::text[], $17, $18, $19::text::uuid,

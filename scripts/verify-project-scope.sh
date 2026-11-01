@@ -124,9 +124,17 @@ args = ["docker", "exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
         "--single-transaction", "-U", "postgres"]
 for source in sorted(Path("crates/storyos-adapter-postgres/migrations").glob("*.sql")):
     name = source.name
+    if mode == "fault" and name == "0001_release_1_baseline.sql":
+        # The fault follows the first table of the baseline, so it runs inside the bootstrap transaction.
+        sql = source.read_text()
+        cut = sql.index("\n);\n", sql.index("CREATE TABLE")) + len("\n);\n")
+        name = "faulted_baseline.sql"
+        subprocess.run(
+            ["docker", "exec", "-i", container, "sh", "-c", f"cat > /tmp/storyos-release1-bootstrap/{name}"],
+            input=(sql[:cut] + "SELECT 1 / 0;\n" + sql[cut:]).encode(),
+            check=True,
+        )
     args.extend(["-f", f"/tmp/storyos-release1-bootstrap/{name}"])
-    if mode == "fault" and name == "0002_project_command_challenges.sql":
-        args.extend(["-c", "SELECT 1 / 0"])
 raise SystemExit(subprocess.call(
     args,
     stdout=subprocess.DEVNULL,

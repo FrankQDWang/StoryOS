@@ -383,7 +383,7 @@ async fn insert_export_receipt(
                      $5::text::uuid, 'exportProjectArchive', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
                      '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)
+                     '{}'::text[], $8::text, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
