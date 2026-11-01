@@ -141,7 +141,7 @@ fn unsigned_byte_order_is_the_sort_key() {
 }
 
 #[test]
-fn foreign_missing_lifecycle_and_provenance_are_typed_failures() {
+fn foreign_missing_and_provenance_are_typed_failures() {
     let owner = "018f0000-0000-7001-8000-000000000001";
     let project = "018f0000-0000-7001-8000-000000000002";
     assert_eq!(
@@ -150,7 +150,6 @@ fn foreign_missing_lifecycle_and_provenance_are_typed_failures() {
             project,
             owner,
             project,
-            /*lifecycle_eligible*/ true,
             /*payload_present*/ true,
             /*gap_documented*/ false,
         ),
@@ -158,26 +157,19 @@ fn foreign_missing_lifecycle_and_provenance_are_typed_failures() {
     );
     assert_eq!(
         classify_export_record(
-            owner, project, owner, project, /*lifecycle_eligible*/ false,
-            /*payload_present*/ true, /*gap_documented*/ false,
-        ),
-        Err(ProjectArchiveBuildRefusal::IneligibleLifecycle)
-    );
-    assert_eq!(
-        classify_export_record(
-            owner, project, owner, project, /*lifecycle_eligible*/ true,
-            /*payload_present*/ false, /*gap_documented*/ false,
+            owner, project, owner, project, /*payload_present*/ false,
+            /*gap_documented*/ false,
         ),
         Err(ProjectArchiveBuildRefusal::InvalidProvenance)
     );
     classify_export_record(
-        owner, project, owner, project, /*lifecycle_eligible*/ true,
-        /*payload_present*/ false, /*gap_documented*/ true,
+        owner, project, owner, project, /*payload_present*/ false,
+        /*gap_documented*/ true,
     )
     .expect("a documented gap stays a gap, not a silent omission");
     classify_export_record(
-        owner, project, owner, project, /*lifecycle_eligible*/ true,
-        /*payload_present*/ true, /*gap_documented*/ false,
+        owner, project, owner, project, /*payload_present*/ true,
+        /*gap_documented*/ false,
     )
     .expect("in-scope payload is eligible");
     assert_eq!(

@@ -60,8 +60,7 @@ impl ProposalReader for PostgresProjectReader {
                          revision.revision_id)
                   WHERE proposal.owner_user_id = $1::text::uuid
                     AND proposal.project_id = $2::text::uuid
-                    AND proposal.proposal_id = $3::text::uuid
-                    AND proposal.source_run_id IS NOT NULL",
+                    AND proposal.proposal_id = $3::text::uuid",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),

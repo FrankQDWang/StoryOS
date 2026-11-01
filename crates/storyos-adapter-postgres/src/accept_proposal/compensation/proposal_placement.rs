@@ -136,12 +136,10 @@ pub(super) async fn place_proposal(
             .execute(
                 "INSERT INTO storyos.proposals
                    (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
-                    source_run_id, source_decision_id, bundle_policy, source_draft_id,
-                    source_draft_revision_id, source_draft_payload_digest)
+                    source_run_id, source_decision_id, bundle_policy)
                  SELECT owner_user_id, project_id, $4::text::uuid, COALESCE($5, kind),
                         chapter_id, manuscript_block_id, source_run_id, source_decision_id,
-                        bundle_policy, source_draft_id, source_draft_revision_id,
-                        source_draft_payload_digest
+                        bundle_policy
                    FROM storyos.proposals
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid

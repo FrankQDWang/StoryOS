@@ -570,7 +570,6 @@ fn classify_rows(
             row_project,
             owner,
             project,
-            /*lifecycle_eligible*/ true,
             /*payload_present*/ true,
             /*gap_documented*/ false,
         )

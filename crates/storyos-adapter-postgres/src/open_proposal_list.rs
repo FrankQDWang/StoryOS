@@ -61,7 +61,6 @@ impl OpenProposalListReader for PostgresProjectReader {
                        WHERE (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                              (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
                          AND operation.resolution = 'pending')
-                    AND proposal.source_run_id IS NOT NULL
                   ORDER BY proposal.proposal_id
                   LIMIT $4",
                 &[
