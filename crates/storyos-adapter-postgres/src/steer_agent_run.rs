@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AgentRunControlRefusal, ProjectCommandEnvelope, ProjectCommandError, RefusableCommandError,
@@ -37,7 +38,7 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for SteerAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "steerAgentRun",
+        kind: CommandKind::SteerAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: ACTIVITY_KIND,
         replay_effect: ReplayEffect::NoQuery,

@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
@@ -169,7 +170,7 @@ pub(crate) fn create_project_issue(
             method: "POST".to_owned(),
             route_template: "/api/v1/projects".to_owned(),
             command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
+            command_kind: CommandKind::CreateProject.as_str().to_owned(),
             create_input_digest: format!("{project_suffix:0<64}"),
             canonical_command_digest: digest,
             idempotency_key: idempotency_key.to_owned(),
@@ -247,14 +248,14 @@ pub(crate) async fn seed_owned_project(
 
 /// The public route identity of one project command kind.
 pub(crate) struct Route {
-    pub(crate) kind: &'static str,
+    pub(crate) kind: CommandKind,
     pub(crate) method: &'static str,
     pub(crate) path: &'static str,
     pub(crate) schema: &'static str,
 }
 
 pub(crate) const CREATE_EDITOR_SESSION: Route = Route {
-    kind: "createEditorSession",
+    kind: CommandKind::CreateEditorSession,
     method: storyos_contracts::CREATE_EDITOR_SESSION_METHOD,
     path: storyos_contracts::CREATE_EDITOR_SESSION_PATH,
     schema: storyos_contracts::CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
@@ -268,7 +269,7 @@ pub(crate) async fn issued<I>(
     route: &Route,
     input: I,
 ) -> CommandCall<I> {
-    let digest = format!("sha256:{}:{suffix:04x}", route.kind);
+    let digest = format!("sha256:{}:{suffix:04x}", route.kind.as_str());
     issued_with_bytes(store, scope, suffix, route, input, b"{}", digest).await
 }
 
@@ -323,13 +324,15 @@ pub(crate) fn command_issue(
             security_policy_revision: SECURITY_POLICY_REVISION.to_owned(),
             limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
             // The Server derives the rate class from the command kind.
-            challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(route.kind)
-                .policy_revision()
-                .to_owned(),
+            challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(
+                route.kind.as_str(),
+            )
+            .policy_revision()
+            .to_owned(),
             method: route.method.to_owned(),
             route_template: route.path.to_owned(),
             command_schema: route.schema.to_owned(),
-            command_kind: route.kind.to_owned(),
+            command_kind: route.kind.as_str().to_owned(),
             canonical_command_digest: digest.to_owned(),
             idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
         },

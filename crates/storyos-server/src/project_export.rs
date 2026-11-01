@@ -14,7 +14,7 @@ use super::*;
 
 const EXPORT_PROJECT_ARCHIVE: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Project Export Archive",
-    command_kind: "exportProjectArchive",
+    command_kind: contracts::CommandKind::ExportProjectArchive,
     method: contracts::EXPORT_PROJECT_ARCHIVE_METHOD,
     path: contracts::EXPORT_PROJECT_ARCHIVE_PATH,
     schema_id: contracts::EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,

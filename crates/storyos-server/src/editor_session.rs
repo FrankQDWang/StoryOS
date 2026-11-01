@@ -103,7 +103,9 @@ pub(super) async fn create_editor_session(
         method: contracts::CREATE_EDITOR_SESSION_METHOD.to_owned(),
         route_template: contracts::CREATE_EDITOR_SESSION_PATH.to_owned(),
         command_schema: contracts::CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID.to_owned(),
-        command_kind: "createEditorSession".to_owned(),
+        command_kind: contracts::CommandKind::CreateEditorSession
+            .as_str()
+            .to_owned(),
         canonical_command_digest: format!(
             "sha256:storyos.command.createEditorSession.jcs.v1:{digest_hex}"
         ),

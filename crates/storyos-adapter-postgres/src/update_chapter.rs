@@ -1,6 +1,7 @@
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateChapterInput, UpdateChapterSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ChapterJoin, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied, UpdateChapterConflict,
     UpdateChapterNoEffect, UpdateChapterRefusal, update_chapter as classify_update_chapter,
@@ -40,7 +41,7 @@ pub(crate) struct LiveSiblings {
 
 impl ProjectCommand for UpdateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "updateChapter",
+        kind: CommandKind::UpdateChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateChapter,
         ))],

@@ -2,6 +2,7 @@ use storyos_application::{
     ChapterDeleted, DeleteChapterInput, DeleteChapterSettlement, ProjectCommandEnvelope,
     ProjectCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterApplied,
     DeleteChapterConflict, DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal,
@@ -36,7 +37,7 @@ pub(crate) struct ParentVolume(String);
 
 impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "deleteChapter",
+        kind: CommandKind::DeleteChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteChapter,
         ))],

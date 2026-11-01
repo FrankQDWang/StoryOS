@@ -2,6 +2,7 @@ use storyos_application::{
     CurrentChapterSelected, ProjectCommandEnvelope, ProjectCommandError, SetCurrentChapterInput,
     SetCurrentChapterSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ChapterJoin, SetCurrentChapter as CoreSetCurrentChapter, SetCurrentChapterConflict,
     SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
@@ -38,7 +39,7 @@ pub(crate) struct ChapterHead(String);
 
 impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "setCurrentChapter",
+        kind: CommandKind::SetCurrentChapter,
         applied: &[AppliedVariant::Forward(ForwardCommand::SetCurrentChapter)],
         activity_kind: "current_chapter_set",
         replay_effect: ReplayEffect::NoQuery,

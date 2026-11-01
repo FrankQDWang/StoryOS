@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
@@ -87,7 +88,7 @@ const TRANSITION_REPLAY: ReplayEffect = ReplayEffect::Query(
 
 impl ProjectCommand for CompleteReadyPartialProposalInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "completeReadyPartialProposal",
+        kind: CommandKind::CompleteReadyPartialProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::CompleteReadyPartialProposal,
         )],
@@ -205,7 +206,7 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
 
 impl ProjectCommand for ContinueProposalGenerationInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "continueProposalGeneration",
+        kind: CommandKind::ContinueProposalGeneration,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ContinueProposalGeneration,
         )],

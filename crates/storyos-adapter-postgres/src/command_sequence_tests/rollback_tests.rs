@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ReceiptResult;
@@ -70,13 +71,13 @@ impl<C: ProjectCommand> DeclaredSpec<C> for WrappedSpec {
     const SPEC: CommandSpec = C::SPEC;
 }
 
-/// The spec of the wrapped command with a kind that no Command Challenge has, so the Admission
-/// insert writes no row.
+/// The spec of the wrapped command with the Create Project kind, which no Project Command Challenge
+/// has, so the Admission insert writes no row.
 pub(super) struct UnchallengedKind;
 
 impl<C: ProjectCommand> DeclaredSpec<C> for UnchallengedKind {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "unchallengedCommand",
+        kind: CommandKind::CreateProject,
         applied: &[],
         ..C::SPEC
     };

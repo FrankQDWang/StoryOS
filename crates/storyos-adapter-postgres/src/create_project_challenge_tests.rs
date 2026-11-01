@@ -3,6 +3,7 @@ use storyos_application::{
     CreateProjectChallengeBinding, IssueCreateProjectChallenge, ProjectCommandChallengeError,
     ProjectId, UserId, issue_create_project_challenge,
 };
+use storyos_contracts::CommandKind;
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -29,7 +30,7 @@ fn issue_request(
             method: "POST".to_owned(),
             route_template: "/api/v1/projects".to_owned(),
             command_schema: "storyos.command.create-project.request.v1".to_owned(),
-            command_kind: "createProject".to_owned(),
+            command_kind: CommandKind::CreateProject.as_str().to_owned(),
             create_input_digest: input_digest.to_owned(),
             canonical_command_digest: format!(
                 "sha256:storyos.command.createProject.jcs.v1:{input_digest}"

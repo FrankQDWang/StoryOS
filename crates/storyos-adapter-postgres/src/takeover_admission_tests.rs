@@ -1,4 +1,5 @@
 use std::time::Duration;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, EditorSessionId,
@@ -127,7 +128,7 @@ fn session_binding(
         method: "POST".to_owned(),
         route_template: "/api/v1/projects/{project_id}/editor-sessions".to_owned(),
         command_schema: "storyos.command.create-editor-session.request.v1".to_owned(),
-        command_kind: "createEditorSession".to_owned(),
+        command_kind: CommandKind::CreateEditorSession.as_str().to_owned(),
         canonical_command_digest: format!("sha256:session-{idempotency_key}"),
         idempotency_key: idempotency_key.to_owned(),
     }
@@ -227,7 +228,7 @@ fn takeover_binding(
         route_template:
             "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers".to_owned(),
         command_schema: "storyos.command.take-over-project-writer.request.v1".to_owned(),
-        command_kind: "takeOverProjectWriter".to_owned(),
+        command_kind: CommandKind::TakeOverProjectWriter.as_str().to_owned(),
         canonical_command_digest: EMPTY_OBJECT_TAKEOVER_DIGEST.to_owned(),
         idempotency_key: idempotency_key.to_owned(),
     }

@@ -13,7 +13,7 @@ use super::*;
 
 const ACCEPT_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Acceptance",
-    command_kind: "acceptProposal",
+    command_kind: contracts::CommandKind::AcceptProposal,
     method: contracts::ACCEPT_PROPOSAL_METHOD,
     path: contracts::ACCEPT_PROPOSAL_PATH,
     schema_id: contracts::ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,

@@ -8,6 +8,7 @@ use storyos_application::{
     SnapshotLookup, UndoApplied, UndoRecords, UserId, VolumeCreated, VolumeId, VolumeNode,
     get_manuscript_tree, get_snapshot, open_chapter, open_current_chapter, open_project,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     CreateChapterCurrent, CreateChapterPlacement, ManuscriptBlockKind, ReceiptResult,
     TransitionOutcome,
@@ -518,7 +519,7 @@ async fn author_undo_compensates_create_volume_after_a_later_edit_is_undone() {
     );
     // One Compensation for the later edit and one for the Volume.
     assert_eq!(
-        compensation_rows(&admin, &scope, "deleteVolume").await,
+        compensation_rows(&admin, &scope, CommandKind::DeleteVolume.as_str()).await,
         serde_json::json!({ "compensations": 2, "removal_receipts": 0 })
     );
 }
@@ -598,7 +599,7 @@ async fn author_undo_compensates_create_chapter_and_keeps_the_initial_revision()
         None
     );
     assert_eq!(
-        compensation_rows(&admin, &scope, "deleteChapter").await,
+        compensation_rows(&admin, &scope, CommandKind::DeleteChapter.as_str()).await,
         serde_json::json!({ "compensations": 2, "removal_receipts": 0 })
     );
     // The Compensation Commits bind no Revision pair, and the initial Revision remains.

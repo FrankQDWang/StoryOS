@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, TakeOverProjectWriterInput,
@@ -82,7 +83,7 @@ async fn load_takeover_facts(
 
 impl ProjectCommand for TakeOverProjectWriterInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "takeOverProjectWriter",
+        kind: CommandKind::TakeOverProjectWriter,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "writer_takeover_applied",
         replay_effect: ReplayEffect::NoQuery,

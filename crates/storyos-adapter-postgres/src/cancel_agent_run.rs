@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput, CancelAgentRunSettlement,
@@ -31,7 +32,7 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for CancelAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "cancelAgentRun",
+        kind: CommandKind::CancelAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_cancelled",
         replay_effect: ReplayEffect::NoQuery,

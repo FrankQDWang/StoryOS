@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::future::Future;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     AdmittedProjectCommand, ArchiveExportOperation, ArchiveExportRefusal, ArchiveExportWorkStore,
@@ -74,7 +75,7 @@ impl ExportInput for ExportHumanReadableManuscriptInput {
     type Work = ReadableExportOperation;
     type Refusal = ExportHumanReadableManuscriptRefusal;
     const ROUTE: Route = Route {
-        kind: "exportHumanReadableManuscript",
+        kind: CommandKind::ExportHumanReadableManuscript,
         method: storyos_contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,
         path: storyos_contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH,
         schema: storyos_contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
@@ -126,7 +127,7 @@ impl ExportInput for ExportProjectArchiveInput {
     type Work = ArchiveExportOperation;
     type Refusal = ArchiveExportRefusal;
     const ROUTE: Route = Route {
-        kind: "exportProjectArchive",
+        kind: CommandKind::ExportProjectArchive,
         method: storyos_contracts::EXPORT_PROJECT_ARCHIVE_METHOD,
         path: storyos_contracts::EXPORT_PROJECT_ARCHIVE_PATH,
         schema: storyos_contracts::EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,

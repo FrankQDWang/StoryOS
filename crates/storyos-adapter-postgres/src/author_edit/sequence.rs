@@ -4,6 +4,7 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, ProjectCommandEnvelope, ProjectCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, ManuscriptBlock,
     TransitionOutcome,
@@ -186,7 +187,7 @@ impl<'a> AuthorEdit<'a> {
 
 impl ProjectCommand for AuthorEdit<'_> {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "applyAuthorEdit",
+        kind: CommandKind::ApplyAuthorEdit,
         applied: &[
             AppliedVariant::Forward(ForwardCommand::AuthorEdit(
                 AuthorEditVariant::AuthoritativeApplied,

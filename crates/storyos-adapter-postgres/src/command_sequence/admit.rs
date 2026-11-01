@@ -27,7 +27,7 @@ use crate::command_response_project::{
 };
 
 pub(crate) struct AdmitSpec {
-    pub(crate) kind: &'static str,
+    pub(crate) kind: storyos_contracts::CommandKind,
     /// The query of the work rows. It takes the owner, Project, and Admission identities as `$1`,
     /// `$2`, and `$3`. Its optional row holds one JSON object text.
     pub(crate) work_query: &'static str,
@@ -199,11 +199,18 @@ impl<C: AdmitCommand> FirstUse for Admit<'_, C> {
         let command = self.0;
         let project = lock_project(client, envelope).await?;
         let facts = command.load_facts(client, envelope, &project).await?;
-        if !insert_admission(client, envelope, C::SPEC.kind, &command.admission(&facts)).await? {
+        if !insert_admission(
+            client,
+            envelope,
+            C::SPEC.kind.as_str(),
+            &command.admission(&facts),
+        )
+        .await?
+        {
             return Err(ProjectCommandError::InvalidChallenge.into());
         }
         let work = command.write_work(client, envelope, facts).await?;
-        let response = C::Response::record(client, envelope, C::SPEC.kind).await?;
+        let response = C::Response::record(client, envelope, C::SPEC.kind.as_str()).await?;
         Ok(AdmittedProjectCommand {
             command_id: envelope.ids.command_id.clone(),
             author_command_admission_id: envelope.ids.author_command_admission_id.clone(),
@@ -244,7 +251,7 @@ async fn read_in_progress<C: AdmitCommand>(
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
-                    &C::SPEC.kind,
+                    &C::SPEC.kind.as_str(),
                     &challenge.idempotency_key,
                     &challenge.canonical_command_digest,
                 ],

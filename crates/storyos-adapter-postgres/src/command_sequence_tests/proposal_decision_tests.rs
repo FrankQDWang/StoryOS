@@ -6,6 +6,7 @@ use storyos_application::{
     ReopenWithdrawnProposalSettlement, ReplanProposalInput, ReplanProposalSettlement,
     WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
 };
+use storyos_contracts::CommandKind;
 use tokio_postgres::Client;
 use tokio_postgres::error::SqlState;
 use uuid::Uuid;
@@ -20,35 +21,35 @@ use super::support::{
 };
 
 pub(crate) const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
-    kind: "reopenWithdrawnProposal",
+    kind: CommandKind::ReopenWithdrawnProposal,
     method: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     path: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
     schema: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const REJECT_PROPOSAL_OPERATIONS: Route = Route {
-    kind: "rejectProposalOperations",
+    kind: CommandKind::RejectProposalOperations,
     method: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_METHOD,
     path: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_PATH,
     schema: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const REPLAN_PROPOSAL: Route = Route {
-    kind: "replanProposal",
+    kind: CommandKind::ReplanProposal,
     method: storyos_contracts::REPLAN_PROPOSAL_METHOD,
     path: storyos_contracts::REPLAN_PROPOSAL_PATH,
     schema: storyos_contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const REOPEN_REJECTED_OPERATIONS: Route = Route {
-    kind: "reopenRejectedOperations",
+    kind: CommandKind::ReopenRejectedOperations,
     method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
     path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
     schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const WITHDRAW_PROPOSAL: Route = Route {
-    kind: "withdrawProposal",
+    kind: CommandKind::WithdrawProposal,
     method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
     path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
     schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,

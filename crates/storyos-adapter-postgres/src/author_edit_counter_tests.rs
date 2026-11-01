@@ -3,6 +3,7 @@ use storyos_application::{
     EditorSessionId, IssueProjectCommandChallenge, OpenEditorSession, ProjectId, ProjectScope,
     UserId, create_editor_session, issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::AuthorEditPrimitive;
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
@@ -286,7 +287,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     let session_nonce_digest = "sha256:counter-session";
     let session_binding = binding(
         &scope,
-        "createEditorSession",
+        CommandKind::CreateEditorSession.as_str(),
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         &Uuid::now_v7().to_string(),

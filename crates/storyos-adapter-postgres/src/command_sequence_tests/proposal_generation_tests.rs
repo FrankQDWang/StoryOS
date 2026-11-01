@@ -4,6 +4,7 @@ use storyos_application::{
     ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
 };
 use storyos_application::{ProjectCommandError, ProjectScope};
+use storyos_contracts::CommandKind;
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -18,14 +19,14 @@ use super::proposal_decision::{
 use super::support::{CommandCall, Route, SequenceError, issued, stores, two_chapter_writer};
 
 pub(crate) const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
-    kind: "completeReadyPartialProposal",
+    kind: CommandKind::CompleteReadyPartialProposal,
     method: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
     path: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
     schema: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const CONTINUE_PROPOSAL_GENERATION: Route = Route {
-    kind: "continueProposalGeneration",
+    kind: CommandKind::ContinueProposalGeneration,
     method: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_METHOD,
     path: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
     schema: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,

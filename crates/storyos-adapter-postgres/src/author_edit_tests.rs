@@ -6,6 +6,7 @@ use storyos_application::{
     create_editor_session, get_apply_author_edit_outcome, get_editor_session,
     issue_project_command_challenge,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
 };
@@ -62,7 +63,7 @@ pub(crate) fn author_command(
 ) -> ApplyAuthorEditCommand {
     let challenge_binding = binding(
         scope,
-        "applyAuthorEdit",
+        CommandKind::ApplyAuthorEdit.as_str(),
         "/api/v1/projects/{project_id}/manuscript/author-edits",
         "storyos.command.apply-author-edit.request.v1",
         key,
@@ -187,7 +188,7 @@ async fn a_cut_after_the_commit_resolves_through_the_outcome_query_and_keeps_the
     let session_nonce_digest = "sha256:session-author-edit";
     let session_binding = binding(
         &scope,
-        "createEditorSession",
+        CommandKind::CreateEditorSession.as_str(),
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         session_key,

@@ -13,7 +13,7 @@ use super::*;
 
 const CREATE_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "createAgentRun",
-    command_kind: "createAgentRun",
+    command_kind: contracts::CommandKind::CreateAgentRun,
     method: contracts::CREATE_AGENT_RUN_METHOD,
     path: contracts::CREATE_AGENT_RUN_PATH,
     schema_id: contracts::CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -193,7 +193,7 @@ pub(super) async fn get_agent_run(
                 model_attempt_id: input.model_attempt_id,
             })
             .collect(),
-        status: inspect_status(record.status),
+        status: storyos_application::wire_agent_run_status(record.status),
         context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
         model_attempt: inspect_model(record.model.as_ref()),
@@ -358,18 +358,6 @@ fn inspect_unknown_create_successor(
             advances_predecessor_continuation: successor.advances_predecessor_continuation,
             reuses_changed_context: successor.reuses_changed_context,
         },
-    }
-}
-
-fn inspect_status(status: storyos_application::AgentRunStatus) -> contracts::AgentRunStatus {
-    match status {
-        storyos_application::AgentRunStatus::Queued => contracts::AgentRunStatus::Queued,
-        storyos_application::AgentRunStatus::Claimed => contracts::AgentRunStatus::Claimed,
-        storyos_application::AgentRunStatus::Waiting => contracts::AgentRunStatus::Waiting,
-        storyos_application::AgentRunStatus::Paused => contracts::AgentRunStatus::Paused,
-        storyos_application::AgentRunStatus::Completed => contracts::AgentRunStatus::Completed,
-        storyos_application::AgentRunStatus::Refused => contracts::AgentRunStatus::Refused,
-        storyos_application::AgentRunStatus::Cancelled => contracts::AgentRunStatus::Cancelled,
     }
 }
 

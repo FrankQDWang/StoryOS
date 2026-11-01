@@ -12,7 +12,7 @@ use super::*;
 
 const UNDO_LATEST_AUTHOR_ACTION: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Undo Latest Author Action",
-    command_kind: "undoLatestAuthorAction",
+    command_kind: contracts::CommandKind::UndoLatestAuthorAction,
     method: contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD,
     path: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
     schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,

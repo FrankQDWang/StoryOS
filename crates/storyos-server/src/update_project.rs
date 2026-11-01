@@ -10,7 +10,7 @@ use super::*;
 
 const UPDATE_PROJECT: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Project",
-    command_kind: "updateProject",
+    command_kind: contracts::CommandKind::UpdateProject,
     method: contracts::UPDATE_PROJECT_METHOD,
     path: contracts::UPDATE_PROJECT_PATH,
     schema_id: contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,

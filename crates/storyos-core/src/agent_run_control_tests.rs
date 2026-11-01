@@ -1,15 +1,15 @@
 use super::{
-    AgentRunLifecycle, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_steer_agent_run,
+    AgentRunStatus, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_steer_agent_run,
 };
 use crate::TransitionOutcome;
 
 #[test]
 fn steering_of_a_run_that_is_not_terminal_is_retained_without_effect() {
     for lifecycle in [
-        AgentRunLifecycle::Queued,
-        AgentRunLifecycle::Claimed,
-        AgentRunLifecycle::Waiting,
-        AgentRunLifecycle::Paused,
+        AgentRunStatus::Queued,
+        AgentRunStatus::Claimed,
+        AgentRunStatus::Waiting,
+        AgentRunStatus::Paused,
     ] {
         assert_eq!(
             classify_steer_agent_run(lifecycle),
@@ -21,9 +21,9 @@ fn steering_of_a_run_that_is_not_terminal_is_retained_without_effect() {
 #[test]
 fn steering_of_a_terminal_run_conflicts() {
     for lifecycle in [
-        AgentRunLifecycle::Completed,
-        AgentRunLifecycle::Refused,
-        AgentRunLifecycle::Cancelled,
+        AgentRunStatus::Completed,
+        AgentRunStatus::Refused,
+        AgentRunStatus::Cancelled,
     ] {
         assert_eq!(
             classify_steer_agent_run(lifecycle),

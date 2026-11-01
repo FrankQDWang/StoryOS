@@ -10,7 +10,7 @@ use super::*;
 
 const UPDATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Volume",
-    command_kind: "updateVolume",
+    command_kind: contracts::CommandKind::UpdateVolume,
     method: contracts::UPDATE_VOLUME_METHOD,
     path: contracts::UPDATE_VOLUME_PATH,
     schema_id: contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,

@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use storyos_contracts::CommandKind;
 
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateProjectInput, UpdateProjectSettlement,
@@ -31,7 +32,7 @@ impl PostgresProjectReader {
 
 impl ProjectCommand for UpdateProjectInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "updateProject",
+        kind: CommandKind::UpdateProject,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "project_updated",
         replay_effect: ReplayEffect::NoQuery,

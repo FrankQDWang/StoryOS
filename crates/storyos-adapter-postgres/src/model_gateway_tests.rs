@@ -3,6 +3,7 @@ use crate::command_sequence::tests::{
     titled_volume,
 };
 use std::sync::Mutex;
+use storyos_contracts::CommandKind;
 
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
@@ -258,7 +259,10 @@ pub(crate) async fn queued_run(
         &scope,
         &format!("{prefix}1"),
         &UPDATE_PROJECT_ASSISTANCE,
-        &digest("updateProjectAssistance", AVAILABLE_BYTES),
+        &digest(
+            CommandKind::UpdateProjectAssistance.as_str(),
+            AVAILABLE_BYTES,
+        ),
     );
     issue_project_command_challenge(store, &assistance)
         .await
@@ -344,7 +348,7 @@ pub(crate) async fn admit_run_in(
         scope,
         &format!("{prefix}5"),
         &CREATE_AGENT_RUN,
-        &digest("createAgentRun", RUN_BYTES),
+        &digest(CommandKind::CreateAgentRun.as_str(), RUN_BYTES),
     );
     issue_project_command_challenge(store, &run).await.unwrap();
     let call = crate::command_sequence::tests::command_call(

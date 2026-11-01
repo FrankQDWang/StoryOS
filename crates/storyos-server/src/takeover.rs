@@ -9,7 +9,7 @@ use super::*;
 
 const TAKE_OVER_PROJECT_WRITER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Take Over Project Writer",
-    command_kind: "takeOverProjectWriter",
+    command_kind: contracts::CommandKind::TakeOverProjectWriter,
     method: contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
     path: contracts::TAKE_OVER_PROJECT_WRITER_PATH,
     schema_id: contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,

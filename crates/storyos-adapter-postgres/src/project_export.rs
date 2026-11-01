@@ -6,6 +6,7 @@ use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProjectReadError, ProjectScope,
     RefusableCommandError,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectPresence,
     export_project_archive as classify_export,
@@ -44,7 +45,7 @@ pub(crate) struct ArchiveExportFacts {
 
 impl AdmitCommand for ExportProjectArchiveInput {
     const SPEC: AdmitSpec = AdmitSpec {
-        kind: "exportProjectArchive",
+        kind: CommandKind::ExportProjectArchive,
         work_query: ARCHIVE_EXPORT_WORK,
     };
     type Error = ExportProjectArchiveError;

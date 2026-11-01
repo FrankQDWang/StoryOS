@@ -1,6 +1,7 @@
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, UpdateVolumeInput, UpdateVolumeSettlement,
 };
+use storyos_contracts::CommandKind;
 use storyos_core::{
     UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict,
     UpdateVolumeNoEffect, UpdateVolumeRefusal, VolumeJoin, update_volume as classify_update_volume,
@@ -37,7 +38,7 @@ pub(crate) struct LiveVolumes {
 
 impl ProjectCommand for UpdateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
-        kind: "updateVolume",
+        kind: CommandKind::UpdateVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateVolume,
         ))],
