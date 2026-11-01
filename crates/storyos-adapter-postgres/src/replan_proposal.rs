@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -6,18 +5,16 @@ use storyos_application::{
     ReplanProposalSettlement,
 };
 use storyos_contracts::ReplanSourceCondition;
-use storyos_core::{
-    ReplanProposal as CoreReplan, ReplanProposalConflict, ReplanProposalRefusal, replan_proposal,
-};
+use storyos_core::{ReplanProposal as CoreReplan, replan_proposal};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
-    ProfileSequences, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
-    unavailable,
+    ActionOnly, AppliedReceipt, AppliedVariant, Classification, CommandResponse, CommandSpec,
+    CommandWrite, LockedProject, ProfileSequences, ProjectCommand, ReceiptRefs, ReplayEffect,
+    settle_project_command, unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::proposal_decision_compensation::{DecisionHistory, RevisionDecisionCompensation};
@@ -67,8 +64,8 @@ fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &
     }
 }
 
-impl LegacyProjectCommand for ReplanProposalInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for ReplanProposalInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::ReplanProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::ReplanProposal)],
         // The ActionOnly profile writes no Activity record.
@@ -83,18 +80,16 @@ impl LegacyProjectCommand for ReplanProposalInput {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND replan_receipt_id = $3::text::uuid",
         ),
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"replan"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     /// The identity of the new pending Proposal Revision.
     type Applied = String;
     type Plan = ConflictedRevision;
-    type Effect = ProposalReplanned;
-    type NoEffect = Infallible;
-    type Conflict = ReplanProposalConflict;
-    type Refusal = ReplanProposalRefusal;
+    type Settlement = ReplanProposalSettlement;
 
     async fn classify(
         &self,
@@ -189,14 +184,14 @@ impl LegacyProjectCommand for ReplanProposalInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &String, _plan: &ConflictedRevision) -> String {
-        r#"{"transition":"replan"}"#.to_owned()
-    }
-
-    fn applied_receipt_refs(&self, applied: &String, _plan: &ConflictedRevision) -> ReceiptRefs {
-        ReceiptRefs {
-            proposal_revision_ids: vec![applied.clone()],
-            ..ReceiptRefs::default()
+    fn applied_receipt(&self, applied: &String, _plan: &ConflictedRevision) -> AppliedReceipt {
+        AppliedReceipt {
+            variant: Self::SPEC.applied[0],
+            payload: Self::SPEC.receipt_payload.to_owned(),
+            refs: ReceiptRefs {
+                proposal_revision_ids: vec![applied.clone()],
+                ..ReceiptRefs::default()
+            },
         }
     }
 
@@ -208,7 +203,7 @@ impl LegacyProjectCommand for ReplanProposalInput {
         sequence: &ProfileSequences<Self>,
         conflicted: ConflictedRevision,
         resulting_proposal_revision_id: String,
-    ) -> Result<ProposalReplanned, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         // A Resolved Replan matched the Chapter head to the expected revision.
         client
@@ -282,11 +277,14 @@ impl LegacyProjectCommand for ReplanProposalInput {
             )
             .await
             .map_err(unavailable)?;
-        Ok(ProposalReplanned {
-            resulting_proposal_revision_id,
-            preserved_generation: conflicted.generation,
-            preserved_closure: conflicted.closure,
-            state_event_id,
+        Ok(CommandWrite {
+            profile: ProposalReplanned {
+                resulting_proposal_revision_id,
+                preserved_generation: conflicted.generation,
+                preserved_closure: conflicted.closure,
+                state_event_id,
+            },
+            after_authority: None,
         })
     }
 

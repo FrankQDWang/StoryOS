@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use storyos_contracts::CommandKind;
 
 use storyos_application::{
@@ -7,8 +6,7 @@ use storyos_application::{
     ProjectCommandError, ProjectScope, ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 use storyos_core::{
-    CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal, ContinueProposalGeneration,
-    ContinueProposalGenerationRefusal, ProposalGenerationConflict, complete_ready_partial_proposal,
+    CompleteReadyPartialProposal, ContinueProposalGeneration, complete_ready_partial_proposal,
     continue_proposal_generation, hex_sha256,
 };
 use tokio_postgres::Client;
@@ -17,8 +15,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
-    ProfileSequences, ProjectResponse, ReplayEffect, settle_project_command, unavailable,
+    ActionOnly, AppliedVariant, Classification, CommandResponse, CommandSpec, CommandWrite,
+    LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, settle_project_command,
+    unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
@@ -86,8 +85,8 @@ const TRANSITION_REPLAY: ReplayEffect = ReplayEffect::Query(
         AND transition.receipt_id = $3::text::uuid",
 );
 
-impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for CompleteReadyPartialProposalInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::CompleteReadyPartialProposal,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::CompleteReadyPartialProposal,
@@ -95,17 +94,15 @@ impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",
         replay_effect: TRANSITION_REPLAY,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"generation_completed"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = LoadedGeneration;
-    type Effect = ProposalGenerationCompleted;
-    type NoEffect = Infallible;
-    type Conflict = ProposalGenerationConflict;
-    type Refusal = CompleteReadyPartialProposalRefusal;
+    type Settlement = CompleteReadyPartialProposalSettlement;
 
     async fn classify(
         &self,
@@ -134,10 +131,6 @@ impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &(), _plan: &LoadedGeneration) -> String {
-        r#"{"transition":"generation_completed"}"#.to_owned()
-    }
-
     async fn apply(
         &self,
         client: &Client,
@@ -146,7 +139,7 @@ impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
         sequence: &ProfileSequences<Self>,
         loaded: LoadedGeneration,
         _applied: (),
-    ) -> Result<ProposalGenerationCompleted, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let updated = client
             .execute(
@@ -182,12 +175,15 @@ impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
             },
         )
         .await?;
-        Ok(ProposalGenerationCompleted {
-            generation_id: loaded.generation_id,
-            preserved_validation: loaded.validation,
-            preserved_closure: loaded.closure,
-            preserved_operation_resolution: loaded.operation_resolution,
-            generation_event_id: event_id,
+        Ok(CommandWrite {
+            profile: ProposalGenerationCompleted {
+                generation_id: loaded.generation_id,
+                preserved_validation: loaded.validation,
+                preserved_closure: loaded.closure,
+                preserved_operation_resolution: loaded.operation_resolution,
+                generation_event_id: event_id,
+            },
+            after_authority: None,
         })
     }
 
@@ -204,8 +200,8 @@ impl LegacyProjectCommand for CompleteReadyPartialProposalInput {
     }
 }
 
-impl LegacyProjectCommand for ContinueProposalGenerationInput {
-    const SPEC: LegacySpec = LegacySpec {
+impl ProjectCommand for ContinueProposalGenerationInput {
+    const SPEC: CommandSpec = CommandSpec {
         kind: CommandKind::ContinueProposalGeneration,
         applied: &[AppliedVariant::Forward(
             ForwardCommand::ContinueProposalGeneration,
@@ -213,17 +209,15 @@ impl LegacyProjectCommand for ContinueProposalGenerationInput {
         // The ActionOnly profile writes no Activity record.
         activity_kind: "",
         replay_effect: TRANSITION_REPLAY,
+        response: CommandResponse::Project,
+        contention_refusal: None,
+        receipt_payload: r#"{"transition":"generation_started"}"#,
     };
     type Error = ProjectCommandError;
     type Profile = ActionOnly;
-    type Response = ProjectResponse;
-    type ZeroEffect = ();
     type Applied = ();
     type Plan = LoadedGeneration;
-    type Effect = ProposalGenerationStarted;
-    type NoEffect = Infallible;
-    type Conflict = ProposalGenerationConflict;
-    type Refusal = ContinueProposalGenerationRefusal;
+    type Settlement = ContinueProposalGenerationSettlement;
 
     async fn classify(
         &self,
@@ -276,10 +270,6 @@ impl LegacyProjectCommand for ContinueProposalGenerationInput {
         ))
     }
 
-    fn applied_receipt_payload(&self, _applied: &(), _plan: &LoadedGeneration) -> String {
-        r#"{"transition":"generation_started"}"#.to_owned()
-    }
-
     async fn apply(
         &self,
         client: &Client,
@@ -288,7 +278,7 @@ impl LegacyProjectCommand for ContinueProposalGenerationInput {
         sequence: &ProfileSequences<Self>,
         loaded: LoadedGeneration,
         _applied: (),
-    ) -> Result<ProposalGenerationStarted, ProjectCommandError> {
+    ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let resulting_run_id = match loaded.run_status.as_str() {
             "completed" | "refused" | "cancelled" => {
@@ -366,16 +356,19 @@ impl LegacyProjectCommand for ContinueProposalGenerationInput {
             },
         )
         .await?;
-        Ok(ProposalGenerationStarted {
-            prior_generation_id: loaded.generation_id,
-            new_generation_id,
-            prior_generation_state: loaded.generation_state,
-            prior_run_id: loaded.source_run_id,
-            resulting_run_id,
-            preserved_validation: loaded.validation,
-            preserved_closure: loaded.closure,
-            preserved_operation_resolution: loaded.operation_resolution,
-            generation_event_id: event_id,
+        Ok(CommandWrite {
+            profile: ProposalGenerationStarted {
+                prior_generation_id: loaded.generation_id,
+                new_generation_id,
+                prior_generation_state: loaded.generation_state,
+                prior_run_id: loaded.source_run_id,
+                resulting_run_id,
+                preserved_validation: loaded.validation,
+                preserved_closure: loaded.closure,
+                preserved_operation_resolution: loaded.operation_resolution,
+                generation_event_id: event_id,
+            },
+            after_authority: None,
         })
     }
 
