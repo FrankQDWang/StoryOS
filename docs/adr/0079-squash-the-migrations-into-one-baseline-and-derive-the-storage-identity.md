@@ -26,17 +26,16 @@ No database holds data. [ADR 0022](0022-prefer-widely-validated-hosted-infrastru
 
 ### 2. Closed lists as domains
 
-- Eight closed lists are PostgreSQL domains over `text`. Each column that carried the list uses the domain, and the list CHECK constraint of that column goes:
+- Seven closed lists are PostgreSQL domains over `text`. Each column that carried the list uses the domain, and the list CHECK constraint of that column goes:
   - `storyos.command_kind`: `domain_receipts`, `author_command_admissions`, and `author_command_admission_outcome_unknown_observations`;
   - `storyos.event_kind`: `project_activity_event_payloads.event_kind`;
   - `storyos.result_kind`: `domain_receipts.result_kind`;
   - `storyos.receipt_result_kind`: `author_action_entries.receipt_result_kind`;
-  - `storyos.scoped_result_kind`: `project_activity_event_payloads.receipt_result_kind`;
   - `storyos.agent_run_status`: `agent_runs.status`;
   - `storyos.attempt_role`: `model_attempts.attempt_role`;
   - `storyos.action_class`: `author_command_admissions.action_class`.
-- The Proposal kind, the Project lifecycle state, the manifest role, the requirement role, and each check of one fixed value stay plain CHECK constraints.
-- The six other domains hold their live members. The removed command kinds and result kinds of the Refused Edit Draft and of the Project archive are not members, so the `NOT IN` guard of those kinds goes.
+- These are the lists that grow when an operation, an event, a Receipt result, a run state, or a model role is added. Each other closed list, including a state list that two or more columns carry, stays a plain CHECK constraint. The Proposal kind, the Project lifecycle state, the manifest role, the requirement role, and each check of one fixed value stay plain CHECK constraints.
+- The five other domains hold their live members. The removed command kinds and result kinds of the Refused Edit Draft and of the Project archive are not members, so the `NOT IN` guard of those kinds goes.
 - PostgreSQL gives a statement parameter that a domain column receives directly the domain type, and `tokio-postgres` does not bind a Rust string to a domain. Such a parameter has a `::text` cast.
 - The command kind domain and the event kind domain hold the live kinds of the generated Route Catalog. One test of the adapter compares their members with the embedded Route Catalog.
 - The five per-command shape constraints stay, each written once as a flat list of per-command branches with its current name: `domain_receipts_common_shape`, `domain_receipts_result_shape`, `draft_retry_disposition_shape`, `author_command_admissions_command_shape`, and `project_activity_event_payloads_shape`. Each is one `(... OR ...) IS TRUE` expression, which is equal to the earlier chain of `IS TRUE` branches. A branch or a list value of a removed kind goes, because the domain refuses that kind.

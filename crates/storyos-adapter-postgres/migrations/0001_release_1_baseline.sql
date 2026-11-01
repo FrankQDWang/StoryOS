@@ -86,11 +86,6 @@ CREATE DOMAIN storyos.receipt_result_kind AS text CHECK (VALUE IN (
     'proposal_revised'
 ));
 
-CREATE DOMAIN storyos.scoped_result_kind AS text CHECK (VALUE IN (
-    'authoritative_applied',
-    'no_effect'
-));
-
 CREATE DOMAIN storyos.agent_run_status AS text CHECK (VALUE IN (
     'cancelled',
     'claimed',
@@ -1899,10 +1894,11 @@ CREATE TABLE storyos.project_activity_event_payloads (
     project_activity_event_id uuid NOT NULL,
     event_kind storyos.event_kind NOT NULL,
     receipt_id uuid NOT NULL,
-    receipt_result_kind storyos.scoped_result_kind NOT NULL,
+    receipt_result_kind text NOT NULL,
     payload jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT project_activity_event_payloads_project_activity_position_check CHECK (((project_activity_position >= (1)::numeric) AND (project_activity_position <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_activity_event_payloads_receipt_result_kind_check CHECK ((receipt_result_kind = ANY (ARRAY['no_effect'::text, 'authoritative_applied'::text]))),
     CONSTRAINT project_activity_event_payloads_shape CHECK ((
         (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'writer_takeover_applied'::text

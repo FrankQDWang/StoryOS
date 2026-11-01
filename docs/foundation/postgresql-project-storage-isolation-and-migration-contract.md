@@ -512,7 +512,7 @@ At minimum, constraints enforce:
 
 Enums that change compatibility semantics are represented by versioned checked
 text or lookup identities, not PostgreSQL enum types that make staged removal
-or renaming unsafe. The baseline defines eight closed lists once as PostgreSQL
+or renaming unsafe. The baseline defines seven closed lists once as PostgreSQL
 domains over checked text ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). Database checks reject impossible local shapes; aggregate
 logic and transition receipts reject semantic conflicts that cannot be stated
 as row constraints.
