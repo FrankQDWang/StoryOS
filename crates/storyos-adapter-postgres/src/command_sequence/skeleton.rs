@@ -23,7 +23,7 @@ pub(super) trait FirstUse: Sync {
     type Error: CommandError;
     /// The refusal of a serialization failure, a unique violation, or a deadlock of the first use,
     /// including its commit. `None` keeps such a failure a store fault.
-    const CONTENTION_REFUSAL: Option<Self::Error> = None;
+    const CONTENTION_REFUSAL: Option<fn() -> Self::Error> = None;
 
     fn write(
         &self,
@@ -78,7 +78,7 @@ pub(super) async fn consume_challenge<F: FirstUse>(
                 }
             }
             .map_err(|error| match F::CONTENTION_REFUSAL {
-                Some(refusal) if error.sequence_error().is_some_and(contended) => refusal,
+                Some(refusal) if error.sequence_error().is_some_and(contended) => refusal(),
                 Some(_) | None => error,
             })
         }

@@ -15,8 +15,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileSequences,
-    ProjectCommand, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
+    ActionOnly, AppliedVariant, Classification, LegacyProjectCommand, LegacySpec, LockedProject,
+    ProfileSequences, ProjectResponse, ReceiptRefs, ReplayEffect, settle_project_command,
     unavailable,
 };
 use crate::proposal_decision::{decision_classification, decode_decision};
@@ -67,8 +67,8 @@ fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &
     }
 }
 
-impl ProjectCommand for ReplanProposalInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for ReplanProposalInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::ReplanProposal,
         applied: &[AppliedVariant::Forward(ForwardCommand::ReplanProposal)],
         // The ActionOnly profile writes no Activity record.

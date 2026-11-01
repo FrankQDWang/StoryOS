@@ -167,7 +167,7 @@ pub(crate) async fn admit_project_command<C: AdmitCommand>(
                     command_id: replay.ids.command_id.clone(),
                     author_command_admission_id: replay.ids.author_command_admission_id.clone(),
                     work: command.decode_work(replay.effect())?,
-                    response: C::Response::replay(&replay)?,
+                    response: C::Response::RESPONSE.replay(&replay)?,
                 })
             })
             .map_err(|fault| replay_problem(fault).into()),

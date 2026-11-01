@@ -18,8 +18,8 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Admission, AppliedVariant, Classification, CommandSpec, EditorAdmission, LockedProject,
-    ProfileSequences, ProjectCommand, ProjectResponse, ReceiptHeads, ReceiptRefs, ReplayEffect,
+    Admission, AppliedVariant, Classification, EditorAdmission, LegacyProjectCommand, LegacySpec,
+    LockedProject, ProfileSequences, ProjectResponse, ReceiptHeads, ReceiptRefs, ReplayEffect,
     ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::{ForwardCommand, UndoRequest};
@@ -53,8 +53,8 @@ pub(crate) struct UndoLatestAuthorAction {
     pub(crate) input: UndoLatestAuthorActionInput,
 }
 
-impl ProjectCommand for UndoLatestAuthorAction {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for UndoLatestAuthorAction {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::UndoLatestAuthorAction,
         applied: &[
             AppliedVariant::Compensation,

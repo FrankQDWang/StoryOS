@@ -14,8 +14,8 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedVariant, Classification, CommandSpec, CurrentChapterChange, LockedProject,
-    ProjectCommand, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
+    AppliedVariant, Classification, CurrentChapterChange, LegacyProjectCommand, LegacySpec,
+    LockedProject, ProjectResponse, ReplayEffect, Structural, StructureIdentity, StructureWrite,
     WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
@@ -32,8 +32,8 @@ impl PostgresProjectReader {
     }
 }
 
-impl ProjectCommand for DeleteVolumeInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for DeleteVolumeInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::DeleteVolume,
         applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteVolume,

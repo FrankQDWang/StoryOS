@@ -634,11 +634,11 @@ struct KeptState {
     durable: Vec<serde_json::Value>,
 }
 
-async fn kept_state(
+async fn kept_state<E>(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
-    spec: &CommandSpec,
+    spec: &CommandSpec<E>,
 ) -> KeptState {
     let row = admin
         .query_one(

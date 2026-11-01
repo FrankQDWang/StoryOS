@@ -16,8 +16,8 @@ use tokio_postgres::Client;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
-    CommandSpec, LockedProject, ProjectActionClass, ProjectCommand, ProjectResponse, ReceiptHeads,
-    ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
+    LegacyProjectCommand, LegacySpec, LockedProject, ProjectActionClass, ProjectResponse,
+    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -77,8 +77,8 @@ impl AgentRunReadStore for PostgresProjectReader {
     }
 }
 
-impl ProjectCommand for CreateAgentRunInput {
-    const SPEC: CommandSpec = CommandSpec {
+impl LegacyProjectCommand for CreateAgentRunInput {
+    const SPEC: LegacySpec = LegacySpec {
         kind: CommandKind::CreateAgentRun,
         applied: &[AppliedVariant::NoAuthorAction],
         activity_kind: "agent_run_created",
@@ -99,9 +99,9 @@ impl ProjectCommand for CreateAgentRunInput {
     type NoEffect = Infallible;
     type Conflict = Infallible;
     type Refusal = Infallible;
-    const CONTENTION_REFUSAL: Option<CreateAgentRunCommandError> = Some(
-        RefusableCommandError::RefusedBeforeAdmission(CreateAgentRunRefusal::ConversationBusy),
-    );
+    const CONTENTION_REFUSAL: Option<fn() -> CreateAgentRunCommandError> = Some(|| {
+        RefusableCommandError::RefusedBeforeAdmission(CreateAgentRunRefusal::ConversationBusy)
+    });
 
     async fn classify(
         &self,
