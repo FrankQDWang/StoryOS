@@ -21,6 +21,10 @@ mod create_project_challenge_tests;
 mod postgres_test_lock_tests;
 
 #[cfg(test)]
+#[path = "persistence_catalog_tests.rs"]
+mod persistence_catalog_tests;
+
+#[cfg(test)]
 #[path = "create_project_tests.rs"]
 mod create_project_tests;
 
