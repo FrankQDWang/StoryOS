@@ -197,7 +197,7 @@ pub fn require_delivered_families(
 }
 
 /// The tables that each Project Export Archive must carry.
-pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
+pub const PROJECT_EXPORT_TABLES: [&str; 58] = [
     "acceptance_receipts",
     "acceptance_refusals",
     "agent_runs",
@@ -216,12 +216,6 @@ pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
     "command_idempotency",
     "conversation_memory_settings",
     "domain_receipts",
-    "draft_artifact_revisions",
-    "draft_artifacts",
-    "draft_close_events",
-    "draft_lifecycle_events",
-    "draft_reopen_events",
-    "draft_reopen_receipts",
     "editor_input_fences",
     "editor_session_base_snapshots",
     "editor_sessions",
@@ -234,14 +228,12 @@ pub const PROJECT_EXPORT_TABLES: [&str; 66] = [
     "project_activity_event_payloads",
     "project_activity_events",
     "project_agents",
-    "project_archival_decisions",
     "project_conversations",
     "project_destination_grants",
     "project_export_operations",
     "project_policy_revisions",
     "project_writer_generations",
     "projects",
-    "proposal_anchors",
     "proposal_generation_heads",
     "proposal_generation_transitions",
     "proposal_generations",

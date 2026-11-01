@@ -15,10 +15,10 @@ Release 1 contract:
 does not match the closed request schema of `applyAuthorEdit`. The Server
 answers HTTP 422 `invalid_request_shape` before Admission and writes nothing.
 
-The Release 1 baseline keeps the dormant Draft tables with a `CHECK (false)`
-guard on `storyos.draft_artifacts`. The command kind and result kind domains
-refuse a Domain Receipt of a Draft command or result. The tables stay in the
-Project archive format.
+The Release 1 baseline has no Draft table
+([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)).
+The command kind and result kind domains refuse a Domain Receipt of a Draft
+command or result. The Project archive format has no Draft table family.
 
 These rules of the earlier profile stay:
 

@@ -49,14 +49,21 @@ No database holds data. [ADR 0022](0022-prefer-widely-validated-hosted-infrastru
 
 ### 4. The Project archive carries no removed feature
 
-- The baseline holds only tables that a live command writes or a live query reads. The tables of the removed Draft, inline Proposal anchor, and Project archival features go, with their archive canonical entries, the Draft withholding code of the archive build, and the recovery drill expectations that named them.
-- The historical Event `storyos.event.project-archival-changed.v1` of ADR 0078 goes from the operation registry, with the catalog rule exception that accepted it.
+- The baseline holds only tables that a live command writes or a live query reads. These eight tables go, with their indexes, policies, grants, triggers, and foreign keys:
+  - the Refused Edit Draft of ADR 0073: `draft_artifacts`, `draft_artifact_revisions`, `draft_lifecycle_events`, `draft_close_events`, `draft_reopen_events`, and `draft_reopen_receipts`;
+  - the inline Proposal Anchor of ADR 0073: `proposal_anchors`;
+  - the Project archival of ADR 0078: `project_archival_decisions`.
+- The functions that only these tables or the removed Draft commands used go: `require_refused_draft_settlement`, `require_draft_expansion_settlement`, `require_draft_close_settlement`, `require_draft_reopen_settlement`, and `keep_refused_draft_revision_immutable`. The Undo check of an edited Proposal in `require_draft_retry_settlement` is live, so it stays as `require_proposal_compensation_identity` with the trigger `proposal_compensation_receipt_complete`. `require_author_edit_receipt_relation` loses its archival decision count and its `archiveProject` and Draft branches.
+- The live tables keep their columns. Their constraints now refuse each Draft value that the removed triggers refused: the Receipt common shape has no Draft retry branch and no Draft reopen branch, `draft_retry_disposition_shape` requires an empty `source_draft_disposition`, and `proposal_source_shape` requires a run source. The foreign key of `proposals` to `draft_artifact_revisions` and the unique key `domain_receipts_draft_source_key` go. The Receipt result shape no longer accepts the removed reason `archived_project`.
+- The Project Export Archive carries no table of a removed feature. The required export table list holds 58 tables, the archive build writes 68 canonical entries, and the Draft withholding code of the archive build goes. The root of a new archive records no known purged gap. The recovery drills named no removed table, so their expectations do not change.
+- The historical Event `storyos.event.project-archival-changed.v1` of ADR 0078 goes from the operation registry, with the catalog rule exception that accepted it. The event kind domain does not hold `project_archival_changed`.
 
 ## Superseded parts
 
 - [ADR 0020](0020-own-release-1-storage-activation-outside-the-runtime.md): "embeds the exact catalogued SQL set and checksums". The source set now comes from the migrations directory.
 - [ADR 0070](0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md): "The migration digest check of the PostgreSQL adapter build script is the proof of the persistence catalog." The generated catalog drift test is now that proof.
 - [ADR 0074](0074-generate-the-route-catalog-from-the-operation-registry.md): "the persistence catalog is a hand-kept file".
+- [ADR 0073](0073-remove-the-refused-edit-draft-and-the-inline-proposal.md): the dormant Draft and Anchor tables, with their functions and triggers, stay in the storage and in the Project archive format. No database holds their rows, so they go.
 - [ADR 0078](0078-remove-the-archive-project-command-and-the-archived-project-state.md): the stored archival decisions and the historical Event stay as history. No database holds that history, so they go.
 - [PostgreSQL Project Storage Isolation and Migration Contract](../foundation/postgresql-project-storage-isolation-and-migration-contract.md): "The Release 1 persistence catalog is the sole exhaustive authority for the membership and order of that set", and the clause on an unlisted SQL file.
 
