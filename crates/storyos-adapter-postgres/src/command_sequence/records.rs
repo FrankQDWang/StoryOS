@@ -32,10 +32,10 @@ pub(super) async fn insert_receipt(
                 artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload,
                 created_at)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $11, $6, $7::text::uuid,
+                     $5::text::uuid, $11::text, $6, $7::text::uuid,
                      'author_command_admission', $12::text[]::uuid[], $13::text[]::uuid[],
                      $14::text[]::uuid[], $16::text[]::uuid[], $15::text[]::uuid[],
-                     $10::text[]::uuid[], '{}'::text[], '{}'::text[], $17::text[], $8,
+                     $10::text[]::uuid[], '{}'::text[], '{}'::text[], $17::text[], $8::text,
                      $9::text::jsonb, clock_timestamp())
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -128,7 +128,7 @@ pub(super) async fn insert_activity_payload(
                 project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
                 payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     $5, $6::text::uuid, $7, $8::text::jsonb)",
+                     $5::text, $6::text::uuid, $7::text, $8::text::jsonb)",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),

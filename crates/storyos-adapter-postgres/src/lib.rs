@@ -21,6 +21,10 @@ mod create_project_challenge_tests;
 mod postgres_test_lock_tests;
 
 #[cfg(test)]
+#[path = "closed_list_domain_tests.rs"]
+mod closed_list_domain_tests;
+
+#[cfg(test)]
 #[path = "persistence_catalog_tests.rs"]
 mod persistence_catalog_tests;
 
