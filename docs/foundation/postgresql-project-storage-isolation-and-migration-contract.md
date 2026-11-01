@@ -173,10 +173,11 @@ only `content_unchanged`. Takeover `no_effect` reason is only
 `writer_takeover_applied` or `writer_takeover_compare_failed`.
 
 Takeover Admission omits manuscript columns as SQL NULL. `MATCH FULL` cannot
-keep the ApplyAuthorEdit revision foreign key on those mixed-null columns.
-`0007` drops that foreign key. ApplyAuthorEdit still checks the same-scope
-authoritative revision at insert. Bootstrap `RESET ROLE` lets the superuser
-validate new `MATCH FULL` keys on FORCE RLS tables when GUC values are unset.
+keep the ApplyAuthorEdit revision foreign key on those mixed-null columns, so
+the baseline has no such foreign key. ApplyAuthorEdit still checks the
+same-scope authoritative revision at insert. Where the baseline adds a foreign
+key to a FORCE RLS table after that table exists, it uses `RESET ROLE`, so that
+the superuser validates the key when the GUC values are unset.
 
 ### 0.4 Empty Project create and nullable current Chapter
 
@@ -511,7 +512,8 @@ At minimum, constraints enforce:
 
 Enums that change compatibility semantics are represented by versioned checked
 text or lookup identities, not PostgreSQL enum types that make staged removal
-or renaming unsafe. Database checks reject impossible local shapes; aggregate
+or renaming unsafe. The baseline defines eight closed lists once as PostgreSQL
+domains over checked text ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md)). Database checks reject impossible local shapes; aggregate
 logic and transition receipts reject semantic conflicts that cannot be stated
 as row constraints.
 

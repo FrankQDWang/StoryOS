@@ -20,14 +20,26 @@ No database holds data. [ADR 0022](0022-prefer-widely-validated-hosted-infrastru
 
 - The migrations directory holds `0000_roles.sql`, unchanged, and `0001_release_1_baseline.sql`. The baseline is the current schema with each table, function, policy, and trigger defined once. The next forward migration is `0002`.
 - The build script lists the migrations directory, sorts the files by name, computes the LF-normalized SHA-256 of each file, and embeds each file. The migration chain digest is the SHA-256 of the ordered path and checksum pairs. The catalog identifier is the constant `storyos.persistence.release-1`. The ledger keeps its three tables: one `schema_migrations` row, four `migration_phases` rows from constants of the adapter, and one `migration_phase_checksums` row for each embedded file.
+- The faulted rollback of the project-scope script injects its fault after the first table of the baseline, inside the one bootstrap transaction.
 - The activation state machine of ADR 0020 does not change. `storyos-storage` activates an empty installation or accepts an exact already-active identity. No upgrade edge exists.
 - The rule for the next squash: while no database that holds data exists, the coordinator can squash the baseline again at each Stage release, and a ticket can edit the baseline file directly. When the first database that holds data exists, the baseline freezes, and each change is one forward migration.
 
 ### 2. Closed lists as domains
 
-- Eight closed lists are PostgreSQL domains: command kind, event kind, result kind, Receipt result kind, scoped result kind, Agent Run status, attempt role, and action class. The rule: a list that two or more columns carry, or that has five or more members. A list that one column carries with fewer than five members stays a plain CHECK constraint.
+- Eight closed lists are PostgreSQL domains over `text`. Each column that carried the list uses the domain, and the list CHECK constraint of that column goes:
+  - `storyos.command_kind`: `domain_receipts`, `author_command_admissions`, and `author_command_admission_outcome_unknown_observations`;
+  - `storyos.event_kind`: `project_activity_event_payloads.event_kind`;
+  - `storyos.result_kind`: `domain_receipts.result_kind`;
+  - `storyos.receipt_result_kind`: `author_action_entries.receipt_result_kind`;
+  - `storyos.scoped_result_kind`: `project_activity_event_payloads.receipt_result_kind`;
+  - `storyos.agent_run_status`: `agent_runs.status`;
+  - `storyos.attempt_role`: `model_attempts.attempt_role`;
+  - `storyos.action_class`: `author_command_admissions.action_class`.
+- The Proposal kind, the Project lifecycle state, the manifest role, the requirement role, and each check of one fixed value stay plain CHECK constraints.
+- The six other domains hold their live members. The removed command kinds and result kinds of the Refused Edit Draft and of the Project archive are not members, so the `NOT IN` guard of those kinds goes.
+- PostgreSQL gives a statement parameter that a domain column receives directly the domain type, and `tokio-postgres` does not bind a Rust string to a domain. Such a parameter has a `::text` cast.
 - The command kind domain and the event kind domain hold the live kinds of the generated Route Catalog. One test of the adapter compares their members with the embedded Route Catalog.
-- The five per-command shape constraints stay, each written once as a flat list of per-command branches with its current name.
+- The five per-command shape constraints stay, each written once as a flat list of per-command branches with its current name: `domain_receipts_common_shape`, `domain_receipts_result_shape`, `draft_retry_disposition_shape`, `author_command_admissions_command_shape`, and `project_activity_event_payloads_shape`. Each is one `(... OR ...) IS TRUE` expression, which is equal to the earlier chain of `IS TRUE` branches. A branch or a list value of a removed kind goes, because the domain refuses that kind.
 - No lookup table and no PostgreSQL enum type. A domain keeps CHECK semantics, so a damaged row written under `session_replication_role = replica` still gets a refusal. The storage contract already permits checked text.
 
 ### 3. Generated persistence catalog
