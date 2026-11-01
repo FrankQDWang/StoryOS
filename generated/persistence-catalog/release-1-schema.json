@@ -1155,7 +1155,7 @@
       },
       "triggers": {
         "author_command_admissions_create_project_challenge": "CREATE TRIGGER author_command_admissions_create_project_challenge BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW EXECUTE FUNCTION storyos.require_create_project_challenge_admission()",
-        "author_command_admissions_writer_generation": "CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN ((((new.action_class)::text <> 'agent_run_control'::text) AND ((new.command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'archiveProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission()"
+        "author_command_admissions_writer_generation": "CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN ((((new.action_class)::text <> 'agent_run_control'::text) AND ((new.command_kind)::text <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission()"
       }
     },
     "authoritative_commits": {
