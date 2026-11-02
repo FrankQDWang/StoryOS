@@ -34,10 +34,6 @@ pub const GET_PROPOSAL_PATH: &str = GET_PROPOSAL.path;
 pub const GET_PROPOSAL_METHOD: &str = GET_PROPOSAL.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct GetProposalRequest {}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProposalSourceInspect {
     AgentRunDecision { run_id: String, decision_id: String },

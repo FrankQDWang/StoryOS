@@ -3,8 +3,8 @@
 use serde_json::{Value, json};
 
 use super::Owner;
-use crate::ProjectActivityKind;
 use crate::release1::ACTIVITY_PROFILE;
+use crate::release1_project_activity::ProjectActivityKind;
 
 /// One catalog Event for each Event schema of each Project Activity kind that the code can persist.
 pub(super) fn catalog_events() -> impl Iterator<Item = Value> {

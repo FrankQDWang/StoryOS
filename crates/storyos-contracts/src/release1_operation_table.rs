@@ -369,3 +369,8 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &export_rows::GET_EXPORT_OPERATION_ROW,
     &export_rows::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_ROW,
 ];
+
+/// The registered operations of the table, in the declared order.
+pub(super) fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
+    OPERATION_TABLE.iter().map(|row| &row.operation)
+}

@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, UUID,
     raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_agent_run_control::{
     CANCEL_AGENT_RUN, CancelAgentRunConflictReason, CancelAgentRunEffect, CancelAgentRunInput,
     CancelAgentRunNoEffectReason, CancelAgentRunRequest, CancelAgentRunResponse, PAUSE_AGENT_RUN,
@@ -15,6 +14,7 @@ use crate::release1_agent_run_control::{
     SteerAgentRunEffect, SteerAgentRunInput, SteerAgentRunRequest, SteerAgentRunResponse,
 };
 use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 
 pub(super) const STEER_AGENT_RUN_ROW: OperationRow = OperationRow {

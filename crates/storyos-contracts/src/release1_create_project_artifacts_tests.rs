@@ -69,11 +69,11 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
     let request_schema: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH],
+        &generated["generated/json-schema/storyos-public-release-1/create-project-challenge-request.schema.json"],
     )
     .expect("prospective Project challenge request schema must be JSON");
     let response_schema: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH],
+        &generated["generated/json-schema/storyos-public-release-1/create-project-challenge-response.schema.json"],
     )
     .expect("prospective Project challenge response schema must be JSON");
     let request_validator = jsonschema::options()
@@ -82,7 +82,7 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         .build(&request_schema)
         .expect("prospective Project challenge request schema must compile");
     let valid_request = serde_json::json!({
-        "command_schema": crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
+        "command_schema": crate::release1_create_project::CREATE_PROJECT_REQUEST_SCHEMA_ID,
         "create_project_input": {
             "title": format!("{}a", "界".repeat(341)),
             "client_contract_revision": "storyos.web-client.release-1.v3",
@@ -131,12 +131,14 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         .build(&response_schema)
         .expect("prospective Project challenge response schema must compile");
     let positive: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_create_project_artifacts::CHALLENGE_FIXTURE_PATH],
+        &generated["generated/golden-wire/storyos-public-release-1/create-project-challenge.json"],
     )
     .expect("positive challenge fixture must be JSON");
     assert!(response_validator.is_valid(&positive));
-    serde_json::from_value::<crate::CreateProjectChallengeResponse>(positive.clone())
-        .expect("positive challenge fixture must match the Rust response contract");
+    serde_json::from_value::<crate::release1_create_project::CreateProjectChallengeResponse>(
+        positive.clone(),
+    )
+    .expect("positive challenge fixture must match the Rust response contract");
     assert_each_present_field_is_required(&response_validator, &positive, "");
     assert_each_present_field_is_required(
         &response_validator,

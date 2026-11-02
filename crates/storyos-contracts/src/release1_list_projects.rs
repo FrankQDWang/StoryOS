@@ -30,7 +30,6 @@ pub(super) const LIST_PROJECTS: QueryOperation = QueryOperation {
     fixture: "storyos.golden.listProjects.positive.v1",
 };
 
-pub const LIST_PROJECTS_PATH: &str = LIST_PROJECTS.path;
 pub const LIST_PROJECTS_METHOD: &str = LIST_PROJECTS.method.as_str();
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

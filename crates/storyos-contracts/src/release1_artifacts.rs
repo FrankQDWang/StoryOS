@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use serde_json::{Value, json};
@@ -18,12 +19,15 @@ use crate::release1::{
     protocol_profile,
 };
 use crate::release1_operation_registry::{
-    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
-    RegisteredOperation,
+    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RegisteredOperation,
 };
-use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
+use crate::release1_operation_table::registered_operations;
+use crate::release1_route_catalog::ROUTE_CATALOG_PATH;
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
+const GENERATED_DIRECTORY: &str = "generated";
+/// The PostgreSQL adapter writes this directory, so the check does not own its files.
+const PERSISTENCE_CATALOG_DIRECTORY: &str = "generated/persistence-catalog";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
 const TYPESCRIPT_CLIENT_PATH: &str = "generated/typescript/storyos-public-release-1/client.mjs";
 const PROJECT_ACTIVITY_MODULE_PATH: &str =
@@ -41,51 +45,24 @@ const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
-#[path = "release1_fixture_corpus.rs"]
-mod release1_fixture_corpus;
-use release1_fixture_corpus::generated_fixture_files;
-
 #[path = "release1_typescript_client.rs"]
 mod release1_typescript_client;
 
-#[cfg(test)]
 #[path = "release1_operation_writer.rs"]
 mod release1_operation_writer;
+use release1_operation_writer::{fixture_files, table_source};
 
-/// The operations of one operation source, and the artifact parts that the source writes for them.
+/// The operations of the table, and the artifact parts that the table writer writes for them.
 struct ArtifactSource {
     operations: Vec<&'static RegisteredOperation>,
     openapi_methods: Vec<OpenApiMethod>,
     schemas: Vec<GeneratedSchema>,
     typescript_types: Vec<String>,
     route_catalog: Vec<u8>,
-    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
-}
-
-/// The artifact parts that the 39 artifacts modules of the Operation Registry write.
-fn module_source() -> ArtifactSource {
-    ArtifactSource {
-        operations: registered_operations().collect(),
-        openapi_methods: RELEASE1_OPERATIONS
-            .iter()
-            .flat_map(|artifacts| (artifacts.openapi)())
-            .collect(),
-        schemas: RELEASE1_OPERATIONS
-            .iter()
-            .flat_map(|artifacts| (artifacts.schemas)())
-            .collect(),
-        typescript_types: RELEASE1_OPERATIONS
-            .iter()
-            .map(|artifacts| (artifacts.typescript_types)())
-            .collect(),
-        route_catalog: route_catalog_bytes(),
-        fixtures: generated_fixture_files,
-    }
 }
 
 struct Release1ArtifactAssembly {
     route_catalog: Vec<u8>,
-    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
     openapi: Vec<u8>,
     schemas: Vec<GeneratedSchema>,
     typescript_client: Vec<u8>,
@@ -94,15 +71,14 @@ struct Release1ArtifactAssembly {
     profile: Release1ProtocolProfile,
 }
 
-fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembly {
+fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let ArtifactSource {
         operations,
         openapi_methods,
         schemas,
         typescript_types,
         route_catalog,
-        fixtures,
-    } = source;
+    } = table_source();
     let openapi = openapi_bytes(openapi_methods, &operations);
     let typescript_client = typescript_client_bytes(&operations);
     let typescript_declaration = typescript_declaration_bytes(typescript_types, &operations);
@@ -124,14 +100,13 @@ fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembl
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
-    let fixture_corpus = fixtures(&profile)
+    let fixture_corpus = fixture_files(&profile)
         .into_iter()
         .flat_map(|(_, bytes)| bytes)
         .collect::<Vec<_>>();
     profile.release_identity.fixture_corpus_digest = sha256_prefixed(fixture_corpus);
     Release1ArtifactAssembly {
         route_catalog,
-        fixtures,
         openapi,
         schemas,
         typescript_client,
@@ -144,7 +119,7 @@ fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembl
 /// Build the one active Release 1 protocol profile from the Rust contract source.
 pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     static PROFILE: LazyLock<Release1ProtocolProfile> =
-        LazyLock::new(|| release1_artifact_assembly(module_source()).profile);
+        LazyLock::new(|| release1_artifact_assembly().profile);
     PROFILE.clone()
 }
 
@@ -163,6 +138,7 @@ pub fn write_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 /// Fail when any checked-in generated artifact differs from Rust-source generation.
 pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
     check_contract_graph(&contract_graph_bytes())?;
+    let mut emitted = BTreeSet::new();
     for (relative_path, expected) in generated_files() {
         let path = repo_root.join(relative_path);
         let actual = match fs::read(&path) {
@@ -175,33 +151,63 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
         if actual != expected {
             return Err(stale_artifact(&path));
         }
+        emitted.insert(path);
     }
-    Ok(())
+    let stray = files_under(
+        &repo_root.join(GENERATED_DIRECTORY),
+        &repo_root.join(PERSISTENCE_CATALOG_DIRECTORY),
+    )?
+    .into_iter()
+    .find(|path| !emitted.contains(path));
+    match stray {
+        Some(path) => Err(stray_artifact(&path)),
+        None => Ok(()),
+    }
+}
+
+/// The files under a directory, in path order, without the files under the excluded directory.
+fn files_under(directory: &Path, excluded: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut directories = vec![directory.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        let entries = fs::read_dir(&directory).map_err(|source| path_error(&directory, source))?;
+        for entry in entries {
+            let entry = entry.map_err(|source| path_error(&directory, source))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|source| path_error(&path, source))?;
+            if file_type.is_dir() {
+                if path != excluded {
+                    directories.push(path);
+                }
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    files.sort_unstable();
+    Ok(files)
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
-    generated_files_of(module_source())
-}
-
-fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
     let Release1ArtifactAssembly {
         route_catalog,
-        fixtures,
         openapi,
         schemas,
         typescript_client,
         typescript_declaration,
         release_profile_declaration,
         profile,
-    } = release1_artifact_assembly(source);
+    } = release1_artifact_assembly();
     let profile_json =
         serde_json::to_string_pretty(&profile).expect("protocol profile should serialize");
     let profile_module = format!("// @generated by storyos-contracts; do not edit.\nexport const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({profile_json});\n").into_bytes();
     let mut generated = vec![
         (
             "generated/json-schema/storyos-web-assets/manifest.schema.json",
-            json_bytes(&schema_value::<crate::WebAssetManifest>(
-                crate::WEB_ASSET_SCHEMA,
+            json_bytes(&schema_value::<crate::web_assets::WebAssetManifest>(
+                crate::web_assets::WEB_ASSET_SCHEMA,
                 "StoryOS Web Asset Manifest",
             )),
         ),
@@ -216,7 +222,7 @@ fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
         (TYPESCRIPT_CLIENT_PATH, typescript_client),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration),
         (PROJECT_ACTIVITY_MODULE_PATH, {
-            let events = crate::ProjectActivityKind::ALL
+            let events = crate::release1_project_activity::ProjectActivityKind::ALL
                 .iter()
                 .map(|kind| (kind.as_str(), kind.event_schemas()))
                 .collect::<std::collections::BTreeMap<_, _>>();
@@ -236,7 +242,7 @@ fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
         ),
         (ROUTE_CATALOG_PATH, route_catalog),
     ]);
-    generated.extend(fixtures(&profile));
+    generated.extend(fixture_files(&profile));
     generated
 }
 
@@ -249,6 +255,16 @@ fn stale_artifact(path: &Path) -> io::Error {
         io::ErrorKind::InvalidData,
         format!(
             "{} is missing or stale; run `make generate-contracts`",
+            path.display()
+        ),
+    )
+}
+
+fn stray_artifact(path: &Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "{} is stale: the generator does not emit it; remove the file",
             path.display()
         ),
     )
@@ -296,12 +312,6 @@ fn contract_graph_bytes_of(operations: &[&RegisteredOperation]) -> Vec<u8> {
         },
     }))
     .expect("the contract graph contains only serializable values")
-}
-
-fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
-    RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| artifacts.operations)
 }
 
 fn operation_graph(

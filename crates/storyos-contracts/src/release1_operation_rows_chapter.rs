@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_create_chapter::{
     CREATE_CHAPTER, CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput,
     CreateChapterPlacement, CreateChapterRefusalReason, CreateChapterRequest,
@@ -18,6 +17,7 @@ use crate::release1_delete_chapter::{
     DeleteChapterResponse,
 };
 use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_update_chapter::{
     UPDATE_CHAPTER, UpdateChapterConflictReason, UpdateChapterEffect, UpdateChapterInput,
