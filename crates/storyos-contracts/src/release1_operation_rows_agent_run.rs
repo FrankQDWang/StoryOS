@@ -141,20 +141,12 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
     .client(ClientOverride::OptionalQueryParameter("model_attempt_id")),
     summary: "Inspect one durable AgentRun status",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::typed(
-            "agent-run-request",
-            raw_schema::<GetAgentRunRequest>,
-            "StoryOS Agent Run Request",
-            GET_AGENT_RUN_REQUEST,
-        ),
-        SchemaSource::typed(
-            "agent-run-response",
-            raw_schema::<GetAgentRunResponse>,
-            "StoryOS Agent Run Response",
-            GET_AGENT_RUN_RESPONSE,
-        ),
-    )
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "agent-run-response",
+        raw_schema::<GetAgentRunResponse>,
+        "StoryOS Agent Run Response",
+        GET_AGENT_RUN_RESPONSE,
+    ))
     .query_value(QueryValue::Uuid),
     typescript: &[
         AgentRunStatus::decl,
@@ -361,8 +353,6 @@ const CREATE_AGENT_RUN_RESPONSE: &[Patch] = &[
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
-
-const GET_AGENT_RUN_REQUEST: &[Patch] = &[Patch(UUID, &["/properties/model_attempt_id"])];
 
 const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
     Patch(

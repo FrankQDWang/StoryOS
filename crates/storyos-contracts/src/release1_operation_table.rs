@@ -115,7 +115,8 @@ impl Headers {
 
 /// The request and response schemas of an operation, and the wire values that only a schema gives.
 pub(super) struct SchemaSources {
-    pub(super) request: SchemaSource,
+    /// The schema of the request body. A GET operation has no request body and no request schema.
+    pub(super) request: Option<SchemaSource>,
     pub(super) response: SchemaSource,
     /// The schema of the optional query parameter that the client override names.
     pub(super) query_value: QueryValue,
@@ -124,6 +125,15 @@ pub(super) struct SchemaSources {
 
 impl SchemaSources {
     pub(super) const fn new(request: SchemaSource, response: SchemaSource) -> Self {
+        Self::of(Some(request), response)
+    }
+
+    /// The schemas of a GET operation: only the response has a schema.
+    pub(super) const fn get(response: SchemaSource) -> Self {
+        Self::of(None, response)
+    }
+
+    const fn of(request: Option<SchemaSource>, response: SchemaSource) -> Self {
         Self {
             request,
             response,
@@ -176,10 +186,6 @@ pub(super) enum SchemaBody {
         title: &'static str,
         patches: &'static [Patch],
     },
-    /// A request without parameters.
-    NoParameters { title: &'static str },
-    /// The path parameters of the operation, each a UUID string.
-    PathParameters { title: Option<&'static str> },
     /// A hand-written JSON Schema without its `$id` and `title`.
     Json {
         title: &'static str,
@@ -201,27 +207,6 @@ impl SchemaSource {
                 title,
                 patches,
             },
-        }
-    }
-
-    pub(super) const fn no_parameters(file: &'static str, title: &'static str) -> Self {
-        Self {
-            file,
-            body: SchemaBody::NoParameters { title },
-        }
-    }
-
-    pub(super) const fn path_parameters(file: &'static str) -> Self {
-        Self {
-            file,
-            body: SchemaBody::PathParameters { title: None },
-        }
-    }
-
-    pub(super) const fn titled_path_parameters(file: &'static str, title: &'static str) -> Self {
-        Self {
-            file,
-            body: SchemaBody::PathParameters { title: Some(title) },
         }
     }
 

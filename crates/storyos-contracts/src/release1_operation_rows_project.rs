@@ -32,18 +32,12 @@ pub(super) const GET_PROTOCOL_PROFILE_ROW: OperationRow = OperationRow {
     .client(ClientOverride::ResponseType("Release1ProtocolProfile")),
     summary: "Discover the active StoryOS Release 1 protocol profile",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::no_parameters(
-            "protocol-profile-request",
-            "StoryOS Release 1 Protocol Profile Request",
-        ),
-        SchemaSource::typed(
-            "protocol-profile-response",
-            raw_schema::<Release1ProtocolProfile>,
-            "StoryOS Release 1 Protocol Profile",
-            NO_PATCHES,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "protocol-profile-response",
+        raw_schema::<Release1ProtocolProfile>,
+        "StoryOS Release 1 Protocol Profile",
+        NO_PATCHES,
+    )),
     typescript: &[
         Release1CompatibilityIdentity::decl,
         Release1ProtocolProfile::decl,
@@ -243,15 +237,12 @@ pub(super) const LIST_PROJECTS_ROW: OperationRow = OperationRow {
     ),
     summary: "List Projects owned by the current User",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::no_parameters("project-list-request", "StoryOS Project List Request"),
-        SchemaSource::typed(
-            "project-list-response",
-            raw_schema::<ListProjectsResponse>,
-            "StoryOS Project List Response",
-            LIST_PROJECTS_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "project-list-response",
+        raw_schema::<ListProjectsResponse>,
+        "StoryOS Project List Response",
+        LIST_PROJECTS_RESPONSE,
+    )),
     typescript: &[ProjectListItem::decl, ListProjectsResponse::decl],
     fixture: Fixture::Json(
         r#"{
@@ -297,15 +288,12 @@ pub(super) const GET_PROJECT_ROW: OperationRow = OperationRow {
     ),
     summary: "Read one controlled StoryOS Project",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::path_parameters("project-request"),
-        SchemaSource::typed(
-            "project-response",
-            raw_schema::<GetProjectResponse>,
-            "StoryOS Project Query Response",
-            NO_PATCHES,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "project-response",
+        raw_schema::<GetProjectResponse>,
+        "StoryOS Project Query Response",
+        NO_PATCHES,
+    )),
     typescript: &[GetProjectResponse::decl],
     fixture: Fixture::Json(
         r#"{

@@ -243,15 +243,12 @@ pub(super) const GET_PROPOSAL_ROW: OperationRow = OperationRow {
     ),
     summary: "Inspect one current Proposal",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::titled_path_parameters("proposal-request", "StoryOS Proposal Request"),
-        SchemaSource::typed(
-            "proposal-response",
-            raw_schema::<GetProposalResponse>,
-            "StoryOS Proposal Response",
-            GET_PROPOSAL_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "proposal-response",
+        raw_schema::<GetProposalResponse>,
+        "StoryOS Proposal Response",
+        GET_PROPOSAL_RESPONSE,
+    )),
     typescript: &[
         ProposalSourceInspect::decl,
         ProposalSourceConditionInspect::decl,
@@ -333,18 +330,12 @@ pub(super) const LIST_CHAPTER_OPEN_PROPOSALS_ROW: OperationRow = OperationRow {
     ),
     summary: "List the open Proposals of one Chapter",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::titled_path_parameters(
-            "chapter-open-proposals-request",
-            "StoryOS Chapter Open Proposals Request",
-        ),
-        SchemaSource::typed(
-            "chapter-open-proposals-response",
-            raw_schema::<ListChapterOpenProposalsResponse>,
-            "StoryOS Chapter Open Proposals Response",
-            LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "chapter-open-proposals-response",
+        raw_schema::<ListChapterOpenProposalsResponse>,
+        "StoryOS Chapter Open Proposals Response",
+        LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE,
+    )),
     typescript: &[
         OpenProposalSource::decl,
         OpenProposalEntry::decl,

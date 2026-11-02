@@ -38,15 +38,12 @@ pub(super) const GET_MANUSCRIPT_TREE_ROW: OperationRow = OperationRow {
     ),
     summary: "Read the ordered canonical manuscript tree",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::path_parameters("manuscript-tree-request"),
-        SchemaSource::typed(
-            "manuscript-tree-response",
-            raw_schema::<GetManuscriptTreeResponse>,
-            "StoryOS Manuscript Tree Response",
-            GET_MANUSCRIPT_TREE_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "manuscript-tree-response",
+        raw_schema::<GetManuscriptTreeResponse>,
+        "StoryOS Manuscript Tree Response",
+        GET_MANUSCRIPT_TREE_RESPONSE,
+    )),
     typescript: &[
         ManuscriptChapterNode::decl,
         ManuscriptVolumeNode::decl,
@@ -98,15 +95,12 @@ pub(super) const GET_CHAPTER_ROW: OperationRow = OperationRow {
     ),
     summary: "Read the controlled Project current Chapter",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::path_parameters("chapter-request"),
-        SchemaSource::typed(
-            "chapter-response",
-            raw_schema::<GetChapterResponse>,
-            "StoryOS Chapter Query Response",
-            NO_PATCHES,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "chapter-response",
+        raw_schema::<GetChapterResponse>,
+        "StoryOS Chapter Query Response",
+        NO_PATCHES,
+    )),
     typescript: &[GetChapterResponse::decl],
     fixture: Fixture::Json(
         r#"{
@@ -152,34 +146,21 @@ pub(super) const GET_STATISTICS_ROW: OperationRow = OperationRow {
     .client(ClientOverride::OptionalQueryParameter("required_watermark")),
     summary: "Rebuild Chapter and manuscript statistics",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::json(
-            "statistics-request",
-            "StoryOS Manuscript Statistics Request",
-            r#"{
-              "$schema": "https://json-schema.org/draft/2020-12/schema",
-              "additionalProperties": false,
-              "properties": {
-                "project_id": {"format": "uuid", "type": "string"},
-                "required_watermark": {
-                  "anyOf": [
-                    {
-                      "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
-                      "type": "string"
-                    },
-                    {"type": "null"}
-                  ]
-                }
-              },
-              "required": ["project_id"],
-              "type": "object"
-            }"#,
-        ),
-        SchemaSource::typed("statistics-response", raw_schema::<GetStatisticsResponse>, "StoryOS Manuscript Statistics Response", GET_STATISTICS_RESPONSE),
-    )
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "statistics-response",
+        raw_schema::<GetStatisticsResponse>,
+        "StoryOS Manuscript Statistics Response",
+        GET_STATISTICS_RESPONSE,
+    ))
     .query_value(QueryValue::Decimal),
-    typescript: &[ManuscriptStatisticsCompleteness::decl, ChapterStatistics::decl, ManuscriptTotals::decl, GetStatisticsResponse::decl],
-    fixture: Fixture::Json(r#"{
+    typescript: &[
+        ManuscriptStatisticsCompleteness::decl,
+        ChapterStatistics::decl,
+        ManuscriptTotals::decl,
+        GetStatisticsResponse::decl,
+    ],
+    fixture: Fixture::Json(
+        r#"{
       "completeness": "complete",
       "correlation_id": "018f0000-0000-7001-8000-000000000072",
       "counting_profile": "storyos.statistics.unicode-16.0.0.v1",
@@ -221,7 +202,8 @@ pub(super) const GET_STATISTICS_ROW: OperationRow = OperationRow {
         "snapshot_kind": "canonical",
         "source_watermarks": {}
       }
-    }"#),
+    }"#,
+    ),
 };
 
 pub(super) const SEARCH_MANUSCRIPT_ROW: OperationRow = OperationRow {
