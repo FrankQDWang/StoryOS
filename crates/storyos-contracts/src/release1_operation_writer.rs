@@ -13,7 +13,7 @@ use crate::release1_operation_registry::{
 };
 use crate::release1_operation_table::{
     Fixture, Headers, OPERATION_TABLE, OperationRow, QueryValue, ResponseMedia, SchemaBody,
-    SchemaSource, apply_patches,
+    SchemaSource, apply_patches, registered_operations,
 };
 use crate::release1_route_catalog::route_catalog_bytes;
 use crate::release1_wire::{json_bytes, path_request_schema};
@@ -47,13 +47,9 @@ static ROW_PATHS: LazyLock<Vec<RowPaths>> = LazyLock::new(|| {
 
 /// The artifact parts that the operation table writes.
 pub(super) fn table_source() -> ArtifactSource {
-    let operations = OPERATION_TABLE
-        .iter()
-        .map(|row| &row.operation)
-        .collect::<Vec<_>>();
     ArtifactSource {
         route_catalog: route_catalog_bytes(),
-        operations,
+        operations: registered_operations().collect(),
         openapi_methods: rows().map(openapi_method).collect(),
         schemas: rows().flat_map(schema_files).collect(),
         typescript_types: rows().map(|(row, _)| declarations(row)).collect(),

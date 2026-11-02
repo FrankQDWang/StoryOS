@@ -52,7 +52,7 @@ mod release1_typescript_client;
 mod release1_operation_writer;
 use release1_operation_writer::{fixture_files, table_source};
 
-/// The operations of the operation table, and the artifact parts that the table writer writes for them.
+/// The operations of the table, and the artifact parts that the table writer writes for them.
 struct ArtifactSource {
     operations: Vec<&'static RegisteredOperation>,
     openapi_methods: Vec<OpenApiMethod>,
