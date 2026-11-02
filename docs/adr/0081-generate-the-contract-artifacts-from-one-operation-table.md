@@ -42,7 +42,7 @@ The generator wrote 94 JSON Schema files. The OpenAPI document referenced 78. Th
 
 - The work lands on one integration branch, `cleanup-phase-8`, through three tickets in one chain: expand (#1386), contract (#1387), schema narrowing (#1388). Each ticket pull request passes `make check`. Each head of the aggregate pull request passes `make check-full` and gets the Codex review.
 - Ticket #1387 deleted the 39 artifacts modules, the old writer, the `OperationArtifacts` value and its function pointers, `RELEASE1_OPERATIONS`, the fixture corpus module, and the shared helpers that only the modules read. `OPERATION_TABLE` now holds the declared order that ADR 0074 gives to `RELEASE1_OPERATIONS`. The crate root keeps 498 of its 550 re-exports: the names that a target outside the library reads.
-- The 34 per-operation type modules, the Route Catalog writer, the TypeScript client writer, and the persistence catalog generator do not change.
+- The TypeScript client writer and the persistence catalog generator do not change. The Route Catalog writer keeps its output and reads `OPERATION_TABLE` where it read `RELEASE1_OPERATIONS`. The 34 per-operation type modules keep their types; the shared `release1.rs` and four of the modules changed only an import path or lost a declaration that nothing read after the re-export trim (`AUTHOR_EDIT_BATCH_POLICY_REVISION`, `AUTHOR_EDIT_BATCH_IDLE_MS`, `LIST_PROJECTS_PATH`, `GetProposalRequest`).
 - The three Python readers of the schema directory under `prototypes/reference-model/` and the one citation under `docs/research/` are research evidence and do not change.
 
 ## Superseded parts
