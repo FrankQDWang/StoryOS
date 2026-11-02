@@ -5,7 +5,8 @@ use serde_json::{Value, json};
 
 use crate::ProjectActivityKind;
 use crate::release1::QueryOperation;
-use crate::release1_operation_registry::{RELEASE1_OPERATIONS, RegisteredOperation};
+use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_operation_table::registered_operations;
 use crate::release1_wire::json_bytes;
 
 #[path = "release1_route_catalog_capabilities.rs"]
@@ -384,25 +385,12 @@ impl OperationCatalog {
     }
 }
 
-/// Write the route catalog from the registry, the event list, and the catalog sections.
+/// Write the route catalog from the operation table, the event list, and the catalog sections.
 pub(super) fn route_catalog_bytes() -> Vec<u8> {
-    operations_route_catalog_bytes(registered_operations())
-}
-
-/// Write the route catalog of these operations, in their order, with the events and the sections.
-pub(super) fn operations_route_catalog_bytes<'a>(
-    operations: impl Iterator<Item = &'a RegisteredOperation>,
-) -> Vec<u8> {
     let mut catalog = sections::catalog_sections();
-    catalog["operations"] = operations.map(operation_json).collect();
+    catalog["operations"] = registered_operations().map(operation_json).collect();
     catalog["events"] = events::catalog_events().collect();
     json_bytes(&catalog)
-}
-
-fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
-    RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| artifacts.operations)
 }
 
 fn operation_json(registered: &RegisteredOperation) -> Value {

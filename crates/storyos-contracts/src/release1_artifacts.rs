@@ -19,11 +19,10 @@ use crate::release1::{
     protocol_profile,
 };
 use crate::release1_operation_registry::{
-    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
-    RegisteredOperation,
+    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RegisteredOperation,
 };
 use crate::release1_operation_table::registered_operations;
-use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
+use crate::release1_route_catalog::ROUTE_CATALOG_PATH;
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const GENERATED_DIRECTORY: &str = "generated";
@@ -46,55 +45,24 @@ const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
-#[path = "release1_fixture_corpus.rs"]
-mod release1_fixture_corpus;
-use release1_fixture_corpus::generated_fixture_files;
-
 #[path = "release1_typescript_client.rs"]
 mod release1_typescript_client;
 
 #[path = "release1_operation_writer.rs"]
 mod release1_operation_writer;
-use release1_operation_writer::table_source;
+use release1_operation_writer::{fixture_files, table_source};
 
-/// The operations of one operation source, and the artifact parts that the source writes for them.
+/// The operations of the operation table, and the artifact parts that the table writer writes for them.
 struct ArtifactSource {
     operations: Vec<&'static RegisteredOperation>,
     openapi_methods: Vec<OpenApiMethod>,
     schemas: Vec<GeneratedSchema>,
     typescript_types: Vec<String>,
     route_catalog: Vec<u8>,
-    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
-}
-
-/// The artifact parts that the 39 artifacts modules of the Operation Registry write.
-#[cfg(test)]
-fn module_source() -> ArtifactSource {
-    ArtifactSource {
-        operations: RELEASE1_OPERATIONS
-            .iter()
-            .flat_map(|artifacts| artifacts.operations)
-            .collect(),
-        openapi_methods: RELEASE1_OPERATIONS
-            .iter()
-            .flat_map(|artifacts| (artifacts.openapi)())
-            .collect(),
-        schemas: RELEASE1_OPERATIONS
-            .iter()
-            .flat_map(|artifacts| (artifacts.schemas)())
-            .collect(),
-        typescript_types: RELEASE1_OPERATIONS
-            .iter()
-            .map(|artifacts| (artifacts.typescript_types)())
-            .collect(),
-        route_catalog: route_catalog_bytes(),
-        fixtures: generated_fixture_files,
-    }
 }
 
 struct Release1ArtifactAssembly {
     route_catalog: Vec<u8>,
-    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
     openapi: Vec<u8>,
     schemas: Vec<GeneratedSchema>,
     typescript_client: Vec<u8>,
@@ -103,15 +71,14 @@ struct Release1ArtifactAssembly {
     profile: Release1ProtocolProfile,
 }
 
-fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembly {
+fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let ArtifactSource {
         operations,
         openapi_methods,
         schemas,
         typescript_types,
         route_catalog,
-        fixtures,
-    } = source;
+    } = table_source();
     let openapi = openapi_bytes(openapi_methods, &operations);
     let typescript_client = typescript_client_bytes(&operations);
     let typescript_declaration = typescript_declaration_bytes(typescript_types, &operations);
@@ -133,14 +100,13 @@ fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembl
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
-    let fixture_corpus = fixtures(&profile)
+    let fixture_corpus = fixture_files(&profile)
         .into_iter()
         .flat_map(|(_, bytes)| bytes)
         .collect::<Vec<_>>();
     profile.release_identity.fixture_corpus_digest = sha256_prefixed(fixture_corpus);
     Release1ArtifactAssembly {
         route_catalog,
-        fixtures,
         openapi,
         schemas,
         typescript_client,
@@ -153,7 +119,7 @@ fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembl
 /// Build the one active Release 1 protocol profile from the Rust contract source.
 pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     static PROFILE: LazyLock<Release1ProtocolProfile> =
-        LazyLock::new(|| release1_artifact_assembly(table_source()).profile);
+        LazyLock::new(|| release1_artifact_assembly().profile);
     PROFILE.clone()
 }
 
@@ -225,20 +191,15 @@ fn files_under(directory: &Path, excluded: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
-    generated_files_of(table_source())
-}
-
-fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
     let Release1ArtifactAssembly {
         route_catalog,
-        fixtures,
         openapi,
         schemas,
         typescript_client,
         typescript_declaration,
         release_profile_declaration,
         profile,
-    } = release1_artifact_assembly(source);
+    } = release1_artifact_assembly();
     let profile_json =
         serde_json::to_string_pretty(&profile).expect("protocol profile should serialize");
     let profile_module = format!("// @generated by storyos-contracts; do not edit.\nexport const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({profile_json});\n").into_bytes();
@@ -281,7 +242,7 @@ fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
         ),
         (ROUTE_CATALOG_PATH, route_catalog),
     ]);
-    generated.extend(fixtures(&profile));
+    generated.extend(fixture_files(&profile));
     generated
 }
 

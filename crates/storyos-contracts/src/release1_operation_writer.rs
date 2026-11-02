@@ -15,7 +15,7 @@ use crate::release1_operation_table::{
     Fixture, Headers, OPERATION_TABLE, OperationRow, QueryValue, ResponseMedia, SchemaBody,
     SchemaSource, apply_patches,
 };
-use crate::release1_route_catalog::operations_route_catalog_bytes;
+use crate::release1_route_catalog::route_catalog_bytes;
 use crate::release1_wire::{json_bytes, path_request_schema};
 
 const SCHEMA_DIRECTORY: &str = "generated/json-schema/storyos-public-release-1/";
@@ -52,12 +52,11 @@ pub(super) fn table_source() -> ArtifactSource {
         .map(|row| &row.operation)
         .collect::<Vec<_>>();
     ArtifactSource {
-        route_catalog: operations_route_catalog_bytes(operations.iter().copied()),
+        route_catalog: route_catalog_bytes(),
         operations,
         openapi_methods: rows().map(openapi_method).collect(),
         schemas: rows().flat_map(schema_files).collect(),
         typescript_types: rows().map(|(row, _)| declarations(row)).collect(),
-        fixtures: fixture_files,
     }
 }
 
@@ -273,7 +272,7 @@ fn schema_value(source: &SchemaSource, schema_id: &str, path: &str) -> Value {
     }
 }
 
-fn declarations(row: &OperationRow) -> String {
+pub(super) fn declarations(row: &OperationRow) -> String {
     let config = Config::default();
     row.typescript
         .iter()
@@ -282,7 +281,7 @@ fn declarations(row: &OperationRow) -> String {
         .join("\n\n")
 }
 
-fn fixture_files(profile: &Release1ProtocolProfile) -> Vec<GeneratedFile> {
+pub(super) fn fixture_files(profile: &Release1ProtocolProfile) -> Vec<GeneratedFile> {
     rows()
         .map(|(row, paths)| {
             let value = match row.fixture {
@@ -295,7 +294,3 @@ fn fixture_files(profile: &Release1ProtocolProfile) -> Vec<GeneratedFile> {
         })
         .collect()
 }
-
-#[cfg(test)]
-#[path = "release1_operation_writer_tests.rs"]
-mod tests;

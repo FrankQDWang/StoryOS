@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
-use super::release1_fixture_corpus::fixture_corpus_membership;
+use super::release1_operation_writer::fixture_files;
 use super::{FIXTURE_DIGEST_PLACEHOLDER, release1_protocol_profile};
 use crate::digest::sha256_prefixed;
-use crate::release1_operation_registry::RELEASE1_OPERATIONS;
+use crate::release1_operation_table::registered_operations;
 
 const INCOMPLETE_FIXTURE_CORPUS_DIGEST: &str =
     "sha256:ae4c01ee1cd84dc779177dcae27abd1e1856fe3b0608848938027d024f4d4071";
@@ -24,9 +24,9 @@ fn fixture_corpus_digest_covers_every_golden_wire_fixture() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<BTreeMap<_, _>>();
-    let digest_paths = fixture_corpus_membership()
-        .iter()
-        .map(|entry| entry.path)
+    let digest_paths = fixture_files(&release1_protocol_profile())
+        .into_iter()
+        .map(|(path, _)| path)
         .collect::<Vec<_>>();
     let mut golden_paths = generated
         .keys()
@@ -49,19 +49,10 @@ fn fixture_corpus_digest_covers_every_golden_wire_fixture() {
     assert_eq!(reconstructed, published);
 
     for operation_id in PREVIOUSLY_OMITTED_OPERATIONS {
-        let artifacts = RELEASE1_OPERATIONS
-            .iter()
-            .find(|artifacts| {
-                artifacts
-                    .operations
-                    .iter()
-                    .any(|registered| registered.operation.operation_id == operation_id)
-            })
-            .unwrap_or_else(|| panic!("{operation_id} must be registered"));
-        let operation_paths = artifacts
-            .fixtures
-            .iter()
-            .map(|entry| entry.path)
+        let operation_paths = registered_operations()
+            .zip(&digest_paths)
+            .filter(|(registered, _)| registered.operation.operation_id == operation_id)
+            .map(|(_, path)| *path)
             .collect::<Vec<_>>();
         assert_eq!(operation_paths.len(), 1, "{operation_id}");
         for path in operation_paths {

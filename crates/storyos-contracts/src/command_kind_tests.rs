@@ -1,11 +1,10 @@
 use super::CommandKind;
-use crate::release1_operation_registry::{OperationKind, RELEASE1_OPERATIONS};
+use crate::release1_operation_registry::OperationKind;
+use crate::release1_operation_table::registered_operations;
 
 #[test]
 fn the_command_kinds_are_the_command_operations_of_the_registry() {
-    let mut registered = RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| artifacts.operations)
+    let mut registered = registered_operations()
         .filter(|registered| registered.kind == OperationKind::Command)
         .map(|registered| registered.operation.operation_id)
         .collect::<Vec<_>>();
