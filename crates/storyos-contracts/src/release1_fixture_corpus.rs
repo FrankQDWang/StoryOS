@@ -16,13 +16,6 @@ pub(super) fn fixture_corpus_membership() -> &'static [FixtureMembership] {
     &MEMBERSHIP
 }
 
-pub(super) fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    fixture_corpus_membership()
-        .iter()
-        .flat_map(|entry| (entry.bytes)(profile))
-        .collect()
-}
-
 pub(super) fn generated_fixture_files(profile: &Release1ProtocolProfile) -> Vec<GeneratedFile> {
     fixture_corpus_membership()
         .iter()

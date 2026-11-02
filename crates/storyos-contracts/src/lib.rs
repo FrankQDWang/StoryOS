@@ -39,6 +39,9 @@ mod release1_manuscript_tree_artifacts;
 mod release1_open_proposal_list;
 mod release1_open_proposal_list_artifacts;
 mod release1_operation_registry;
+// The expand step of #1385 compiles the table only for the writer equality test.
+#[cfg(test)]
+mod release1_operation_table;
 mod release1_project_activity;
 mod release1_project_assistance;
 mod release1_project_assistance_artifacts;
