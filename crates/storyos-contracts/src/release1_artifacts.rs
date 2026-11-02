@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use serde_json::{Value, json};
@@ -24,6 +25,9 @@ use crate::release1_operation_registry::{
 use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
+const GENERATED_DIRECTORY: &str = "generated";
+/// The PostgreSQL adapter writes this directory, so the check does not own its files.
+const PERSISTENCE_CATALOG_DIRECTORY: &str = "generated/persistence-catalog";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
 const TYPESCRIPT_CLIENT_PATH: &str = "generated/typescript/storyos-public-release-1/client.mjs";
 const PROJECT_ACTIVITY_MODULE_PATH: &str =
@@ -163,6 +167,7 @@ pub fn write_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 /// Fail when any checked-in generated artifact differs from Rust-source generation.
 pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
     check_contract_graph(&contract_graph_bytes())?;
+    let mut emitted = BTreeSet::new();
     for (relative_path, expected) in generated_files() {
         let path = repo_root.join(relative_path);
         let actual = match fs::read(&path) {
@@ -175,8 +180,43 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
         if actual != expected {
             return Err(stale_artifact(&path));
         }
+        emitted.insert(path);
     }
-    Ok(())
+    let stray = files_under(
+        &repo_root.join(GENERATED_DIRECTORY),
+        &repo_root.join(PERSISTENCE_CATALOG_DIRECTORY),
+    )?
+    .into_iter()
+    .find(|path| !emitted.contains(path));
+    match stray {
+        Some(path) => Err(stale_artifact(&path)),
+        None => Ok(()),
+    }
+}
+
+/// The files under a directory, in path order, without the files under the excluded directory.
+fn files_under(directory: &Path, excluded: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut directories = vec![directory.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        let entries = fs::read_dir(&directory).map_err(|source| path_error(&directory, source))?;
+        for entry in entries {
+            let entry = entry.map_err(|source| path_error(&directory, source))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|source| path_error(&path, source))?;
+            if file_type.is_dir() {
+                if path != excluded {
+                    directories.push(path);
+                }
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    files.sort_unstable();
+    Ok(files)
 }
 
 fn generated_files() -> Vec<GeneratedFile> {

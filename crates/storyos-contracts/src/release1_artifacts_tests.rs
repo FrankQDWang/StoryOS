@@ -1,4 +1,7 @@
-use super::{OPENAPI_PATH, check_contract_graph, contract_graph_bytes, release1_protocol_profile};
+use super::{
+    OPENAPI_PATH, check_contract_graph, check_release1_artifacts, contract_graph_bytes,
+    release1_protocol_profile, stale_artifact,
+};
 use crate::release1::HttpMethod;
 use crate::release1_chapter_query_artifacts::CHAPTER_RESPONSE_SCHEMA_PATH;
 use crate::{
@@ -277,6 +280,28 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
             .any(|window| window == b"project_activity_position")
     );
 }
+#[test]
+fn check_reports_a_generated_file_that_the_generator_does_not_emit() {
+    let root = std::env::temp_dir().join(format!("storyos-contracts-stray-{}", std::process::id()));
+    super::write_release1_artifacts(&root).expect("artifacts must write");
+    let catalog = root.join("generated/persistence-catalog");
+    std::fs::create_dir_all(&catalog).expect("catalog directory must write");
+    std::fs::write(catalog.join("release-1-schema.json"), b"{}").expect("catalog must write");
+    assert!(check_release1_artifacts(&root).is_ok());
+
+    let stray = root.join("generated/json-schema/storyos-public-release-1/stray.schema.json");
+    std::fs::write(&stray, b"{}").expect("stray file must write");
+    let error = check_release1_artifacts(&root).expect_err("a stray file is stale");
+    assert_eq!(
+        (error.kind(), error.to_string()),
+        (
+            std::io::ErrorKind::InvalidData,
+            stale_artifact(&stray).to_string()
+        )
+    );
+    std::fs::remove_dir_all(&root).expect("temporary root must go");
+}
+
 #[test]
 fn changed_contract_graph_is_rejected() {
     let mut graph = contract_graph_bytes();
