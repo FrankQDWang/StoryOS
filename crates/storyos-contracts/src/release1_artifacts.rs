@@ -43,12 +43,49 @@ type GeneratedFile = (&'static str, Vec<u8>);
 
 #[path = "release1_fixture_corpus.rs"]
 mod release1_fixture_corpus;
-use release1_fixture_corpus::{fixture_corpus_bytes, generated_fixture_files};
+use release1_fixture_corpus::generated_fixture_files;
 
 #[path = "release1_typescript_client.rs"]
 mod release1_typescript_client;
 
+#[cfg(test)]
+#[path = "release1_operation_writer.rs"]
+mod release1_operation_writer;
+
+/// The operations of one operation source, and the artifact parts that the source writes for them.
+struct ArtifactSource {
+    operations: Vec<&'static RegisteredOperation>,
+    openapi_methods: Vec<OpenApiMethod>,
+    schemas: Vec<GeneratedSchema>,
+    typescript_types: Vec<String>,
+    route_catalog: Vec<u8>,
+    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
+}
+
+/// The artifact parts that the 39 artifacts modules of the Operation Registry write.
+fn module_source() -> ArtifactSource {
+    ArtifactSource {
+        operations: registered_operations().collect(),
+        openapi_methods: RELEASE1_OPERATIONS
+            .iter()
+            .flat_map(|artifacts| (artifacts.openapi)())
+            .collect(),
+        schemas: RELEASE1_OPERATIONS
+            .iter()
+            .flat_map(|artifacts| (artifacts.schemas)())
+            .collect(),
+        typescript_types: RELEASE1_OPERATIONS
+            .iter()
+            .map(|artifacts| (artifacts.typescript_types)())
+            .collect(),
+        route_catalog: route_catalog_bytes(),
+        fixtures: generated_fixture_files,
+    }
+}
+
 struct Release1ArtifactAssembly {
+    route_catalog: Vec<u8>,
+    fixtures: fn(&Release1ProtocolProfile) -> Vec<GeneratedFile>,
     openapi: Vec<u8>,
     schemas: Vec<GeneratedSchema>,
     typescript_client: Vec<u8>,
@@ -57,16 +94,20 @@ struct Release1ArtifactAssembly {
     profile: Release1ProtocolProfile,
 }
 
-fn release1_artifact_assembly() -> Release1ArtifactAssembly {
-    let openapi = openapi_bytes();
-    let schemas = RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| (artifacts.schemas)())
-        .collect::<Vec<_>>();
-    let typescript_client = typescript_client_bytes();
-    let typescript_declaration = typescript_declaration_bytes();
+fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembly {
+    let ArtifactSource {
+        operations,
+        openapi_methods,
+        schemas,
+        typescript_types,
+        route_catalog,
+        fixtures,
+    } = source;
+    let openapi = openapi_bytes(openapi_methods, &operations);
+    let typescript_client = typescript_client_bytes(&operations);
+    let typescript_declaration = typescript_declaration_bytes(typescript_types, &operations);
     let release_profile_declaration = release_profile_declaration_bytes();
-    let contract_graph = contract_graph_bytes();
+    let contract_graph = contract_graph_bytes_of(&operations);
     let typescript = [
         typescript_client.as_slice(),
         b"\n--declaration--\n",
@@ -79,13 +120,18 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let mut profile = protocol_profile(ArtifactDigests {
         contract_graph: sha256_prefixed(contract_graph.as_slice()),
         openapi: sha256_prefixed(openapi.as_slice()),
-        json_schema_catalog: sha256_prefixed(schema_catalog_bytes(&schemas)),
+        json_schema_catalog: sha256_prefixed(schema_catalog_bytes(&schemas, &operations)),
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
-    profile.release_identity.fixture_corpus_digest =
-        sha256_prefixed(fixture_corpus_bytes(&profile));
+    let fixture_corpus = fixtures(&profile)
+        .into_iter()
+        .flat_map(|(_, bytes)| bytes)
+        .collect::<Vec<_>>();
+    profile.release_identity.fixture_corpus_digest = sha256_prefixed(fixture_corpus);
     Release1ArtifactAssembly {
+        route_catalog,
+        fixtures,
         openapi,
         schemas,
         typescript_client,
@@ -98,7 +144,7 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
 /// Build the one active Release 1 protocol profile from the Rust contract source.
 pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     static PROFILE: LazyLock<Release1ProtocolProfile> =
-        LazyLock::new(|| release1_artifact_assembly().profile);
+        LazyLock::new(|| release1_artifact_assembly(module_source()).profile);
     PROFILE.clone()
 }
 
@@ -134,14 +180,20 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
+    generated_files_of(module_source())
+}
+
+fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
     let Release1ArtifactAssembly {
+        route_catalog,
+        fixtures,
         openapi,
         schemas,
         typescript_client,
         typescript_declaration,
         release_profile_declaration,
         profile,
-    } = release1_artifact_assembly();
+    } = release1_artifact_assembly(source);
     let profile_json =
         serde_json::to_string_pretty(&profile).expect("protocol profile should serialize");
     let profile_module = format!("// @generated by storyos-contracts; do not edit.\nexport const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({profile_json});\n").into_bytes();
@@ -182,9 +234,9 @@ fn generated_files() -> Vec<GeneratedFile> {
             RELEASE_PROFILE_DECLARATION_PATH,
             release_profile_declaration,
         ),
-        (ROUTE_CATALOG_PATH, route_catalog_bytes()),
+        (ROUTE_CATALOG_PATH, route_catalog),
     ]);
-    generated.extend(generated_fixture_files(&profile));
+    generated.extend(fixtures(&profile));
     generated
 }
 
@@ -214,7 +266,12 @@ fn check_contract_graph(graph: &[u8]) -> io::Result<()> {
 }
 
 fn contract_graph_bytes() -> Vec<u8> {
-    let operations = registered_operations()
+    contract_graph_bytes_of(&registered_operations().collect::<Vec<_>>())
+}
+
+fn contract_graph_bytes_of(operations: &[&RegisteredOperation]) -> Vec<u8> {
+    let operations = operations
+        .iter()
         .filter_map(|registered| match registered.graph {
             ContractGraphEntry::Preconditions(preconditions) => Some(operation_graph(
                 registered.operation,
@@ -262,12 +319,9 @@ fn operation_graph(
     })
 }
 
-fn openapi_bytes() -> Vec<u8> {
+fn openapi_bytes(methods: Vec<OpenApiMethod>, operations: &[&RegisteredOperation]) -> Vec<u8> {
     let mut path_items: Vec<OpenApiMethod> = Vec::new();
-    for method in RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| (artifacts.openapi)())
-    {
+    for method in methods {
         match path_items.iter_mut().find(|item| item.path == method.path) {
             Some(item) => item.yaml.push_str(&method.yaml),
             None => path_items.push(method),
@@ -277,7 +331,7 @@ fn openapi_bytes() -> Vec<u8> {
         .iter()
         .map(|item| format!("  {}:\n{}", item.path, item.yaml))
         .collect::<String>();
-    let implemented_slice = implemented_operation_ids().join(",");
+    let implemented_slice = implemented_operation_ids(operations).join(",");
     format!(
         "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
     ).into_bytes()
@@ -285,23 +339,27 @@ fn openapi_bytes() -> Vec<u8> {
 
 /// The release identity digests this schema catalog. The generator does not write it, because
 /// no reader needs the file.
-fn schema_catalog_bytes(schemas: &[GeneratedSchema]) -> Vec<u8> {
+fn schema_catalog_bytes(
+    schemas: &[GeneratedSchema],
+    operations: &[&RegisteredOperation],
+) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
-        "implemented_operations": implemented_operation_ids(),
+        "implemented_operations": implemented_operation_ids(operations),
         "schemas": schemas.iter().map(|schema| json!({
             "schema_id": schema.schema_id, "path": schema.path, "sha256": sha256_prefixed(&schema.bytes)
         })).collect::<Vec<_>>()
     }))
 }
 
-fn implemented_operation_ids() -> Vec<&'static str> {
-    registered_operations()
+fn implemented_operation_ids(operations: &[&RegisteredOperation]) -> Vec<&'static str> {
+    operations
+        .iter()
         .map(|registered| registered.operation.operation_id)
         .collect()
 }
 
-fn typescript_client_bytes() -> Vec<u8> {
+fn typescript_client_bytes(operations: &[&RegisteredOperation]) -> Vec<u8> {
     let preamble = format!(
         concat!(
             "// @generated by storyos-contracts; do not edit.\n",
@@ -345,13 +403,17 @@ fn typescript_client_bytes() -> Vec<u8> {
         ),
         GENERATED_CLIENT_REVISION,
     );
-    let operations = registered_operations()
-        .map(release1_typescript_client::client_source)
+    let operations = operations
+        .iter()
+        .map(|registered| release1_typescript_client::client_source(registered))
         .collect::<String>();
     (preamble + &operations).into_bytes()
 }
 
-fn typescript_declaration_bytes() -> Vec<u8> {
+fn typescript_declaration_bytes(
+    typescript_types: Vec<String>,
+    operations: &[&RegisteredOperation],
+) -> Vec<u8> {
     let config = Config::default();
     let shared_types = [
         ProjectScope::decl(&config),
@@ -367,15 +429,12 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     .map(|declaration| format!("export {declaration}"));
     let types = shared_types
         .into_iter()
-        .chain(
-            RELEASE1_OPERATIONS
-                .iter()
-                .map(|artifacts| (artifacts.typescript_types)()),
-        )
+        .chain(typescript_types)
         .collect::<Vec<_>>()
         .join("\n\n");
-    let functions = registered_operations()
-        .map(release1_typescript_client::declaration_source)
+    let functions = operations
+        .iter()
+        .map(|registered| release1_typescript_client::declaration_source(registered))
         .collect::<String>();
     format!(
         concat!(

@@ -386,8 +386,15 @@ impl OperationCatalog {
 
 /// Write the route catalog from the registry, the event list, and the catalog sections.
 pub(super) fn route_catalog_bytes() -> Vec<u8> {
+    operations_route_catalog_bytes(registered_operations())
+}
+
+/// Write the route catalog of these operations, in their order, with the events and the sections.
+pub(super) fn operations_route_catalog_bytes<'a>(
+    operations: impl Iterator<Item = &'a RegisteredOperation>,
+) -> Vec<u8> {
     let mut catalog = sections::catalog_sections();
-    catalog["operations"] = registered_operations().map(operation_json).collect();
+    catalog["operations"] = operations.map(operation_json).collect();
     catalog["events"] = events::catalog_events().collect();
     json_bytes(&catalog)
 }
