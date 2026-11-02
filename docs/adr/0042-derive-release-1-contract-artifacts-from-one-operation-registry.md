@@ -10,6 +10,8 @@ On 2026-10-04 the author accepted this decision. Each Release 1 artifacts module
 
 [ADR 0075](0075-prove-each-behavior-at-one-behavior-owner.md) partly supersedes this ADR. Each operation declares one positive golden-wire fixture. Ticket #1311 removes the invalid and boundary fixtures.
 
+[ADR 0081](0081-generate-the-contract-artifacts-from-one-operation-table.md) partly supersedes this ADR. The operation table `OPERATION_TABLE` in `release1_operation_table.rs` replaces the artifacts modules, their `OperationArtifacts` values, and `RELEASE1_OPERATIONS`. Each public operation is one row of the table, in the declared order, and one writer emits every artifact from the rows. ADR 0081 names the paragraphs of this ADR that it replaces. The byte-identical refactor rule of this ADR stays in force.
+
 ## Context
 
 At `main` `6c69595c`, `release1_artifacts.rs` and `release1_fixture_corpus.rs` referred to the per-operation artifacts modules more than 500 times through hand-written lists. A new operation needed one line in six or seven lists. Each list had a different order, so each generated artifact had a different operation order, and no source owned that order.

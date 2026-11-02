@@ -83,6 +83,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 - Treat a change to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as a contract change. Review its breaking and migration impact explicitly.
 - Editable sources own deterministic generated artifacts. Change and stage a generated artifact with the editable source that produces it.
 - Regenerate it with the StoryOS-owned command, classify its diff separately from hand-written lines, and review the generated diff for drift.
+- Describe a public operation as one row of the operation table `OPERATION_TABLE` in `storyos-contracts` ([ADR 0081](docs/adr/0081-generate-the-contract-artifacts-from-one-operation-table.md)). Put only the hand fields in the row. Do not write OpenAPI, JSON Schema, TypeScript, or fixture code for one operation.
 
 ## Change size
 
