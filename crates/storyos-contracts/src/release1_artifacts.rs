@@ -160,7 +160,7 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
     .into_iter()
     .find(|path| !emitted.contains(path));
     match stray {
-        Some(path) => Err(stale_artifact(&path)),
+        Some(path) => Err(stray_artifact(&path)),
         None => Ok(()),
     }
 }
@@ -255,6 +255,16 @@ fn stale_artifact(path: &Path) -> io::Error {
         io::ErrorKind::InvalidData,
         format!(
             "{} is missing or stale; run `make generate-contracts`",
+            path.display()
+        ),
+    )
+}
+
+fn stray_artifact(path: &Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "{} is stale: the generator does not emit it; remove the file",
             path.display()
         ),
     )

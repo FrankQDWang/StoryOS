@@ -1,7 +1,7 @@
 use super::release1_operation_writer::{declarations, table_source};
 use super::{
     OPENAPI_PATH, check_contract_graph, check_release1_artifacts, contract_graph_bytes,
-    release1_protocol_profile, stale_artifact,
+    release1_protocol_profile, stray_artifact,
 };
 use crate::release1::AuthoritativeChapterRevision;
 use crate::release1::HttpMethod;
@@ -302,7 +302,7 @@ fn check_reports_a_generated_file_that_the_generator_does_not_emit() {
         (error.kind(), error.to_string()),
         (
             std::io::ErrorKind::InvalidData,
-            stale_artifact(&stray).to_string()
+            stray_artifact(&stray).to_string()
         )
     );
     std::fs::remove_dir_all(&root).expect("temporary root must go");
