@@ -6,8 +6,8 @@ use super::{
     Fixture, Headers, NO_PATCHES, OperationRow, Patch, ResponseMedia, SCHEMA_ID, SchemaSource,
     SchemaSources, UUID, raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_project_export::{
     EXPORT_PROJECT_ARCHIVE, ExportProjectArchiveEffect, ExportProjectArchiveInput,
     ExportProjectArchiveRequest, ExportProjectArchiveResponse, ProjectExportRef,

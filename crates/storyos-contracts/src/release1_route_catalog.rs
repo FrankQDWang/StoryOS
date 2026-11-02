@@ -3,10 +3,10 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::ProjectActivityKind;
 use crate::release1::QueryOperation;
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_operation_table::registered_operations;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_wire::json_bytes;
 
 #[path = "release1_route_catalog_capabilities.rs"]

@@ -206,8 +206,8 @@ fn generated_files() -> Vec<GeneratedFile> {
     let mut generated = vec![
         (
             "generated/json-schema/storyos-web-assets/manifest.schema.json",
-            json_bytes(&schema_value::<crate::WebAssetManifest>(
-                crate::WEB_ASSET_SCHEMA,
+            json_bytes(&schema_value::<crate::web_assets::WebAssetManifest>(
+                crate::web_assets::WEB_ASSET_SCHEMA,
                 "StoryOS Web Asset Manifest",
             )),
         ),
@@ -222,7 +222,7 @@ fn generated_files() -> Vec<GeneratedFile> {
         (TYPESCRIPT_CLIENT_PATH, typescript_client),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration),
         (PROJECT_ACTIVITY_MODULE_PATH, {
-            let events = crate::ProjectActivityKind::ALL
+            let events = crate::release1_project_activity::ProjectActivityKind::ALL
                 .iter()
                 .map(|kind| (kind.as_str(), kind.event_schemas()))
                 .collect::<std::collections::BTreeMap<_, _>>();

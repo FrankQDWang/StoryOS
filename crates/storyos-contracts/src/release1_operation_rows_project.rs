@@ -6,7 +6,6 @@ use super::{
     DATE_TIME, Edit, Fixture, Headers, NO_PATCHES, OperationRow, Patch, SCHEMA_ID, SchemaSource,
     SchemaSources, U64, UUID, raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1::{
     CREATE_PROJECT_COMMAND_CHALLENGE, CreateProjectCommandChallengeRequest,
     CreateProjectCommandChallengeResponse, GET_PROJECT, GET_PROTOCOL_PROFILE, GetProjectResponse,
@@ -20,6 +19,7 @@ use crate::release1_create_project::{
 };
 use crate::release1_list_projects::{LIST_PROJECTS, ListProjectsResponse, ProjectListItem};
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 
 pub(super) const GET_PROTOCOL_PROFILE_ROW: OperationRow = OperationRow {

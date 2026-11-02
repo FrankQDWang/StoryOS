@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, QueryValue, SCHEMA_ID, SchemaSource,
     SchemaSources, U64, UUID, raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
@@ -28,6 +27,7 @@ use crate::release1_agent_run::{
     UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
     Owner, Settlement,

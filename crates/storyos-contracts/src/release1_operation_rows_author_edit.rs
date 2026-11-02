@@ -6,7 +6,6 @@ use super::{
     DATE_TIME, Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources,
     U64, UUID, raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
     AuthorEditConflictReason, AuthorEditPrimitive, AuthorEditProposalTarget,
@@ -19,6 +18,7 @@ use crate::release1_author_edit_outcome::{
     GetApplyAuthorEditOutcomeRequest, GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
     Owner, Settlement,

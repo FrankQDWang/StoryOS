@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_create_volume::{
     CREATE_VOLUME, CreateVolumeConflictReason, CreateVolumeEffect, CreateVolumeInput,
     CreateVolumeRefusalReason, CreateVolumeRequest, CreateVolumeResponse,
@@ -17,6 +16,7 @@ use crate::release1_delete_volume::{
     DeleteVolumeResponse,
 };
 use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_update_volume::{
     UPDATE_VOLUME, UpdateVolumeConflictReason, UpdateVolumeEffect, UpdateVolumeInput,

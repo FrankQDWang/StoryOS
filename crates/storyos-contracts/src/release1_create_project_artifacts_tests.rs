@@ -82,7 +82,7 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
         .build(&request_schema)
         .expect("prospective Project challenge request schema must compile");
     let valid_request = serde_json::json!({
-        "command_schema": crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
+        "command_schema": crate::release1_create_project::CREATE_PROJECT_REQUEST_SCHEMA_ID,
         "create_project_input": {
             "title": format!("{}a", "界".repeat(341)),
             "client_contract_revision": "storyos.web-client.release-1.v3",
@@ -135,8 +135,10 @@ fn prospective_create_project_challenge_schemas_reject_malformed_wire_values() {
     )
     .expect("positive challenge fixture must be JSON");
     assert!(response_validator.is_valid(&positive));
-    serde_json::from_value::<crate::CreateProjectChallengeResponse>(positive.clone())
-        .expect("positive challenge fixture must match the Rust response contract");
+    serde_json::from_value::<crate::release1_create_project::CreateProjectChallengeResponse>(
+        positive.clone(),
+    )
+    .expect("positive challenge fixture must match the Rust response contract");
     assert_each_present_field_is_required(&response_validator, &positive, "");
     assert_each_present_field_is_required(
         &response_validator,

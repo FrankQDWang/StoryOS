@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use ts_rs::Config;
 
 use super::{ArtifactSource, GeneratedFile};
-use crate::Release1ProtocolProfile;
 use crate::release1::HttpMethod;
+use crate::release1::Release1ProtocolProfile;
 use crate::release1_operation_registry::{
     ClientOverride, GeneratedSchema, OpenApiMethod, OperationKind,
 };

@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, NO_PATCHES, OperationRow, Patch, SchemaSource, SchemaSources, U64,
     raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1::{
     CREATE_EDITOR_SESSION, CreateEditorSessionRequest, CreateEditorSessionResponse,
     EditorBaseSnapshot, EditorReadOnlyReason, EditorSessionBinding, EditorWriterProjection,
@@ -15,6 +14,7 @@ use crate::release1::{
 use crate::release1_operation_registry::{
     ClientOverride, ContractGraphEntry, OperationKind, RegisteredOperation,
 };
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_route_catalog::{
     ActionClass, Admission, Binding, EditorRule, ErrorProfile, Idempotency, OperationCatalog,
     Owner, Settlement,

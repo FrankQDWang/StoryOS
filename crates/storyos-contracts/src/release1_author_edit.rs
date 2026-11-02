@@ -104,7 +104,7 @@ pub enum AuthorEditPrimitive {
     },
     RetypeBlock {
         manuscript_block_id: String,
-        block_kind: crate::ManuscriptBlockKind,
+        block_kind: crate::release1::ManuscriptBlockKind,
     },
 }
 

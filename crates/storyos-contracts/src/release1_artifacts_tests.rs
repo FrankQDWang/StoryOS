@@ -3,12 +3,12 @@ use super::{
     OPENAPI_PATH, check_contract_graph, check_release1_artifacts, contract_graph_bytes,
     release1_protocol_profile, stale_artifact,
 };
+use crate::release1::AuthoritativeChapterRevision;
 use crate::release1::HttpMethod;
-use crate::release1_operation_table::{OPERATION_TABLE, registered_operations};
-use crate::{
-    ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
-    AuthoritativeChapterRevision, NoEffectReason,
+use crate::release1_author_edit::{
+    ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason, NoEffectReason,
 };
+use crate::release1_operation_table::{OPERATION_TABLE, registered_operations};
 
 #[test]
 fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
@@ -19,20 +19,20 @@ fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
         "reconciliation_required": true
     });
     assert_eq!(
-        serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(admitted.clone())
+        serde_json::from_value::<crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation>(admitted.clone())
             .expect("the required observation must deserialize"),
-        crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+        crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
             command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
             author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
-            reconciliation_required: crate::ReconciliationRequired,
+            reconciliation_required: crate::release1_author_edit_outcome::ReconciliationRequired,
         }
     );
     assert_eq!(
         serde_json::to_value(
-            crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
                 command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
                 author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
-                reconciliation_required: crate::ReconciliationRequired,
+                reconciliation_required: crate::release1_author_edit_outcome::ReconciliationRequired,
             }
         )
         .expect("required reconciliation observation must serialize"),
@@ -40,14 +40,24 @@ fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
     );
     let mut disabled = admitted.clone();
     disabled["reconciliation_required"] = serde_json::json!(false);
-    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(disabled).is_err());
+    assert!(
+        serde_json::from_value::<
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation,
+        >(disabled)
+        .is_err()
+    );
     let mut surplus = admitted;
     surplus["receipt_id"] = serde_json::json!("018f0000-0000-7001-8000-000000000033");
-    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(surplus).is_err());
+    assert!(
+        serde_json::from_value::<
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation,
+        >(surplus)
+        .is_err()
+    );
 
     assert_eq!(
-        serde_json::to_value(crate::ApplyAuthorEditOutcome::Rejected {
-            reason: crate::ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
+        serde_json::to_value(crate::release1_author_edit_outcome::ApplyAuthorEditOutcome::Rejected {
+            reason: crate::release1_author_edit_outcome::ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
         })
         .expect("rejected outcome serializes"),
         serde_json::json!({
@@ -206,9 +216,9 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         authoritative_revision: AuthoritativeChapterRevision {
             revision_id: "revision-1".to_owned(),
             body: "body".to_owned(),
-            blocks: vec![crate::ManuscriptBlock {
+            blocks: vec![crate::release1::ManuscriptBlock {
                 manuscript_block_id: "block-1".to_owned(),
-                block_kind: crate::ManuscriptBlockKind::Paragraph,
+                block_kind: crate::release1::ManuscriptBlockKind::Paragraph,
                 text: "body".to_owned(),
             }],
         },

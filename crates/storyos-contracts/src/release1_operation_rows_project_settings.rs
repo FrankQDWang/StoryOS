@@ -6,8 +6,8 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
-use crate::ProjectActivityKind;
 use crate::release1_operation_registry::RegisteredOperation;
+use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_project_assistance::{
     GET_PROJECT_ASSISTANCE, GetProjectAssistanceResponse, ModelRuntimeQualification,
     ProjectAssistanceAvailability, ProjectAssistanceBinding, ProjectModelDestination,
