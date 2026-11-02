@@ -149,15 +149,12 @@ pub(super) const GET_EDITOR_SESSION_ROW: OperationRow = OperationRow {
     ),
     summary: "Read one exact Editor Session",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::path_parameters("editor-session-get-request"),
-        SchemaSource::typed(
-            "editor-session-get-response",
-            raw_schema::<GetEditorSessionResponse>,
-            "StoryOS Get Editor Session Response",
-            GET_EDITOR_SESSION_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "editor-session-get-response",
+        raw_schema::<GetEditorSessionResponse>,
+        "StoryOS Get Editor Session Response",
+        GET_EDITOR_SESSION_RESPONSE,
+    )),
     typescript: &[GetEditorSessionResponse::decl],
     fixture: Fixture::Json(
         r#"{

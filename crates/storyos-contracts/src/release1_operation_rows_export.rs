@@ -233,18 +233,12 @@ pub(super) const GET_EXPORT_OPERATION_ROW: OperationRow = OperationRow {
     ),
     summary: "Inspect or download one settled Project Export Archive",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::titled_path_parameters(
-            "export-operation-request",
-            "StoryOS Export Operation Request",
-        ),
-        SchemaSource::typed(
-            "export-operation-response",
-            raw_schema::<GetExportOperationResponse>,
-            "StoryOS Export Operation Response",
-            NO_PATCHES,
-        ),
-    )
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "export-operation-response",
+        raw_schema::<GetExportOperationResponse>,
+        "StoryOS Export Operation Response",
+        NO_PATCHES,
+    ))
     .response_media(ResponseMedia::JsonOrProjectArchive),
     typescript: &[GetExportOperationResponse::decl],
     fixture: Fixture::Json(
@@ -300,18 +294,12 @@ pub(super) const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_ROW: OperationRow = Operat
     ),
     summary: "Inspect one human-readable manuscript export",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::titled_path_parameters(
-            "human-readable-manuscript-export-request",
-            "StoryOS Human-Readable Manuscript Export Request",
-        ),
-        SchemaSource::typed(
-            "human-readable-manuscript-export-response",
-            raw_schema::<GetHumanReadableManuscriptExportResponse>,
-            "StoryOS Human-Readable Manuscript Export Response",
-            NO_PATCHES,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "human-readable-manuscript-export-response",
+        raw_schema::<GetHumanReadableManuscriptExportResponse>,
+        "StoryOS Human-Readable Manuscript Export Response",
+        NO_PATCHES,
+    )),
     typescript: &[GetHumanReadableManuscriptExportResponse::decl],
     fixture: Fixture::Json(
         r##"{

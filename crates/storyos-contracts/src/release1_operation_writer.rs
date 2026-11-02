@@ -16,7 +16,7 @@ use crate::release1_operation_table::{
     SchemaSource, apply_patches, registered_operations,
 };
 use crate::release1_route_catalog::route_catalog_bytes;
-use crate::release1_wire::{json_bytes, path_request_schema};
+use crate::release1_wire::json_bytes;
 
 const SCHEMA_DIRECTORY: &str = "generated/json-schema/storyos-public-release-1/";
 const FIXTURE_DIRECTORY: &str = "generated/golden-wire/storyos-public-release-1/";
@@ -26,7 +26,7 @@ const PROJECT_ARCHIVE_MEDIA: &str = "            application/vnd.storyos.project
 
 /// The generated paths of one row; the paths live as long as the table.
 struct RowPaths {
-    request_schema: String,
+    request_schema: Option<String>,
     response_schema: String,
     fixture: String,
 }
@@ -35,7 +35,7 @@ static ROW_PATHS: LazyLock<Vec<RowPaths>> = LazyLock::new(|| {
     OPERATION_TABLE
         .iter()
         .map(|row| RowPaths {
-            request_schema: schema_path(&row.schemas.request),
+            request_schema: row.schemas.request.as_ref().map(schema_path),
             response_schema: schema_path(&row.schemas.response),
             fixture: format!(
                 "{FIXTURE_DIRECTORY}{}.json",
@@ -144,7 +144,12 @@ fn openapi_method((row, paths): (&OperationRow, &RowPaths)) -> OpenApiMethod {
     if operation.method != HttpMethod::Get {
         yaml.push_str(&format!(
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: {}\n",
-            reference(&paths.request_schema),
+            reference(
+                paths
+                    .request_schema
+                    .as_ref()
+                    .expect("a request body has a schema source")
+            ),
         ));
     }
     yaml.push_str("      responses:\n");
@@ -214,28 +219,32 @@ fn header_parameters(headers: Headers) -> String {
     .collect()
 }
 
-fn schema_files((row, paths): (&'static OperationRow, &'static RowPaths)) -> [GeneratedSchema; 2] {
+/// The request schema file, when the operation has a request body, and the response schema file.
+fn schema_files(
+    (row, paths): (&'static OperationRow, &'static RowPaths),
+) -> impl Iterator<Item = GeneratedSchema> {
     let operation = row.operation.operation;
-    [
-        (
-            &row.schemas.request,
-            operation.request_schema,
-            &paths.request_schema,
-        ),
-        (
+    let request = row
+        .schemas
+        .request
+        .as_ref()
+        .zip(paths.request_schema.as_ref())
+        .map(|(source, path)| (source, operation.request_schema, path));
+    request
+        .into_iter()
+        .chain([(
             &row.schemas.response,
             operation.response_schema,
             &paths.response_schema,
-        ),
-    ]
-    .map(|(source, schema_id, path)| GeneratedSchema {
-        schema_id,
-        path,
-        bytes: json_bytes(&schema_value(source, schema_id, operation.path)),
-    })
+        )])
+        .map(|(source, schema_id, path)| GeneratedSchema {
+            schema_id,
+            path,
+            bytes: json_bytes(&schema_value(source, schema_id)),
+        })
 }
 
-fn schema_value(source: &SchemaSource, schema_id: &str, path: &str) -> Value {
+fn schema_value(source: &SchemaSource, schema_id: &str) -> Value {
     match source.body {
         SchemaBody::Type {
             schema,
@@ -246,17 +255,6 @@ fn schema_value(source: &SchemaSource, schema_id: &str, path: &str) -> Value {
             schema["$id"] = json!(schema_id);
             schema["title"] = json!(title);
             apply_patches(&mut schema, patches);
-            schema
-        }
-        SchemaBody::NoParameters { title } => json!({
-            "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": schema_id,
-            "title": title, "type": "object", "additionalProperties": false, "maxProperties": 0
-        }),
-        SchemaBody::PathParameters { title } => {
-            let mut schema = path_request_schema(schema_id, &path_parameters(path));
-            if let Some(title) = title {
-                schema["title"] = json!(title);
-            }
             schema
         }
         SchemaBody::Json { title, json } => {

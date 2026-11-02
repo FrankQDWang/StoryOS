@@ -3,8 +3,7 @@
 use ts_rs::TS;
 
 use super::{
-    DATE_TIME, Fixture, Headers, OperationRow, Patch, SchemaSource, SchemaSources, U64, UUID,
-    raw_schema,
+    DATE_TIME, Fixture, Headers, OperationRow, Patch, SchemaSource, SchemaSources, U64, raw_schema,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
 use crate::release1_route_catalog::{
@@ -29,20 +28,12 @@ pub(super) const GET_SNAPSHOT_ROW: OperationRow = OperationRow {
     ),
     summary: "Read one authorized canonical Snapshot",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::typed(
-            "snapshot-request",
-            raw_schema::<GetSnapshotRequest>,
-            "StoryOS Snapshot Request",
-            GET_SNAPSHOT_REQUEST,
-        ),
-        SchemaSource::typed(
-            "snapshot-response",
-            raw_schema::<GetSnapshotResponse>,
-            "StoryOS Snapshot Response",
-            GET_SNAPSHOT_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "snapshot-response",
+        raw_schema::<GetSnapshotResponse>,
+        "StoryOS Snapshot Response",
+        GET_SNAPSHOT_RESPONSE,
+    )),
     typescript: &[
         SnapshotKind::decl,
         CanonicalSnapshotMaps::decl,
@@ -109,8 +100,7 @@ pub(super) const ACTIVITY_STREAM_ROW: OperationRow = OperationRow {
         }),
     summary: "Stream Project Activity after an authorized Snapshot",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::typed("activity-stream-request", raw_schema::<ActivityStreamRequest>, "StoryOS Activity Stream Request", ACTIVITY_STREAM_REQUEST),
+    schemas: SchemaSources::get(
         SchemaSource::json(
             "activity-stream-response",
             "StoryOS Activity Stream SSE Frame",
@@ -341,11 +331,6 @@ fn activity_stream_client_source() -> String {
     )
 }
 
-const GET_SNAPSHOT_REQUEST: &[Patch] = &[Patch(
-    UUID,
-    &["/properties/project_id", "/properties/snapshot_id"],
-)];
-
 const GET_SNAPSHOT_RESPONSE: &[Patch] = &[
     Patch(
         DATE_TIME,
@@ -362,8 +347,3 @@ const GET_SNAPSHOT_RESPONSE: &[Patch] = &[
         ],
     ),
 ];
-
-const ACTIVITY_STREAM_REQUEST: &[Patch] = &[Patch(
-    UUID,
-    &["/properties/project_id", "/properties/snapshot_id"],
-)];

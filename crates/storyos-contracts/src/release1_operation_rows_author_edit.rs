@@ -294,8 +294,7 @@ pub(super) const GET_APPLY_AUTHOR_EDIT_OUTCOME_ROW: OperationRow = OperationRow 
     }),
     summary: "Read one exact Apply Author Edit outcome",
     headers: Headers::NONE.anti_forgery().no_store(),
-    schemas: SchemaSources::new(
-        SchemaSource::typed("apply-author-edit-outcome-request", raw_schema::<GetApplyAuthorEditOutcomeRequest>, "StoryOS Apply Author Edit Outcome Request", GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST),
+    schemas: SchemaSources::get(
         SchemaSource::typed("apply-author-edit-outcome-response", raw_schema::<GetApplyAuthorEditOutcomeResponse>, "StoryOS Apply Author Edit Outcome Response", GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE),
     ),
     typescript: &[GetApplyAuthorEditOutcomeRequest::decl, ApplyAuthorEditRejectionReason::decl, ApplyAuthorEditReconfirmationReason::decl, ApplyAuthorEditUnknownObservation::decl, ApplyAuthorEditOutcome::decl, GetApplyAuthorEditOutcomeResponse::decl],
@@ -439,11 +438,6 @@ const UNDO_LATEST_AUTHOR_ACTION_RESPONSE: &[Patch] = &[
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
-
-const GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST: &[Patch] = &[Patch(
-    UUID,
-    &["/properties/idempotency_key", "/properties/project_id"],
-)];
 
 const GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE: &[Patch] = &[
     Patch(

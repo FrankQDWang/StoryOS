@@ -309,6 +309,26 @@ fn check_reports_a_generated_file_that_the_generator_does_not_emit() {
 }
 
 #[test]
+fn the_writer_emits_no_request_schema_for_a_get_or_stream_operation() {
+    let emitted = table_source()
+        .schemas
+        .iter()
+        .map(|schema| schema.schema_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    for registered in registered_operations() {
+        let operation = registered.operation;
+        let body = operation.method != HttpMethod::Get;
+        assert_eq!(
+            emitted.contains(operation.request_schema),
+            body,
+            "{}",
+            operation.operation_id
+        );
+        assert!(emitted.contains(operation.response_schema));
+    }
+}
+
+#[test]
 fn changed_contract_graph_is_rejected() {
     let mut graph = contract_graph_bytes();
     assert!(check_contract_graph(&graph).is_ok());
@@ -350,17 +370,20 @@ fn every_registered_operation_matches_its_generated_wire() {
                 .strip_prefix("generated/")
                 .expect("schema is a generated artifact")
         };
-        for schema_id in [operation.request_schema, operation.response_schema] {
+        let request = (operation.method != HttpMethod::Get).then_some(operation.request_schema);
+        for schema_id in request.into_iter().chain([operation.response_schema]) {
             let schema: serde_json::Value =
                 serde_json::from_slice(&generated[schema_paths[schema_id]])
                     .expect("generated schema must be JSON");
             assert_eq!(schema["$id"], schema_id);
         }
-        let request_schema: serde_json::Value =
-            serde_json::from_slice(&generated[schema_paths[operation.request_schema]])
-                .expect("generated schema must be JSON");
-        assert_eq!(request_schema["additionalProperties"], false, "{id}");
-        assert!(request_schema["properties"].get("nonce").is_none(), "{id}");
+        if let Some(request) = request {
+            let request_schema: serde_json::Value =
+                serde_json::from_slice(&generated[schema_paths[request]])
+                    .expect("generated schema must be JSON");
+            assert_eq!(request_schema["additionalProperties"], false, "{id}");
+            assert!(request_schema["properties"].get("nonce").is_none(), "{id}");
+        }
         let response_schema: serde_json::Value =
             serde_json::from_slice(&generated[schema_paths[operation.response_schema]])
                 .expect("generated schema must be JSON");
@@ -578,22 +601,6 @@ fn with_value(
 }
 
 fn assert_outcome_documents(generated: &GeneratedFiles) {
-    let request = generated_validator(generated, "apply-author-edit-outcome-request.schema.json");
-    let valid_request = serde_json::json!({
-        "project_id": "018f0000-0000-7001-8000-000000000002",
-        "idempotency_key": "018f0000-0000-7001-8000-000000000037"
-    });
-    assert!(request.is_valid(&valid_request));
-    assert_each_present_field_is_required(&request, &valid_request, "");
-    let mut with_nonce = valid_request.clone();
-    with_nonce["nonce"] = serde_json::json!("a".repeat(64));
-    for invalid in [
-        with_nonce,
-        with_value(&valid_request, "/idempotency_key", serde_json::json!("key")),
-    ] {
-        assert!(!request.is_valid(&invalid), "{invalid}");
-    }
-
     let response = generated_validator(generated, "apply-author-edit-outcome-response.schema.json");
     let committed = golden_wire(generated, "getApplyAuthorEditOutcome");
     assert!(response.is_valid(&committed));

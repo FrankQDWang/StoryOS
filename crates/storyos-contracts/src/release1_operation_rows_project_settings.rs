@@ -123,18 +123,12 @@ pub(super) const GET_PROJECT_ASSISTANCE_ROW: OperationRow = OperationRow {
     ),
     summary: "Inspect Project assistance and its Host-owned fake binding",
     headers: Headers::NONE,
-    schemas: SchemaSources::new(
-        SchemaSource::no_parameters(
-            "project-assistance-request",
-            "StoryOS Project Assistance Request",
-        ),
-        SchemaSource::typed(
-            "project-assistance-response",
-            raw_schema::<GetProjectAssistanceResponse>,
-            "StoryOS Project Assistance Response",
-            GET_PROJECT_ASSISTANCE_RESPONSE,
-        ),
-    ),
+    schemas: SchemaSources::get(SchemaSource::typed(
+        "project-assistance-response",
+        raw_schema::<GetProjectAssistanceResponse>,
+        "StoryOS Project Assistance Response",
+        GET_PROJECT_ASSISTANCE_RESPONSE,
+    )),
     typescript: &[
         ProjectAssistanceAvailability::decl,
         ProjectModelDestination::decl,
