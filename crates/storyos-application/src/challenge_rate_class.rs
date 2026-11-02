@@ -1,7 +1,11 @@
+use storyos_contracts::CommandKind;
+
 use crate::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION;
 
 const AUTHOR_EDIT_POLICY_REVISION: &str =
     "storyos.project-command-challenge-rate.author-edit.fixed-window.v1";
+const APPLY_AUTHOR_EDIT: &str = CommandKind::ApplyAuthorEdit.as_str();
+const UNDO_LATEST_AUTHOR_ACTION: &str = CommandKind::UndoLatestAuthorAction.as_str();
 
 /// The Server-derived rate budget that a new Command Challenge uses.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -13,7 +17,7 @@ pub enum ChallengeRateClass {
 impl ChallengeRateClass {
     pub fn for_command_kind(command_kind: &str) -> Self {
         match command_kind {
-            "applyAuthorEdit" | "undoLatestAuthorAction" => Self::AuthorEdit,
+            APPLY_AUTHOR_EDIT | UNDO_LATEST_AUTHOR_ACTION => Self::AuthorEdit,
             _ => Self::Shared,
         }
     }
