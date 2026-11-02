@@ -1,5 +1,6 @@
 use std::future::Future;
 
+use storyos_contracts::CommandKind;
 use storyos_core::{ReadableExportChapter, ReadableExportVolume, render_readable_manuscript};
 
 use crate::{
@@ -7,7 +8,8 @@ use crate::{
     ProjectReadError, ProjectScope, RefusableCommandError,
 };
 
-pub const HUMAN_READABLE_EXPORT_COMMAND_KIND: &str = "exportHumanReadableManuscript";
+pub const HUMAN_READABLE_EXPORT_COMMAND_KIND: &str =
+    CommandKind::ExportHumanReadableManuscript.as_str();
 pub const HUMAN_READABLE_EXPORT_ROUTE: &str = "/api/v1/projects/{project_id}/manuscript/exports";
 pub const HUMAN_READABLE_EXPORT_REQUEST_SCHEMA: &str =
     "storyos.command.export-human-readable-manuscript.request.v1";

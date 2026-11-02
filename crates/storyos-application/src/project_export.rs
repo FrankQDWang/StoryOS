@@ -1,5 +1,6 @@
 use std::future::Future;
 
+use storyos_contracts::CommandKind;
 use storyos_core::{ExportProjectArchiveRefusal, ProjectArchiveBuildRefusal};
 
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
     RefusableCommandError,
 };
 
-pub const PROJECT_EXPORT_COMMAND_KIND: &str = "exportProjectArchive";
+pub const PROJECT_EXPORT_COMMAND_KIND: &str = CommandKind::ExportProjectArchive.as_str();
 pub const PROJECT_EXPORT_ROUTE: &str = "/api/v1/projects/{project_id}/exports";
 pub const PROJECT_EXPORT_REQUEST_SCHEMA: &str = "storyos.command.export-project-archive.request.v1";
 pub const PROJECT_EXPORT_DIGEST_PROFILE: &str = "storyos.command.exportProjectArchive.jcs.v1";

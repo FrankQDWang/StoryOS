@@ -19,7 +19,22 @@ The generator wrote 94 JSON Schema files. The OpenAPI document referenced 78. Th
 - The Operation Registry is one table, `OPERATION_TABLE` in `release1_operation_table.rs`, with one row for each public operation, in the declared order. The declared order is the order of every generated artifact (ADR 0074).
 - A row holds the registered operation: the route, the kind, the schema ids, the status codes, the fixture id, the contract-graph preconditions, the Route Catalog metadata, and the client override. A row holds five hand fields that the registered operation does not hold: the summary text, the header parameter set, the schema sources, the TypeScript declaration list, and the fixture.
 - The header set is a closed value over the Origin, Idempotency-Key, and X-StoryOS-Anti-Forgery request parameters and the Retry-After and `Cache-Control: no-store` response headers. The registered operation does not tell which 429 response has a Retry-After header or which response is never stored, so the row tells it.
-- A schema source names the request type and the response type and carries a declarative patch list. The schema sources of a GET operation have no request source, because a GET operation has no request body. A patch names one edit of a closed set and the JSON pointers inside the schema that get it: the schema id as a constant, a constant, a format, a pattern, a minimum length, a maximum length, a maximum UTF-8 byte count, a minimum item count, a maximum item count, unique items, an enumeration, a nullable pattern, or the removal of a null type. One function applies the list after schemars. No row repeats a patch that the shared schema helpers apply to every schema.
+- A schema source names the request type and the response type and carries a declarative patch list. The schema sources of a GET operation have no request source, because a GET operation has no request body. A patch names one edit of a closed set and the JSON pointers inside the schema that get it. The closed set has thirteen edits:
+  - the schema id as a constant,
+  - a constant,
+  - a format,
+  - a pattern,
+  - a minimum length,
+  - a maximum length,
+  - a maximum UTF-8 byte count,
+  - a minimum item count,
+  - a maximum item count,
+  - unique items,
+  - an enumeration,
+  - a nullable pattern,
+  - the removal of a null type.
+
+  One function applies the list after schemars. No row repeats a patch that the shared schema helpers apply to every schema.
 - A schema that has no Rust type has one closed body: a JSON literal. Before ticket #1388, two more closed bodies, an object with no parameters and an object of the path parameters, gave only the request schemas of GET operations. Ticket #1388 removed them with those schemas. The schema sources also give the value schema of an optional query parameter and the project archive media of a response, because the registered operation does not hold them.
 - A TypeScript declaration that several operations share appears in the row of the first operation that uses it. The declaration lists, read in the declared order, give the declaration file.
 - The fixture of a row is the one positive golden-wire fixture of the operation (ADR 0075), kept as a JSON text literal in the row. The protocol-profile fixture is the one exception: the writer serializes the protocol profile, because the profile holds the digests of the other artifacts.

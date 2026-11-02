@@ -1,5 +1,7 @@
 use std::future::Future;
 
+use storyos_contracts::CommandKind;
+
 use crate::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, EditorClientBinding, ProjectScope,
 };
@@ -74,7 +76,7 @@ pub async fn create_project(
         || challenge.client_session_generation != command.client_binding.session_generation
         || challenge.client_contract_revision != command.client_binding.client_contract_revision
         || challenge.security_policy_revision != command.client_binding.security_policy_revision
-        || challenge.command_kind != "createProject"
+        || challenge.command_kind != CommandKind::CreateProject.as_str()
         || challenge.method != "POST"
         || challenge.route_template != "/api/v1/projects"
         || challenge.command_schema != "storyos.command.create-project.request.v1"
