@@ -38,7 +38,7 @@ pub struct SteerAgentRunInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(length(min = 1, max = 8))]
     #[ts(optional)]
-    pub selection_references: Option<Vec<crate::SelectionReference>>,
+    pub selection_references: Option<Vec<crate::release1_agent_run::SelectionReference>>,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,

@@ -1,100 +1,61 @@
 //! StoryOS-owned source for public contract shapes and deterministic generated artifacts.
 
-#![recursion_limit = "256"]
-
 mod command_kind;
 mod digest;
 mod project_command_targets;
 mod release1;
 mod release1_accept_proposal;
-mod release1_accept_proposal_artifacts;
 mod release1_agent_run;
-mod release1_agent_run_artifacts;
 mod release1_agent_run_control;
-mod release1_agent_run_control_artifacts;
 mod release1_artifacts;
 mod release1_author_edit;
-mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
-mod release1_author_edit_outcome_artifacts;
 mod release1_create_chapter;
-mod release1_create_chapter_artifacts;
 mod release1_create_project;
-mod release1_create_project_artifacts;
 mod release1_create_volume;
-mod release1_create_volume_artifacts;
 mod release1_delete_chapter;
-mod release1_delete_chapter_artifacts;
 mod release1_delete_volume;
-mod release1_delete_volume_artifacts;
-mod release1_editor_session_artifacts;
 mod release1_list_projects;
-mod release1_list_projects_artifacts;
 mod release1_manuscript_search;
-mod release1_manuscript_search_artifacts;
 mod release1_manuscript_statistics;
-mod release1_manuscript_statistics_artifacts;
 mod release1_manuscript_tree;
-mod release1_manuscript_tree_artifacts;
 mod release1_open_proposal_list;
-mod release1_open_proposal_list_artifacts;
 mod release1_operation_registry;
+mod release1_operation_table;
 mod release1_project_activity;
 mod release1_project_assistance;
-mod release1_project_assistance_artifacts;
 mod release1_project_export;
-mod release1_project_export_artifacts;
 mod release1_project_export_query;
-mod release1_project_export_query_artifacts;
-mod release1_project_query_artifacts;
 mod release1_proposal;
-mod release1_proposal_artifacts;
 mod release1_proposal_generation_decision;
-mod release1_proposal_generation_decision_artifacts;
-mod release1_protocol_profile_artifacts;
 mod release1_readable_export;
-mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
-mod release1_readable_export_query_artifacts;
 mod release1_reject_proposal_operations;
-mod release1_reject_proposal_operations_artifacts;
 mod release1_reopen_rejected_operations;
-mod release1_reopen_rejected_operations_artifacts;
 mod release1_reopen_withdrawn_proposal;
-mod release1_reopen_withdrawn_proposal_artifacts;
 mod release1_replan_proposal;
-mod release1_replan_proposal_artifacts;
 mod release1_route_catalog;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
-mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
-mod release1_snapshot_artifacts;
 mod release1_takeover;
-mod release1_takeover_artifacts;
 mod release1_undo_latest_author_action;
-mod release1_undo_latest_author_action_artifacts;
 mod release1_update_chapter;
-mod release1_update_chapter_artifacts;
 mod release1_update_project;
-mod release1_update_project_artifacts;
 mod release1_update_volume;
-mod release1_update_volume_artifacts;
 mod release1_wire;
 mod release1_withdraw_proposal;
-mod release1_withdraw_proposal_artifacts;
 mod web_assets;
 
 pub use command_kind::CommandKind;
 pub use release1_project_activity::ProjectActivityKind;
 pub use web_assets::{
-    RELEASE_1_SECURITY_POLICY_REVISION, WEB_ASSET_MANIFEST, WEB_ASSET_SCHEMA, WebAssetManifest,
-    WebResource, web_asset_digest, web_resource_paths, write_web_asset_manifest,
+    RELEASE_1_SECURITY_POLICY_REVISION, WEB_ASSET_MANIFEST, WebAssetManifest, WebResource,
+    web_asset_digest, web_resource_paths, write_web_asset_manifest,
 };
 
 pub use release1::{
     APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-    AUTHOR_EDIT_BATCH_IDLE_MS, AUTHOR_EDIT_BATCH_POLICY_REVISION,
     AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES, AUTHOR_EDIT_MAX_UNITS, AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
     AuthoritativeChapterRevision, CREATE_EDITOR_SESSION_METHOD, CREATE_EDITOR_SESSION_PATH,
     CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID, CREATE_PROJECT_COMMAND_CHALLENGE_METHOD,
@@ -106,32 +67,29 @@ pub use release1::{
     GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
     GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
     LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE,
-    ProjectOpenState, ProjectScope, Release1CompatibilityIdentity, Release1ProtocolProfile,
-    StoryOSProblem, project_command_kind,
+    ProjectOpenState, ProjectScope, Release1ProtocolProfile, StoryOSProblem, project_command_kind,
 };
 pub use release1_accept_proposal::{
     ACCEPT_PROPOSAL_DIGEST_PROFILE, ACCEPT_PROPOSAL_METHOD, ACCEPT_PROPOSAL_PATH,
-    ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID, ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
-    AcceptProposalConflictReason, AcceptProposalEffect, AcceptProposalInput,
-    AcceptProposalInvalidReason, AcceptProposalRefusalReason, AcceptProposalRequest,
-    AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult, AcceptanceTargetResolution,
+    ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID, ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID, AcceptProposalEffect,
+    AcceptProposalRequest, AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
+    AcceptanceTargetResolution,
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
-    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget,
-    AttemptCacheInspect, AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE,
-    CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
-    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
-    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
-    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
-    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
-    DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
-    GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest,
-    GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalActiveCompactionInspect,
-    OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
-    OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceWorkingTarget, AttemptCacheInspect,
+    AttemptEvidence, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD,
+    CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
+    ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
+    ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
+    ConversationSelection, CreateAgentRunEffect, CreateAgentRunRequest, CreateAgentRunResponse,
+    CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD,
+    GET_AGENT_RUN_PATH, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse,
+    HostControlInspect, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
     OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
     ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
@@ -142,15 +100,14 @@ pub use release1_agent_run::{
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
     CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID, CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
-    CancelAgentRunConflictReason, CancelAgentRunEffect, CancelAgentRunInput,
-    CancelAgentRunNoEffectReason, CancelAgentRunRequest, CancelAgentRunResponse,
-    PAUSE_AGENT_RUN_DIGEST_PROFILE, PAUSE_AGENT_RUN_METHOD, PAUSE_AGENT_RUN_PATH,
-    PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-    PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
+    CancelAgentRunConflictReason, CancelAgentRunEffect, CancelAgentRunNoEffectReason,
+    CancelAgentRunRequest, CancelAgentRunResponse, PAUSE_AGENT_RUN_DIGEST_PROFILE,
+    PAUSE_AGENT_RUN_METHOD, PAUSE_AGENT_RUN_PATH, PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
+    PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID, PauseAgentRunConflictReason, PauseAgentRunEffect,
     PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
     STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_METHOD, STEER_AGENT_RUN_PATH,
     STEER_AGENT_RUN_REQUEST_SCHEMA_ID, STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect,
-    SteerAgentRunInput, SteerAgentRunRequest, SteerAgentRunResponse,
+    SteerAgentRunRequest, SteerAgentRunResponse,
 };
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,
@@ -165,46 +122,41 @@ pub use release1_author_edit::{
 pub use release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
     ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH, GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH, GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
     GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
 };
 pub use release1_create_chapter::{
     CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_METHOD, CREATE_CHAPTER_PATH,
     CREATE_CHAPTER_REQUEST_SCHEMA_ID, CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
-    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput, CreateChapterPlacement,
+    CreateChapterConflictReason, CreateChapterEffect, CreateChapterPlacement,
     CreateChapterRefusalReason, CreateChapterRequest, CreateChapterResponse,
 };
 pub use release1_create_project::{
-    CREATE_PROJECT_CHALLENGE_METHOD, CREATE_PROJECT_CHALLENGE_PATH,
-    CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID, CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
-    CREATE_PROJECT_DIGEST_PROFILE, CREATE_PROJECT_METHOD, CREATE_PROJECT_PATH,
-    CREATE_PROJECT_REQUEST_SCHEMA_ID, CREATE_PROJECT_RESPONSE_SCHEMA_ID,
-    CreateProjectChallengeRequest, CreateProjectChallengeResponse, CreateProjectInput,
-    CreateProjectRequest, CreateProjectResponse,
+    CREATE_PROJECT_CHALLENGE_METHOD, CREATE_PROJECT_CHALLENGE_PATH, CREATE_PROJECT_DIGEST_PROFILE,
+    CREATE_PROJECT_METHOD, CREATE_PROJECT_PATH, CREATE_PROJECT_REQUEST_SCHEMA_ID,
+    CREATE_PROJECT_RESPONSE_SCHEMA_ID, CreateProjectChallengeRequest,
+    CreateProjectChallengeResponse, CreateProjectInput, CreateProjectRequest,
+    CreateProjectResponse,
 };
 pub use release1_create_volume::{
     CREATE_VOLUME_DIGEST_PROFILE, CREATE_VOLUME_METHOD, CREATE_VOLUME_PATH,
     CREATE_VOLUME_REQUEST_SCHEMA_ID, CREATE_VOLUME_RESPONSE_SCHEMA_ID, CreateVolumeConflictReason,
-    CreateVolumeEffect, CreateVolumeInput, CreateVolumeRefusalReason, CreateVolumeRequest,
-    CreateVolumeResponse,
+    CreateVolumeEffect, CreateVolumeRefusalReason, CreateVolumeRequest, CreateVolumeResponse,
 };
 pub use release1_delete_chapter::{
     DELETE_CHAPTER_DIGEST_PROFILE, DELETE_CHAPTER_METHOD, DELETE_CHAPTER_PATH,
     DELETE_CHAPTER_REQUEST_SCHEMA_ID, DELETE_CHAPTER_RESPONSE_SCHEMA_ID,
-    DeleteChapterConflictReason, DeleteChapterEffect, DeleteChapterInput,
-    DeleteChapterNoEffectReason, DeleteChapterRefusalReason, DeleteChapterRequest,
-    DeleteChapterResponse,
+    DeleteChapterConflictReason, DeleteChapterEffect, DeleteChapterNoEffectReason,
+    DeleteChapterRefusalReason, DeleteChapterRequest, DeleteChapterResponse,
 };
 pub use release1_delete_volume::{
     DELETE_VOLUME_DIGEST_PROFILE, DELETE_VOLUME_METHOD, DELETE_VOLUME_PATH,
     DELETE_VOLUME_REQUEST_SCHEMA_ID, DELETE_VOLUME_RESPONSE_SCHEMA_ID, DeleteVolumeConflictReason,
-    DeleteVolumeEffect, DeleteVolumeInput, DeleteVolumeNoEffectReason, DeleteVolumeRefusalReason,
-    DeleteVolumeRequest, DeleteVolumeResponse,
+    DeleteVolumeEffect, DeleteVolumeNoEffectReason, DeleteVolumeRefusalReason, DeleteVolumeRequest,
+    DeleteVolumeResponse,
 };
 pub use release1_list_projects::{
-    LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
-    LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectListItem,
+    LIST_PROJECTS_METHOD, LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectListItem,
 };
 pub use release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
@@ -213,47 +165,44 @@ pub use release1_manuscript_search::{
 };
 pub use release1_manuscript_statistics::{
     ChapterStatistics, GET_STATISTICS_METHOD, GET_STATISTICS_PATH,
-    GET_STATISTICS_REQUEST_SCHEMA_ID, GET_STATISTICS_RESPONSE_SCHEMA_ID, GetStatisticsResponse,
-    ManuscriptStatisticsCompleteness, ManuscriptTotals,
+    GET_STATISTICS_RESPONSE_SCHEMA_ID, GetStatisticsResponse, ManuscriptStatisticsCompleteness,
+    ManuscriptTotals,
 };
 pub use release1_manuscript_tree::{
-    GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
-    GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
-    ManuscriptVolumeNode,
+    GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
+    GetManuscriptTreeResponse, ManuscriptChapterNode, ManuscriptVolumeNode,
 };
 pub use release1_open_proposal_list::{
     LIST_CHAPTER_OPEN_PROPOSALS_METHOD, LIST_CHAPTER_OPEN_PROPOSALS_PATH,
-    LIST_CHAPTER_OPEN_PROPOSALS_REQUEST_SCHEMA_ID, LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID,
-    ListChapterOpenProposalsResponse, OPEN_PROPOSAL_LIST_MAX_ENTRIES, OpenProposalEntry,
-    OpenProposalListCompleteness, OpenProposalSource,
+    LIST_CHAPTER_OPEN_PROPOSALS_RESPONSE_SCHEMA_ID, ListChapterOpenProposalsResponse,
+    OPEN_PROPOSAL_LIST_MAX_ENTRIES, OpenProposalEntry, OpenProposalListCompleteness,
+    OpenProposalSource,
 };
 pub use release1_project_assistance::{
     GET_PROJECT_ASSISTANCE_METHOD, GET_PROJECT_ASSISTANCE_PATH,
-    GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID, GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
-    GetProjectAssistanceResponse, ModelRuntimeQualification, ProjectAssistanceAvailability,
-    ProjectAssistanceBinding, ProjectModelDestination, UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE,
+    GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID, GetProjectAssistanceResponse,
+    ModelRuntimeQualification, ProjectAssistanceAvailability, ProjectAssistanceBinding,
+    ProjectModelDestination, UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE,
     UPDATE_PROJECT_ASSISTANCE_METHOD, UPDATE_PROJECT_ASSISTANCE_PATH,
     UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID, UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
     UpdateProjectAssistanceConflictReason, UpdateProjectAssistanceEffect,
-    UpdateProjectAssistanceInput, UpdateProjectAssistanceNoEffectReason,
-    UpdateProjectAssistanceRequest, UpdateProjectAssistanceResponse,
+    UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
+    UpdateProjectAssistanceResponse,
 };
 pub use release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,
     EXPORT_PROJECT_ARCHIVE_PATH, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
     EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID, ExportProjectArchiveEffect,
-    ExportProjectArchiveInput, ExportProjectArchiveRequest, ExportProjectArchiveResponse,
-    ProjectExportRef,
+    ExportProjectArchiveRequest, ExportProjectArchiveResponse, ProjectExportRef,
 };
 pub use release1_project_export_query::{
-    GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
+    GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
 };
 pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
-    BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
-    GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
-    OptionalAcceptanceRefusalInspect, OptionalRevisionComparisonInspect,
+    BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_RESPONSE_SCHEMA_ID,
+    GetProposalResponse, OptionalAcceptanceRefusalInspect, OptionalRevisionComparisonInspect,
     OptionalValidationReceiptInspect, ProposalOperationInspect, ProposalSourceConditionInspect,
     ProposalSourceInspect, ReplacementSpanInspect,
 };
@@ -264,9 +213,8 @@ pub use release1_proposal_generation_decision::{
     CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE, CONTINUE_PROPOSAL_GENERATION_METHOD,
     CONTINUE_PROPOSAL_GENERATION_PATH, CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
     CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID, CompleteReadyPartialProposalEffect,
-    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalRefusalReason,
-    CompleteReadyPartialProposalRequest, CompleteReadyPartialProposalResponse,
-    ContinueProposalGenerationEffect, ContinueProposalGenerationInput,
+    CompleteReadyPartialProposalRefusalReason, CompleteReadyPartialProposalRequest,
+    CompleteReadyPartialProposalResponse, ContinueProposalGenerationEffect,
     ContinueProposalGenerationRefusalReason, ContinueProposalGenerationRequest,
     ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
     ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
@@ -275,13 +223,11 @@ pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH, EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID, ExportAcknowledgement,
-    ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptInput,
-    ExportHumanReadableManuscriptRequest, ExportHumanReadableManuscriptResponse,
-    HumanReadableManuscriptExportRef,
+    ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptRequest,
+    ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
 };
 pub use release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD, GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_PATH,
-    GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
     GetHumanReadableManuscriptExportResponse,
 };
@@ -290,78 +236,73 @@ pub use release1_reject_proposal_operations::{
     REJECT_PROPOSAL_OPERATIONS_DIGEST_PROFILE, REJECT_PROPOSAL_OPERATIONS_METHOD,
     REJECT_PROPOSAL_OPERATIONS_PATH, REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
     REJECT_PROPOSAL_OPERATIONS_RESPONSE_SCHEMA_ID, RejectProposalOperationsConflictReason,
-    RejectProposalOperationsEffect, RejectProposalOperationsInput,
-    RejectProposalOperationsRefusalReason, RejectProposalOperationsRequest,
-    RejectProposalOperationsResponse, RejectionReceipt, RejectionReceiptResult,
+    RejectProposalOperationsEffect, RejectProposalOperationsRefusalReason,
+    RejectProposalOperationsRequest, RejectProposalOperationsResponse, RejectionReceipt,
+    RejectionReceiptResult,
 };
 pub use release1_reopen_rejected_operations::{
     REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE, REOPEN_REJECTED_OPERATIONS_METHOD,
     REOPEN_REJECTED_OPERATIONS_PATH, REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
     REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID, ReopenReceipt, ReopenReceiptResult,
     ReopenRejectedOperationsConflictReason, ReopenRejectedOperationsEffect,
-    ReopenRejectedOperationsInput, ReopenRejectedOperationsRefusalReason,
-    ReopenRejectedOperationsRequest, ReopenRejectedOperationsResponse,
+    ReopenRejectedOperationsRefusalReason, ReopenRejectedOperationsRequest,
+    ReopenRejectedOperationsResponse,
 };
 pub use release1_reopen_withdrawn_proposal::{
     REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE, REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     REOPEN_WITHDRAWN_PROPOSAL_PATH, REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
     REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID, ReopenWithdrawnProposalConflictReason,
-    ReopenWithdrawnProposalEffect, ReopenWithdrawnProposalInput,
-    ReopenWithdrawnProposalNoEffectReason, ReopenWithdrawnProposalRefusalReason,
-    ReopenWithdrawnProposalRequest, ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt,
-    ReopenWithdrawnReceiptResult,
+    ReopenWithdrawnProposalEffect, ReopenWithdrawnProposalNoEffectReason,
+    ReopenWithdrawnProposalRefusalReason, ReopenWithdrawnProposalRequest,
+    ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt, ReopenWithdrawnReceiptResult,
 };
 pub use release1_replan_proposal::{
     REPLAN_PROPOSAL_DIGEST_PROFILE, REPLAN_PROPOSAL_METHOD, REPLAN_PROPOSAL_PATH,
     REPLAN_PROPOSAL_REQUEST_SCHEMA_ID, REPLAN_PROPOSAL_RESPONSE_SCHEMA_ID,
-    ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalInput,
-    ReplanProposalRefusalReason, ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt,
-    ReplanReceiptResult, ReplanSourceCondition,
+    ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalRefusalReason,
+    ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult,
+    ReplanSourceCondition,
 };
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,
     SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID, SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID,
-    SetCurrentChapterConflictReason, SetCurrentChapterEffect, SetCurrentChapterInput,
-    SetCurrentChapterNoEffectReason, SetCurrentChapterRefusalReason, SetCurrentChapterRequest,
-    SetCurrentChapterResponse,
+    SetCurrentChapterConflictReason, SetCurrentChapterEffect, SetCurrentChapterNoEffectReason,
+    SetCurrentChapterRefusalReason, SetCurrentChapterRequest, SetCurrentChapterResponse,
 };
 pub use release1_snapshot::{
-    ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,
-    GET_SNAPSHOT_METHOD, GET_SNAPSHOT_PATH, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
-    GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
+    ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, CanonicalSnapshotMaps, GET_SNAPSHOT_METHOD,
+    GET_SNAPSHOT_PATH, GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
 };
 pub use release1_takeover::{
     TAKE_OVER_PROJECT_WRITER_METHOD, TAKE_OVER_PROJECT_WRITER_PATH,
     TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID, TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
     TakeOverProjectWriterRequest, TakeOverProjectWriterResponse, TakeOverProjectWriterResult,
-    TakeoverCompareFailedReason,
 };
 pub use release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE, UNDO_LATEST_AUTHOR_ACTION_METHOD,
     UNDO_LATEST_AUTHOR_ACTION_PATH, UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
     UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID, UndoLatestAuthorActionConflictReason,
-    UndoLatestAuthorActionEffect, UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest,
-    UndoLatestAuthorActionResponse, UndoLatestAuthorActionUnavailableReason,
+    UndoLatestAuthorActionEffect, UndoLatestAuthorActionRequest, UndoLatestAuthorActionResponse,
+    UndoLatestAuthorActionUnavailableReason,
 };
 pub use release1_update_chapter::{
     UPDATE_CHAPTER_DIGEST_PROFILE, UPDATE_CHAPTER_METHOD, UPDATE_CHAPTER_PATH,
     UPDATE_CHAPTER_REQUEST_SCHEMA_ID, UPDATE_CHAPTER_RESPONSE_SCHEMA_ID,
-    UpdateChapterConflictReason, UpdateChapterEffect, UpdateChapterInput,
-    UpdateChapterNoEffectReason, UpdateChapterRefusalReason, UpdateChapterRequest,
-    UpdateChapterResponse,
+    UpdateChapterConflictReason, UpdateChapterEffect, UpdateChapterNoEffectReason,
+    UpdateChapterRefusalReason, UpdateChapterRequest, UpdateChapterResponse,
 };
 pub use release1_update_project::{
     UPDATE_PROJECT_DIGEST_PROFILE, UPDATE_PROJECT_METHOD, UPDATE_PROJECT_PATH,
     UPDATE_PROJECT_REQUEST_SCHEMA_ID, UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
-    UpdateProjectConflictReason, UpdateProjectEffect, UpdateProjectInput,
-    UpdateProjectNoEffectReason, UpdateProjectRequest, UpdateProjectResponse,
+    UpdateProjectConflictReason, UpdateProjectEffect, UpdateProjectNoEffectReason,
+    UpdateProjectRequest, UpdateProjectResponse,
 };
 pub use release1_update_volume::{
     UPDATE_VOLUME_DIGEST_PROFILE, UPDATE_VOLUME_METHOD, UPDATE_VOLUME_PATH,
     UPDATE_VOLUME_REQUEST_SCHEMA_ID, UPDATE_VOLUME_RESPONSE_SCHEMA_ID, UpdateVolumeConflictReason,
-    UpdateVolumeEffect, UpdateVolumeInput, UpdateVolumeNoEffectReason, UpdateVolumeRefusalReason,
-    UpdateVolumeRequest, UpdateVolumeResponse,
+    UpdateVolumeEffect, UpdateVolumeNoEffectReason, UpdateVolumeRefusalReason, UpdateVolumeRequest,
+    UpdateVolumeResponse,
 };
 pub use release1_withdraw_proposal::{
     AgentRunDecisionKind, AgentRunDecisionProducer, AuthorWithdrawalReason,
@@ -378,6 +319,3 @@ pub fn repository_root() -> &'static std::path::Path {
         .nth(2)
         .expect("contracts crate must be nested under the repository root")
 }
-
-mod release1_chapter_query_artifacts;
-mod release1_command_challenge_artifacts;

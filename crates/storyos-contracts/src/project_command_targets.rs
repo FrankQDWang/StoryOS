@@ -1,4 +1,4 @@
-use crate::CommandKind;
+use crate::command_kind::CommandKind;
 
 pub fn project_command_kind(
     method: &str,

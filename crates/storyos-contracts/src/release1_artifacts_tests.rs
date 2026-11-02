@@ -1,10 +1,14 @@
-use super::{OPENAPI_PATH, check_contract_graph, contract_graph_bytes, release1_protocol_profile};
-use crate::release1::HttpMethod;
-use crate::release1_chapter_query_artifacts::CHAPTER_RESPONSE_SCHEMA_PATH;
-use crate::{
-    ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
-    AuthoritativeChapterRevision, NoEffectReason,
+use super::release1_operation_writer::{declarations, table_source};
+use super::{
+    OPENAPI_PATH, check_contract_graph, check_release1_artifacts, contract_graph_bytes,
+    release1_protocol_profile, stray_artifact,
 };
+use crate::release1::AuthoritativeChapterRevision;
+use crate::release1::HttpMethod;
+use crate::release1_author_edit::{
+    ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason, NoEffectReason,
+};
+use crate::release1_operation_table::{OPERATION_TABLE, registered_operations};
 
 #[test]
 fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
@@ -15,20 +19,20 @@ fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
         "reconciliation_required": true
     });
     assert_eq!(
-        serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(admitted.clone())
+        serde_json::from_value::<crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation>(admitted.clone())
             .expect("the required observation must deserialize"),
-        crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+        crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
             command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
             author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
-            reconciliation_required: crate::ReconciliationRequired,
+            reconciliation_required: crate::release1_author_edit_outcome::ReconciliationRequired,
         }
     );
     assert_eq!(
         serde_json::to_value(
-            crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
                 command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
                 author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
-                reconciliation_required: crate::ReconciliationRequired,
+                reconciliation_required: crate::release1_author_edit_outcome::ReconciliationRequired,
             }
         )
         .expect("required reconciliation observation must serialize"),
@@ -36,14 +40,24 @@ fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
     );
     let mut disabled = admitted.clone();
     disabled["reconciliation_required"] = serde_json::json!(false);
-    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(disabled).is_err());
+    assert!(
+        serde_json::from_value::<
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation,
+        >(disabled)
+        .is_err()
+    );
     let mut surplus = admitted;
     surplus["receipt_id"] = serde_json::json!("018f0000-0000-7001-8000-000000000033");
-    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(surplus).is_err());
+    assert!(
+        serde_json::from_value::<
+            crate::release1_author_edit_outcome::ApplyAuthorEditUnknownObservation,
+        >(surplus)
+        .is_err()
+    );
 
     assert_eq!(
-        serde_json::to_value(crate::ApplyAuthorEditOutcome::Rejected {
-            reason: crate::ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
+        serde_json::to_value(crate::release1_author_edit_outcome::ApplyAuthorEditOutcome::Rejected {
+            reason: crate::release1_author_edit_outcome::ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
         })
         .expect("rejected outcome serializes"),
         serde_json::json!({
@@ -92,26 +106,15 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         );
         resolved_references.insert(relative);
     }
-    let expected_references = crate::release1_operation_registry::RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| {
-            let schema_paths = (artifacts.schemas)()
+    let schema_paths = schema_paths();
+    let expected_references = registered_operations()
+        .flat_map(|registered| {
+            let operation = registered.operation;
+            let request = (operation.method != HttpMethod::Get).then_some(operation.request_schema);
+            request
                 .into_iter()
-                .map(|schema| (schema.schema_id, schema.path))
-                .collect::<std::collections::BTreeMap<_, _>>();
-            artifacts
-                .operations
-                .iter()
-                .flat_map(move |registered| {
-                    let operation = registered.operation;
-                    let request =
-                        (operation.method != HttpMethod::Get).then_some(operation.request_schema);
-                    request
-                        .into_iter()
-                        .chain([operation.response_schema])
-                        .map(|schema_id| schema_paths[schema_id].to_owned())
-                        .collect::<Vec<_>>()
-                })
+                .chain([operation.response_schema])
+                .map(|schema_id| schema_paths[schema_id].to_owned())
                 .collect::<Vec<_>>()
         })
         .collect::<std::collections::BTreeSet<_>>();
@@ -145,7 +148,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         "storyos.typescript-client.release-1.v32"
     );
     let schema: serde_json::Value = serde_json::from_slice(
-        &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
+        &generated["generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"],
     )
     .expect("response schema must be JSON");
     assert_eq!(
@@ -213,9 +216,9 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         authoritative_revision: AuthoritativeChapterRevision {
             revision_id: "revision-1".to_owned(),
             body: "body".to_owned(),
-            blocks: vec![crate::ManuscriptBlock {
+            blocks: vec![crate::release1::ManuscriptBlock {
                 manuscript_block_id: "block-1".to_owned(),
-                block_kind: crate::ManuscriptBlockKind::Paragraph,
+                block_kind: crate::release1::ManuscriptBlockKind::Paragraph,
                 text: "body".to_owned(),
             }],
         },
@@ -245,7 +248,12 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         assert!(serde_json::from_value::<ApplyAuthorEditEffect>(value).is_err());
     }
 
-    let declarations = crate::release1_author_edit_artifacts::typescript_type_declarations();
+    let declarations = declarations(
+        OPERATION_TABLE
+            .iter()
+            .find(|row| row.operation.operation.operation_id == "applyAuthorEdit")
+            .expect("the table has the applyAuthorEdit row"),
+    );
     let effect_declaration = declarations
         .lines()
         .find(|line| line.starts_with("export type ApplyAuthorEditEffect ="))
@@ -272,11 +280,54 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v32\";"
     ));
     assert!(
-        generated[CHAPTER_RESPONSE_SCHEMA_PATH]
+        generated["generated/json-schema/storyos-public-release-1/chapter-response.schema.json"]
             .windows(b"project_activity_position".len())
             .any(|window| window == b"project_activity_position")
     );
 }
+
+#[test]
+fn check_reports_a_generated_file_that_the_generator_does_not_emit() {
+    let root = std::env::temp_dir().join(format!("storyos-contracts-stray-{}", std::process::id()));
+    super::write_release1_artifacts(&root).expect("artifacts must write");
+    let catalog = root.join("generated/persistence-catalog");
+    std::fs::create_dir_all(&catalog).expect("catalog directory must write");
+    std::fs::write(catalog.join("release-1-schema.json"), b"{}").expect("catalog must write");
+    assert!(check_release1_artifacts(&root).is_ok());
+
+    let stray = root.join("generated/json-schema/storyos-public-release-1/stray.schema.json");
+    std::fs::write(&stray, b"{}").expect("stray file must write");
+    let error = check_release1_artifacts(&root).expect_err("a stray file is stale");
+    assert_eq!(
+        (error.kind(), error.to_string()),
+        (
+            std::io::ErrorKind::InvalidData,
+            stray_artifact(&stray).to_string()
+        )
+    );
+    std::fs::remove_dir_all(&root).expect("temporary root must go");
+}
+
+#[test]
+fn the_writer_emits_no_request_schema_for_a_get_or_stream_operation() {
+    let emitted = table_source()
+        .schemas
+        .iter()
+        .map(|schema| schema.schema_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    for registered in registered_operations() {
+        let operation = registered.operation;
+        let body = operation.method != HttpMethod::Get;
+        assert_eq!(
+            emitted.contains(operation.request_schema),
+            body,
+            "{}",
+            operation.operation_id
+        );
+        assert!(emitted.contains(operation.response_schema));
+    }
+}
+
 #[test]
 fn changed_contract_graph_is_rejected() {
     let mut graph = contract_graph_bytes();
@@ -304,166 +355,164 @@ fn every_registered_operation_matches_its_generated_wire() {
         .expect("OpenAPI names the runtime-implemented slice")
         .split(',')
         .collect::<Vec<_>>();
-    for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
-        let schema_paths = (artifacts.schemas)()
-            .into_iter()
-            .map(|schema| (schema.schema_id, schema.path))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        for registered in artifacts.operations {
-            let operation = registered.operation;
-            let id = operation.operation_id;
-            let statuses = operation
-                .responses
-                .iter()
-                .map(|(status, _)| *status)
-                .collect::<Vec<_>>();
+    let schema_paths = schema_paths();
+    for registered in registered_operations() {
+        let operation = registered.operation;
+        let id = operation.operation_id;
+        let statuses = operation
+            .responses
+            .iter()
+            .map(|(status, _)| *status)
+            .collect::<Vec<_>>();
 
-            let schema_ref = |schema_id: &str| {
-                schema_paths[schema_id]
-                    .strip_prefix("generated/")
-                    .expect("schema is a generated artifact")
-            };
-            for schema_id in [operation.request_schema, operation.response_schema] {
-                let schema: serde_json::Value =
-                    serde_json::from_slice(&generated[schema_paths[schema_id]])
-                        .expect("generated schema must be JSON");
-                assert_eq!(schema["$id"], schema_id);
-            }
+        let schema_ref = |schema_id: &str| {
+            schema_paths[schema_id]
+                .strip_prefix("generated/")
+                .expect("schema is a generated artifact")
+        };
+        let request = (operation.method != HttpMethod::Get).then_some(operation.request_schema);
+        for schema_id in request.into_iter().chain([operation.response_schema]) {
+            let schema: serde_json::Value =
+                serde_json::from_slice(&generated[schema_paths[schema_id]])
+                    .expect("generated schema must be JSON");
+            assert_eq!(schema["$id"], schema_id);
+        }
+        if let Some(request) = request {
             let request_schema: serde_json::Value =
-                serde_json::from_slice(&generated[schema_paths[operation.request_schema]])
+                serde_json::from_slice(&generated[schema_paths[request]])
                     .expect("generated schema must be JSON");
             assert_eq!(request_schema["additionalProperties"], false, "{id}");
             assert!(request_schema["properties"].get("nonce").is_none(), "{id}");
-            let response_schema: serde_json::Value =
-                serde_json::from_slice(&generated[schema_paths[operation.response_schema]])
-                    .expect("generated schema must be JSON");
-            if response_schema.get("oneOf").is_none() {
-                assert_eq!(response_schema["additionalProperties"], false, "{id}");
-            }
-            assert!(implemented_slice.contains(&id), "{id}");
+        }
+        let response_schema: serde_json::Value =
+            serde_json::from_slice(&generated[schema_paths[operation.response_schema]])
+                .expect("generated schema must be JSON");
+        if response_schema.get("oneOf").is_none() {
+            assert_eq!(response_schema["additionalProperties"], false, "{id}");
+        }
+        assert!(implemented_slice.contains(&id), "{id}");
 
-            let path_key = format!("\n  {}:\n", operation.path);
-            let path_start = openapi
-                .find(&path_key)
-                .unwrap_or_else(|| panic!("OpenAPI must contain the path of {id}"));
-            let method_key = format!(
-                "    {}:\n      operationId: {id}\n",
-                operation.method.as_str().to_ascii_lowercase()
-            );
-            let path_item = &openapi[path_start + path_key.len()..];
-            let path_item = &path_item[..path_item.find("\n  /").unwrap_or(path_item.len())];
-            let method_start = path_item
-                .find(&method_key)
-                .unwrap_or_else(|| panic!("OpenAPI must contain the method of {id}"));
-            let method_lines = path_item[method_start + method_key.len()..]
-                .lines()
-                .take_while(|line| line.starts_with("      "))
-                .collect::<Vec<_>>();
-            let responses_at = method_lines
+        let path_key = format!("\n  {}:\n", operation.path);
+        let path_start = openapi
+            .find(&path_key)
+            .unwrap_or_else(|| panic!("OpenAPI must contain the path of {id}"));
+        let method_key = format!(
+            "    {}:\n      operationId: {id}\n",
+            operation.method.as_str().to_ascii_lowercase()
+        );
+        let path_item = &openapi[path_start + path_key.len()..];
+        let path_item = &path_item[..path_item.find("\n  /").unwrap_or(path_item.len())];
+        let method_start = path_item
+            .find(&method_key)
+            .unwrap_or_else(|| panic!("OpenAPI must contain the method of {id}"));
+        let method_lines = path_item[method_start + method_key.len()..]
+            .lines()
+            .take_while(|line| line.starts_with("      "))
+            .collect::<Vec<_>>();
+        let responses_at = method_lines
+            .iter()
+            .position(|line| *line == "      responses:")
+            .unwrap_or_else(|| panic!("OpenAPI must list the responses of {id}"));
+        let references = |lines: &[&str]| {
+            lines
                 .iter()
-                .position(|line| *line == "      responses:")
-                .unwrap_or_else(|| panic!("OpenAPI must list the responses of {id}"));
-            let references = |lines: &[&str]| {
-                lines
-                    .iter()
-                    .filter_map(|line| line.trim().strip_prefix("$ref: '../")?.strip_suffix('\''))
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            };
-            let request_references = references(&method_lines[..responses_at]);
-            if operation.method == HttpMethod::Get {
-                assert_eq!(request_references, Vec::<String>::new(), "{id}");
-            } else {
+                .filter_map(|line| line.trim().strip_prefix("$ref: '../")?.strip_suffix('\''))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        let request_references = references(&method_lines[..responses_at]);
+        if operation.method == HttpMethod::Get {
+            assert_eq!(request_references, Vec::<String>::new(), "{id}");
+        } else {
+            assert_eq!(
+                request_references,
+                [schema_ref(operation.request_schema)],
+                "{id}"
+            );
+        }
+        let mut referenced_statuses = Vec::new();
+        let mut status = None;
+        for line in &method_lines[responses_at..] {
+            if let Some(code) = line
+                .strip_prefix("        '")
+                .and_then(|rest| rest.strip_suffix("':"))
+            {
+                status = Some(code);
+            }
+            if let Some(reference) = references(&[line]).pop() {
+                assert_eq!(reference, schema_ref(operation.response_schema), "{id}");
+                referenced_statuses
+                    .push(status.unwrap_or_else(|| panic!("{id}: reference outside a status")));
+            }
+        }
+        assert!(!referenced_statuses.is_empty(), "{id}");
+        assert!(
+            referenced_statuses
+                .iter()
+                .all(|status| status.starts_with('2')),
+            "{id}: {referenced_statuses:?}"
+        );
+        let openapi_statuses = method_lines[responses_at..]
+            .iter()
+            .filter_map(|line| {
+                line.strip_prefix("        '")?
+                    .strip_suffix("':")?
+                    .parse()
+                    .ok()
+            })
+            .collect::<Vec<u16>>();
+        assert_eq!(openapi_statuses, statuses, "{id}");
+
+        client_positions.push(client.find(&format!("export async function {id}(")));
+        let function = client
+            .split(&format!("export async function {id}("))
+            .nth(1)
+            .unwrap_or_else(|| panic!("the client must contain {id}"))
+            .split("\n}\n")
+            .next()
+            .expect("a client function closes");
+        for (openapi_text, client_text) in [
+            (
+                "- name: X-StoryOS-Anti-Forgery",
+                "\"x-storyos-anti-forgery\"",
+            ),
+            ("- name: Idempotency-Key", "\"idempotency-key\""),
+            ("text/event-stream", "text/event-stream"),
+        ] {
+            assert_eq!(
+                function.contains(client_text),
+                method_lines.iter().any(|line| line.contains(openapi_text)),
+                "{id}: {openapi_text}"
+            );
+        }
+        let url = function
+            .split_once("path: `")
+            .map_or("", |(_, rest)| rest.split('`').next().unwrap_or(rest));
+        assert!(
+            !url.contains("antiForgery") && !function.contains("nonce"),
+            "{id}: the Challenge proof stays out of the URL"
+        );
+        declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
+        let graph_entry = graph["operations"]
+            .as_array()
+            .expect("contract graph operations must be an array")
+            .iter()
+            .find(|entry| entry["operation_id"] == id);
+        match registered.graph {
+            crate::release1_operation_registry::ContractGraphEntry::Preconditions(
+                preconditions,
+            ) => {
+                let graph_entry =
+                    graph_entry.unwrap_or_else(|| panic!("contract graph must contain {id}"));
+                assert_eq!(graph_entry["kind"], registered.kind.as_str(), "{id}");
                 assert_eq!(
-                    request_references,
-                    [schema_ref(operation.request_schema)],
+                    graph_entry["preconditions"],
+                    serde_json::json!(preconditions),
                     "{id}"
                 );
             }
-            let mut referenced_statuses = Vec::new();
-            let mut status = None;
-            for line in &method_lines[responses_at..] {
-                if let Some(code) = line
-                    .strip_prefix("        '")
-                    .and_then(|rest| rest.strip_suffix("':"))
-                {
-                    status = Some(code);
-                }
-                if let Some(reference) = references(&[line]).pop() {
-                    assert_eq!(reference, schema_ref(operation.response_schema), "{id}");
-                    referenced_statuses
-                        .push(status.unwrap_or_else(|| panic!("{id}: reference outside a status")));
-                }
-            }
-            assert!(!referenced_statuses.is_empty(), "{id}");
-            assert!(
-                referenced_statuses
-                    .iter()
-                    .all(|status| status.starts_with('2')),
-                "{id}: {referenced_statuses:?}"
-            );
-            let openapi_statuses = method_lines[responses_at..]
-                .iter()
-                .filter_map(|line| {
-                    line.strip_prefix("        '")?
-                        .strip_suffix("':")?
-                        .parse()
-                        .ok()
-                })
-                .collect::<Vec<u16>>();
-            assert_eq!(openapi_statuses, statuses, "{id}");
-
-            client_positions.push(client.find(&format!("export async function {id}(")));
-            let function = client
-                .split(&format!("export async function {id}("))
-                .nth(1)
-                .unwrap_or_else(|| panic!("the client must contain {id}"))
-                .split("\n}\n")
-                .next()
-                .expect("a client function closes");
-            for (openapi_text, client_text) in [
-                (
-                    "- name: X-StoryOS-Anti-Forgery",
-                    "\"x-storyos-anti-forgery\"",
-                ),
-                ("- name: Idempotency-Key", "\"idempotency-key\""),
-                ("text/event-stream", "text/event-stream"),
-            ] {
-                assert_eq!(
-                    function.contains(client_text),
-                    method_lines.iter().any(|line| line.contains(openapi_text)),
-                    "{id}: {openapi_text}"
-                );
-            }
-            let url = function
-                .split_once("path: `")
-                .map_or("", |(_, rest)| rest.split('`').next().unwrap_or(rest));
-            assert!(
-                !url.contains("antiForgery") && !function.contains("nonce"),
-                "{id}: the Challenge proof stays out of the URL"
-            );
-            declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
-            let graph_entry = graph["operations"]
-                .as_array()
-                .expect("contract graph operations must be an array")
-                .iter()
-                .find(|entry| entry["operation_id"] == id);
-            match registered.graph {
-                crate::release1_operation_registry::ContractGraphEntry::Preconditions(
-                    preconditions,
-                ) => {
-                    let graph_entry =
-                        graph_entry.unwrap_or_else(|| panic!("contract graph must contain {id}"));
-                    assert_eq!(graph_entry["kind"], registered.kind.as_str(), "{id}");
-                    assert_eq!(
-                        graph_entry["preconditions"],
-                        serde_json::json!(preconditions),
-                        "{id}"
-                    );
-                }
-                crate::release1_operation_registry::ContractGraphEntry::Absent(_) => {
-                    assert!(graph_entry.is_none(), "{id}");
-                }
+            crate::release1_operation_registry::ContractGraphEntry::Absent(_) => {
+                assert!(graph_entry.is_none(), "{id}");
             }
         }
     }
@@ -480,6 +529,17 @@ fn every_registered_operation_matches_its_generated_wire() {
 }
 
 type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
+
+/// The generated path of each schema id.
+fn schema_paths() -> std::collections::BTreeMap<&'static str, &'static str> {
+    let schemas = table_source().schemas;
+    let paths = schemas
+        .iter()
+        .map(|schema| (schema.schema_id, schema.path))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(paths.len(), schemas.len(), "each schema id has one path");
+    paths
+}
 
 const SCHEMA_DIRECTORY: &str = "generated/json-schema/storyos-public-release-1";
 
@@ -541,22 +601,6 @@ fn with_value(
 }
 
 fn assert_outcome_documents(generated: &GeneratedFiles) {
-    let request = generated_validator(generated, "apply-author-edit-outcome-request.schema.json");
-    let valid_request = serde_json::json!({
-        "project_id": "018f0000-0000-7001-8000-000000000002",
-        "idempotency_key": "018f0000-0000-7001-8000-000000000037"
-    });
-    assert!(request.is_valid(&valid_request));
-    assert_each_present_field_is_required(&request, &valid_request, "");
-    let mut with_nonce = valid_request.clone();
-    with_nonce["nonce"] = serde_json::json!("a".repeat(64));
-    for invalid in [
-        with_nonce,
-        with_value(&valid_request, "/idempotency_key", serde_json::json!("key")),
-    ] {
-        assert!(!request.is_valid(&invalid), "{invalid}");
-    }
-
     let response = generated_validator(generated, "apply-author-edit-outcome-response.schema.json");
     let committed = golden_wire(generated, "getApplyAuthorEditOutcome");
     assert!(response.is_valid(&committed));

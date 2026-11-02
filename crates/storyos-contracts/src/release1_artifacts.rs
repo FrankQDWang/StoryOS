@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use serde_json::{Value, json};
@@ -18,12 +19,15 @@ use crate::release1::{
     protocol_profile,
 };
 use crate::release1_operation_registry::{
-    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
-    RegisteredOperation,
+    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RegisteredOperation,
 };
-use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
+use crate::release1_operation_table::registered_operations;
+use crate::release1_route_catalog::ROUTE_CATALOG_PATH;
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
+const GENERATED_DIRECTORY: &str = "generated";
+/// The PostgreSQL adapter writes this directory, so the check does not own its files.
+const PERSISTENCE_CATALOG_DIRECTORY: &str = "generated/persistence-catalog";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
 const TYPESCRIPT_CLIENT_PATH: &str = "generated/typescript/storyos-public-release-1/client.mjs";
 const PROJECT_ACTIVITY_MODULE_PATH: &str =
@@ -41,14 +45,24 @@ const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
-#[path = "release1_fixture_corpus.rs"]
-mod release1_fixture_corpus;
-use release1_fixture_corpus::{fixture_corpus_bytes, generated_fixture_files};
-
 #[path = "release1_typescript_client.rs"]
 mod release1_typescript_client;
 
+#[path = "release1_operation_writer.rs"]
+mod release1_operation_writer;
+use release1_operation_writer::{fixture_files, table_source};
+
+/// The operations of the table, and the artifact parts that the table writer writes for them.
+struct ArtifactSource {
+    operations: Vec<&'static RegisteredOperation>,
+    openapi_methods: Vec<OpenApiMethod>,
+    schemas: Vec<GeneratedSchema>,
+    typescript_types: Vec<String>,
+    route_catalog: Vec<u8>,
+}
+
 struct Release1ArtifactAssembly {
+    route_catalog: Vec<u8>,
     openapi: Vec<u8>,
     schemas: Vec<GeneratedSchema>,
     typescript_client: Vec<u8>,
@@ -58,15 +72,18 @@ struct Release1ArtifactAssembly {
 }
 
 fn release1_artifact_assembly() -> Release1ArtifactAssembly {
-    let openapi = openapi_bytes();
-    let schemas = RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| (artifacts.schemas)())
-        .collect::<Vec<_>>();
-    let typescript_client = typescript_client_bytes();
-    let typescript_declaration = typescript_declaration_bytes();
+    let ArtifactSource {
+        operations,
+        openapi_methods,
+        schemas,
+        typescript_types,
+        route_catalog,
+    } = table_source();
+    let openapi = openapi_bytes(openapi_methods, &operations);
+    let typescript_client = typescript_client_bytes(&operations);
+    let typescript_declaration = typescript_declaration_bytes(typescript_types, &operations);
     let release_profile_declaration = release_profile_declaration_bytes();
-    let contract_graph = contract_graph_bytes();
+    let contract_graph = contract_graph_bytes_of(&operations);
     let typescript = [
         typescript_client.as_slice(),
         b"\n--declaration--\n",
@@ -79,13 +96,17 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let mut profile = protocol_profile(ArtifactDigests {
         contract_graph: sha256_prefixed(contract_graph.as_slice()),
         openapi: sha256_prefixed(openapi.as_slice()),
-        json_schema_catalog: sha256_prefixed(schema_catalog_bytes(&schemas)),
+        json_schema_catalog: sha256_prefixed(schema_catalog_bytes(&schemas, &operations)),
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
-    profile.release_identity.fixture_corpus_digest =
-        sha256_prefixed(fixture_corpus_bytes(&profile));
+    let fixture_corpus = fixture_files(&profile)
+        .into_iter()
+        .flat_map(|(_, bytes)| bytes)
+        .collect::<Vec<_>>();
+    profile.release_identity.fixture_corpus_digest = sha256_prefixed(fixture_corpus);
     Release1ArtifactAssembly {
+        route_catalog,
         openapi,
         schemas,
         typescript_client,
@@ -117,6 +138,7 @@ pub fn write_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 /// Fail when any checked-in generated artifact differs from Rust-source generation.
 pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
     check_contract_graph(&contract_graph_bytes())?;
+    let mut emitted = BTreeSet::new();
     for (relative_path, expected) in generated_files() {
         let path = repo_root.join(relative_path);
         let actual = match fs::read(&path) {
@@ -129,12 +151,48 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
         if actual != expected {
             return Err(stale_artifact(&path));
         }
+        emitted.insert(path);
     }
-    Ok(())
+    let stray = files_under(
+        &repo_root.join(GENERATED_DIRECTORY),
+        &repo_root.join(PERSISTENCE_CATALOG_DIRECTORY),
+    )?
+    .into_iter()
+    .find(|path| !emitted.contains(path));
+    match stray {
+        Some(path) => Err(stray_artifact(&path)),
+        None => Ok(()),
+    }
+}
+
+/// The files under a directory, in path order, without the files under the excluded directory.
+fn files_under(directory: &Path, excluded: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut directories = vec![directory.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        let entries = fs::read_dir(&directory).map_err(|source| path_error(&directory, source))?;
+        for entry in entries {
+            let entry = entry.map_err(|source| path_error(&directory, source))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|source| path_error(&path, source))?;
+            if file_type.is_dir() {
+                if path != excluded {
+                    directories.push(path);
+                }
+            } else {
+                files.push(path);
+            }
+        }
+    }
+    files.sort_unstable();
+    Ok(files)
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
     let Release1ArtifactAssembly {
+        route_catalog,
         openapi,
         schemas,
         typescript_client,
@@ -148,8 +206,8 @@ fn generated_files() -> Vec<GeneratedFile> {
     let mut generated = vec![
         (
             "generated/json-schema/storyos-web-assets/manifest.schema.json",
-            json_bytes(&schema_value::<crate::WebAssetManifest>(
-                crate::WEB_ASSET_SCHEMA,
+            json_bytes(&schema_value::<crate::web_assets::WebAssetManifest>(
+                crate::web_assets::WEB_ASSET_SCHEMA,
                 "StoryOS Web Asset Manifest",
             )),
         ),
@@ -164,7 +222,7 @@ fn generated_files() -> Vec<GeneratedFile> {
         (TYPESCRIPT_CLIENT_PATH, typescript_client),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration),
         (PROJECT_ACTIVITY_MODULE_PATH, {
-            let events = crate::ProjectActivityKind::ALL
+            let events = crate::release1_project_activity::ProjectActivityKind::ALL
                 .iter()
                 .map(|kind| (kind.as_str(), kind.event_schemas()))
                 .collect::<std::collections::BTreeMap<_, _>>();
@@ -182,9 +240,9 @@ fn generated_files() -> Vec<GeneratedFile> {
             RELEASE_PROFILE_DECLARATION_PATH,
             release_profile_declaration,
         ),
-        (ROUTE_CATALOG_PATH, route_catalog_bytes()),
+        (ROUTE_CATALOG_PATH, route_catalog),
     ]);
-    generated.extend(generated_fixture_files(&profile));
+    generated.extend(fixture_files(&profile));
     generated
 }
 
@@ -202,6 +260,16 @@ fn stale_artifact(path: &Path) -> io::Error {
     )
 }
 
+fn stray_artifact(path: &Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "{} is stale: the generator does not emit it; remove the file",
+            path.display()
+        ),
+    )
+}
+
 fn check_contract_graph(graph: &[u8]) -> io::Result<()> {
     let graph_digest = sha256_prefixed(graph);
     if graph_digest != REVIEWED_CONTRACT_GRAPH_SHA256 {
@@ -214,7 +282,12 @@ fn check_contract_graph(graph: &[u8]) -> io::Result<()> {
 }
 
 fn contract_graph_bytes() -> Vec<u8> {
-    let operations = registered_operations()
+    contract_graph_bytes_of(&registered_operations().collect::<Vec<_>>())
+}
+
+fn contract_graph_bytes_of(operations: &[&RegisteredOperation]) -> Vec<u8> {
+    let operations = operations
+        .iter()
         .filter_map(|registered| match registered.graph {
             ContractGraphEntry::Preconditions(preconditions) => Some(operation_graph(
                 registered.operation,
@@ -241,12 +314,6 @@ fn contract_graph_bytes() -> Vec<u8> {
     .expect("the contract graph contains only serializable values")
 }
 
-fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
-    RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| artifacts.operations)
-}
-
 fn operation_graph(
     operation: &QueryOperation,
     kind: OperationKind,
@@ -262,12 +329,9 @@ fn operation_graph(
     })
 }
 
-fn openapi_bytes() -> Vec<u8> {
+fn openapi_bytes(methods: Vec<OpenApiMethod>, operations: &[&RegisteredOperation]) -> Vec<u8> {
     let mut path_items: Vec<OpenApiMethod> = Vec::new();
-    for method in RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| (artifacts.openapi)())
-    {
+    for method in methods {
         match path_items.iter_mut().find(|item| item.path == method.path) {
             Some(item) => item.yaml.push_str(&method.yaml),
             None => path_items.push(method),
@@ -277,7 +341,7 @@ fn openapi_bytes() -> Vec<u8> {
         .iter()
         .map(|item| format!("  {}:\n{}", item.path, item.yaml))
         .collect::<String>();
-    let implemented_slice = implemented_operation_ids().join(",");
+    let implemented_slice = implemented_operation_ids(operations).join(",");
     format!(
         "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
     ).into_bytes()
@@ -285,23 +349,27 @@ fn openapi_bytes() -> Vec<u8> {
 
 /// The release identity digests this schema catalog. The generator does not write it, because
 /// no reader needs the file.
-fn schema_catalog_bytes(schemas: &[GeneratedSchema]) -> Vec<u8> {
+fn schema_catalog_bytes(
+    schemas: &[GeneratedSchema],
+    operations: &[&RegisteredOperation],
+) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
-        "implemented_operations": implemented_operation_ids(),
+        "implemented_operations": implemented_operation_ids(operations),
         "schemas": schemas.iter().map(|schema| json!({
             "schema_id": schema.schema_id, "path": schema.path, "sha256": sha256_prefixed(&schema.bytes)
         })).collect::<Vec<_>>()
     }))
 }
 
-fn implemented_operation_ids() -> Vec<&'static str> {
-    registered_operations()
+fn implemented_operation_ids(operations: &[&RegisteredOperation]) -> Vec<&'static str> {
+    operations
+        .iter()
         .map(|registered| registered.operation.operation_id)
         .collect()
 }
 
-fn typescript_client_bytes() -> Vec<u8> {
+fn typescript_client_bytes(operations: &[&RegisteredOperation]) -> Vec<u8> {
     let preamble = format!(
         concat!(
             "// @generated by storyos-contracts; do not edit.\n",
@@ -345,13 +413,17 @@ fn typescript_client_bytes() -> Vec<u8> {
         ),
         GENERATED_CLIENT_REVISION,
     );
-    let operations = registered_operations()
-        .map(release1_typescript_client::client_source)
+    let operations = operations
+        .iter()
+        .map(|registered| release1_typescript_client::client_source(registered))
         .collect::<String>();
     (preamble + &operations).into_bytes()
 }
 
-fn typescript_declaration_bytes() -> Vec<u8> {
+fn typescript_declaration_bytes(
+    typescript_types: Vec<String>,
+    operations: &[&RegisteredOperation],
+) -> Vec<u8> {
     let config = Config::default();
     let shared_types = [
         ProjectScope::decl(&config),
@@ -367,15 +439,12 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     .map(|declaration| format!("export {declaration}"));
     let types = shared_types
         .into_iter()
-        .chain(
-            RELEASE1_OPERATIONS
-                .iter()
-                .map(|artifacts| (artifacts.typescript_types)()),
-        )
+        .chain(typescript_types)
         .collect::<Vec<_>>()
         .join("\n\n");
-    let functions = registered_operations()
-        .map(release1_typescript_client::declaration_source)
+    let functions = operations
+        .iter()
+        .map(|registered| release1_typescript_client::declaration_source(registered))
         .collect::<String>();
     format!(
         concat!(

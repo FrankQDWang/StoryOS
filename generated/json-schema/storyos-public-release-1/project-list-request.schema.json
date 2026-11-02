@@ -1,8 +1,0 @@
-{
-  "$id": "storyos.query.project-list.request.v1",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "maxProperties": 0,
-  "title": "StoryOS Project List Request",
-  "type": "object"
-}
