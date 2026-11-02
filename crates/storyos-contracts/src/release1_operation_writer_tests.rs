@@ -1,10 +1,9 @@
-use super::super::{generated_files, generated_files_of};
-use super::table_source;
+use super::super::{generated_files, generated_files_of, module_source};
 
 #[test]
 fn table_writer_emits_the_bytes_of_the_module_writer() {
-    let modules = generated_files();
-    let table = generated_files_of(table_source());
+    let modules = generated_files_of(module_source());
+    let table = generated_files();
     for index in 0..modules.len().max(table.len()) {
         let (module_path, module_bytes) = modules
             .get(index)

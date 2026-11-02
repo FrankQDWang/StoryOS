@@ -22,6 +22,7 @@ use crate::release1_operation_registry::{
     ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
     RegisteredOperation,
 };
+use crate::release1_operation_table::registered_operations;
 use crate::release1_route_catalog::{ROUTE_CATALOG_PATH, route_catalog_bytes};
 use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
@@ -52,9 +53,9 @@ use release1_fixture_corpus::generated_fixture_files;
 #[path = "release1_typescript_client.rs"]
 mod release1_typescript_client;
 
-#[cfg(test)]
 #[path = "release1_operation_writer.rs"]
 mod release1_operation_writer;
+use release1_operation_writer::table_source;
 
 /// The operations of one operation source, and the artifact parts that the source writes for them.
 struct ArtifactSource {
@@ -67,9 +68,13 @@ struct ArtifactSource {
 }
 
 /// The artifact parts that the 39 artifacts modules of the Operation Registry write.
+#[cfg(test)]
 fn module_source() -> ArtifactSource {
     ArtifactSource {
-        operations: registered_operations().collect(),
+        operations: RELEASE1_OPERATIONS
+            .iter()
+            .flat_map(|artifacts| artifacts.operations)
+            .collect(),
         openapi_methods: RELEASE1_OPERATIONS
             .iter()
             .flat_map(|artifacts| (artifacts.openapi)())
@@ -148,7 +153,7 @@ fn release1_artifact_assembly(source: ArtifactSource) -> Release1ArtifactAssembl
 /// Build the one active Release 1 protocol profile from the Rust contract source.
 pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     static PROFILE: LazyLock<Release1ProtocolProfile> =
-        LazyLock::new(|| release1_artifact_assembly(module_source()).profile);
+        LazyLock::new(|| release1_artifact_assembly(table_source()).profile);
     PROFILE.clone()
 }
 
@@ -220,7 +225,7 @@ fn files_under(directory: &Path, excluded: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
-    generated_files_of(module_source())
+    generated_files_of(table_source())
 }
 
 fn generated_files_of(source: ArtifactSource) -> Vec<GeneratedFile> {
@@ -336,12 +341,6 @@ fn contract_graph_bytes_of(operations: &[&RegisteredOperation]) -> Vec<u8> {
         },
     }))
     .expect("the contract graph contains only serializable values")
-}
-
-fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
-    RELEASE1_OPERATIONS
-        .iter()
-        .flat_map(|artifacts| artifacts.operations)
 }
 
 fn operation_graph(
