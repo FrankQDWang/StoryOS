@@ -1865,6 +1865,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "storyos-adapter-mcp-client"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "storyos-application",
+ "storyos-core",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "storyos-adapter-postgres"
 version = "0.1.0"
 dependencies = [
