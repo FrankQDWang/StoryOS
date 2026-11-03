@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -40,6 +41,8 @@ enum Body {
     Events,
     /// The same events after a byte order mark, with a CR at the end of each line.
     CrEvents,
+    /// The CR events on a connection that stays open after the response.
+    HeldCrEvents,
 }
 
 /// The answer of the fake server to one message.
@@ -55,6 +58,8 @@ enum Reply {
     Hold,
     /// More than 1 MiB of small server notifications before the response.
     Flood,
+    /// HTTP 404 with no body.
+    NotFound,
 }
 
 /// The method and the MCP headers of one message that the fake server received.
@@ -109,8 +114,15 @@ async fn serve(
                     let result = json!({"jsonrpc": "2.0", "id": message["id"], "result": {"content": []}});
                     format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{}data: {result}\n\n", event.repeat(1100))
                 }
+                Reply::NotFound => "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
             };
             stream.write_all(response.as_bytes()).await.unwrap();
+            if matches!(body, Body::HeldCrEvents) {
+                tokio::spawn(async move {
+                    let _open = stream;
+                    std::future::pending::<()>().await;
+                });
+            }
         }
     });
     (url, received)
@@ -156,14 +168,16 @@ fn response(body: Body, session: Option<&str>, message: Value) -> String {
                 message.len()
             )
         }
-        Body::Events | Body::CrEvents => {
+        Body::Events | Body::CrEvents | Body::HeldCrEvents => {
             let request = json!({"jsonrpc": "2.0", "id": "s1", "method": "ping"});
             let notification = json!({"jsonrpc": "2.0", "method": "notifications/message", "params": {"level": "info", "data": CONTENT_CANARY}});
             let events = format!(
                 "id: 1\ndata:\n\ndata: {request}\n\ndata: {notification}\n\nid: 2\nevent: message\ndata: {message}\n\n"
             );
             let events = match body {
-                Body::CrEvents => format!("\u{feff}{}", events.replace('\n', "\r")),
+                Body::CrEvents | Body::HeldCrEvents => {
+                    format!("\u{feff}{}", events.replace('\n', "\r"))
+                }
                 Body::Json | Body::Events => events,
             };
             format!(
@@ -305,6 +319,7 @@ async fn json_and_event_stream_servers_give_the_same_record_and_call_result() {
         (Body::Json, Some(SESSION)),
         (Body::Events, Some(SESSION)),
         (Body::CrEvents, Some(SESSION)),
+        (Body::HeldCrEvents, Some(SESSION)),
         (Body::Json, None),
     ] {
         let (url, received) = serve(body, session, conforming).await;
@@ -385,6 +400,35 @@ async fn each_failure_of_the_server_is_one_observation() {
         };
         let (url, _) = serve(Body::Json, Some(SESSION), script).await;
         assert_eq!(exchange(call(&url)).await, expected, "{method}");
+    }
+}
+
+#[tokio::test]
+async fn an_ended_session_starts_one_new_session() {
+    let rejected = McpObservation::Rejected {
+        reason: "http_404".to_owned(),
+    };
+    let twice = [CALL, CALL].concat();
+    // The number of 404 replies to `tools/call`, the session header, the observation, and the
+    // methods that the server receives.
+    let cases = [
+        (1, Some(SESSION), called(), twice.clone()),
+        (2, Some(SESSION), rejected.clone(), twice),
+        (1, None, rejected, CALL.to_vec()),
+    ];
+    for (ended, session, expected, methods) in cases {
+        let calls = AtomicUsize::new(0);
+        let script = move |message: &Value| {
+            if message["method"] == "tools/call" && calls.fetch_add(1, Ordering::SeqCst) < ended {
+                Reply::NotFound
+            } else {
+                conforming(message)
+            }
+        };
+        let (url, received) = serve(Body::Json, session, script).await;
+        let observation = exchange(call(&url)).await;
+        let messages = std::mem::take(&mut *received.lock().unwrap());
+        assert_eq!((observation, messages), (expected, sent(&methods, session)));
     }
 }
 

@@ -36,25 +36,32 @@ enum Failure {
     Invalid(&'static str),
     /// The request left, and its result is not known.
     Lost,
+    /// HTTP 404 to a request with a session identifier: the server ended the session and did
+    /// not process the request.
+    SessionEnded,
 }
+
+/// The server ended the session of an attempt.
+struct SessionEnded;
 
 impl Failure {
     /// Before the operation request, a lost answer proves that the operation was not sent.
-    fn before_operation(self) -> McpObservation {
+    fn before_operation(self) -> Result<McpObservation, SessionEnded> {
         match self {
-            Self::Unsent | Self::Lost => McpObservation::NotSubmitted,
+            Self::Unsent | Self::Lost => Ok(McpObservation::NotSubmitted),
             other => other.after_operation(),
         }
     }
 
-    fn after_operation(self) -> McpObservation {
-        match self {
+    fn after_operation(self) -> Result<McpObservation, SessionEnded> {
+        Ok(match self {
             Self::Unsent => McpObservation::NotSubmitted,
             Self::Rejected(reason) => McpObservation::Rejected { reason },
             Self::JsonRpc(code) => McpObservation::JsonRpcError { code },
             Self::Invalid(reason) => McpObservation::InvalidResult { reason },
             Self::Lost => McpObservation::OutcomeUnknown,
-        }
+            Self::SessionEnded => return Err(SessionEnded),
+        })
     }
 }
 
@@ -73,7 +80,8 @@ struct Session<'a> {
     deadline: Instant,
 }
 
-/// `initialize`, `notifications/initialized`, and then the operation of `request`.
+/// `initialize`, `notifications/initialized`, and then the operation of `request`. When the server
+/// ends the session, the client starts one new session, as the specification requires.
 pub(crate) async fn run(
     url: &str,
     credential: &ResolvedCredential,
@@ -99,60 +107,75 @@ pub(crate) async fn run(
         received: 0,
         deadline: Instant::now() + timeout,
     };
-    let identity = match session.request("initialize", initialize_params()).await {
-        Ok(result) => record::server_identity(&result),
-        Err(failure) => return failure.before_operation(),
-    };
-    let (server_name, server_version) = match identity {
-        Ok(identity) => identity,
-        Err(reason) => return McpObservation::InvalidResult { reason },
-    };
-    if let Err(failure) = session.notify("notifications/initialized").await {
-        return failure.before_operation();
+    if let Ok(observation) = session.attempt(request).await {
+        return observation;
     }
-    match request {
-        McpRequest::Discover { .. } => {
-            let mut tools = Vec::new();
-            let mut cursor = None;
-            loop {
-                let params = match &cursor {
-                    Some(cursor) => json!({"cursor": cursor}),
-                    None => json!({}),
-                };
-                let page = match session.request("tools/list", params).await {
-                    Ok(page) => page,
-                    Err(failure) => return failure.after_operation(),
-                };
-                match record::tools_page(&page, &mut tools) {
-                    Ok(Some(next)) => cursor = Some(next),
-                    Ok(None) => break,
-                    Err(reason) => return McpObservation::InvalidResult { reason },
-                }
-            }
-            McpObservation::Discovered(ToolDiscoveryRecord {
-                server_url: url.to_owned(),
-                server_name,
-                server_version,
-                protocol_revision: PROTOCOL_REVISION.to_owned(),
-                tools,
-            })
-        }
-        McpRequest::Call {
-            tool, arguments, ..
-        } => {
-            let params = json!({"name": tool, "arguments": arguments});
-            match session.request("tools/call", params).await {
-                Ok(result) => match record::call_result(result) {
-                    Ok(result) => McpObservation::Called(result),
-                    Err(reason) => McpObservation::InvalidResult { reason },
-                },
-                Err(failure) => failure.after_operation(),
-            }
-        }
-    }
+    session.session_id = None;
+    session.session_tag = "none".to_owned();
+    session
+        .attempt(request)
+        .await
+        .unwrap_or_else(|SessionEnded| McpObservation::Rejected {
+            reason: "http_404".to_owned(),
+        })
 }
 
 impl Session<'_> {
+    /// One session: `initialize`, `notifications/initialized`, and the operation.
+    async fn attempt(&mut self, request: &McpRequest) -> Result<McpObservation, SessionEnded> {
+        let identity = match self.request("initialize", initialize_params()).await {
+            Ok(result) => record::server_identity(&result),
+            Err(failure) => return failure.before_operation(),
+        };
+        let (server_name, server_version) = match identity {
+            Ok(identity) => identity,
+            Err(reason) => return Ok(McpObservation::InvalidResult { reason }),
+        };
+        if let Err(failure) = self.notify("notifications/initialized").await {
+            return failure.before_operation();
+        }
+        match request {
+            McpRequest::Discover { .. } => {
+                let mut tools = Vec::new();
+                let mut cursor = None;
+                loop {
+                    let params = match &cursor {
+                        Some(cursor) => json!({"cursor": cursor}),
+                        None => json!({}),
+                    };
+                    let page = match self.request("tools/list", params).await {
+                        Ok(page) => page,
+                        Err(failure) => return failure.after_operation(),
+                    };
+                    match record::tools_page(&page, &mut tools) {
+                        Ok(Some(next)) => cursor = Some(next),
+                        Ok(None) => break,
+                        Err(reason) => return Ok(McpObservation::InvalidResult { reason }),
+                    }
+                }
+                Ok(McpObservation::Discovered(ToolDiscoveryRecord {
+                    server_url: self.url.to_owned(),
+                    server_name,
+                    server_version,
+                    protocol_revision: PROTOCOL_REVISION.to_owned(),
+                    tools,
+                }))
+            }
+            McpRequest::Call {
+                tool, arguments, ..
+            } => {
+                let params = json!({"name": tool, "arguments": arguments});
+                match self.request("tools/call", params).await {
+                    Ok(result) => Ok(match record::call_result(result) {
+                        Ok(result) => McpObservation::Called(result),
+                        Err(reason) => McpObservation::InvalidResult { reason },
+                    }),
+                    Err(failure) => failure.after_operation(),
+                }
+            }
+        }
+    }
+
     async fn request(&mut self, method: &'static str, params: Value) -> Result<Value, Failure> {
         let id = self.next_id;
         self.next_id += 1;
@@ -208,6 +231,9 @@ impl Session<'_> {
         if status.is_server_error() {
             return Err(Failure::Lost);
         }
+        if status == reqwest::StatusCode::NOT_FOUND && self.session_id.is_some() {
+            return Err(Failure::SessionEnded);
+        }
         if !status.is_success() {
             return Err(Failure::Rejected(format!("http_{}", status.as_u16())));
         }
@@ -248,17 +274,12 @@ impl Session<'_> {
                 Ok(Err(_)) | Err(_) => return Err(Failure::Lost),
             };
             let ended = chunk.is_none();
-            match chunk {
-                Some(chunk) => {
-                    self.received += chunk.len() as u64;
-                    if self.received > MAX_BODY_BYTES as u64 {
-                        return Err(Failure::Invalid("body_too_large"));
-                    }
-                    buffer.extend_from_slice(&chunk);
+            if let Some(chunk) = chunk {
+                self.received += chunk.len() as u64;
+                if self.received > MAX_BODY_BYTES as u64 {
+                    return Err(Failure::Invalid("body_too_large"));
                 }
-                // At the end of the stream, a last CR ends its line.
-                None if buffer.ends_with(b"\r") => buffer.push(b'\n'),
-                None => {}
+                buffer.extend_from_slice(&chunk);
             }
             if events {
                 while let Some(message) = stream.next_message(&mut buffer)? {
@@ -318,11 +339,13 @@ impl Session<'_> {
     }
 }
 
-/// The parse state of one server-sent event stream: a line ends with CRLF, LF, or CR, a blank
-/// line ends an event, and a leading UTF-8 byte order mark is removed.
+/// The parse state of one server-sent event stream. A line ends with CRLF, LF, or CR. A blank
+/// line ends an event. A leading UTF-8 byte order mark is removed.
 #[derive(Default)]
 struct EventStream {
     started: bool,
+    /// The last line ended with a CR, so an LF at the start of the buffer belongs to it.
+    after_cr: bool,
     data: Vec<String>,
 }
 
@@ -339,11 +362,11 @@ impl EventStream {
             }
             self.started = true;
         }
-        while let Some(line) = next_line(buffer) {
+        while let Some(line) = self.next_line(buffer) {
             let line = std::str::from_utf8(&line).map_err(|_| Failure::Invalid("invalid_utf8"))?;
             if line.is_empty() {
                 let data = std::mem::take(&mut self.data);
-                if !data.is_empty() && data.iter().any(|line| !line.is_empty()) {
+                if data.iter().any(|line| !line.is_empty()) {
                     return message(data.join("\n").as_bytes()).map(Some);
                 }
                 continue;
@@ -356,22 +379,30 @@ impl EventStream {
         }
         Ok(None)
     }
-}
 
-/// Removes and returns the next complete line of `buffer`, without its end. A CR at the end of
-/// `buffer` waits for the next byte, which can be its LF.
-fn next_line(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
-    let end = buffer
-        .iter()
-        .position(|byte| matches!(byte, b'\n' | b'\r'))?;
-    let separator = match (buffer[end], buffer.get(end + 1)) {
-        (b'\r', None) => return None,
-        (b'\r', Some(b'\n')) => 2,
-        _ => 1,
-    };
-    let line = buffer[..end].to_vec();
-    buffer.drain(..end + separator);
-    Some(line)
+    /// Removes and returns the next complete line of `buffer`, without its end.
+    fn next_line(&mut self, buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
+        if self.after_cr && buffer.first() == Some(&b'\n') {
+            buffer.drain(..1);
+        }
+        if !buffer.is_empty() {
+            self.after_cr = false;
+        }
+        let end = buffer
+            .iter()
+            .position(|byte| matches!(byte, b'\n' | b'\r'))?;
+        let separator = match (buffer[end], buffer.get(end + 1)) {
+            (b'\r', Some(b'\n')) => 2,
+            (b'\r', None) => {
+                self.after_cr = true;
+                1
+            }
+            _ => 1,
+        };
+        let line = buffer[..end].to_vec();
+        buffer.drain(..end + separator);
+        Some(line)
+    }
 }
 
 fn message(bytes: &[u8]) -> Result<Value, Failure> {
