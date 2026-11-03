@@ -399,7 +399,6 @@ fn parse_items(values: &[serde_json::Value]) -> Vec<AgentRunStreamItem> {
                 call_id: optional_string(value, "call_id"),
                 arguments: optional_string(value, "arguments"),
                 refusal: optional_string(value, "refusal"),
-                hosted_report: optional_string(value, "hosted_report"),
             }
         })
         .collect()

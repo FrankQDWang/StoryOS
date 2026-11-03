@@ -141,7 +141,11 @@ pub(crate) async fn record_original_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(observation, &declared);
+    let retrieved = RetrievedResult::classify(
+        observation,
+        &declared,
+        crate::agent_run_tool_probe::is_probe(&payload),
+    );
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -260,7 +264,11 @@ pub(crate) async fn record_late_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(observation, &declared);
+    let retrieved = RetrievedResult::classify(
+        observation,
+        &declared,
+        crate::agent_run_tool_probe::is_probe(&row.payload),
+    );
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -315,10 +323,12 @@ pub(crate) struct SelectedResult {
 }
 
 impl RetrievedResult {
-    /// Validates the original response against the targets that its Create declared.
+    /// Validates the original response against the targets that its Create declared. The
+    /// response of a probe makes no Agent Decision.
     pub(crate) fn classify(
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
+        probe: bool,
     ) -> Self {
         let Observation::Terminal(response) = observation else {
             return Self {
@@ -334,7 +344,12 @@ impl RetrievedResult {
             .iter()
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
-        match validate_agent_decision(response.output.as_ref(), declared) {
+        let outcome = if probe {
+            AgentDecisionOutcome::NoDecision
+        } else {
+            validate_agent_decision(response.output.as_ref(), declared)
+        };
+        match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,

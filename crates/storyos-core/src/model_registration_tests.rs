@@ -1,4 +1,5 @@
 use super::*;
+use crate::AGENT_PLAN_REGISTRATION;
 
 const PROOF: CapabilityEvidence = CapabilityEvidence::Qualified { evidence: "test" };
 
@@ -17,6 +18,7 @@ fn qualified_entries(combinations: &'static [CapabilityCombination]) -> ModelCap
             host_compaction: PROOF,
             retrieval: PROOF,
             abort: PROOF,
+            function_calling: CapabilityEvidence::Unknown,
         },
         combinations,
         context_window: None,
@@ -134,7 +136,7 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
 fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
     let agent_plan: Vec<_> = [
         "fa02", "fa03", "fa04", "fa05", "fa06", "fa07", "fa08", "fa09", "fa10", "fa11", "fa12",
-        "fa13", "fa14", "fa15",
+        "fa13", "fa14", "fa15", "fa16", "fa17",
     ]
     .iter()
     .map(|suffix| {
@@ -155,11 +157,11 @@ fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
         (
             [
                 vec![Some("doubao-seed-2.1-pro"); 12],
-                vec![Some("doubao-seed-2-1-pro-260915"); 2]
+                vec![Some("doubao-seed-2-1-pro-260915"); 4]
             ]
             .concat(),
-            "018f0000-0000-7001-8000-00000000fa15",
-            "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v2",
+            "018f0000-0000-7001-8000-00000000fa17",
+            "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
             "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v1",
         )
     );

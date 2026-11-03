@@ -233,7 +233,13 @@ pub(crate) async fn record(
                 .iter()
                 .map(DeclaredTarget::location)
                 .collect();
-            match validate_agent_decision(response.output.as_ref(), &declared) {
+            // The successor of a probe makes no Agent Decision (ADR 0049).
+            let outcome = if crate::agent_run_tool_probe::is_probe(&row.payload) {
+                AgentDecisionOutcome::NoDecision
+            } else {
+                validate_agent_decision(response.output.as_ref(), &declared)
+            };
+            match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,
                     selected: true,

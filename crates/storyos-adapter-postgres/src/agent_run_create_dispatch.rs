@@ -20,6 +20,7 @@ pub(crate) async fn record_create(
     let retained: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let probe = matches!(request.purpose, CreatePurpose::ToolQualification(_));
     let response = match observation {
         Observation::Terminal(response) => response,
         Observation::OutcomeUnknown { response_reference } => {
@@ -34,7 +35,8 @@ pub(crate) async fn record_create(
         }
         // A real adapter appends the native code after the condition.
         Observation::Rejected { reason }
-            if request.previous_response_reference.is_some()
+            if !probe
+                && request.previous_response_reference.is_some()
                 && matches!(
                     reason.split(':').next(),
                     Some("continuation_expired" | "continuation_unusable")
@@ -72,7 +74,12 @@ pub(crate) async fn record_create(
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
-        outcome: validate_agent_decision(response.output.as_ref(), &declared),
+        // A Tool qualification probe makes no Agent Decision (ADR 0049).
+        outcome: if probe {
+            AgentDecisionOutcome::NoDecision
+        } else {
+            validate_agent_decision(response.output.as_ref(), &declared)
+        },
         producer_output: response
             .output
             .as_ref()
@@ -125,9 +132,16 @@ pub(crate) async fn create_request(
         )))
     })?;
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
+    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    let previous_response_reference = match &probe {
+        Some(probe) => probe.previous_response_reference.clone(),
+        None => previous_response_reference(client, claim, run, prior_context).await?,
+    };
     Ok(CreateRequest {
         attempt,
-        purpose: CreatePurpose::Decision,
+        purpose: probe.map_or(CreatePurpose::Decision, |probe| {
+            CreatePurpose::ToolQualification(probe.request)
+        }),
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),
@@ -147,8 +161,7 @@ pub(crate) async fn create_request(
             .selection_references
             .clone()
             .unwrap_or_default(),
-        previous_response_reference: previous_response_reference(client, claim, run, prior_context)
-            .await?,
+        previous_response_reference,
         successor_of: None,
     })
 }

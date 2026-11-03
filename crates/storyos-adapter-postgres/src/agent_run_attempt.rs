@@ -1,5 +1,5 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, CreateRequest, ProjectAssistanceRecord,
+    ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, ProjectAssistanceRecord,
     WirePayloadProjection,
 };
 use storyos_core::{DeclaredTargetKind, DestinationKind, RuntimeQualification};
@@ -55,13 +55,23 @@ pub(crate) async fn persist_uncertain_attempt(
         continuation.mapping = storyos_core::ContinuationInputMapping::NewTransport;
         continuation.prior_binding_id = None;
     }
+    // A probe sends no prior binding of the Conversation. Its wire payload names the prior
+    // response that a function output probe continues.
+    let probe = match &request.purpose {
+        CreatePurpose::ToolQualification(probe) => {
+            continuation.mapping = storyos_core::ContinuationInputMapping::Full;
+            continuation.prior_binding_id = None;
+            Some(probe.probe())
+        }
+        CreatePurpose::Decision | CreatePurpose::CompactionSummary => None,
+    };
     let decided_reference = match &continuation.prior_binding_id {
         Some(binding) => {
             crate::agent_run_create_dispatch::binding_reference(client, claim, binding).await?
         }
         None => None,
     };
-    if decided_reference != request.previous_response_reference {
+    if probe.is_none() && decided_reference != request.previous_response_reference {
         return Ok(None);
     }
     let mut payload = serde_json::json!({
@@ -114,6 +124,9 @@ pub(crate) async fn persist_uncertain_attempt(
         "grant_id": run.grant_id,
         "grant_scope": run.grant_scope,
     });
+    if let Some(probe) = probe {
+        payload["tool_qualification"] = serde_json::json!(probe.as_str());
+    }
     if assistance.runtime_qualification == RuntimeQualification::QualificationAuthorized {
         payload["runtime_qualification"] =
             serde_json::json!(assistance.runtime_qualification.as_str());
