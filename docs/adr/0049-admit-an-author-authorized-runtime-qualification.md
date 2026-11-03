@@ -35,3 +35,11 @@ The author authorized live requests for S4-02 on 2026-10-10 ([authorization](htt
 - Migration 0088 adds `qualification_authorized` and the `qualification_authorization` column to the compatibility Decisions, and `agent_plan_request_v1` to the binding bounds. The assistance query can answer `qualification_authorized`.
 - After S4-02c qualifies the profile, a Decision is `qualified`, and the link has no effect.
 - This decision authorizes no external account, spend, or deployment change. The author keeps the Agent Plan quota and overage under control in the Volcengine console.
+
+## Amendment: Tool entries (2026-11-03)
+
+[S5-10: Probe the Tool Capabilities of the Agent Plan Route](https://github.com/FrankQDWang/StoryOS/issues/696) adds four Tool entries to the Model Capability Profile: function calling, hosted web search, remote MCP, and the `max_tool_calls` bound. An entry can also record `unsupported` evidence from the exact route and model. The author accepted these changes on 2026-11-03 through the coordinator of Stage 5:
+
+- The link also authorizes a qualified Registration while one of its Tool entries is pending. A pending Tool entry has documentation as its only evidence. Then the Decision is `qualification_authorized`, and ordinary requests dispatch as before.
+- A Tool qualification request is a Create request of an AgentRun whose author message is the exact constant text of one probe. Only an authorized Decision on a pending entry selects it. It sends that constant text, or a constant function output for the continuation of a function call probe, and no Project content. Its response makes no Agent Decision. The Model Attempt records the native Tool items, the `url_citation` URLs, and the Tool usage counts.
+- No ordinary AgentRun gets a Tool from this amendment.
