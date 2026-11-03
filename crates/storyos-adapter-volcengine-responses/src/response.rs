@@ -84,7 +84,8 @@ pub(crate) fn native_item(
         call_id: None,
         arguments: None,
         refusal: None,
-        hosted_report: None,
+        native_type: None,
+        name: None,
     };
     match kind {
         "message" => {
@@ -92,14 +93,14 @@ pub(crate) fn native_item(
             native.refusal = text_of("content", "refusal", "refusal");
         }
         "reasoning" => native.summary = text_of("summary", "summary_text", "text"),
-        "function_call" => {
+        // A request asks for no other native item (ADR 0084). Such an item is a Tool item, so
+        // the response has no final text and no Agent Decision. Its native type stays as evidence.
+        _ => {
             native.role = StreamItemRole::Tool;
             native.call_id = string("call_id");
             native.arguments = string("arguments");
-        }
-        _ => {
-            native.role = StreamItemRole::Hosted;
-            native.hosted_report = Some(if kind.is_empty() { "unknown" } else { kind }.to_owned());
+            native.native_type = Some(if kind.is_empty() { "unknown" } else { kind }.to_owned());
+            native.name = string("name");
         }
     }
     native

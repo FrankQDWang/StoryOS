@@ -700,7 +700,6 @@ pub struct AgentRunStreamItemInspect {
     pub call_id: Option<String>,
     pub arguments: Option<String>,
     pub refusal: Option<String>,
-    pub hosted_report: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -151,14 +151,18 @@ impl DeploymentDestination {
         }
     }
 
-    /// The qualification of a new compatibility Decision for this destination.
+    /// The qualification of a new compatibility Decision for this destination. The link
+    /// authorizes a pending requirement or a pending Tool entry of the Registration.
     pub fn runtime_qualification(&self) -> RuntimeQualification {
+        let registration = self.registration();
         match self {
-            _ if self.registration().qualified() => RuntimeQualification::Qualified,
             Self::VolcengineAgentPlan {
                 qualification_authorization: Some(_),
                 ..
-            } => RuntimeQualification::QualificationAuthorized,
+            } if registration.awaits_qualification() => {
+                RuntimeQualification::QualificationAuthorized
+            }
+            _ if registration.qualified() => RuntimeQualification::Qualified,
             Self::HostFake | Self::VolcengineAgentPlan { .. } => RuntimeQualification::Pending,
         }
     }

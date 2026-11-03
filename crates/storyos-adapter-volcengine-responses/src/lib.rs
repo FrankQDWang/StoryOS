@@ -1,6 +1,7 @@
 //! The Model Provider Adapter of the Volcengine Agent Plan Responses route (ADR 0033, ADR 0039).
 
 mod decision;
+mod probe;
 mod response;
 mod stream;
 mod wire;
@@ -89,9 +90,13 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
-        let body = match (create.purpose, &create.previous_response_reference) {
+        let body = match (&create.purpose, &create.previous_response_reference) {
             (CreatePurpose::Decision, _) => {
                 wire::create_body(create, &route.provider_model_id, bounds, streams)
+            }
+            (CreatePurpose::ToolQualification(probe), _) => {
+                probe::probe_body(probe, create, &route.provider_model_id, bounds)
+                    .ok_or(PreDispatchRefusal::UnsupportedRequest)?
             }
             (CreatePurpose::CompactionSummary, Some(reference)) if compacts => {
                 wire::summary_body(reference, &route.provider_model_id, bounds, streams)
@@ -125,7 +130,8 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 timeout: bounds.timeout,
                 targets: create.declared_targets.clone(),
                 continues: create.previous_response_reference.is_some(),
-                stream: streams.then(|| route.mapping_revision.clone()),
+                stream: (streams && !matches!(create.purpose, CreatePurpose::ToolQualification(_)))
+                    .then(|| route.mapping_revision.clone()),
             }),
         })
     }

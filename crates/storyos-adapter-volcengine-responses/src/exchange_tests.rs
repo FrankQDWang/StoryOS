@@ -221,7 +221,8 @@ pub(crate) fn item(
         call_id: None,
         arguments: None,
         refusal: None,
-        hosted_report: None,
+        native_type: None,
+        name: None,
     }
 }
 
@@ -580,6 +581,7 @@ fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
                 vec![NativeStreamItem {
                     call_id: Some("call_01".to_owned()),
                     arguments: Some("{\"q\"".to_owned()),
+                    native_type: Some("function_call".to_owned()),
                     ..item("fc_01", StreamItemRole::Tool, complete)
                 }],
                 None

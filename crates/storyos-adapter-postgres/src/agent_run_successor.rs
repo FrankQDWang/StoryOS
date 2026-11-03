@@ -40,13 +40,14 @@ pub(crate) fn conditions(
         .map(|registration| registration.adapter)
     {
         Some(ModelAdapter::VolcengineAgentPlanResponses) => {
-            // The request declares no Tool, so only a committed Tool or hosted item is an effect.
+            // The request declares no Tool, so only a committed Tool item is an effect. The adapter
+            // maps each native item that is not a message or a reasoning item to a Tool item.
             let effect = payload
                 .get("items")
                 .and_then(serde_json::Value::as_array)
                 .into_iter()
                 .flatten()
-                .any(|item| matches!(text(item, "role"), Some("tool" | "hosted")));
+                .any(|item| matches!(text(item, "role"), Some("tool")));
             Some(route_successor_conditions(
                 BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
                 if effect {

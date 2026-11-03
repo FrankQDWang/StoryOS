@@ -643,7 +643,6 @@ fn inspect_items(
             call_id: item.call_id.clone(),
             arguments: item.arguments.clone(),
             refusal: item.refusal.clone(),
-            hosted_report: item.hosted_report.clone(),
         })
         .collect()
 }

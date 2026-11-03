@@ -145,6 +145,8 @@ pub(crate) async fn settle_cancelled(
 }
 
 /// Records the reference of an unknown create as the retrieval subject of the first decision.
+/// A probe has no recovery: its Attempt stays uncertain, and the executor sends the probe again
+/// at most one time (ADR 0049).
 pub(crate) async fn record_unknown_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -152,7 +154,12 @@ pub(crate) async fn record_unknown_create(
     dispatch: &DispatchClaim,
     reference: Option<&ResponseReference>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    if run.decision_position != "0" {
+    let probe = run
+        .attempt_payload
+        .as_deref()
+        .and_then(|payload| serde_json::from_str(payload).ok())
+        .is_some_and(|payload| crate::agent_run_tool_probe::is_probe(&payload));
+    if run.decision_position != "0" || probe {
         update_run(
             client,
             claim,
@@ -187,17 +194,18 @@ pub(crate) async fn record_cancelled_create(
         )
         .await?;
     }
-    // A late terminal response keeps its usage and cache use as evidence only.
-    let (usage, cache_use) = match &observation {
+    // A late terminal response keeps its usage, cache use, and items as evidence only.
+    let (usage, cache_use, items) = match &observation {
         Observation::Terminal(response) => (
             Some(crate::agent_run_observation::encode_usage(response.usage)),
             Some(crate::provider_evidence::encode_cache_use(
                 response.cache_use,
             )),
+            Some(crate::agent_run_observation::encode_items(&response.items)),
         ),
         Observation::NotSubmitted
         | Observation::Rejected { .. }
-        | Observation::OutcomeUnknown { .. } => (None, None),
+        | Observation::OutcomeUnknown { .. } => (None, None, None),
     };
     client
         .execute(
@@ -208,6 +216,8 @@ pub(crate) async fn record_cancelled_create(
                               || '{\"observed_after_cancellation\": true}'::jsonb
                               || CASE WHEN $4::text IS NULL THEN '{}'::jsonb
                                       ELSE jsonb_build_object('usage', $4::text::jsonb) END
+                              || CASE WHEN $6::text IS NULL THEN '{}'::jsonb
+                                      ELSE jsonb_build_object('observed_items', $6::text::jsonb) END
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid",
             &[
@@ -216,6 +226,7 @@ pub(crate) async fn record_cancelled_create(
                 &dispatch.model_attempt_id,
                 &usage.map(|value| value.to_string()),
                 &cache_use.map(|value| value.to_string()),
+                &items.map(|value| value.to_string()),
             ],
         )
         .await

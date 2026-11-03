@@ -315,7 +315,6 @@ pub struct AgentRunStreamItem {
     pub call_id: Option<String>,
     pub arguments: Option<String>,
     pub refusal: Option<String>,
-    pub hosted_report: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

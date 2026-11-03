@@ -73,13 +73,38 @@ pub enum RequestAttempt {
 }
 
 /// What one Create request asks for.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreatePurpose {
     /// The candidate of the active decision.
     Decision,
     /// The Host-managed summary of the Conversation for an active compaction. The request sends
     /// one Host instruction with the prior response reference, and no project content.
     CompactionSummary,
+    /// One author-authorized qualification probe of a pending Tool entry (ADR 0049). The request
+    /// sends the constant author message or a constant function output, and no project content.
+    /// Its response makes no Agent Decision.
+    ToolQualification(ToolProbeRequest),
+}
+
+/// The probe of one Tool qualification request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ToolProbeRequest {
+    FunctionCall,
+    /// The output of the function call `call_id` of the earlier probe response, which the
+    /// request continues with its prior response reference. `None` when the Conversation has no
+    /// function call probe: the adapter refuses that request before dispatch.
+    FunctionCallOutput {
+        call_id: Option<String>,
+    },
+}
+
+impl ToolProbeRequest {
+    pub fn probe(&self) -> storyos_core::ToolProbe {
+        match self {
+            Self::FunctionCall => storyos_core::ToolProbe::FunctionCall,
+            Self::FunctionCallOutput { .. } => storyos_core::ToolProbe::FunctionCallOutput,
+        }
+    }
 }
 
 /// One provider-neutral Create request for the active decision of one claimed AgentRun.

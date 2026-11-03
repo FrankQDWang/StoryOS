@@ -631,7 +631,7 @@ test.each(["What would make this sharper?", "Which wording should I keep?",
     if (run.decision.kind === "advisory" || run.decision.kind === "clarification") assert.deepEqual(run.items, [{
       item_id: "1", role: "assistant", state: "complete", phase: "complete",
       text: run.decision.kind === "advisory" ? run.decision.text : run.decision.question,
-      summary: "host_fake_native_text", call_id: null, arguments: null, refusal: null, hosted_report: null }]);
+      summary: "host_fake_native_text", call_id: null, arguments: null, refusal: null }]);
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
   } finally { await stopRealServer(started.server); }

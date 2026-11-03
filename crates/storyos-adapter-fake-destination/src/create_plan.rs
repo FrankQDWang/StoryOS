@@ -199,7 +199,8 @@ pub(crate) fn assistant_item(
         call_id: None,
         arguments: None,
         refusal: None,
-        hosted_report: None,
+        native_type: None,
+        name: None,
     }
 }
 
@@ -213,7 +214,8 @@ fn evidence_item(role: StreamItemRole, state: StreamItemState, summary: &str) ->
         call_id: None,
         arguments: None,
         refusal: None,
-        hosted_report: None,
+        native_type: None,
+        name: None,
     }
 }
 
@@ -242,19 +244,6 @@ fn scripted_plan(author_message: &str) -> Option<FakeCreate> {
                         StreamItemRole::Tool,
                         StreamItemState::Provisional,
                         "partial_tool_arguments",
-                    )
-                }],
-                output: None,
-            });
-        }
-        "SCRIPT:hosted" => {
-            return Some(FakeCreate {
-                items: vec![NativeStreamItem {
-                    hosted_report: Some("host_fake_hosted_item".to_owned()),
-                    ..evidence_item(
-                        StreamItemRole::Hosted,
-                        StreamItemState::Complete,
-                        "hosted_item_evidence",
                     )
                 }],
                 output: None,

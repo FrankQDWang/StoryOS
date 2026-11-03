@@ -35,3 +35,12 @@ The author authorized live requests for S4-02 on 2026-10-10 ([authorization](htt
 - Migration 0088 adds `qualification_authorized` and the `qualification_authorization` column to the compatibility Decisions, and `agent_plan_request_v1` to the binding bounds. The assistance query can answer `qualification_authorized`.
 - After S4-02c qualifies the profile, a Decision is `qualified`, and the link has no effect.
 - This decision authorizes no external account, spend, or deployment change. The author keeps the Agent Plan quota and overage under control in the Volcengine console.
+
+## Amendment: function calling (2026-11-03)
+
+[S5-10: Probe the Tool Capabilities of the Agent Plan Route](https://github.com/FrankQDWang/StoryOS/issues/696) adds one Tool entry to the Model Capability Profile: function calling. An entry can also record `unsupported` evidence from the exact route and model. The author accepted these changes on 2026-11-03 through the coordinator of Stage 5. [ADR 0084](0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md) removes the hosted entries of the first plan.
+
+- The link also authorizes a qualified Registration while its function calling entry is pending. A pending entry has documentation as its only evidence. Then the Decision is `qualification_authorized`, and ordinary requests dispatch as before.
+- A function calling probe is a Create request of an AgentRun whose author message is the exact constant text of the probe. Only an authorized Decision on a pending entry selects it. The first probe sends that constant text and one function tool. The second probe sends the constant output of the earlier function call and the prior response reference. The earlier call must have the same Conversation, Registration, and destination. Without an earlier call, the adapter refuses the second probe before dispatch. A probe sends no Project content and no Provider-side tool. Its response makes no Agent Decision on any path, and a probe has no recovery. A rejection refuses the AgentRun. An unknown outcome keeps the Model Attempt uncertain and leaves the AgentRun waiting. The Model Attempt records the native Tool items.
+- Registration `018f0000-0000-7001-8000-00000000fa16` has the entry pending. The probe of 2026-11-03 qualifies it ([evidence](../research/agent-plan-function-calling-probe-2026-11-03.md)). The head Registration `018f0000-0000-7001-8000-00000000fa17` has the qualified entry, so the link authorizes no more probes.
+- No ordinary AgentRun gets a Tool from this amendment.

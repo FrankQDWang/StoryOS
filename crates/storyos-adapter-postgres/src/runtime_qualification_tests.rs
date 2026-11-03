@@ -867,3 +867,6 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
         ]
     );
 }
+
+#[path = "runtime_qualification_probe_tests.rs"]
+mod probe_tests;

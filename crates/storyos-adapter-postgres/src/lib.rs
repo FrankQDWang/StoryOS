@@ -103,6 +103,7 @@ mod agent_run_retrieval_dispatch;
 mod agent_run_steering;
 mod agent_run_successor;
 mod agent_run_successor_dispatch;
+mod agent_run_tool_probe;
 mod agent_run_work;
 mod author_edit;
 mod author_edit_admission_recovery;

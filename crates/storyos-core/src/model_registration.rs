@@ -114,6 +114,10 @@ pub enum CapabilityEvidence {
     Qualified {
         evidence: &'static str,
     },
+    /// Attributable evidence from the exact route and model that it does not have the capability.
+    Unsupported {
+        evidence: &'static str,
+    },
 }
 
 const fn documented(source: &'static str) -> CapabilityEvidence {
@@ -123,6 +127,10 @@ const fn documented(source: &'static str) -> CapabilityEvidence {
 impl CapabilityEvidence {
     fn qualified(self) -> bool {
         matches!(self, Self::Qualified { .. })
+    }
+
+    fn unknown(&self) -> bool {
+        *self == Self::Unknown
     }
 }
 
@@ -140,6 +148,9 @@ pub struct CapabilityEntries {
     pub host_compaction: CapabilityEvidence,
     pub retrieval: CapabilityEvidence,
     pub abort: CapabilityEvidence,
+    /// A profile without function calling evidence keeps its stored form.
+    #[serde(skip_serializing_if = "CapabilityEvidence::unknown")]
+    pub function_calling: CapabilityEvidence,
 }
 
 /// The evidence that a set of capabilities works together. Members alone prove no combination.
@@ -259,6 +270,7 @@ pub const HOST_FAKE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapability
         host_compaction: STAGE_3_PROOF,
         retrieval: STAGE_3_PROOF,
         abort: STAGE_3_PROOF,
+        function_calling: CapabilityEvidence::Unknown,
     },
     context_window: None,
     combinations: &[CapabilityCombination {
@@ -305,6 +317,7 @@ pub const AGENT_PLAN_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelC
         host_compaction: CapabilityEvidence::Unknown,
         retrieval: documented(ARK_RETRIEVE_RESPONSE),
         abort: CapabilityEvidence::Unknown,
+        function_calling: CapabilityEvidence::Unknown,
     },
     context_window: None,
     combinations: &[
@@ -898,9 +911,10 @@ pub const AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION: ModelRegistration = Mo
     ..AGENT_PLAN_RECOVERY_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the dated version with the qualified profile. A later
-/// provider version is a new Registration that the author approves (ADR 0059).
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The Agent Plan Registration of the dated version with the qualified profile and no Tool
+/// entries. A later provider version is a new Registration that the author approves (ADR 0059).
+/// An AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_PINNED_VERSION_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa15",
     capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
     ..AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION
@@ -923,7 +937,9 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_RECOVERY_PENDING_REGISTRATION,
         &AGENT_PLAN_RECOVERY_REGISTRATION,
         &AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
-        &AGENT_PLAN_REGISTRATION,
+        &AGENT_PLAN_PINNED_VERSION_REGISTRATION,
+        &crate::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION,
+        &crate::AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()
     .find(|registration| registration.revision == revision)
