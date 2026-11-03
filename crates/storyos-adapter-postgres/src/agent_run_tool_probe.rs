@@ -1,8 +1,6 @@
-//! The function calling probe of one AgentRun and the recorded native Tool items (ADR 0049).
+//! The function calling probe of one AgentRun (ADR 0049).
 
-use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, ToolItemEvidence, ToolProbeRequest,
-};
+use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolProbeRequest};
 use storyos_core::ToolProbe;
 
 use crate::agent_run_work::{RunPhaseRow, complete_database_error};
@@ -62,12 +60,12 @@ async fn prior_function_call(
             "SELECT attempt.payload->>'response_reference', item->>'call_id'
                FROM storyos.model_attempts AS attempt
               CROSS JOIN LATERAL jsonb_array_elements(
-                      COALESCE(attempt.payload->'tool_items', '[]'::jsonb)) AS item
+                      COALESCE(attempt.payload->'items', '[]'::jsonb)) AS item
               WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
                 AND attempt.conversation_id = $3::text::uuid
                 AND attempt.payload->>'tool_qualification' = $4
                 AND attempt.payload->>'response_reference' IS NOT NULL
-                AND item->>'kind' = 'function_call' AND item->>'call_id' IS NOT NULL
+                AND item->>'native_type' = 'function_call' AND item->>'call_id' IS NOT NULL
               ORDER BY attempt.model_attempt_id DESC
               LIMIT 1",
             &[
@@ -86,20 +84,4 @@ async fn prior_function_call(
 /// makes no Agent Decision on any path (ADR 0049).
 pub(crate) fn is_probe(payload: &serde_json::Value) -> bool {
     payload.get("tool_qualification").is_some()
-}
-
-pub(crate) fn encode_tool_items(items: &[ToolItemEvidence]) -> serde_json::Value {
-    items
-        .iter()
-        .map(|item| {
-            serde_json::json!({
-                "kind": item.kind,
-                "item_id": item.item_id,
-                "status": item.status,
-                "call_id": item.call_id,
-                "name": item.name,
-                "arguments": item.arguments,
-            })
-        })
-        .collect()
 }

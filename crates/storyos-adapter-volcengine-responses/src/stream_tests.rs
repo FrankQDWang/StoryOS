@@ -191,7 +191,6 @@ async fn a_streamed_response_commits_ordered_events_and_maps_its_terminal_respon
                     cached_input_tokens: 0,
                 },
                 response_reference: Some("resp_s1".to_owned()),
-                tool_items: Vec::new(),
             }),
             vec![
                 provisional(None),
@@ -212,6 +211,28 @@ async fn a_stream_that_ends_before_its_terminal_event_is_unknown_with_its_refere
     assert_eq!(
         (observation, batches.concat().last().cloned()),
         (unknown("resp_s2"), Some(provisional(Some(ADVISORY)))),
+    );
+}
+
+#[tokio::test]
+async fn a_stream_that_ends_before_its_terminal_event_keeps_the_native_type_of_a_tool_item() {
+    let mut events = started("resp_s4");
+    events.push(
+        json!({"type": "response.output_item.done", "sequence_number": 4,
+        "output_index": 1, "item": {"id": "ws_01", "type": "web_search_call",
+                                    "status": "completed"}}),
+    );
+    let (observation, batches, _) = stream(events, /*stop_after*/ None).await;
+
+    assert_eq!(
+        (observation, batches.concat().last().cloned()),
+        (
+            unknown("resp_s4"),
+            Some(NativeStreamItem {
+                native_type: Some("web_search_call".to_owned()),
+                ..item("ws_01", StreamItemRole::Tool, StreamItemState::Complete)
+            })
+        ),
     );
 }
 

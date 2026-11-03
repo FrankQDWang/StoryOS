@@ -303,6 +303,7 @@ impl ModelProviderAdapter for StoredProseChange {
                 call_id: None,
                 arguments: None,
                 refusal: None,
+                native_type: None,
             }],
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,
@@ -317,7 +318,6 @@ impl ModelProviderAdapter for StoredProseChange {
             },
             cache_use: CacheUse::Unknown,
             response_reference: Some("resp_c49".to_owned()),
-            tool_items: Vec::new(),
         })
     }
 }
@@ -482,6 +482,7 @@ impl ModelProviderAdapter for SuccessorProseChange {
                 call_id: None,
                 arguments: None,
                 refusal: None,
+                native_type: None,
             }],
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,
@@ -496,7 +497,6 @@ impl ModelProviderAdapter for SuccessorProseChange {
             },
             cache_use: CacheUse::Unknown,
             response_reference: Some("resp_1d".to_owned()),
-            tool_items: Vec::new(),
         })
     }
 }

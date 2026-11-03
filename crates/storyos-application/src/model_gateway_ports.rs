@@ -311,22 +311,6 @@ pub struct ModelResponse {
     pub usage: ModelUsage,
     pub cache_use: CacheUse,
     pub response_reference: Option<String>,
-    /// Each native item that is not a message or a reasoning item, in response order. Only a
-    /// Tool qualification request asks for one; another request gets no Agent Decision, and the
-    /// kind of the item is the evidence.
-    pub tool_items: Vec<ToolItemEvidence>,
-}
-
-/// One native Tool item, with its call correlation. It keeps no Tool output content.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ToolItemEvidence {
-    pub kind: String,
-    pub item_id: Option<String>,
-    pub status: Option<String>,
-    pub call_id: Option<String>,
-    pub name: Option<String>,
-    /// The arguments of a call as native JSON text.
-    pub arguments: Option<String>,
 }
 
 /// Unknown usage is never zero usage.

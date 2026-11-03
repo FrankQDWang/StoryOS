@@ -310,7 +310,8 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         "summary": item.summary,
         "call_id": item.call_id,
         "arguments": item.arguments,
-        "refusal": item.refusal
+        "refusal": item.refusal,
+        "native_type": item.native_type
     })
 }
 

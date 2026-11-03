@@ -228,10 +228,6 @@ pub(crate) async fn record(
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);
             }
-            if !response.tool_items.is_empty() {
-                payload["tool_items"] =
-                    crate::agent_run_tool_probe::encode_tool_items(&response.tool_items);
-            }
             let declared: Vec<_> = request
                 .declared_targets
                 .iter()

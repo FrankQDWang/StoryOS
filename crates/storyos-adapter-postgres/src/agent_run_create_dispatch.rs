@@ -85,12 +85,6 @@ pub(crate) async fn record_create(
         .iter()
         .map(DeclaredTarget::location)
         .collect();
-    let mut retained = retained;
-    // Each native item that the request did not ask for keeps its kind as evidence.
-    if !response.tool_items.is_empty() {
-        retained["tool_items"] =
-            crate::agent_run_tool_probe::encode_tool_items(&response.tool_items);
-    }
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,

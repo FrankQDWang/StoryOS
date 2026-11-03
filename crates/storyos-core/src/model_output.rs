@@ -29,6 +29,10 @@ pub struct NativeStreamItem {
     pub call_id: Option<String>,
     pub arguments: Option<String>,
     pub refusal: Option<String>,
+    /// The native type of a Tool item, kept as evidence on each path (ADR 0084). A request asks
+    /// for no native item other than a message, a reasoning item, and the function call of a
+    /// probe. `None` for an assistant item.
+    pub native_type: Option<String>,
 }
 
 /// Whether the destination offers a complete output as its final answer.

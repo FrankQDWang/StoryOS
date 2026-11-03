@@ -1,7 +1,7 @@
 use serde_json::json;
 use storyos_application::{
     CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, Observation,
-    PreDispatchRefusal, RequestAttempt, RequestRoute, ToolItemEvidence, ToolProbeRequest,
+    PreDispatchRefusal, RequestAttempt, RequestRoute, ToolProbeRequest,
 };
 use storyos_core::StreamItemRole;
 
@@ -116,42 +116,28 @@ fn a_native_item_that_the_request_did_not_ask_for_is_a_tool_item_with_no_decisio
     let Observation::Terminal(observed) = crate::response::observe_value(&response, &[]) else {
         unreachable!("a completed response is terminal")
     };
-    let item = |kind: &str, item_id: &str| ToolItemEvidence {
-        kind: kind.to_owned(),
-        item_id: Some(item_id.to_owned()),
-        status: Some("completed".to_owned()),
-        call_id: None,
-        name: None,
-        arguments: None,
-    };
 
     assert_eq!(
         (
             observed
                 .items
                 .iter()
-                .map(|item| item.role)
+                .map(|item| (
+                    item.role,
+                    item.native_type.as_deref(),
+                    item.call_id.as_deref()
+                ))
                 .collect::<Vec<_>>(),
             observed.output,
-            observed.tool_items,
         ),
         (
             vec![
-                StreamItemRole::Assistant,
-                StreamItemRole::Tool,
-                StreamItemRole::Tool,
-                StreamItemRole::Assistant,
+                (StreamItemRole::Assistant, None, None),
+                (StreamItemRole::Tool, Some("web_search_call"), None),
+                (StreamItemRole::Tool, Some("function_call"), Some("call_01")),
+                (StreamItemRole::Assistant, None, None),
             ],
             None,
-            vec![
-                item("web_search_call", "ws_01"),
-                ToolItemEvidence {
-                    call_id: Some("call_01".to_owned()),
-                    name: Some("storyos_probe_echo".to_owned()),
-                    arguments: Some("{\"text\":\"storyos-probe\"}".to_owned()),
-                    ..item("function_call", "fc_01")
-                },
-            ],
         )
     );
 }

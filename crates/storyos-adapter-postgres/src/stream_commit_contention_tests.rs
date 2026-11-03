@@ -118,6 +118,7 @@ async fn a_stream_commit_beside_the_work_of_another_run_commits() {
         call_id: None,
         arguments: None,
         refusal: None,
+        native_type: None,
     }];
     let (appended, ()) = tokio::join!(
         store.append_model_stream_events(&streaming, &dispatch, &events, /*reference*/ None),

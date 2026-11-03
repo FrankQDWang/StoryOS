@@ -1,9 +1,7 @@
 //! Map one complete Responses object to the typed Model Gateway observation.
 
 use serde_json::Value;
-use storyos_application::{
-    CacheUse, DeclaredTarget, ModelResponse, ModelUsage, Observation, ToolItemEvidence,
-};
+use storyos_application::{CacheUse, DeclaredTarget, ModelResponse, ModelUsage, Observation};
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 
 /// The observation of a successful HTTP response body. A body that is not a Responses object
@@ -24,13 +22,11 @@ pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Obs
             response_reference: None,
         };
     };
-    let output_items = response
+    let items: Vec<_> = response
         .get("output")
         .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    let items: Vec<_> = output_items
-        .iter()
+        .into_iter()
+        .flatten()
         .enumerate()
         .map(|(index, item)| native_item(index, item, status))
         .collect();
@@ -47,7 +43,6 @@ pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Obs
             .get("id")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        tool_items: output_items.iter().filter_map(tool_item).collect(),
     })
 }
 
@@ -89,6 +84,7 @@ pub(crate) fn native_item(
         call_id: None,
         arguments: None,
         refusal: None,
+        native_type: None,
     };
     match kind {
         "message" => {
@@ -97,28 +93,15 @@ pub(crate) fn native_item(
         }
         "reasoning" => native.summary = text_of("summary", "summary_text", "text"),
         // A request asks for no other native item (ADR 0084). Such an item is a Tool item, so
-        // the response has no final text and no Agent Decision. Its kind is in the Tool items.
+        // the response has no final text and no Agent Decision. Its native type stays as evidence.
         _ => {
             native.role = StreamItemRole::Tool;
             native.call_id = string("call_id");
             native.arguments = string("arguments");
+            native.native_type = Some(if kind.is_empty() { "unknown" } else { kind }.to_owned());
         }
     }
     native
-}
-
-/// The facts of one native item that is not a message or a reasoning item.
-fn tool_item(item: &Value) -> Option<ToolItemEvidence> {
-    let string = |field: &str| item.get(field).and_then(Value::as_str).map(str::to_owned);
-    let kind = item.get("type").and_then(Value::as_str).unwrap_or_default();
-    (!matches!(kind, "message" | "reasoning")).then(|| ToolItemEvidence {
-        kind: if kind.is_empty() { "unknown" } else { kind }.to_owned(),
-        item_id: string("id"),
-        status: string("status"),
-        call_id: string("call_id"),
-        name: string("name"),
-        arguments: string("arguments"),
-    })
 }
 
 /// An item without its own status has the state of its response.

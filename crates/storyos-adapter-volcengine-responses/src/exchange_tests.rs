@@ -221,6 +221,7 @@ pub(crate) fn item(
         call_id: None,
         arguments: None,
         refusal: None,
+        native_type: None,
     }
 }
 
@@ -287,7 +288,6 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
-                tool_items: Vec::new(),
             }),
             items,
             "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
@@ -580,6 +580,7 @@ fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
                 vec![NativeStreamItem {
                     call_id: Some("call_01".to_owned()),
                     arguments: Some("{\"q\"".to_owned()),
+                    native_type: Some("function_call".to_owned()),
                     ..item("fc_01", StreamItemRole::Tool, complete)
                 }],
                 None
@@ -742,7 +743,6 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
-                tool_items: Vec::new(),
             }),
             (
                 "GET /api/plan/v3/responses/resp_01 HTTP/1.1".to_owned(),

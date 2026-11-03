@@ -69,7 +69,6 @@ impl ModelProviderAdapter for CancelledStream<'_> {
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some(REFERENCE.to_owned()),
-                tool_items: Vec::new(),
             });
         }
         // The cancellation commits with the same fence, so the next stream commit stops.
