@@ -1,6 +1,6 @@
 # Exa MCP Discovery Record, 2026-11-03
 
-This report records one live `Discover` exchange of the MCP client adapter `storyos-adapter-mcp-client` against the hosted Exa MCP server, for [S5-01a](https://github.com/FrankQDWang/StoryOS/issues/1395) under [ADR 0083](../adr/0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md). The record is an untrusted observation. It has no Registration identity, no enablement, and no execution authority. S5-01b ([#1396](https://github.com/FrankQDWang/StoryOS/issues/1396)) maps it to exact trusted ToolSpecs.
+This report records one live `Discover` exchange of the MCP client adapter `storyos-adapter-mcp-client` against the remote Exa MCP server, for [S5-01a](https://github.com/FrankQDWang/StoryOS/issues/1395) under [ADR 0083](../adr/0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md). The record is an untrusted observation. It has no Registration identity, no enablement, and no execution authority. S5-01b ([#1396](https://github.com/FrankQDWang/StoryOS/issues/1396)) maps it to exact trusted ToolSpecs.
 
 ## Method
 
