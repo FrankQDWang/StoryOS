@@ -1,8 +1,11 @@
 //! One MCP session over the Streamable HTTP transport: each JSON-RPC message is one POST.
 
+use std::time::Duration;
+
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
 use serde_json::{Value, json};
 use storyos_application::{DiagnosticField as _, DiagnosticId, ResolvedCredential};
+use tokio::time::Instant;
 
 use crate::record::{self, MAX_TEXT_BYTES, ToolDiscoveryRecord};
 use crate::{McpObservation, McpRequest, PROTOCOL_REVISION};
@@ -66,6 +69,8 @@ struct Session<'a> {
     next_id: u64,
     /// The response bytes of the current message.
     received: u64,
+    /// The end of the complete exchange.
+    deadline: Instant,
 }
 
 /// `initialize`, `notifications/initialized`, and then the operation of `request`.
@@ -73,6 +78,7 @@ pub(crate) async fn run(
     url: &str,
     credential: &ResolvedCredential,
     request: &McpRequest,
+    timeout: Duration,
 ) -> McpObservation {
     let Ok(client) = reqwest::Client::builder()
         .http1_only()
@@ -91,6 +97,7 @@ pub(crate) async fn run(
         session_tag: "none".to_owned(),
         next_id: 1,
         received: 0,
+        deadline: Instant::now() + timeout,
     };
     let identity = match session.request("initialize", initialize_params()).await {
         Ok(result) => record::server_identity(&result),
@@ -188,10 +195,14 @@ impl Session<'_> {
         if let Some(session_id) = &self.session_id {
             request = request.header(SESSION_HEADER, session_id);
         }
-        let response = match request.body(body).send().await {
-            Ok(response) => response,
-            Err(error) if error.is_builder() || error.is_connect() => return Err(Failure::Unsent),
-            Err(_) => return Err(Failure::Lost),
+        // A timeout proves nothing about the request, also before the connection.
+        let response = match tokio::time::timeout_at(self.deadline, request.body(body).send()).await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) if error.is_builder() || error.is_connect() => {
+                return Err(Failure::Unsent);
+            }
+            Ok(Err(_)) | Err(_) => return Err(Failure::Lost),
         };
         let status = response.status();
         if status.is_server_error() {
@@ -230,24 +241,34 @@ impl Session<'_> {
             return Err(Failure::Invalid("content_type"));
         };
         let mut buffer = Vec::new();
+        let mut stream = EventStream::default();
         loop {
-            let chunk = match response.chunk().await {
-                Ok(Some(chunk)) => chunk,
-                Ok(None) => break,
-                Err(_) => return Err(Failure::Lost),
+            let chunk = match tokio::time::timeout_at(self.deadline, response.chunk()).await {
+                Ok(Ok(chunk)) => chunk,
+                Ok(Err(_)) | Err(_) => return Err(Failure::Lost),
             };
-            self.received += chunk.len() as u64;
-            buffer.extend_from_slice(&chunk);
-            if buffer.len() > MAX_BODY_BYTES {
-                return Err(Failure::Invalid("body_too_large"));
-            }
-            while events && let Some((end, separator)) = event_end(&buffer) {
-                let event: Vec<u8> = buffer.drain(..end + separator).collect();
-                if let Some(message) = event_message(&event[..end])?
-                    && let Some(reply) = self.answer(message, id)
-                {
-                    return reply;
+            let ended = chunk.is_none();
+            match chunk {
+                Some(chunk) => {
+                    self.received += chunk.len() as u64;
+                    if self.received > MAX_BODY_BYTES as u64 {
+                        return Err(Failure::Invalid("body_too_large"));
+                    }
+                    buffer.extend_from_slice(&chunk);
                 }
+                // At the end of the stream, a last CR ends its line.
+                None if buffer.ends_with(b"\r") => buffer.push(b'\n'),
+                None => {}
+            }
+            if events {
+                while let Some(message) = stream.next_message(&mut buffer)? {
+                    if let Some(reply) = self.answer(message, id) {
+                        return reply;
+                    }
+                }
+            }
+            if ended {
+                break;
             }
         }
         if events {
@@ -274,15 +295,15 @@ impl Session<'_> {
         if message.get("id").and_then(Value::as_u64) != Some(id) {
             return None;
         }
-        if let Some(result) = message.get_mut("result") {
-            return Some(Ok(result.take()));
-        }
-        Some(
-            match message.pointer("/error/code").and_then(Value::as_i64) {
-                Some(code) => Err(Failure::JsonRpc(code)),
-                None => Err(Failure::Invalid("malformed_message")),
-            },
-        )
+        let version = message.get("jsonrpc").and_then(Value::as_str) == Some("2.0");
+        let error = message.get("error").is_some();
+        let code = message.pointer("/error/code").and_then(Value::as_i64);
+        // A response has exactly one of `result` and `error`.
+        Some(match (version, message.get_mut("result"), error, code) {
+            (true, Some(result), false, _) => Ok(result.take()),
+            (true, None, true, Some(code)) => Err(Failure::JsonRpc(code)),
+            _ => Err(Failure::Invalid("malformed_message")),
+        })
     }
 
     fn trace(&self, method: &'static str, request_bytes: u64) {
@@ -297,32 +318,60 @@ impl Session<'_> {
     }
 }
 
-/// The end of the first complete event and the length of its blank line.
-fn event_end(buffer: &[u8]) -> Option<(usize, usize)> {
-    (0..buffer.len()).find_map(|position| {
-        let tail = &buffer[position..];
-        if tail.starts_with(b"\n\n") {
-            Some((position, 2))
-        } else if tail.starts_with(b"\r\n\r\n") {
-            Some((position, 4))
-        } else {
-            None
-        }
-    })
+/// The parse state of one server-sent event stream: a line ends with CRLF, LF, or CR, a blank
+/// line ends an event, and a leading UTF-8 byte order mark is removed.
+#[derive(Default)]
+struct EventStream {
+    started: bool,
+    data: Vec<String>,
 }
 
-/// The JSON-RPC message of one event, or `None` for an event with no data.
-fn event_message(event: &[u8]) -> Result<Option<Value>, Failure> {
-    let text = std::str::from_utf8(event).map_err(|_| Failure::Invalid("invalid_utf8"))?;
-    let data: Vec<_> = text
-        .lines()
-        .filter_map(|line| line.strip_prefix("data:"))
-        .map(|line| line.strip_prefix(' ').unwrap_or(line))
-        .collect();
-    if data.iter().all(|line| line.is_empty()) {
-        return Ok(None);
+impl EventStream {
+    /// Takes the complete lines of `buffer`, and returns the JSON-RPC message of the next event
+    /// that has data.
+    fn next_message(&mut self, buffer: &mut Vec<u8>) -> Result<Option<Value>, Failure> {
+        if !self.started {
+            if buffer.len() < 3 && b"\xEF\xBB\xBF".starts_with(buffer) {
+                return Ok(None);
+            }
+            if buffer.starts_with(b"\xEF\xBB\xBF") {
+                buffer.drain(..3);
+            }
+            self.started = true;
+        }
+        while let Some(line) = next_line(buffer) {
+            let line = std::str::from_utf8(&line).map_err(|_| Failure::Invalid("invalid_utf8"))?;
+            if line.is_empty() {
+                let data = std::mem::take(&mut self.data);
+                if !data.is_empty() && data.iter().any(|line| !line.is_empty()) {
+                    return message(data.join("\n").as_bytes()).map(Some);
+                }
+                continue;
+            }
+            let (field, value) = line.split_once(':').unwrap_or((line, ""));
+            if field == "data" {
+                self.data
+                    .push(value.strip_prefix(' ').unwrap_or(value).to_owned());
+            }
+        }
+        Ok(None)
     }
-    message(data.join("\n").as_bytes()).map(Some)
+}
+
+/// Removes and returns the next complete line of `buffer`, without its end. A CR at the end of
+/// `buffer` waits for the next byte, which can be its LF.
+fn next_line(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
+    let end = buffer
+        .iter()
+        .position(|byte| matches!(byte, b'\n' | b'\r'))?;
+    let separator = match (buffer[end], buffer.get(end + 1)) {
+        (b'\r', None) => return None,
+        (b'\r', Some(b'\n')) => 2,
+        _ => 1,
+    };
+    let line = buffer[..end].to_vec();
+    buffer.drain(..end + separator);
+    Some(line)
 }
 
 fn message(bytes: &[u8]) -> Result<Value, Failure> {

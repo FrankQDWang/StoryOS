@@ -141,12 +141,7 @@ impl<R: CredentialResolver> McpClient<R> {
             credential,
         } = prepared;
         let (McpRequest::Discover { server_url } | McpRequest::Call { server_url, .. }) = &request;
-        let observation = tokio::time::timeout(
-            self.timeout,
-            session::run(server_url, &credential, &request),
-        )
-        .await
-        .unwrap_or(McpObservation::OutcomeUnknown);
+        let observation = session::run(server_url, &credential, &request, self.timeout).await;
         tracing::info!(
             server_url = DiagnosticId(server_url).diagnostic(),
             observation = observation.category().diagnostic(),

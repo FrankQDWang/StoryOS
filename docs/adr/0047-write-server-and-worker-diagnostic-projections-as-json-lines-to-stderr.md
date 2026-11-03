@@ -24,6 +24,7 @@ Most domain types derive `Debug`, and many hold author text, for example `Manusc
 
 - Each of the two binaries, `storyos-server` and `storyos-worker`, installs one formatter that writes JSON lines to stderr.
 - Stdout keeps only the `STORYOS_SERVER_URL=` startup line. Tests and scripts find the Server through this line.
+  Exception: the one-off research command `storyos-worker --discover-exa` writes the Tool Discovery Record as JSON to stdout ([ADR 0083](0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md)). The record holds no key and no author text.
 - StoryOS installs no OTLP exporter, no collector, and no hosted vendor. A later exporter is a Telemetry Disclosure and needs its own ADR.
 - On the Linux VPS of [ADR 0022](0022-prefer-widely-validated-hosted-infrastructure.md), the process manager keeps stderr on the host. That process manager owns the Diagnostic Projection retention. The `PER-008` tuning item owns the window, and deployment preparation sets it.
 - A configuration refusal at startup keeps its current stderr text. A runtime error that stops a binary writes one `error` event with the stage and the SQLSTATE code, and no error text.
@@ -86,6 +87,7 @@ Each layer records only the fields in this table:
 ### Tests and verification
 
 - Rust tests install no subscriber. Spans do nothing there, and the test output does not change.
+  Exception: a credential canary test of an adapter crate or the Worker binary installs a subscriber that writes to memory, and asserts that no key, no content, and no secret identifier reaches its lines. It writes nothing to the test output.
 - Node and shell tests start the packaged binaries without `STORYOS_LOG`. Thus they run at `info`. The existing `STORYOS_SERVER_URL=` matches do not change.
 - Only the canary corpus test uses `debug`. It is in the existing `node-postgresql` suite. No new verification stage is necessary.
 - Verification observation under [ADR 0037](0037-keep-verification-execution-local-and-observe-cost-separately.md) does not read product logs.

@@ -38,6 +38,8 @@ enum Body {
     Json,
     /// A priming event, a server request, and a server notification, and then the response.
     Events,
+    /// The same events after a byte order mark, with a CR at the end of each line.
+    CrEvents,
 }
 
 /// The answer of the fake server to one message.
@@ -47,6 +49,12 @@ enum Reply {
     Accepted,
     /// A promised body that stops after a few bytes.
     Drop,
+    /// A complete JSON body as it is.
+    Message(Value),
+    /// No response, on an open connection.
+    Hold,
+    /// More than 1 MiB of small server notifications before the response.
+    Flood,
 }
 
 /// The method and the MCP headers of one message that the fake server received.
@@ -59,13 +67,11 @@ struct Received {
     session: Option<String>,
 }
 
-type Script = fn(&Value) -> Reply;
-
 /// An in-process MCP server on a loopback port. It serves each message on its own connection.
 async fn serve(
     body: Body,
     session: Option<&'static str>,
-    script: Script,
+    script: impl Fn(&Value) -> Reply + Send + 'static,
 ) -> (String, Arc<Mutex<Vec<Received>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
@@ -96,6 +102,13 @@ async fn serve(
                 Reply::Error(code) => response(body, session, json!({"jsonrpc": "2.0", "id": message["id"], "error": {"code": code, "message": CONTENT_CANARY}})),
                 Reply::Accepted => "HTTP/1.1 202 Accepted\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
                 Reply::Drop => "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 400\r\nconnection: close\r\n\r\n{\"jsonrpc\"".to_owned(),
+                Reply::Message(message) => response(Body::Json, session, message),
+                Reply::Hold => std::future::pending().await,
+                Reply::Flood => {
+                    let event = format!("data: {}\n\n", json!({"jsonrpc": "2.0", "method": "notifications/progress", "params": {"padding": "a".repeat(1000)}}));
+                    let result = json!({"jsonrpc": "2.0", "id": message["id"], "result": {"content": []}});
+                    format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{}data: {result}\n\n", event.repeat(1100))
+                }
             };
             stream.write_all(response.as_bytes()).await.unwrap();
         }
@@ -143,11 +156,18 @@ fn response(body: Body, session: Option<&str>, message: Value) -> String {
                 message.len()
             )
         }
-        Body::Events => {
+        Body::Events | Body::CrEvents => {
             let request = json!({"jsonrpc": "2.0", "id": "s1", "method": "ping"});
             let notification = json!({"jsonrpc": "2.0", "method": "notifications/message", "params": {"level": "info", "data": CONTENT_CANARY}});
+            let events = format!(
+                "id: 1\ndata:\n\ndata: {request}\n\ndata: {notification}\n\nid: 2\nevent: message\ndata: {message}\n\n"
+            );
+            let events = match body {
+                Body::CrEvents => format!("\u{feff}{}", events.replace('\n', "\r")),
+                Body::Json | Body::Events => events,
+            };
             format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n{session}connection: close\r\n\r\nid: 1\ndata:\n\ndata: {request}\n\ndata: {notification}\n\nid: 2\nevent: message\ndata: {message}\n\n"
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n{session}connection: close\r\n\r\n{events}"
             )
         }
     }
@@ -243,7 +263,7 @@ fn call(url: &str) -> McpRequest {
 async fn exchange(request: McpRequest) -> McpObservation {
     let client = McpClient {
         resolver: CanaryResolver,
-        timeout: Duration::from_secs(/*secs*/ 5),
+        timeout: Duration::from_secs(/*secs*/ 1),
     };
     let reference = CredentialReference(REFERENCE.to_owned());
     let prepared = client
@@ -284,6 +304,7 @@ async fn json_and_event_stream_servers_give_the_same_record_and_call_result() {
     for (body, session) in [
         (Body::Json, Some(SESSION)),
         (Body::Events, Some(SESSION)),
+        (Body::CrEvents, Some(SESSION)),
         (Body::Json, None),
     ] {
         let (url, received) = serve(body, session, conforming).await;
@@ -301,32 +322,69 @@ async fn json_and_event_stream_servers_give_the_same_record_and_call_result() {
     }
 }
 
+/// The method that fails, the reply of the server to it, and the expected observation.
+type FailureCase = (&'static str, fn(&Value) -> Reply, McpObservation);
+
 #[tokio::test]
-async fn a_json_rpc_error_or_a_dropped_body_is_one_observation() {
-    fn call_error(message: &Value) -> Reply {
-        match message["method"].as_str() {
-            Some("tools/call") => Reply::Error(-32602),
-            _ => conforming(message),
-        }
-    }
-    fn call_drop(message: &Value) -> Reply {
-        match message["method"].as_str() {
-            Some("tools/call") => Reply::Drop,
-            _ => conforming(message),
-        }
-    }
-    fn initialize_drop(_: &Value) -> Reply {
-        Reply::Drop
-    }
-    let cases: [(Script, McpObservation); 3] = [
-        (call_error, McpObservation::JsonRpcError { code: -32602 }),
-        (call_drop, McpObservation::OutcomeUnknown),
+async fn each_failure_of_the_server_is_one_observation() {
+    let malformed = McpObservation::InvalidResult {
+        reason: "malformed_message",
+    };
+    let cases: [FailureCase; 8] = [
+        (
+            "tools/call",
+            |_| Reply::Error(-32602),
+            McpObservation::JsonRpcError { code: -32602 },
+        ),
+        (
+            "tools/call",
+            |_| Reply::Drop,
+            McpObservation::OutcomeUnknown,
+        ),
+        (
+            "tools/call",
+            |_| Reply::Hold,
+            McpObservation::OutcomeUnknown,
+        ),
+        (
+            "tools/call",
+            |message| {
+                Reply::Message(
+                    json!({"jsonrpc": "1.0", "id": message["id"], "result": {"content": []}}),
+                )
+            },
+            malformed.clone(),
+        ),
+        (
+            "tools/call",
+            |message| {
+                Reply::Message(
+                    json!({"jsonrpc": "2.0", "id": message["id"], "result": {"content": []}, "error": {"code": 1, "message": ""}}),
+                )
+            },
+            malformed,
+        ),
+        (
+            "tools/call",
+            |_| Reply::Flood,
+            McpObservation::InvalidResult {
+                reason: "body_too_large",
+            },
+        ),
         // The operation request never left, so the call is proven not submitted.
-        (initialize_drop, McpObservation::NotSubmitted),
+        ("initialize", |_| Reply::Drop, McpObservation::NotSubmitted),
+        ("initialize", |_| Reply::Hold, McpObservation::NotSubmitted),
     ];
-    for (script, expected) in cases {
+    for (method, reply, expected) in cases {
+        let script = move |message: &Value| {
+            if message["method"] == method {
+                reply(message)
+            } else {
+                conforming(message)
+            }
+        };
         let (url, _) = serve(Body::Json, Some(SESSION), script).await;
-        assert_eq!(exchange(call(&url)).await, expected);
+        assert_eq!(exchange(call(&url)).await, expected, "{method}");
     }
 }
 
