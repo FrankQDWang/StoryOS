@@ -77,7 +77,7 @@ An immutable author decision over one exact typed operational request, input dig
 _Avoid_: Permission flag, confirmation dialog, Acceptance, permanent project setting
 
 **Tool Approval**:
-The Approval kind with two distinct exact request targets: a StoryOS ToolCall bound to its ToolSpec, arguments, resolved targets, and Tool Effect Request, or a Provider-hosted Operation bound to its complete registered Tool set, intake, effects, destinations, and bounds under the governing policy and Project Scope. It may grant only that operation or a bounded remainder of the current Run; high-risk disclosure, external writes, and irreversible effects remain one-shot, and neither target authorizes the other.
+The Approval kind with one exact request target: a StoryOS ToolCall bound to its ToolSpec, arguments, resolved targets, and Tool Effect Request under the governing policy and Project Scope. It may grant only that operation or a bounded remainder of the current Run; high-risk disclosure, external writes, and irreversible effects remain one-shot. The Provider-hosted Operation target was withdrawn on 2026-11-03 by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md).
 _Avoid_: Destination Disclosure Approval, Tool Exposure, Capability Grant, Acceptance
 
 **Destination Disclosure Approval**:

@@ -16,8 +16,9 @@ a separate product restriction. This decision does not start implementation.
 
 Withdrawn in part on 2026-11-03 by
 [ADR 0084](0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md):
-StoryOS performs no Provider-hosted Operation. The Tool Gateway, the Tool
-Approval targets, and the pre-submission configuration of this ADR stay in force.
+StoryOS performs no Provider-hosted Operation, and the Tool Approval keeps one
+target, the StoryOS ToolCall. The Tool Gateway, that Tool Approval, and the
+pre-submission configuration of this ADR stay in force.
 
 ## Execution boundary
 
