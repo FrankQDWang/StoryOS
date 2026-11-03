@@ -16,11 +16,11 @@ _Avoid_: Full prompt forwarding, implicit Transcript, inherited model context, a
 Any Transcript, Project Instruction, Working Target, Agent Memory, project data, or other surrounding content supplied to a non-model destination without an exact Destination Context Intake Contract field and current minimum-necessary decision. Ambient Context is prohibited even when the destination shares a Provider, process, network connection, or AgentRun.
 _Avoid_: Convenience metadata, default Tool context, provider session state
 
-**Provider-hosted Tool Destination**:
+**Provider-hosted Tool Destination** (withdrawn on 2026-11-03 by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md); kept for the reading of older records):
 A Tool processing boundary operated by or behind a model Provider and declared within a separately admitted Provider-hosted Operation. Its exact Registration, intake, permitted outward processing, and authority are distinct from the model destination's, while the operation binds the applicable manifests and actual submission evidence without inventing Host dispatch records for invisible internal steps; it inherits no model context or permission.
 _Avoid_: Model Tool Request, StoryOS ToolCall, provider prompt capability, inherited disclosure
 
-**Provider-hosted Operation**:
+**Provider-hosted Operation** (withdrawn on 2026-11-03 by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md); kept for the reading of older records):
 The bounded search, read, or temporary-computation work that one exact Model Attempt may cause through its complete admitted hosted Tool set. This Operational Record binds the explicit intake, permitted effects, destinations, authority, budget, and result evidence before submission without claiming StoryOS control of each Provider-internal step.
 _Avoid_: StoryOS ToolCall, AgentRun, Agent Decision, Provider session, per-step Host approval
 

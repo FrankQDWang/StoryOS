@@ -16,7 +16,7 @@ Stage 5 needs one approved MCP research tool before the first Tool Registration,
 - Issue [#1102](https://github.com/FrankQDWang/StoryOS/issues/1102) planned a one-shot Destination Disclosure Approval outside the standing grant as the Stage 5 path for a new destination.
 - The author read the public Exa documentation and the Volcengine MCP documentation on 2026-11-03. The facts below come from that reading; S5-01a verifies them against the live server and records the Discovery Record under `docs/research/`.
 
-Exa offers a hosted MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. Its default tool set is `web_search_exa` and `web_fetch_exa`, both read-only; `web_search_advanced_exa` and `agent_run` are optional and need a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
+Exa offers a remote MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. Its default tool set is `web_search_exa` and `web_fetch_exa`, both read-only; `web_search_advanced_exa` and `agent_run` are optional and need a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
 
 Volcengine offers a Doubao web search MCP server as a local `stdio` Python process started with `uvx`, with its own key in a process environment variable. StoryOS has no `stdio` transport, no Python runtime in the Worker, and no sidecar process model.
 
@@ -24,7 +24,7 @@ Volcengine offers a Doubao web search MCP server as a local `stdio` Python proce
 
 ### 1. The service
 
-The hosted Exa MCP server is the first and, for Stage 5, the only MCP research destination of StoryOS. The Tool Registration binds the server URL, the MCP protocol revision, and the SHA-256 digests of the input schemas of exactly two operations: `web_search_exa` and `web_fetch_exa`. Each other tool of the server has no StoryOS ToolSpec and stays uncallable. A later service, a second server, or a widened operation set needs a new ADR.
+The remote Exa MCP server is the first and, for Stage 5, the only MCP research destination of StoryOS. The Tool Registration binds the server URL, the MCP protocol revision, and the SHA-256 digests of the input schemas of exactly two operations: `web_search_exa` and `web_fetch_exa`. Each other tool of the server has no StoryOS ToolSpec and stays uncallable. A later service, a second server, or a widened operation set needs a new ADR.
 
 ### 2. The transport and the key
 
@@ -40,9 +40,9 @@ Thus each Stage 5 submission is inside a grant: the model destination under the 
 
 The model decides itself when it searches the web and when it reads a page. Both operations are inside `research_tool_v1` and dispatch with no prompt; the author gave the consent one time, at enablement, where the panel names the service. The panel shows each search and each page read after the fact. A Tool Approval ([ADR 0034](0034-bound-provider-hosted-tool-operations.md)) stays the contract for an effect outside the grant, such as an external write; Stage 5 has no such operation, so the Run Wait and the `decideApproval` command of S5-04 are built only when a Stage 5 operation needs them.
 
-### 5. Hosted operations wait for the probe
+### 5. No hosted track
 
-The hosted track of Stage 5 (Provider-hosted web search or remote MCP through the Agent Plan route) starts with a recorded qualification probe under [ADR 0049](0049-admit-an-author-authorized-runtime-qualification.md). It blocks no MCP ticket. The probe result decides whether S5-11 is claimed or waived.
+Superseded on 2026-11-03 by [ADR 0084](0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md): StoryOS performs no Provider-hosted operation. The one qualification of the model route that Stage 5 needs is function calling (S5-10).
 
 ## Considered options
 
@@ -50,7 +50,7 @@ The hosted track of Stage 5 (Provider-hosted web search or remote MCP through th
 - **Exa without a key.** Rejected. The keyless mode gives no account boundary, no spend boundary, and no stable identity for the Processing Destination Identity.
 - **A one-shot Destination Disclosure Approval for each search (#1102 as planned).** Rejected. The author would approve each query of each Run; the grant that the enablement records expresses the same consent one time, at the boundary where the author reads the service name.
 - **A Tool Approval for each page read, one per AgentRun.** Rejected. The author reads the service name once at enablement. A prompt for each page interrupts the conversation, and the model, not the author, knows which page its answer needs. The after-the-fact line in the panel keeps the read visible.
-- **Exa through the Agent Plan route as a remote MCP tool.** Deferred to the hosted track. The route takes the key and the server URL in the request body, which moves the Credential Reference to the model Provider and leaves the Host without the per-call disclosure evidence that ADR 0034 requires.
+- **Exa through the Agent Plan route as a remote MCP tool.** Rejected; ADR 0084 withdraws the hosted track. The route takes the key and the server URL in the request body, which moves the Credential Reference to the model Provider and leaves the Host without the per-call disclosure evidence that ADR 0034 requires.
 
 ## Consequences
 
