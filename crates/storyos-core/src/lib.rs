@@ -23,6 +23,7 @@ mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
 mod rebuild_expired_reference;
+mod research_destination;
 mod retrieve_original_result;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -217,6 +218,7 @@ pub use replan_proposal::{
     ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
     replan_proposal,
 };
+pub use research_destination::{EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL};
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
     RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,

@@ -11,10 +11,12 @@ path = "src/main.rs"
 [dependencies]
 storyos-adapter-diagnostics = { path = "../storyos-adapter-diagnostics" }
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
+storyos-adapter-mcp-client = { path = "../storyos-adapter-mcp-client" }
 storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-adapter-volcengine-responses = { path = "../storyos-adapter-volcengine-responses" }
 secrecy.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 storyos-application = { path = "../storyos-application" }
 storyos-core = { path = "../storyos-core" }
 storyos-settings = { path = "../storyos-settings" }

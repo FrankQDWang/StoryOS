@@ -10,7 +10,8 @@ use crate::{McpObservation, McpRequest, PROTOCOL_REVISION};
 const SESSION_HEADER: &str = "mcp-session-id";
 const VERSION_HEADER: &str = "mcp-protocol-version";
 const KEY_HEADER: &str = "x-api-key";
-/// Four times the text bound of a Call: room for JSON escapes and a structured copy of the text.
+/// The read bound of one response body, 1 MiB: four times the text bound of a Call, for JSON
+/// escapes and a structured copy of the text.
 const MAX_BODY_BYTES: usize = 4 * MAX_TEXT_BYTES;
 
 /// The `initialize` parameters. The client declares no capability, so a server request is never
@@ -59,6 +60,9 @@ struct Session<'a> {
     url: &'a str,
     credential: &'a ResolvedCredential,
     session_id: Option<String>,
+    /// The first 8 hex digits of the SHA-256 of the session identifier, or `none`. The
+    /// specification treats the identifier as security-sensitive, so no diagnostic line has it.
+    session_tag: String,
     next_id: u64,
     /// The response bytes of the current message.
     received: u64,
@@ -84,6 +88,7 @@ pub(crate) async fn run(
         url,
         credential,
         session_id: None,
+        session_tag: "none".to_owned(),
         next_id: 1,
         received: 0,
     };
@@ -203,6 +208,7 @@ impl Session<'_> {
             if bytes.is_empty() || !bytes.iter().all(|byte| (0x21..=0x7e).contains(byte)) {
                 return Err(Failure::Invalid("invalid_session_id"));
             }
+            self.session_tag = storyos_core::hex_sha256(bytes)[..8].to_owned();
             self.session_id = value.to_str().ok().map(str::to_owned);
         }
         Ok(response)
@@ -259,8 +265,7 @@ impl Session<'_> {
         if let Some(method) = message.get("method") {
             tracing::warn!(
                 server_url = DiagnosticId(self.url).diagnostic(),
-                session_id =
-                    DiagnosticId(self.session_id.as_deref().unwrap_or("none")).diagnostic(),
+                session_tag = DiagnosticId(&self.session_tag).diagnostic(),
                 refused_method = refused_method(method.as_str()).diagnostic(),
                 "mcp server message refused"
             );
@@ -284,7 +289,7 @@ impl Session<'_> {
         tracing::debug!(
             server_url = DiagnosticId(self.url).diagnostic(),
             method = method.diagnostic(),
-            session_id = DiagnosticId(self.session_id.as_deref().unwrap_or("none")).diagnostic(),
+            session_tag = DiagnosticId(&self.session_tag).diagnostic(),
             request_bytes = request_bytes.diagnostic(),
             response_bytes = self.received.diagnostic(),
             "mcp message"

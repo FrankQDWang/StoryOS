@@ -1875,6 +1875,7 @@ dependencies = [
  "storyos-core",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2000,8 +2001,10 @@ version = "0.1.0"
 dependencies = [
  "secrecy",
  "serde",
+ "serde_json",
  "storyos-adapter-diagnostics",
  "storyos-adapter-fake-destination",
+ "storyos-adapter-mcp-client",
  "storyos-adapter-postgres",
  "storyos-adapter-volcengine-responses",
  "storyos-application",

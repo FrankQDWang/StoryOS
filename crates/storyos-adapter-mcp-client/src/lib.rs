@@ -5,6 +5,11 @@
 //! <https://modelcontextprotocol.io/specification/2025-11-25/basic/transports>,
 //! <https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle>, and
 //! <https://modelcontextprotocol.io/specification/2025-11-25/server/tools>.
+//!
+//! Bounds: one response body is read up to 1 MiB, and the total text of a Call result is at most
+//! 256 KiB. The one-off discovery of the Worker binary bounds its exchange with
+//! `DISCOVERY_TIMEOUT`. The specification treats the `Mcp-Session-Id` as security-sensitive, so a
+//! diagnostic line has only the first 8 hex digits of its SHA-256.
 
 mod record;
 mod session;
@@ -21,6 +26,9 @@ pub use record::{CallResult, DiscoveredTool, ToolDiscoveryRecord};
 
 /// The one MCP protocol revision that the client sends and accepts.
 pub const PROTOCOL_REVISION: &str = "2025-11-25";
+
+/// The bound of the one-off `Discover` exchange of a research record.
+pub const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
 
 const EXECUTION_PROFILE: &str = "storyos.mcp-streamable-http.v1";
 
@@ -172,3 +180,7 @@ fn plain_url(text: &str) -> bool {
             && url.fragment().is_none()
     })
 }
+
+#[cfg(test)]
+#[path = "client_tests.rs"]
+mod tests;

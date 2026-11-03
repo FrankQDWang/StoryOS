@@ -46,6 +46,7 @@ Only these async functions get `#[tracing::instrument(skip_all, ...)]`:
 2. **Command sequence.** The entry functions of `command_sequence` in `storyos-adapter-postgres`: settle, admit, settle the admitted command, and replay.
 3. **Worker claims.** The Worker step, the completion of a readable export and of an archive export, and `complete_agent_run`.
 4. **Model Gateway.** `Gateway::dispatch` at `info`. At `debug`, the implementations of `prepare`, `exchange`, `commit_dispatch_claim`, `record`, and the append of Model Stream Events.
+5. **MCP client.** `prepare` and `exchange` of `storyos-adapter-mcp-client` at `debug` ([ADR 0083](0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md)). One `info` event closes each exchange, one `debug` event records each JSON-RPC message, and one `warn` event records each server message that the client refuses.
 
 The other async functions get no span. The 466 internal functions of `storyos-adapter-postgres` are in this group.
 
@@ -59,11 +60,13 @@ Each layer records only the fields in this table:
 | Command sequence | `command_kind`, `project_id`, `command_id`, `author_command_admission_id`, `correlation_id`, `outcome` |
 | Worker claim | `project_id`, `run_id` or `export_id`, `fence_token`, `attempt`, `outcome` |
 | Model Gateway | `project_id`, `run_id`, `request_kind`, `adapter`, `observation`, usage counters |
+| MCP client | `server_url`, `method`, `session_tag`, `request_bytes`, `response_bytes`, `observation`, `refused_method` |
 
 - `outcome` is a static category: the name of the applied variant, `replayed`, or a refusal reason code.
 - `correlation_id` is the client UUID that the Server validates.
 - No span records `owner_user_id`. `project_id` identifies the Project Scope.
 - No span records a digest, an idempotency key, a nonce, a Credential Reference, or a credential value.
+- `server_url` has no credential, query, or fragment. `session_tag` is the first 8 hex digits of the SHA-256 of the `Mcp-Session-Id`, never the identifier, because the MCP specification treats it as security-sensitive. `refused_method` is a static category of the server method.
 - A new field changes this table and the rule in `CODING_STANDARDS.md`.
 
 ### Error events

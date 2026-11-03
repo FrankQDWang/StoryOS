@@ -22,13 +22,13 @@ pub struct ToolDiscoveryRecord {
 /// One tool as the server describes it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DiscoveredTool {
-    name: String,
-    description: Option<String>,
-    input_schema: Value,
+    pub(crate) name: String,
+    pub(crate) description: Option<String>,
+    pub(crate) input_schema: Value,
     /// `sha256:` and the hex SHA-256 of the canonical JSON of the input schema.
-    input_schema_digest: String,
-    output_schema: Option<Value>,
-    annotations: Option<Value>,
+    pub(crate) input_schema_digest: String,
+    pub(crate) output_schema: Option<Value>,
+    pub(crate) annotations: Option<Value>,
 }
 
 impl ToolDiscoveryRecord {

@@ -35,7 +35,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 
 ## Observability
 
-- Add a span only to a boundary function of [ADR 0047](docs/adr/0047-write-server-and-worker-diagnostic-projections-as-json-lines-to-stderr.md). These are the HTTP request middleware, the `command_sequence` entries, the Worker claims, and the Model Gateway dispatch with its port implementations.
+- Add a span only to a boundary function of [ADR 0047](docs/adr/0047-write-server-and-worker-diagnostic-projections-as-json-lines-to-stderr.md). These are the HTTP request middleware, the `command_sequence` entries, the Worker claims, the Model Gateway dispatch with its port implementations, and the `prepare` and `exchange` of the MCP client.
 - Instrument a boundary function at its definition with `#[tracing::instrument(skip_all, fields(...))]`. Attach no span to a future with `.instrument(...)` at a call site.
 - Record only the fields of the ADR 0047 table. Each field value is a literal or a `DiagnosticField` value. Never record the `Display` or `Debug` text of a value or an error.
 - Before you add instrumentation, find whether the callee, or the implementation method it directly delegates to, already has it.
