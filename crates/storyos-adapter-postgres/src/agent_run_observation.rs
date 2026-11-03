@@ -303,7 +303,6 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         "role": match item.role {
             StreamItemRole::Assistant => "assistant",
             StreamItemRole::Tool => "tool",
-            StreamItemRole::Hosted => "hosted",
         },
         "state": phase,
         "phase": phase,
@@ -311,8 +310,7 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         "summary": item.summary,
         "call_id": item.call_id,
         "arguments": item.arguments,
-        "refusal": item.refusal,
-        "hosted_report": item.hosted_report
+        "refusal": item.refusal
     })
 }
 

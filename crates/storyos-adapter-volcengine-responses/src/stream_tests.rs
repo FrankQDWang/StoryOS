@@ -191,7 +191,7 @@ async fn a_streamed_response_commits_ordered_events_and_maps_its_terminal_respon
                     cached_input_tokens: 0,
                 },
                 response_reference: Some("resp_s1".to_owned()),
-                tool_evidence: None,
+                tool_items: Vec::new(),
             }),
             vec![
                 provisional(None),

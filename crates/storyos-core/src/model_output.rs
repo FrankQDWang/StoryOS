@@ -16,7 +16,6 @@ pub enum StreamItemState {
 pub enum StreamItemRole {
     Assistant,
     Tool,
-    Hosted,
 }
 
 /// One native item of a Model Attempt stream, as the Model Provider Adapter reports it.
@@ -30,7 +29,6 @@ pub struct NativeStreamItem {
     pub call_id: Option<String>,
     pub arguments: Option<String>,
     pub refusal: Option<String>,
-    pub hosted_report: Option<String>,
 }
 
 /// Whether the destination offers a complete output as its final answer.

@@ -380,8 +380,8 @@ pub fn stage_compaction(
     }
 }
 
-/// The text of the one complete assistant message of a summary response. A refusal, a tool or
-/// hosted item, or a missing or incomplete message supplies no summary.
+/// The text of the one complete assistant message of a summary response. A refusal, a tool
+/// item, or a missing or incomplete message supplies no summary.
 pub fn summary_text(items: &[crate::NativeStreamItem]) -> Option<String> {
     if items
         .iter()

@@ -16,6 +16,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
+mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
 mod manuscript_payload;
@@ -24,7 +25,6 @@ mod model_registration;
 mod ordinary_passage_request;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
-mod tool_capability;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
@@ -126,6 +126,12 @@ pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
+};
+pub use function_calling::{
+    AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, ToolProbe,
+    tool_probe,
 };
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
@@ -237,11 +243,6 @@ pub use statistics_profile::{
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
-};
-pub use tool_capability::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_TOOL_CAPABILITY_PROFILE,
-    AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE, AGENT_PLAN_TOOL_PENDING_REGISTRATION,
-    ToolCapability, ToolEntries, ToolProbe, UNKNOWN_TOOL_ENTRIES, tool_probe,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{

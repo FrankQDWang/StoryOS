@@ -54,7 +54,7 @@ impl ModelProviderAdapter for FakeDestination {
                             usage: ModelUsage::Unknown,
                             cache_use: CacheUse::Unknown,
                             response_reference: abort.response_reference.clone(),
-                            tool_evidence: None,
+                            tool_items: Vec::new(),
                         },
                     ))),
                 });
@@ -152,7 +152,7 @@ impl ModelProviderAdapter for FakeDestination {
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(reference),
-            tool_evidence: None,
+            tool_items: Vec::new(),
         })
     }
 }
@@ -178,7 +178,7 @@ fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(reference),
-            tool_evidence: None,
+            tool_items: Vec::new(),
         }))),
     }
 }

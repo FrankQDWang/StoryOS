@@ -1,7 +1,7 @@
-//! The Tool qualification probe of one AgentRun and its recorded native Tool facts (ADR 0049).
+//! The function calling probe of one AgentRun and the recorded native Tool items (ADR 0049).
 
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, ToolEvidence, ToolItemEvidence, ToolProbeRequest,
+    ClaimedAgentRun, CompleteAgentRunError, ToolItemEvidence, ToolProbeRequest,
 };
 use storyos_core::ToolProbe;
 
@@ -35,24 +35,18 @@ pub(crate) async fn probe_request(
     }) else {
         return Ok(None);
     };
-    let request = match probe {
-        ToolProbe::FunctionCall => ToolProbeRequest::FunctionCall,
-        ToolProbe::HostedWebSearch => ToolProbeRequest::HostedWebSearch,
-        ToolProbe::RemoteMcp => ToolProbeRequest::RemoteMcp,
-        ToolProbe::MaxToolCallsBound => ToolProbeRequest::MaxToolCallsBound,
-        ToolProbe::FunctionCallOutput => {
-            return Ok(prior_function_call(client, claim, &run.conversation_id)
-                .await?
-                .map(|(reference, call_id)| ProbeRequest {
-                    request: ToolProbeRequest::FunctionCallOutput { call_id },
-                    previous_response_reference: Some(reference),
-                }));
-        }
-    };
-    Ok(Some(ProbeRequest {
-        request,
-        previous_response_reference: None,
-    }))
+    Ok(match probe {
+        ToolProbe::FunctionCall => Some(ProbeRequest {
+            request: ToolProbeRequest::FunctionCall,
+            previous_response_reference: None,
+        }),
+        ToolProbe::FunctionCallOutput => prior_function_call(client, claim, &run.conversation_id)
+            .await?
+            .map(|(reference, call_id)| ProbeRequest {
+                request: ToolProbeRequest::FunctionCallOutput { call_id },
+                previous_response_reference: Some(reference),
+            }),
+    })
 }
 
 /// The response reference and the call ID of the latest function call probe of the Conversation.
@@ -66,7 +60,7 @@ async fn prior_function_call(
             "SELECT attempt.payload->>'response_reference', item->>'call_id'
                FROM storyos.model_attempts AS attempt
               CROSS JOIN LATERAL jsonb_array_elements(
-                      COALESCE(attempt.payload->'tool_evidence'->'items', '[]'::jsonb)) AS item
+                      COALESCE(attempt.payload->'tool_items', '[]'::jsonb)) AS item
               WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
                 AND attempt.conversation_id = $3::text::uuid
                 AND attempt.payload->>'tool_qualification' = $4
@@ -86,28 +80,18 @@ async fn prior_function_call(
         .map(|row| (row.get(0), row.get(1))))
 }
 
-pub(crate) fn encode_tool_evidence(evidence: &ToolEvidence) -> serde_json::Value {
-    let item = |item: &ToolItemEvidence| {
-        serde_json::json!({
-            "kind": item.kind,
-            "item_id": item.item_id,
-            "status": item.status,
-            "call_id": item.call_id,
-            "name": item.name,
-            "server_label": item.server_label,
-            "arguments": item.arguments,
-            "listed_tools": item.listed_tools,
-            "output_present": item.output_present,
-            "error": item.error,
+pub(crate) fn encode_tool_items(items: &[ToolItemEvidence]) -> serde_json::Value {
+    items
+        .iter()
+        .map(|item| {
+            serde_json::json!({
+                "kind": item.kind,
+                "item_id": item.item_id,
+                "status": item.status,
+                "call_id": item.call_id,
+                "name": item.name,
+                "arguments": item.arguments,
+            })
         })
-    };
-    serde_json::json!({
-        "items": evidence.items.iter().map(item).collect::<Vec<_>>(),
-        "citations": evidence.citations,
-        "tool_usage": evidence
-            .tool_usage
-            .iter()
-            .map(|(name, count)| (name.clone(), serde_json::json!(count)))
-            .collect::<serde_json::Map<_, _>>(),
-    })
+        .collect()
 }

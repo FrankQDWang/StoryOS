@@ -18,7 +18,7 @@ fn qualified_entries(combinations: &'static [CapabilityCombination]) -> ModelCap
             host_compaction: PROOF,
             retrieval: PROOF,
             abort: PROOF,
-            tools: UNKNOWN_TOOL_ENTRIES,
+            function_calling: CapabilityEvidence::Unknown,
         },
         combinations,
         context_window: None,

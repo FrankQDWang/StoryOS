@@ -3,9 +3,8 @@ use std::sync::Mutex;
 use storyos_application::{
     ConversationSelection, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,
     ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ProjectAssistanceRecord, ProjectScope, RequestRoute, ToolEvidence,
-    ToolItemEvidence, ToolProbeRequest, UserId, WirePayloadProjection, complete_agent_run,
-    open_project_assistance,
+    PreparedRequest, ProjectAssistanceRecord, ProjectScope, RequestRoute, ToolItemEvidence,
+    ToolProbeRequest, UserId, WirePayloadProjection, complete_agent_run, open_project_assistance,
 };
 use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
@@ -245,7 +244,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         },
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
-        tool_evidence: None,
+        tool_items: Vec::new(),
     }));
     let first = admit_run(&store, &scope, &chapter_id, "e9c", authorized(), "Help.").await;
     settle(&store, &admin, &scope, &first, &advisory).await;
@@ -543,7 +542,7 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
                 cached_input_tokens: 128,
             },
             response_reference: Some("resp_late".to_owned()),
-            tool_evidence: None,
+            tool_items: Vec::new(),
         })
     }
 }
@@ -663,7 +662,7 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
         usage: ModelUsage::Unknown,
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
-        tool_evidence: None,
+        tool_items: Vec::new(),
     }));
     settle(&store, &admin, &scope, &first, &advisory).await;
     let next = admit_run_in(
@@ -872,10 +871,10 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
     );
 }
 
-/// Pins the Registration with pending Tool entries to `run_id` and its Project, with an
-/// authorized qualification Decision, and makes it the head of its adapter.
+/// Pins the Registration with the pending function calling entry to `run_id` and its Project,
+/// with an authorized qualification Decision, and makes it the head of its adapter.
 async fn authorize_tool_probes(admin: &Client, scope: &ProjectScope, run_id: &str) {
-    let pending = &storyos_core::AGENT_PLAN_TOOL_PENDING_REGISTRATION;
+    let pending = &storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION;
     let profile = serde_json::to_string(pending.capability_profile).unwrap();
     admin
         .batch_execute(&format!(
@@ -916,7 +915,7 @@ async fn probe_evidence(admin: &Client, run_id: &str) -> [Option<String>; 5] {
         .query_one(
             "SELECT run.status, attempt.decision_id::text,
                     attempt.payload->>'tool_qualification',
-                    attempt.payload#>>'{tool_evidence,items,0,call_id}',
+                    attempt.payload#>>'{tool_items,0,call_id}',
                     attempt.payload->>'runtime_qualification'
                FROM storyos.agent_runs AS run
                LEFT JOIN storyos.model_attempts AS attempt
@@ -937,7 +936,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "b4a", authorized()).await;
-    let response = |reference: &str, tool_evidence| {
+    let response = |reference: &str, tool_items| {
         ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
             items: Vec::new(),
             output: Some(ModelOutput {
@@ -953,24 +952,17 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             },
             cache_use: storyos_application::CacheUse::Unknown,
             response_reference: Some(reference.to_owned()),
-            tool_evidence,
+            tool_items,
         }))
     };
-    let function_call = ToolEvidence {
-        items: vec![ToolItemEvidence {
-            kind: "function_call".to_owned(),
-            item_id: Some("fc_b4b".to_owned()),
-            status: Some("completed".to_owned()),
-            call_id: Some("call_b4b".to_owned()),
-            name: Some("storyos_probe_echo".to_owned()),
-            server_label: None,
-            arguments: Some("{\"text\":\"storyos-probe\"}".to_owned()),
-            listed_tools: Vec::new(),
-            output_present: false,
-            error: None,
-        }],
-        ..ToolEvidence::default()
-    };
+    let function_call = vec![ToolItemEvidence {
+        kind: "function_call".to_owned(),
+        item_id: Some("fc_b4b".to_owned()),
+        status: Some("completed".to_owned()),
+        call_id: Some("call_b4b".to_owned()),
+        name: Some("storyos_probe_echo".to_owned()),
+        arguments: Some("{\"text\":\"storyos-probe\"}".to_owned()),
+    }];
     let call = admit_run(
         &store,
         &scope,
@@ -981,7 +973,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     )
     .await;
     authorize_tool_probes(&admin, &scope, &call).await;
-    let call_adapter = response("resp_b4b", Some(Box::new(function_call)));
+    let call_adapter = response("resp_b4b", function_call);
     settle(&store, &admin, &scope, &call, &call_adapter).await;
     let output = admit_run_in(
         &store,
@@ -996,20 +988,19 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     )
     .await;
     authorize_tool_probes(&admin, &scope, &output).await;
-    let output_adapter = response("resp_b4c", None);
+    let output_adapter = response("resp_b4c", Vec::new());
     settle(&store, &admin, &scope, &output, &output_adapter).await;
-    // The current head qualifies the route with no pending Tool entry, so the same message is an
-    // ordinary request.
+    // The head qualifies function calling, so the same message is an ordinary request.
     let ordinary = admit_run(
         &store,
         &scope,
         &chapter_id,
         "b4d",
         authorized(),
-        ToolProbe::HostedWebSearch.instruction(),
+        ToolProbe::FunctionCall.instruction(),
     )
     .await;
-    let ordinary_adapter = response("resp_b4d", None);
+    let ordinary_adapter = response("resp_b4d", Vec::new());
     settle(&store, &admin, &scope, &ordinary, &ordinary_adapter).await;
 
     let sent = |adapter: ScriptedAgentPlan| {

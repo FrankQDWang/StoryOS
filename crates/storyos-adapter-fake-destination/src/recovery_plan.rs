@@ -156,7 +156,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
             usage,
             cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),
-            tool_evidence: None,
+            tool_items: Vec::new(),
         })
     };
     let unknown = Observation::OutcomeUnknown {
@@ -178,7 +178,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),
-            tool_evidence: None,
+            tool_items: Vec::new(),
         }),
         (Some(3 | 4), _) => unknown,
         _ => Observation::Rejected {

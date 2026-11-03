@@ -214,7 +214,6 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
       ["SCRIPT:unknown", "unknown", "assistant"],
       ["SCRIPT:invalid", "complete", "assistant"],
       ["SCRIPT:tool_partial", "provisional", "tool"],
-      ["SCRIPT:hosted", "complete", "hosted"],
       ["SCRIPT:refusal", "complete", "assistant"],
     ] as const;
     let scriptIndex = 0;

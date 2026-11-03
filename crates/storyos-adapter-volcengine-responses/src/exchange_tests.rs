@@ -33,7 +33,7 @@ impl CredentialResolver for CanaryResolver {
 }
 
 #[derive(Default)]
-pub(crate) struct RecordingSink(Vec<NativeStreamItem>);
+struct RecordingSink(Vec<NativeStreamItem>);
 
 impl ModelStreamSink for RecordingSink {
     async fn append(&mut self, events: &[NativeStreamItem]) -> StreamControl {
@@ -221,7 +221,6 @@ pub(crate) fn item(
         call_id: None,
         arguments: None,
         refusal: None,
-        hosted_report: None,
     }
 }
 
@@ -288,7 +287,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
-                tool_evidence: None,
+                tool_items: Vec::new(),
             }),
             items,
             "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
@@ -743,7 +742,7 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
-                tool_evidence: None,
+                tool_items: Vec::new(),
             }),
             (
                 "GET /api/plan/v3/responses/resp_01 HTTP/1.1".to_owned(),

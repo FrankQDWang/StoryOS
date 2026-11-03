@@ -108,7 +108,6 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     call_id: None,
                     arguments: None,
                     refusal: None,
-                    hosted_report: None,
                 };
                 let first = [
                     item("1", StreamItemState::Provisional, "Guard"),
@@ -143,7 +142,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     usage: ModelUsage::Unknown,
                     cache_use: storyos_application::CacheUse::Unknown,
                     response_reference: None,
-                    tool_evidence: None,
+                    tool_items: Vec::new(),
                 });
             }
             Probe::InspectBeforeExchange => {
@@ -676,7 +675,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
         serde_json::json!({
             "item_id": item_id, "role": "assistant", "state": state, "phase": state,
             "text": text, "summary": null, "call_id": null, "arguments": null,
-            "refusal": null, "hosted_report": null
+            "refusal": null
         })
     };
     let kept = serde_json::json!([

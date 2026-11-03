@@ -95,9 +95,6 @@ pub enum ToolProbeRequest {
     FunctionCallOutput {
         call_id: String,
     },
-    HostedWebSearch,
-    RemoteMcp,
-    MaxToolCallsBound,
 }
 
 impl ToolProbeRequest {
@@ -105,9 +102,6 @@ impl ToolProbeRequest {
         match self {
             Self::FunctionCall => storyos_core::ToolProbe::FunctionCall,
             Self::FunctionCallOutput { .. } => storyos_core::ToolProbe::FunctionCallOutput,
-            Self::HostedWebSearch => storyos_core::ToolProbe::HostedWebSearch,
-            Self::RemoteMcp => storyos_core::ToolProbe::RemoteMcp,
-            Self::MaxToolCallsBound => storyos_core::ToolProbe::MaxToolCallsBound,
         }
     }
 }
@@ -316,19 +310,10 @@ pub struct ModelResponse {
     pub usage: ModelUsage,
     pub cache_use: CacheUse,
     pub response_reference: Option<String>,
-    /// The native Tool facts of the response, or `None` when it reports no Tool fact.
-    pub tool_evidence: Option<Box<ToolEvidence>>,
-}
-
-/// The native Tool facts of one response that a Tool qualification records (ADR 0049).
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ToolEvidence {
-    /// Each native item that is not a message or a reasoning item, in response order.
-    pub items: Vec<ToolItemEvidence>,
-    /// The URL of each `url_citation` annotation of the messages, in order.
-    pub citations: Vec<String>,
-    /// Each count of the Tool usage that the destination reports, by its native name.
-    pub tool_usage: Vec<(String, u64)>,
+    /// Each native item that is not a message or a reasoning item, in response order. Only a
+    /// Tool qualification request asks for one; another request gets no Agent Decision, and the
+    /// kind of the item is the evidence.
+    pub tool_items: Vec<ToolItemEvidence>,
 }
 
 /// One native Tool item, with its call correlation. It keeps no Tool output content.
@@ -339,13 +324,8 @@ pub struct ToolItemEvidence {
     pub status: Option<String>,
     pub call_id: Option<String>,
     pub name: Option<String>,
-    pub server_label: Option<String>,
-    /// The arguments of a call, or the action of a hosted search, as native JSON text.
+    /// The arguments of a call as native JSON text.
     pub arguments: Option<String>,
-    /// The names of the tools that a tool list reports.
-    pub listed_tools: Vec<String>,
-    pub output_present: bool,
-    pub error: Option<String>,
 }
 
 /// Unknown usage is never zero usage.

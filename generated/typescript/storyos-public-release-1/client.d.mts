@@ -485,7 +485,7 @@ export type ReferenceRecoveryDisposition = "rebuilt" | "blocked" | "unknown_crea
 
 export type OptionalReferenceRecoveryInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: ReferenceRecoveryDisposition, block_reason?: string | null, predecessor_run_id: string, predecessor_continuation_binding_id?: string | null, run_step_id?: string | null, model_invocation_id?: string | null, model_attempt_id?: string | null, assembly_manifest_id?: string | null, lossless_provider_reconstruction: boolean, semantic_erasure: boolean, opaque_reused: boolean, covered_content_included: boolean, predecessor_terminal: boolean, };
 
-export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
+export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, };
 
 export type AgentRunUsageInspect = { kind: string, };
 

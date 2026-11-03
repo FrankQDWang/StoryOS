@@ -11,8 +11,7 @@ use std::time::Duration;
 use storyos_application::{
     CacheSetting, CreatePurpose, CredentialResolver, DeclaredTarget, DestinationRequest,
     ModelProviderAdapter, ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest,
-    RequestAttempt, RequestRoute, ResolvedCredential, RetrieveRequest, ToolProbeRequest,
-    WirePayloadProjection,
+    RequestAttempt, RequestRoute, ResolvedCredential, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::ModelAdapter;
 
@@ -48,8 +47,6 @@ enum Exchange {
         continues: bool,
         /// The mapping revision of a streamed request, `None` for a request that is not streamed.
         stream: Option<String>,
-        /// The extra headers of the request, for example the beta header of remote MCP.
-        headers: &'static [(&'static str, &'static str)],
     },
     /// One read of a stored response. It never sends the original request again.
     Retrieve {
@@ -134,12 +131,6 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 continues: create.previous_response_reference.is_some(),
                 stream: (streams && !matches!(create.purpose, CreatePurpose::ToolQualification(_)))
                     .then(|| route.mapping_revision.clone()),
-                headers: match create.purpose {
-                    CreatePurpose::ToolQualification(ToolProbeRequest::RemoteMcp) => {
-                        &[probe::MCP_BETA_HEADER]
-                    }
-                    _ => &[],
-                },
             }),
         })
     }
@@ -150,8 +141,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         prepared: AgentPlanExchange,
         sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let (url, body, credential, timeout, targets, continues, stream, headers) = match prepared.0
-        {
+        let (url, body, credential, timeout, targets, continues, stream) = match prepared.0 {
             Exchange::Send {
                 url,
                 body,
@@ -160,10 +150,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 targets,
                 continues,
                 stream,
-                headers,
-            } => (
-                url, body, credential, timeout, targets, continues, stream, headers,
-            ),
+            } => (url, body, credential, timeout, targets, continues, stream),
             Exchange::Retrieve {
                 url,
                 credential,
@@ -176,31 +163,30 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 };
             }
         };
-        let mut observation =
-            match send(Method::Post(body, headers), &url, &credential, timeout).await {
-                Sent::Settled(observation) => observation,
-                Sent::Accepted(response) => match stream {
-                    Some(mapping_revision) => {
-                        return stream::observe(
-                            response,
-                            &targets,
-                            &mapping_revision,
-                            stream::CommitPolicy {
-                                bound: storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
-                                interval: storyos_application::PROVISIONAL_STREAM_COMMIT_INTERVAL,
-                            },
-                            sink,
-                        )
-                        .await;
-                    }
-                    None => match response.bytes().await {
-                        Ok(bytes) => response::observe(&bytes, &targets),
-                        Err(_) => Observation::OutcomeUnknown {
-                            response_reference: None,
+        let mut observation = match send(Method::Post(body), &url, &credential, timeout).await {
+            Sent::Settled(observation) => observation,
+            Sent::Accepted(response) => match stream {
+                Some(mapping_revision) => {
+                    return stream::observe(
+                        response,
+                        &targets,
+                        &mapping_revision,
+                        stream::CommitPolicy {
+                            bound: storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
+                            interval: storyos_application::PROVISIONAL_STREAM_COMMIT_INTERVAL,
                         },
+                        sink,
+                    )
+                    .await;
+                }
+                None => match response.bytes().await {
+                    Ok(bytes) => response::observe(&bytes, &targets),
+                    Err(_) => Observation::OutcomeUnknown {
+                        response_reference: None,
                     },
                 },
-            };
+            },
+        };
         if let Observation::Rejected { reason } = &mut observation
             && continues
             && reason.as_str() == PREVIOUS_RESPONSE_NOT_FOUND
@@ -291,7 +277,7 @@ async fn retrieve(
 }
 
 enum Method {
-    Post(String, &'static [(&'static str, &'static str)]),
+    Post(String),
     Get,
 }
 
@@ -325,13 +311,10 @@ async fn send(
     // A failed read is OutcomeUnknown, also a timeout before the connection. It proves nothing.
     let read = matches!(method, Method::Get);
     let request = match method {
-        Method::Post(body, headers) => headers.iter().fold(
-            client
-                .post(url)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(body),
-            |request, (name, value)| request.header(*name, *value),
-        ),
+        Method::Post(body) => client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body),
         Method::Get => client.get(url),
     };
     let sent = request.bearer_auth(credential.expose()).send().await;
