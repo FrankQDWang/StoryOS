@@ -164,7 +164,8 @@ pub use model_gateway_ports::{
     PROVISIONAL_STREAM_COMMIT_INTERVAL, PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal,
     PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds,
     RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose,
-    RetrieveRequest, StreamControl, StreamStop, WirePayloadProjection,
+    RetrieveRequest, StreamControl, StreamStop, ToolEvidence, ToolItemEvidence, ToolProbeRequest,
+    WirePayloadProjection,
 };
 pub use open_proposal_list::{
     OpenProposalList, OpenProposalListItem, OpenProposalListReader, list_open_proposals,

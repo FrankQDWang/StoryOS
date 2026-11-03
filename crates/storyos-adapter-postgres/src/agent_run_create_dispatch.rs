@@ -69,10 +69,20 @@ pub(crate) async fn record_create(
         .iter()
         .map(DeclaredTarget::location)
         .collect();
+    let mut retained = retained;
+    if let Some(evidence) = &response.tool_evidence {
+        retained["tool_evidence"] = crate::agent_run_tool_probe::encode_tool_evidence(evidence);
+    }
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
-        outcome: validate_agent_decision(response.output.as_ref(), &declared),
+        // A Tool qualification probe makes no Agent Decision (ADR 0049).
+        outcome: match request.purpose {
+            CreatePurpose::ToolQualification(_) => AgentDecisionOutcome::NoDecision,
+            CreatePurpose::Decision | CreatePurpose::CompactionSummary => {
+                validate_agent_decision(response.output.as_ref(), &declared)
+            }
+        },
         producer_output: response
             .output
             .as_ref()
@@ -125,9 +135,16 @@ pub(crate) async fn create_request(
         )))
     })?;
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
+    let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    let previous_response_reference = match &probe {
+        Some(probe) => probe.previous_response_reference.clone(),
+        None => previous_response_reference(client, claim, run, prior_context).await?,
+    };
     Ok(CreateRequest {
         attempt,
-        purpose: CreatePurpose::Decision,
+        purpose: probe.map_or(CreatePurpose::Decision, |probe| {
+            CreatePurpose::ToolQualification(probe.request)
+        }),
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),
@@ -147,8 +164,7 @@ pub(crate) async fn create_request(
             .selection_references
             .clone()
             .unwrap_or_default(),
-        previous_response_reference: previous_response_reference(client, claim, run, prior_context)
-            .await?,
+        previous_response_reference,
         successor_of: None,
     })
 }

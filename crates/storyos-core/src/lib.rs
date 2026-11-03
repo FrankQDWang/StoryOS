@@ -24,6 +24,7 @@ mod model_registration;
 mod ordinary_passage_request;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
+mod tool_capability;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
@@ -236,6 +237,10 @@ pub use statistics_profile::{
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
+};
+pub use tool_capability::{
+    AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE, AGENT_PLAN_TOOL_PENDING_REGISTRATION,
+    ToolCapability, ToolEntries, ToolProbe, UNKNOWN_TOOL_ENTRIES, tool_probe,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{

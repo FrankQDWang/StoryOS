@@ -143,6 +143,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     usage: ModelUsage::Unknown,
                     cache_use: storyos_application::CacheUse::Unknown,
                     response_reference: None,
+                    tool_evidence: None,
                 });
             }
             Probe::InspectBeforeExchange => {

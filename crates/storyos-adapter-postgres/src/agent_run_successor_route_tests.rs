@@ -318,6 +318,7 @@ impl ModelProviderAdapter for StoredProseChange {
             },
             cache_use: CacheUse::Unknown,
             response_reference: Some("resp_c49".to_owned()),
+            tool_evidence: None,
         })
     }
 }
@@ -497,6 +498,7 @@ impl ModelProviderAdapter for SuccessorProseChange {
             },
             cache_use: CacheUse::Unknown,
             response_reference: Some("resp_1d".to_owned()),
+            tool_evidence: None,
         })
     }
 }

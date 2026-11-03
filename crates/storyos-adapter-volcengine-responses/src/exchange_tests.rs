@@ -288,6 +288,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
+                tool_evidence: None,
             }),
             items,
             "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
@@ -742,6 +743,7 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
                 },
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
+                tool_evidence: None,
             }),
             (
                 "GET /api/plan/v3/responses/resp_01 HTTP/1.1".to_owned(),

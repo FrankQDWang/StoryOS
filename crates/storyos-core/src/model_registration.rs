@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+use crate::{ToolEntries, UNKNOWN_TOOL_ENTRIES};
+
 /// The Model Provider Adapter that a Model Registration binds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModelAdapter {
@@ -114,6 +116,10 @@ pub enum CapabilityEvidence {
     Qualified {
         evidence: &'static str,
     },
+    /// Attributable evidence from the exact route and model that it does not have the capability.
+    Unsupported {
+        evidence: &'static str,
+    },
 }
 
 const fn documented(source: &'static str) -> CapabilityEvidence {
@@ -140,6 +146,8 @@ pub struct CapabilityEntries {
     pub host_compaction: CapabilityEvidence,
     pub retrieval: CapabilityEvidence,
     pub abort: CapabilityEvidence,
+    #[serde(skip_serializing_if = "ToolEntries::unknown")]
+    pub tools: ToolEntries,
 }
 
 /// The evidence that a set of capabilities works together. Members alone prove no combination.
@@ -259,6 +267,7 @@ pub const HOST_FAKE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapability
         host_compaction: STAGE_3_PROOF,
         retrieval: STAGE_3_PROOF,
         abort: STAGE_3_PROOF,
+        tools: UNKNOWN_TOOL_ENTRIES,
     },
     context_window: None,
     combinations: &[CapabilityCombination {
@@ -305,6 +314,7 @@ pub const AGENT_PLAN_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelC
         host_compaction: CapabilityEvidence::Unknown,
         retrieval: documented(ARK_RETRIEVE_RESPONSE),
         abort: CapabilityEvidence::Unknown,
+        tools: UNKNOWN_TOOL_ENTRIES,
     },
     context_window: None,
     combinations: &[
@@ -898,8 +908,8 @@ pub const AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION: ModelRegistration = Mo
     ..AGENT_PLAN_RECOVERY_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the dated version with the qualified profile. A later
-/// provider version is a new Registration that the author approves (ADR 0059).
+/// The Agent Plan Registration of the dated version with the qualified profile and no Tool
+/// entries. A later provider version is a new Registration that the author approves (ADR 0059).
 pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa15",
     capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
@@ -924,6 +934,7 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_RECOVERY_REGISTRATION,
         &AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
+        &crate::AGENT_PLAN_TOOL_PENDING_REGISTRATION,
     ]
     .into_iter()
     .find(|registration| registration.revision == revision)

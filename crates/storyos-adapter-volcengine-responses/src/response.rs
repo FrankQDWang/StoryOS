@@ -43,6 +43,7 @@ pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Obs
             .get("id")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        tool_evidence: crate::probe::tool_evidence(response).map(Box::new),
     })
 }
 

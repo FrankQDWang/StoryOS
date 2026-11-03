@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{AGENT_PLAN_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
+use crate::{AGENT_PLAN_TOOL_PENDING_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
 
 pub const AGENT_PLAN_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/plan/v3";
 pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
@@ -147,18 +147,22 @@ impl DeploymentDestination {
     pub fn registration(&self) -> &'static ModelRegistration {
         match self {
             Self::HostFake => &HOST_FAKE_REGISTRATION,
-            Self::VolcengineAgentPlan { .. } => &AGENT_PLAN_REGISTRATION,
+            Self::VolcengineAgentPlan { .. } => &AGENT_PLAN_TOOL_PENDING_REGISTRATION,
         }
     }
 
-    /// The qualification of a new compatibility Decision for this destination.
+    /// The qualification of a new compatibility Decision for this destination. The link
+    /// authorizes a pending requirement or a pending Tool entry of the Registration.
     pub fn runtime_qualification(&self) -> RuntimeQualification {
+        let registration = self.registration();
+        let pending = !registration.qualified()
+            || registration.capability_profile.entries.tools.any_pending();
         match self {
-            _ if self.registration().qualified() => RuntimeQualification::Qualified,
             Self::VolcengineAgentPlan {
                 qualification_authorization: Some(_),
                 ..
-            } => RuntimeQualification::QualificationAuthorized,
+            } if pending => RuntimeQualification::QualificationAuthorized,
+            _ if registration.qualified() => RuntimeQualification::Qualified,
             Self::HostFake | Self::VolcengineAgentPlan { .. } => RuntimeQualification::Pending,
         }
     }
