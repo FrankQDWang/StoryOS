@@ -10,6 +10,10 @@
 //! 256 KiB. The one-off discovery of the Worker binary bounds its exchange with
 //! `DISCOVERY_TIMEOUT`. The specification treats the `Mcp-Session-Id` as security-sensitive, so a
 //! diagnostic line has only the first 8 hex digits of its SHA-256.
+//!
+//! Each exchange opens its own session and sends each request one time. When the server ends the
+//! session with HTTP 404, the observation is `Rejected { reason: "session_ended" }`. A resend is a
+//! new Destination Attempt (ADR 0039), and its exchange starts a new session.
 
 mod record;
 mod session;

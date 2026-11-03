@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -403,23 +402,12 @@ async fn each_failure_of_the_server_is_one_observation() {
     }
 }
 
+/// A 404 ends the exchange. The next exchange is a new Destination Attempt with a new session.
 #[tokio::test]
-async fn an_ended_session_starts_one_new_session() {
-    let rejected = McpObservation::Rejected {
-        reason: "http_404".to_owned(),
-    };
-    let twice = [CALL, CALL].concat();
-    // The number of 404 replies to `tools/call`, the session header, the observation, and the
-    // methods that the server receives.
-    let cases = [
-        (1, Some(SESSION), called(), twice.clone()),
-        (2, Some(SESSION), rejected.clone(), twice),
-        (1, None, rejected, CALL.to_vec()),
-    ];
-    for (ended, session, expected, methods) in cases {
-        let calls = AtomicUsize::new(0);
-        let script = move |message: &Value| {
-            if message["method"] == "tools/call" && calls.fetch_add(1, Ordering::SeqCst) < ended {
+async fn an_ended_session_is_a_rejection_and_nothing_is_sent_again() {
+    for (session, reason) in [(Some(SESSION), "session_ended"), (None, "http_404")] {
+        let script = |message: &Value| {
+            if message["method"] == "tools/call" {
                 Reply::NotFound
             } else {
                 conforming(message)
@@ -428,7 +416,10 @@ async fn an_ended_session_starts_one_new_session() {
         let (url, received) = serve(Body::Json, session, script).await;
         let observation = exchange(call(&url)).await;
         let messages = std::mem::take(&mut *received.lock().unwrap());
-        assert_eq!((observation, messages), (expected, sent(&methods, session)));
+        let expected = McpObservation::Rejected {
+            reason: reason.to_owned(),
+        };
+        assert_eq!((observation, messages), (expected, sent(CALL, session)));
     }
 }
 

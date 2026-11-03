@@ -41,27 +41,28 @@ enum Failure {
     SessionEnded,
 }
 
-/// The server ended the session of an attempt.
-struct SessionEnded;
-
 impl Failure {
     /// Before the operation request, a lost answer proves that the operation was not sent.
-    fn before_operation(self) -> Result<McpObservation, SessionEnded> {
+    fn before_operation(self) -> McpObservation {
         match self {
-            Self::Unsent | Self::Lost => Ok(McpObservation::NotSubmitted),
+            Self::Unsent | Self::Lost => McpObservation::NotSubmitted,
             other => other.after_operation(),
         }
     }
 
-    fn after_operation(self) -> Result<McpObservation, SessionEnded> {
-        Ok(match self {
+    fn after_operation(self) -> McpObservation {
+        match self {
             Self::Unsent => McpObservation::NotSubmitted,
             Self::Rejected(reason) => McpObservation::Rejected { reason },
             Self::JsonRpc(code) => McpObservation::JsonRpcError { code },
             Self::Invalid(reason) => McpObservation::InvalidResult { reason },
             Self::Lost => McpObservation::OutcomeUnknown,
-            Self::SessionEnded => return Err(SessionEnded),
-        })
+            // The exchange does not send the request again: each resend is a new Destination
+            // Attempt (ADR 0039). The next exchange starts a new session.
+            Self::SessionEnded => McpObservation::Rejected {
+                reason: "session_ended".to_owned(),
+            },
+        }
     }
 }
 
@@ -80,8 +81,7 @@ struct Session<'a> {
     deadline: Instant,
 }
 
-/// `initialize`, `notifications/initialized`, and then the operation of `request`. When the server
-/// ends the session, the client starts one new session, as the specification requires.
+/// `initialize`, `notifications/initialized`, and then the operation of `request`.
 pub(crate) async fn run(
     url: &str,
     credential: &ResolvedCredential,
@@ -107,75 +107,60 @@ pub(crate) async fn run(
         received: 0,
         deadline: Instant::now() + timeout,
     };
-    if let Ok(observation) = session.attempt(request).await {
-        return observation;
+    let identity = match session.request("initialize", initialize_params()).await {
+        Ok(result) => record::server_identity(&result),
+        Err(failure) => return failure.before_operation(),
+    };
+    let (server_name, server_version) = match identity {
+        Ok(identity) => identity,
+        Err(reason) => return McpObservation::InvalidResult { reason },
+    };
+    if let Err(failure) = session.notify("notifications/initialized").await {
+        return failure.before_operation();
     }
-    session.session_id = None;
-    session.session_tag = "none".to_owned();
-    session
-        .attempt(request)
-        .await
-        .unwrap_or_else(|SessionEnded| McpObservation::Rejected {
-            reason: "http_404".to_owned(),
-        })
+    match request {
+        McpRequest::Discover { .. } => {
+            let mut tools = Vec::new();
+            let mut cursor = None;
+            loop {
+                let params = match &cursor {
+                    Some(cursor) => json!({"cursor": cursor}),
+                    None => json!({}),
+                };
+                let page = match session.request("tools/list", params).await {
+                    Ok(page) => page,
+                    Err(failure) => return failure.after_operation(),
+                };
+                match record::tools_page(&page, &mut tools) {
+                    Ok(Some(next)) => cursor = Some(next),
+                    Ok(None) => break,
+                    Err(reason) => return McpObservation::InvalidResult { reason },
+                }
+            }
+            McpObservation::Discovered(ToolDiscoveryRecord {
+                server_url: url.to_owned(),
+                server_name,
+                server_version,
+                protocol_revision: PROTOCOL_REVISION.to_owned(),
+                tools,
+            })
+        }
+        McpRequest::Call {
+            tool, arguments, ..
+        } => {
+            let params = json!({"name": tool, "arguments": arguments});
+            match session.request("tools/call", params).await {
+                Ok(result) => match record::call_result(result) {
+                    Ok(result) => McpObservation::Called(result),
+                    Err(reason) => McpObservation::InvalidResult { reason },
+                },
+                Err(failure) => failure.after_operation(),
+            }
+        }
+    }
 }
 
 impl Session<'_> {
-    /// One session: `initialize`, `notifications/initialized`, and the operation.
-    async fn attempt(&mut self, request: &McpRequest) -> Result<McpObservation, SessionEnded> {
-        let identity = match self.request("initialize", initialize_params()).await {
-            Ok(result) => record::server_identity(&result),
-            Err(failure) => return failure.before_operation(),
-        };
-        let (server_name, server_version) = match identity {
-            Ok(identity) => identity,
-            Err(reason) => return Ok(McpObservation::InvalidResult { reason }),
-        };
-        if let Err(failure) = self.notify("notifications/initialized").await {
-            return failure.before_operation();
-        }
-        match request {
-            McpRequest::Discover { .. } => {
-                let mut tools = Vec::new();
-                let mut cursor = None;
-                loop {
-                    let params = match &cursor {
-                        Some(cursor) => json!({"cursor": cursor}),
-                        None => json!({}),
-                    };
-                    let page = match self.request("tools/list", params).await {
-                        Ok(page) => page,
-                        Err(failure) => return failure.after_operation(),
-                    };
-                    match record::tools_page(&page, &mut tools) {
-                        Ok(Some(next)) => cursor = Some(next),
-                        Ok(None) => break,
-                        Err(reason) => return Ok(McpObservation::InvalidResult { reason }),
-                    }
-                }
-                Ok(McpObservation::Discovered(ToolDiscoveryRecord {
-                    server_url: self.url.to_owned(),
-                    server_name,
-                    server_version,
-                    protocol_revision: PROTOCOL_REVISION.to_owned(),
-                    tools,
-                }))
-            }
-            McpRequest::Call {
-                tool, arguments, ..
-            } => {
-                let params = json!({"name": tool, "arguments": arguments});
-                match self.request("tools/call", params).await {
-                    Ok(result) => Ok(match record::call_result(result) {
-                        Ok(result) => McpObservation::Called(result),
-                        Err(reason) => McpObservation::InvalidResult { reason },
-                    }),
-                    Err(failure) => failure.after_operation(),
-                }
-            }
-        }
-    }
-
     async fn request(&mut self, method: &'static str, params: Value) -> Result<Value, Failure> {
         let id = self.next_id;
         self.next_id += 1;
@@ -382,11 +367,11 @@ impl EventStream {
 
     /// Removes and returns the next complete line of `buffer`, without its end.
     fn next_line(&mut self, buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
-        if self.after_cr && buffer.first() == Some(&b'\n') {
-            buffer.drain(..1);
-        }
-        if !buffer.is_empty() {
+        if self.after_cr && !buffer.is_empty() {
             self.after_cr = false;
+            if buffer[0] == b'\n' {
+                buffer.drain(..1);
+            }
         }
         let end = buffer
             .iter()
@@ -423,3 +408,7 @@ fn refused_method(method: Option<&str>) -> &'static str {
         Some(_) | None => "other",
     }
 }
+
+#[cfg(test)]
+#[path = "session_tests.rs"]
+mod tests;
