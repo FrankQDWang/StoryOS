@@ -158,6 +158,15 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     // leaves the run waiting. A function call under another Registration or destination is not
     // continued.
     let head = AGENT_PLAN_REGISTRATION.revision;
+    // The loop and the ordinary request issue five more Challenges in this minute.
+    admin
+        .execute(
+            "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+              WHERE project_id = $1::text::uuid",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
     let mut ends = Vec::new();
     for (prefix, observation, call_registration, same_destination) in [
         (
