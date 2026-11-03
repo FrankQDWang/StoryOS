@@ -342,6 +342,7 @@ fn item(item_id: &str) -> NativeStreamItem {
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     }
 }
 

@@ -33,6 +33,8 @@ pub struct NativeStreamItem {
     /// for no native item other than a message, a reasoning item, and the function call of a
     /// probe. `None` for an assistant item.
     pub native_type: Option<String>,
+    /// The function name of a function call item.
+    pub name: Option<String>,
 }
 
 /// Whether the destination offers a complete output as its final answer.

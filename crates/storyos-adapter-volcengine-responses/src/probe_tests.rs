@@ -125,6 +125,7 @@ fn a_native_item_that_the_request_did_not_ask_for_is_a_tool_item_with_no_decisio
                 .map(|item| (
                     item.role,
                     item.native_type.as_deref(),
+                    item.name.as_deref(),
                     item.call_id.as_deref()
                 ))
                 .collect::<Vec<_>>(),
@@ -132,10 +133,15 @@ fn a_native_item_that_the_request_did_not_ask_for_is_a_tool_item_with_no_decisio
         ),
         (
             vec![
-                (StreamItemRole::Assistant, None, None),
-                (StreamItemRole::Tool, Some("web_search_call"), None),
-                (StreamItemRole::Tool, Some("function_call"), Some("call_01")),
-                (StreamItemRole::Assistant, None, None),
+                (StreamItemRole::Assistant, None, None, None),
+                (StreamItemRole::Tool, Some("web_search_call"), None, None),
+                (
+                    StreamItemRole::Tool,
+                    Some("function_call"),
+                    Some("storyos_probe_echo"),
+                    Some("call_01")
+                ),
+                (StreamItemRole::Assistant, None, None, None),
             ],
             None,
         )

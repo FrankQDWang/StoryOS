@@ -23,20 +23,6 @@ pub(crate) async fn record_create(
     let probe = matches!(request.purpose, CreatePurpose::ToolQualification(_));
     let response = match observation {
         Observation::Terminal(response) => response,
-        // A probe has no recovery. The executor sends it again at most one time (ADR 0049).
-        Observation::OutcomeUnknown { .. } if probe => {
-            return persist_create_result(
-                client,
-                claim,
-                run,
-                no_response(
-                    dispatch,
-                    CreateSettlement::Rejected("probe_outcome_unknown"),
-                ),
-                retained,
-            )
-            .await;
-        }
         Observation::OutcomeUnknown { response_reference } => {
             return crate::agent_run_recovery::record_unknown_create(
                 client,

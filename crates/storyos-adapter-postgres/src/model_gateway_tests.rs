@@ -109,6 +109,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     arguments: None,
                     refusal: None,
                     native_type: None,
+                    name: None,
                 };
                 let first = [
                     item("1", StreamItemState::Provisional, "Guard"),
@@ -675,7 +676,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
         serde_json::json!({
             "item_id": item_id, "role": "assistant", "state": state, "phase": state,
             "text": text, "summary": null, "call_id": null, "arguments": null,
-            "refusal": null, "native_type": null
+            "refusal": null, "native_type": null, "name": null
         })
     };
     let kept = serde_json::json!([

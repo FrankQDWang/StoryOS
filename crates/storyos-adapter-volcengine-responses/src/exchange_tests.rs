@@ -222,6 +222,7 @@ pub(crate) fn item(
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     }
 }
 

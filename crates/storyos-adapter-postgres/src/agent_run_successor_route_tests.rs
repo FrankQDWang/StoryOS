@@ -304,6 +304,7 @@ impl ModelProviderAdapter for StoredProseChange {
                 arguments: None,
                 refusal: None,
                 native_type: None,
+                name: None,
             }],
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,
@@ -483,6 +484,7 @@ impl ModelProviderAdapter for SuccessorProseChange {
                 arguments: None,
                 refusal: None,
                 native_type: None,
+                name: None,
             }],
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,

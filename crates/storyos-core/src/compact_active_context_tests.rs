@@ -293,6 +293,7 @@ fn a_summary_is_the_one_complete_assistant_message() {
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     };
     let reasoning = crate::NativeStreamItem {
         text: None,

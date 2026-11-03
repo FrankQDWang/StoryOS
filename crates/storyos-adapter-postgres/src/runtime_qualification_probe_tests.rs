@@ -98,6 +98,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         arguments: Some("{\"text\":\"storyos-probe\"}".to_owned()),
         refusal: None,
         native_type: Some("function_call".to_owned()),
+        name: Some("storyos_probe_echo".to_owned()),
     }];
     let call = admit_run(
         &store,
@@ -126,22 +127,43 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     authorize_tool_probes(&admin, &scope, &output).await;
     let output_adapter = response("resp_b4c", Vec::new());
     settle(&store, &admin, &scope, &output, &output_adapter).await;
-    // A probe has no recovery: a rejected continuation and an unknown outcome refuse the run.
-    let mut refused = Vec::new();
-    for (prefix, observation) in [
+    // A probe has no recovery: a rejected continuation refuses the run, and an unknown outcome
+    // leaves the run waiting. A function call under another Registration is not continued.
+    let head = AGENT_PLAN_REGISTRATION.revision;
+    let pending = storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision;
+    let mut ends = Vec::new();
+    for (prefix, observation, call_registration) in [
         (
             "b4e",
             Observation::Rejected {
                 reason: "continuation_unusable:previous_response_not_found".to_owned(),
             },
+            pending,
+        ),
+        (
+            "b49",
+            Observation::Rejected {
+                reason: "invalid_request".to_owned(),
+            },
+            head,
         ),
         (
             "b4f",
             Observation::OutcomeUnknown {
                 response_reference: None,
             },
+            pending,
         ),
     ] {
+        admin
+            .batch_execute(&format!(
+                "SET session_replication_role = replica;
+                 UPDATE storyos.agent_runs SET model_registration_revision = '{call_registration}'
+                  WHERE run_id = '{call}';
+                 SET session_replication_role = DEFAULT;"
+            ))
+            .await
+            .unwrap();
         let run = admit_run_in(
             &store,
             &scope,
@@ -155,15 +177,16 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         )
         .await;
         authorize_tool_probes(&admin, &scope, &run).await;
-        settle(
-            &store,
-            &admin,
-            &scope,
-            &run,
-            &ScriptedAgentPlan::new(observation),
-        )
-        .await;
-        refused.push(probe_evidence(&admin, &run).await);
+        let adapter = ScriptedAgentPlan::new(observation);
+        settle(&store, &admin, &scope, &run, &adapter).await;
+        let evidence = probe_evidence(&admin, &run).await;
+        let request = adapter.seen.into_inner().unwrap().pop().unwrap();
+        ends.push((
+            evidence[0].clone(),
+            evidence[1].clone(),
+            request.purpose,
+            request.previous_response_reference,
+        ));
     }
     // The head qualifies function calling, so the same message is an ordinary request.
     let ordinary = admit_run(
@@ -196,7 +219,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             sent(ordinary_adapter),
             probe_evidence(&admin, &call).await,
             probe_evidence(&admin, &output).await,
-            refused,
+            ends,
             [ordinary_evidence[0].clone(), ordinary_evidence[2].clone()],
             ordinary_evidence[1].is_some(),
         ),
@@ -226,16 +249,28 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                 None,
                 text("qualification_authorized"),
             ],
-            vec![
-                [
-                    text("refused"),
-                    None,
-                    text("function_call_output"),
-                    None,
-                    text("qualification_authorized"),
-                ];
-                2
-            ],
+            {
+                let output = |call: Option<&str>| {
+                    CreatePurpose::ToolQualification(ToolProbeRequest::FunctionCallOutput {
+                        call_id: call.map(str::to_owned),
+                    })
+                };
+                vec![
+                    (
+                        text("refused"),
+                        None,
+                        output(Some("call_b4b")),
+                        text("resp_b4b"),
+                    ),
+                    (text("refused"), None, output(None), None),
+                    (
+                        text("waiting"),
+                        None,
+                        output(Some("call_b4b")),
+                        text("resp_b4b"),
+                    ),
+                ]
+            },
             [text("completed"), None],
             true,
         )

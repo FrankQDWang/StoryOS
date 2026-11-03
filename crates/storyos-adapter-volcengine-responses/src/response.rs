@@ -85,6 +85,7 @@ pub(crate) fn native_item(
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     };
     match kind {
         "message" => {
@@ -99,6 +100,7 @@ pub(crate) fn native_item(
             native.call_id = string("call_id");
             native.arguments = string("arguments");
             native.native_type = Some(if kind.is_empty() { "unknown" } else { kind }.to_owned());
+            native.name = string("name");
         }
     }
     native

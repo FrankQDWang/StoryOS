@@ -145,6 +145,8 @@ pub(crate) async fn settle_cancelled(
 }
 
 /// Records the reference of an unknown create as the retrieval subject of the first decision.
+/// A probe has no recovery: its Attempt stays uncertain, and the executor sends the probe again
+/// at most one time (ADR 0049).
 pub(crate) async fn record_unknown_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -152,7 +154,12 @@ pub(crate) async fn record_unknown_create(
     dispatch: &DispatchClaim,
     reference: Option<&ResponseReference>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    if run.decision_position != "0" {
+    let probe = run
+        .attempt_payload
+        .as_deref()
+        .and_then(|payload| serde_json::from_str(payload).ok())
+        .is_some_and(|payload| crate::agent_run_tool_probe::is_probe(&payload));
+    if run.decision_position != "0" || probe {
         update_run(
             client,
             claim,

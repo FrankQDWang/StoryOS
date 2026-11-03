@@ -200,6 +200,7 @@ pub(crate) fn assistant_item(
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     }
 }
 
@@ -214,6 +215,7 @@ fn evidence_item(role: StreamItemRole, state: StreamItemState, summary: &str) ->
         arguments: None,
         refusal: None,
         native_type: None,
+        name: None,
     }
 }
 
