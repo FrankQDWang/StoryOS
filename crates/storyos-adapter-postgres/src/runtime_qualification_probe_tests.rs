@@ -42,6 +42,31 @@ async fn authorize_tool_probes(admin: &Client, scope: &ProjectScope, run_id: &st
         .unwrap();
 }
 
+/// Moves the earlier AgentRun `call` to the Registration `registration` and, when `binding_of`
+/// is set, to the binding of that AgentRun. Each admission of a test probe binds the Project again
+/// with a new destination identity, because the code head Registration is not the pending one.
+async fn move_call(admin: &Client, call: &str, registration: &str, binding_of: Option<&str>) {
+    let binding = binding_of.map_or(String::new(), |run| {
+        format!(
+            "UPDATE storyos.agent_runs AS call
+                SET project_model_use_binding_revision = source.project_model_use_binding_revision,
+                    grant_id = source.grant_id
+               FROM storyos.agent_runs AS source
+              WHERE source.run_id = '{run}' AND call.run_id = '{call}';"
+        )
+    });
+    admin
+        .batch_execute(&format!(
+            "SET session_replication_role = replica;
+             UPDATE storyos.agent_runs SET model_registration_revision = '{registration}'
+              WHERE run_id = '{call}';
+             {binding}
+             SET session_replication_role = DEFAULT;"
+        ))
+        .await
+        .unwrap();
+}
+
 /// The status of one AgentRun and the decision, probe, call, and qualification facts of its
 /// decision Attempt.
 async fn probe_evidence(admin: &Client, run_id: &str) -> [Option<String>; 5] {
@@ -125,20 +150,23 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     )
     .await;
     authorize_tool_probes(&admin, &scope, &output).await;
+    let pending = storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision;
+    move_call(&admin, &call, pending, Some(&output)).await;
     let output_adapter = response("resp_b4c", Vec::new());
     settle(&store, &admin, &scope, &output, &output_adapter).await;
     // A probe has no recovery: a rejected continuation refuses the run, and an unknown outcome
-    // leaves the run waiting. A function call under another Registration is not continued.
+    // leaves the run waiting. A function call under another Registration or destination is not
+    // continued.
     let head = AGENT_PLAN_REGISTRATION.revision;
-    let pending = storyos_core::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision;
     let mut ends = Vec::new();
-    for (prefix, observation, call_registration) in [
+    for (prefix, observation, call_registration, same_destination) in [
         (
             "b4e",
             Observation::Rejected {
                 reason: "continuation_unusable:previous_response_not_found".to_owned(),
             },
             pending,
+            true,
         ),
         (
             "b49",
@@ -146,6 +174,15 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                 reason: "invalid_request".to_owned(),
             },
             head,
+            true,
+        ),
+        (
+            "b48",
+            Observation::Rejected {
+                reason: "invalid_request".to_owned(),
+            },
+            pending,
+            false,
         ),
         (
             "b4f",
@@ -153,17 +190,9 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                 response_reference: None,
             },
             pending,
+            true,
         ),
     ] {
-        admin
-            .batch_execute(&format!(
-                "SET session_replication_role = replica;
-                 UPDATE storyos.agent_runs SET model_registration_revision = '{call_registration}'
-                  WHERE run_id = '{call}';
-                 SET session_replication_role = DEFAULT;"
-            ))
-            .await
-            .unwrap();
         let run = admit_run_in(
             &store,
             &scope,
@@ -177,6 +206,13 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         )
         .await;
         authorize_tool_probes(&admin, &scope, &run).await;
+        move_call(
+            &admin,
+            &call,
+            call_registration,
+            same_destination.then_some(run.as_str()),
+        )
+        .await;
         let adapter = ScriptedAgentPlan::new(observation);
         settle(&store, &admin, &scope, &run, &adapter).await;
         let evidence = probe_evidence(&admin, &run).await;
@@ -262,6 +298,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                         output(Some("call_b4b")),
                         text("resp_b4b"),
                     ),
+                    (text("refused"), None, output(None), None),
                     (text("refused"), None, output(None), None),
                     (
                         text("waiting"),
