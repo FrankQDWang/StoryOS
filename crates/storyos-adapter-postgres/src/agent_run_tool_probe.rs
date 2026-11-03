@@ -14,8 +14,8 @@ pub(crate) struct ProbeRequest {
 }
 
 /// The probe that the author message of `run` asks for under the current compatibility
-/// Decision, or `None` for an ordinary request. A function output probe needs a function call of
-/// an earlier probe of the same Conversation; without one, the message is an ordinary request.
+/// Decision, or `None` for an ordinary request. A function output probe continues the function
+/// call of an earlier probe of the same Conversation; without one, it has no call ID.
 pub(crate) async fn probe_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -40,12 +40,14 @@ pub(crate) async fn probe_request(
             request: ToolProbeRequest::FunctionCall,
             previous_response_reference: None,
         }),
-        ToolProbe::FunctionCallOutput => prior_function_call(client, claim, &run.conversation_id)
-            .await?
-            .map(|(reference, call_id)| ProbeRequest {
+        ToolProbe::FunctionCallOutput => {
+            let prior = prior_function_call(client, claim, &run.conversation_id).await?;
+            let (previous_response_reference, call_id) = prior.unzip();
+            Some(ProbeRequest {
                 request: ToolProbeRequest::FunctionCallOutput { call_id },
-                previous_response_reference: Some(reference),
-            }),
+                previous_response_reference,
+            })
+        }
     })
 }
 
@@ -78,6 +80,12 @@ async fn prior_function_call(
         .await
         .map_err(complete_database_error)?
         .map(|row| (row.get(0), row.get(1))))
+}
+
+/// True when the decision Attempt of `payload` is a Tool qualification probe. Its response
+/// makes no Agent Decision on any path (ADR 0049).
+pub(crate) fn is_probe(payload: &serde_json::Value) -> bool {
+    payload.get("tool_qualification").is_some()
 }
 
 pub(crate) fn encode_tool_items(items: &[ToolItemEvidence]) -> serde_json::Value {

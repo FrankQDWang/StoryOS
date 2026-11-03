@@ -12,13 +12,13 @@ const PROBE_INSTRUCTIONS: &str = "You answer one capability probe of StoryOS. Do
 const PROBE_FUNCTION_OUTPUT: &str = "{\"text\":\"storyos-probe\"}";
 
 /// The canonical JSON body of one probe. It is not streamed, so that the complete response
-/// object holds each native item.
+/// object holds each native item. A function output probe without a call ID has no body.
 pub(crate) fn probe_body(
     probe: &ToolProbeRequest,
     request: &CreateRequest,
     provider_model_id: &str,
     bounds: RequestBounds,
-) -> String {
+) -> Option<String> {
     let input = match probe {
         ToolProbeRequest::FunctionCall => json!([{
             "role": "user",
@@ -26,7 +26,7 @@ pub(crate) fn probe_body(
         }]),
         ToolProbeRequest::FunctionCallOutput { call_id } => json!([{
             "type": "function_call_output",
-            "call_id": call_id,
+            "call_id": call_id.as_deref()?,
             "output": PROBE_FUNCTION_OUTPUT,
         }]),
     };
@@ -52,7 +52,7 @@ pub(crate) fn probe_body(
     if let Some(reference) = &request.previous_response_reference {
         body["previous_response_id"] = json!(reference);
     }
-    storyos_core::canonical_json(&body)
+    Some(storyos_core::canonical_json(&body))
 }
 
 #[cfg(test)]

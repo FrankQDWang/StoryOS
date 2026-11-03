@@ -96,6 +96,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             }
             (CreatePurpose::ToolQualification(probe), _) => {
                 probe::probe_body(probe, create, &route.provider_model_id, bounds)
+                    .ok_or(PreDispatchRefusal::UnsupportedRequest)?
             }
             (CreatePurpose::CompactionSummary, Some(reference)) if compacts => {
                 wire::summary_body(reference, &route.provider_model_id, bounds, streams)

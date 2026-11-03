@@ -20,8 +20,23 @@ pub(crate) async fn record_create(
     let retained: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let probe = matches!(request.purpose, CreatePurpose::ToolQualification(_));
     let response = match observation {
         Observation::Terminal(response) => response,
+        // A probe has no recovery. The executor sends it again at most one time (ADR 0049).
+        Observation::OutcomeUnknown { .. } if probe => {
+            return persist_create_result(
+                client,
+                claim,
+                run,
+                no_response(
+                    dispatch,
+                    CreateSettlement::Rejected("probe_outcome_unknown"),
+                ),
+                retained,
+            )
+            .await;
+        }
         Observation::OutcomeUnknown { response_reference } => {
             return crate::agent_run_recovery::record_unknown_create(
                 client,
@@ -34,7 +49,8 @@ pub(crate) async fn record_create(
         }
         // A real adapter appends the native code after the condition.
         Observation::Rejected { reason }
-            if request.previous_response_reference.is_some()
+            if !probe
+                && request.previous_response_reference.is_some()
                 && matches!(
                     reason.split(':').next(),
                     Some("continuation_expired" | "continuation_unusable")
@@ -79,11 +95,10 @@ pub(crate) async fn record_create(
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
         // A Tool qualification probe makes no Agent Decision (ADR 0049).
-        outcome: match request.purpose {
-            CreatePurpose::ToolQualification(_) => AgentDecisionOutcome::NoDecision,
-            CreatePurpose::Decision | CreatePurpose::CompactionSummary => {
-                validate_agent_decision(response.output.as_ref(), &declared)
-            }
+        outcome: if probe {
+            AgentDecisionOutcome::NoDecision
+        } else {
+            validate_agent_decision(response.output.as_ref(), &declared)
         },
         producer_output: response
             .output

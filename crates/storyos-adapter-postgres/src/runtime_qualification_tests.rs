@@ -990,6 +990,45 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     authorize_tool_probes(&admin, &scope, &output).await;
     let output_adapter = response("resp_b4c", Vec::new());
     settle(&store, &admin, &scope, &output, &output_adapter).await;
+    // A probe has no recovery: a rejected continuation and an unknown outcome refuse the run.
+    let mut refused = Vec::new();
+    for (prefix, observation) in [
+        (
+            "b4e",
+            Observation::Rejected {
+                reason: "continuation_unusable:previous_response_not_found".to_owned(),
+            },
+        ),
+        (
+            "b4f",
+            Observation::OutcomeUnknown {
+                response_reference: None,
+            },
+        ),
+    ] {
+        let run = admit_run_in(
+            &store,
+            &scope,
+            &chapter_id,
+            prefix,
+            authorized(),
+            ToolProbe::FunctionCallOutput.instruction(),
+            ConversationSelection::Existing {
+                conversation_id: "018f0000-0000-7001-8000-00000006b4b6".to_owned(),
+            },
+        )
+        .await;
+        authorize_tool_probes(&admin, &scope, &run).await;
+        settle(
+            &store,
+            &admin,
+            &scope,
+            &run,
+            &ScriptedAgentPlan::new(observation),
+        )
+        .await;
+        refused.push(probe_evidence(&admin, &run).await);
+    }
     // The head qualifies function calling, so the same message is an ordinary request.
     let ordinary = admit_run(
         &store,
@@ -1021,6 +1060,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             sent(ordinary_adapter),
             probe_evidence(&admin, &call).await,
             probe_evidence(&admin, &output).await,
+            refused,
             [ordinary_evidence[0].clone(), ordinary_evidence[2].clone()],
             ordinary_evidence[1].is_some(),
         ),
@@ -1031,7 +1071,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             )],
             vec![(
                 CreatePurpose::ToolQualification(ToolProbeRequest::FunctionCallOutput {
-                    call_id: "call_b4b".to_owned()
+                    call_id: Some("call_b4b".to_owned())
                 }),
                 text("resp_b4b")
             )],
@@ -1049,6 +1089,16 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                 text("function_call_output"),
                 None,
                 text("qualification_authorized"),
+            ],
+            vec![
+                [
+                    text("refused"),
+                    None,
+                    text("function_call_output"),
+                    None,
+                    text("qualification_authorized"),
+                ];
+                2
             ],
             [text("completed"), None],
             true,

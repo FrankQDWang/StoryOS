@@ -141,7 +141,11 @@ pub(crate) async fn record_original_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(observation, &declared);
+    let retrieved = RetrievedResult::classify(
+        observation,
+        &declared,
+        crate::agent_run_tool_probe::is_probe(&payload),
+    );
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -159,7 +163,7 @@ pub(crate) async fn record_original_result(
             "UPDATE storyos.model_attempts AS attempt
                 SET dispatch_state = $5,
                     payload = attempt.payload || jsonb_build_object(
-                      'result', $6::text, 'items', $7::text::jsonb)
+                      'result', $6::text, 'items', $7::text::jsonb) || $8::text::jsonb
                FROM storyos.context_assembly_manifests AS assembly
               WHERE attempt.owner_user_id = $1::text::uuid
                 AND attempt.project_id = $2::text::uuid
@@ -177,6 +181,7 @@ pub(crate) async fn record_original_result(
                 &dispatch_state,
                 &retrieved.label(),
                 &retrieved.items.to_string(),
+                &retrieved.tool_items.to_string(),
             ],
         )
         .await
@@ -260,12 +265,17 @@ pub(crate) async fn record_late_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(observation, &declared);
+    let retrieved = RetrievedResult::classify(
+        observation,
+        &declared,
+        crate::agent_run_tool_probe::is_probe(&row.payload),
+    );
     client
         .execute(
             "UPDATE storyos.model_attempts
                 SET dispatch_state = $7,
                     payload = payload || jsonb_build_object('result', $5::text, 'items', $6::text::jsonb)
+                              || $8::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid",
             &[
@@ -280,6 +290,7 @@ pub(crate) async fn record_late_result(
                 } else {
                     "settled"
                 },
+                &retrieved.tool_items.to_string(),
             ],
         )
         .await
@@ -304,6 +315,8 @@ pub(crate) async fn record_late_result(
 pub(crate) struct RetrievedResult {
     pub kind: RetrievedOriginalResult,
     pub items: serde_json::Value,
+    /// `{"tool_items": [...]}` when the response has a native Tool item, else `{}`.
+    pub tool_items: serde_json::Value,
     pub selected: Option<SelectedResult>,
     pub usage: ModelUsage,
 }
@@ -315,15 +328,18 @@ pub(crate) struct SelectedResult {
 }
 
 impl RetrievedResult {
-    /// Validates the original response against the targets that its Create declared.
+    /// Validates the original response against the targets that its Create declared. The
+    /// response of a probe makes no Agent Decision.
     pub(crate) fn classify(
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
+        probe: bool,
     ) -> Self {
         let Observation::Terminal(response) = observation else {
             return Self {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
+                tool_items: serde_json::json!({}),
                 selected: None,
                 usage: ModelUsage::Unknown,
             };
@@ -334,16 +350,30 @@ impl RetrievedResult {
             .iter()
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
-        match validate_agent_decision(response.output.as_ref(), declared) {
+        let tool_items = if response.tool_items.is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::json!({
+                "tool_items": crate::agent_run_tool_probe::encode_tool_items(&response.tool_items)
+            })
+        };
+        let outcome = if probe {
+            AgentDecisionOutcome::NoDecision
+        } else {
+            validate_agent_decision(response.output.as_ref(), declared)
+        };
+        match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
+                tool_items,
                 selected: Some(SelectedResult { response, outcome }),
                 usage,
             },
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
                 kind: RetrievedOriginalResult::Incomplete,
                 items,
+                tool_items,
                 selected: None,
                 usage,
             },

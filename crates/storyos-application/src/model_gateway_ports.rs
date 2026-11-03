@@ -91,9 +91,10 @@ pub enum CreatePurpose {
 pub enum ToolProbeRequest {
     FunctionCall,
     /// The output of the function call `call_id` of the earlier probe response, which the
-    /// request continues with its prior response reference.
+    /// request continues with its prior response reference. `None` when the Conversation has no
+    /// function call probe: the adapter refuses that request before dispatch.
     FunctionCallOutput {
-        call_id: String,
+        call_id: Option<String>,
     },
 }
 

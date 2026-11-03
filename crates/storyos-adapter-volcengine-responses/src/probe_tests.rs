@@ -1,7 +1,7 @@
 use serde_json::json;
 use storyos_application::{
     CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, Observation,
-    RequestAttempt, RequestRoute, ToolItemEvidence, ToolProbeRequest,
+    PreDispatchRefusal, RequestAttempt, RequestRoute, ToolItemEvidence, ToolProbeRequest,
 };
 use storyos_core::StreamItemRole;
 
@@ -25,7 +25,7 @@ async fn a_probe_sends_one_function_tool_and_constant_input_and_no_project_conte
         (ToolProbeRequest::FunctionCall, None),
         (
             ToolProbeRequest::FunctionCallOutput {
-                call_id: "call_01".to_owned(),
+                call_id: Some("call_01".to_owned()),
             },
             Some("resp_01".to_owned()),
         ),
@@ -63,7 +63,18 @@ async fn a_probe_sends_one_function_tool_and_constant_input_and_no_project_conte
         ));
     }
     let echo = vec![(json!("function"), json!("storyos_probe_echo"))];
+    // A function output probe without the call of an earlier probe sends nothing.
+    let uncalled = adapter
+        .prepare(&DestinationRequest::Create(CreateRequest {
+            purpose: CreatePurpose::ToolQualification(ToolProbeRequest::FunctionCallOutput {
+                call_id: None,
+            }),
+            ..request
+        }))
+        .await
+        .err();
 
+    assert_eq!(uncalled, Some(PreDispatchRefusal::UnsupportedRequest));
     assert_eq!(
         sent,
         [
