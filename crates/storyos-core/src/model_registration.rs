@@ -910,7 +910,8 @@ pub const AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION: ModelRegistration = Mo
 
 /// The Agent Plan Registration of the dated version with the qualified profile and no Tool
 /// entries. A later provider version is a new Registration that the author approves (ADR 0059).
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// An AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_PINNED_VERSION_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa15",
     capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
     ..AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION
@@ -933,8 +934,9 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_RECOVERY_PENDING_REGISTRATION,
         &AGENT_PLAN_RECOVERY_REGISTRATION,
         &AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
-        &AGENT_PLAN_REGISTRATION,
+        &AGENT_PLAN_PINNED_VERSION_REGISTRATION,
         &crate::AGENT_PLAN_TOOL_PENDING_REGISTRATION,
+        &crate::AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()
     .find(|registration| registration.revision == revision)

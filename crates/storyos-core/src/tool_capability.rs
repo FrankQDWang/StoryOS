@@ -4,8 +4,9 @@
 use serde::Serialize;
 
 use crate::{
-    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_REGISTRATION, CapabilityEntries, CapabilityEvidence,
-    ModelCapabilityProfile, ModelRegistration, RuntimeQualification, model_registration,
+    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_PINNED_VERSION_REGISTRATION, CapabilityEntries,
+    CapabilityEvidence, ModelCapabilityProfile, ModelRegistration, RuntimeQualification,
+    model_registration,
 };
 
 /// One Tool capability of a Model Capability Profile.
@@ -67,6 +68,14 @@ impl ToolEntries {
         ]
         .into_iter()
         .any(|capability| self.pending(capability))
+    }
+}
+
+impl ModelRegistration {
+    /// True when the authorization link of a compatibility Decision has a requirement or a Tool
+    /// entry of this Registration to qualify.
+    pub fn awaits_qualification(&self) -> bool {
+        !self.qualified() || self.capability_profile.entries.tools.any_pending()
     }
 }
 
@@ -195,12 +204,55 @@ pub const AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
         combinations: AGENT_PLAN_CAPABILITY_PROFILE.combinations,
     };
 
-/// The current Agent Plan Registration: the qualified dated version with its Tool entries
-/// pending. A Decision with the authorization link dispatches their probes (ADR 0049).
+/// The qualified dated version with its Tool entries pending. A Decision with the authorization
+/// link dispatches their probes (ADR 0049). An AgentRun that pinned it refuses with Registration
+/// drift.
 pub const AGENT_PLAN_TOOL_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa16",
     capability_profile: &AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE,
-    ..AGENT_PLAN_REGISTRATION
+    ..AGENT_PLAN_PINNED_VERSION_REGISTRATION
+};
+
+const AGENT_PLAN_TOOL_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized Tool probes of doubao-seed-2-1-pro-260915 on 2026-11-03: \
+               docs/research/agent-plan-tool-capability-probe-2026-11-03.md",
+};
+
+/// The Tool entries after the qualification probes of 2026-11-03.
+const AGENT_PLAN_TOOL_ENTRIES: ToolEntries = ToolEntries {
+    function_calling: AGENT_PLAN_TOOL_QUALIFICATION,
+    hosted_web_search: AGENT_PLAN_TOOL_QUALIFICATION,
+    remote_mcp: CapabilityEvidence::Unsupported {
+        evidence: "Authorized Tool probe on 2026-11-03: the route completed a non-streamed \
+                   request with an mcp tool and the header ark-beta-mcp, but it returned no MCP \
+                   item and no tool usage, and it counted 85 input tokens. The route ignores the \
+                   tool. docs/research/agent-plan-tool-capability-probe-2026-11-03.md",
+    },
+    max_tool_calls_bound: CapabilityEvidence::Unsupported {
+        evidence: "Authorized Tool probe on 2026-11-03: with max_tool_calls 1, the route made two \
+                   web_search_call items and reported web_search 2 in usage.tool_usage. \
+                   docs/research/agent-plan-tool-capability-probe-2026-11-03.md",
+    },
+};
+
+/// The profile of the dated version with the verdicts of its four Tool entries.
+pub const AGENT_PLAN_TOOL_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v4",
+    entries: CapabilityEntries {
+        tools: AGENT_PLAN_TOOL_ENTRIES,
+        ..AGENT_PLAN_CAPABILITY_PROFILE.entries
+    },
+    context_window: AGENT_PLAN_CAPABILITY_PROFILE.context_window,
+    combinations: AGENT_PLAN_CAPABILITY_PROFILE.combinations,
+};
+
+/// The current Agent Plan Registration: the qualified dated version with the verdicts of its Tool
+/// entries. It has no pending Tool entry, so the link authorizes no probe. Only a Tool probe
+/// sends a Tool; an ordinary AgentRun sends none.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa17",
+    capability_profile: &AGENT_PLAN_TOOL_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_PINNED_VERSION_REGISTRATION
 };
 
 #[cfg(test)]

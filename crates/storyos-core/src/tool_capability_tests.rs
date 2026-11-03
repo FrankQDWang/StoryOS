@@ -1,5 +1,8 @@
 use super::*;
-use crate::{AGENT_PLAN_PENDING_REGISTRATION, DeploymentDestination, HOST_FAKE_REGISTRATION};
+use crate::{
+    AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
+    DeploymentDestination, HOST_FAKE_REGISTRATION,
+};
 
 const AUTHORIZATION: &str = "https://github.com/FrankQDWang/StoryOS/issues/696";
 
@@ -46,7 +49,7 @@ fn only_an_authorized_decision_on_a_pending_tool_entry_selects_a_probe() {
 }
 
 #[test]
-fn the_link_authorizes_a_qualified_registration_only_while_a_tool_entry_is_pending() {
+fn the_link_authorizes_a_registration_only_while_it_awaits_qualification() {
     let authorized = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: Some(AUTHORIZATION.to_owned()),
     };
@@ -56,47 +59,73 @@ fn the_link_authorizes_a_qualified_registration_only_while_a_tool_entry_is_pendi
 
     assert_eq!(
         (
-            authorized.registration().qualified(),
+            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.awaits_qualification(),
+            AGENT_PLAN_TOOL_PENDING_REGISTRATION.awaits_qualification(),
+            AGENT_PLAN_PINNED_VERSION_REGISTRATION.awaits_qualification(),
+            AGENT_PLAN_REGISTRATION.awaits_qualification(),
+            authorized.registration().revision,
             authorized.runtime_qualification(),
             authorized.qualification_authorization(),
             unauthorized.runtime_qualification(),
-            unauthorized.qualification_authorization(),
-            AGENT_PLAN_REGISTRATION
-                .capability_profile
-                .entries
-                .tools
-                .any_pending(),
         ),
         (
             true,
-            RuntimeQualification::QualificationAuthorized,
-            Some(AUTHORIZATION),
+            true,
+            false,
+            false,
+            AGENT_PLAN_REGISTRATION.revision,
             RuntimeQualification::Qualified,
             None,
-            false,
+            RuntimeQualification::Qualified,
         )
     );
 }
 
 #[test]
-fn a_profile_without_tool_evidence_keeps_its_stored_form() {
+fn a_profile_without_tool_evidence_keeps_its_stored_form_and_the_probes_set_the_verdicts() {
     let tools = |profile: &ModelCapabilityProfile| {
         serde_json::to_value(profile).unwrap()["entries"]
             .get("tools")
             .cloned()
     };
 
+    let kinds = |profile: &ModelCapabilityProfile| {
+        tools(profile).map(|tools| {
+            tools
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(name, entry)| (name.clone(), entry["kind"].as_str().unwrap().to_owned()))
+                .collect::<Vec<_>>()
+        })
+    };
+    let entries = |kinds: [&str; 4]| {
+        Some(
+            [
+                "function_calling",
+                "hosted_web_search",
+                "max_tool_calls_bound",
+                "remote_mcp",
+            ]
+            .into_iter()
+            .zip(kinds)
+            .map(|(name, kind)| (name.to_owned(), kind.to_owned()))
+            .collect::<Vec<_>>(),
+        )
+    };
+
     assert_eq!(
         (
             tools(AGENT_PLAN_PENDING_REGISTRATION.capability_profile),
             tools(&AGENT_PLAN_CAPABILITY_PROFILE),
-            tools(&AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE).map(|tools| tools
-                .as_object()
-                .unwrap()
-                .values()
-                .map(|entry| entry["kind"].clone())
-                .collect::<Vec<_>>()),
+            kinds(&AGENT_PLAN_TOOL_PENDING_CAPABILITY_PROFILE),
+            kinds(&AGENT_PLAN_TOOL_CAPABILITY_PROFILE),
         ),
-        (None, None, Some(vec![serde_json::json!("documented"); 4]),)
+        (
+            None,
+            None,
+            entries(["documented"; 4]),
+            entries(["qualified", "qualified", "unsupported", "unsupported"]),
+        )
     );
 }

@@ -33,7 +33,7 @@ impl CredentialResolver for CanaryResolver {
 }
 
 #[derive(Default)]
-struct RecordingSink(Vec<NativeStreamItem>);
+pub(crate) struct RecordingSink(Vec<NativeStreamItem>);
 
 impl ModelStreamSink for RecordingSink {
     async fn append(&mut self, events: &[NativeStreamItem]) -> StreamControl {

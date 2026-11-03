@@ -189,3 +189,52 @@ fn the_tool_facts_keep_each_call_correlation_citation_and_usage_count() {
         )
     );
 }
+
+#[tokio::test]
+async fn only_the_remote_mcp_probe_sends_the_mcp_beta_header() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let mut heads = Vec::new();
+    for probe in [
+        ToolProbeRequest::RemoteMcp,
+        ToolProbeRequest::HostedWebSearch,
+    ] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
+        let DestinationRequest::Create(request) = create(route(&base), RequestAttempt::New) else {
+            unreachable!("create() makes a Create request")
+        };
+        let served = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = vec![0_u8; 8192];
+            let read = stream.read(&mut bytes).await.unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 400 Scripted\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&bytes[..read]).to_ascii_lowercase()
+        });
+        let prepared = adapter
+            .prepare(&DestinationRequest::Create(CreateRequest {
+                purpose: CreatePurpose::ToolQualification(probe),
+                ..request
+            }))
+            .await
+            .ok()
+            .unwrap();
+        adapter
+            .exchange(
+                prepared.prepared,
+                &mut crate::tests::RecordingSink::default(),
+            )
+            .await;
+        heads.push(served.await.unwrap().contains("\r\nark-beta-mcp: true\r\n"));
+    }
+
+    assert_eq!(heads, [true, false]);
+}
