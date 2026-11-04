@@ -39,26 +39,15 @@ impl PostgresProjectReader {
                 })
             })
             .collect();
-        let client = self.pool.checkout().await?;
-        client
+        let mut client = self.pool.checkout().await?;
+        let transaction = client.transaction().await?;
+        let inserted = transaction
             .execute(
-                "WITH revision AS (
-                   INSERT INTO storyos.tool_registration_revisions
-                     (tool_registration_revision, registration_kind, server_url, server_name,
-                      protocol_revision, adapter_revision)
-                   VALUES ($1::text::uuid, $2, $3, $4, $5, $6)
-                   ON CONFLICT (tool_registration_revision) DO NOTHING
-                   RETURNING tool_registration_revision)
-                 INSERT INTO storyos.tool_registration_tools
-                   (tool_registration_revision, tool_name, tool_spec_revision,
-                    input_schema_digest, input_contract_digest, output_schema_digest,
-                    provenance_digest)
-                 SELECT revision.tool_registration_revision, tool.name, tool.spec, tool.input,
-                        tool.contract, tool.output, tool.provenance
-                   FROM revision,
-                        jsonb_to_recordset($7::text::jsonb)
-                          AS tool(name text, spec text, input text, contract text, output text,
-                                  provenance text)",
+                "INSERT INTO storyos.tool_registration_revisions
+                   (tool_registration_revision, registration_kind, server_url, server_name,
+                    protocol_revision, adapter_revision)
+                 VALUES ($1::text::uuid, $2, $3, $4, $5, $6)
+                 ON CONFLICT (tool_registration_revision) DO NOTHING",
                 &[
                     &registration.revision,
                     &registration.kind.as_str(),
@@ -66,10 +55,29 @@ impl PostgresProjectReader {
                     &registration.server_name,
                     &registration.protocol_revision,
                     &registration.adapter_revision,
-                    &serde_json::Value::from(tools).to_string(),
                 ],
             )
             .await?;
+        if inserted == 1 {
+            transaction
+                .execute(
+                    "INSERT INTO storyos.tool_registration_tools
+                       (tool_registration_revision, tool_name, tool_spec_revision,
+                        input_schema_digest, input_contract_digest, output_schema_digest,
+                        provenance_digest)
+                     SELECT $1::text::uuid, tool.name, tool.spec, tool.input, tool.contract,
+                            tool.output, tool.provenance
+                       FROM jsonb_to_recordset($2::text::jsonb)
+                              AS tool(name text, spec text, input text, contract text,
+                                      output text, provenance text)",
+                    &[
+                        &registration.revision,
+                        &serde_json::Value::from(tools).to_string(),
+                    ],
+                )
+                .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
