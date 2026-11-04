@@ -341,6 +341,26 @@ async fn a_wrong_scope_refuses_and_a_quarantined_revision_shows_as_quarantined()
             SetProjectToolEnablementRefusal::RegistrationUnavailable
         )]
     );
+    // A Project without an enablement record: the refusal and the read after it agree.
+    assert_eq!(
+        settle_each(
+            &store,
+            &other_scope,
+            /*first_suffix*/ 0xb526,
+            vec![enable(&QUARANTINED_OFFER)]
+        )
+        .await,
+        vec![TransitionOutcome::Refused(
+            SetProjectToolEnablementRefusal::RegistrationUnavailable
+        )]
+    );
+    assert_eq!(
+        store
+            .project_tool_state(&other_scope, Some(&QUARANTINED_OFFER))
+            .await
+            .unwrap(),
+        ProjectToolState::Quarantined
+    );
 
     let mut foreign = issued(
         &store,

@@ -123,7 +123,8 @@ pub enum ProjectToolState {
     NotOffered,
     Disabled,
     Enabled,
-    /// The enabled revision pins a quarantined or retired Registration revision.
+    /// The offered Registration revision, or the revision that the enabled revision pins, is
+    /// quarantined or retired.
     Quarantined,
 }
 
@@ -136,8 +137,13 @@ pub enum PinnedEnablement {
 }
 
 impl ProjectToolState {
-    /// The state of an offered Registration from the current enablement revision of the Project.
-    pub fn offered(current: Option<PinnedEnablement>) -> Self {
+    /// The state of an offered Registration from the lifecycle of the offered revision and the
+    /// current enablement revision of the Project. A quarantined or retired offered revision is
+    /// unavailable for each Project, with or without an enablement record.
+    pub fn offered(offered: ToolRegistrationLifecycle, current: Option<PinnedEnablement>) -> Self {
+        if offered != ToolRegistrationLifecycle::Active {
+            return Self::Quarantined;
+        }
         match current {
             None | Some(PinnedEnablement::Disabled) => Self::Disabled,
             Some(PinnedEnablement::Enabled(ToolRegistrationLifecycle::Active)) => Self::Enabled,

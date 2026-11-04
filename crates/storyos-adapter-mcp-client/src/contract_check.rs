@@ -1,5 +1,6 @@
 //! The Tool Contract Drift check of a fresh Tool Discovery Record against a pinned Tool
-//! Registration revision. The Worker runs it at Project enablement and before each dispatch.
+//! Registration revision. The Worker runs it before each dispatch (S5-03); Project enablement
+//! reads the pinned active Registration and runs no discovery.
 
 use serde_json::{Value, json};
 use storyos_core::{ContractCheck, ContractDifference, ToolRegistration};

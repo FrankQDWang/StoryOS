@@ -49,6 +49,20 @@ impl PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
+        let offered = transaction
+            .query_opt(
+                "SELECT lifecycle FROM storyos.tool_registration_revisions
+                  WHERE tool_registration_revision = $1::text::uuid",
+                &[&offer.registration.revision],
+            )
+            .await
+            .map_err(read_error)?
+            .and_then(|row| ToolRegistrationLifecycle::parse(row.get(/*idx*/ 0)))
+            .ok_or_else(|| {
+                ProjectReadError::unavailable(std::io::Error::other(
+                    "the offered Tool Registration revision is missing",
+                ))
+            })?;
         let row = transaction
             .query_opt(
                 "SELECT enablement.enablement, registration.lifecycle
@@ -98,7 +112,7 @@ impl PostgresProjectReader {
                 }
             })
             .transpose()?;
-        Ok(ProjectToolState::offered(current))
+        Ok(ProjectToolState::offered(offered, current))
     }
 }
 
