@@ -236,7 +236,8 @@ export function WritingAssistantPanel({
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
 }) {
   const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
-  const [researchTool, setResearchTool] = useState<ProjectResearchTool>("not_offered");
+  // The research tool state of the Project whose assistance read gave it.
+  const [researchTool, setResearchTool] = useState<{ scope: ProjectScope; state: ProjectResearchTool }>();
   const [reference, setReference] = useState<RequestReference | undefined>(
     () => context === undefined ? undefined : readReference(context.scope),
   );
@@ -249,7 +250,6 @@ export function WritingAssistantPanel({
   const [failedReads, setFailedReads] = useState(0);
 
   useEffect(() => {
-    setResearchTool("not_offered");
     if (context === undefined) {
       setAvailability("unavailable");
       return;
@@ -263,7 +263,7 @@ export function WritingAssistantPanel({
       const owned = response.project_scope.owner_user_id === context.scope.owner_user_id
         && response.project_scope.project_id === context.scope.project_id;
       setAvailability(owned ? response.assistance?.availability ?? "available" : "unavailable");
-      if (owned) setResearchTool(response.research_tool);
+      if (owned) setResearchTool({ scope: context.scope, state: response.research_tool });
     }).catch(() => {
       if (active) setAvailability("unavailable");
     });
@@ -553,8 +553,10 @@ export function WritingAssistantPanel({
               setStatus("");
             }}>新对话</button>
         </header>
-        {context === undefined ? null : <ResearchToolControl key={`${context.scope.owner_user_id}:${context.scope.project_id}`}
-          context={context} state={researchTool} onSettled={setResearchTool} />}
+        {context === undefined ? null : <ResearchToolControl key={`research:${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} state={researchTool?.scope.owner_user_id === context.scope.owner_user_id
+            && researchTool.scope.project_id === context.scope.project_id ? researchTool.state : "not_offered"}
+          onSettled={(state) => setResearchTool({ scope: context.scope, state })} />}
         <div className="assistant-conversation" aria-live="polite">
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>

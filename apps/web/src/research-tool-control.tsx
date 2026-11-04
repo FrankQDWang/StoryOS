@@ -4,7 +4,7 @@ import {
   createProjectCommandChallenge, digestSetProjectToolEnablement, setProjectToolEnablement,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  ProjectResearchTool, SetProjectToolEnablementEffect, SetProjectToolEnablementRequest,
+  ProjectResearchTool, SetProjectToolEnablementRequest,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { uuidV7 } from "./acceptance-journal.ts";
@@ -18,22 +18,6 @@ export const RESEARCH_TOOL_LABEL = "允许本项目进行网络研究";
 export const RESEARCH_TOOL_SERVICE_SENTENCE = "开启后，写作助手可以自行用 Exa 搜索网页并阅读网页内容。";
 export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "网络研究暂时不可用。";
 export const RESEARCH_TOOL_UNCONFIRMED_SENTENCE = "网络研究设置未能确认。请刷新页面后查看。";
-
-function settledState(requested: boolean, effect: SetProjectToolEnablementEffect): ProjectResearchTool {
-  switch (effect.kind) {
-    case "authoritative_applied":
-      return effect.enabled ? "enabled" : "disabled";
-    case "no_effect":
-      return requested ? "enabled" : "disabled";
-    case "refused":
-      switch (effect.reason) {
-        case "registration_not_offered":
-          return "not_offered";
-        case "registration_unavailable":
-          return "quarantined";
-      }
-  }
-}
 
 async function sendEnablement(context: AssistantContext, enabled: boolean): Promise<ProjectResearchTool> {
   const idempotencyKey = uuidV7(context.cryptoImpl);
@@ -65,7 +49,20 @@ async function sendEnablement(context: AssistantContext, enabled: boolean): Prom
     || response.project_scope.project_id !== context.scope.project_id) {
     throw new Error("Project Tool Enablement Scope mismatch");
   }
-  return settledState(enabled, response.effect);
+  const effect = response.effect;
+  switch (effect.kind) {
+    case "authoritative_applied":
+      return effect.enabled ? "enabled" : "disabled";
+    case "no_effect":
+      return enabled ? "enabled" : "disabled";
+    case "refused":
+      switch (effect.reason) {
+        case "registration_not_offered":
+          return "not_offered";
+        case "registration_unavailable":
+          return "quarantined";
+      }
+  }
 }
 
 /** The one control of Project Tool Enablement. It names the service and no technical identifier (ADR 0040). */

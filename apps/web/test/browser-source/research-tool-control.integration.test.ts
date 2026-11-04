@@ -36,22 +36,27 @@ function fakeServer(state: ProjectResearchTool, effect?: SetProjectToolEnablemen
   return { fetchImpl, requests };
 }
 
-async function renderPanel(fetchImpl: typeof fetch, run: (host: HTMLElement) => Promise<void>) {
+async function renderPanel(fetchImpl: typeof fetch,
+  run: (host: HTMLElement, open: (projectId: string) => Promise<void>) => Promise<void>) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  try {
+  const open = async (projectId: string) => {
     await act(async () => {
       root.render(createElement(WritingAssistantPanel, {
         collapsed: false,
-        context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
+        context: { scope: { owner_user_id: OWNER, project_id: projectId }, chapterId: CHAPTER, canSubmit: true,
+          baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
         scheduleRefresh: () => () => {},
       }));
     });
+  };
+  try {
+    await open(PROJECT);
     await settle();
-    await run(host);
+    await run(host, open);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -123,5 +128,18 @@ it.each([
           security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: "" } },
       control: { label: RESEARCH_TOOL_LABEL, ...settled },
     });
+  });
+});
+
+it("shows no research control for the next Project until its own state is read", async () => {
+  const next = "018f0000-0000-7001-8000-000000000e02";
+  const server = fakeServer("enabled");
+  const fetchImpl: typeof fetch = (input, init) =>
+    new URL(input instanceof Request ? input.url : input).pathname.includes(next)
+      ? new Promise<Response>(() => {}) : server.fetchImpl(input, init);
+  await renderPanel(fetchImpl, async (host, open) => {
+    await open(next);
+
+    expect(view(host).control).toBeNull();
   });
 });
