@@ -49,6 +49,9 @@ impl PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
+        // The offered revision gets its row at the first enablement of the deployment, like a
+        // model Registration at its first binding. Before that row exists, nothing can have
+        // quarantined the revision, so the constant is active.
         let offered = transaction
             .query_opt(
                 "SELECT lifecycle FROM storyos.tool_registration_revisions
@@ -57,11 +60,11 @@ impl PostgresProjectReader {
             )
             .await
             .map_err(read_error)?
-            .and_then(|row| ToolRegistrationLifecycle::parse(row.get(/*idx*/ 0)))
+            .map_or(Some(ToolRegistrationLifecycle::Active), |row| {
+                ToolRegistrationLifecycle::parse(row.get(/*idx*/ 0))
+            })
             .ok_or_else(|| {
-                ProjectReadError::unavailable(std::io::Error::other(
-                    "the offered Tool Registration revision is missing",
-                ))
+                ProjectReadError::unavailable(std::io::Error::other("Tool Registration is damaged"))
             })?;
         let row = transaction
             .query_opt(
