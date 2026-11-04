@@ -15,6 +15,7 @@
 //! session with HTTP 404, the observation is `Rejected { reason: "session_ended" }`. A resend is a
 //! new Destination Attempt (ADR 0039), and its exchange starts a new session.
 
+mod contract_check;
 mod record;
 mod session;
 
@@ -28,13 +29,14 @@ use storyos_application::{
 
 pub use record::{CallResult, DiscoveredTool, ToolDiscoveryRecord};
 
-/// The one MCP protocol revision that the client sends and accepts.
+/// The one MCP protocol revision that the client speaks. A Discover of a server that answers
+/// another revision records that revision with no tool list.
 pub const PROTOCOL_REVISION: &str = "2025-11-25";
 
 /// The bound of the one-off `Discover` exchange of a research record.
 pub const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
 
-const EXECUTION_PROFILE: &str = "storyos.mcp-streamable-http.v1";
+const EXECUTION_PROFILE: &str = storyos_core::MCP_STREAMABLE_HTTP_ADAPTER_REVISION;
 
 /// One closed request to an MCP server. Each exchange opens its own session.
 #[derive(Clone, Debug, Eq, PartialEq)]

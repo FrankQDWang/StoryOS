@@ -3652,6 +3652,73 @@ GRANT SELECT,INSERT ON TABLE storyos.model_registration_heads TO storyos_runtime
 
 GRANT UPDATE(model_registration_revision) ON TABLE storyos.model_registration_heads TO storyos_runtime;
 
+-- Global Tool Registrations (ADR 0083). The rows hold no Project data, Credential Reference,
+-- grant, or use state, and they are not Project Export data. Each runtime role reads each row.
+-- Only an active revision changes, and only to quarantined or retired. The quarantine columns are
+-- the Activity record of the quarantine. A tool row joins only the transaction that inserts its
+-- revision, so the tool set of a stored revision does not change.
+
+CREATE TABLE storyos.tool_registration_revisions (
+    tool_registration_revision uuid NOT NULL,
+    registration_kind text NOT NULL,
+    server_url text NOT NULL,
+    server_name text NOT NULL,
+    protocol_revision text NOT NULL,
+    adapter_revision text NOT NULL,
+    lifecycle text DEFAULT 'active'::text NOT NULL,
+    quarantine_differences jsonb,
+    quarantined_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT tool_registration_revisions_pkey PRIMARY KEY (tool_registration_revision),
+    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = 'mcp_remote'::text)),
+    CONSTRAINT tool_registration_revisions_identity_check CHECK (char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_revisions_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'quarantined'::text, 'retired'::text]))),
+    CONSTRAINT tool_registration_revisions_quarantine_check CHECK (
+        ((quarantine_differences IS NULL) = (quarantined_at IS NULL))
+        AND (lifecycle <> 'active'::text OR quarantine_differences IS NULL)
+        AND (lifecycle <> 'quarantined'::text OR quarantine_differences IS NOT NULL)
+        AND (quarantine_differences IS NULL
+             OR (jsonb_typeof(quarantine_differences) = 'array'::text AND jsonb_array_length(quarantine_differences) >= 1)))
+);
+
+ALTER TABLE storyos.tool_registration_revisions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.tool_registration_revisions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tool_registration_revisions_global_read ON storyos.tool_registration_revisions FOR SELECT USING (true);
+
+CREATE POLICY tool_registration_revisions_active_insert ON storyos.tool_registration_revisions FOR INSERT WITH CHECK ((lifecycle = 'active'::text));
+
+CREATE POLICY tool_registration_revisions_lifecycle_update ON storyos.tool_registration_revisions FOR UPDATE USING ((lifecycle = 'active'::text)) WITH CHECK ((lifecycle <> 'active'::text));
+
+GRANT SELECT,INSERT ON TABLE storyos.tool_registration_revisions TO storyos_runtime;
+
+GRANT UPDATE(lifecycle, quarantine_differences, quarantined_at) ON TABLE storyos.tool_registration_revisions TO storyos_runtime;
+
+CREATE TABLE storyos.tool_registration_tools (
+    tool_registration_revision uuid NOT NULL,
+    tool_name text NOT NULL,
+    tool_spec_revision text NOT NULL,
+    input_schema_digest text NOT NULL,
+    input_contract_digest text NOT NULL,
+    output_schema_digest text,
+    provenance_digest text NOT NULL,
+    CONSTRAINT tool_registration_tools_pkey PRIMARY KEY (tool_registration_revision, tool_name),
+    CONSTRAINT tool_registration_tools_name_check CHECK (char_length(tool_name) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_tools_digest_check CHECK (input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text AND input_contract_digest ~ '^sha256:[0-9a-f]{64}$'::text AND provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text AND (output_schema_digest IS NULL OR output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT tool_registration_tools_revision_fkey FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)
+);
+
+ALTER TABLE storyos.tool_registration_tools ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.tool_registration_tools FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tool_registration_tools_global_read ON storyos.tool_registration_tools FOR SELECT USING (true);
+
+CREATE POLICY tool_registration_tools_revision_insert ON storyos.tool_registration_tools FOR INSERT WITH CHECK ((EXISTS ( SELECT 1 FROM storyos.tool_registration_revisions AS revision WHERE ((revision.tool_registration_revision = tool_registration_tools.tool_registration_revision) AND (revision.lifecycle = 'active'::text) AND (revision.xmin = (pg_current_xact_id())::xid)))));
+
+GRANT SELECT,INSERT ON TABLE storyos.tool_registration_tools TO storyos_runtime;
+
 CREATE TABLE storyos.processing_destination_identities (
     owner_user_id uuid NOT NULL,
     project_id uuid NOT NULL,

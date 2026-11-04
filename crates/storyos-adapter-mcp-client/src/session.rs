@@ -111,10 +111,25 @@ pub(crate) async fn run(
         Ok(result) => record::server_identity(&result),
         Err(failure) => return failure.before_operation(),
     };
-    let (server_name, server_version) = match identity {
+    let (server_name, server_version, protocol_revision) = match identity {
         Ok(identity) => identity,
         Err(reason) => return McpObservation::InvalidResult { reason },
     };
+    if protocol_revision != PROTOCOL_REVISION {
+        // The client sends nothing more in a revision that it does not speak.
+        return match request {
+            McpRequest::Discover { .. } => McpObservation::Discovered(ToolDiscoveryRecord {
+                server_url: url.to_owned(),
+                server_name,
+                server_version,
+                protocol_revision,
+                tools: Vec::new(),
+            }),
+            McpRequest::Call { .. } => McpObservation::InvalidResult {
+                reason: "protocol_revision",
+            },
+        };
+    }
     if let Err(failure) = session.notify("notifications/initialized").await {
         return failure.before_operation();
     }
@@ -141,7 +156,7 @@ pub(crate) async fn run(
                 server_url: url.to_owned(),
                 server_name,
                 server_version,
-                protocol_revision: PROTOCOL_REVISION.to_owned(),
+                protocol_revision,
                 tools,
             })
         }

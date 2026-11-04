@@ -26,6 +26,8 @@ mod ordinary_passage_request;
 mod rebuild_expired_reference;
 mod research_destination;
 mod retrieve_original_result;
+mod tool_registration;
+mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
     HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
@@ -225,7 +227,9 @@ pub use replan_proposal::{
     ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
     replan_proposal,
 };
-pub use research_destination::{EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL};
+pub use research_destination::{
+    EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION, tool_registration,
+};
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
     RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
@@ -245,6 +249,15 @@ pub use statistics_profile::{
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
+};
+pub use tool_registration::{
+    ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,
+    ToolCallRefusal, ToolRegistration, ToolRegistrationKind, ToolRegistrationLifecycle,
+};
+pub use tool_spec::{
+    ExternalRead, IntakeField, IntakeRefusal, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES,
+    ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC,
+    WEB_SEARCH_TOOL_SPEC,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
