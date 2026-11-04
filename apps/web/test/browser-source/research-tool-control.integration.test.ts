@@ -5,6 +5,7 @@ import assistanceFixture from "../../../../generated/golden-wire/storyos-public-
 import challengeFixture from "../../../../generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json";
 import enablementFixture from "../../../../generated/golden-wire/storyos-public-release-1/set-project-tool-enablement.json";
 import { digestSetProjectToolEnablement } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type {
   ProjectResearchTool, SetProjectToolEnablementEffect, SetProjectToolEnablementRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -124,7 +125,7 @@ it.each([
       },
       command: { path: `/api/v1/projects/${PROJECT}/tool-enablement`, method: "PUT",
         idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/), antiForgery: challengeFixture.nonce,
-        input: { registration_id: "web_research", enabled: true, client_contract_revision: expect.any(String),
+        input: { registration_id: "web_research", enabled: true, client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
           security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: "" } },
       control: { label: RESEARCH_TOOL_LABEL, ...settled },
     });
