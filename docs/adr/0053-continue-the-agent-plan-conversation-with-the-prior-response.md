@@ -54,3 +54,13 @@ At `main` `1fc55a1b`, the Agent Plan profile v2 qualifies only transport, native
 - Registrations `018f0000-0000-7001-8000-00000000fa04` (profile v3, pending continuation, the qualification build) and `018f0000-0000-7001-8000-00000000fa05` (profile v4, qualified continuation) follow `fa03`. An AgentRun that pinned an earlier head refuses with Registration drift. The next AgentRun of the Conversation uses a new transport continuation, because the Registration changed.
 - The `getAgentRun` response has a new `cache` field. The generated contracts change with it.
 - Confirmed expiry recovery on the real route stays with [S4-04: Recover an Uncertain Real-Model Attempt](https://github.com/FrankQDWang/StoryOS/issues/395).
+
+## Amendment: the Tool projection (2026-11-05)
+
+[#1398](https://github.com/FrankQDWang/StoryOS/issues/1398) adds the Tool projection to the mapping `storyos.volcengine-agent-plan.responses.create.v4`. A non-empty Tool Exposure adds strict function declarations and `tool_choice: "auto"` to the request (ADR 0084). The head Registration `018f0000-0000-7001-8000-00000000fa17` keeps this mapping and its requirement. This is a recorded exception to the rule that a mapping with a new capability gets a new Registration:
+
+- The qualified function calling entry of ADR 0049 admits the Tool projection. The entry is not a member of the requirement, because the requirement names the capabilities that each request uses together, and an ordinary request sends no Tool.
+- A request with an empty Tool Exposure is byte-identical to the request before #1398. The mapping revision therefore stays `v4`, and a prior binding of the same Conversation stays eligible.
+- A changed Tool Exposure digest starts a new transport continuation in the same Conversation. It does not change the processing boundary, so expiry recovery of the same boundary continues.
+- The live request of 2026-11-05 (response `resp_021793825651645295492bf4fae3051b4480808ec74710fc5549c`, ADR 0052) is the evidence that the route accepts the strict declarations and returns one complete `function_call` item.
+- A later ticket that executes a ToolCall and sends function output (S5-02b, [#1399](https://github.com/FrankQDWang/StoryOS/issues/1399)) adds the capability to the requirement with a new mapping revision and a new Registration.
