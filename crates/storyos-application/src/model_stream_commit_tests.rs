@@ -46,9 +46,9 @@ struct ScriptedStore {
 impl ScriptedStore {
     fn new(appends: &[Append]) -> Self {
         Self {
-            work: Mutex::new(VecDeque::from([NextDispatchWork::Request(
+            work: Mutex::new(VecDeque::from([NextDispatchWork::Request(Box::new(
                 DestinationRequest::Retrieve(retrieve()),
-            )])),
+            ))])),
             appends: Mutex::new(appends.iter().copied().collect()),
             steps: Mutex::new(Vec::new()),
         }

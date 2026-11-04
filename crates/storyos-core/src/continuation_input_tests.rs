@@ -2,7 +2,7 @@ use super::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
     map_continuation_input,
 };
-use crate::HOST_FAKE_MAPPING_REVISION;
+use crate::{HOST_FAKE_MAPPING_REVISION, ToolExposure};
 
 fn identity(conversation: &str, destination: &str) -> ContinuationIdentity {
     ContinuationIdentity {
@@ -16,6 +16,7 @@ fn identity(conversation: &str, destination: &str) -> ContinuationIdentity {
         use_binding: "018f0000-0000-7001-8000-00000000fb01".to_owned(),
         compatibility: "018f0000-0000-7001-8000-00000000fc01".to_owned(),
         covered_copy_restricted: false,
+        tool_exposure_digest: ToolExposure::empty().digest(),
     }
 }
 
@@ -70,6 +71,10 @@ fn identity_mismatch_or_covered_copy_uses_new_transport() {
         ),
         ContinuationIdentity {
             registration: "018f0000-0000-7001-8000-00000000dead".to_owned(),
+            ..current.clone()
+        },
+        ContinuationIdentity {
+            tool_exposure_digest: "sha256:changed-exposure".to_owned(),
             ..current.clone()
         },
         ContinuationIdentity {

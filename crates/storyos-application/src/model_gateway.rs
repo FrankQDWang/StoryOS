@@ -30,7 +30,7 @@ pub async fn complete_agent_run(
     loop {
         let request = match store.next_dispatch_work(claim).await? {
             NextDispatchWork::Settled(result) => return Ok(result),
-            NextDispatchWork::Request(request) => request,
+            NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
         };
         if let Some(cancellation) = gateway.dispatch(request).await? {

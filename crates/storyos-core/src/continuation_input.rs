@@ -22,6 +22,9 @@ pub struct ContinuationIdentity {
     pub use_binding: String,
     pub compatibility: String,
     pub covered_copy_restricted: bool,
+    /// The digest of the Tool Exposure of the Attempt. A changed Exposure starts a new
+    /// transport continuation with the full input (ADR 0033).
+    pub tool_exposure_digest: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,7 +54,8 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     }
 }
 
-/// Same Scope, conversation, destination, registration, mapping, and use boundary.
+/// Same Scope, conversation, destination, registration, mapping, use boundary, and Tool
+/// Exposure.
 pub fn continuation_boundary_matches(
     current: &ContinuationIdentity,
     prior: &ContinuationIdentity,
@@ -65,6 +69,7 @@ pub fn continuation_boundary_matches(
         && current.adapter_mapping == prior.adapter_mapping
         && current.use_binding == prior.use_binding
         && current.compatibility == prior.compatibility
+        && current.tool_exposure_digest == prior.tool_exposure_digest
 }
 
 #[cfg(test)]

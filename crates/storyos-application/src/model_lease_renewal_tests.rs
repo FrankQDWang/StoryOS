@@ -64,9 +64,9 @@ impl<'a> LeaseStore<'a> {
     fn new(clock: &'a VirtualClock, held: &[bool]) -> Self {
         Self {
             clock,
-            work: Mutex::new(VecDeque::from([NextDispatchWork::Request(
+            work: Mutex::new(VecDeque::from([NextDispatchWork::Request(Box::new(
                 DestinationRequest::Retrieve(retrieve()),
-            )])),
+            ))])),
             held: Mutex::new(held.iter().copied().collect()),
             steps: Mutex::new(Vec::new()),
         }

@@ -93,6 +93,8 @@ pub enum BudgetBounds {
     AgentPlanRequestV1,
     /// The bounds that the author adopted for a long Chapter on 2026-10-12 (ADR 0052).
     AgentPlanRequestV2,
+    /// The bounds of V2 with the Tool projection of the request (ADR 0052, ADR 0084).
+    AgentPlanRequestV3,
 }
 
 impl BudgetBounds {
@@ -102,6 +104,7 @@ impl BudgetBounds {
             Self::Unqualified => "unqualified",
             Self::AgentPlanRequestV1 => "agent_plan_request_v1",
             Self::AgentPlanRequestV2 => "agent_plan_request_v2",
+            Self::AgentPlanRequestV3 => "agent_plan_request_v3",
         }
     }
 
@@ -111,6 +114,7 @@ impl BudgetBounds {
             Self::Unqualified,
             Self::AgentPlanRequestV1,
             Self::AgentPlanRequestV2,
+            Self::AgentPlanRequestV3,
         ]
         .into_iter()
         .find(|bounds| bounds.as_str() == value)
@@ -123,7 +127,7 @@ impl BudgetBounds {
                 max_output_tokens: 8192,
                 timeout: Duration::from_secs(/*secs*/ 180),
             }),
-            Self::AgentPlanRequestV2 => Some(RequestBounds {
+            Self::AgentPlanRequestV2 | Self::AgentPlanRequestV3 => Some(RequestBounds {
                 max_output_tokens: 32_768,
                 timeout: Duration::from_secs(/*secs*/ 600),
             }),
@@ -191,7 +195,7 @@ impl DeploymentDestination {
     pub fn budget_bounds(&self) -> BudgetBounds {
         match self {
             Self::HostFake => BudgetBounds::NotRequired,
-            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV2,
+            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV3,
         }
     }
 }

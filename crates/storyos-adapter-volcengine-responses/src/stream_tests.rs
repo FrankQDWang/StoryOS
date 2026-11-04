@@ -381,3 +381,58 @@ fn a_long_event_in_small_chunks_gives_its_data() {
         assert_eq!(event_data_of(&chunks), vec![Some(text.clone())]);
     }
 }
+
+#[tokio::test]
+async fn function_call_argument_deltas_are_provisional_and_only_the_terminal_item_counts() {
+    const ARGUMENTS: &str = r#"{"query":"tide tables","result_count":null}"#;
+    let call = |arguments: &str, status: &str| {
+        json!({"id": "fc_01", "type": "function_call", "status": status, "call_id": "call_01",
+               "name": "web_search", "arguments": arguments})
+    };
+    let events = vec![
+        json!({"type": "response.created", "sequence_number": 0,
+               "response": {"id": "resp_f1", "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.added", "sequence_number": 1, "output_index": 0,
+               "item": call("", "in_progress")}),
+        json!({"type": "response.function_call_arguments.delta", "sequence_number": 2,
+               "output_index": 0, "item_id": "fc_01", "delta": &ARGUMENTS[..16]}),
+        json!({"type": "response.function_call_arguments.delta", "sequence_number": 3,
+               "output_index": 0, "item_id": "fc_01", "delta": &ARGUMENTS[16..]}),
+        json!({"type": "response.output_item.done", "sequence_number": 4, "output_index": 0,
+               "item": call(ARGUMENTS, "completed")}),
+        json!({"type": "response.completed", "sequence_number": 5, "response": {
+            "id": "resp_f1", "status": "completed", "output": [call(ARGUMENTS, "completed")],
+            "usage": {"input_tokens": 70, "output_tokens": 21}}}),
+    ];
+    let (observation, batches, _) = stream(events, /*stop_after*/ None).await;
+    let call_item = |arguments: &str, state: StreamItemState| NativeStreamItem {
+        call_id: Some("call_01".to_owned()),
+        arguments: Some(arguments.to_owned()),
+        native_type: Some("function_call".to_owned()),
+        name: Some("web_search".to_owned()),
+        ..item("fc_01", StreamItemRole::Tool, state)
+    };
+    let done = call_item(ARGUMENTS, StreamItemState::Complete);
+
+    assert_eq!(
+        (observation, batches.concat()),
+        (
+            Observation::Terminal(ModelResponse {
+                items: vec![done.clone()],
+                output: None,
+                usage: ModelUsage::Reported {
+                    input_tokens: 70,
+                    output_tokens: 21,
+                },
+                cache_use: CacheUse::Unknown,
+                response_reference: Some("resp_f1".to_owned()),
+            }),
+            vec![
+                call_item("", StreamItemState::Provisional),
+                call_item(&ARGUMENTS[..16], StreamItemState::Provisional),
+                call_item(ARGUMENTS, StreamItemState::Provisional),
+                done,
+            ],
+        )
+    );
+}

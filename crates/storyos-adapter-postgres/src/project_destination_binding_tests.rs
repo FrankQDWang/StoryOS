@@ -146,7 +146,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             eligibility_evidence: Some(storyos_core::AGENT_PLAN_ELIGIBILITY_EVIDENCE.to_owned()),
             credential_source: "operator_quota".to_owned(),
             credential_reference: Some(storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()),
-            budget_bounds: "agent_plan_request_v2".to_owned(),
+            budget_bounds: "agent_plan_request_v3".to_owned(),
             runtime_qualification: "qualified".to_owned(),
         }
     );
@@ -245,7 +245,7 @@ async fn a_binding_with_the_qualification_bounds_gets_the_long_chapter_bounds() 
         binding_facts(&admin, &current.external_compatibility_decision)
             .await
             .budget_bounds,
-        "agent_plan_request_v2"
+        "agent_plan_request_v3"
     );
 }
 

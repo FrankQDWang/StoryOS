@@ -304,14 +304,13 @@ pub(crate) async fn admit_create(
     run: &RunPhaseRow,
     assistance: Option<&storyos_application::ProjectAssistanceRecord>,
 ) -> Result<CreateAdmission, CompleteAgentRunError> {
+    let exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let rebuild = match crate::agent_run_expiry::plan_expiry_rebuild(
         client,
         claim,
-        &run.conversation_id,
-        &run.author_message,
-        &run.sufficiency,
+        run,
         assistance,
-        &run.assembly_manifest_id,
+        &exposure.digest(),
     )
     .await?
     {

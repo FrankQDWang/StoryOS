@@ -4,7 +4,7 @@ use storyos_application::{
     CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
     DispatchClaim, ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
-use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
+use storyos_core::{AgentDecisionOutcome, requests_function, validate_agent_decision};
 
 use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase};
@@ -71,15 +71,26 @@ pub(crate) async fn record_create(
         .iter()
         .map(DeclaredTarget::location)
         .collect();
+    // A Tool qualification probe makes no Agent Decision (ADR 0049).
+    let outcome = if probe {
+        AgentDecisionOutcome::NoDecision
+    } else {
+        validate_agent_decision(response.output.as_ref(), &declared)
+    };
+    // No ToolCall exists yet: a function call of an ordinary request stays as evidence, and
+    // the Run settles with one refusal sentence (ADR 0084).
+    let settlement = if !probe
+        && outcome == AgentDecisionOutcome::NoDecision
+        && requests_function(&response.items)
+    {
+        CreateSettlement::FunctionRequested
+    } else {
+        CreateSettlement::Response
+    };
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
-        // A Tool qualification probe makes no Agent Decision (ADR 0049).
-        outcome: if probe {
-            AgentDecisionOutcome::NoDecision
-        } else {
-            validate_agent_decision(response.output.as_ref(), &declared)
-        },
+        outcome,
         producer_output: response
             .output
             .as_ref()
@@ -87,7 +98,7 @@ pub(crate) async fn record_create(
         usage: response.usage,
         cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
-        settlement: CreateSettlement::Response,
+        settlement,
     };
     persist_create_result(client, claim, run, result, retained).await
 }
@@ -133,9 +144,13 @@ pub(crate) async fn create_request(
     })?;
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
+    let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
-        None => previous_response_reference(client, claim, run, prior_context).await?,
+        None => {
+            previous_response_reference(client, claim, run, prior_context, &tool_exposure.digest())
+                .await?
+        }
     };
     Ok(CreateRequest {
         attempt,
@@ -162,6 +177,7 @@ pub(crate) async fn create_request(
             .clone()
             .unwrap_or_default(),
         previous_response_reference,
+        tool_exposure,
         successor_of: None,
     })
 }
@@ -196,6 +212,7 @@ async fn previous_response_reference(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
+    tool_exposure_digest: &str,
 ) -> Result<Option<String>, CompleteAgentRunError> {
     let prior_binding = match (&run.attempt_payload, prior_context) {
         (Some(payload), _) => serde_json::from_str::<serde_json::Value>(payload)
@@ -219,6 +236,7 @@ async fn previous_response_reference(
                         &run.conversation_id,
                         &run.author_message,
                         &assistance,
+                        tool_exposure_digest,
                     )
                     .await?
                     .prior_binding_id

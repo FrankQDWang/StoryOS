@@ -44,7 +44,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             match phase {
                 WorkPhase::Done(result) => return Ok(NextDispatchWork::Settled(result)),
                 WorkPhase::Hold(kind) => hold_if_requested(kind).await,
-                WorkPhase::Dispatch(request) => return Ok(NextDispatchWork::Request(*request)),
+                WorkPhase::Dispatch(request) => return Ok(NextDispatchWork::Request(request)),
                 WorkPhase::Abort(cancellation) => {
                     return Ok(NextDispatchWork::Abort(cancellation));
                 }
