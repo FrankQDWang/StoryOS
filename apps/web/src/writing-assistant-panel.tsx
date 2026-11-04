@@ -6,8 +6,8 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
-  SelectionReference,
+  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectResearchTool,
+  ProjectScope, SelectionReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -19,6 +19,7 @@ import {
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
+import { ResearchToolControl } from "./research-tool-control.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
@@ -235,6 +236,8 @@ export function WritingAssistantPanel({
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
 }) {
   const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
+  // The research tool state of the Project whose assistance read gave it.
+  const [researchTool, setResearchTool] = useState<{ scope: ProjectScope; state: ProjectResearchTool }>();
   const [reference, setReference] = useState<RequestReference | undefined>(
     () => context === undefined ? undefined : readReference(context.scope),
   );
@@ -257,11 +260,10 @@ export function WritingAssistantPanel({
       projectId: context.scope.project_id,
     }).then((response) => {
       if (!active) return;
-      setAvailability(
-        response.project_scope.owner_user_id === context.scope.owner_user_id
-          && response.project_scope.project_id === context.scope.project_id
-          ? response.assistance?.availability ?? "available" : "unavailable",
-      );
+      const owned = response.project_scope.owner_user_id === context.scope.owner_user_id
+        && response.project_scope.project_id === context.scope.project_id;
+      setAvailability(owned ? response.assistance?.availability ?? "available" : "unavailable");
+      if (owned) setResearchTool({ scope: context.scope, state: response.research_tool });
     }).catch(() => {
       if (active) setAvailability("unavailable");
     });
@@ -551,6 +553,10 @@ export function WritingAssistantPanel({
               setStatus("");
             }}>新对话</button>
         </header>
+        {context === undefined ? null : <ResearchToolControl key={`research:${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} state={researchTool?.scope.owner_user_id === context.scope.owner_user_id
+            && researchTool.scope.project_id === context.scope.project_id ? researchTool.state : "not_offered"}
+          onSettled={(state) => setResearchTool({ scope: context.scope, state })} />}
         <div className="assistant-conversation" aria-live="polite">
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>
