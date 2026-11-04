@@ -7103,6 +7103,182 @@
       },
       "triggers": {}
     },
+    "tool_registration_revisions": {
+      "columns": {
+        "adapter_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "created_at": {
+          "default": "clock_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "lifecycle": {
+          "default": "'active'::text",
+          "nullable": false,
+          "type": "text"
+        },
+        "protocol_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "quarantine_differences": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
+        "quarantined_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "registration_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "server_name": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "server_url": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "tool_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "tool_registration_revisions_identity_check": "CHECK ((((char_length(server_url) >= 1) AND (char_length(server_url) <= 2048)) AND ((char_length(server_name) >= 1) AND (char_length(server_name) <= 200)) AND ((char_length(protocol_revision) >= 1) AND (char_length(protocol_revision) <= 64)) AND ((char_length(adapter_revision) >= 1) AND (char_length(adapter_revision) <= 200))))",
+        "tool_registration_revisions_kind_check": "CHECK ((registration_kind = 'mcp_remote'::text))",
+        "tool_registration_revisions_lifecycle_check": "CHECK ((lifecycle = ANY (ARRAY['active'::text, 'quarantined'::text, 'retired'::text])))",
+        "tool_registration_revisions_pkey": "PRIMARY KEY (tool_registration_revision)",
+        "tool_registration_revisions_quarantine_check": "CHECK ((((quarantine_differences IS NULL) = (quarantined_at IS NULL)) AND ((lifecycle <> 'active'::text) OR (quarantine_differences IS NULL)) AND ((lifecycle <> 'quarantined'::text) OR (quarantine_differences IS NOT NULL)) AND ((quarantine_differences IS NULL) OR ((jsonb_typeof(quarantine_differences) = 'array'::text) AND (jsonb_array_length(quarantine_differences) >= 1)))))"
+      },
+      "indexes": {
+        "tool_registration_revisions_pkey": "CREATE UNIQUE INDEX tool_registration_revisions_pkey ON storyos.tool_registration_revisions USING btree (tool_registration_revision)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "tool_registration_revisions_active_insert": {
+          "command": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": null,
+          "with_check": "(lifecycle = 'active'::text)"
+        },
+        "tool_registration_revisions_global_read": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "true",
+          "with_check": null
+        },
+        "tool_registration_revisions_lifecycle_update": {
+          "command": "UPDATE",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "(lifecycle = 'active'::text)",
+          "with_check": "(lifecycle <> 'active'::text)"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "tool_registration_tools": {
+      "columns": {
+        "input_schema_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "output_schema_digest": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "provenance_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "tool_name": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "tool_registration_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "tool_spec_revision": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "tool_registration_tools_digest_check": "CHECK (((input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((output_schema_digest IS NULL) OR (output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text))))",
+        "tool_registration_tools_name_check": "CHECK ((((char_length(tool_name) >= 1) AND (char_length(tool_name) <= 128)) AND ((char_length(tool_spec_revision) >= 1) AND (char_length(tool_spec_revision) <= 200))))",
+        "tool_registration_tools_pkey": "PRIMARY KEY (tool_registration_revision, tool_name)",
+        "tool_registration_tools_revision_fkey": "FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)"
+      },
+      "indexes": {
+        "tool_registration_tools_pkey": "CREATE UNIQUE INDEX tool_registration_tools_pkey ON storyos.tool_registration_tools USING btree (tool_registration_revision, tool_name)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "tool_registration_tools_global_insert": {
+          "command": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": null,
+          "with_check": "true"
+        },
+        "tool_registration_tools_global_read": {
+          "command": "SELECT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "true",
+          "with_check": null
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "undo_acceptance_receipts": {
       "columns": {
         "acceptance_receipt_id": {
