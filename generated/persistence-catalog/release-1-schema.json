@@ -7208,6 +7208,11 @@
     },
     "tool_registration_tools": {
       "columns": {
+        "input_contract_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
         "input_schema_digest": {
           "default": null,
           "nullable": false,
@@ -7240,7 +7245,7 @@
         }
       },
       "constraints": {
-        "tool_registration_tools_digest_check": "CHECK (((input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((output_schema_digest IS NULL) OR (output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text))))",
+        "tool_registration_tools_digest_check": "CHECK (((input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (input_contract_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((output_schema_digest IS NULL) OR (output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text))))",
         "tool_registration_tools_name_check": "CHECK ((((char_length(tool_name) >= 1) AND (char_length(tool_name) <= 128)) AND ((char_length(tool_spec_revision) >= 1) AND (char_length(tool_spec_revision) <= 200))))",
         "tool_registration_tools_pkey": "PRIMARY KEY (tool_registration_revision, tool_name)",
         "tool_registration_tools_revision_fkey": "FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)"
@@ -7250,15 +7255,6 @@
       },
       "owner": "storyos_owner",
       "policies": {
-        "tool_registration_tools_global_insert": {
-          "command": "INSERT",
-          "permissive": "PERMISSIVE",
-          "roles": [
-            "public"
-          ],
-          "using": null,
-          "with_check": "true"
-        },
         "tool_registration_tools_global_read": {
           "command": "SELECT",
           "permissive": "PERMISSIVE",
@@ -7267,6 +7263,15 @@
           ],
           "using": "true",
           "with_check": null
+        },
+        "tool_registration_tools_revision_insert": {
+          "command": "INSERT",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": null,
+          "with_check": "(EXISTS ( SELECT 1\n   FROM storyos.tool_registration_revisions revision\n  WHERE ((revision.tool_registration_revision = tool_registration_tools.tool_registration_revision) AND (revision.lifecycle = 'active'::text) AND (revision.xmin = (pg_current_xact_id())::xid))))"
         }
       },
       "privileges": [
