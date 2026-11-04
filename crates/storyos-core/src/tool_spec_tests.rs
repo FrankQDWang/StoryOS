@@ -66,6 +66,8 @@ fn a_fetch_intake_takes_at_most_five_absolute_web_urls() {
             Err(IntakeRefusal::Url),
         ),
         (json!({"urls": ["https://"]}), Err(IntakeRefusal::Url)),
+        (json!({"urls": ["https://:443"]}), Err(IntakeRefusal::Url)),
+        (json!({"urls": ["https://[::1"]}), Err(IntakeRefusal::Url)),
         (
             json!({"urls": ["https://user:key@a.example"]}),
             Err(IntakeRefusal::Url),

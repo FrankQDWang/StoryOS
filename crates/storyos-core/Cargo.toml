@@ -10,6 +10,7 @@ workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+url.workspace = true
 
 [[bench]]
 name = "statistics_profile_bench"

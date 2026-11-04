@@ -112,7 +112,7 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_runtime_role_never_reactivates_or_edits_a_registration_revision() {
+async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revision() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -121,7 +121,12 @@ async fn the_runtime_role_never_reactivates_or_edits_a_registration_revision() {
         revision: "018f0000-0000-7001-8000-0000000e0f04",
         ..EXA_TOOL_REGISTRATION
     };
+    const ACTIVE: ToolRegistration = ToolRegistration {
+        revision: "018f0000-0000-7001-8000-0000000e0f05",
+        ..EXA_TOOL_REGISTRATION
+    };
     store.insert_tool_registration(&REVISION).await.unwrap();
+    store.insert_tool_registration(&ACTIVE).await.unwrap();
     let drift = [ContractDifference::ProtocolRevision {
         pinned: "2025-11-25".to_owned(),
         observed: "2026-06-18".to_owned(),
@@ -150,6 +155,21 @@ async fn the_runtime_role_never_reactivates_or_edits_a_registration_revision() {
         .await
         .map_err(|error| crate::sql_state(&error));
 
+    let appended_tool = client
+        .execute(
+            "INSERT INTO storyos.tool_registration_tools
+               (tool_registration_revision, tool_name, tool_spec_revision, input_schema_digest,
+                input_contract_digest, provenance_digest)
+             SELECT tool_registration_revision, 'agent_run', tool_spec_revision,
+                    input_schema_digest, input_contract_digest, provenance_digest
+               FROM storyos.tool_registration_tools
+              WHERE tool_registration_revision = $1::text::uuid AND tool_name = 'web_fetch_exa'",
+            &[&ACTIVE.revision],
+        )
+        .await
+        .map_err(|error| crate::sql_state(&error));
+
+    assert_eq!(appended_tool, Err(Some("42501".to_owned())));
     assert_eq!(reactivated, 0);
     assert_eq!(identity_edit, Err(Some("42501".to_owned())));
     assert_eq!(

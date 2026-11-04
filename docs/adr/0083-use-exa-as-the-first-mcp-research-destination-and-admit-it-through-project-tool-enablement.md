@@ -16,7 +16,7 @@ Stage 5 needs one approved MCP research tool before the first Tool Registration,
 - Issue [#1102](https://github.com/FrankQDWang/StoryOS/issues/1102) planned a one-shot Destination Disclosure Approval outside the standing grant as the Stage 5 path for a new destination.
 - The author read the public Exa documentation and the Volcengine MCP documentation on 2026-11-03. The facts below come from that reading; S5-01a verifies them against the live server and records the Discovery Record under `docs/research/`.
 
-Exa offers a remote MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. Its default tool set, as observed on 2026-11-03, has three tools: `web_search_exa`, `web_fetch_exa`, and `agent_run`; only `web_search_exa` and `web_fetch_exa` are approved, and `web_search_advanced_exa` is optional and needs a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
+Exa offers a remote MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. On 2026-11-03, its default tool set had three tools: `web_search_exa`, `web_fetch_exa`, and `agent_run`. Only `web_search_exa` and `web_fetch_exa` are approved. `web_search_advanced_exa` is optional and needs a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
 
 Volcengine offers a Doubao web search MCP server as a local `stdio` Python process started with `uvx`, with its own key in a process environment variable. StoryOS has no `stdio` transport, no Python runtime in the Worker, and no sidecar process model.
 

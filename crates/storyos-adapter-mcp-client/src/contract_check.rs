@@ -1,7 +1,7 @@
 //! The Tool Contract Drift check of a fresh Tool Discovery Record against a pinned Tool
 //! Registration revision. The Worker runs it at Project enablement and before each dispatch.
 
-use serde_json::json;
+use serde_json::{Value, json};
 use storyos_core::{ContractCheck, ContractDifference, ToolRegistration};
 
 use crate::ToolDiscoveryRecord;
@@ -44,11 +44,16 @@ impl ToolDiscoveryRecord {
                 continue;
             };
             if observed.input_schema_digest != pinned.input_schema_digest {
-                differences.push(ContractDifference::InputSchema {
-                    tool: tool.clone(),
-                    pinned: pinned.input_schema_digest.to_owned(),
-                    observed: observed.input_schema_digest.clone(),
-                });
+                let contract = digest(&without_descriptions(&observed.input_schema));
+                if contract == pinned.input_contract_digest {
+                    provenance_changed = true;
+                } else {
+                    differences.push(ContractDifference::InputSchema {
+                        tool: tool.clone(),
+                        pinned: pinned.input_contract_digest.to_owned(),
+                        observed: contract,
+                    });
+                }
             }
             let output = observed.output_schema.as_ref().map(digest);
             if output.as_deref() != pinned.output_schema_digest {
@@ -71,6 +76,37 @@ impl ToolDiscoveryRecord {
         } else {
             ContractCheck::Unchanged
         }
+    }
+}
+
+/// A schema without its `description` keywords. The keys of a property map are names, and an
+/// `enum`, `const`, `default`, or `examples` value is data, so the function keeps them.
+fn without_descriptions(schema: &Value) -> Value {
+    match schema {
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .filter(|(key, value)| !(key.as_str() == "description" && value.is_string()))
+                .map(|(key, value)| {
+                    let value = match (key.as_str(), value) {
+                        (
+                            "properties" | "patternProperties" | "definitions" | "$defs",
+                            Value::Object(named),
+                        ) => Value::Object(
+                            named
+                                .iter()
+                                .map(|(name, child)| (name.clone(), without_descriptions(child)))
+                                .collect(),
+                        ),
+                        ("enum" | "const" | "default" | "examples", data) => data.clone(),
+                        (_, child) => without_descriptions(child),
+                    };
+                    (key.clone(), value)
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(without_descriptions).collect()),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => schema.clone(),
     }
 }
 

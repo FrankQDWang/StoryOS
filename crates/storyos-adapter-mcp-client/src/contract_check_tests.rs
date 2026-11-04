@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use storyos_core::{ContractCheck, ContractDifference, EXA_TOOL_REGISTRATION};
 
+use super::without_descriptions;
 use crate::record::{digest, tools_page};
 use crate::{DiscoveredTool, ToolDiscoveryRecord};
 
@@ -110,20 +111,15 @@ fn add_fetch_output_schema(recorded: &mut Value) {
     tool(recorded, "web_fetch_exa")["output_schema"] = json!({"type": "object"});
 }
 
-fn observed_schema_digest(edit: Edit, name: &str) -> String {
+fn observed_contract_digest(edit: Edit, name: &str) -> String {
     let record = edited(edit);
     let observed = record.tools().iter().find(|tool| tool.name() == name);
-    observed.unwrap().input_schema_digest().to_owned()
+    digest(&without_descriptions(observed.unwrap().input_schema()))
 }
 
 #[test]
 fn a_changed_identity_schema_or_removed_approved_tool_is_drift_that_names_the_difference() {
-    let pinned = |index: usize| {
-        EXA_TOOL_REGISTRATION.tools[index]
-            .input_schema_digest
-            .to_owned()
-    };
-    let cases: [(Edit, ContractDifference); 6] = [
+    let cases: [(Edit, ContractDifference); 5] = [
         (
             remove_fetch,
             ContractDifference::ToolRemoved {
@@ -134,16 +130,10 @@ fn a_changed_identity_schema_or_removed_approved_tool_is_drift_that_names_the_di
             widen_query,
             ContractDifference::InputSchema {
                 tool: "web_search_exa".to_owned(),
-                pinned: pinned(0),
-                observed: observed_schema_digest(widen_query, "web_search_exa"),
-            },
-        ),
-        (
-            reword_urls_property,
-            ContractDifference::InputSchema {
-                tool: "web_fetch_exa".to_owned(),
-                pinned: pinned(1),
-                observed: observed_schema_digest(reword_urls_property, "web_fetch_exa"),
+                pinned: EXA_TOOL_REGISTRATION.tools[0]
+                    .input_contract_digest
+                    .to_owned(),
+                observed: observed_contract_digest(widen_query, "web_search_exa"),
             },
         ),
         (
@@ -179,7 +169,20 @@ fn a_changed_identity_schema_or_removed_approved_tool_is_drift_that_names_the_di
 
 #[test]
 fn a_changed_description_annotation_or_server_version_is_provenance_only() {
-    let cases: [Edit; 3] = [
+    let record = record_of(&recorded_json());
+    let contracts: Vec<String> = record.tools()[..2]
+        .iter()
+        .map(|tool| digest(&without_descriptions(tool.input_schema())))
+        .collect();
+    let pinned: Vec<&str> = EXA_TOOL_REGISTRATION
+        .tools
+        .iter()
+        .map(|tool| tool.input_contract_digest)
+        .collect();
+    assert_eq!(contracts, pinned);
+
+    let cases: [Edit; 4] = [
+        reword_urls_property,
         |recorded| tool(recorded, "web_search_exa")["description"] = json!("Changed text."),
         |recorded| {
             tool(recorded, "web_fetch_exa")["annotations"] =

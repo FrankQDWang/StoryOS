@@ -121,9 +121,9 @@ struct FetchArguments {
 }
 
 impl ToolSpec {
-    /// Validates the complete arguments of one function call against the typed intake: a query
-    /// of 1 to 512 characters and an optional result count of 1 to 10, or 1 to 5 absolute `http`
-    /// or `https` URLs with no user information.
+    /// Validates the complete arguments of one function call against the typed intake. A search
+    /// takes a query of 1 to 512 characters and an optional result count of 1 to 10. A fetch
+    /// takes 1 to 5 absolute `http` or `https` URLs with a host and no user information.
     pub fn intake(&self, arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
         match self.operation {
             ToolOperation::WebSearch => {
@@ -210,17 +210,15 @@ impl ServerArguments {
     }
 }
 
-fn absolute_web_url(url: &str) -> bool {
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"));
-    rest.is_some_and(|rest| {
-        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-        !authority.is_empty()
-            && !authority.contains('@')
-            && url.chars().count() <= URL_MAX_CHARS
-            && !url.chars().any(|c| c.is_whitespace() || c.is_control())
-    })
+fn absolute_web_url(text: &str) -> bool {
+    text.chars().count() <= URL_MAX_CHARS
+        && !text.chars().any(|c| c.is_whitespace() || c.is_control())
+        && url::Url::parse(text).is_ok_and(|url| {
+            matches!(url.scheme(), "https" | "http")
+                && url.host_str().is_some_and(|host| !host.is_empty())
+                && url.username().is_empty()
+                && url.password().is_none()
+        })
 }
 
 #[cfg(test)]

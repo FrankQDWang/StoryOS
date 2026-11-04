@@ -3655,7 +3655,8 @@ GRANT UPDATE(model_registration_revision) ON TABLE storyos.model_registration_he
 -- Global Tool Registrations (ADR 0083). The rows hold no Project data, Credential Reference,
 -- grant, or use state, and they are not Project Export data. Each runtime role reads each row.
 -- Only an active revision changes, and only to quarantined or retired. The quarantine columns are
--- the Activity record of the quarantine.
+-- the Activity record of the quarantine. A tool row joins only the transaction that inserts its
+-- revision, so the tool set of a stored revision does not change.
 
 CREATE TABLE storyos.tool_registration_revisions (
     tool_registration_revision uuid NOT NULL,
@@ -3699,11 +3700,12 @@ CREATE TABLE storyos.tool_registration_tools (
     tool_name text NOT NULL,
     tool_spec_revision text NOT NULL,
     input_schema_digest text NOT NULL,
+    input_contract_digest text NOT NULL,
     output_schema_digest text,
     provenance_digest text NOT NULL,
     CONSTRAINT tool_registration_tools_pkey PRIMARY KEY (tool_registration_revision, tool_name),
     CONSTRAINT tool_registration_tools_name_check CHECK (char_length(tool_name) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
-    CONSTRAINT tool_registration_tools_digest_check CHECK (input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text AND provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text AND (output_schema_digest IS NULL OR output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT tool_registration_tools_digest_check CHECK (input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text AND input_contract_digest ~ '^sha256:[0-9a-f]{64}$'::text AND provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text AND (output_schema_digest IS NULL OR output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT tool_registration_tools_revision_fkey FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)
 );
 
@@ -3713,7 +3715,7 @@ ALTER TABLE storyos.tool_registration_tools FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY tool_registration_tools_global_read ON storyos.tool_registration_tools FOR SELECT USING (true);
 
-CREATE POLICY tool_registration_tools_global_insert ON storyos.tool_registration_tools FOR INSERT WITH CHECK (true);
+CREATE POLICY tool_registration_tools_revision_insert ON storyos.tool_registration_tools FOR INSERT WITH CHECK ((EXISTS ( SELECT 1 FROM storyos.tool_registration_revisions AS revision WHERE ((revision.tool_registration_revision = tool_registration_tools.tool_registration_revision) AND (revision.lifecycle = 'active'::text) AND (revision.xmin = (pg_current_xact_id())::xid)))));
 
 GRANT SELECT,INSERT ON TABLE storyos.tool_registration_tools TO storyos_runtime;
 

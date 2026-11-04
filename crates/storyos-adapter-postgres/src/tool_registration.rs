@@ -33,6 +33,7 @@ impl PostgresProjectReader {
                     "name": tool.name,
                     "spec": tool.spec.revision,
                     "input": tool.input_schema_digest,
+                    "contract": tool.input_contract_digest,
                     "output": tool.output_schema_digest,
                     "provenance": tool.provenance_digest,
                 })
@@ -50,12 +51,14 @@ impl PostgresProjectReader {
                    RETURNING tool_registration_revision)
                  INSERT INTO storyos.tool_registration_tools
                    (tool_registration_revision, tool_name, tool_spec_revision,
-                    input_schema_digest, output_schema_digest, provenance_digest)
+                    input_schema_digest, input_contract_digest, output_schema_digest,
+                    provenance_digest)
                  SELECT revision.tool_registration_revision, tool.name, tool.spec, tool.input,
-                        tool.output, tool.provenance
+                        tool.contract, tool.output, tool.provenance
                    FROM revision,
                         jsonb_to_recordset($7::text::jsonb)
-                          AS tool(name text, spec text, input text, output text, provenance text)",
+                          AS tool(name text, spec text, input text, contract text, output text,
+                                  provenance text)",
                 &[
                     &registration.revision,
                     &registration.kind.as_str(),

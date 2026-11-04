@@ -2,9 +2,10 @@
 //!
 //! Each digest is `sha256:` and the hex SHA-256 of the `canonical_json` text of a value: the
 //! canonicalization of the Wire Payload Projections. The input schema digest covers the complete
-//! schema, also its property descriptions, so a changed property description is drift. The
-//! provenance digest covers the tool description and the annotations, which are untrusted
-//! descriptive provenance.
+//! schema, as the Discovery Record gives it. The input contract digest covers the same schema
+//! without its `description` keywords. The provenance digest covers the tool description and the
+//! annotations. Descriptions and annotations are untrusted descriptive provenance, so a change
+//! of only them is not drift.
 
 use serde::Serialize;
 
@@ -35,6 +36,7 @@ pub struct RegisteredTool {
     pub spec: &'static ToolSpec,
     pub arguments: ServerArguments,
     pub input_schema_digest: &'static str,
+    pub input_contract_digest: &'static str,
     /// `None` when the server declares no output schema.
     pub output_schema_digest: Option<&'static str>,
     pub provenance_digest: &'static str,
