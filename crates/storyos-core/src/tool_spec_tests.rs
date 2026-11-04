@@ -35,10 +35,17 @@ fn a_search_intake_takes_one_bounded_query_and_an_optional_count_of_at_most_ten(
             json!({"query": "storyos", "objective": "x"}),
             Err(IntakeRefusal::Malformed),
         ),
-        (json!({"urls": ["https://a.example"]}), Err(IntakeRefusal::Malformed)),
+        (
+            json!({"urls": ["https://a.example"]}),
+            Err(IntakeRefusal::Malformed),
+        ),
     ];
     for (arguments, expected) in cases {
-        assert_eq!(WEB_SEARCH_TOOL_SPEC.intake(&arguments), expected, "{arguments}");
+        assert_eq!(
+            WEB_SEARCH_TOOL_SPEC.intake(&arguments),
+            expected,
+            "{arguments}"
+        );
     }
 }
 
@@ -54,14 +61,27 @@ fn a_fetch_intake_takes_at_most_five_absolute_web_urls() {
         (json!({"urls": six}), Err(IntakeRefusal::UrlCount)),
         (json!({"urls": []}), Err(IntakeRefusal::UrlCount)),
         (json!({"urls": ["/relative"]}), Err(IntakeRefusal::Url)),
-        (json!({"urls": ["ftp://a.example"]}), Err(IntakeRefusal::Url)),
+        (
+            json!({"urls": ["ftp://a.example"]}),
+            Err(IntakeRefusal::Url),
+        ),
         (json!({"urls": ["https://"]}), Err(IntakeRefusal::Url)),
-        (json!({"urls": ["https://user:key@a.example"]}), Err(IntakeRefusal::Url)),
-        (json!({"urls": ["https://a.example/a b"]}), Err(IntakeRefusal::Url)),
+        (
+            json!({"urls": ["https://user:key@a.example"]}),
+            Err(IntakeRefusal::Url),
+        ),
+        (
+            json!({"urls": ["https://a.example/a b"]}),
+            Err(IntakeRefusal::Url),
+        ),
         (json!({"query": "storyos"}), Err(IntakeRefusal::Malformed)),
     ];
     for (arguments, expected) in cases {
-        assert_eq!(WEB_FETCH_TOOL_SPEC.intake(&arguments), expected, "{arguments}");
+        assert_eq!(
+            WEB_FETCH_TOOL_SPEC.intake(&arguments),
+            expected,
+            "{arguments}"
+        );
     }
 }
 

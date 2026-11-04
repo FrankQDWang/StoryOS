@@ -144,8 +144,8 @@ impl ToolSpec {
                 })
             }
             ToolOperation::WebFetch => {
-                let FetchArguments { urls } = FetchArguments::deserialize(arguments)
-                    .map_err(|_| IntakeRefusal::Malformed)?;
+                let FetchArguments { urls } =
+                    FetchArguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
                 if urls.is_empty() || urls.len() > URLS_MAX {
                     return Err(IntakeRefusal::UrlCount);
                 }

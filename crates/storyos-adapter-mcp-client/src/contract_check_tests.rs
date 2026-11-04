@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 use storyos_core::{ContractCheck, ContractDifference, EXA_TOOL_REGISTRATION};
 
-use crate::{DiscoveredTool, ToolDiscoveryRecord};
 use crate::record::{digest, tools_page};
+use crate::{DiscoveredTool, ToolDiscoveryRecord};
 
 type Edit = fn(&mut Value);
 
@@ -67,11 +67,11 @@ fn the_pinned_digests_match_the_discovery_record_and_an_extra_unapproved_tool_is
     let recorded = recorded_json();
     let record = record_of(&recorded);
     let names: Vec<&str> = record.tools().iter().map(DiscoveredTool::name).collect();
-    let recorded_digests: Vec<&Value> = recorded["tools"]
+    let recorded_digests: Vec<Value> = recorded["tools"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|tool| &tool["input_schema_digest"])
+        .map(|tool| tool["input_schema_digest"].clone())
         .collect();
     let computed_digests: Vec<Value> = record
         .tools()
@@ -80,8 +80,11 @@ fn the_pinned_digests_match_the_discovery_record_and_an_extra_unapproved_tool_is
         .collect();
 
     assert_eq!(names, ["web_search_exa", "web_fetch_exa", "agent_run"]);
-    assert_eq!(recorded_digests, computed_digests.iter().collect::<Vec<_>>());
-    assert_eq!(record.check(&EXA_TOOL_REGISTRATION), ContractCheck::Unchanged);
+    assert_eq!(recorded_digests, computed_digests);
+    assert_eq!(
+        record.check(&EXA_TOOL_REGISTRATION),
+        ContractCheck::Unchanged
+    );
     assert_eq!(EXA_TOOL_REGISTRATION.tool("agent_run"), None);
     assert_eq!(EXA_TOOL_REGISTRATION.tool("web_search_advanced_exa"), None);
 }
@@ -115,7 +118,11 @@ fn observed_schema_digest(edit: Edit, name: &str) -> String {
 
 #[test]
 fn a_changed_identity_schema_or_removed_approved_tool_is_drift_that_names_the_difference() {
-    let pinned = |index: usize| EXA_TOOL_REGISTRATION.tools[index].input_schema_digest.to_owned();
+    let pinned = |index: usize| {
+        EXA_TOOL_REGISTRATION.tools[index]
+            .input_schema_digest
+            .to_owned()
+    };
     let cases: [(Edit, ContractDifference); 6] = [
         (
             remove_fetch,

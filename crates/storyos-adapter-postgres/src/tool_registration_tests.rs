@@ -70,11 +70,15 @@ async fn drift_quarantines_one_revision_once_and_a_new_revision_carries_no_autho
         [
             (
                 "web_fetch_exa".to_owned(),
-                EXA_TOOL_REGISTRATION.tools[1].input_schema_digest.to_owned()
+                EXA_TOOL_REGISTRATION.tools[1]
+                    .input_schema_digest
+                    .to_owned()
             ),
             (
                 "web_search_exa".to_owned(),
-                EXA_TOOL_REGISTRATION.tools[0].input_schema_digest.to_owned()
+                EXA_TOOL_REGISTRATION.tools[0]
+                    .input_schema_digest
+                    .to_owned()
             ),
         ]
     );
@@ -149,7 +153,10 @@ async fn the_runtime_role_never_reactivates_or_edits_a_registration_revision() {
     assert_eq!(reactivated, 0);
     assert_eq!(identity_edit, Err(Some("42501".to_owned())));
     assert_eq!(
-        store.tool_registration_lifecycle(REVISION.revision).await.unwrap(),
+        store
+            .tool_registration_lifecycle(REVISION.revision)
+            .await
+            .unwrap(),
         Some(ToolRegistrationLifecycle::Quarantined)
     );
 }

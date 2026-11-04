@@ -15,12 +15,16 @@ impl ToolDiscoveryRecord {
     pub fn check(&self, registration: &ToolRegistration) -> ContractCheck {
         let mut differences = Vec::new();
         let identities: [(&str, &str, Difference); 3] = [
-            (registration.server_url, &self.server_url, |pinned, observed| {
-                ContractDifference::ServerUrl { pinned, observed }
-            }),
-            (registration.server_name, &self.server_name, |pinned, observed| {
-                ContractDifference::ServerName { pinned, observed }
-            }),
+            (
+                registration.server_url,
+                &self.server_url,
+                |pinned, observed| ContractDifference::ServerUrl { pinned, observed },
+            ),
+            (
+                registration.server_name,
+                &self.server_name,
+                |pinned, observed| ContractDifference::ServerName { pinned, observed },
+            ),
             (
                 registration.protocol_revision,
                 &self.protocol_revision,
