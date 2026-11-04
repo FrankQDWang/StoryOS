@@ -157,6 +157,7 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod selection_references;
 mod set_current_chapter;
+mod set_project_tool_enablement;
 mod snapshot;
 mod steer_agent_run;
 mod storage_activation;
@@ -165,6 +166,7 @@ mod stream_proposal_generation;
 mod stream_proposal_pause;
 mod structural_authority_settlement;
 mod takeover;
+mod tool_registration;
 mod undo_compensation;
 mod undo_frontier;
 mod undo_latest_author_action;
@@ -194,6 +196,7 @@ pub use storage_activation::{
 pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
+pub use tool_registration::QuarantineOutcome;
 
 /// Whether `url` is a PostgreSQL connection string that the client can parse. A binary checks
 /// it at startup, before storage activation (ADR 0050).

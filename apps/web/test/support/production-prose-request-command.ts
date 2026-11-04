@@ -81,9 +81,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.locator('[data-assistant-availability="available"]').waitFor();
     const fetchImpl = sessionFetch(origin, "session-a");
     const options = { baseUrl: origin, projectId, fetchImpl };
-    await assert.rejects(() => getProjectAssistance(options), (error) =>
-      error instanceof StoryOSProtocolError && error.status === 404
-        && (JSON.parse(String(error.responseBody)) as { code?: string }).code === "assistance_not_bound");
+    assert.equal((await getProjectAssistance(options)).assistance, null);
     const request: UpdateProjectAssistanceRequest = {
       command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: {

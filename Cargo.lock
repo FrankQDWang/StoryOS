@@ -1865,6 +1865,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "storyos-adapter-mcp-client"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "storyos-application",
+ "storyos-core",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "storyos-adapter-postgres"
 version = "0.1.0"
 dependencies = [
@@ -1925,6 +1939,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "url",
 ]
 
 [[package]]
@@ -1987,8 +2002,10 @@ version = "0.1.0"
 dependencies = [
  "secrecy",
  "serde",
+ "serde_json",
  "storyos-adapter-diagnostics",
  "storyos-adapter-fake-destination",
+ "storyos-adapter-mcp-client",
  "storyos-adapter-postgres",
  "storyos-adapter-volcengine-responses",
  "storyos-application",

@@ -31,6 +31,7 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'reopenWithdrawnProposal',
     'replanProposal',
     'setCurrentChapter',
+    'setProjectToolEnablement',
     'steerAgentRun',
     'takeOverProjectWriter',
     'undoLatestAuthorAction',
@@ -55,6 +56,7 @@ CREATE DOMAIN storyos.event_kind AS text CHECK (VALUE IN (
     'project_assistance_updated',
     'project_created',
     'project_export_settled',
+    'project_tool_enablement_set',
     'project_updated',
     'volume_created',
     'volume_deleted',
@@ -617,7 +619,7 @@ CREATE TABLE storyos.author_command_admissions (
             AND local_intent_sequence IS NULL
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text])
+        OR (command_kind = ANY (ARRAY['deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'setProjectToolEnablement'::text])
             AND action_class = 'explicit_project_command'::text
             AND editor_session_id IS NULL
             AND writer_generation IS NULL
@@ -873,7 +875,7 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
+CREATE TRIGGER author_command_admissions_writer_generation BEFORE INSERT ON storyos.author_command_admissions FOR EACH ROW WHEN (((new.action_class <> 'agent_run_control'::text) AND (new.command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'setProjectToolEnablement'::text, 'createAgentRun'::text])))) EXECUTE FUNCTION storyos.require_writer_generation_admission();
 
 CREATE TABLE storyos.scope_counters (
     owner_user_id uuid NOT NULL,
@@ -994,7 +996,7 @@ CREATE TABLE storyos.domain_receipts (
             AND array_position(draft_artifact_refs, NULL::text) IS NULL
             AND array_position(artifact_lifecycle_event_refs, NULL::text) IS NULL
             AND array_position(condition_refs, NULL::text) IS NULL
-            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
+            AND (((command_kind <> ALL (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'setProjectToolEnablement'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 1) AND (cardinality(prior_heads) = 1) AND (cardinality(resulting_heads) = 1) AND (array_dims(expected_heads) = '[1:1]'::text) AND (array_dims(prior_heads) = '[1:1]'::text) AND (array_dims(resulting_heads) = '[1:1]'::text)) OR ((command_kind = ANY (ARRAY['createProject'::text, 'updateProject'::text, 'createVolume'::text, 'createChapter'::text, 'updateVolume'::text, 'updateChapter'::text, 'deleteChapter'::text, 'deleteVolume'::text, 'exportHumanReadableManuscript'::text, 'exportProjectArchive'::text, 'updateProjectAssistance'::text, 'setProjectToolEnablement'::text, 'createAgentRun'::text, 'pauseAgentRun'::text, 'cancelAgentRun'::text])) AND (cardinality(expected_heads) = 0) AND (cardinality(prior_heads) = 0) AND (cardinality(resulting_heads) = 0))))
         OR (command_kind = 'replanProposal'::text
             AND cardinality(expected_heads) = 1
             AND cardinality(prior_heads) <= 1
@@ -1375,6 +1377,19 @@ CREATE TABLE storyos.domain_receipts (
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
             AND (result_payload ->> 'reason'::text) = 'availability_unchanged'::text
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'setProjectToolEnablement'::text
+            AND result_kind = 'authoritative_applied'::text
+            AND result_payload = '{}'::jsonb
+            AND cardinality(authoritative_revision_ids) = 0
+            AND cardinality(authoritative_commit_ids) = 0)
+        OR (command_kind = 'setProjectToolEnablement'::text
+            AND ((result_kind = 'no_effect'::text
+                  AND (result_payload ->> 'reason'::text) = 'enablement_unchanged'::text)
+                 OR (result_kind = 'refused'::text
+                     AND (result_payload ->> 'reason'::text) = ANY (ARRAY['registration_not_offered'::text, 'registration_unavailable'::text])))
+            AND (result_payload - 'reason'::text) = '{}'::jsonb
             AND cardinality(authoritative_revision_ids) = 0
             AND cardinality(authoritative_commit_ids) = 0)
         OR (command_kind = 'updateProjectAssistance'::text
@@ -1993,6 +2008,13 @@ CREATE TABLE storyos.project_activity_event_payloads (
             AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
             AND (((payload - 'kind'::text) - 'availability'::text) - 'revision'::text) = '{}'::jsonb)
         OR (jsonb_typeof(payload) = 'object'::text
+            AND event_kind = 'project_tool_enablement_set'::text
+            AND receipt_result_kind = 'authoritative_applied'::text
+            AND (payload ->> 'kind'::text) = 'project_tool_enablement_set'::text
+            AND (payload ->> 'enablement'::text) = ANY (ARRAY['enabled'::text, 'disabled'::text])
+            AND jsonb_typeof((payload -> 'revision'::text)) = 'string'::text
+            AND (((payload - 'kind'::text) - 'enablement'::text) - 'revision'::text) = '{}'::jsonb)
+        OR (jsonb_typeof(payload) = 'object'::text
             AND event_kind = 'agent_run_created'::text
             AND receipt_result_kind = 'authoritative_applied'::text
             AND (payload ->> 'kind'::text) = 'agent_run_created'::text
@@ -2574,6 +2596,22 @@ BEGIN
       RAISE EXCEPTION USING
         ERRCODE = '23514',
         MESSAGE = 'updateProjectAssistance with zero availability effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'setProjectToolEnablement' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF (activity_count, action_count, commit_count, revision_envelope_count, payload_count)
+         <> (0, 0, 0, 0, CASE WHEN scoped_result_kind = 'authoritative_applied' THEN 1 ELSE 0 END)
+       OR (scoped_result_kind = 'authoritative_applied'
+           AND payload_event_kind IS DISTINCT FROM 'project_tool_enablement_set') THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'setProjectToolEnablement requires one enablement Activity only when applied';
     END IF;
 
   ELSIF scoped_command_kind = 'createAgentRun' THEN
@@ -3652,12 +3690,81 @@ GRANT SELECT,INSERT ON TABLE storyos.model_registration_heads TO storyos_runtime
 
 GRANT UPDATE(model_registration_revision) ON TABLE storyos.model_registration_heads TO storyos_runtime;
 
+-- Global Tool Registrations (ADR 0083). The rows hold no Project data, Credential Reference,
+-- grant, or use state, and they are not Project Export data. Each runtime role reads each row.
+-- Only an active revision changes, and only to quarantined or retired. The quarantine columns are
+-- the Activity record of the quarantine. A tool row joins only the transaction that inserts its
+-- revision, so the tool set of a stored revision does not change.
+
+CREATE TABLE storyos.tool_registration_revisions (
+    tool_registration_revision uuid NOT NULL,
+    registration_kind text NOT NULL,
+    server_url text NOT NULL,
+    server_name text NOT NULL,
+    protocol_revision text NOT NULL,
+    adapter_revision text NOT NULL,
+    lifecycle text DEFAULT 'active'::text NOT NULL,
+    quarantine_differences jsonb,
+    quarantined_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT tool_registration_revisions_pkey PRIMARY KEY (tool_registration_revision),
+    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = 'mcp_remote'::text)),
+    CONSTRAINT tool_registration_revisions_identity_check CHECK (char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_revisions_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'quarantined'::text, 'retired'::text]))),
+    CONSTRAINT tool_registration_revisions_quarantine_check CHECK (
+        ((quarantine_differences IS NULL) = (quarantined_at IS NULL))
+        AND (lifecycle <> 'active'::text OR quarantine_differences IS NULL)
+        AND (lifecycle <> 'quarantined'::text OR quarantine_differences IS NOT NULL)
+        AND (quarantine_differences IS NULL
+             OR (jsonb_typeof(quarantine_differences) = 'array'::text AND jsonb_array_length(quarantine_differences) >= 1)))
+);
+
+ALTER TABLE storyos.tool_registration_revisions ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.tool_registration_revisions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tool_registration_revisions_global_read ON storyos.tool_registration_revisions FOR SELECT USING (true);
+
+CREATE POLICY tool_registration_revisions_active_insert ON storyos.tool_registration_revisions FOR INSERT WITH CHECK ((lifecycle = 'active'::text));
+
+CREATE POLICY tool_registration_revisions_lifecycle_update ON storyos.tool_registration_revisions FOR UPDATE USING ((lifecycle = 'active'::text)) WITH CHECK ((lifecycle <> 'active'::text));
+
+GRANT SELECT,INSERT ON TABLE storyos.tool_registration_revisions TO storyos_runtime;
+
+GRANT UPDATE(lifecycle, quarantine_differences, quarantined_at) ON TABLE storyos.tool_registration_revisions TO storyos_runtime;
+
+CREATE TABLE storyos.tool_registration_tools (
+    tool_registration_revision uuid NOT NULL,
+    tool_name text NOT NULL,
+    tool_spec_revision text NOT NULL,
+    input_schema_digest text NOT NULL,
+    input_contract_digest text NOT NULL,
+    output_schema_digest text,
+    provenance_digest text NOT NULL,
+    CONSTRAINT tool_registration_tools_pkey PRIMARY KEY (tool_registration_revision, tool_name),
+    CONSTRAINT tool_registration_tools_name_check CHECK (char_length(tool_name) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_tools_digest_check CHECK (input_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text AND input_contract_digest ~ '^sha256:[0-9a-f]{64}$'::text AND provenance_digest ~ '^sha256:[0-9a-f]{64}$'::text AND (output_schema_digest IS NULL OR output_schema_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT tool_registration_tools_revision_fkey FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)
+);
+
+ALTER TABLE storyos.tool_registration_tools ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.tool_registration_tools FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tool_registration_tools_global_read ON storyos.tool_registration_tools FOR SELECT USING (true);
+
+CREATE POLICY tool_registration_tools_revision_insert ON storyos.tool_registration_tools FOR INSERT WITH CHECK ((EXISTS ( SELECT 1 FROM storyos.tool_registration_revisions AS revision WHERE ((revision.tool_registration_revision = tool_registration_tools.tool_registration_revision) AND (revision.lifecycle = 'active'::text) AND (revision.xmin = (pg_current_xact_id())::xid)))));
+
+GRANT SELECT,INSERT ON TABLE storyos.tool_registration_tools TO storyos_runtime;
+
 CREATE TABLE storyos.processing_destination_identities (
     owner_user_id uuid NOT NULL,
     project_id uuid NOT NULL,
     processing_destination_identity uuid NOT NULL,
     destination_kind text NOT NULL,
-    CONSTRAINT processing_destination_identities_kind_check CHECK ((destination_kind = ANY (ARRAY['host_fake'::text, 'volcengine_agent_plan'::text]))),
+    control_classification text NOT NULL,
+    CONSTRAINT processing_destination_identities_kind_check CHECK ((destination_kind = ANY (ARRAY['host_fake'::text, 'volcengine_agent_plan'::text, 'mcp_remote'::text]))),
+    CONSTRAINT processing_destination_identities_control_check CHECK ((control_classification = CASE destination_kind WHEN 'host_fake'::text THEN 'host_internal'::text ELSE 'external'::text END)),
     CONSTRAINT processing_destination_identities_pkey PRIMARY KEY (owner_user_id, project_id, processing_destination_identity),
     CONSTRAINT processing_destination_identities_owner_user_id_project_id_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
 );
@@ -3682,9 +3789,9 @@ CREATE TABLE storyos.processing_destination_identity_evidence_revisions (
     CONSTRAINT processing_destination_identity_evid_eligibility_evidence_check CHECK (((char_length(eligibility_evidence) >= 1) AND (char_length(eligibility_evidence) <= 500))),
     CONSTRAINT processing_destination_identity_evidenc_evidence_revision_check CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric))),
     CONSTRAINT processing_destination_identity_evidence_account_boundary_check CHECK (((char_length(account_boundary) >= 1) AND (char_length(account_boundary) <= 500))),
-    CONSTRAINT processing_destination_identity_evidence_kind_check CHECK ((evidence_kind = ANY (ARRAY['host_fake_boundary'::text, 'volcengine_agent_plan_boundary'::text]))),
+    CONSTRAINT processing_destination_identity_evidence_kind_check CHECK ((evidence_kind = ANY (ARRAY['host_fake_boundary'::text, 'volcengine_agent_plan_boundary'::text, 'mcp_remote_boundary'::text]))),
     CONSTRAINT processing_destination_identity_evidence_revisio_endpoint_check CHECK (((char_length(endpoint) >= 1) AND (char_length(endpoint) <= 500))),
-    CONSTRAINT processing_destination_identity_evidence_shape CHECK ((((evidence_kind = 'host_fake_boundary'::text) AND (endpoint IS NULL) AND (account_boundary IS NULL) AND (eligibility_evidence IS NULL)) OR ((evidence_kind = 'volcengine_agent_plan_boundary'::text) AND (endpoint IS NOT NULL) AND (account_boundary IS NOT NULL) AND (eligibility_evidence IS NOT NULL)))),
+    CONSTRAINT processing_destination_identity_evidence_shape CHECK ((((evidence_kind = 'host_fake_boundary'::text) AND (endpoint IS NULL) AND (account_boundary IS NULL) AND (eligibility_evidence IS NULL)) OR ((evidence_kind = 'volcengine_agent_plan_boundary'::text) AND (endpoint IS NOT NULL) AND (account_boundary IS NOT NULL) AND (eligibility_evidence IS NOT NULL)) OR ((evidence_kind = 'mcp_remote_boundary'::text) AND (endpoint IS NOT NULL) AND (account_boundary IS NOT NULL) AND (eligibility_evidence IS NULL)))),
     CONSTRAINT processing_destination_identity_evidence_revisions_pkey PRIMARY KEY (owner_user_id, project_id, processing_destination_identity, evidence_revision),
     CONSTRAINT processing_destination_identi_owner_user_id_project_id_pro_fkey FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL
 );
@@ -3704,8 +3811,9 @@ CREATE TABLE storyos.project_destination_grants (
     processing_destination_identity uuid NOT NULL,
     grant_kind text NOT NULL,
     grant_scope text,
-    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text]))),
-    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text]))),
+    CONSTRAINT project_destination_grants_grant_scope_check CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'research_tool_v1'::text]))),
+    CONSTRAINT project_destination_grants_kind_check CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text]))),
+    CONSTRAINT project_destination_grants_research_scope CHECK (((grant_kind = 'research_tool_use'::text) = (grant_scope IS NOT DISTINCT FROM 'research_tool_v1'::text))),
     CONSTRAINT project_destination_grants_pkey PRIMARY KEY (owner_user_id, project_id, grant_id),
     CONSTRAINT project_destination_grants_owner_user_id_project_id_proces_fkey FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL
 );
@@ -3727,7 +3835,8 @@ CREATE TABLE storyos.project_external_use_binding_revisions (
     processing_destination_identity uuid NOT NULL,
     evidence_revision numeric(20,0) NOT NULL,
     grant_id uuid NOT NULL,
-    model_registration_revision uuid NOT NULL,
+    model_registration_revision uuid,
+    tool_registration_revision uuid,
     credential_source text NOT NULL,
     credential_reference text,
     budget_bounds text NOT NULL,
@@ -3735,12 +3844,14 @@ CREATE TABLE storyos.project_external_use_binding_revisions (
     CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text]))),
     CONSTRAINT project_external_use_binding_revisions_credential_shape CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL))),
     CONSTRAINT project_external_use_binding_revisions_credential_source_check CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text]))),
+    CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision) = 1)),
     CONSTRAINT project_external_use_binding_revisions_evidence_revision_check CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric))),
     CONSTRAINT project_external_use_binding_revisions_pkey PRIMARY KEY (owner_user_id, project_id, project_model_use_binding_revision),
     CONSTRAINT project_external_use_binding_revisions_registration_key UNIQUE (owner_user_id, project_id, project_model_use_binding_revision, model_registration_revision),
     CONSTRAINT project_external_use_binding__owner_user_id_project_id_gra_fkey FOREIGN KEY (owner_user_id, project_id, grant_id) REFERENCES storyos.project_destination_grants(owner_user_id, project_id, grant_id) MATCH FULL,
     CONSTRAINT project_external_use_binding__owner_user_id_project_id_pro_fkey FOREIGN KEY (owner_user_id, project_id, processing_destination_identity, evidence_revision) REFERENCES storyos.processing_destination_identity_evidence_revisions(owner_user_id, project_id, processing_destination_identity, evidence_revision) MATCH FULL,
-    CONSTRAINT project_external_use_binding_r_model_registration_revision_fkey FOREIGN KEY (model_registration_revision) REFERENCES storyos.model_registration_revisions(model_registration_revision)
+    CONSTRAINT project_external_use_binding_r_model_registration_revision_fkey FOREIGN KEY (model_registration_revision) REFERENCES storyos.model_registration_revisions(model_registration_revision),
+    CONSTRAINT project_external_use_binding_r_tool_registration_revision_fkey FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)
 );
 
 CREATE INDEX project_external_use_binding_revisions_grant_idx ON storyos.project_external_use_binding_revisions USING btree (owner_user_id, project_id, grant_id);
@@ -3761,11 +3872,12 @@ CREATE TABLE storyos.external_contract_compatibility_decisions (
     external_compatibility_decision uuid NOT NULL,
     project_model_use_binding_revision uuid NOT NULL,
     decision_kind text NOT NULL,
-    runtime_qualification text NOT NULL,
+    runtime_qualification text,
     qualification_authorization text,
     CONSTRAINT external_contract_compatibili_qualification_authorization_check CHECK (((char_length(qualification_authorization) >= 1) AND (char_length(qualification_authorization) <= 500))),
     CONSTRAINT external_contract_compatibility_decisions_authorization_shape CHECK (((runtime_qualification = 'qualification_authorized'::text) = (qualification_authorization IS NOT NULL))),
-    CONSTRAINT external_contract_compatibility_decisions_kind_check CHECK ((decision_kind = ANY (ARRAY['host_fake_compatible'::text, 'volcengine_agent_plan_compatible'::text]))),
+    CONSTRAINT external_contract_compatibility_decisions_kind_check CHECK ((decision_kind = ANY (ARRAY['host_fake_compatible'::text, 'volcengine_agent_plan_compatible'::text, 'tool_registration_compatible'::text]))),
+    CONSTRAINT external_contract_compatibility_decisions_tool_shape CHECK (((decision_kind = 'tool_registration_compatible'::text) = (runtime_qualification IS NULL) AND (runtime_qualification IS NOT NULL OR qualification_authorization IS NULL))),
     CONSTRAINT external_contract_compatibility_decisions_qualification_check CHECK ((runtime_qualification = ANY (ARRAY['qualified'::text, 'pending'::text, 'qualification_authorized'::text]))),
     CONSTRAINT external_contract_compatibility_decisions_pkey PRIMARY KEY (owner_user_id, project_id, external_compatibility_decision),
     CONSTRAINT external_contract_compatibili_owner_user_id_project_id_pro_fkey FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision) REFERENCES storyos.project_external_use_binding_revisions(owner_user_id, project_id, project_model_use_binding_revision) MATCH FULL
@@ -3780,6 +3892,38 @@ ALTER TABLE storyos.external_contract_compatibility_decisions FORCE ROW LEVEL SE
 CREATE POLICY external_contract_compatibility_decisions_exact_scope ON storyos.external_contract_compatibility_decisions USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
 
 GRANT SELECT,INSERT ON TABLE storyos.external_contract_compatibility_decisions TO storyos_runtime;
+
+-- Project Tool Enablement (ADR 0083). Each revision is append-only. An enabled revision names the
+-- compatibility Decision of its binding records; a disabled revision names none, and the earlier
+-- records stay as history.
+
+CREATE TABLE storyos.project_tool_enablements (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    registration_id text NOT NULL,
+    enablement_revision numeric(20,0) NOT NULL,
+    enablement text NOT NULL,
+    external_compatibility_decision uuid,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT project_tool_enablements_pkey PRIMARY KEY (owner_user_id, project_id, registration_id, enablement_revision),
+    CONSTRAINT project_tool_enablements_registration_id_check CHECK (char_length(registration_id) BETWEEN 1 AND 128),
+    CONSTRAINT project_tool_enablements_revision_check CHECK (((enablement_revision >= (1)::numeric) AND (enablement_revision <= '18446744073709551615'::numeric))),
+    CONSTRAINT project_tool_enablements_enablement_check CHECK ((enablement = ANY (ARRAY['enabled'::text, 'disabled'::text]))),
+    CONSTRAINT project_tool_enablements_decision_shape CHECK (((enablement = 'enabled'::text) = (external_compatibility_decision IS NOT NULL))),
+    CONSTRAINT project_tool_enablements_owner_user_id_project_id_fkey FOREIGN KEY (owner_user_id, project_id) REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL,
+    CONSTRAINT project_tool_enablements_decision_fkey FOREIGN KEY (owner_user_id, project_id, external_compatibility_decision) REFERENCES storyos.external_contract_compatibility_decisions(owner_user_id, project_id, external_compatibility_decision),
+    CONSTRAINT project_tool_enablements_receipt_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
+);
+
+CREATE INDEX project_tool_enablements_decision_idx ON storyos.project_tool_enablements USING btree (owner_user_id, project_id, external_compatibility_decision);
+
+ALTER TABLE storyos.project_tool_enablements ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.project_tool_enablements FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY project_tool_enablements_exact_scope ON storyos.project_tool_enablements USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.project_tool_enablements TO storyos_runtime;
 
 CREATE TABLE storyos.project_policy_revisions (
     owner_user_id uuid NOT NULL,

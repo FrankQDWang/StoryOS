@@ -6,8 +6,8 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
-  SelectionReference,
+  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectResearchTool,
+  ProjectScope, SelectionReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -19,6 +19,7 @@ import {
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
+import { ResearchToolControl } from "./research-tool-control.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
@@ -159,16 +160,6 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
   return undefined;
 }
 
-/** A Project without a binding uses the destination that the deployment offers (ADR 0048). */
-function withoutBinding(error: unknown): boolean {
-  if (!(error instanceof StoryOSProtocolError) || error.status !== 404) return false;
-  try {
-    return (JSON.parse(String(error.responseBody)) as { code?: unknown }).code === "assistance_not_bound";
-  } catch {
-    return false;
-  }
-}
-
 function resultText(run: GetAgentRunResponse): string | undefined {
   if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
@@ -245,6 +236,8 @@ export function WritingAssistantPanel({
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
 }) {
   const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
+  // The research tool state of the Project whose assistance read gave it.
+  const [researchTool, setResearchTool] = useState<{ scope: ProjectScope; state: ProjectResearchTool }>();
   const [reference, setReference] = useState<RequestReference | undefined>(
     () => context === undefined ? undefined : readReference(context.scope),
   );
@@ -267,13 +260,12 @@ export function WritingAssistantPanel({
       projectId: context.scope.project_id,
     }).then((response) => {
       if (!active) return;
-      setAvailability(
-        response.project_scope.owner_user_id === context.scope.owner_user_id
-          && response.project_scope.project_id === context.scope.project_id
-          ? response.assistance.availability : "unavailable",
-      );
-    }).catch((error: unknown) => {
-      if (active) setAvailability(withoutBinding(error) ? "available" : "unavailable");
+      const owned = response.project_scope.owner_user_id === context.scope.owner_user_id
+        && response.project_scope.project_id === context.scope.project_id;
+      setAvailability(owned ? response.assistance?.availability ?? "available" : "unavailable");
+      if (owned) setResearchTool({ scope: context.scope, state: response.research_tool });
+    }).catch(() => {
+      if (active) setAvailability("unavailable");
     });
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
@@ -417,14 +409,11 @@ export function WritingAssistantPanel({
       const assistance = await getProjectAssistance({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: context.scope.project_id,
-      }).catch((error: unknown) => {
-        if (withoutBinding(error)) return undefined;
-        throw error;
       });
-      if (assistance !== undefined
-        && (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
-          || assistance.project_scope.project_id !== context.scope.project_id
-          || assistance.assistance.availability !== "available")) {
+      // A Project without a binding uses the destination that the deployment offers (ADR 0048).
+      if (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
+        || assistance.project_scope.project_id !== context.scope.project_id
+        || (assistance.assistance !== null && assistance.assistance.availability !== "available")) {
         setAvailability("unavailable");
         setStatus("写作助手当前不可用。你仍可以直接写作。");
         return;
@@ -564,6 +553,10 @@ export function WritingAssistantPanel({
               setStatus("");
             }}>新对话</button>
         </header>
+        {context === undefined ? null : <ResearchToolControl key={`research:${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} state={researchTool?.scope.owner_user_id === context.scope.owner_user_id
+            && researchTool.scope.project_id === context.scope.project_id ? researchTool.state : "not_offered"}
+          onSettled={(state) => setResearchTool({ scope: context.scope, state })} />}
         <div className="assistant-conversation" aria-live="polite">
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>

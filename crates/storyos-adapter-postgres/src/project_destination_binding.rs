@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 /// The kind and evidence columns of the binding records of one deployment destination.
 struct BindingShape {
+    control_classification: &'static str,
     evidence_kind: &'static str,
     endpoint: Option<&'static str>,
     account_boundary: Option<&'static str>,
@@ -20,6 +21,7 @@ struct BindingShape {
 fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
     match destination {
         DeploymentDestination::HostFake => BindingShape {
+            control_classification: "host_internal",
             evidence_kind: "host_fake_boundary",
             endpoint: None,
             account_boundary: None,
@@ -29,6 +31,7 @@ fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
             decision_kind: "host_fake_compatible",
         },
         DeploymentDestination::VolcengineAgentPlan { .. } => BindingShape {
+            control_classification: "external",
             evidence_kind: "volcengine_agent_plan_boundary",
             endpoint: Some(AGENT_PLAN_ENDPOINT),
             account_boundary: Some(AGENT_PLAN_ACCOUNT_BOUNDARY),
@@ -56,8 +59,9 @@ pub(crate) async fn insert_destination_binding(
         .execute(
             "WITH identity AS (
                INSERT INTO storyos.processing_destination_identities
-                 (owner_user_id, project_id, processing_destination_identity, destination_kind)
-               VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $7)
+                 (owner_user_id, project_id, processing_destination_identity, destination_kind,
+                  control_classification)
+               VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $7, $21)
              ), evidence AS (
                INSERT INTO storyos.processing_destination_identity_evidence_revisions
                  (owner_user_id, project_id, processing_destination_identity, evidence_revision,
@@ -105,6 +109,7 @@ pub(crate) async fn insert_destination_binding(
                 &destination.runtime_qualification().as_str(),
                 &destination.qualification_authorization(),
                 &GrantScope::CURRENT.as_str(),
+                &shape.control_classification,
             ],
         )
         .await?;

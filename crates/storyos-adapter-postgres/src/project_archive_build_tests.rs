@@ -125,6 +125,9 @@ async fn each_project_export_table_is_a_live_table() {
         .collect();
 
     assert_eq!(missing, Vec::<&str>::new());
+    for global in ["tool_registration_revisions", "tool_registration_tools"] {
+        assert!(live.contains(global) && !PROJECT_EXPORT_TABLES.contains(&global));
+    }
 }
 
 #[tokio::test]

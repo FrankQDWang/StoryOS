@@ -271,9 +271,24 @@ input:focus-visible {
 
 .assistant-body {
   display: grid;
-  grid-template-rows: var(--assistant-header-height) minmax(0, 1fr) auto;
+  grid-template-rows: var(--assistant-header-height) auto minmax(0, 1fr) auto;
   height: 100%;
 }
+
+/* The research control row is empty when the deployment offers no research tool. */
+.assistant-body > .assistant-conversation { grid-row: 3; }
+.assistant-body > .composer-dock { grid-row: 4; }
+
+.assistant-research-tool {
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.assistant-research-tool label { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 13px; }
+.assistant-research-tool p { margin: 4px 0 0; }
 
 .assistant-body[hidden] { display: none; }
 

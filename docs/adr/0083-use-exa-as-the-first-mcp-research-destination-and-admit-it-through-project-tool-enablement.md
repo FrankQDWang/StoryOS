@@ -16,7 +16,7 @@ Stage 5 needs one approved MCP research tool before the first Tool Registration,
 - Issue [#1102](https://github.com/FrankQDWang/StoryOS/issues/1102) planned a one-shot Destination Disclosure Approval outside the standing grant as the Stage 5 path for a new destination.
 - The author read the public Exa documentation and the Volcengine MCP documentation on 2026-11-03. The facts below come from that reading; S5-01a verifies them against the live server and records the Discovery Record under `docs/research/`.
 
-Exa offers a remote MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. Its default tool set is `web_search_exa` and `web_fetch_exa`, both read-only; `web_search_advanced_exa` and `agent_run` are optional and need a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
+Exa offers a remote MCP server at `https://mcp.exa.ai/mcp` over the MCP Streamable HTTP transport. It authenticates with an `x-api-key` header. On 2026-11-03, its default tool set had three tools: `web_search_exa`, `web_fetch_exa`, and `agent_run`. Only `web_search_exa` and `web_fetch_exa` are approved. `web_search_advanced_exa` is optional and needs a query parameter at the URL. The free tier gives a monthly credit; search and page reads are metered per thousand.
 
 Volcengine offers a Doubao web search MCP server as a local `stdio` Python process started with `uvx`, with its own key in a process environment variable. StoryOS has no `stdio` transport, no Python runtime in the Worker, and no sidecar process model.
 
@@ -28,7 +28,7 @@ The remote Exa MCP server is the first and, for Stage 5, the only MCP research d
 
 ### 2. The transport and the key
 
-A new adapter crate, `storyos-adapter-mcp-client`, holds the MCP Streamable HTTP transport and the HTTP and TLS dependency. The Worker binary composes it; the Server does not depend on it. The Exa key is one typed Worker setting, `STORYOS_EXA_API_KEY`, read through the settings path of ADR 0050. Records hold the Credential Reference `storyos_exa_api_key` and never a value. The key belongs to the operator of the deployment; Stage 5 adds no per-author key.
+A new adapter crate, `storyos-adapter-mcp-client`, holds the MCP Streamable HTTP transport and the HTTP and TLS dependency. The Worker binary composes it; the Server does not depend on it. The Exa key is one typed Worker setting, `STORYOS_EXA_API_KEY`, read through the settings path of ADR 0050. Records hold the Credential Reference `settings:STORYOS_EXA_API_KEY`, in the form of the Agent Plan reference, and never a value. The key belongs to the operator of the deployment; Stage 5 adds no per-author key.
 
 ### 3. Enablement records the grant
 

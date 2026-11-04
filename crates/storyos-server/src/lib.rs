@@ -56,6 +56,7 @@ mod request_span;
 mod selection_references;
 mod session_bootstrap;
 mod set_current_chapter;
+mod set_project_tool_enablement;
 mod settings;
 mod snapshot;
 mod steer_agent_run;
@@ -117,6 +118,7 @@ use reopen_withdrawn_proposal::reopen_withdrawn_proposal;
 use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use set_current_chapter::set_current_chapter;
+use set_project_tool_enablement::set_project_tool_enablement;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use steer_agent_run::steer_agent_run;
 use takeover::take_over_project_writer;
@@ -319,6 +321,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             .on(
                 method_filter(contracts::UPDATE_PROJECT_ASSISTANCE_METHOD),
                 update_project_assistance,
+            ),
+        )
+        .route(
+            contracts::SET_PROJECT_TOOL_ENABLEMENT_PATH,
+            routing::on(
+                method_filter(contracts::SET_PROJECT_TOOL_ENABLEMENT_METHOD),
+                set_project_tool_enablement,
             ),
         )
         .route(

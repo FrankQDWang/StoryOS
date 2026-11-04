@@ -113,7 +113,9 @@ pub struct GetProjectAssistanceResponse {
     pub schema_id: String,
     pub correlation_id: String,
     pub project_scope: crate::release1::ProjectScope,
-    pub assistance: ProjectAssistanceBinding,
+    #[schemars(required)]
+    pub assistance: Option<ProjectAssistanceBinding>,
+    pub research_tool: crate::ProjectResearchTool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
