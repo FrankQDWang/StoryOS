@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::PROTOCOL_REVISION;
 
 /// The bound of the total text of one Call result.
-pub(crate) const MAX_TEXT_BYTES: usize = 256 * 1024;
+pub(crate) const MAX_TEXT_BYTES: usize = storyos_core::TOOL_RESULT_TEXT_MAX_BYTES;
 
 /// What one `Discover` exchange observed. It is untrusted: it has no Registration identity, no
 /// enablement, and no execution authority.
@@ -137,15 +137,20 @@ fn discovered_tool(tool: &Value) -> Option<DiscoveredTool> {
     let input_schema = tool
         .get("inputSchema")
         .filter(|schema| schema.is_object())?;
-    let canonical = storyos_core::canonical_json(input_schema);
     Some(DiscoveredTool {
         name: tool.get("name")?.as_str()?.to_owned(),
         description,
         input_schema: input_schema.clone(),
-        input_schema_digest: format!("sha256:{}", storyos_core::hex_sha256(canonical.as_bytes())),
+        input_schema_digest: digest(input_schema),
         output_schema: object("outputSchema")?,
         annotations: object("annotations")?,
     })
+}
+
+/// `sha256:` and the hex SHA-256 of the canonical JSON of a value.
+pub(crate) fn digest(value: &Value) -> String {
+    let canonical = storyos_core::canonical_json(value);
+    format!("sha256:{}", storyos_core::hex_sha256(canonical.as_bytes()))
 }
 
 /// Text blocks only, a boolean or absent `isError`, and at most `MAX_TEXT_BYTES` of text. The
