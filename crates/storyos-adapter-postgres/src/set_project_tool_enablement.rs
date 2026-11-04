@@ -102,8 +102,8 @@ impl PostgresProjectReader {
     }
 }
 
-/// The enabled decision of an earlier revision whose records match the offer. An enablement
-/// reuses it; otherwise it writes new binding records.
+/// The Decision of the latest binding records when they match the offer. An enablement reuses
+/// it; otherwise it writes new binding records.
 type ReusableDecision = Option<String>;
 
 impl ProjectCommand for SetProjectToolEnablementInput {
@@ -240,9 +240,16 @@ async fn read_enablement_facts(
                   AND registration_id = $3
                 ORDER BY enablement_revision DESC
                 LIMIT 1
+             ), latest_binding AS (
+               SELECT owner_user_id, project_id, external_compatibility_decision
+                 FROM storyos.project_tool_enablements
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND registration_id = $3 AND external_compatibility_decision IS NOT NULL
+                ORDER BY enablement_revision DESC
+                LIMIT 1
              ), matching AS (
                SELECT enablement.external_compatibility_decision
-                 FROM storyos.project_tool_enablements AS enablement
+                 FROM latest_binding AS enablement
                  JOIN storyos.external_contract_compatibility_decisions AS decision
                    ON (decision.owner_user_id, decision.project_id,
                        decision.external_compatibility_decision) =
@@ -258,15 +265,10 @@ async fn read_enablement_facts(
                        evidence.processing_destination_identity, evidence.evidence_revision) =
                       (binding.owner_user_id, binding.project_id,
                        binding.processing_destination_identity, binding.evidence_revision)
-                WHERE enablement.owner_user_id = $1::text::uuid
-                  AND enablement.project_id = $2::text::uuid
-                  AND enablement.registration_id = $3
-                  AND binding.tool_registration_revision = $4::text::uuid
+                WHERE binding.tool_registration_revision = $4::text::uuid
                   AND binding.credential_reference = $5
                   AND evidence.endpoint = $6
                   AND evidence.account_boundary = $7
-                ORDER BY enablement.enablement_revision DESC
-                LIMIT 1
              )
              SELECT (SELECT lifecycle FROM storyos.tool_registration_revisions
                       WHERE tool_registration_revision = $4::text::uuid),

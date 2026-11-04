@@ -249,6 +249,7 @@ async fn a_changed_registration_or_credential_reference_makes_new_binding_record
             enable(&SUCCESSOR_OFFER),
             enable(&REBOUND_OFFER),
             enable(&REBOUND_OFFER),
+            enable(&RESEARCH_TOOL_OFFER),
         ],
     )
     .await;
@@ -259,6 +260,7 @@ async fn a_changed_registration_or_credential_reference_makes_new_binding_record
             applied(ToolEnablement::Enabled, 2),
             applied(ToolEnablement::Enabled, 3),
             UNCHANGED,
+            applied(ToolEnablement::Enabled, 4),
         ]
     );
     assert_eq!(
@@ -270,6 +272,11 @@ async fn a_changed_registration_or_credential_reference_makes_new_binding_record
             ),
             record(SUCCESSOR.revision, "settings:STORYOS_EXA_API_KEY"),
             record(SUCCESSOR.revision, "settings:STORYOS_EXA_API_KEY_SECOND"),
+            // A change back to earlier values makes new records too.
+            record(
+                EXA_TOOL_REGISTRATION.revision,
+                "settings:STORYOS_EXA_API_KEY"
+            ),
         ]
     );
 }

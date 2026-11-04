@@ -3,7 +3,7 @@
 use ts_rs::TS;
 
 use super::{
-    Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, UUID,
+    Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
 use crate::release1_operation_registry::RegisteredOperation;
@@ -14,6 +14,7 @@ use crate::release1_project_tool_enablement::{
     SetProjectToolEnablementRequest, SetProjectToolEnablementResponse,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
+use crate::release1_wire::U64_WIRE;
 
 pub(super) const SET_PROJECT_TOOL_ENABLEMENT_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -127,10 +128,23 @@ const SET_PROJECT_TOOL_ENABLEMENT_RESPONSE: &[Patch] = &[
     Patch(
         UUID,
         &[
+            "/$defs/ProjectScope/properties/owner_user_id",
+            "/$defs/ProjectScope/properties/project_id",
             "/properties/author_command_admission_id",
             "/properties/command_id",
             "/properties/correlation_id",
         ],
+    ),
+    Patch(
+        U64,
+        &[
+            "/$defs/SetProjectToolEnablementEffect/oneOf/0/properties/project_activity_position",
+            "/$defs/SetProjectToolEnablementEffect/oneOf/0/properties/revision",
+        ],
+    ),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &["/$defs/DomainReceipt/properties/author_action_sequence"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
