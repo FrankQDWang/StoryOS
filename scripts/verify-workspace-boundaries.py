@@ -10,6 +10,7 @@ manifests = sorted(Path(package["manifest_path"]).resolve() for package in metad
 expected = [
     root / "crates/storyos-adapter-diagnostics/Cargo.toml",
     root / "crates/storyos-adapter-fake-destination/Cargo.toml",
+    root / "crates/storyos-adapter-mcp-client/Cargo.toml",
     root / "crates/storyos-adapter-postgres/Cargo.toml",
     root / "crates/storyos-adapter-volcengine-responses/Cargo.toml",
     root / "crates/storyos-application/Cargo.toml",
@@ -53,8 +54,9 @@ def closure(name):
 tool_crates = {"storyos-literal-guard"}
 
 problems = []
-if "storyos-adapter-volcengine-responses" in closure("storyos-server"):
-    problems.append("storyos-server links the Volcengine Responses adapter")
+for adapter in ("storyos-adapter-volcengine-responses", "storyos-adapter-mcp-client"):
+    if adapter in closure("storyos-server"):
+        problems.append(f"storyos-server links {adapter}")
 if any(name.startswith("storyos-adapter-") for name in dependencies["storyos-worker"]):
     problems.append("the storyos-worker library depends on an adapter")
 if any("storyos-worker-bin" in names for names in dependencies.values()):

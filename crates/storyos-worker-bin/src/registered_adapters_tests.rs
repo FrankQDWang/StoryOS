@@ -149,6 +149,7 @@ async fn a_resolved_credential_never_reaches_the_diagnostic_projection() {
         agent_plan: AgentPlanResponses {
             resolver: SettingsCredentials {
                 agent_plan_api_key: Some(CREDENTIAL_CANARY.into()),
+                exa_api_key: None,
             },
         },
     };

@@ -28,7 +28,7 @@ The remote Exa MCP server is the first and, for Stage 5, the only MCP research d
 
 ### 2. The transport and the key
 
-A new adapter crate, `storyos-adapter-mcp-client`, holds the MCP Streamable HTTP transport and the HTTP and TLS dependency. The Worker binary composes it; the Server does not depend on it. The Exa key is one typed Worker setting, `STORYOS_EXA_API_KEY`, read through the settings path of ADR 0050. Records hold the Credential Reference `storyos_exa_api_key` and never a value. The key belongs to the operator of the deployment; Stage 5 adds no per-author key.
+A new adapter crate, `storyos-adapter-mcp-client`, holds the MCP Streamable HTTP transport and the HTTP and TLS dependency. The Worker binary composes it; the Server does not depend on it. The Exa key is one typed Worker setting, `STORYOS_EXA_API_KEY`, read through the settings path of ADR 0050. Records hold the Credential Reference `settings:STORYOS_EXA_API_KEY`, in the form of the Agent Plan reference, and never a value. The key belongs to the operator of the deployment; Stage 5 adds no per-author key.
 
 ### 3. Enablement records the grant
 

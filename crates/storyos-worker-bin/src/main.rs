@@ -1,8 +1,10 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
-//! adapters, and the credential resolver of the Worker settings.
+//! adapters, and the credential resolver of the Worker settings. `--discover-exa` runs one
+//! `Discover` exchange of the MCP client adapter.
 
 mod contract_fault_holds;
 mod credential;
+mod discover_tools;
 mod registered_adapters;
 mod settings;
 
@@ -25,6 +27,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if arguments.iter().any(|argument| argument == "--check") {
         return Ok(());
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--discover-exa")
+    {
+        let resolver = credential::SettingsCredentials {
+            agent_plan_api_key: None,
+            exa_api_key: settings.exa_api_key,
+        };
+        std::process::exit(discover_tools::discover_exa(resolver).await);
     }
     let database_url = settings
         .database_url
@@ -53,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             agent_plan: AgentPlanResponses {
                 resolver: credential::SettingsCredentials {
                     agent_plan_api_key: settings.agent_plan_api_key,
+                    exa_api_key: settings.exa_api_key,
                 },
             },
         },

@@ -7,6 +7,7 @@ const KEYS: &[&str] = &[
     "database_url",
     "export_lease_ttl_secs",
     "agent_plan_api_key",
+    "exa_api_key",
     "model_destination",
 ];
 
@@ -19,6 +20,8 @@ pub(crate) struct WorkerSettings {
     pub(crate) export_lease_ttl_secs: Option<u64>,
     /// The operator-quota key of the Agent Plan route. Only the Worker takes it.
     pub(crate) agent_plan_api_key: Option<SecretString>,
+    /// The operator key of the Exa MCP server (ADR 0083). Only the Worker takes it.
+    pub(crate) exa_api_key: Option<SecretString>,
     /// `volcengine_agent_plan` marks a real-route run, which needs the key.
     pub(crate) model_destination: Option<String>,
 }
@@ -41,6 +44,14 @@ impl WorkerSettings {
             }
             (None | Some("host_fake" | "volcengine_agent_plan"), _) => {}
             (Some(_), _) => return refused("STORYOS_MODEL_DESTINATION"),
+        }
+        if loaded
+            .settings
+            .exa_api_key
+            .as_ref()
+            .is_some_and(|key| key.expose_secret().trim().is_empty())
+        {
+            return refused("STORYOS_EXA_API_KEY");
         }
         if loaded
             .settings
