@@ -63,7 +63,7 @@ export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailabi
 
 export type ProjectResearchTool = "not_offered" | "disabled" | "enabled" | "quarantined";
 
-export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding, research_tool: ProjectResearchTool, };
+export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding | null, research_tool: ProjectResearchTool, };
 
 export type UpdateProjectAssistanceInput = { availability: ProjectAssistanceAvailability, expected_assistance_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
