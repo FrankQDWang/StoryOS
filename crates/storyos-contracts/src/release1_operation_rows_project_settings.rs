@@ -397,6 +397,10 @@ const UPDATE_PROJECT_RESPONSE: &[Patch] = &[
 
 const GET_PROJECT_ASSISTANCE_RESPONSE: &[Patch] = &[
     Patch(
+        Edit::NullableDefinition("ProjectAssistanceBinding"),
+        &["/properties/assistance"],
+    ),
+    Patch(
         UUID,
         &[
             "/$defs/ProjectAssistanceBinding/properties/external_compatibility_decision",
