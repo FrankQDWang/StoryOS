@@ -55,12 +55,13 @@ At `main` `1fc55a1b`, the Agent Plan profile v2 qualifies only transport, native
 - The `getAgentRun` response has a new `cache` field. The generated contracts change with it.
 - Confirmed expiry recovery on the real route stays with [S4-04: Recover an Uncertain Real-Model Attempt](https://github.com/FrankQDWang/StoryOS/issues/395).
 
-## Amendment: the Tool projection (2026-11-05)
+## Amendment 2026-11-05: the Tool projection
 
-[#1398](https://github.com/FrankQDWang/StoryOS/issues/1398) adds the Tool projection to the mapping `storyos.volcengine-agent-plan.responses.create.v4`. A non-empty Tool Exposure adds strict function declarations and `tool_choice: "auto"` to the request (ADR 0084). The head Registration `018f0000-0000-7001-8000-00000000fa17` keeps this mapping and its requirement. This is a recorded exception to the rule that a mapping with a new capability gets a new Registration:
+[#1398](https://github.com/FrankQDWang/StoryOS/issues/1398) adds the Tool projection to the requests of the mapping `storyos.volcengine-agent-plan.responses.create.v4`. A non-empty Tool Exposure adds strict function declarations and `tool_choice: "auto"` to the request (ADR 0084). The head Registration `018f0000-0000-7001-8000-00000000fa17` keeps the mapping `v4` and its requirement. This is a recorded exception to the rule that a mapping with a new capability gets a new mapping revision and a new Registration. The author decided it on 2026-11-05, for these reasons:
 
-- The qualified function calling entry of ADR 0049 admits the Tool projection. The entry is not a member of the requirement, because the requirement names the capabilities that each request uses together, and an ordinary request sends no Tool.
-- A request with an empty Tool Exposure is byte-identical to the request before #1398. The mapping revision therefore stays `v4`, and a prior binding of the same Conversation stays eligible.
-- A changed Tool Exposure digest starts a new transport continuation in the same Conversation. It does not change the processing boundary, so expiry recovery of the same boundary continues.
-- The live request of 2026-11-05 (response `resp_021793825651645295492bf4fae3051b4480808ec74710fc5549c`, ADR 0052) is the evidence that the route accepts the strict declarations and returns one complete `function_call` item.
-- A later ticket that executes a ToolCall and sends function output (S5-02b, [#1399](https://github.com/FrankQDWang/StoryOS/issues/1399)) adds the capability to the requirement with a new mapping revision and a new Registration.
+1. [S5-10](https://github.com/FrankQDWang/StoryOS/issues/696) qualified function calling as one entry of the Model Capability Profile, outside `ModelCapability` (ADR 0049, with the pattern of ADR 0059). No requirement and no combination can name that entry today.
+2. A request with an empty Tool Exposure is byte-identical to a request of the mapping `v4`. The mapping `v4` and the recovery requirement therefore stay the pinned mapping and requirement of the Registration, and a prior binding of the same Conversation stays eligible.
+3. The qualified function calling entry of the pinned Registration admits the Tool projection. The live request of 2026-11-05 (response `resp_021793825651645295492bf4fae3051b4480808ec74710fc5549c`, logged on #1398, ADR 0052) is the route evidence of the projection.
+4. The exception ends when a later Registration puts the entry into the requirement, with a new mapping revision. That happens at the latest with the [S5-09](https://github.com/FrankQDWang/StoryOS/issues/405) journey, which gives the combination evidence of streaming, continuation, compaction, and a function call in one live request. [S5-02b](https://github.com/FrankQDWang/StoryOS/issues/1399) and [S5-03](https://github.com/FrankQDWang/StoryOS/issues/399) do not need it.
+
+A changed Tool Exposure digest starts a new transport continuation in the same Conversation. It does not change the processing boundary, so the expiry recovery of the same boundary continues.
