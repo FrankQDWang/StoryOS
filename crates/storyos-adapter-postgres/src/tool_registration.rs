@@ -25,59 +25,15 @@ impl PostgresProjectReader {
         &self,
         registration: &ToolRegistration,
     ) -> Result<(), ToolRegistrationError> {
-        let tools: Vec<_> = registration
-            .tools
-            .iter()
-            .map(|tool| {
-                json!({
-                    "name": tool.name,
-                    "spec": tool.spec.revision,
-                    "input": tool.input_schema_digest,
-                    "contract": tool.input_contract_digest,
-                    "output": tool.output_schema_digest,
-                    "provenance": tool.provenance_digest,
-                })
-            })
-            .collect();
-        let mut client = self.pool.checkout().await?;
-        let transaction = client.transaction().await?;
-        let inserted = transaction
-            .execute(
-                "INSERT INTO storyos.tool_registration_revisions
-                   (tool_registration_revision, registration_kind, server_url, server_name,
-                    protocol_revision, adapter_revision)
-                 VALUES ($1::text::uuid, $2, $3, $4, $5, $6)
-                 ON CONFLICT (tool_registration_revision) DO NOTHING",
-                &[
-                    &registration.revision,
-                    &registration.kind.as_str(),
-                    &registration.server_url,
-                    &registration.server_name,
-                    &registration.protocol_revision,
-                    &registration.adapter_revision,
-                ],
-            )
-            .await?;
-        if inserted == 1 {
-            transaction
-                .execute(
-                    "INSERT INTO storyos.tool_registration_tools
-                       (tool_registration_revision, tool_name, tool_spec_revision,
-                        input_schema_digest, input_contract_digest, output_schema_digest,
-                        provenance_digest)
-                     SELECT $1::text::uuid, tool.name, tool.spec, tool.input, tool.contract,
-                            tool.output, tool.provenance
-                       FROM jsonb_to_recordset($2::text::jsonb)
-                              AS tool(name text, spec text, input text, contract text,
-                                      output text, provenance text)",
-                    &[
-                        &registration.revision,
-                        &serde_json::Value::from(tools).to_string(),
-                    ],
-                )
-                .await?;
+        let client = self.connect().await?;
+        client.batch_execute("BEGIN").await?;
+        match insert_registration_rows(&client, registration).await {
+            Ok(()) => client.batch_execute("COMMIT").await?,
+            Err(error) => {
+                let _rollback = client.batch_execute("ROLLBACK").await;
+                return Err(error.into());
+            }
         }
-        transaction.commit().await?;
         Ok(())
     }
 
@@ -86,7 +42,7 @@ impl PostgresProjectReader {
         &self,
         revision: &str,
     ) -> Result<Option<ToolRegistrationLifecycle>, ToolRegistrationError> {
-        let client = self.pool.checkout().await?;
+        let client = self.connect().await?;
         let row = client
             .query_opt(
                 "SELECT lifecycle FROM storyos.tool_registration_revisions
@@ -109,7 +65,7 @@ impl PostgresProjectReader {
         revision: &str,
         differences: &[ContractDifference],
     ) -> Result<QuarantineOutcome, ToolRegistrationError> {
-        let client = self.pool.checkout().await?;
+        let client = self.connect().await?;
         let row = client
             .query_one(
                 "WITH changed AS (
@@ -131,6 +87,64 @@ impl PostgresProjectReader {
             (false, false) => QuarantineOutcome::UnknownRevision,
         })
     }
+}
+
+/// Inserts the revision, and its tools only when this transaction inserted the revision.
+async fn insert_registration_rows(
+    client: &tokio_postgres::Client,
+    registration: &ToolRegistration,
+) -> Result<(), tokio_postgres::Error> {
+    let tools: Vec<_> = registration
+        .tools
+        .iter()
+        .map(|tool| {
+            json!({
+                "name": tool.name,
+                "spec": tool.spec.revision,
+                "input": tool.input_schema_digest,
+                "contract": tool.input_contract_digest,
+                "output": tool.output_schema_digest,
+                "provenance": tool.provenance_digest,
+            })
+        })
+        .collect();
+    let inserted = client
+        .execute(
+            "INSERT INTO storyos.tool_registration_revisions
+                   (tool_registration_revision, registration_kind, server_url, server_name,
+                    protocol_revision, adapter_revision)
+                 VALUES ($1::text::uuid, $2, $3, $4, $5, $6)
+                 ON CONFLICT (tool_registration_revision) DO NOTHING",
+            &[
+                &registration.revision,
+                &registration.kind.as_str(),
+                &registration.server_url,
+                &registration.server_name,
+                &registration.protocol_revision,
+                &registration.adapter_revision,
+            ],
+        )
+        .await?;
+    if inserted == 1 {
+        client
+            .execute(
+                "INSERT INTO storyos.tool_registration_tools
+                       (tool_registration_revision, tool_name, tool_spec_revision,
+                        input_schema_digest, input_contract_digest, output_schema_digest,
+                        provenance_digest)
+                     SELECT $1::text::uuid, tool.name, tool.spec, tool.input, tool.contract,
+                            tool.output, tool.provenance
+                       FROM jsonb_to_recordset($2::text::jsonb)
+                              AS tool(name text, spec text, input text, contract text,
+                                      output text, provenance text)",
+                &[
+                    &registration.revision,
+                    &serde_json::Value::from(tools).to_string(),
+                ],
+            )
+            .await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

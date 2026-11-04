@@ -135,7 +135,7 @@ async fn the_runtime_role_never_reactivates_edits_or_extends_a_registration_revi
         .quarantine_tool_registration(REVISION.revision, &drift)
         .await
         .unwrap();
-    let client = store.pool.checkout().await.unwrap();
+    let client = store.connect().await.unwrap();
 
     let reactivated = client
         .execute(
