@@ -122,6 +122,10 @@ project_command_request!(
     nested update_project_assistance_input
 );
 project_command_request!(
+    contracts::SetProjectToolEnablementRequest,
+    nested set_project_tool_enablement_input
+);
+project_command_request!(
     contracts::ReopenWithdrawnProposalRequest,
     nested reopen_withdrawn_proposal_input
 );

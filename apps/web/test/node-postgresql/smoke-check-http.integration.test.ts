@@ -194,6 +194,16 @@ const COMMANDS: CommandRows = {
       } } };
     },
     expected: { effect: { kind: "initialized", availability: "available", revision: "1" } },  },
+  setProjectToolEnablement: {
+    arrange: async () => {
+      const project = await createProject(server, { title: "Smoke Tool Enablement Novel" });
+      return { project, input: { request: {
+        command_schema: "storyos.command.set-project-tool-enablement.request.v1",
+        set_project_tool_enablement_input: { registration_id: "web_research", enabled: true, ...project.binding() },
+      } } };
+    },
+    expected: { effect: { kind: "authoritative_applied", enabled: true, revision: "1" } },
+  },
   createEditorSession: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Session Novel" });

@@ -304,10 +304,9 @@ test("project assistance prepares the host fake binding without a run", async ()
       if (init?.method === "PUT") responses.push(Buffer.from(await response.clone().arrayBuffer()));
       return response;
     };
-    await assert.rejects(
-      () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
-      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "assistance_not_bound",
-    );
+    const unbound = await getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
+    assert.equal(unbound.assistance, null);
+    assert.equal(unbound.research_tool, "disabled");
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = id(`${ns}0a20`);
     const absentDigest = await digestUpdateProjectAssistance(absentRequest);
@@ -406,7 +405,7 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
     });
-    assert.equal(afterToggle.assistance.availability, "unavailable");
+    assert.equal(afterToggle.assistance?.availability, "unavailable");
     assert.deepEqual(afterToggle.assistance, toggled.updated.assistance);
 
     await assert.rejects(retryAbsent, (error) => problemCode(error) === "stale_assistance_revision");

@@ -159,16 +159,6 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
   return undefined;
 }
 
-/** A Project without a binding uses the destination that the deployment offers (ADR 0048). */
-function withoutBinding(error: unknown): boolean {
-  if (!(error instanceof StoryOSProtocolError) || error.status !== 404) return false;
-  try {
-    return (JSON.parse(String(error.responseBody)) as { code?: unknown }).code === "assistance_not_bound";
-  } catch {
-    return false;
-  }
-}
-
 function resultText(run: GetAgentRunResponse): string | undefined {
   if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
@@ -270,10 +260,10 @@ export function WritingAssistantPanel({
       setAvailability(
         response.project_scope.owner_user_id === context.scope.owner_user_id
           && response.project_scope.project_id === context.scope.project_id
-          ? response.assistance.availability : "unavailable",
+          ? response.assistance?.availability ?? "available" : "unavailable",
       );
-    }).catch((error: unknown) => {
-      if (active) setAvailability(withoutBinding(error) ? "available" : "unavailable");
+    }).catch(() => {
+      if (active) setAvailability("unavailable");
     });
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
@@ -417,14 +407,11 @@ export function WritingAssistantPanel({
       const assistance = await getProjectAssistance({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: context.scope.project_id,
-      }).catch((error: unknown) => {
-        if (withoutBinding(error)) return undefined;
-        throw error;
       });
-      if (assistance !== undefined
-        && (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
-          || assistance.project_scope.project_id !== context.scope.project_id
-          || assistance.assistance.availability !== "available")) {
+      // A Project without a binding uses the destination that the deployment offers (ADR 0048).
+      if (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
+        || assistance.project_scope.project_id !== context.scope.project_id
+        || (assistance.assistance !== null && assistance.assistance.availability !== "available")) {
         setAvailability("unavailable");
         setStatus("写作助手当前不可用。你仍可以直接写作。");
         return;

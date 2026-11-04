@@ -9,12 +9,33 @@ use crate::{
 pub const EXA_MCP_SERVER_URL: &str = "https://mcp.exa.ai/mcp";
 /// The Credential Reference of the operator key: the Worker setting that holds it (ADR 0050).
 pub const EXA_CREDENTIAL_REFERENCE: &str = "settings:STORYOS_EXA_API_KEY";
+/// The account boundary that the Processing Destination Identity of the server records.
+pub const EXA_ACCOUNT_BOUNDARY: &str =
+    "The Exa account of the deployment operator that holds the Exa API key";
+
+/// The research destination that a deployment offers with its model destination: the
+/// Registration and the Project-scoped facts that Project Tool Enablement records (ADR 0083).
+#[derive(Debug, Eq, PartialEq)]
+pub struct ResearchToolOffer {
+    pub registration: &'static ToolRegistration,
+    /// The source of this Credential Reference is the operator quota.
+    pub credential_reference: &'static str,
+    pub account_boundary: &'static str,
+}
+
+/// The research destination of Stage 5.
+pub const RESEARCH_TOOL_OFFER: ResearchToolOffer = ResearchToolOffer {
+    registration: &EXA_TOOL_REGISTRATION,
+    credential_reference: EXA_CREDENTIAL_REFERENCE,
+    account_boundary: EXA_ACCOUNT_BOUNDARY,
+};
 
 /// The Exa Registration of the Discovery Record `docs/research/exa-mcp-discovery-2026-11-03.md`.
 /// It approves only `web_search_exa` and `web_fetch_exa`; `agent_run`,
 /// `web_search_advanced_exa`, and each later tool stay uncallable. The server requires
 /// `objective` on a search, and the Registration derives it from the query.
 pub const EXA_TOOL_REGISTRATION: ToolRegistration = ToolRegistration {
+    id: "web_research",
     revision: "018f0000-0000-7001-8000-0000000e0001",
     kind: ToolRegistrationKind::McpRemote,
     server_url: EXA_MCP_SERVER_URL,

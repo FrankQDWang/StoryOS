@@ -157,6 +157,7 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod selection_references;
 mod set_current_chapter;
+mod set_project_tool_enablement;
 mod snapshot;
 mod steer_agent_run;
 mod storage_activation;

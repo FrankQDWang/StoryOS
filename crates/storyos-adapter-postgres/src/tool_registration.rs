@@ -90,7 +90,7 @@ impl PostgresProjectReader {
 }
 
 /// Inserts the revision, and its tools only when this transaction inserted the revision.
-async fn insert_registration_rows(
+pub(crate) async fn insert_registration_rows(
     client: &tokio_postgres::Client,
     registration: &ToolRegistration,
 ) -> Result<(), tokio_postgres::Error> {

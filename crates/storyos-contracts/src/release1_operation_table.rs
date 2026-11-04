@@ -33,6 +33,8 @@ mod query_rows;
 mod run_control_rows;
 #[path = "release1_operation_rows_stream.rs"]
 mod stream_rows;
+#[path = "release1_operation_rows_tool_enablement.rs"]
+mod tool_enablement_rows;
 #[path = "release1_operation_rows_volume.rs"]
 mod volume_rows;
 
@@ -247,6 +249,8 @@ pub(super) enum Edit {
     Enum(&'static [&'static str]),
     /// Replace the value with a string of this pattern or null.
     NullablePattern(&'static str),
+    /// Move the inline value to this definition, and replace it with a reference or null.
+    NullableDefinition(&'static str),
     /// Replace a nullable `anyOf` with its first alternative.
     NotNull,
 }
@@ -256,6 +260,18 @@ pub(super) fn apply_patches(schema: &mut Value, patches: &[Patch]) {
     let schema_id = schema["$id"].clone();
     for Patch(edit, pointers) in patches {
         for pointer in *pointers {
+            if let Edit::NullableDefinition(definition) = edit {
+                let reference = json!({"anyOf": [
+                    {"$ref": format!("#/$defs/{definition}")},
+                    {"type": "null"},
+                ]});
+                let inline = std::mem::replace(
+                    schema.pointer_mut(pointer).expect("an inline schema"),
+                    reference,
+                );
+                schema["$defs"][*definition] = inline;
+                continue;
+            }
             let node = pointer
                 .split('/')
                 .skip(1)
@@ -284,6 +300,7 @@ fn apply_edit(node: &mut Value, edit: &Edit, schema_id: &Value) {
         Edit::NullablePattern(pattern) => {
             *node = json!({"anyOf": [{"type": "string", "pattern": pattern}, {"type": "null"}]});
         }
+        Edit::NullableDefinition(_) => unreachable!("apply_patches moves the definition"),
         Edit::NotNull => {
             let Value::Object(first) = node["anyOf"][0].take() else {
                 panic!("the first alternative of a nullable schema is an object");
@@ -315,6 +332,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_settings_rows::UPDATE_PROJECT_ROW,
     &project_settings_rows::GET_PROJECT_ASSISTANCE_ROW,
     &project_settings_rows::UPDATE_PROJECT_ASSISTANCE_ROW,
+    &tool_enablement_rows::SET_PROJECT_TOOL_ENABLEMENT_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,

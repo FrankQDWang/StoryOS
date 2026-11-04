@@ -11,6 +11,10 @@ pub enum GrantScope {
     /// The first scope, the active compaction of the current Conversation, and the Host-managed
     /// summary of the same Conversation.
     ProjectWritingAssistanceV2,
+    /// The research destination of Project Tool Enablement (ADR 0083): the Purpose `research`,
+    /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
+    /// Context. It covers no model request.
+    ResearchToolV1,
 }
 
 impl GrantScope {
@@ -21,6 +25,7 @@ impl GrantScope {
         match self {
             Self::ProjectWritingAssistanceV1 => "project_writing_assistance_v1",
             Self::ProjectWritingAssistanceV2 => "project_writing_assistance_v2",
+            Self::ResearchToolV1 => "research_tool_v1",
         }
     }
 
@@ -28,6 +33,7 @@ impl GrantScope {
         match value {
             "project_writing_assistance_v1" => Some(Self::ProjectWritingAssistanceV1),
             "project_writing_assistance_v2" => Some(Self::ProjectWritingAssistanceV2),
+            "research_tool_v1" => Some(Self::ResearchToolV1),
             _ => None,
         }
     }
@@ -39,7 +45,11 @@ impl GrantScope {
                 ContextPurpose::CurrentPassageAssistance,
             )
             | (Self::ProjectWritingAssistanceV2, ContextPurpose::ActiveContextCompaction) => true,
-            (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction) => false,
+            (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction)
+            | (
+                Self::ResearchToolV1,
+                ContextPurpose::CurrentPassageAssistance | ContextPurpose::ActiveContextCompaction,
+            ) => false,
         }
     }
 
@@ -56,7 +66,15 @@ impl GrantScope {
                 Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
                 ContextSourceClass::HostControl,
             )
-            | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary) => false,
+            | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary)
+            | (
+                Self::ResearchToolV1,
+                ContextSourceClass::AuthorInstruction
+                | ContextSourceClass::WorkingTarget
+                | ContextSourceClass::InstructionBinding
+                | ContextSourceClass::ConversationSummary
+                | ContextSourceClass::HostControl,
+            ) => false,
         }
     }
 }

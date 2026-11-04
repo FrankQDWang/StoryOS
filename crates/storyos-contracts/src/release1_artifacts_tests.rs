@@ -526,6 +526,7 @@ fn every_registered_operation_matches_its_generated_wire() {
     assert_outcome_documents(&generated);
     assert_activity_frame_documents(&generated);
     assert_takeover_documents(&generated);
+    assert_research_tool_documents(&generated);
 }
 
 type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
@@ -665,6 +666,38 @@ fn assert_activity_frame_documents(generated: &GeneratedFiles) {
     ] {
         assert!(!frame.is_valid(&invalid), "{invalid}");
     }
+}
+
+fn assert_research_tool_documents(generated: &GeneratedFiles) {
+    let assistance = generated_validator(generated, "project-assistance-response.schema.json");
+    let bound = golden_wire(generated, "getProjectAssistance");
+    let unbound = with_value(&bound, "/assistance", serde_json::Value::Null);
+    assert!(assistance.is_valid(&bound));
+    assert!(assistance.is_valid(&unbound));
+    assert_each_present_field_is_required(&assistance, &unbound, "");
+    assert_each_present_field_is_required(&assistance, &bound, "/assistance");
+    for invalid in [
+        with_value(&bound, "/assistance/revision", serde_json::json!("01")),
+        with_value(
+            &bound,
+            "/assistance/processing_destination_identity",
+            serde_json::json!("not-a-uuid"),
+        ),
+        with_value(&unbound, "/research_tool", serde_json::json!("exa")),
+    ] {
+        assert!(!assistance.is_valid(&invalid), "{invalid}");
+    }
+    let enablement = generated_validator(
+        generated,
+        "set-project-tool-enablement-response.schema.json",
+    );
+    let applied = golden_wire(generated, "setProjectToolEnablement");
+    assert!(enablement.is_valid(&applied));
+    assert!(!enablement.is_valid(&with_value(
+        &applied,
+        "/effect/revision",
+        serde_json::json!("01")
+    )));
 }
 
 fn assert_takeover_documents(generated: &GeneratedFiles) {

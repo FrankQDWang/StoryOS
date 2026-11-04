@@ -74,6 +74,16 @@
       ],
       "type": "string"
     },
+    "ProjectResearchTool": {
+      "description": "The research tool state of the Project. It names no server and no key.",
+      "enum": [
+        "not_offered",
+        "disabled",
+        "enabled",
+        "quarantined"
+      ],
+      "type": "string"
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -98,7 +108,14 @@
   "additionalProperties": false,
   "properties": {
     "assistance": {
-      "$ref": "#/$defs/ProjectAssistanceBinding"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectAssistanceBinding"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "correlation_id": {
       "format": "uuid",
@@ -106,6 +123,9 @@
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
+    },
+    "research_tool": {
+      "$ref": "#/$defs/ProjectResearchTool"
     },
     "schema_id": {
       "const": "storyos.query.project-assistance.response.v1",
@@ -116,7 +136,8 @@
     "schema_id",
     "correlation_id",
     "project_scope",
-    "assistance"
+    "assistance",
+    "research_tool"
   ],
   "title": "StoryOS Project Assistance Response",
   "type": "object"
