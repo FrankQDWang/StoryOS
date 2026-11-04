@@ -46,6 +46,8 @@ pub struct RegisteredTool {
 /// Credential Reference, grant, or use state.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ToolRegistration {
+    /// The public name of the Registration. Each revision of the Registration keeps it.
+    pub id: &'static str,
     pub revision: &'static str,
     pub kind: ToolRegistrationKind,
     pub server_url: &'static str,

@@ -40,6 +40,9 @@ export const IMPLEMENTED_PROJECT_ACTIVITY_EVENTS = Object.freeze({
   "project_export_settled": [
     "storyos.event.project-export-settled.v1"
   ],
+  "project_tool_enablement_set": [
+    "storyos.event.project-tool-enablement-set.v1"
+  ],
   "project_updated": [
     "storyos.event.project-updated.v1"
   ],

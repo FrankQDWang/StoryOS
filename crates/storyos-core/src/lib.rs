@@ -23,6 +23,7 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod project_tool_enablement;
 mod rebuild_expired_reference;
 mod research_destination;
 mod retrieve_original_result;
@@ -193,6 +194,12 @@ pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
 };
+pub use project_tool_enablement::{
+    CurrentEnablement, EnablementBinding, PinnedEnablement, ProjectToolState,
+    SetProjectToolEnablement, SetProjectToolEnablementApplied, SetProjectToolEnablementNoEffect,
+    SetProjectToolEnablementRefusal, SetProjectToolEnablementResult, ToolEnablement,
+    set_project_tool_enablement,
+};
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
     CompleteReadyPartialProposalResult, ContinueProposalGeneration,
@@ -228,7 +235,8 @@ pub use replan_proposal::{
     replan_proposal,
 };
 pub use research_destination::{
-    EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION, tool_registration,
+    EXA_ACCOUNT_BOUNDARY, EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION,
+    RESEARCH_TOOL_OFFER, ResearchToolOffer, tool_registration,
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,

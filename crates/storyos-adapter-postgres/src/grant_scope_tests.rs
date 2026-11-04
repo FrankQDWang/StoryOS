@@ -259,8 +259,10 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
             WHERE grant_id = '{grant_id}'
          ), identity AS (
            INSERT INTO storyos.processing_destination_identities
-             (owner_user_id, project_id, processing_destination_identity, destination_kind)
-           SELECT owner_user_id, project_id, gen_random_uuid(), 'host_fake' FROM grant_row
+             (owner_user_id, project_id, processing_destination_identity, destination_kind,
+              control_classification)
+           SELECT owner_user_id, project_id, gen_random_uuid(), 'host_fake', 'host_internal'
+             FROM grant_row
            RETURNING processing_destination_identity
          )
          UPDATE storyos.project_destination_grants

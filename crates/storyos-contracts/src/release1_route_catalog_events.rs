@@ -30,6 +30,7 @@ fn event_owner(kind: ProjectActivityKind) -> Owner {
         ProjectActivityKind::ProjectCreated
         | ProjectActivityKind::ProjectUpdated
         | ProjectActivityKind::ProjectAssistanceUpdated
+        | ProjectActivityKind::ProjectToolEnablementSet
         | ProjectActivityKind::VolumeCreated
         | ProjectActivityKind::VolumeUpdated
         | ProjectActivityKind::VolumeDeleted

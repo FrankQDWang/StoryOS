@@ -23,6 +23,7 @@ const CAPABILITIES: &[Capability] = &[
             "updateProject",
             "getProjectAssistance",
             "updateProjectAssistance",
+            "setProjectToolEnablement",
         ],
         operation_actions: &[],
     },

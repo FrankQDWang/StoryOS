@@ -2,8 +2,8 @@ use storyos_application::{
     ProjectAssistanceRecord, UpdateProjectAssistanceInput, open_project_assistance,
 };
 use storyos_core::{
-    AssistanceAvailability, DestinationKind, RuntimeQualification, TransitionOutcome,
-    UpdateProjectAssistanceApplied,
+    AssistanceAvailability, DestinationKind, ProjectToolState, RuntimeQualification,
+    TransitionOutcome, UpdateProjectAssistanceApplied,
 };
 
 use super::command_admission::{
@@ -11,6 +11,7 @@ use super::command_admission::{
     SettledReceipt, TargetValidation, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
+use super::set_project_tool_enablement::research_tool_offer;
 use super::*;
 
 pub(super) async fn get_project_assistance(
@@ -39,6 +40,16 @@ pub(super) async fn get_project_assistance(
             None => resource_unavailable(),
         });
     };
+    let research_tool = match reader
+        .project_tool_state(&scope, research_tool_offer(&state))
+        .await
+        .map_err(service_unavailable)?
+    {
+        ProjectToolState::NotOffered => contracts::ProjectResearchTool::NotOffered,
+        ProjectToolState::Disabled => contracts::ProjectResearchTool::Disabled,
+        ProjectToolState::Enabled => contracts::ProjectResearchTool::Enabled,
+        ProjectToolState::Quarantined => contracts::ProjectResearchTool::Quarantined,
+    };
     let mut assistance = contract_assistance(&assistance);
     if state.config.model_destination.is_none() {
         // A deployment without a destination refuses each new Run, so the query reports the
@@ -50,6 +61,7 @@ pub(super) async fn get_project_assistance(
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
         assistance,
+        research_tool,
     }))
 }
 

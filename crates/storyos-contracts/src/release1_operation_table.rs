@@ -33,6 +33,8 @@ mod query_rows;
 mod run_control_rows;
 #[path = "release1_operation_rows_stream.rs"]
 mod stream_rows;
+#[path = "release1_operation_rows_tool_enablement.rs"]
+mod tool_enablement_rows;
 #[path = "release1_operation_rows_volume.rs"]
 mod volume_rows;
 
@@ -315,6 +317,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_settings_rows::UPDATE_PROJECT_ROW,
     &project_settings_rows::GET_PROJECT_ASSISTANCE_ROW,
     &project_settings_rows::UPDATE_PROJECT_ASSISTANCE_ROW,
+    &tool_enablement_rows::SET_PROJECT_TOOL_ENABLEMENT_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,
