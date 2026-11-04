@@ -3,8 +3,6 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::PROTOCOL_REVISION;
-
 /// The bound of the total text of one Call result.
 pub(crate) const MAX_TEXT_BYTES: usize = storyos_core::TOOL_RESULT_TEXT_MAX_BYTES;
 
@@ -88,17 +86,21 @@ pub struct CallResult {
     pub structured_content: Option<Value>,
 }
 
-/// The server name and version of an `initialize` result at the pinned revision.
-pub(crate) fn server_identity(result: &Value) -> Result<(String, String), &'static str> {
-    if result.get("protocolVersion").and_then(Value::as_str) != Some(PROTOCOL_REVISION) {
-        return Err("protocol_revision");
-    }
+/// The server name, the server version, and the protocol revision of an `initialize` result.
+pub(crate) fn server_identity(result: &Value) -> Result<(String, String, String), &'static str> {
     if result.pointer("/capabilities/tools").is_none() {
         return Err("tools_capability");
     }
     let text = |pointer| result.pointer(pointer).and_then(Value::as_str);
-    match (text("/serverInfo/name"), text("/serverInfo/version")) {
-        (Some(name), Some(version)) => Ok((name.to_owned(), version.to_owned())),
+    match (
+        text("/serverInfo/name"),
+        text("/serverInfo/version"),
+        text("/protocolVersion"),
+    ) {
+        (Some(name), Some(version), Some(revision)) => {
+            Ok((name.to_owned(), version.to_owned(), revision.to_owned()))
+        }
+        (_, _, None) => Err("protocol_revision"),
         _ => Err("server_info"),
     }
 }

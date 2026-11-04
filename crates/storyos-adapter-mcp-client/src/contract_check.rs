@@ -11,7 +11,8 @@ type Difference = fn(String, String) -> ContractDifference;
 
 impl ToolDiscoveryRecord {
     /// Compares this record with a pinned revision. A tool that the Registration does not list
-    /// stays uncallable and is not a difference.
+    /// stays uncallable and is not a difference. A record of another protocol revision has no
+    /// tool list, so only its identity differences are named.
     pub fn check(&self, registration: &ToolRegistration) -> ContractCheck {
         let mut differences = Vec::new();
         let identities: [(&str, &str, Difference); 3] = [
@@ -37,7 +38,12 @@ impl ToolDiscoveryRecord {
             }
         }
         let mut provenance_changed = registration.server_version != self.server_version;
-        for pinned in registration.tools {
+        let compared = if registration.protocol_revision == self.protocol_revision {
+            registration.tools
+        } else {
+            &[]
+        };
+        for pinned in compared {
             let tool = pinned.name.to_owned();
             let Some(observed) = self.tools.iter().find(|known| known.name == pinned.name) else {
                 differences.push(ContractDifference::ToolRemoved { tool });

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use storyos_application::{
     CredentialReference, CredentialResolver, PreDispatchRefusal, ResolvedCredential,
 };
+use storyos_core::{ContractCheck, ContractDifference, EXA_TOOL_REGISTRATION, ToolRegistration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -522,5 +523,54 @@ async fn diagnostics_carry_no_key_content_or_session_identifier() {
             lines.contains(r#""refused_method":"ping""#),
         ),
         (called(), [false; 3], true, true, true)
+    );
+}
+
+fn newer_revision(message: &Value) -> Reply {
+    match message["method"].as_str().unwrap() {
+        "initialize" => Reply::Result(json!({
+            "protocolVersion": "2026-06-18",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "exa-search-server", "version": "3.5.0"},
+        })),
+        method => panic!("unexpected method {method}"),
+    }
+}
+
+#[tokio::test]
+async fn another_protocol_revision_gives_a_record_whose_drift_check_names_it() {
+    let (url, received) = serve(Body::Json, None, newer_revision).await;
+    let observations = (exchange(discover(&url)).await, exchange(call(&url)).await);
+    let messages = std::mem::take(&mut *received.lock().unwrap());
+    let record = ToolDiscoveryRecord {
+        server_url: url.clone(),
+        server_name: "exa-search-server".to_owned(),
+        server_version: "3.5.0".to_owned(),
+        protocol_revision: "2026-06-18".to_owned(),
+        tools: Vec::new(),
+    };
+    let registration = ToolRegistration {
+        server_url: Box::leak(url.into_boxed_str()),
+        ..EXA_TOOL_REGISTRATION
+    };
+
+    assert_eq!(
+        (observations, messages),
+        (
+            (
+                McpObservation::Discovered(record.clone()),
+                McpObservation::InvalidResult {
+                    reason: "protocol_revision"
+                }
+            ),
+            sent(&["initialize", "initialize"], None)
+        )
+    );
+    assert_eq!(
+        record.check(&registration),
+        ContractCheck::Drift(vec![ContractDifference::ProtocolRevision {
+            pinned: PROTOCOL_REVISION.to_owned(),
+            observed: "2026-06-18".to_owned(),
+        }])
     );
 }

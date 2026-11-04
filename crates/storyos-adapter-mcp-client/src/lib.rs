@@ -29,7 +29,8 @@ use storyos_application::{
 
 pub use record::{CallResult, DiscoveredTool, ToolDiscoveryRecord};
 
-/// The one MCP protocol revision that the client sends and accepts.
+/// The one MCP protocol revision that the client speaks. A Discover of a server that answers
+/// another revision records that revision with no tool list.
 pub const PROTOCOL_REVISION: &str = "2025-11-25";
 
 /// The bound of the one-off `Discover` exchange of a research record.
