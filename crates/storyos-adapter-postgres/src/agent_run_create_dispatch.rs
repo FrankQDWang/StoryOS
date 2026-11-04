@@ -4,7 +4,10 @@ use storyos_application::{
     CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
     DispatchClaim, ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
-use storyos_core::{AgentDecisionOutcome, requests_function, validate_agent_decision};
+use storyos_core::{
+    AgentDecisionOutcome, ResponseDisposition, ResponseFacts, response_disposition,
+    validate_agent_decision,
+};
 
 use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase};
@@ -77,15 +80,16 @@ pub(crate) async fn record_create(
     } else {
         validate_agent_decision(response.output.as_ref(), &declared)
     };
-    // No ToolCall exists yet: a function call of an ordinary request stays as evidence, and
-    // the Run settles with one refusal sentence (ADR 0084).
-    let settlement = if !probe
-        && outcome == AgentDecisionOutcome::NoDecision
-        && requests_function(&response.items)
-    {
-        CreateSettlement::FunctionRequested
-    } else {
-        CreateSettlement::Response
+    // Core decides the disposition of the response (ADR 0084).
+    let settlement = match response_disposition(&ResponseFacts {
+        probe,
+        outcome: &outcome,
+        items: &response.items,
+    }) {
+        ResponseDisposition::FunctionRequested => CreateSettlement::FunctionRequested,
+        ResponseDisposition::Decision | ResponseDisposition::NoDecision => {
+            CreateSettlement::Response
+        }
     };
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,

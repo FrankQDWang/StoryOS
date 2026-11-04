@@ -201,7 +201,7 @@ pub(crate) async fn persist_create_result(
 pub(crate) fn research_refusal() -> serde_json::Value {
     serde_json::json!({
         "kind": "execution_refused",
-        "capability": "research_tool_unavailable"
+        "capability": storyos_core::RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
     })
 }
 

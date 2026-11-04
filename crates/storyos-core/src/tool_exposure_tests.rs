@@ -1,13 +1,14 @@
 use serde_json::json;
 
 use super::{
-    EnabledTool, ExposedTool, ExposureFacts, ToolCompatibilityDecision, ToolExposure,
-    requests_function,
+    EnabledTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
+    ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 use crate::{
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION,
-    EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
+    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION, NativeStreamItem,
+    StreamItemRole, StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC,
+    WEB_SEARCH_TOOL_SPEC,
 };
 
 fn enabled(
@@ -258,4 +259,49 @@ fn only_a_complete_function_call_item_requests_a_function() {
         assert!(!requests_function(&[item]));
     }
     assert!(!requests_function(&[]));
+}
+
+#[test]
+fn only_an_ordinary_response_without_a_decision_and_with_a_complete_call_requests_a_function() {
+    let call = [item(
+        StreamItemRole::Tool,
+        StreamItemState::Complete,
+        Some("function_call"),
+    )];
+    let reply = [item(
+        StreamItemRole::Assistant,
+        StreamItemState::Complete,
+        None,
+    )];
+    let decision = AgentDecisionOutcome::Decision {
+        kind: AgentDecisionKind::Advisory {
+            text: "Keep it.".to_owned(),
+        },
+        selected: true,
+        advances_continuation: true,
+    };
+    let disposition = |probe: bool, outcome: &AgentDecisionOutcome, items: &[NativeStreamItem]| {
+        response_disposition(&ResponseFacts {
+            probe,
+            outcome,
+            items,
+        })
+    };
+
+    assert_eq!(
+        [
+            disposition(false, &AgentDecisionOutcome::NoDecision, &call),
+            disposition(true, &AgentDecisionOutcome::NoDecision, &call),
+            disposition(false, &AgentDecisionOutcome::NoDecision, &reply),
+            disposition(false, &decision, &call),
+            disposition(false, &decision, &reply),
+        ],
+        [
+            ResponseDisposition::FunctionRequested,
+            ResponseDisposition::NoDecision,
+            ResponseDisposition::NoDecision,
+            ResponseDisposition::Decision,
+            ResponseDisposition::Decision,
+        ]
+    );
 }

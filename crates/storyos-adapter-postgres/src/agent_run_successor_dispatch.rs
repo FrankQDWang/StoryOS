@@ -6,8 +6,8 @@ use storyos_application::{
     WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, SuccessorPauseReason, requests_function,
-    validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, ResponseDisposition, ResponseFacts,
+    SuccessorPauseReason, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -300,7 +300,11 @@ pub(crate) async fn record(
                 // A successor that asks for a function keeps its items as evidence, and the Run
                 // settles with the research refusal once the late check is done (ADR 0084).
                 AgentDecisionOutcome::NoDecision
-                    if !probe && requests_function(&response.items) =>
+                    if response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
                 {
                     ("settled", None, None, true)
                 }

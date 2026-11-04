@@ -261,7 +261,8 @@ pub use take_over_project_writer::{
 };
 pub use tool_exposure::{
     EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
-    ToolCompatibilityDecision, ToolExposure, requests_function,
+    RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
+    ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,

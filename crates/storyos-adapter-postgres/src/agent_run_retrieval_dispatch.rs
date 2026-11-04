@@ -6,7 +6,8 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentDecisionOutcome, OriginalResultKeepReason, OriginalResultRetrievalDecision,
-    RetrievedOriginalResult, StreamItemState, requests_function, validate_agent_decision,
+    ResponseDisposition, ResponseFacts, RetrievedOriginalResult, StreamItemState,
+    response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -379,7 +380,12 @@ impl RetrievedResult {
                 usage,
             },
             AgentDecisionOutcome::NoDecision
-                if complete && !probe && requests_function(&response.items) =>
+                if complete
+                    && response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
             {
                 Self {
                     kind: RetrievedOriginalResult::CompleteSelected,

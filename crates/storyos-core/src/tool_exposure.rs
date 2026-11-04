@@ -8,8 +8,9 @@
 use serde_json::{Value, json};
 
 use crate::{
-    CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole, StreamItemState,
-    ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration, tool_registration,
+    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
+    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
+    tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -256,6 +257,45 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
             && item.state == StreamItemState::Complete
             && item.native_type.as_deref() == Some(FUNCTION_CALL_NATIVE_TYPE)
     })
+}
+
+/// The refusal capability of a Run whose response asks for a function while no ToolCall
+/// exists (ADR 0084). The author sees one result sentence.
+pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
+
+/// What the Host does with one terminal response after core validation (ADR 0084).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseDisposition {
+    /// Core validation made an Agent Decision. The response settles as that decision.
+    Decision,
+    /// The response of an ordinary request made no Agent Decision and asks for a function. No
+    /// ToolCall exists yet: the items and the usage stay as evidence, and the Run refuses with
+    /// `research_tool_unavailable`. A probe never gets this disposition.
+    FunctionRequested,
+    /// No Agent Decision and no function request: a probe response, or a reply that validation
+    /// did not accept.
+    NoDecision,
+}
+
+/// The facts of one terminal response that decide its disposition.
+#[derive(Clone, Copy, Debug)]
+pub struct ResponseFacts<'a> {
+    /// The request was a Tool qualification probe (ADR 0049).
+    pub probe: bool,
+    pub outcome: &'a AgentDecisionOutcome,
+    pub items: &'a [NativeStreamItem],
+}
+
+/// Decides the disposition of one terminal response. Each Create path uses it: the direct
+/// Create, the original-result retrieval, and the successor of an unknown Create.
+pub fn response_disposition(facts: &ResponseFacts<'_>) -> ResponseDisposition {
+    match facts.outcome {
+        AgentDecisionOutcome::Decision { .. } => ResponseDisposition::Decision,
+        AgentDecisionOutcome::NoDecision if !facts.probe && requests_function(facts.items) => {
+            ResponseDisposition::FunctionRequested
+        }
+        AgentDecisionOutcome::NoDecision => ResponseDisposition::NoDecision,
+    }
 }
 
 #[cfg(test)]
