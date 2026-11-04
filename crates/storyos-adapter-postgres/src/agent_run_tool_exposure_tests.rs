@@ -9,7 +9,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination};
+use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run, recovery};
 use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 
 const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
@@ -39,13 +39,27 @@ fn advisory_stream(reference: &str) -> String {
     ])
 }
 
+/// One function call item with `arguments` and `status`.
+fn call(arguments: &str, status: &str) -> serde_json::Value {
+    json!({"id": "fc_01", "type": "function_call", "status": status, "call_id": "call_01",
+           "name": "web_search", "arguments": arguments})
+}
+
+/// The stored complete response that a Retrieve reads: one complete function call.
+fn stored_function_call(reference: &str) -> String {
+    let body =
+        json!({"id": reference, "status": "completed", "output": [call(ARGUMENTS, "completed")],
+        "usage": {"input_tokens": 90, "output_tokens": 30}})
+        .to_string();
+    format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
 /// A stream that reports `reference`, streams the arguments of one function call, and ends
 /// with the complete call.
-fn function_call_stream(reference: &str) -> String {
-    let call = |arguments: &str, status: &str| {
-        json!({"id": "fc_01", "type": "function_call", "status": status, "call_id": "call_01",
-               "name": "web_search", "arguments": arguments})
-    };
+pub(crate) fn function_call_stream(reference: &str) -> String {
     sse(&[
         json!({"type": "response.created",
                "response": {"id": reference, "status": "in_progress", "output": []}}),
@@ -231,6 +245,96 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+            ],
+        )
+    );
+}
+
+/// The result label and items of the retrieval Attempt of the Run.
+async fn retrieval_facts(admin: &Client, run_id: &str) -> (Option<String>, Option<String>) {
+    let row = admin
+        .query_one(
+            "SELECT payload->>'result', payload->'items'->0->>'name'
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'retrieval'",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    (row.get(0), row.get(1))
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![
+        broken_stream("resp_f73"),
+        stored_function_call("resp_f73"),
+    ])
+    .await;
+    let (scope, run_id) = real_run(&store, &admin, "f73", &base).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            recovery(&admin, &run_id).await,
+            retrieval_facts(&admin, &run_id).await,
+            attempt_facts(&admin, &run_id).await[6].clone(),
+            served.await.unwrap(),
+        ),
+        (
+            [
+                Some("refused".to_owned()),
+                Some(
+                    r#"{"kind": "execution_refused", "capability": "research_tool_unavailable"}"#
+                        .to_owned()
+                ),
+                None,
+                Some("settled".to_owned()),
+                None,
+                Some("true".to_owned()),
+                Some("decision:true,retrieval:true".to_owned()),
+            ],
+            (
+                Some("complete_function_request".to_owned()),
+                Some("web_search".to_owned()),
+            ),
+            // The provisional item of the lost stream stays before the retrieved call.
+            Some(json!([{
+                "item_id": "msg_01",
+                "role": "assistant",
+                "state": "provisional",
+                "phase": "provisional",
+                "text": "{\"kind\"",
+                "summary": null,
+                "call_id": null,
+                "arguments": null,
+                "refusal": null,
+                "native_type": null,
+                "name": null
+            }, {
+                "item_id": "fc_01",
+                "role": "tool",
+                "state": "complete",
+                "phase": "complete",
+                "text": null,
+                "summary": null,
+                "call_id": "call_01",
+                "arguments": ARGUMENTS,
+                "refusal": null,
+                "native_type": "function_call",
+                "name": "web_search"
+            }])),
+            vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_f73 HTTP/1.1".to_owned(),
             ],
         )
     );

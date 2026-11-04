@@ -89,3 +89,14 @@ fn identity_mismatch_or_covered_copy_uses_new_transport() {
         );
     }
 }
+
+#[test]
+fn a_changed_exposure_changes_the_transport_and_not_the_processing_boundary() {
+    let current = matching_prior();
+    let prior = ContinuationIdentity {
+        tool_exposure_digest: "sha256:changed-exposure".to_owned(),
+        ..current.clone()
+    };
+
+    assert!(super::continuation_boundary_matches(&current, &prior));
+}

@@ -23,7 +23,8 @@ pub struct ContinuationIdentity {
     pub compatibility: String,
     pub covered_copy_restricted: bool,
     /// The digest of the Tool Exposure of the Attempt. A changed Exposure starts a new
-    /// transport continuation with the full input (ADR 0033).
+    /// transport continuation with the full input (ADR 0033). It is not part of the processing
+    /// boundary of `continuation_boundary_matches`.
     pub tool_exposure_digest: String,
 }
 
@@ -44,7 +45,12 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     let Some(prior) = input.prior.as_ref() else {
         return ContinuationInputMapping::None;
     };
-    if prior.covered_copy_restricted || !continuation_boundary_matches(&input.current, prior) {
+    // A changed Tool Exposure keeps the processing boundary and changes only the transport: the
+    // request sends the full input with no prior reference (ADR 0033, ADR 0084).
+    if prior.covered_copy_restricted
+        || !continuation_boundary_matches(&input.current, prior)
+        || input.current.tool_exposure_digest != prior.tool_exposure_digest
+    {
         return ContinuationInputMapping::NewTransport;
     }
     if input.mapping_can_represent {
@@ -54,8 +60,9 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     }
 }
 
-/// Same Scope, conversation, destination, registration, mapping, use boundary, and Tool
-/// Exposure.
+/// Same Scope, conversation, destination, registration, mapping, and use boundary: the
+/// processing boundary. The Tool Exposure is not part of it, so a changed Exposure permits the
+/// full input under the current admission.
 pub fn continuation_boundary_matches(
     current: &ContinuationIdentity,
     prior: &ContinuationIdentity,
@@ -69,7 +76,6 @@ pub fn continuation_boundary_matches(
         && current.adapter_mapping == prior.adapter_mapping
         && current.use_binding == prior.use_binding
         && current.compatibility == prior.compatibility
-        && current.tool_exposure_digest == prior.tool_exposure_digest
 }
 
 #[cfg(test)]

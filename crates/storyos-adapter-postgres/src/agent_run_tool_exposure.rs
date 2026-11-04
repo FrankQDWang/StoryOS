@@ -77,4 +77,4 @@ pub(crate) async fn tool_exposure(
 
 #[cfg(test)]
 #[path = "agent_run_tool_exposure_tests.rs"]
-mod tests;
+pub(crate) mod tests;

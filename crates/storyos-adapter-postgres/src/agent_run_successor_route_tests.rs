@@ -17,6 +17,7 @@ use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_retrieval::tests::{
     AfterExchange, adapter, broken_stream, destination, real_run, stored,
 };
+use crate::agent_run_tool_exposure::tests::function_call_stream;
 
 /// A stream that reports `reference` and ends with a complete Advisory.
 fn completed_stream(reference: &str) -> String {
@@ -138,6 +139,66 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
                 "GET /api/plan/v3/responses/resp_c46 HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_c46 HTTP/1.1".to_owned(),
+            ],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_successor_function_request_settles_the_run_with_the_research_refusal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![
+        broken_stream("resp_f74"),
+        stored("resp_f74", "in_progress"),
+        function_call_stream("resp_f74s"),
+        stored("resp_f74", "in_progress"),
+    ])
+    .await;
+    let (scope, run_id) = real_run(&store, &admin, "f74", &base).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let successor_items: Option<String> = admin
+        .query_one(
+            "SELECT payload->'items'->0->>'name' FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'successor'",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+
+    assert_eq!(
+        (
+            successor_facts(&admin, &run_id).await,
+            successor_items,
+            served.await.unwrap(),
+        ),
+        (
+            [
+                Some("refused".to_owned()),
+                Some(
+                    r#"{"kind": "execution_refused", "capability": "research_tool_unavailable"}"#
+                        .to_owned()
+                ),
+                Some("dispatched".to_owned()),
+                None,
+                Some("true,true".to_owned()),
+                Some("false,unknown".to_owned()),
+                None,
+                Some("decision,retrieval,successor,late_retrieval".to_owned()),
+            ],
+            Some("web_search".to_owned()),
+            vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
             ],
         )
     );

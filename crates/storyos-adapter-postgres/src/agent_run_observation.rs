@@ -125,10 +125,7 @@ pub(crate) async fn persist_create_result(
     match result.settlement {
         CreateSettlement::Response => {}
         CreateSettlement::FunctionRequested => {
-            refusal = Some(serde_json::json!({
-                "kind": "execution_refused",
-                "capability": "research_tool_unavailable"
-            }));
+            refusal = Some(research_refusal());
         }
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
@@ -196,6 +193,15 @@ pub(crate) async fn persist_create_result(
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
+    })
+}
+
+/// The settlement of a Run whose response asks for a function while no ToolCall exists
+/// (ADR 0084). The author sees one result sentence.
+pub(crate) fn research_refusal() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "execution_refused",
+        "capability": "research_tool_unavailable"
     })
 }
 
