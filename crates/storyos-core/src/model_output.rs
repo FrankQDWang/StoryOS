@@ -71,6 +71,11 @@ pub enum AgentDecisionKind {
     Clarification {
         question: String,
     },
+    /// The complete validated function request batch. Any text of the response is provisional
+    /// assistant output, and the ToolCalls are the next work (ADR 0084).
+    ToolRequest {
+        calls: Vec<crate::ValidatedToolCall>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -83,19 +88,34 @@ pub enum AgentDecisionOutcome {
     },
 }
 
-/// Select an Agent Decision only from a valid final answer; only a selected non-question advances.
+/// Select an Agent Decision only from a valid final answer and a valid batch; only a selected
+/// non-question without a ToolCall advances. An invalid batch makes no Decision. A valid batch
+/// with members is the Decision, and the ordinary continuation waits for its ToolCalls.
 pub fn validate_agent_decision(
     output: Option<&ModelOutput>,
     declared_targets: &[crate::DeclaredLocation],
+    batch: crate::ToolCallBatch,
 ) -> AgentDecisionOutcome {
-    let Some(output) = output else {
-        return AgentDecisionOutcome::NoDecision;
+    let calls = match batch {
+        crate::ToolCallBatch::Invalid(_) => return AgentDecisionOutcome::NoDecision,
+        crate::ToolCallBatch::Valid(calls) => calls,
     };
-    if let Some(changes) = &output.prose_changes
+    if let Some(output) = output
+        && let Some(changes) = &output.prose_changes
         && !crate::prose_changes_match_targets(declared_targets, changes)
     {
         return AgentDecisionOutcome::NoDecision;
     }
+    if !calls.is_empty() {
+        return AgentDecisionOutcome::Decision {
+            kind: AgentDecisionKind::ToolRequest { calls },
+            selected: true,
+            advances_continuation: false,
+        };
+    }
+    let Some(output) = output else {
+        return AgentDecisionOutcome::NoDecision;
+    };
     let kind = match &output.candidate {
         DecisionCandidate::Advisory { text } => AgentDecisionKind::Advisory { text: text.clone() },
         DecisionCandidate::ProseChange { text } => AgentDecisionKind::ProseChange {

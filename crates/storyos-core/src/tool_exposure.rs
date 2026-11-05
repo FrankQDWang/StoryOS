@@ -268,9 +268,14 @@ pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailabl
 pub enum ResponseDisposition {
     /// Core validation made an Agent Decision. The response settles as that decision.
     Decision,
-    /// The response of an ordinary request made no Agent Decision and asks for a function. No
-    /// ToolCall exists yet: the items and the usage stay as evidence, and the Run refuses with
-    /// `research_tool_unavailable`. A probe never gets this disposition.
+    /// Core validation made an Agent Decision of a validated function request batch. The store
+    /// derives one ToolCall for each member with the durable Decision, in state `pending`. Until
+    /// execution exists, the Run refuses with `research_tool_unavailable` and keeps the Decision
+    /// and the ToolCalls as evidence.
+    ToolCallsPending,
+    /// The response of an ordinary request made no Agent Decision and asks for a function: the
+    /// batch did not validate. No ToolCall exists: the items and the usage stay as evidence, and
+    /// the Run refuses with `research_tool_unavailable`. A probe never gets this disposition.
     FunctionRequested,
     /// No Agent Decision and no function request: a probe response, or a reply that validation
     /// did not accept.
@@ -290,6 +295,10 @@ pub struct ResponseFacts<'a> {
 /// Create, the original-result retrieval, and the successor of an unknown Create.
 pub fn response_disposition(facts: &ResponseFacts<'_>) -> ResponseDisposition {
     match facts.outcome {
+        AgentDecisionOutcome::Decision {
+            kind: crate::AgentDecisionKind::ToolRequest { .. },
+            ..
+        } => ResponseDisposition::ToolCallsPending,
         AgentDecisionOutcome::Decision { .. } => ResponseDisposition::Decision,
         AgentDecisionOutcome::NoDecision if !facts.probe && requests_function(facts.items) => {
             ResponseDisposition::FunctionRequested

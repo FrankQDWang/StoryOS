@@ -31,23 +31,27 @@ pub(crate) struct SuccessorSelection {
 }
 
 /// The Host gates of the successor of one unknown create. The fake profile scripts them by the
-/// author message. A real route derives them from the pinned use binding and the committed items.
+/// author message. A real route derives them from the pinned use binding, the committed items,
+/// and the pending ToolCalls of the Run.
 pub(crate) fn conditions(
     run: &RunPhaseRow,
     payload: &serde_json::Value,
+    pending_tool_call: bool,
 ) -> Option<SuccessorConditions> {
     match storyos_core::model_registration(&run.model_registration_revision)
         .map(|registration| registration.adapter)
     {
         Some(ModelAdapter::VolcengineAgentPlanResponses) => {
-            // The request declares no Tool, so only a committed Tool item is an effect. The adapter
-            // maps each native item that is not a message or a reasoning item to a Tool item.
-            let effect = payload
-                .get("items")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-                .any(|item| matches!(text(item, "role"), Some("tool")));
+            // A committed Tool item is a Tool effect, and so is a ToolCall that no execution
+            // resolved (ADR 0033). The adapter maps each native item that is not a message or a
+            // reasoning item to a Tool item.
+            let effect = pending_tool_call
+                || payload
+                    .get("items")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .any(|item| matches!(text(item, "role"), Some("tool")));
             Some(route_successor_conditions(
                 BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
                 if effect {

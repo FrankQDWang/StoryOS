@@ -5,9 +5,9 @@ use storyos_application::{
     ModelUsage, Observation, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionOutcome, OriginalResultKeepReason, OriginalResultRetrievalDecision,
-    ResponseDisposition, ResponseFacts, RetrievedOriginalResult, StreamItemState,
-    response_disposition, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, OriginalResultKeepReason,
+    OriginalResultRetrievalDecision, ResponseDisposition, ResponseFacts, RetrievedOriginalResult,
+    StreamItemState, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -142,11 +142,12 @@ pub(crate) async fn record_original_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(
+    let mut retrieved = RetrievedResult::classify(
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&payload),
-    );
+        &payload,
+    )?;
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -208,11 +209,26 @@ pub(crate) async fn record_original_result(
         },
     )
     .await?;
-    let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected) else {
+    let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected.take()) else {
         return Ok(WorkPhase::Hold("recovery"));
     };
+    if let Some(evidence) = retrieved.batch_evidence.take() {
+        sealed["tool_call_batch"] = evidence;
+    }
     let (advances_continuation, settlement) = match (&selected.outcome, selected.function_requested)
     {
+        // The retrieved Decision is a validated function request: the original Attempt supplies
+        // the Decision and its ToolCalls, and the Run refuses until execution exists.
+        (
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::ToolRequest { .. },
+                ..
+            },
+            false,
+        ) => {
+            sealed["original_result_retrieval"]["supplies_tool_call"] = serde_json::json!(true);
+            (false, CreateSettlement::ToolCallsPending)
+        }
         (
             AgentDecisionOutcome::Decision {
                 advances_continuation,
@@ -282,7 +298,8 @@ pub(crate) async fn record_late_result(
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&row.payload),
-    );
+        &row.payload,
+    )?;
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -328,6 +345,8 @@ pub(crate) struct RetrievedResult {
     pub items: serde_json::Value,
     pub selected: Option<SelectedResult>,
     pub usage: ModelUsage,
+    /// The evidence of the batch validation, when the response has a Tool item.
+    pub batch_evidence: Option<serde_json::Value>,
 }
 
 /// A complete original response that settles the original Attempt: core validation selected its
@@ -348,14 +367,16 @@ impl RetrievedResult {
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
         probe: bool,
-    ) -> Self {
+        attempt_payload: &serde_json::Value,
+    ) -> Result<Self, CompleteAgentRunError> {
         let Observation::Terminal(response) = observation else {
-            return Self {
+            return Ok(Self {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
                 selected: None,
                 usage: ModelUsage::Unknown,
-            };
+                batch_evidence: None,
+            });
         };
         let items = encode_items(&response.items);
         let complete = response
@@ -363,12 +384,16 @@ impl RetrievedResult {
             .iter()
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
+        let mut batch_evidence = None;
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
-            validate_agent_decision(response.output.as_ref(), declared)
+            let batch =
+                crate::agent_run_tool_call::validate_batch(attempt_payload, &response.items)?;
+            batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
+            validate_agent_decision(response.output.as_ref(), declared, batch)
         };
-        match outcome {
+        Ok(match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
@@ -378,6 +403,7 @@ impl RetrievedResult {
                     function_requested: false,
                 }),
                 usage,
+                batch_evidence,
             },
             AgentDecisionOutcome::NoDecision
                 if complete
@@ -396,6 +422,7 @@ impl RetrievedResult {
                         function_requested: true,
                     }),
                     usage,
+                    batch_evidence,
                 }
             }
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
@@ -403,8 +430,9 @@ impl RetrievedResult {
                 items,
                 selected: None,
                 usage,
+                batch_evidence,
             },
-        }
+        })
     }
 
     pub(crate) fn label(&self) -> &'static str {

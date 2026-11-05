@@ -1,5 +1,5 @@
 use super::*;
-use crate::{DeclaredLocation, DeclaredTargetKind};
+use crate::{DeclaredLocation, DeclaredTargetKind, ToolCallBatch};
 
 fn declared(block: &str, kind: DeclaredTargetKind) -> DeclaredLocation {
     DeclaredLocation {
@@ -33,9 +33,13 @@ fn a_prose_change_is_selected_only_for_the_declared_targets() {
 
     assert_eq!(
         (
-            validate_agent_decision(Some(&matching), &declared),
-            validate_agent_decision(Some(&prose_change("block-2")), &declared),
-            validate_agent_decision(Some(&matching), &[]),
+            validate_agent_decision(Some(&matching), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&prose_change("block-2")),
+                &declared,
+                ToolCallBatch::none()
+            ),
+            validate_agent_decision(Some(&matching), &[], ToolCallBatch::none()),
         ),
         (
             AgentDecisionOutcome::Decision {
@@ -74,10 +78,18 @@ fn a_prose_change_can_change_a_subset_of_the_declared_targets_once_each() {
 
     assert_eq!(
         [
-            validate_agent_decision(Some(&subset), &declared),
-            validate_agent_decision(Some(&with_changes(&["block-2", "block-2"])), &declared),
-            validate_agent_decision(Some(&with_changes(&[])), &declared),
-            validate_agent_decision(Some(&with_changes(&["block-2", "block-3"])), &declared),
+            validate_agent_decision(Some(&subset), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&with_changes(&["block-2", "block-2"])),
+                &declared,
+                ToolCallBatch::none()
+            ),
+            validate_agent_decision(Some(&with_changes(&[])), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&with_changes(&["block-2", "block-3"])),
+                &declared,
+                ToolCallBatch::none()
+            ),
         ],
         [
             AgentDecisionOutcome::Decision {
@@ -118,7 +130,11 @@ fn a_prose_change_of_a_pending_candidate_is_the_only_change_of_its_result() {
     };
     let selected = |blocks: &[&str]| {
         matches!(
-            validate_agent_decision(Some(&with_changes(blocks)), &declared),
+            validate_agent_decision(
+                Some(&with_changes(blocks)),
+                &declared,
+                ToolCallBatch::none()
+            ),
             AgentDecisionOutcome::Decision { .. }
         )
     };
@@ -167,7 +183,11 @@ fn a_growth_changes_the_candidate_and_one_adjacent_run_of_joinable_blocks() {
     };
     let selected = |blocks: &[&str]| {
         matches!(
-            validate_agent_decision(Some(&with_changes(blocks)), &declared),
+            validate_agent_decision(
+                Some(&with_changes(blocks)),
+                &declared,
+                ToolCallBatch::none()
+            ),
             AgentDecisionOutcome::Decision { .. }
         )
     };
