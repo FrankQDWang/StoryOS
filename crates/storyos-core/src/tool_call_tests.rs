@@ -91,14 +91,16 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 
     assert_eq!(
         (
-            validate_tool_call_batch(&items, &pinned()),
-            validate_tool_call_batch(&[message("Keep it.")], &pinned()),
+            validate_tool_call_batch(StreamItemState::Complete, &items, &pinned()),
+            validate_tool_call_batch(StreamItemState::Complete, &[message("Keep it.")], &pinned()),
+            validate_tool_call_batch(StreamItemState::Incomplete, &[message("Keep")], &pinned()),
             search_call("call_01").arguments(),
             fetch.arguments(),
             search_call("call_01").argument_digest(),
         ),
         (
             ToolCallBatch::Valid(vec![search_call("call_01"), fetch]),
+            ToolCallBatch::none(),
             ToolCallBatch::none(),
             json!({"query": "tide tables of 1890", "result_count": null}),
             json!({"urls": ["https://example.org/tides"]}),
@@ -110,10 +112,13 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 #[test]
 fn one_invalid_member_rejects_the_whole_batch() {
     let valid = call("fc_01", "call_01", "web_search", SEARCH);
-    let refusal = |items: &[NativeStreamItem]| match validate_tool_call_batch(items, &pinned()) {
-        ToolCallBatch::Invalid(refusal) => refusal,
-        ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
-    };
+    let refusal_in =
+        |state, items: &[NativeStreamItem]| match validate_tool_call_batch(state, items, &pinned())
+        {
+            ToolCallBatch::Invalid(refusal) => refusal,
+            ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
+        };
+    let refusal = |items: &[NativeStreamItem]| refusal_in(StreamItemState::Complete, items);
     let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
     let six_urls =
         json!({"urls": (0..6).map(|n| format!("https://example.org/{n}")).collect::<Vec<_>>()});
@@ -129,6 +134,11 @@ fn one_invalid_member_rejects_the_whole_batch() {
     let no_call_id = NativeStreamItem {
         call_id: None,
         ..call("fc_04", "call_04", "web_search", SEARCH)
+    };
+    let long_call_id = "c".repeat(257);
+    let cut_message = NativeStreamItem {
+        state: StreamItemState::Incomplete,
+        ..message("Looking")
     };
 
     assert_eq!(
@@ -148,7 +158,15 @@ fn one_invalid_member_rejects_the_whole_batch() {
             refusal(&[valid.clone(), hosted]),
             refusal(&[provisional]),
             refusal(&[no_call_id]),
-            match validate_tool_call_batch(&[valid], &unexposed) {
+            refusal(&[call("fc_05", "", "web_search", SEARCH)]),
+            refusal(&[call("fc_06", &long_call_id, "web_search", SEARCH)]),
+            refusal_in(StreamItemState::Incomplete, std::slice::from_ref(&valid)),
+            refusal_in(
+                StreamItemState::Cancelled,
+                &[message("Looking"), valid.clone()]
+            ),
+            refusal(&[cut_message, valid.clone()]),
+            match validate_tool_call_batch(StreamItemState::Complete, &[valid], &unexposed) {
                 ToolCallBatch::Invalid(refusal) => refusal,
                 ToolCallBatch::Valid(_) => panic!("exposed"),
             },
@@ -187,6 +205,15 @@ fn one_invalid_member_rejects_the_whole_batch() {
             ToolCallBatchRefusal::Incomplete {
                 item_id: "fc_04".to_owned()
             },
+            ToolCallBatchRefusal::InvalidCallId {
+                item_id: "fc_05".to_owned()
+            },
+            ToolCallBatchRefusal::InvalidCallId {
+                item_id: "fc_06".to_owned()
+            },
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
             ToolCallBatchRefusal::Unexposed {
                 call_id: "call_01".to_owned()
             },

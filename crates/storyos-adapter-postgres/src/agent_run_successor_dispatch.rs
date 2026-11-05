@@ -191,7 +191,9 @@ pub(crate) async fn commit(
 }
 
 /// Records the successor observation. Core validation decides its Agent Decision with the
-/// declared targets of the repeated request, and a selected prose change opens its Proposal.
+/// declared targets of the repeated request, and a selected prose change opens its Proposal. A
+/// repeated observation of a settled successor Attempt changes nothing: its Decision and its
+/// ToolCalls stay.
 pub(crate) async fn record(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -208,7 +210,7 @@ pub(crate) async fn record(
         .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
     let loaded = client
         .query_one(
-            "SELECT payload::text FROM storyos.model_attempts
+            "SELECT payload::text, dispatch_state FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
             &[
@@ -219,6 +221,15 @@ pub(crate) async fn record(
         )
         .await
         .map_err(unavailable)?;
+    if loaded.get::<_, &str>(1) == "settled" {
+        return Ok(WorkPhase::Hold(
+            if late_check_reference(&row.payload, &marker).is_some() {
+                "successor_late"
+            } else {
+                "recovery"
+            },
+        ));
+    }
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
     let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
@@ -241,8 +252,7 @@ pub(crate) async fn record(
             let outcome = if probe {
                 AgentDecisionOutcome::NoDecision
             } else {
-                let batch =
-                    crate::agent_run_tool_call::validate_batch(&row.payload, &response.items)?;
+                let batch = crate::agent_run_tool_call::validate_batch(&row.payload, &response)?;
                 if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
                     payload["tool_call_batch"] = evidence;
                 }

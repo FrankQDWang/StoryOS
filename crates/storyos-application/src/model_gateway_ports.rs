@@ -8,7 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 pub use storyos_core::RequestBounds;
 use storyos_core::{
     ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    RetrievalBounds, ToolExposure,
+    RetrievalBounds, StreamItemState, ToolExposure,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -309,6 +309,9 @@ pub struct ReportedBinding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelResponse {
+    /// The terminal state of the whole response: `Complete`, `Incomplete`, `Failed`, or
+    /// `Cancelled`. An item keeps its own state.
+    pub state: StreamItemState,
     pub items: Vec<NativeStreamItem>,
     pub output: Option<ModelOutput>,
     pub usage: ModelUsage,

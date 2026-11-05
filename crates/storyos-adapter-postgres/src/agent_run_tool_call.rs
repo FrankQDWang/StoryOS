@@ -103,11 +103,11 @@ pub(crate) fn batch_evidence(batch: &ToolCallBatch) -> Option<serde_json::Value>
     }
 }
 
-/// The batch of `items` against the Exposure that the Step Snapshot of `attempt_payload`
-/// pinned. A damaged Snapshot is a store fault.
+/// The batch of the terminal `response` against the Exposure that the Step Snapshot of
+/// `attempt_payload` pinned. A damaged Snapshot is a store fault.
 pub(crate) fn validate_batch(
     attempt_payload: &serde_json::Value,
-    items: &[storyos_core::NativeStreamItem],
+    response: &storyos_application::ModelResponse,
 ) -> Result<ToolCallBatch, CompleteAgentRunError> {
     let exposure = storyos_core::ExposureSnapshot::decode(
         attempt_payload.pointer("/step_snapshot/tool_exposure"),
@@ -117,7 +117,11 @@ pub(crate) fn validate_batch(
             "The Step Snapshot of the Tool Exposure is damaged",
         )))
     })?;
-    Ok(storyos_core::validate_tool_call_batch(items, &exposure))
+    Ok(storyos_core::validate_tool_call_batch(
+        response.state,
+        &response.items,
+        &exposure,
+    ))
 }
 
 #[cfg(test)]

@@ -176,6 +176,7 @@ async fn a_streamed_response_commits_ordered_events_and_maps_its_terminal_respon
         ),
         (
             Observation::Terminal(ModelResponse {
+                state: storyos_core::StreamItemState::Complete,
                 items: vec![done.clone()],
                 output: Some(final_answer(
                     DecisionCandidate::Advisory {
@@ -418,6 +419,7 @@ async fn function_call_argument_deltas_are_provisional_and_only_the_terminal_ite
         (observation, batches.concat()),
         (
             Observation::Terminal(ModelResponse {
+                state: storyos_core::StreamItemState::Complete,
                 items: vec![done.clone()],
                 output: None,
                 usage: ModelUsage::Reported {

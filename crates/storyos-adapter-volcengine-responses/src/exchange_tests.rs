@@ -277,6 +277,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
         (observation, events, line, authorization, projection, sent),
         (
             Observation::Terminal(ModelResponse {
+                state: storyos_core::StreamItemState::Complete,
                 items: items.clone(),
                 output: Some(final_answer(
                     DecisionCandidate::Advisory {
@@ -719,6 +720,7 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
         ),
         (
             Observation::Terminal(ModelResponse {
+                state: storyos_core::StreamItemState::Complete,
                 items: vec![NativeStreamItem {
                     text: Some(change.clone()),
                     ..item(

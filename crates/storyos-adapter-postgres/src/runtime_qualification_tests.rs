@@ -230,6 +230,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
 
     settle(&store, &admin, &scope, &unknown_run, &unknown).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
+        state: storyos_core::StreamItemState::Complete,
         items: Vec::new(),
         output: Some(ModelOutput {
             phase: OutputPhase::FinalAnswer,
@@ -525,6 +526,7 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
             .await
             .unwrap();
         Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: Vec::new(),
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,
@@ -649,6 +651,7 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued_run(&store, "ea9", authorized()).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
+        state: storyos_core::StreamItemState::Complete,
         items: Vec::new(),
         output: Some(ModelOutput {
             phase: OutputPhase::FinalAnswer,

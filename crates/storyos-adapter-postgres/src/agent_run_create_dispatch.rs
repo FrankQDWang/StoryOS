@@ -79,7 +79,7 @@ pub(crate) async fn record_create(
     let outcome = if probe {
         AgentDecisionOutcome::NoDecision
     } else {
-        let batch = crate::agent_run_tool_call::validate_batch(&retained, &response.items)?;
+        let batch = crate::agent_run_tool_call::validate_batch(&retained, &response)?;
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }

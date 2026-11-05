@@ -141,6 +141,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
     let code = reference_code(&request.response_reference);
     let complete = |usage| {
         Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: vec![assistant_item(
                 "1",
                 StreamItemState::Complete,
@@ -168,6 +169,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
             output_tokens: 0,
         }),
         (Some(2), _) => Observation::Terminal(ModelResponse {
+            state: StreamItemState::Incomplete,
             items: vec![assistant_item(
                 "1",
                 StreamItemState::Incomplete,

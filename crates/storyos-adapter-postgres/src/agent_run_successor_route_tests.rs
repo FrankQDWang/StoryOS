@@ -355,6 +355,7 @@ impl ModelProviderAdapter for StoredProseChange {
             };
         };
         Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: vec![NativeStreamItem {
                 item_id: "msg_01".to_owned(),
                 role: StreamItemRole::Assistant,
@@ -535,6 +536,7 @@ impl ModelProviderAdapter for SuccessorProseChange {
             };
         };
         Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: vec![NativeStreamItem {
                 item_id: "msg_01".to_owned(),
                 role: StreamItemRole::Assistant,

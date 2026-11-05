@@ -388,8 +388,7 @@ impl RetrievedResult {
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
-            let batch =
-                crate::agent_run_tool_call::validate_batch(attempt_payload, &response.items)?;
+            let batch = crate::agent_run_tool_call::validate_batch(attempt_payload, &response)?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
             validate_agent_decision(response.output.as_ref(), declared, batch)
         };

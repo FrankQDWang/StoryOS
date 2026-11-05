@@ -49,6 +49,7 @@ impl ModelProviderAdapter for FakeDestination {
                     ),
                     prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(
                         ModelResponse {
+                            state: storyos_core::StreamItemState::Complete,
                             items: Vec::new(),
                             output: None,
                             usage: ModelUsage::Unknown,
@@ -146,6 +147,7 @@ impl ModelProviderAdapter for FakeDestination {
             };
         }
         Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: planned.items,
             output: planned.output,
             usage: ModelUsage::Unknown,
@@ -171,6 +173,7 @@ fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
     PreparedRequest {
         projection: projection(digest, /*serialized_payload*/ None),
         prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items: vec![item],
             output: None,
             usage: ModelUsage::Unknown,

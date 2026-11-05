@@ -9,8 +9,11 @@ use serde_json::{Value, json};
 
 use crate::{
     FUNCTION_CALL_NATIVE_TYPE, IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState,
-    ToolIntake, ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    ToolIntake, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
+
+/// The longest native call identifier that a ToolCall row keeps.
+pub const MAX_CALL_ID_CHARS: usize = 256;
 
 /// One exposed Tool, as the Step Snapshot of the Attempt pinned it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -94,12 +97,19 @@ impl ValidatedToolCall {
 /// The one member that rejects the batch. Each refusal names the item or the call.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ToolCallBatchRefusal {
+    /// The response did not complete, or one of its other items did not: the function call
+    /// items are evidence of a cut stream, not a request.
+    ResponseIncomplete,
     /// A Tool item of a native type that the request did not ask for.
     UnexpectedItem {
         item_id: String,
     },
     /// A function call item without a complete arguments text or without a call identifier.
     Incomplete {
+        item_id: String,
+    },
+    /// The call identifier is empty or longer than `MAX_CALL_ID_CHARS`.
+    InvalidCallId {
         item_id: String,
     },
     /// The function name is not a Tool of the pinned Exposure.
@@ -127,8 +137,10 @@ impl ToolCallBatchRefusal {
     /// The stable label of the refusal, for the evidence record of the Attempt.
     pub fn label(&self) -> &'static str {
         match self {
+            Self::ResponseIncomplete => "response_incomplete",
             Self::UnexpectedItem { .. } => "unexpected_item",
             Self::Incomplete { .. } => "incomplete_arguments",
+            Self::InvalidCallId { .. } => "invalid_call_id",
             Self::Unexposed { .. } => "unexposed_name",
             Self::UnknownSpec { .. } => "unknown_spec",
             Self::Malformed { .. } => "malformed_arguments",
@@ -159,26 +171,30 @@ impl ToolCallBatch {
     }
 }
 
-/// The ToolSpec of a pinned revision. The validation reads the revision of the Snapshot.
-fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
-    [&WEB_SEARCH_TOOL_SPEC, &WEB_FETCH_TOOL_SPEC]
-        .into_iter()
-        .find(|spec| spec.revision == revision)
-}
-
-/// Validates the Tool items of `items` against the pinned `exposure`. Each Tool item is a
-/// member of the batch. A member is valid when it is a complete function call with a call
-/// identifier, its name is exposed, its arguments text is a JSON object, the object fits the
-/// typed intake of the pinned ToolSpec, and no earlier member has its call identifier.
+/// Validates the Tool items of a response in `state` against the pinned `exposure`. Each Tool
+/// item is a member of the batch. A batch with a member exists only in a complete response
+/// whose other items completed. A member is valid when it is a complete function call with a
+/// call identifier of a kept length, its name is exposed, its arguments text is a JSON object,
+/// the object fits the typed intake of the pinned ToolSpec, and no earlier member has its call
+/// identifier.
 pub fn validate_tool_call_batch(
+    state: StreamItemState,
     items: &[NativeStreamItem],
     exposure: &ExposureSnapshot,
 ) -> ToolCallBatch {
     let mut calls: Vec<ValidatedToolCall> = Vec::new();
-    for item in items
+    let members = items
         .iter()
-        .filter(|item| item.role == StreamItemRole::Tool)
+        .filter(|item| item.role == StreamItemRole::Tool);
+    if items.iter().any(|item| item.role == StreamItemRole::Tool)
+        && (state != StreamItemState::Complete
+            || items.iter().any(|item| {
+                item.role != StreamItemRole::Tool && item.state != StreamItemState::Complete
+            }))
     {
+        return ToolCallBatch::Invalid(ToolCallBatchRefusal::ResponseIncomplete);
+    }
+    for item in members {
         match validate_member(item, exposure, &calls) {
             Ok(call) => calls.push(call),
             Err(refusal) => return ToolCallBatch::Invalid(refusal),
@@ -204,6 +220,11 @@ fn validate_member(
             item_id: item.item_id.clone(),
         });
     };
+    if call_id.is_empty() || call_id.chars().count() > MAX_CALL_ID_CHARS {
+        return Err(ToolCallBatchRefusal::InvalidCallId {
+            item_id: item.item_id.clone(),
+        });
+    }
     let call_id = call_id.clone();
     if earlier.iter().any(|call| call.call_id == call_id) {
         return Err(ToolCallBatchRefusal::DuplicateCallId { call_id });
@@ -212,7 +233,9 @@ fn validate_member(
     let Some(exposed) = exposure.tools.iter().find(|tool| tool.name == name) else {
         return Err(ToolCallBatchRefusal::Unexposed { call_id });
     };
-    let Some(spec) = tool_spec(&exposed.spec_revision)
+    let Some(spec) = [&WEB_SEARCH_TOOL_SPEC, &WEB_FETCH_TOOL_SPEC]
+        .into_iter()
+        .find(|spec| spec.revision == exposed.spec_revision)
         .filter(|spec| spec.operation.function_name() == exposed.name)
     else {
         return Err(ToolCallBatchRefusal::UnknownSpec { call_id });
