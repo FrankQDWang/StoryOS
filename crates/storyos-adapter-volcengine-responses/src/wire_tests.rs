@@ -203,3 +203,71 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
 
     assert_eq!(counted(&request) - counted(&framing), estimate);
 }
+
+/// The Exposure of the research Tool Registration on the current Agent Plan Registration.
+pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
+    storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
+        enabled: &[storyos_core::EnabledTool {
+            registration_revision: storyos_core::EXA_TOOL_REGISTRATION.revision.to_owned(),
+            lifecycle: storyos_core::ToolRegistrationLifecycle::Active,
+            compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),
+        }],
+        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+    })
+}
+
+#[test]
+fn an_exposure_declares_strict_functions_and_an_empty_exposure_declares_no_tool() {
+    let DestinationRequest::Create(request) = crate::tests::create(
+        crate::tests::route("http://127.0.0.1:9"),
+        RequestAttempt::New,
+    ) else {
+        unreachable!("create() makes a Create request")
+    };
+    let bounds = request.route.bounds.unwrap();
+    let body = |request: &CreateRequest| -> serde_json::Value {
+        serde_json::from_str(&create_body(
+            request, "model-1", bounds, /*stream*/ false,
+        ))
+        .unwrap()
+    };
+    let plain = body(&request);
+    let exposure = research_exposure();
+    let exposed = body(&CreateRequest {
+        tool_exposure: exposure.clone(),
+        ..request
+    });
+    let declared: Vec<serde_json::Value> = exposure
+        .declarations()
+        .into_iter()
+        .map(|declaration| {
+            serde_json::json!({
+                "type": "function",
+                "name": declaration.name,
+                "description": declaration.description,
+                "parameters": declaration.parameters,
+                "strict": true,
+            })
+        })
+        .collect();
+
+    assert_eq!(
+        (
+            plain.get("tools"),
+            plain.get("tool_choice"),
+            plain["instructions"].clone(),
+            exposed["tools"].clone(),
+            exposed["tool_choice"].clone(),
+            exposed["instructions"].clone(),
+        ),
+        (
+            None,
+            None,
+            serde_json::json!(HOST_INSTRUCTIONS),
+            serde_json::json!(declared),
+            serde_json::json!("auto"),
+            serde_json::json!(format!("{HOST_INSTRUCTIONS}{TOOL_INSTRUCTIONS}")),
+        )
+    );
+    assert_eq!(declared.len(), 2);
+}

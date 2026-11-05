@@ -6,7 +6,8 @@ use storyos_application::{
     WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, SuccessorPauseReason, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, ResponseDisposition, ResponseFacts,
+    SuccessorPauseReason, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -220,7 +221,7 @@ pub(crate) async fn record(
         .map_err(unavailable)?;
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
-    let (dispatch_state, decision_id, binding_id) = match observation {
+    let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
         Observation::Terminal(response) => {
             payload["items"] =
                 crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
@@ -234,7 +235,8 @@ pub(crate) async fn record(
                 .map(DeclaredTarget::location)
                 .collect();
             // The successor of a probe makes no Agent Decision (ADR 0049).
-            let outcome = if crate::agent_run_tool_probe::is_probe(&row.payload) {
+            let probe = crate::agent_run_tool_probe::is_probe(&row.payload);
+            let outcome = if probe {
                 AgentDecisionOutcome::NoDecision
             } else {
                 validate_agent_decision(response.output.as_ref(), &declared)
@@ -293,10 +295,21 @@ pub(crate) async fn record(
                                 &wire.admission,
                             );
                     }
-                    ("settled", Some(decision_id), binding_id)
+                    ("settled", Some(decision_id), binding_id, false)
+                }
+                // A successor that asks for a function keeps its items as evidence, and the Run
+                // settles with the research refusal once the late check is done (ADR 0084).
+                AgentDecisionOutcome::NoDecision
+                    if response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
+                {
+                    ("settled", None, None, true)
                 }
                 AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
-                    ("settled", None, None)
+                    ("settled", None, None, false)
                 }
             }
         }
@@ -304,15 +317,15 @@ pub(crate) async fn record(
             if let Some(reference) = response_reference {
                 payload["response_reference"] = serde_json::json!(reference.reference_id);
             }
-            ("uncertain", None, None)
+            ("uncertain", None, None, false)
         }
         Observation::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted");
-            ("settled", None, None)
+            ("settled", None, None, false)
         }
         Observation::Rejected { reason } => {
             payload["rejection"] = serde_json::json!(reason);
-            ("settled", None, None)
+            ("settled", None, None, false)
         }
     };
     client
@@ -351,6 +364,7 @@ pub(crate) async fn record(
     marker["successor_model_attempt_id"] = serde_json::json!(dispatch.model_attempt_id);
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
     marker["successor_decision_id"] = serde_json::json!(decision_id);
+    marker["successor_requests_function"] = serde_json::json!(function_requested);
     seal(
         &mut marker,
         "dispatched",
@@ -412,11 +426,18 @@ pub(crate) async fn finish_dispatched(
             .await?,
         }));
     }
+    // A successor that asked for a function refuses the Run: no ToolCall exists (ADR 0084).
+    let refusal = flag(marker, "successor_requests_function")
+        .then(crate::agent_run_observation::research_refusal);
     update_run(
         client,
         claim,
-        "completed",
-        /*settlement*/ None,
+        if refusal.is_some() {
+            "refused"
+        } else {
+            "completed"
+        },
+        refusal.as_ref(),
         /*clear_lease*/ true,
     )
     .await?;

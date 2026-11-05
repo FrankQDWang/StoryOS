@@ -4,8 +4,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
-    HOST_FAKE_MAPPING_REVISION, ModelRegistration, continuation_mapping_can_represent,
-    map_continuation_input, model_registration,
+    HOST_FAKE_MAPPING_REVISION, ModelRegistration, ToolExposure,
+    continuation_mapping_can_represent, map_continuation_input, model_registration,
 };
 
 pub(crate) struct ContinuationWire {
@@ -21,8 +21,9 @@ pub(crate) async fn decide_continuation(
     conversation_id: &str,
     author_message: &str,
     assistance: &ProjectAssistanceRecord,
+    tool_exposure_digest: &str,
 ) -> Result<ContinuationWire, CompleteAgentRunError> {
-    let admission = current_identity(claim, conversation_id, assistance);
+    let admission = current_identity(claim, conversation_id, assistance, tool_exposure_digest);
     let prior = load_prior_binding(client, claim, conversation_id).await?;
     let known_prior_binding_id = prior.as_ref().map(|loaded| loaded.binding_id.clone());
     let mapping = map_continuation_input(&ContinuationMappingInput {
@@ -114,10 +115,13 @@ pub(crate) fn default_inspect_admission() -> AgentRunContinuationAdmission {
     }
 }
 
+/// The identity of the current admission. `tool_exposure_digest` is the digest of the Tool
+/// Exposure of this RunStep: a changed Exposure starts a new transport (ADR 0033, ADR 0084).
 pub(crate) fn current_identity(
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     assistance: &ProjectAssistanceRecord,
+    tool_exposure_digest: &str,
 ) -> ContinuationIdentity {
     ContinuationIdentity {
         owner_user_id: claim.project_scope.owner_user_id.as_ref().to_owned(),
@@ -136,6 +140,7 @@ pub(crate) fn current_identity(
         use_binding: assistance.project_model_use_binding_revision.clone(),
         compatibility: assistance.external_compatibility_decision.clone(),
         covered_copy_restricted: false,
+        tool_exposure_digest: tool_exposure_digest.to_owned(),
     }
 }
 
@@ -199,7 +204,8 @@ fn identity_value(identity: &ContinuationIdentity) -> serde_json::Value {
         "adapter_mapping": identity.adapter_mapping,
         "project_model_use_binding_revision": identity.use_binding,
         "external_compatibility_decision": identity.compatibility,
-        "covered_copy_restricted": identity.covered_copy_restricted
+        "covered_copy_restricted": identity.covered_copy_restricted,
+        "tool_exposure_digest": identity.tool_exposure_digest
     })
 }
 
@@ -218,6 +224,9 @@ pub(crate) fn parse_identity(value: &serde_json::Value) -> Option<ContinuationId
             .get("covered_copy_restricted")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        // A binding from before the Tool Exposure had no Tool.
+        tool_exposure_digest: string_field(value, "tool_exposure_digest")
+            .unwrap_or_else(|| ToolExposure::empty().digest()),
     })
 }
 

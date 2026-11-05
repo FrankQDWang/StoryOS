@@ -27,6 +27,9 @@ pub(crate) struct CreateResult<'a> {
 /// How the destination answered one Create.
 pub(crate) enum CreateSettlement<'a> {
     Response,
+    /// The response asks for a function, and no ToolCall exists yet (ADR 0084). The items stay
+    /// as evidence, and the Run refuses with one result sentence.
+    FunctionRequested,
     NotSubmitted,
     Rejected(&'a str),
 }
@@ -108,7 +111,10 @@ pub(crate) async fn persist_create_result(
     if let Some(reference) = result.response_reference {
         payload["response_reference"] = serde_json::json!(reference);
     }
-    if matches!(result.settlement, CreateSettlement::Response) {
+    if matches!(
+        result.settlement,
+        CreateSettlement::Response | CreateSettlement::FunctionRequested
+    ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
             .unwrap_or("unknown")
@@ -118,6 +124,9 @@ pub(crate) async fn persist_create_result(
     let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
+        CreateSettlement::FunctionRequested => {
+            refusal = Some(research_refusal());
+        }
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
@@ -184,6 +193,15 @@ pub(crate) async fn persist_create_result(
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
+    })
+}
+
+/// The settlement of a Run whose response asks for a function while no ToolCall exists
+/// (ADR 0084). The author sees one result sentence.
+pub(crate) fn research_refusal() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "execution_refused",
+        "capability": storyos_core::RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
     })
 }
 

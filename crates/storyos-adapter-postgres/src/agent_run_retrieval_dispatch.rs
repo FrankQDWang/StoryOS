@@ -6,7 +6,8 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentDecisionOutcome, OriginalResultKeepReason, OriginalResultRetrievalDecision,
-    RetrievedOriginalResult, StreamItemState, validate_agent_decision,
+    ResponseDisposition, ResponseFacts, RetrievedOriginalResult, StreamItemState,
+    response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -210,14 +211,27 @@ pub(crate) async fn record_original_result(
     let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected) else {
         return Ok(WorkPhase::Hold("recovery"));
     };
-    let AgentDecisionOutcome::Decision {
-        advances_continuation,
-        ..
-    } = selected.outcome
-    else {
-        return Err(unavailable(std::io::Error::other(
-            "A selected original result has no Agent Decision",
-        )));
+    let (advances_continuation, settlement) = match (&selected.outcome, selected.function_requested)
+    {
+        (
+            AgentDecisionOutcome::Decision {
+                advances_continuation,
+                ..
+            },
+            false,
+        ) => (*advances_continuation, CreateSettlement::Response),
+        // The retrieved response asks for a function: the original Attempt keeps it as
+        // evidence, supplies no decision, and settles the Run with the refusal (ADR 0084).
+        (AgentDecisionOutcome::NoDecision, true) => {
+            sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
+            (false, CreateSettlement::FunctionRequested)
+        }
+        (AgentDecisionOutcome::Decision { .. }, true)
+        | (AgentDecisionOutcome::NoDecision, false) => {
+            return Err(unavailable(std::io::Error::other(
+                "A selected original result has no Agent Decision",
+            )));
+        }
     };
     sealed["original_result_retrieval"]["advances_continuation"] =
         serde_json::json!(advances_continuation);
@@ -237,7 +251,7 @@ pub(crate) async fn record_original_result(
             usage: response.usage,
             cache_use: response.cache_use,
             response_reference: response.response_reference.as_deref(),
-            settlement: CreateSettlement::Response,
+            settlement,
         },
         sealed,
     )
@@ -316,15 +330,20 @@ pub(crate) struct RetrievedResult {
     pub usage: ModelUsage,
 }
 
-/// A complete original response whose Agent Decision core validation selected.
+/// A complete original response that settles the original Attempt: core validation selected its
+/// Agent Decision, or it asks for a function.
 pub(crate) struct SelectedResult {
     pub response: ModelResponse,
     pub outcome: AgentDecisionOutcome,
+    /// The complete response asks for a function, and no ToolCall exists. The Host keeps it as
+    /// evidence and settles the Run with the research refusal (ADR 0084).
+    pub function_requested: bool,
 }
 
 impl RetrievedResult {
     /// Validates the original response against the targets that its Create declared. The
-    /// response of a probe makes no Agent Decision.
+    /// response of a probe makes no Agent Decision. A complete function request of an ordinary
+    /// request settles like a selected result, with the research refusal.
     pub(crate) fn classify(
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
@@ -353,9 +372,32 @@ impl RetrievedResult {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
-                selected: Some(SelectedResult { response, outcome }),
+                selected: Some(SelectedResult {
+                    response,
+                    outcome,
+                    function_requested: false,
+                }),
                 usage,
             },
+            AgentDecisionOutcome::NoDecision
+                if complete
+                    && response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
+            {
+                Self {
+                    kind: RetrievedOriginalResult::CompleteSelected,
+                    items,
+                    selected: Some(SelectedResult {
+                        response,
+                        outcome: AgentDecisionOutcome::NoDecision,
+                        function_requested: true,
+                    }),
+                    usage,
+                }
+            }
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
                 kind: RetrievedOriginalResult::Incomplete,
                 items,
@@ -366,7 +408,14 @@ impl RetrievedResult {
     }
 
     pub(crate) fn label(&self) -> &'static str {
+        let function_requested = self
+            .selected
+            .as_ref()
+            .is_some_and(|selected| selected.function_requested);
         match self.kind {
+            RetrievedOriginalResult::CompleteSelected if function_requested => {
+                "complete_function_request"
+            }
             RetrievedOriginalResult::CompleteSelected => "complete_selected",
             RetrievedOriginalResult::Incomplete => "incomplete",
             RetrievedOriginalResult::Unknown | RetrievedOriginalResult::NotRetrieved => "unknown",

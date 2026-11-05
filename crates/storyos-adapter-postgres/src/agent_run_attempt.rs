@@ -40,6 +40,7 @@ pub(crate) async fn persist_uncertain_attempt(
         conversation_id,
         author_message,
         assistance,
+        &request.tool_exposure.digest(),
     )
     .await?;
     let model_invocation_id = match rebuild {
@@ -119,6 +120,11 @@ pub(crate) async fn persist_uncertain_attempt(
             }
         }
     }
+    // The Step Snapshot of the Tool Exposure (ADR 0084). A later validation reads it, never the
+    // current Registration.
+    payload["step_snapshot"] = serde_json::json!({
+        "tool_exposure": request.tool_exposure.snapshot(),
+    });
     // ADR 0051: the grant and the scope that admitted this disclosure.
     payload["disclosure_grant"] = serde_json::json!({
         "grant_id": run.grant_id,
