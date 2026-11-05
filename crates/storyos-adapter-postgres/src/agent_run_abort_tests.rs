@@ -55,6 +55,7 @@ impl ModelProviderAdapter for CancelledStream<'_> {
     async fn exchange(&self, retrieve: bool, sink: &mut impl ModelStreamSink) -> Observation {
         if retrieve {
             return Observation::Terminal(ModelResponse {
+                state: storyos_core::StreamItemState::Complete,
                 items: Vec::new(),
                 output: Some(ModelOutput {
                     phase: OutputPhase::FinalAnswer,

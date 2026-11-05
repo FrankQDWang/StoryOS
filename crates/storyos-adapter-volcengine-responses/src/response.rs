@@ -35,6 +35,7 @@ pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Obs
         .flatten()
         .map(|text| crate::decision::map_output(&text, targets));
     Observation::Terminal(ModelResponse {
+        state: status,
         items,
         output,
         usage: usage(response),

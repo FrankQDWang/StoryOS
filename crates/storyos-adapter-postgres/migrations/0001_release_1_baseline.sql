@@ -4184,6 +4184,53 @@ CREATE POLICY model_attempts_exact_scope ON storyos.model_attempts USING (((owne
 
 GRANT SELECT,INSERT,UPDATE ON TABLE storyos.model_attempts TO storyos_runtime;
 
+-- ToolCalls (ADR 0034, ADR 0084). One row for each member of the validated function request batch of
+-- one durable Agent Decision, in item order. The identity is the Model Attempt and the native call
+-- identifier, so a second delivery of the same observation creates no second row. A row holds no result
+-- and no authority: the state stays pending until a later ticket executes the ToolCall.
+
+CREATE TABLE storyos.tool_calls (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    tool_call_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    decision_position numeric(20,0) NOT NULL,
+    model_attempt_id uuid NOT NULL,
+    decision_id uuid NOT NULL,
+    call_id text NOT NULL,
+    call_position integer NOT NULL,
+    caller_route text NOT NULL,
+    function_name text NOT NULL,
+    registration_id text NOT NULL,
+    tool_registration_revision uuid NOT NULL,
+    tool_spec_revision text NOT NULL,
+    arguments jsonb NOT NULL,
+    argument_digest text NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT tool_calls_pkey PRIMARY KEY (owner_user_id, project_id, tool_call_id),
+    CONSTRAINT tool_calls_attempt_call_key UNIQUE (owner_user_id, project_id, model_attempt_id, call_id),
+    CONSTRAINT tool_calls_attempt_position_key UNIQUE (owner_user_id, project_id, model_attempt_id, call_position),
+    CONSTRAINT tool_calls_call_id_check CHECK (char_length(call_id) BETWEEN 1 AND 256),
+    CONSTRAINT tool_calls_call_position_check CHECK ((call_position >= 0)),
+    CONSTRAINT tool_calls_caller_route_check CHECK ((caller_route = 'model'::text)),
+    CONSTRAINT tool_calls_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
+    CONSTRAINT tool_calls_digest_check CHECK (argument_digest ~ '^sha256:[0-9a-f]{64}$'::text),
+    CONSTRAINT tool_calls_name_check CHECK (char_length(function_name) BETWEEN 1 AND 128 AND char_length(registration_id) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_calls_state_check CHECK ((state = 'pending'::text)),
+    CONSTRAINT tool_calls_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT tool_calls_owner_user_id_project_id_model_attempt_id_fkey FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL
+);
+
+CREATE INDEX tool_calls_run_state_idx ON storyos.tool_calls USING btree (owner_user_id, project_id, run_id, state);
+
+ALTER TABLE storyos.tool_calls ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.tool_calls FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tool_calls_exact_scope ON storyos.tool_calls USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
+
 -- Proposals
 
 CREATE TABLE storyos.proposals (

@@ -20,7 +20,7 @@ pub(crate) async fn record_create(
     request: &CreateRequest,
     observation: Observation,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let retained: serde_json::Value =
+    let mut retained: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let probe = matches!(request.purpose, CreatePurpose::ToolQualification(_));
@@ -74,11 +74,16 @@ pub(crate) async fn record_create(
         .iter()
         .map(DeclaredTarget::location)
         .collect();
-    // A Tool qualification probe makes no Agent Decision (ADR 0049).
+    // A Tool qualification probe makes no Agent Decision (ADR 0049). The batch validates
+    // against the Exposure that the Step Snapshot of this Attempt pinned (ADR 0084).
     let outcome = if probe {
         AgentDecisionOutcome::NoDecision
     } else {
-        validate_agent_decision(response.output.as_ref(), &declared)
+        let batch = crate::agent_run_tool_call::validate_batch(&retained, &response)?;
+        if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
+            retained["tool_call_batch"] = evidence;
+        }
+        validate_agent_decision(response.output.as_ref(), &declared, batch)
     };
     // Core decides the disposition of the response (ADR 0084).
     let settlement = match response_disposition(&ResponseFacts {
@@ -87,6 +92,7 @@ pub(crate) async fn record_create(
         items: &response.items,
     }) {
         ResponseDisposition::FunctionRequested => CreateSettlement::FunctionRequested,
+        ResponseDisposition::ToolCallsPending => CreateSettlement::ToolCallsPending,
         ResponseDisposition::Decision | ResponseDisposition::NoDecision => {
             CreateSettlement::Response
         }

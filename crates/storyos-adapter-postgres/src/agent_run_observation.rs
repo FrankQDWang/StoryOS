@@ -27,9 +27,12 @@ pub(crate) struct CreateResult<'a> {
 /// How the destination answered one Create.
 pub(crate) enum CreateSettlement<'a> {
     Response,
-    /// The response asks for a function, and no ToolCall exists yet (ADR 0084). The items stay
-    /// as evidence, and the Run refuses with one result sentence.
+    /// The response asks for a function, and its batch did not validate: no ToolCall exists
+    /// (ADR 0084). The items stay as evidence, and the Run refuses with one result sentence.
     FunctionRequested,
+    /// The Decision is a validated function request: its ToolCalls become durable with it, in
+    /// state `pending`. Execution is later work, so the Run refuses with the same sentence.
+    ToolCallsPending,
     NotSubmitted,
     Rejected(&'a str),
 }
@@ -113,7 +116,9 @@ pub(crate) async fn persist_create_result(
     }
     if matches!(
         result.settlement,
-        CreateSettlement::Response | CreateSettlement::FunctionRequested
+        CreateSettlement::Response
+            | CreateSettlement::FunctionRequested
+            | CreateSettlement::ToolCallsPending
     ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
@@ -124,7 +129,7 @@ pub(crate) async fn persist_create_result(
     let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
-        CreateSettlement::FunctionRequested => {
+        CreateSettlement::FunctionRequested | CreateSettlement::ToolCallsPending => {
             refusal = Some(research_refusal());
         }
         CreateSettlement::NotSubmitted => {
@@ -175,6 +180,28 @@ pub(crate) async fn persist_create_result(
         )
         .await
         .map_err(complete_database_error)?;
+    // The ToolCalls of a durable function request Decision, in the same transaction.
+    if let (
+        Some(decision_id),
+        AgentDecisionOutcome::Decision {
+            kind: AgentDecisionKind::ToolRequest { calls },
+            ..
+        },
+    ) = (decision_id.as_deref(), &result.outcome)
+    {
+        crate::agent_run_tool_call::insert_tool_calls(
+            client,
+            claim,
+            &crate::agent_run_tool_call::ToolCallOwner {
+                run_id: &claim.run_id,
+                decision_position: &run.decision_position,
+                model_attempt_id: result.attempt_id,
+                decision_id,
+            },
+            calls,
+        )
+        .await?;
+    }
     update_run(
         client,
         claim,
@@ -372,6 +399,14 @@ pub(crate) fn encode_decision(
             "selected": selected,
             "question": question,
             "required_reply": question,
+            "authoritative": false,
+            "advances_continuation": advances_continuation
+        }),
+        AgentDecisionKind::ToolRequest { calls } => serde_json::json!({
+            "kind": "tool_request",
+            "decision_id": decision_id,
+            "selected": selected,
+            "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),

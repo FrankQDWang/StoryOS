@@ -133,6 +133,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     .get(0);
                 *self.streamed.lock().unwrap() = serde_json::from_str(&streamed).ok();
                 return Observation::Terminal(ModelResponse {
+                    state: storyos_core::StreamItemState::Complete,
                     items: second.to_vec(),
                     output: Some(ModelOutput {
                         phase: OutputPhase::Commentary,
