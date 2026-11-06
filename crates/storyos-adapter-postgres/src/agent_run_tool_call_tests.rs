@@ -45,6 +45,16 @@ async fn enable_research_tool(
     scope: &storyos_application::ProjectScope,
     suffix: u16,
 ) {
+    set_research_tool(store, scope, suffix, ToolEnablement::Enabled).await;
+}
+
+/// Settles the `requested` enablement of the research Tool of the Project, as the author does.
+pub(crate) async fn set_research_tool(
+    store: &crate::PostgresProjectReader,
+    scope: &storyos_application::ProjectScope,
+    suffix: u16,
+    requested: ToolEnablement,
+) {
     let call = issued(
         store,
         scope,
@@ -52,7 +62,7 @@ async fn enable_research_tool(
         &SET_PROJECT_TOOL_ENABLEMENT,
         SetProjectToolEnablementInput {
             registration_id: "web_research".to_owned(),
-            requested: ToolEnablement::Enabled,
+            requested,
             offer: Some(&RESEARCH_TOOL_OFFER),
         },
     )

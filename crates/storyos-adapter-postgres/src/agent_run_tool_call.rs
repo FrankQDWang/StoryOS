@@ -126,4 +126,4 @@ pub(crate) fn validate_batch(
 
 #[cfg(test)]
 #[path = "agent_run_tool_call_tests.rs"]
-mod tests;
+pub(crate) mod tests;

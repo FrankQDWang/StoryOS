@@ -259,7 +259,12 @@ pub(crate) async fn load_run_phase(
 
 pub(crate) enum CreateAdmission {
     Settled,
-    Dispatch(Option<Box<crate::agent_run_expiry::RebuildDispatch>>),
+    /// The request can go out. `exposure_digest` is the digest of the Tool Exposure that this
+    /// admission computed with the current authority.
+    Dispatch {
+        rebuild: Option<Box<crate::agent_run_expiry::RebuildDispatch>>,
+        exposure_digest: String,
+    },
 }
 
 /// The route that `run` pinned, compared with the current assistance record of its Project.
@@ -304,13 +309,15 @@ pub(crate) async fn admit_create(
     run: &RunPhaseRow,
     assistance: Option<&storyos_application::ProjectAssistanceRecord>,
 ) -> Result<CreateAdmission, CompleteAgentRunError> {
-    let exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
+    let exposure_digest = crate::agent_run_tool_exposure::tool_exposure(client, claim, run)
+        .await?
+        .digest();
     let rebuild = match crate::agent_run_expiry::plan_expiry_rebuild(
         client,
         claim,
         run,
         assistance,
-        &exposure.digest(),
+        &exposure_digest,
     )
     .await?
     {
@@ -327,7 +334,12 @@ pub(crate) async fn admit_create(
         route: route_facts(run, assistance),
     });
     let capability = match admission {
-        CoreCreateAdmission::Dispatch => return Ok(CreateAdmission::Dispatch(rebuild)),
+        CoreCreateAdmission::Dispatch => {
+            return Ok(CreateAdmission::Dispatch {
+                rebuild,
+                exposure_digest,
+            });
+        }
         CoreCreateAdmission::Refuse(capability) => capability,
     };
     update_run(
@@ -404,7 +416,7 @@ pub(crate) async fn settle_one_phase(
         return Ok(
             match admit_create(client, claim, &run, assistance.as_ref()).await? {
                 CreateAdmission::Settled => WorkPhase::Done(CompleteAgentRun::Settled),
-                CreateAdmission::Dispatch(rebuild) => {
+                CreateAdmission::Dispatch { rebuild, .. } => {
                     WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
                         crate::agent_run_create_dispatch::create_request(
                             client,

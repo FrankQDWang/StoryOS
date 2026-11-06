@@ -127,11 +127,19 @@ impl ModelDispatchStore for PostgresProjectReader {
             let assistance = read_assistance_record(client, &claim.project_scope)
                 .await
                 .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-            let CreateAdmission::Dispatch(rebuild) =
-                admit_create(client, claim, &run, assistance.as_ref()).await?
+            let CreateAdmission::Dispatch {
+                rebuild,
+                exposure_digest,
+            } = admit_create(client, claim, &run, assistance.as_ref()).await?
             else {
                 return Ok(None);
             };
+            // A Tool Exposure that changed after the request was built refuses the claim. The
+            // next work phase builds the request again with the current Exposure, so the Step
+            // Snapshot and the declared functions are the Exposure that this claim saw.
+            if exposure_digest != request.tool_exposure.digest() {
+                return Ok(None);
+            }
             let assistance = assistance.ok_or_else(|| {
                 CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
                     "Dispatch requires current assistance admission",

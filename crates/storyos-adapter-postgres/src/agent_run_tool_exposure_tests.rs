@@ -1,10 +1,14 @@
 use serde_json::json;
+use storyos_adapter_volcengine_responses::AgentPlanExchange;
 use storyos_application::{
-    ConversationSelection, NoContractFaults, SetProjectToolEnablementInput, complete_agent_run,
+    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    SetProjectToolEnablementInput, complete_agent_run,
 };
 use storyos_core::{
-    DeploymentDestination, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, RESEARCH_TOOL_OFFER,
-    ToolCompatibilityDecision, ToolEnablement, ToolExposure, ToolRegistrationLifecycle,
+    DeploymentDestination, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ModelAdapter,
+    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolEnablement, ToolExposure,
+    ToolRegistrationLifecycle,
 };
 use tokio_postgres::Client;
 
@@ -336,6 +340,128 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f73 HTTP/1.1".to_owned(),
             ],
+        )
+    );
+}
+
+/// The real adapter. Before the claim of the first Create, the author disables the research
+/// Tool. Each prepared Create keeps its Exposure Snapshot and the `tools` field of its body.
+struct DisableBeforeClaim<'a> {
+    store: &'a crate::PostgresProjectReader,
+    scope: &'a storyos_application::ProjectScope,
+    prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
+}
+
+impl ModelProviderAdapter for DisableBeforeClaim<'_> {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = AgentPlanExchange;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
+        let prepared = adapter().prepare(request).await?;
+        if let DestinationRequest::Create(create) = request {
+            let body: serde_json::Value =
+                serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap())
+                    .unwrap();
+            let first = {
+                let mut seen = self.prepared.lock().unwrap();
+                seen.push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
+                seen.len() == 1
+            };
+            if first {
+                crate::agent_run_tool_call::tests::set_research_tool(
+                    self.store,
+                    self.scope,
+                    0xf79b,
+                    ToolEnablement::Disabled,
+                )
+                .await;
+            }
+        }
+        Ok(prepared)
+    }
+
+    async fn exchange(
+        &self,
+        prepared: AgentPlanExchange,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        adapter().exchange(prepared, sink).await
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_current_exposure() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![advisory_stream("resp_f79")]).await;
+    let (scope, run_id) = real_run(&store, &admin, "f79", &base).await;
+    crate::agent_run_tool_call::tests::set_research_tool(
+        &store,
+        &scope,
+        0xf79a,
+        ToolEnablement::Enabled,
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let route = DisableBeforeClaim {
+        store: &store,
+        scope: &scope,
+        prepared: std::sync::Mutex::new(Vec::new()),
+    };
+    complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let attempts: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM storyos.model_attempts WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let [status, _, _, _, snapshot, body, _] = attempt_facts(&admin, &run_id).await;
+    let prepared = route.prepared.into_inner().unwrap();
+
+    assert_eq!(
+        (
+            prepared,
+            attempts,
+            status,
+            snapshot,
+            body.and_then(|body| body.get("tools").cloned()),
+            served.await.unwrap(),
+        ),
+        (
+            vec![
+                (
+                    research_exposure().snapshot(),
+                    Some(json!(
+                        research_exposure()
+                            .declarations()
+                            .iter()
+                            .map(|declaration| json!({
+                                "type": "function",
+                                "name": declaration.name,
+                                "description": declaration.description,
+                                "parameters": declaration.parameters,
+                                "strict": true,
+                            }))
+                            .collect::<Vec<_>>()
+                    )),
+                ),
+                (ToolExposure::empty().snapshot(), None),
+            ],
+            1,
+            Some(json!("completed")),
+            Some(ToolExposure::empty().snapshot()),
+            None,
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
         )
     );
 }
