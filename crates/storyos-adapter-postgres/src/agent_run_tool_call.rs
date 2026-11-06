@@ -4,7 +4,10 @@
 //! of the same observation or a retry of the same commit creates no second row.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ToolCallBatch, ValidatedToolCall};
+use storyos_core::{
+    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolCallBatch, ToolEnablement,
+    ToolRegistrationLifecycle, ValidatedToolCall,
+};
 use uuid::Uuid;
 
 use crate::agent_run_work::complete_database_error;
@@ -104,24 +107,89 @@ pub(crate) fn batch_evidence(batch: &ToolCallBatch) -> Option<serde_json::Value>
 }
 
 /// The batch of the terminal `response` against the Exposure that the Step Snapshot of
-/// `attempt_payload` pinned. A damaged Snapshot is a store fault.
-pub(crate) fn validate_batch(
+/// `attempt_payload` pinned and against the current authority, which the transaction of the
+/// caller reads before it selects the Decision. A damaged Snapshot is a store fault.
+pub(crate) async fn validate_batch(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
     attempt_payload: &serde_json::Value,
     response: &storyos_application::ModelResponse,
 ) -> Result<ToolCallBatch, CompleteAgentRunError> {
-    let exposure = storyos_core::ExposureSnapshot::decode(
-        attempt_payload.pointer("/step_snapshot/tool_exposure"),
-    )
-    .ok_or_else(|| {
-        CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-            "The Step Snapshot of the Tool Exposure is damaged",
-        )))
-    })?;
+    let exposure =
+        ExposureSnapshot::decode(attempt_payload.pointer("/step_snapshot/tool_exposure"))
+            .ok_or_else(|| damaged("The Step Snapshot of the Tool Exposure is damaged"))?;
+    // A response without a Tool item makes no batch member, so it needs no current authority.
+    let current = if response
+        .items
+        .iter()
+        .any(|item| item.role == StreamItemRole::Tool)
+    {
+        current_tool_authority(client, claim, &exposure).await?
+    } else {
+        Vec::new()
+    };
     Ok(storyos_core::validate_tool_call_batch(
         response.state,
         &response.items,
         &exposure,
+        &current,
     ))
+}
+
+/// The current authority of each Registration revision that `exposure` pinned: whether the
+/// latest Project Tool Enablement of the Registration enables it, and the lifecycle of the
+/// revision. A revision without a lifecycle row is the active constant, because the row appears
+/// at the first enablement of the deployment.
+async fn current_tool_authority(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    exposure: &ExposureSnapshot,
+) -> Result<Vec<CurrentToolAuthority>, CompleteAgentRunError> {
+    let mut current: Vec<CurrentToolAuthority> = Vec::new();
+    for tool in &exposure.tools {
+        if current.iter().any(|authority| {
+            authority.registration_id == tool.registration_id
+                && authority.registration_revision == tool.registration_revision
+        }) {
+            continue;
+        }
+        let row = client
+            .query_one(
+                "SELECT (SELECT enablement FROM storyos.project_tool_enablements
+                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                            AND registration_id = $3
+                          ORDER BY enablement_revision DESC LIMIT 1),
+                        (SELECT lifecycle FROM storyos.tool_registration_revisions
+                          WHERE tool_registration_revision = $4::text::uuid)",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &tool.registration_id,
+                    &tool.registration_revision,
+                ],
+            )
+            .await
+            .map_err(complete_database_error)?;
+        let lifecycle = match row.get::<_, Option<&str>>(/*idx*/ 1) {
+            None => ToolRegistrationLifecycle::Active,
+            Some(lifecycle) => ToolRegistrationLifecycle::parse(lifecycle)
+                .ok_or_else(|| damaged("Tool Registration is damaged"))?,
+        };
+        current.push(CurrentToolAuthority {
+            registration_id: tool.registration_id.clone(),
+            registration_revision: tool.registration_revision.clone(),
+            enabled: row
+                .get::<_, Option<&str>>(/*idx*/ 0)
+                .and_then(ToolEnablement::parse)
+                == Some(ToolEnablement::Enabled),
+            lifecycle,
+        });
+    }
+    Ok(current)
+}
+
+fn damaged(message: &'static str) -> CompleteAgentRunError {
+    CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(message)))
 }
 
 #[cfg(test)]

@@ -143,11 +143,14 @@ pub(crate) async fn record_original_result(
             .map(DeclaredTarget::location)
             .collect();
     let mut retrieved = RetrievedResult::classify(
+        client,
+        claim,
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&payload),
         &payload,
-    )?;
+    )
+    .await?;
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -295,11 +298,14 @@ pub(crate) async fn record_late_result(
             .map(DeclaredTarget::location)
             .collect();
     let retrieved = RetrievedResult::classify(
+        client,
+        claim,
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&row.payload),
         &row.payload,
-    )?;
+    )
+    .await?;
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -363,7 +369,9 @@ impl RetrievedResult {
     /// Validates the original response against the targets that its Create declared. The
     /// response of a probe makes no Agent Decision. A complete function request of an ordinary
     /// request settles like a selected result, with the research refusal.
-    pub(crate) fn classify(
+    pub(crate) async fn classify(
+        client: &tokio_postgres::Client,
+        claim: &ClaimedAgentRun,
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
         probe: bool,
@@ -388,7 +396,13 @@ impl RetrievedResult {
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
-            let batch = crate::agent_run_tool_call::validate_batch(attempt_payload, &response)?;
+            let batch = crate::agent_run_tool_call::validate_batch(
+                client,
+                claim,
+                attempt_payload,
+                &response,
+            )
+            .await?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
             validate_agent_decision(response.output.as_ref(), declared, batch)
         };

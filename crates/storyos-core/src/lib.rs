@@ -261,8 +261,8 @@ pub use take_over_project_writer::{
     TakeOverProjectWriterResult, take_over_project_writer,
 };
 pub use tool_call::{
-    ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch, ToolCallBatchRefusal,
-    ValidatedToolCall, validate_tool_call_batch,
+    CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch,
+    ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
 };
 pub use tool_exposure::{
     EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,

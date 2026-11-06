@@ -75,11 +75,13 @@ pub(crate) async fn record_create(
         .map(DeclaredTarget::location)
         .collect();
     // A Tool qualification probe makes no Agent Decision (ADR 0049). The batch validates
-    // against the Exposure that the Step Snapshot of this Attempt pinned (ADR 0084).
+    // against the Exposure that the Step Snapshot of this Attempt pinned and against the current
+    // authority (ADR 0084).
     let outcome = if probe {
         AgentDecisionOutcome::NoDecision
     } else {
-        let batch = crate::agent_run_tool_call::validate_batch(&retained, &response)?;
+        let batch =
+            crate::agent_run_tool_call::validate_batch(client, claim, &retained, &response).await?;
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }

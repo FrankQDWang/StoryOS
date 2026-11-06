@@ -1,14 +1,15 @@
 use serde_json::json;
 use storyos_application::{NoContractFaults, SetProjectToolEnablementInput, complete_agent_run};
 use storyos_core::{
-    EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ExposureSnapshot, NativeStreamItem,
-    RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState, ToolCallBatch, ToolCompatibilityDecision,
-    ToolEnablement, ToolExposure, ToolRegistrationLifecycle, validate_tool_call_batch,
+    CurrentToolAuthority, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ExposureSnapshot,
+    NativeStreamItem, RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState, ToolCallBatch,
+    ToolCompatibilityDecision, ToolEnablement, ToolExposure, ToolRegistrationLifecycle,
+    validate_tool_call_batch,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
+use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, real_run};
 use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -140,6 +141,12 @@ fn validated_search_call() -> storyos_core::ValidatedToolCall {
         StreamItemState::Complete,
         &[item],
         &ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap(),
+        &[CurrentToolAuthority {
+            registration_id: "web_research".to_owned(),
+            registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
+            enabled: true,
+            lifecycle: ToolRegistrationLifecycle::Active,
+        }],
     ) {
         ToolCallBatch::Valid(mut calls) => calls.remove(0),
         ToolCallBatch::Invalid(refusal) => panic!("{}", refusal.label()),
@@ -359,6 +366,129 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
     );
 }
 
+/// A change of the current Tool authority that occurs while the model response is pending.
+#[derive(Clone, Copy)]
+enum Revocation {
+    /// The Tool Contract Drift of the pinned research revision quarantines it.
+    Quarantine,
+    /// The author disables the research Tool of the Project.
+    Disable,
+}
+
+impl Revocation {
+    /// The administration statement that makes the change in the Project of `run_id`.
+    fn statement(self, run_id: &str) -> String {
+        match self {
+            Self::Quarantine => format!(
+                "UPDATE storyos.tool_registration_revisions
+                    SET lifecycle = 'quarantined', quarantined_at = clock_timestamp(),
+                        quarantine_differences = '[{{\"kind\": \"tool_removed\", \"tool\": \"web_fetch_exa\"}}]'
+                  WHERE tool_registration_revision = '{}'",
+                EXA_TOOL_REGISTRATION.revision
+            ),
+            Self::Disable => format!(
+                "INSERT INTO storyos.project_tool_enablements
+                   SELECT enablement.owner_user_id, enablement.project_id,
+                          enablement.registration_id, enablement.enablement_revision + 1,
+                          'disabled', NULL, enablement.receipt_id
+                     FROM storyos.project_tool_enablements AS enablement
+                     JOIN storyos.agent_runs AS run
+                       ON (run.owner_user_id, run.project_id) =
+                          (enablement.owner_user_id, enablement.project_id)
+                    WHERE run.run_id = '{run_id}'"
+            ),
+        }
+    }
+}
+
+/// Makes the shared research revision active again after a quarantine, so that later tests
+/// expose it.
+async fn reactivate_research_revision(admin: &Client) {
+    admin
+        .execute(
+            "UPDATE storyos.tool_registration_revisions
+                SET lifecycle = 'active', quarantine_differences = NULL, quarantined_at = NULL
+              WHERE tool_registration_revision = $1::text::uuid",
+            &[&EXA_TOOL_REGISTRATION.revision],
+        )
+        .await
+        .unwrap();
+}
+
+/// Runs one real Create whose response requests a valid `web_search` call, and applies
+/// `revocation` between the exchange and the record. Returns the decision facts without the
+/// Attempt identity, the ToolCall rows, and whether a pending ToolCall exists.
+async fn revoked_create(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    suffix: u16,
+    revocation: Revocation,
+) -> (serde_json::Value, Vec<serde_json::Value>, bool) {
+    let (base, served) = destination(vec![text_and_call_stream(
+        &format!("resp_{prefix}"),
+        "web_search",
+        SEARCH_ARGUMENTS,
+        "completed",
+    )])
+    .await;
+    let (scope, run_id) = real_run(store, admin, prefix, &base).await;
+    enable_research_tool(store, &scope, suffix).await;
+    let claim = claim_run(admin, scope, run_id.clone()).await;
+    let route = AfterExchange {
+        admin,
+        statement: revocation.statement(&run_id),
+    };
+    complete_agent_run(store, &route, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    reactivate_research_revision(admin).await;
+    served.await.unwrap();
+    let mut facts = decision_facts(admin, &run_id).await;
+    facts.as_object_mut().unwrap().remove("model_attempt_id");
+    (
+        facts,
+        tool_call_rows(admin, &run_id).await,
+        crate::agent_run_tool_call::pending_tool_call_exists(admin, &claim)
+            .await
+            .unwrap(),
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_tool_authority_revoked_before_the_create_record_derives_no_decision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let quarantined = revoked_create(&store, &admin, "f7a", 0xf7aa, Revocation::Quarantine).await;
+    let disabled = revoked_create(&store, &admin, "f7b", 0xf7ba, Revocation::Disable).await;
+    let rejected = |refusal: &str| {
+        (
+            json!({
+                "status": "refused",
+                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "decision_id": null,
+                "dispatch_state": "settled",
+                "decision": null,
+                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+                "item_count": 2
+            }),
+            Vec::<serde_json::Value>::new(),
+            false,
+        )
+    };
+
+    assert_eq!(
+        (quarantined, disabled),
+        (
+            rejected("tool_registration_unavailable"),
+            rejected("tool_not_enabled")
+        )
+    );
+}
+
 /// A route whose first Create and original Retrieve stay unknown, whose successor Create
 /// returns one complete function call, and whose late Retrieve first delivers the successor
 /// observation a second time through the store, before the Run settles.
@@ -368,6 +498,9 @@ struct DuplicateSuccessorDelivery<'a> {
     claim: &'a storyos_application::ClaimedAgentRun,
     successor: std::sync::Mutex<Option<storyos_application::CreateRequest>>,
     delivered_twice: std::sync::Mutex<Option<bool>>,
+    /// The administration statement that changes the current Tool authority after the
+    /// successor exchange, before its record.
+    revocation: Option<String>,
 }
 
 enum DuplicatePlan {
@@ -459,6 +592,9 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
         use storyos_application::{DispatchRecord, ModelDispatchStore, Observation};
         match prepared {
             DuplicatePlan::FunctionCall => {
+                if let Some(statement) = &self.revocation {
+                    self.admin.batch_execute(statement).await.unwrap();
+                }
                 return Observation::Terminal(Self::function_response());
             }
             DuplicatePlan::LateResult => {
@@ -511,33 +647,44 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
     }
 }
 
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
+/// Runs the unknown Create, the unknown original Retrieve, the successor Create that returns two
+/// valid calls, and the late Retrieve that delivers the successor observation a second time.
+/// `revocation` applies between the successor exchange and its record. Returns the Run and
+/// Attempt facts, the call identifier, position, and Decision of each ToolCall row, and whether
+/// the second delivery recorded.
+async fn successor_run(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    suffix: u16,
+    revocation: Option<Revocation>,
+) -> (
+    serde_json::Value,
+    Vec<(serde_json::Value, serde_json::Value, serde_json::Value)>,
+    Option<bool>,
+) {
     let (scope, _, run_id) = crate::agent_run_dispatch::tests::queued_run(
-        &store,
-        "f78",
+        store,
+        prefix,
         storyos_core::DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
     )
     .await;
-    enable_research_tool(&store, &scope, 0xf78a).await;
-    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    enable_research_tool(store, &scope, suffix).await;
+    let claim = claim_run(admin, scope, run_id.clone()).await;
     let route = DuplicateSuccessorDelivery {
-        store: &store,
-        admin: &admin,
+        store,
+        admin,
         claim: &claim,
         successor: std::sync::Mutex::new(None),
         delivered_twice: std::sync::Mutex::new(None),
+        revocation: revocation.map(|revocation| revocation.statement(&run_id)),
     };
-    complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
+    complete_agent_run(store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
+    reactivate_research_revision(admin).await;
     let facts: serde_json::Value = admin
         .query_one(
             "SELECT jsonb_build_object(
@@ -548,6 +695,7 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
                       'supplies_tool_call',
                         decision.payload->'unknown_create_successor'->'supplies_tool_call',
                       'decision', successor.payload->'decision',
+                      'tool_call_batch', successor.payload->'tool_call_batch',
                       'roles', (SELECT string_agg(attempt.attempt_role, ','
                                                   ORDER BY attempt.model_attempt_id)
                                   FROM storyos.model_attempts AS attempt
@@ -563,22 +711,34 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
         .await
         .map(|row| serde_json::from_str(row.get::<_, &str>(0)).unwrap())
         .unwrap();
+    let rows = tool_call_rows(admin, &run_id)
+        .await
+        .into_iter()
+        .map(|row| {
+            (
+                row["call_id"].clone(),
+                row["call_position"].clone(),
+                row["decision_id"].clone(),
+            )
+        })
+        .collect();
+    let delivered_twice = *route.delivered_twice.lock().unwrap();
+    (facts, rows, delivered_twice)
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (facts, rows, delivered_twice) =
+        successor_run(&store, &admin, "f78", 0xf78a, /*revocation*/ None).await;
     let decision_id = facts["successor_decision_id"].clone();
-    let rows: Vec<(serde_json::Value, serde_json::Value, serde_json::Value)> =
-        tool_call_rows(&admin, &run_id)
-            .await
-            .into_iter()
-            .map(|row| {
-                (
-                    row["call_id"].clone(),
-                    row["call_position"].clone(),
-                    row["decision_id"].clone(),
-                )
-            })
-            .collect();
 
     assert_eq!(
-        (facts, rows, *route.delivered_twice.lock().unwrap()),
+        (facts, rows, delivered_twice),
         (
             json!({
                 "status": "refused",
@@ -594,6 +754,7 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
                     "authoritative": false,
                     "advances_continuation": false
                 },
+                "tool_call_batch": {"kind": "valid", "call_ids": ["call_01", "call_02"]},
                 "roles": "decision,retrieval,successor,late_retrieval"
             }),
             vec![
@@ -601,6 +762,42 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
                 (json!("call_02"), json!(1), decision_id),
             ],
             Some(true),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_tool_authority_revoked_before_the_successor_record_derives_no_decision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let quarantined =
+        successor_run(&store, &admin, "f7c", 0xf7ca, Some(Revocation::Quarantine)).await;
+    let disabled = successor_run(&store, &admin, "f7d", 0xf7da, Some(Revocation::Disable)).await;
+    let rejected = |refusal: &str| {
+        (
+            json!({
+                "status": "refused",
+                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "successor_decision_id": null,
+                "marker_decision_id": null,
+                "supplies_tool_call": false,
+                "decision": null,
+                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+                "roles": "decision,retrieval,successor,late_retrieval"
+            }),
+            Vec::new(),
+            Some(true),
+        )
+    };
+
+    assert_eq!(
+        (quarantined, disabled),
+        (
+            rejected("tool_registration_unavailable"),
+            rejected("tool_not_enabled")
         )
     );
 }

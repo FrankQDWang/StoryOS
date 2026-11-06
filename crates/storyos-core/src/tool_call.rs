@@ -1,15 +1,17 @@
 //! The ToolCall batch of one terminal Model Attempt (ADR 0033, ADR 0034, ADR 0084). The Host
 //! validates the complete requested business-tool batch against the Tool Exposure that the Step
-//! Snapshot pinned, never against the current Registration, and against the typed intake of each
-//! named ToolSpec. One invalid member rejects the whole batch, and an invalid batch makes the
-//! Agent Decision invalid. A valid batch is part of the Decision: only a durable Decision derives
+//! Snapshot pinned, against the typed intake of each named ToolSpec, and against the current
+//! authority: the Project must enable the Registration now, and its pinned revision must be
+//! active now. The contract of each member (name, revisions, intake) comes from the Snapshot,
+//! never from the current Registration. One invalid member rejects the whole batch, and an
+//! invalid batch makes the Agent Decision invalid. A valid batch is part of the Decision: only a durable Decision derives
 //! one ToolCall for each member, in item order.
 
 use serde_json::{Value, json};
 
 use crate::{
     FUNCTION_CALL_NATIVE_TYPE, IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState,
-    ToolIntake, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    ToolIntake, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
 /// The longest native call identifier that a ToolCall row keeps.
@@ -58,6 +60,18 @@ impl ExposureSnapshot {
             .collect::<Option<Vec<_>>>()?;
         Some(Self { tools })
     }
+}
+
+/// The current authority of one Registration revision that the pinned Exposure names. The Host
+/// reads it in the transaction that selects the Decision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CurrentToolAuthority {
+    pub registration_id: String,
+    pub registration_revision: String,
+    /// Whether the latest Project Tool Enablement of the Registration enables it.
+    pub enabled: bool,
+    /// The current lifecycle of the pinned revision.
+    pub lifecycle: ToolRegistrationLifecycle,
 }
 
 /// One validated member of the batch: the ToolCall that a durable Decision derives.
@@ -116,6 +130,14 @@ pub enum ToolCallBatchRefusal {
     Unexposed {
         call_id: String,
     },
+    /// The Project does not enable the Registration of the name now.
+    NotEnabled {
+        call_id: String,
+    },
+    /// The pinned revision of the Registration is not active now.
+    RegistrationUnavailable {
+        call_id: String,
+    },
     /// The pinned ToolSpec revision of the name is not a ToolSpec of this build.
     UnknownSpec {
         call_id: String,
@@ -142,6 +164,8 @@ impl ToolCallBatchRefusal {
             Self::Incomplete { .. } => "incomplete_arguments",
             Self::InvalidCallId { .. } => "invalid_call_id",
             Self::Unexposed { .. } => "unexposed_name",
+            Self::NotEnabled { .. } => "tool_not_enabled",
+            Self::RegistrationUnavailable { .. } => "tool_registration_unavailable",
             Self::UnknownSpec { .. } => "unknown_spec",
             Self::Malformed { .. } => "malformed_arguments",
             Self::Intake { refusal, .. } => match refusal {
@@ -171,16 +195,18 @@ impl ToolCallBatch {
     }
 }
 
-/// Validates the Tool items of a response in `state` against the pinned `exposure`. Each Tool
-/// item is a member of the batch. A batch with a member exists only in a complete response
-/// whose other items completed. A member is valid when it is a complete function call with a
-/// call identifier of a kept length, its name is exposed, its arguments text is a JSON object,
-/// the object fits the typed intake of the pinned ToolSpec, and no earlier member has its call
-/// identifier.
+/// Validates the Tool items of a response in `state` against the pinned `exposure` and the
+/// `current` authority of its Registrations. Each Tool item is a member of the batch. A batch
+/// with a member exists only in a complete response whose other items completed. A member is
+/// valid when it is a complete function call with a call identifier of a kept length, its name
+/// is exposed, the Project enables its Registration now, its pinned revision admits a new
+/// ToolCall now, its arguments text is a JSON object, the object fits the typed intake of the
+/// pinned ToolSpec, and no earlier member has its call identifier.
 pub fn validate_tool_call_batch(
     state: StreamItemState,
     items: &[NativeStreamItem],
     exposure: &ExposureSnapshot,
+    current: &[CurrentToolAuthority],
 ) -> ToolCallBatch {
     let mut calls: Vec<ValidatedToolCall> = Vec::new();
     let members = items
@@ -195,7 +221,7 @@ pub fn validate_tool_call_batch(
         return ToolCallBatch::Invalid(ToolCallBatchRefusal::ResponseIncomplete);
     }
     for item in members {
-        match validate_member(item, exposure, &calls) {
+        match validate_member(item, exposure, current, &calls) {
             Ok(call) => calls.push(call),
             Err(refusal) => return ToolCallBatch::Invalid(refusal),
         }
@@ -206,6 +232,7 @@ pub fn validate_tool_call_batch(
 fn validate_member(
     item: &NativeStreamItem,
     exposure: &ExposureSnapshot,
+    current: &[CurrentToolAuthority],
     earlier: &[ValidatedToolCall],
 ) -> Result<ValidatedToolCall, ToolCallBatchRefusal> {
     if item.native_type.as_deref() != Some(FUNCTION_CALL_NATIVE_TYPE) {
@@ -233,6 +260,17 @@ fn validate_member(
     let Some(exposed) = exposure.tools.iter().find(|tool| tool.name == name) else {
         return Err(ToolCallBatchRefusal::Unexposed { call_id });
     };
+    // A pinned revision without a current authority record is not enabled now.
+    let Some(authority) = current.iter().find(|authority| {
+        authority.registration_id == exposed.registration_id
+            && authority.registration_revision == exposed.registration_revision
+            && authority.enabled
+    }) else {
+        return Err(ToolCallBatchRefusal::NotEnabled { call_id });
+    };
+    if authority.lifecycle.admit_new_tool_call().is_err() {
+        return Err(ToolCallBatchRefusal::RegistrationUnavailable { call_id });
+    }
     let Some(spec) = [&WEB_SEARCH_TOOL_SPEC, &WEB_FETCH_TOOL_SPEC]
         .into_iter()
         .find(|spec| spec.revision == exposed.spec_revision)

@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::{
-    ExposureSnapshot, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
+    CurrentToolAuthority, ExposureSnapshot, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
     validate_tool_call_batch,
 };
 use crate::{
@@ -22,6 +22,24 @@ fn pinned() -> ExposureSnapshot {
         model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
+}
+
+/// The current authority of the pinned research Registration revision.
+fn authority(enabled: bool, lifecycle: ToolRegistrationLifecycle) -> CurrentToolAuthority {
+    CurrentToolAuthority {
+        registration_id: "web_research".to_owned(),
+        registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
+        enabled,
+        lifecycle,
+    }
+}
+
+/// The Project enables the pinned Registration now, and its revision is active now.
+fn current() -> [CurrentToolAuthority; 1] {
+    [authority(
+        /*enabled*/ true,
+        ToolRegistrationLifecycle::Active,
+    )]
 }
 
 fn call(item_id: &str, call_id: &str, name: &str, arguments: &str) -> NativeStreamItem {
@@ -91,9 +109,19 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 
     assert_eq!(
         (
-            validate_tool_call_batch(StreamItemState::Complete, &items, &pinned()),
-            validate_tool_call_batch(StreamItemState::Complete, &[message("Keep it.")], &pinned()),
-            validate_tool_call_batch(StreamItemState::Incomplete, &[message("Keep")], &pinned()),
+            validate_tool_call_batch(StreamItemState::Complete, &items, &pinned(), &current()),
+            validate_tool_call_batch(
+                StreamItemState::Complete,
+                &[message("Keep it.")],
+                &pinned(),
+                &current()
+            ),
+            validate_tool_call_batch(
+                StreamItemState::Incomplete,
+                &[message("Keep")],
+                &pinned(),
+                &current()
+            ),
             search_call("call_01").arguments(),
             fetch.arguments(),
             search_call("call_01").argument_digest(),
@@ -112,12 +140,15 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 #[test]
 fn one_invalid_member_rejects_the_whole_batch() {
     let valid = call("fc_01", "call_01", "web_search", SEARCH);
-    let refusal_in =
-        |state, items: &[NativeStreamItem]| match validate_tool_call_batch(state, items, &pinned())
-        {
-            ToolCallBatch::Invalid(refusal) => refusal,
-            ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
-        };
+    let refusal_in = |state, items: &[NativeStreamItem]| match validate_tool_call_batch(
+        state,
+        items,
+        &pinned(),
+        &current(),
+    ) {
+        ToolCallBatch::Invalid(refusal) => refusal,
+        ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
+    };
     let refusal = |items: &[NativeStreamItem]| refusal_in(StreamItemState::Complete, items);
     let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
     let six_urls =
@@ -166,7 +197,12 @@ fn one_invalid_member_rejects_the_whole_batch() {
                 &[message("Looking"), valid.clone()]
             ),
             refusal(&[cut_message, valid.clone()]),
-            match validate_tool_call_batch(StreamItemState::Complete, &[valid], &unexposed) {
+            match validate_tool_call_batch(
+                StreamItemState::Complete,
+                &[valid],
+                &unexposed,
+                &current(),
+            ) {
                 ToolCallBatch::Invalid(refusal) => refusal,
                 ToolCallBatch::Valid(_) => panic!("exposed"),
             },
@@ -218,6 +254,71 @@ fn one_invalid_member_rejects_the_whole_batch() {
                 call_id: "call_01".to_owned()
             },
         ]
+    );
+}
+
+/// The refusal of a complete, exposed, intake-valid batch under the `current` authority.
+fn current_refusal(current: &[CurrentToolAuthority]) -> (ToolCallBatchRefusal, &'static str) {
+    let items = [
+        call("fc_01", "call_01", "web_search", SEARCH),
+        call("fc_02", "call_02", "web_fetch", FETCH),
+    ];
+    match validate_tool_call_batch(StreamItemState::Complete, &items, &pinned(), current) {
+        ToolCallBatch::Invalid(refusal) => {
+            let label = refusal.label();
+            (refusal, label)
+        }
+        ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
+    }
+}
+
+#[test]
+fn a_registration_that_the_project_does_not_enable_now_rejects_the_batch() {
+    let other_revision = CurrentToolAuthority {
+        registration_revision: "018f0000-0000-7001-8000-0000000e0f09".to_owned(),
+        ..authority(/*enabled*/ true, ToolRegistrationLifecycle::Active)
+    };
+    let not_enabled = (
+        ToolCallBatchRefusal::NotEnabled {
+            call_id: "call_01".to_owned(),
+        },
+        "tool_not_enabled",
+    );
+
+    assert_eq!(
+        [
+            current_refusal(&[authority(
+                /*enabled*/ false,
+                ToolRegistrationLifecycle::Active
+            )]),
+            current_refusal(&[]),
+            current_refusal(&[other_revision]),
+        ],
+        [not_enabled.clone(), not_enabled.clone(), not_enabled]
+    );
+}
+
+#[test]
+fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
+    let unavailable = (
+        ToolCallBatchRefusal::RegistrationUnavailable {
+            call_id: "call_01".to_owned(),
+        },
+        "tool_registration_unavailable",
+    );
+
+    assert_eq!(
+        [
+            current_refusal(&[authority(
+                /*enabled*/ true,
+                ToolRegistrationLifecycle::Quarantined
+            )]),
+            current_refusal(&[authority(
+                /*enabled*/ true,
+                ToolRegistrationLifecycle::Retired
+            )]),
+        ],
+        [unavailable.clone(), unavailable]
     );
 }
 
