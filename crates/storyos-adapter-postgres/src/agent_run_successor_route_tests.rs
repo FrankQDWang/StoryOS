@@ -291,15 +291,15 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
         .await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
-        broken_stream("resp_f80"),
-        stored("resp_f80", "in_progress"),
+        broken_stream("resp_e32"),
+        stored("resp_e32", "in_progress"),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "f80", &base).await;
+    let (scope, run_id) = real_run(&store, &admin, "e32", &base).await;
     crate::agent_run_tool_call::tests::set_research_tool(
         &store,
         &scope,
-        0xf80a,
+        0xe32a,
         storyos_core::ToolEnablement::Enabled,
     )
     .await;
@@ -308,7 +308,7 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
     let route = crate::agent_run_tool_exposure::tests::DisableBeforeClaim {
         store: &store,
         scope: &scope,
-        suffix: 0xf80b,
+        suffix: 0xe32b,
         successor: true,
         disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
         prepared: Mutex::new(Vec::new()),
@@ -348,7 +348,7 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
             vec![true, true],
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "GET /api/plan/v3/responses/resp_f80 HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_e32 HTTP/1.1".to_owned(),
             ],
         )
     );

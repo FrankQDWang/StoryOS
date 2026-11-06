@@ -519,8 +519,8 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
     let facts = create_with_call(
         &store,
         &admin,
-        "f81",
-        0xf81a,
+        "e31",
+        0xe31a,
         "call_\u{0}01",
         SEARCH_ARGUMENTS,
     )
