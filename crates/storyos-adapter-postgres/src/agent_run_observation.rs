@@ -223,8 +223,9 @@ pub(crate) async fn persist_create_result(
     })
 }
 
-/// The settlement of a Run whose response asks for a function while no ToolCall exists
-/// (ADR 0084). The author sees one result sentence.
+/// The settlement of a Run whose response asks for a function while no Tool executes
+/// (ADR 0084): the batch did not validate, or its ToolCalls stay `pending`. The author sees one
+/// result sentence.
 pub(crate) fn research_refusal() -> serde_json::Value {
     serde_json::json!({
         "kind": "execution_refused",

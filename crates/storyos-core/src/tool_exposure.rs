@@ -249,8 +249,9 @@ impl ToolExposure {
     }
 }
 
-/// Whether the native items of one response hold a complete function call. Such a response makes
-/// no Agent Decision, and no ToolCall exists yet: the Run settles with the call as evidence.
+/// Whether the native items of one response hold a complete function call. When such a response
+/// makes no Agent Decision, its batch did not validate and derives no ToolCall: the Run settles
+/// with the call as evidence. A validated batch is an Agent Decision that derives its ToolCalls.
 pub fn requests_function(items: &[NativeStreamItem]) -> bool {
     items.iter().any(|item| {
         item.role == StreamItemRole::Tool
@@ -259,8 +260,9 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
     })
 }
 
-/// The refusal capability of a Run whose response asks for a function while no ToolCall
-/// exists (ADR 0084). The author sees one result sentence.
+/// The refusal capability of a Run whose response asks for a function while no Tool executes
+/// (ADR 0084): the batch did not validate, or its ToolCalls stay `pending`. The author sees one
+/// result sentence.
 pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
 
 /// What the Host does with one terminal response after core validation (ADR 0084).

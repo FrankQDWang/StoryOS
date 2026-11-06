@@ -482,7 +482,8 @@ pub(crate) async fn finish_dispatched(
             .await?,
         }));
     }
-    // A successor that asked for a function refuses the Run: no ToolCall exists (ADR 0084).
+    // A successor that asked for a function refuses the Run, because no Tool executes: its batch
+    // did not validate, or its ToolCalls stay `pending` (ADR 0084).
     let refusal = flag(marker, "successor_requests_function")
         .then(crate::agent_run_observation::research_refusal);
     update_run(
