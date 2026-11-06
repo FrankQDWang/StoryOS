@@ -345,8 +345,8 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         StreamItemState::Unknown => "unknown",
     };
     let mut escaped_fields = Vec::new();
-    let mut field = |name: &'static str, value: &Option<String>| {
-        storable_text(value.as_deref()).map(|(text, escaped)| {
+    let mut field = |name: &'static str, value: Option<&str>| {
+        storable_text(value).map(|(text, escaped)| {
             if escaped {
                 escaped_fields.push(name);
             }
@@ -354,20 +354,20 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         })
     };
     let mut encoded = serde_json::json!({
-        "item_id": item.item_id,
+        "item_id": field("item_id", Some(item.item_id.as_str())),
         "role": match item.role {
             StreamItemRole::Assistant => "assistant",
             StreamItemRole::Tool => "tool",
         },
         "state": phase,
         "phase": phase,
-        "text": field("text", &item.text),
-        "summary": field("summary", &item.summary),
-        "call_id": field("call_id", &item.call_id),
-        "arguments": field("arguments", &item.arguments),
-        "refusal": field("refusal", &item.refusal),
-        "native_type": field("native_type", &item.native_type),
-        "name": field("name", &item.name)
+        "text": field("text", item.text.as_deref()),
+        "summary": field("summary", item.summary.as_deref()),
+        "call_id": field("call_id", item.call_id.as_deref()),
+        "arguments": field("arguments", item.arguments.as_deref()),
+        "refusal": field("refusal", item.refusal.as_deref()),
+        "native_type": field("native_type", item.native_type.as_deref()),
+        "name": field("name", item.name.as_deref())
     });
     if !escaped_fields.is_empty() {
         encoded["escaped_fields"] = serde_json::json!(escaped_fields);

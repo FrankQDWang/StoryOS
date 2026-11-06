@@ -122,7 +122,8 @@ pub enum ToolCallBatchRefusal {
     Incomplete {
         item_id: String,
     },
-    /// The call identifier is empty or longer than `MAX_CALL_ID_CHARS`.
+    /// The call identifier is empty, is longer than `MAX_CALL_ID_CHARS`, or holds a control
+    /// character (Unicode category Cc). The store cannot keep U+0000 in a `jsonb` value.
     InvalidCallId {
         item_id: String,
     },
@@ -198,10 +199,10 @@ impl ToolCallBatch {
 /// Validates the Tool items of a response in `state` against the pinned `exposure` and the
 /// `current` authority of its Registrations. Each Tool item is a member of the batch. A batch
 /// with a member exists only in a complete response whose other items completed. A member is
-/// valid when it is a complete function call with a call identifier of a kept length, its name
-/// is exposed, the Project enables its Registration now, its pinned revision admits a new
-/// ToolCall now, its arguments text is a JSON object, the object fits the typed intake of the
-/// pinned ToolSpec, and no earlier member has its call identifier.
+/// valid when it is a complete function call with a call identifier of a kept length and no
+/// control character, its name is exposed, the Project enables its Registration now, its pinned
+/// revision admits a new ToolCall now, its arguments text is a JSON object, the object fits the
+/// typed intake of the pinned ToolSpec, and no earlier member has its call identifier.
 pub fn validate_tool_call_batch(
     state: StreamItemState,
     items: &[NativeStreamItem],
@@ -247,7 +248,10 @@ fn validate_member(
             item_id: item.item_id.clone(),
         });
     };
-    if call_id.is_empty() || call_id.chars().count() > MAX_CALL_ID_CHARS {
+    if call_id.is_empty()
+        || call_id.chars().count() > MAX_CALL_ID_CHARS
+        || call_id.chars().any(char::is_control)
+    {
         return Err(ToolCallBatchRefusal::InvalidCallId {
             item_id: item.item_id.clone(),
         });

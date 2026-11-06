@@ -15,13 +15,19 @@ use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://e.org/3","https://e.org/4","https://e.org/5","https://e.org/6"]}"#;
 
-/// A stream that reports `reference`, one complete message, and one complete function call,
-/// and ends with the terminal `status` of the response.
-fn text_and_call_stream(reference: &str, name: &str, arguments: &str, status: &str) -> String {
+/// A stream that reports `reference`, one complete message, and one complete function call with
+/// `call_id`, and ends with the terminal `status` of the response.
+fn text_and_call_stream(
+    reference: &str,
+    call_id: &str,
+    name: &str,
+    arguments: &str,
+    status: &str,
+) -> String {
     let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": "Looking it up."}]});
     let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
-        "call_id": "call_01", "name": name, "arguments": arguments});
+        "call_id": call_id, "name": name, "arguments": arguments});
     let events = [
         json!({"type": "response.created",
                "response": {"id": reference, "status": "in_progress", "output": []}}),
@@ -162,6 +168,7 @@ async fn a_durable_function_request_decision_derives_one_pending_tool_call_once(
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![text_and_call_stream(
         "resp_f75",
+        "call_01",
         "web_search",
         SEARCH_ARGUMENTS,
         "completed",
@@ -275,6 +282,7 @@ async fn an_intake_violation_rejects_the_batch_and_keeps_the_attempt_as_evidence
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![text_and_call_stream(
         "resp_f76",
+        "call_01",
         "web_fetch",
         SIX_URLS,
         "completed",
@@ -325,6 +333,7 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![text_and_call_stream(
         "resp_f77",
+        "call_01",
         "web_search",
         SEARCH_ARGUMENTS,
         "incomplete",
@@ -366,14 +375,15 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
     );
 }
 
-/// Runs one real Create whose response requests `web_search` with `arguments`. Returns the
-/// decision facts without the Attempt identity, the ToolCall rows, whether a pending ToolCall
-/// exists, and the stored function call item.
-async fn create_with_arguments(
+/// Runs one real Create whose response requests `web_search` with `call_id` and `arguments`.
+/// Returns the decision facts without the Attempt identity, the ToolCall rows, whether a pending
+/// ToolCall exists, and the stored function call item.
+async fn create_with_call(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
     suffix: u16,
+    call_id: &str,
     arguments: &str,
 ) -> (
     serde_json::Value,
@@ -383,6 +393,7 @@ async fn create_with_arguments(
 ) {
     let (base, served) = destination(vec![text_and_call_stream(
         &format!("resp_{prefix}"),
+        call_id,
         "web_search",
         arguments,
         "completed",
@@ -418,6 +429,54 @@ async fn create_with_arguments(
     )
 }
 
+/// The facts of a Create whose batch `refusal` rejected it, with the stored function call `item`.
+fn rejected_create(
+    refusal: &str,
+    item: serde_json::Value,
+) -> (
+    serde_json::Value,
+    Vec<serde_json::Value>,
+    bool,
+    serde_json::Value,
+) {
+    (
+        json!({
+            "status": "refused",
+            "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+            "decision_id": null,
+            "dispatch_state": "settled",
+            "decision": null,
+            "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+            "item_count": 2
+        }),
+        Vec::new(),
+        false,
+        item,
+    )
+}
+
+/// The stored `web_search` call item of `text_and_call_stream`, with the stored `call_id` and
+/// `arguments` text. Each name of `escaped` is a field in its escaped form.
+fn stored_call_item(call_id: &str, arguments: &str, escaped: &[&str]) -> serde_json::Value {
+    let mut item = json!({
+        "item_id": "fc_01",
+        "role": "tool",
+        "state": "complete",
+        "phase": "complete",
+        "text": null,
+        "summary": null,
+        "call_id": call_id,
+        "arguments": arguments,
+        "refusal": null,
+        "native_type": "function_call",
+        "name": "web_search"
+    });
+    if !escaped.is_empty() {
+        item["escaped_fields"] = json!(escaped);
+    }
+    item
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_item() {
@@ -430,47 +489,48 @@ async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_i
     // The arguments text holds U+0000 itself, so it is not JSON text. It also holds an escaped
     // backslash, which the stored form doubles.
     let raw = "{\"query\":\"tide\\\\\u{0}tables\",\"result_count\":null}";
-    let in_query = create_with_arguments(&store, &admin, "f7e", 0xf7ea, escaped).await;
-    let in_text = create_with_arguments(&store, &admin, "f7f", 0xf7fa, raw).await;
-    let rejected = |refusal: &str, item: serde_json::Value| {
-        (
-            json!({
-                "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
-                "decision_id": null,
-                "dispatch_state": "settled",
-                "decision": null,
-                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
-                "item_count": 2
-            }),
-            Vec::<serde_json::Value>::new(),
-            false,
-            item,
-        )
-    };
-    let item = |arguments: &str| {
-        json!({
-            "item_id": "fc_01",
-            "role": "tool",
-            "state": "complete",
-            "phase": "complete",
-            "text": null,
-            "summary": null,
-            "call_id": "call_01",
-            "arguments": arguments,
-            "refusal": null,
-            "native_type": "function_call",
-            "name": "web_search"
-        })
-    };
-    let mut escaped_item = item(r#"{"query":"tide\\\\\u0000tables","result_count":null}"#);
-    escaped_item["escaped_fields"] = json!(["arguments"]);
+    let in_query = create_with_call(&store, &admin, "f7e", 0xf7ea, "call_01", escaped).await;
+    let in_text = create_with_call(&store, &admin, "f7f", 0xf7fa, "call_01", raw).await;
 
     assert_eq!(
         (in_query, in_text),
         (
-            rejected("intake_query", item(escaped)),
-            rejected("malformed_arguments", escaped_item),
+            rejected_create("intake_query", stored_call_item("call_01", escaped, &[])),
+            rejected_create(
+                "malformed_arguments",
+                stored_call_item(
+                    "call_01",
+                    r#"{"query":"tide\\\\\u0000tables","result_count":null}"#,
+                    &["arguments"],
+                ),
+            ),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the_raw_item() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The call identifier holds U+0000 itself. The arguments are valid.
+    let facts = create_with_call(
+        &store,
+        &admin,
+        "f81",
+        0xf81a,
+        "call_\u{0}01",
+        SEARCH_ARGUMENTS,
+    )
+    .await;
+
+    assert_eq!(
+        facts,
+        rejected_create(
+            "invalid_call_id",
+            stored_call_item(r"call_\u000001", SEARCH_ARGUMENTS, &["call_id"]),
         )
     );
 }
@@ -536,6 +596,7 @@ async fn revoked_create(
 ) -> (serde_json::Value, Vec<serde_json::Value>, bool) {
     let (base, served) = destination(vec![text_and_call_stream(
         &format!("resp_{prefix}"),
+        "call_01",
         "web_search",
         SEARCH_ARGUMENTS,
         "completed",

@@ -191,6 +191,9 @@ fn one_invalid_member_rejects_the_whole_batch() {
             refusal(&[no_call_id]),
             refusal(&[call("fc_05", "", "web_search", SEARCH)]),
             refusal(&[call("fc_06", &long_call_id, "web_search", SEARCH)]),
+            refusal(&[call("fc_07", "call\u{0}07", "web_search", SEARCH)]),
+            refusal(&[call("fc_08", "call\n08", "web_search", SEARCH)]),
+            refusal(&[call("fc_09", "call\u{9f}09", "web_search", SEARCH)]),
             refusal_in(StreamItemState::Incomplete, std::slice::from_ref(&valid)),
             refusal_in(
                 StreamItemState::Cancelled,
@@ -246,6 +249,15 @@ fn one_invalid_member_rejects_the_whole_batch() {
             },
             ToolCallBatchRefusal::InvalidCallId {
                 item_id: "fc_06".to_owned()
+            },
+            ToolCallBatchRefusal::InvalidCallId {
+                item_id: "fc_07".to_owned()
+            },
+            ToolCallBatchRefusal::InvalidCallId {
+                item_id: "fc_08".to_owned()
+            },
+            ToolCallBatchRefusal::InvalidCallId {
+                item_id: "fc_09".to_owned()
             },
             ToolCallBatchRefusal::ResponseIncomplete,
             ToolCallBatchRefusal::ResponseIncomplete,
