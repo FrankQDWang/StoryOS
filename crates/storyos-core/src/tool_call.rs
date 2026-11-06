@@ -198,11 +198,17 @@ impl ToolCallBatch {
 
 /// Validates the Tool items of a response in `state` against the pinned `exposure` and the
 /// `current` authority of its Registrations. Each Tool item is a member of the batch. A batch
-/// with a member exists only in a complete response whose other items completed. A member is
-/// valid when it is a complete function call with a call identifier of a kept length and no
-/// control character, its name is exposed, the Project enables its Registration now, its pinned
-/// revision admits a new ToolCall now, its arguments text is a JSON object, the object fits the
-/// typed intake of the pinned ToolSpec, and no earlier member has its call identifier.
+/// with a member exists only in a complete response whose other items completed.
+///
+/// A member is valid only when each of these conditions is true:
+/// - It is a complete function call.
+/// - Its call identifier has a kept length and no control character.
+/// - No earlier member has its call identifier.
+/// - Its name is exposed.
+/// - The Project enables its Registration now.
+/// - Its pinned revision admits a new ToolCall now.
+/// - Its arguments text is a JSON object.
+/// - The object fits the typed intake of the pinned ToolSpec.
 pub fn validate_tool_call_batch(
     state: StreamItemState,
     items: &[NativeStreamItem],
