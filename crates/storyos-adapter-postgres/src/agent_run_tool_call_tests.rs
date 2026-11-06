@@ -366,6 +366,115 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
     );
 }
 
+/// Runs one real Create whose response requests `web_search` with `arguments`. Returns the
+/// decision facts without the Attempt identity, the ToolCall rows, whether a pending ToolCall
+/// exists, and the stored function call item.
+async fn create_with_arguments(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    suffix: u16,
+    arguments: &str,
+) -> (
+    serde_json::Value,
+    Vec<serde_json::Value>,
+    bool,
+    serde_json::Value,
+) {
+    let (base, served) = destination(vec![text_and_call_stream(
+        &format!("resp_{prefix}"),
+        "web_search",
+        arguments,
+        "completed",
+    )])
+    .await;
+    let (scope, run_id) = real_run(store, admin, prefix, &base).await;
+    enable_research_tool(store, &scope, suffix).await;
+    let claim = claim_run(admin, scope, run_id.clone()).await;
+    complete_agent_run(store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    served.await.unwrap();
+    let mut facts = decision_facts(admin, &run_id).await;
+    facts.as_object_mut().unwrap().remove("model_attempt_id");
+    let item: Option<String> = admin
+        .query_one(
+            "SELECT (payload->'items'->1)::text FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    (
+        facts,
+        tool_call_rows(admin, &run_id).await,
+        crate::agent_run_tool_call::pending_tool_call_exists(admin, &claim)
+            .await
+            .unwrap(),
+        item.map_or(serde_json::Value::Null, |item| {
+            serde_json::from_str(&item).unwrap()
+        }),
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_item() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The arguments text escapes U+0000, so the parsed query holds it.
+    let escaped = r#"{"query":"tide\u0000tables","result_count":null}"#;
+    // The arguments text holds U+0000 itself, so it is not JSON text. It also holds an escaped
+    // backslash, which the stored form doubles.
+    let raw = "{\"query\":\"tide\\\\\u{0}tables\",\"result_count\":null}";
+    let in_query = create_with_arguments(&store, &admin, "f7e", 0xf7ea, escaped).await;
+    let in_text = create_with_arguments(&store, &admin, "f7f", 0xf7fa, raw).await;
+    let rejected = |refusal: &str, item: serde_json::Value| {
+        (
+            json!({
+                "status": "refused",
+                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "decision_id": null,
+                "dispatch_state": "settled",
+                "decision": null,
+                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+                "item_count": 2
+            }),
+            Vec::<serde_json::Value>::new(),
+            false,
+            item,
+        )
+    };
+    let item = |arguments: &str| {
+        json!({
+            "item_id": "fc_01",
+            "role": "tool",
+            "state": "complete",
+            "phase": "complete",
+            "text": null,
+            "summary": null,
+            "call_id": "call_01",
+            "arguments": arguments,
+            "refusal": null,
+            "native_type": "function_call",
+            "name": "web_search"
+        })
+    };
+    let mut escaped_item = item(r#"{"query":"tide\\\\\u0000tables","result_count":null}"#);
+    escaped_item["escaped_fields"] = json!(["arguments"]);
+
+    assert_eq!(
+        (in_query, in_text),
+        (
+            rejected("intake_query", item(escaped)),
+            rejected("malformed_arguments", escaped_item),
+        )
+    );
+}
+
 /// A change of the current Tool authority that occurs while the model response is pending.
 #[derive(Clone, Copy)]
 enum Revocation {

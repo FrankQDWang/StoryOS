@@ -123,7 +123,10 @@ struct FetchArguments {
 impl ToolSpec {
     /// Validates the complete arguments of one function call against the typed intake. A search
     /// takes a query of 1 to 512 characters and an optional result count of 1 to 10. A fetch
-    /// takes 1 to 5 absolute `http` or `https` URLs with a host and no user information.
+    /// takes 1 to 5 absolute `http` or `https` URLs with a host and no user information. A query
+    /// or a URL with a control character (Unicode category Cc: U+0000 to U+001F, U+007F, and
+    /// U+0080 to U+009F) does not fit: the store cannot keep U+0000 in a `jsonb` value, and a
+    /// query or a URL is one line of text.
     pub fn intake(&self, arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
         match self.operation {
             ToolOperation::WebSearch => {
@@ -132,7 +135,10 @@ impl ToolSpec {
                     result_count,
                 } = SearchArguments::deserialize(arguments)
                     .map_err(|_| IntakeRefusal::Malformed)?;
-                if query.trim().is_empty() || query.chars().count() > QUERY_MAX_CHARS {
+                if query.trim().is_empty()
+                    || query.chars().count() > QUERY_MAX_CHARS
+                    || query.chars().any(char::is_control)
+                {
                     return Err(IntakeRefusal::Query);
                 }
                 if result_count.is_some_and(|count| count == 0 || count > RESULT_COUNT_MAX) {

@@ -343,7 +343,16 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         StreamItemState::Cancelled => "cancelled",
         StreamItemState::Unknown => "unknown",
     };
-    serde_json::json!({
+    let mut escaped_fields = Vec::new();
+    let mut field = |name: &'static str, value: &Option<String>| {
+        storable_text(value.as_deref()).map(|(text, escaped)| {
+            if escaped {
+                escaped_fields.push(name);
+            }
+            text
+        })
+    };
+    let mut encoded = serde_json::json!({
         "item_id": item.item_id,
         "role": match item.role {
             StreamItemRole::Assistant => "assistant",
@@ -351,14 +360,31 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         },
         "state": phase,
         "phase": phase,
-        "text": item.text,
-        "summary": item.summary,
-        "call_id": item.call_id,
-        "arguments": item.arguments,
-        "refusal": item.refusal,
-        "native_type": item.native_type,
-        "name": item.name
-    })
+        "text": field("text", &item.text),
+        "summary": field("summary", &item.summary),
+        "call_id": field("call_id", &item.call_id),
+        "arguments": field("arguments", &item.arguments),
+        "refusal": field("refusal", &item.refusal),
+        "native_type": field("native_type", &item.native_type),
+        "name": field("name", &item.name)
+    });
+    if !escaped_fields.is_empty() {
+        encoded["escaped_fields"] = serde_json::json!(escaped_fields);
+    }
+    encoded
+}
+
+/// The text of one native item field in a form that a `jsonb` value can keep, and whether the
+/// form is escaped. PostgreSQL refuses U+0000 in `jsonb`, so a model text with U+0000 is kept
+/// as evidence in an escaped form: each backslash becomes two backslashes, and each U+0000
+/// becomes the six characters `\u0000`. The item names each escaped field in
+/// `escaped_fields`, so the original text stays recoverable.
+fn storable_text(text: Option<&str>) -> Option<(String, bool)> {
+    let text = text?;
+    if !text.contains('\0') {
+        return Some((text.to_owned(), false));
+    }
+    Some((text.replace('\\', "\\\\").replace('\0', "\\u0000"), true))
 }
 
 pub(crate) fn encode_decision(
