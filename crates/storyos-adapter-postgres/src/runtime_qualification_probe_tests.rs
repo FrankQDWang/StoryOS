@@ -97,6 +97,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
     let (scope, chapter_id, _) = queued_run(&store, "b4a", authorized()).await;
     let response = |reference: &str, items| {
         ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
+            state: storyos_core::StreamItemState::Complete,
             items,
             output: Some(ModelOutput {
                 phase: OutputPhase::FinalAnswer,

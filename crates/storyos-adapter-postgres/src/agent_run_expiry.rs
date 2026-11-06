@@ -10,6 +10,7 @@ use storyos_core::{
 use uuid::Uuid;
 
 use crate::agent_run_continuation::{current_identity, parse_identity};
+use crate::agent_run_work::RunPhaseRow;
 
 pub(crate) struct RecoveryDraft {
     pub recovery_id: String,
@@ -38,12 +39,17 @@ pub(crate) enum ExpiryAdmission {
 pub(crate) async fn plan_expiry_rebuild(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    conversation_id: &str,
-    author_message: &str,
-    sufficiency: &str,
+    run: &RunPhaseRow,
     assistance: Option<&ProjectAssistanceRecord>,
-    assembly_manifest_id: &str,
+    tool_exposure_digest: &str,
 ) -> Result<ExpiryAdmission, CompleteAgentRunError> {
+    let RunPhaseRow {
+        conversation_id,
+        author_message,
+        sufficiency,
+        assembly_manifest_id,
+        ..
+    } = run;
     let Some(prior) = load_latest_attempt(client, claim, conversation_id).await? else {
         return Ok(ExpiryAdmission::Dispatch(None));
     };
@@ -64,7 +70,8 @@ pub(crate) async fn plan_expiry_rebuild(
     if matches!(reference, ContinuationReferenceCondition::Usable) {
         return Ok(ExpiryAdmission::Dispatch(None));
     }
-    let current = assistance.map(|record| current_identity(claim, conversation_id, record));
+    let current = assistance
+        .map(|record| current_identity(claim, conversation_id, record, tool_exposure_digest));
     let decision = decide_confirmed_expiry_rebuild(&ExpiryRebuildFacts {
         reference,
         prior_submissions_settled: prior.dispatch_state == "settled"

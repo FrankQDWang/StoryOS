@@ -66,12 +66,14 @@ pub(crate) async fn prior_chain(
     else {
         return Ok(None);
     };
+    let exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
         &run.conversation_id,
         &run.author_message,
         &assistance,
+        &exposure.digest(),
     )
     .await?;
     let Some(binding) = continuation.prior_binding_id else {
@@ -123,6 +125,7 @@ pub(crate) async fn summary_request(
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference,
+        tool_exposure: storyos_core::ToolExposure::empty(),
         successor_of: None,
     }))
 }

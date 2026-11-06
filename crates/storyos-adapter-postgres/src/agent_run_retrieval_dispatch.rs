@@ -5,8 +5,9 @@ use storyos_application::{
     ModelUsage, Observation, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionOutcome, OriginalResultKeepReason, OriginalResultRetrievalDecision,
-    RetrievedOriginalResult, StreamItemState, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, OriginalResultKeepReason,
+    OriginalResultRetrievalDecision, ResponseDisposition, ResponseFacts, RetrievedOriginalResult,
+    StreamItemState, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -141,11 +142,15 @@ pub(crate) async fn record_original_result(
             .iter()
             .map(DeclaredTarget::location)
             .collect();
-    let retrieved = RetrievedResult::classify(
+    let mut retrieved = RetrievedResult::classify(
+        client,
+        claim,
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&payload),
-    );
+        &payload,
+    )
+    .await?;
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -207,17 +212,45 @@ pub(crate) async fn record_original_result(
         },
     )
     .await?;
-    let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected) else {
+    let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected.take()) else {
         return Ok(WorkPhase::Hold("recovery"));
     };
-    let AgentDecisionOutcome::Decision {
-        advances_continuation,
-        ..
-    } = selected.outcome
-    else {
-        return Err(unavailable(std::io::Error::other(
-            "A selected original result has no Agent Decision",
-        )));
+    if let Some(evidence) = retrieved.batch_evidence.take() {
+        sealed["tool_call_batch"] = evidence;
+    }
+    let (advances_continuation, settlement) = match (&selected.outcome, selected.function_requested)
+    {
+        // The retrieved Decision is a validated function request: the original Attempt supplies
+        // the Decision and its ToolCalls, and the Run refuses until execution exists.
+        (
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::ToolRequest { .. },
+                ..
+            },
+            false,
+        ) => {
+            sealed["original_result_retrieval"]["supplies_tool_call"] = serde_json::json!(true);
+            (false, CreateSettlement::ToolCallsPending)
+        }
+        (
+            AgentDecisionOutcome::Decision {
+                advances_continuation,
+                ..
+            },
+            false,
+        ) => (*advances_continuation, CreateSettlement::Response),
+        // The retrieved response asks for a function: the original Attempt keeps it as
+        // evidence, supplies no decision, and settles the Run with the refusal (ADR 0084).
+        (AgentDecisionOutcome::NoDecision, true) => {
+            sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
+            (false, CreateSettlement::FunctionRequested)
+        }
+        (AgentDecisionOutcome::Decision { .. }, true)
+        | (AgentDecisionOutcome::NoDecision, false) => {
+            return Err(unavailable(std::io::Error::other(
+                "A selected original result has no Agent Decision",
+            )));
+        }
     };
     sealed["original_result_retrieval"]["advances_continuation"] =
         serde_json::json!(advances_continuation);
@@ -237,7 +270,7 @@ pub(crate) async fn record_original_result(
             usage: response.usage,
             cache_use: response.cache_use,
             response_reference: response.response_reference.as_deref(),
-            settlement: CreateSettlement::Response,
+            settlement,
         },
         sealed,
     )
@@ -265,10 +298,14 @@ pub(crate) async fn record_late_result(
             .map(DeclaredTarget::location)
             .collect();
     let retrieved = RetrievedResult::classify(
+        client,
+        claim,
         observation,
         &declared,
         crate::agent_run_tool_probe::is_probe(&row.payload),
-    );
+        &row.payload,
+    )
+    .await?;
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -314,29 +351,40 @@ pub(crate) struct RetrievedResult {
     pub items: serde_json::Value,
     pub selected: Option<SelectedResult>,
     pub usage: ModelUsage,
+    /// The evidence of the batch validation, when the response has a Tool item.
+    pub batch_evidence: Option<serde_json::Value>,
 }
 
-/// A complete original response whose Agent Decision core validation selected.
+/// A complete original response that settles the original Attempt: core validation selected its
+/// Agent Decision, or it asks for a function.
 pub(crate) struct SelectedResult {
     pub response: ModelResponse,
     pub outcome: AgentDecisionOutcome,
+    /// The complete response asks for a function, and no ToolCall exists. The Host keeps it as
+    /// evidence and settles the Run with the research refusal (ADR 0084).
+    pub function_requested: bool,
 }
 
 impl RetrievedResult {
     /// Validates the original response against the targets that its Create declared. The
-    /// response of a probe makes no Agent Decision.
-    pub(crate) fn classify(
+    /// response of a probe makes no Agent Decision. A complete function request of an ordinary
+    /// request settles like a selected result, with the research refusal.
+    pub(crate) async fn classify(
+        client: &tokio_postgres::Client,
+        claim: &ClaimedAgentRun,
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
         probe: bool,
-    ) -> Self {
+        attempt_payload: &serde_json::Value,
+    ) -> Result<Self, CompleteAgentRunError> {
         let Observation::Terminal(response) = observation else {
-            return Self {
+            return Ok(Self {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
                 selected: None,
                 usage: ModelUsage::Unknown,
-            };
+                batch_evidence: None,
+            });
         };
         let items = encode_items(&response.items);
         let complete = response
@@ -344,29 +392,71 @@ impl RetrievedResult {
             .iter()
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
+        let mut batch_evidence = None;
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
-            validate_agent_decision(response.output.as_ref(), declared)
+            let batch = crate::agent_run_tool_call::validate_batch(
+                client,
+                claim,
+                attempt_payload,
+                &response,
+            )
+            .await?;
+            batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
+            validate_agent_decision(response.output.as_ref(), declared, batch)
         };
-        match outcome {
+        Ok(match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
-                selected: Some(SelectedResult { response, outcome }),
+                selected: Some(SelectedResult {
+                    response,
+                    outcome,
+                    function_requested: false,
+                }),
                 usage,
+                batch_evidence,
             },
+            AgentDecisionOutcome::NoDecision
+                if complete
+                    && response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
+            {
+                Self {
+                    kind: RetrievedOriginalResult::CompleteSelected,
+                    items,
+                    selected: Some(SelectedResult {
+                        response,
+                        outcome: AgentDecisionOutcome::NoDecision,
+                        function_requested: true,
+                    }),
+                    usage,
+                    batch_evidence,
+                }
+            }
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
                 kind: RetrievedOriginalResult::Incomplete,
                 items,
                 selected: None,
                 usage,
+                batch_evidence,
             },
-        }
+        })
     }
 
     pub(crate) fn label(&self) -> &'static str {
+        let function_requested = self
+            .selected
+            .as_ref()
+            .is_some_and(|selected| selected.function_requested);
         match self.kind {
+            RetrievedOriginalResult::CompleteSelected if function_requested => {
+                "complete_function_request"
+            }
             RetrievedOriginalResult::CompleteSelected => "complete_selected",
             RetrievedOriginalResult::Incomplete => "incomplete",
             RetrievedOriginalResult::Unknown | RetrievedOriginalResult::NotRetrieved => "unknown",

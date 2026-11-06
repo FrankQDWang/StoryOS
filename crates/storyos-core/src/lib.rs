@@ -27,6 +27,8 @@ mod project_tool_enablement;
 mod rebuild_expired_reference;
 mod research_destination;
 mod retrieve_original_result;
+mod tool_call;
+mod tool_exposure;
 mod tool_registration;
 mod tool_spec;
 mod unknown_create_successor;
@@ -257,6 +259,15 @@ pub use statistics_profile::{
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
+};
+pub use tool_call::{
+    CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch,
+    ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
+};
+pub use tool_exposure::{
+    EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
+    RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
+    ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,

@@ -27,6 +27,12 @@ pub(crate) struct CreateResult<'a> {
 /// How the destination answered one Create.
 pub(crate) enum CreateSettlement<'a> {
     Response,
+    /// The response asks for a function, and its batch did not validate: no ToolCall exists
+    /// (ADR 0084). The items stay as evidence, and the Run refuses with one result sentence.
+    FunctionRequested,
+    /// The Decision is a validated function request: its ToolCalls become durable with it, in
+    /// state `pending`. Execution is later work, so the Run refuses with the same sentence.
+    ToolCallsPending,
     NotSubmitted,
     Rejected(&'a str),
 }
@@ -108,7 +114,12 @@ pub(crate) async fn persist_create_result(
     if let Some(reference) = result.response_reference {
         payload["response_reference"] = serde_json::json!(reference);
     }
-    if matches!(result.settlement, CreateSettlement::Response) {
+    if matches!(
+        result.settlement,
+        CreateSettlement::Response
+            | CreateSettlement::FunctionRequested
+            | CreateSettlement::ToolCallsPending
+    ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
             .unwrap_or("unknown")
@@ -118,6 +129,9 @@ pub(crate) async fn persist_create_result(
     let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
+        CreateSettlement::FunctionRequested | CreateSettlement::ToolCallsPending => {
+            refusal = Some(research_refusal());
+        }
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
@@ -166,6 +180,28 @@ pub(crate) async fn persist_create_result(
         )
         .await
         .map_err(complete_database_error)?;
+    // The ToolCalls of a durable function request Decision, in the same transaction.
+    if let (
+        Some(decision_id),
+        AgentDecisionOutcome::Decision {
+            kind: AgentDecisionKind::ToolRequest { calls },
+            ..
+        },
+    ) = (decision_id.as_deref(), &result.outcome)
+    {
+        crate::agent_run_tool_call::insert_tool_calls(
+            client,
+            claim,
+            &crate::agent_run_tool_call::ToolCallOwner {
+                run_id: &claim.run_id,
+                decision_position: &run.decision_position,
+                model_attempt_id: result.attempt_id,
+                decision_id,
+            },
+            calls,
+        )
+        .await?;
+    }
     update_run(
         client,
         claim,
@@ -184,6 +220,16 @@ pub(crate) async fn persist_create_result(
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
+    })
+}
+
+/// The settlement of a Run whose response asks for a function while no Tool executes
+/// (ADR 0084): the batch did not validate, or its ToolCalls stay `pending`. The author sees one
+/// result sentence.
+pub(crate) fn research_refusal() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "execution_refused",
+        "capability": storyos_core::RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
     })
 }
 
@@ -298,22 +344,48 @@ fn encode_item(item: &NativeStreamItem) -> serde_json::Value {
         StreamItemState::Cancelled => "cancelled",
         StreamItemState::Unknown => "unknown",
     };
-    serde_json::json!({
-        "item_id": item.item_id,
+    let mut escaped_fields = Vec::new();
+    let mut field = |name: &'static str, value: Option<&str>| {
+        storable_text(value).map(|(text, escaped)| {
+            if escaped {
+                escaped_fields.push(name);
+            }
+            text
+        })
+    };
+    let mut encoded = serde_json::json!({
+        "item_id": field("item_id", Some(item.item_id.as_str())),
         "role": match item.role {
             StreamItemRole::Assistant => "assistant",
             StreamItemRole::Tool => "tool",
         },
         "state": phase,
         "phase": phase,
-        "text": item.text,
-        "summary": item.summary,
-        "call_id": item.call_id,
-        "arguments": item.arguments,
-        "refusal": item.refusal,
-        "native_type": item.native_type,
-        "name": item.name
-    })
+        "text": field("text", item.text.as_deref()),
+        "summary": field("summary", item.summary.as_deref()),
+        "call_id": field("call_id", item.call_id.as_deref()),
+        "arguments": field("arguments", item.arguments.as_deref()),
+        "refusal": field("refusal", item.refusal.as_deref()),
+        "native_type": field("native_type", item.native_type.as_deref()),
+        "name": field("name", item.name.as_deref())
+    });
+    if !escaped_fields.is_empty() {
+        encoded["escaped_fields"] = serde_json::json!(escaped_fields);
+    }
+    encoded
+}
+
+/// The text of one native item field in a form that a `jsonb` value can keep, and whether the
+/// form is escaped. PostgreSQL refuses U+0000 in `jsonb`, so a model text with U+0000 is kept
+/// as evidence in an escaped form: each backslash becomes two backslashes, and each U+0000
+/// becomes the six characters `\u0000`. The item names each escaped field in
+/// `escaped_fields`, so the original text stays recoverable.
+fn storable_text(text: Option<&str>) -> Option<(String, bool)> {
+    let text = text?;
+    if !text.contains('\0') {
+        return Some((text.to_owned(), false));
+    }
+    Some((text.replace('\\', "\\\\").replace('\0', "\\u0000"), true))
 }
 
 pub(crate) fn encode_decision(
@@ -354,6 +426,14 @@ pub(crate) fn encode_decision(
             "selected": selected,
             "question": question,
             "required_reply": question,
+            "authoritative": false,
+            "advances_continuation": advances_continuation
+        }),
+        AgentDecisionKind::ToolRequest { calls } => serde_json::json!({
+            "kind": "tool_request",
+            "decision_id": decision_id,
+            "selected": selected,
+            "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),

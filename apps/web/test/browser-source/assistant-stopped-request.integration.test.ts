@@ -39,6 +39,9 @@ it.each([
   ["an input above the model window", { status: "refused",
     decision: { kind: "execution_refused", capability: "conversation_too_long" } },
   "这段对话已经太长，请开始一个新对话。你可以继续手动写作。"],
+  ["a model that asked for research before the research tool exists", { status: "refused",
+    decision: { kind: "execution_refused", capability: "research_tool_unavailable" } },
+  "模型想要联网检索，但检索功能还没有开放，正文没有改动。你可以重试，或继续手动写作。"],
 ])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({

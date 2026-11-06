@@ -16,7 +16,8 @@ import {
 import { AssistantComposer } from "./assistant-composer.tsx";
 import {
   CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
-  PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
+  PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE, malformedStructuredReply, settledRun,
+  stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ResearchToolControl } from "./research-tool-control.tsx";
@@ -183,6 +184,8 @@ function resultText(run: GetAgentRunResponse): string | undefined {
           return DESTINATION_REFUSED_SENTENCE;
         case "expiry_rebuild_unknown_create":
           return PREVIOUS_REQUEST_UNRESOLVED_SENTENCE;
+        case "research_tool_unavailable":
+          return RESEARCH_TOOL_UNAVAILABLE_SENTENCE;
         default:
           return "本次请求未能执行。";
       }

@@ -8,7 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 pub use storyos_core::RequestBounds;
 use storyos_core::{
     ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    RetrievalBounds,
+    RetrievalBounds, StreamItemState, ToolExposure,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -124,6 +124,9 @@ pub struct CreateRequest {
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
+    /// The Tool Exposure of this RunStep. The adapter declares each exposed Tool as one function
+    /// and sends no Tool for an empty Exposure (ADR 0084).
+    pub tool_exposure: ToolExposure,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
 }
@@ -306,6 +309,9 @@ pub struct ReportedBinding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelResponse {
+    /// The terminal state of the whole response: `Complete`, `Incomplete`, `Failed`, or
+    /// `Cancelled`. An item keeps its own state.
+    pub state: StreamItemState,
     pub items: Vec<NativeStreamItem>,
     pub output: Option<ModelOutput>,
     pub usage: ModelUsage,
@@ -331,7 +337,7 @@ pub enum ModelUsage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NextDispatchWork {
     Settled(CompleteAgentRun),
-    Request(DestinationRequest),
+    Request(Box<DestinationRequest>),
     Abort(CommittedCancellation),
 }
 

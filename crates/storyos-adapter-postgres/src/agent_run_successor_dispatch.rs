@@ -6,7 +6,8 @@ use storyos_application::{
     WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, SuccessorPauseReason, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, ResponseDisposition, ResponseFacts,
+    SuccessorPauseReason, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
 
@@ -60,19 +61,29 @@ pub(crate) async fn successor_request(
     Ok(request)
 }
 
-/// Whether the successor sends the same request as its predecessor. A different wire digest
-/// pauses the recovery with `request_changed` and sends nothing. Returns `false` after that pause.
+/// Whether the successor sends the same request as its predecessor, with the Tool Exposure that
+/// the claim transaction computes now. A current Exposure that is not the Exposure of the
+/// prepared `request`, or a different wire digest, pauses the recovery with `request_changed`
+/// and sends nothing: the successor can only repeat the request of its predecessor, and that
+/// request no longer fits the current Exposure. Returns `false` after that pause.
 pub(crate) async fn same_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    request: &CreateRequest,
     projection: &WirePayloadProjection,
 ) -> Result<bool, CompleteAgentRunError> {
+    let exposure_current = crate::agent_run_tool_exposure::tool_exposure(client, claim, run)
+        .await?
+        .digest()
+        == request.tool_exposure.digest();
     let mut row = load_decision(client, claim).await?;
-    if row
-        .payload
-        .pointer("/wire/digest")
-        .and_then(serde_json::Value::as_str)
-        == Some(projection.digest.as_str())
+    if exposure_current
+        && row
+            .payload
+            .pointer("/wire/digest")
+            .and_then(serde_json::Value::as_str)
+            == Some(projection.digest.as_str())
     {
         return Ok(true);
     }
@@ -190,7 +201,9 @@ pub(crate) async fn commit(
 }
 
 /// Records the successor observation. Core validation decides its Agent Decision with the
-/// declared targets of the repeated request, and a selected prose change opens its Proposal.
+/// declared targets of the repeated request, and a selected prose change opens its Proposal. A
+/// repeated observation of a settled successor Attempt changes nothing: its Decision and its
+/// ToolCalls stay.
 pub(crate) async fn record(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -207,7 +220,7 @@ pub(crate) async fn record(
         .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
     let loaded = client
         .query_one(
-            "SELECT payload::text FROM storyos.model_attempts
+            "SELECT payload::text, dispatch_state FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
             &[
@@ -218,9 +231,18 @@ pub(crate) async fn record(
         )
         .await
         .map_err(unavailable)?;
+    if loaded.get::<_, &str>(1) == "settled" {
+        return Ok(WorkPhase::Hold(
+            if late_check_reference(&row.payload, &marker).is_some() {
+                "successor_late"
+            } else {
+                "recovery"
+            },
+        ));
+    }
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
-    let (dispatch_state, decision_id, binding_id) = match observation {
+    let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
         Observation::Terminal(response) => {
             payload["items"] =
                 crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
@@ -233,11 +255,24 @@ pub(crate) async fn record(
                 .iter()
                 .map(DeclaredTarget::location)
                 .collect();
-            // The successor of a probe makes no Agent Decision (ADR 0049).
-            let outcome = if crate::agent_run_tool_probe::is_probe(&row.payload) {
+            // The successor of a probe makes no Agent Decision (ADR 0049). The successor sends
+            // the request of its predecessor again, so its batch validates against the Step
+            // Snapshot of the predecessor (ADR 0084).
+            let probe = crate::agent_run_tool_probe::is_probe(&row.payload);
+            let outcome = if probe {
                 AgentDecisionOutcome::NoDecision
             } else {
-                validate_agent_decision(response.output.as_ref(), &declared)
+                let batch = crate::agent_run_tool_call::validate_batch(
+                    client,
+                    claim,
+                    &row.payload,
+                    &response,
+                )
+                .await?;
+                if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
+                    payload["tool_call_batch"] = evidence;
+                }
+                validate_agent_decision(response.output.as_ref(), &declared, batch)
             };
             match outcome {
                 AgentDecisionOutcome::Decision {
@@ -262,10 +297,31 @@ pub(crate) async fn record(
                             .opening
                         }
                         AgentDecisionKind::Advisory { .. }
-                        | AgentDecisionKind::Clarification { .. } => ProseOpening {
+                        | AgentDecisionKind::Clarification { .. }
+                        | AgentDecisionKind::ToolRequest { .. } => ProseOpening {
                             proposal_id: None,
                             locations: None,
                         },
+                    };
+                    let tool_calls_pending = match &kind {
+                        AgentDecisionKind::ToolRequest { calls } => {
+                            crate::agent_run_tool_call::insert_tool_calls(
+                                client,
+                                claim,
+                                &crate::agent_run_tool_call::ToolCallOwner {
+                                    run_id: &claim.run_id,
+                                    decision_position: &run.decision_position,
+                                    model_attempt_id: &dispatch.model_attempt_id,
+                                    decision_id: &decision_id,
+                                },
+                                calls,
+                            )
+                            .await?;
+                            true
+                        }
+                        AgentDecisionKind::Advisory { .. }
+                        | AgentDecisionKind::ProseChange { .. }
+                        | AgentDecisionKind::Clarification { .. } => false,
                     };
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
@@ -293,10 +349,22 @@ pub(crate) async fn record(
                                 &wire.admission,
                             );
                     }
-                    ("settled", Some(decision_id), binding_id)
+                    // A pending ToolCall refuses the Run until execution exists (ADR 0084).
+                    ("settled", Some(decision_id), binding_id, tool_calls_pending)
+                }
+                // A successor that asks for a function keeps its items as evidence, and the Run
+                // settles with the research refusal once the late check is done (ADR 0084).
+                AgentDecisionOutcome::NoDecision
+                    if response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
+                {
+                    ("settled", None, None, true)
                 }
                 AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
-                    ("settled", None, None)
+                    ("settled", None, None, false)
                 }
             }
         }
@@ -304,15 +372,15 @@ pub(crate) async fn record(
             if let Some(reference) = response_reference {
                 payload["response_reference"] = serde_json::json!(reference.reference_id);
             }
-            ("uncertain", None, None)
+            ("uncertain", None, None, false)
         }
         Observation::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted");
-            ("settled", None, None)
+            ("settled", None, None, false)
         }
         Observation::Rejected { reason } => {
             payload["rejection"] = serde_json::json!(reason);
-            ("settled", None, None)
+            ("settled", None, None, false)
         }
     };
     client
@@ -351,6 +419,7 @@ pub(crate) async fn record(
     marker["successor_model_attempt_id"] = serde_json::json!(dispatch.model_attempt_id);
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
     marker["successor_decision_id"] = serde_json::json!(decision_id);
+    marker["successor_requests_function"] = serde_json::json!(function_requested);
     seal(
         &mut marker,
         "dispatched",
@@ -358,6 +427,7 @@ pub(crate) async fn record(
         /*allowance_consumed*/ true,
         /*predecessor_fenced*/ true,
     );
+    marker["supplies_tool_call"] = serde_json::json!(function_requested && decision_id.is_some());
     let late = late_check_reference(&row.payload, &marker).is_some();
     row.payload["unknown_create_successor"] = marker;
     row.payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
@@ -412,11 +482,19 @@ pub(crate) async fn finish_dispatched(
             .await?,
         }));
     }
+    // A successor that asked for a function refuses the Run, because no Tool executes: its batch
+    // did not validate, or its ToolCalls stay `pending` (ADR 0084).
+    let refusal = flag(marker, "successor_requests_function")
+        .then(crate::agent_run_observation::research_refusal);
     update_run(
         client,
         claim,
-        "completed",
-        /*settlement*/ None,
+        if refusal.is_some() {
+            "refused"
+        } else {
+            "completed"
+        },
+        refusal.as_ref(),
         /*clear_lease*/ true,
     )
     .await?;

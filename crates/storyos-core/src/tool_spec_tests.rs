@@ -24,6 +24,23 @@ fn a_search_intake_takes_one_bounded_query_and_an_optional_count_of_at_most_ten(
         (json!({"query": "q".repeat(513)}), Err(IntakeRefusal::Query)),
         (json!({"query": "  "}), Err(IntakeRefusal::Query)),
         (
+            json!({"query": "tide\u{0}tables"}),
+            Err(IntakeRefusal::Query),
+        ),
+        (json!({"query": "tide\ntables"}), Err(IntakeRefusal::Query)),
+        (
+            json!({"query": "tide\u{1f}tables"}),
+            Err(IntakeRefusal::Query),
+        ),
+        (
+            json!({"query": "tide\u{7f}tables"}),
+            Err(IntakeRefusal::Query),
+        ),
+        (
+            json!({"query": "tide\u{9f}tables"}),
+            Err(IntakeRefusal::Query),
+        ),
+        (
             json!({"query": "storyos", "result_count": 11}),
             Err(IntakeRefusal::ResultCount),
         ),
@@ -74,6 +91,18 @@ fn a_fetch_intake_takes_at_most_five_absolute_web_urls() {
         ),
         (
             json!({"urls": ["https://a.example/a b"]}),
+            Err(IntakeRefusal::Url),
+        ),
+        (
+            json!({"urls": ["https://a.example/a\u{0}b"]}),
+            Err(IntakeRefusal::Url),
+        ),
+        (
+            json!({"urls": ["https://a.example/a\u{7f}b"]}),
+            Err(IntakeRefusal::Url),
+        ),
+        (
+            json!({"urls": ["https://a.example/a\u{85}b"]}),
             Err(IntakeRefusal::Url),
         ),
         (json!({"query": "storyos"}), Err(IntakeRefusal::Malformed)),
