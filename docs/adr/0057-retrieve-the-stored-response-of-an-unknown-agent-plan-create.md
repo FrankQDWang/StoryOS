@@ -40,6 +40,7 @@ On 2026-10-13, [S4-04c: Settle Retrieved Results and Decide the Real Successor](
 - A complete retrieved original result settles the original Attempt like a Create result, with the declared targets of the Create. An Advisory, a Clarification, and a prose change with its Proposal are each possible. A selected result releases the reservation, and no successor follows.
 - The Stage 3 successor decision of S3-24 decides the one successor on the route. Its gates come from the records of the route, not from a script. The request bound of the pinned use binding is the budget for both requests (author decision, 2026-10-13). A committed Tool or hosted item is an unresolved effect, because the request declares no Tool.
 - The dispatch claim of the successor compares its wire digest with the digest of the predecessor. A different digest commits a pause with `request_changed`, and nothing leaves the Host.
+- On 2026-11-06, [#1398](https://github.com/FrankQDWang/StoryOS/issues/1398) added a Tool Exposure check to this claim. The claim computes the current Tool Exposure (ADR 0084). When its digest is not the digest of the prepared successor request, the claim commits a pause with `request_changed`, and nothing leaves the Host.
 - A late predecessor result after the successor dispatch reconciles usage as evidence only.
 
 ## Author-visible result

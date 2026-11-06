@@ -61,19 +61,29 @@ pub(crate) async fn successor_request(
     Ok(request)
 }
 
-/// Whether the successor sends the same request as its predecessor. A different wire digest
-/// pauses the recovery with `request_changed` and sends nothing. Returns `false` after that pause.
+/// Whether the successor sends the same request as its predecessor, with the Tool Exposure that
+/// the claim transaction computes now. A current Exposure that is not the Exposure of the
+/// prepared `request`, or a different wire digest, pauses the recovery with `request_changed`
+/// and sends nothing: the successor can only repeat the request of its predecessor, and that
+/// request no longer fits the current Exposure. Returns `false` after that pause.
 pub(crate) async fn same_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    request: &CreateRequest,
     projection: &WirePayloadProjection,
 ) -> Result<bool, CompleteAgentRunError> {
+    let exposure_current = crate::agent_run_tool_exposure::tool_exposure(client, claim, run)
+        .await?
+        .digest()
+        == request.tool_exposure.digest();
     let mut row = load_decision(client, claim).await?;
-    if row
-        .payload
-        .pointer("/wire/digest")
-        .and_then(serde_json::Value::as_str)
-        == Some(projection.digest.as_str())
+    if exposure_current
+        && row
+            .payload
+            .pointer("/wire/digest")
+            .and_then(serde_json::Value::as_str)
+            == Some(projection.digest.as_str())
     {
         return Ok(true);
     }

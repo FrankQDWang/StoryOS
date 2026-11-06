@@ -283,6 +283,77 @@ async fn a_committed_tool_item_or_a_changed_request_pauses_the_successor_before_
     );
 }
 
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_before_egress() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![
+        broken_stream("resp_f80"),
+        stored("resp_f80", "in_progress"),
+    ])
+    .await;
+    let (scope, run_id) = real_run(&store, &admin, "f80", &base).await;
+    crate::agent_run_tool_call::tests::set_research_tool(
+        &store,
+        &scope,
+        0xf80a,
+        storyos_core::ToolEnablement::Enabled,
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    // The author disables the research Tool after the successor request was prepared.
+    let route = crate::agent_run_tool_exposure::tests::DisableBeforeClaim {
+        store: &store,
+        scope: &scope,
+        suffix: 0xf80b,
+        successor: true,
+        disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
+        prepared: Mutex::new(Vec::new()),
+    };
+    complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let facts = successor_facts(&admin, &run_id).await;
+    let declared: Vec<bool> = route
+        .prepared
+        .into_inner()
+        .unwrap()
+        .iter()
+        .map(|(snapshot, tools)| snapshot["tools"] != serde_json::json!([]) && tools.is_some())
+        .collect();
+
+    assert_eq!(
+        (
+            facts[..4].to_vec(),
+            facts[4].clone(),
+            facts[7].clone(),
+            declared,
+            served.await.unwrap(),
+        ),
+        (
+            vec![
+                Some("paused".to_owned()),
+                Some(
+                    r#"{"kind": "unknown_create_successor", "reason": "request_changed"}"#
+                        .to_owned()
+                ),
+                Some("paused".to_owned()),
+                Some("request_changed".to_owned()),
+            ],
+            Some("true,true".to_owned()),
+            Some("decision,retrieval".to_owned()),
+            vec![true, true],
+            vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_f80 HTTP/1.1".to_owned(),
+            ],
+        )
+    );
+}
+
 /// An Agent Plan route whose Create outcome is unknown and whose stored response is a complete
 /// prose change of each declared target. It records the declared targets of the Retrieve.
 struct StoredProseChange {

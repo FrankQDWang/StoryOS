@@ -89,8 +89,10 @@ impl ModelDispatchStore for PostgresProjectReader {
                     if run.settled() || !available || storyos_core::admit_route(&route).is_err() {
                         return Ok(None);
                     }
-                    if !crate::agent_run_successor_dispatch::same_request(client, claim, projection)
-                        .await?
+                    if !crate::agent_run_successor_dispatch::same_request(
+                        client, claim, &run, create, projection,
+                    )
+                    .await?
                     {
                         paused.store(/*val*/ true, std::sync::atomic::Ordering::Relaxed);
                         return Ok(None);

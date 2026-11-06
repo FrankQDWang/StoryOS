@@ -344,12 +344,17 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
     );
 }
 
-/// The real adapter. Before the claim of the first Create, the author disables the research
-/// Tool. Each prepared Create keeps its Exposure Snapshot and the `tools` field of its body.
-struct DisableBeforeClaim<'a> {
-    store: &'a crate::PostgresProjectReader,
-    scope: &'a storyos_application::ProjectScope,
-    prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
+/// The real adapter. Before the claim of the first Create that is a successor when `successor`
+/// is set, and that is not a successor when it is not, the author disables the research Tool
+/// with the Command Challenge `suffix`. Each prepared Create keeps its Exposure Snapshot and the
+/// `tools` field of its body.
+pub(crate) struct DisableBeforeClaim<'a> {
+    pub store: &'a crate::PostgresProjectReader,
+    pub scope: &'a storyos_application::ProjectScope,
+    pub suffix: u16,
+    pub successor: bool,
+    pub disabled: std::sync::atomic::AtomicBool,
+    pub prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
 }
 
 impl ModelProviderAdapter for DisableBeforeClaim<'_> {
@@ -365,16 +370,19 @@ impl ModelProviderAdapter for DisableBeforeClaim<'_> {
             let body: serde_json::Value =
                 serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap())
                     .unwrap();
-            let first = {
-                let mut seen = self.prepared.lock().unwrap();
-                seen.push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
-                seen.len() == 1
-            };
-            if first {
+            self.prepared
+                .lock()
+                .unwrap()
+                .push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
+            if create.successor_of.is_some() == self.successor
+                && !self
+                    .disabled
+                    .swap(/*val*/ true, std::sync::atomic::Ordering::Relaxed)
+            {
                 crate::agent_run_tool_call::tests::set_research_tool(
                     self.store,
                     self.scope,
-                    0xf79b,
+                    self.suffix,
                     ToolEnablement::Disabled,
                 )
                 .await;
@@ -412,6 +420,9 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
     let route = DisableBeforeClaim {
         store: &store,
         scope: &scope,
+        suffix: 0xf79b,
+        successor: false,
+        disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
         prepared: std::sync::Mutex::new(Vec::new()),
     };
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
