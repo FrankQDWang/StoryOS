@@ -133,6 +133,11 @@ async fn tool_run(
 
 /// The Run, its one ToolCall without volatile identities, and its Activity Run Events.
 async fn tool_facts(admin: &Client, run_id: &str) -> Value {
+    tool_facts_without(admin, run_id, KEY).await
+}
+
+/// The facts of `tool_facts`, with `holds_key` for the credential value `key`.
+async fn tool_facts_without(admin: &Client, run_id: &str, key: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_object(
@@ -200,7 +205,7 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                                               FROM storyos.agent_run_events AS event
                                              WHERE event.run_id = run.run_id) AS records))::text
                FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
-            &[&run_id, &KEY],
+            &[&run_id, &key],
         )
         .await
         .unwrap();
@@ -666,5 +671,96 @@ async fn a_claim_in_another_project_scope_sends_nothing_and_changes_no_tool_call
             Value::Null,
             Vec::<String>::new(),
         )
+    );
+}
+
+/// The Exa key of the Worker settings file `STORYOS_ENV_FILE`. The test never prints it.
+struct SettingsFileKey(String);
+
+impl storyos_application::CredentialResolver for SettingsFileKey {
+    async fn resolve(
+        &self,
+        _reference: &storyos_application::CredentialReference,
+    ) -> Option<storyos_application::ResolvedCredential> {
+        Some(storyos_application::ResolvedCredential::new(self.0.clone()))
+    }
+}
+
+/// The live tool adapter: the real MCP client with the author key.
+struct Live(McpClient<SettingsFileKey>);
+
+impl ToolDestinationAdapter for Live {
+    type Prepared = McpExchange;
+
+    async fn prepare(
+        &self,
+        request: &ToolCallRequest,
+    ) -> Result<PreparedRequest<McpExchange>, PreDispatchRefusal> {
+        ToolDestinationAdapter::prepare(&self.0, request).await
+    }
+
+    async fn exchange(&self, prepared: McpExchange) -> ToolObservation {
+        ToolDestinationAdapter::exchange(&self.0, prepared).await
+    }
+}
+
+/// One governed search against the live Exa server (S5-03 AC11). It runs only when
+/// `STORYOS_LIVE_EXA_CALL=1`, after the author authorizes it, and it prints no key.
+#[tokio::test]
+#[ignore = "live: needs the author authorization and STORYOS_LIVE_EXA_CALL=1"]
+async fn a_live_exa_search_settles_through_the_tool_gateway() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    if std::env::var("STORYOS_LIVE_EXA_CALL").as_deref() != Ok("1") {
+        return;
+    }
+    let settings = std::fs::read_to_string(std::env::var("STORYOS_ENV_FILE").unwrap()).unwrap();
+    let key = settings
+        .lines()
+        .find_map(|line| line.strip_prefix("STORYOS_EXA_API_KEY="))
+        .map(|value| value.trim().trim_matches('"').to_owned())
+        .unwrap();
+    let (store, admin) = stores().await;
+    let (scope, run_id) = tool_run(
+        &store,
+        &admin,
+        "dcd",
+        0xdcda,
+        EXA_TOOL_REGISTRATION.server_url,
+    )
+    .await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    let live = Live(McpClient {
+        resolver: SettingsFileKey(key.clone()),
+        timeout: std::time::Duration::from_secs(/*secs*/ 60),
+    });
+    let started = std::time::Instant::now();
+    let completed = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &live,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await;
+    let mut facts = tool_facts_without(&admin, &run_id, &key).await;
+    let text = facts["tool_call"]["result_text"].take();
+    let lines = text.as_str().map_or(0, |text| text.lines().count());
+    println!(
+        "live exa: elapsed {} ms, completed {:?}, result lines {lines}",
+        started.elapsed().as_millis(),
+        completed.is_ok()
+    );
+    println!("{}", serde_json::to_string_pretty(&facts).unwrap());
+
+    assert_eq!(
+        (
+            completed.is_ok(),
+            facts["tool_call"]["state"].clone(),
+            facts["holds_key"].clone()
+        ),
+        (true, json!("settled"), json!(false))
     );
 }
