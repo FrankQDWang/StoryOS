@@ -8,6 +8,11 @@ use crate::{ToolAttemptSettlement, ToolCallSettlement, ToolCallState, ToolIntake
 
 /// The bound of the stored text of one Source Snapshot, with its truncation mark.
 pub const SOURCE_TEXT_MAX_BYTES: usize = 256 * 1024;
+/// The character bounds of the stored metadata of one Source Snapshot. They are the CHECK bounds
+/// of the store, so that a capture never fails the settlement transaction.
+pub const SOURCE_LOCATOR_MAX_CHARS: usize = 8192;
+pub const SOURCE_TITLE_MAX_CHARS: usize = 8192;
+pub const SOURCE_PUBLISHED_MAX_CHARS: usize = 128;
 
 /// The text format of the result of one registered tool.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -153,46 +158,64 @@ struct Entry<'a> {
     body: Vec<&'a str>,
 }
 
-/// Splits `lines` at each line with `title_prefix` that a `URL:` line follows.
-fn entries<'a>(lines: &[&'a str], title_prefix: &str, no_title: &str) -> Vec<Entry<'a>> {
-    let starts: Vec<usize> = (0..lines.len())
-        .filter(|&index| {
-            lines[index].starts_with(title_prefix)
-                && lines
-                    .get(index + 1)
-                    .is_some_and(|line| line.starts_with("URL: "))
-        })
-        .collect();
-    starts
-        .iter()
-        .enumerate()
-        .filter_map(|(position, &start)| {
-            let end = starts.get(position + 1).copied().unwrap_or(lines.len());
-            let locator = lines[start + 1]["URL: ".len()..].trim().to_owned();
-            let mut body = &lines[start + 2..end];
-            let mut published = None;
-            while let Some(line) = body.first() {
-                if let Some(value) = line.strip_prefix("Published: ") {
-                    published = reported(value, "N/A");
-                } else if !line.starts_with("Author: ") {
-                    break;
-                }
-                body = &body[1..];
-            }
-            (!locator.is_empty()).then(|| Entry {
-                title: reported(&lines[start][title_prefix.len()..], no_title),
-                locator,
-                published,
-                body: body.to_vec(),
-            })
-        })
-        .collect()
+/// The header of the entry that starts at `lines[start]`: a line with `title_prefix`, a `URL:`
+/// line, and optional `Published:` and `Author:` lines. Returns the entry with an empty body and
+/// the index of its first body line.
+fn header<'a>(
+    lines: &[&'a str],
+    start: usize,
+    title_prefix: &str,
+    no_title: &str,
+) -> Option<(Entry<'a>, usize)> {
+    let title = lines.get(start)?.strip_prefix(title_prefix)?;
+    let locator = lines.get(start + 1)?.strip_prefix("URL: ")?.trim();
+    let mut next = start + 2;
+    let mut published = None;
+    while let Some(line) = lines.get(next) {
+        if let Some(value) = line.strip_prefix("Published: ") {
+            published = reported(value, "N/A", SOURCE_PUBLISHED_MAX_CHARS);
+        } else if !line.starts_with("Author: ") {
+            break;
+        }
+        next += 1;
+    }
+    let entry = Entry {
+        title: reported(title, no_title, SOURCE_TITLE_MAX_CHARS),
+        locator: locator.to_owned(),
+        published,
+        body: Vec::new(),
+    };
+    Some((entry, next))
 }
 
+/// The entries of a search result. An entry starts at the first line, or after the separator
+/// lines `""`, `"---"`, `""` that the server writes between two entries, so that a snippet line
+/// cannot start an entry. An entry with no URL or with a URL above the locator bound is dropped.
 fn titled_entries(text: &str) -> Vec<CapturedSource> {
     let lines: Vec<&str> = text.split('\n').collect();
-    entries(&lines, "Title: ", "N/A")
+    let separated =
+        |index: usize| index == 0 || (index >= 3 && lines[index - 3..index] == ["", "---", ""]);
+    let mut entries: Vec<Entry<'_>> = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        match header(&lines, index, "Title: ", "N/A").filter(|_| separated(index)) {
+            Some((entry, body)) => {
+                entries.push(entry);
+                index = body;
+            }
+            None => {
+                if let Some(entry) = entries.last_mut() {
+                    entry.body.push(lines[index]);
+                }
+                index += 1;
+            }
+        }
+    }
+    entries
         .into_iter()
+        .filter(|entry| {
+            !entry.locator.is_empty() && entry.locator.chars().count() <= SOURCE_LOCATOR_MAX_CHARS
+        })
         .map(|entry| {
             let body = entry.body.join("\n");
             let body = body.trim_end();
@@ -201,61 +224,80 @@ fn titled_entries(text: &str) -> Vec<CapturedSource> {
                 .strip_prefix("Highlights:")
                 .or_else(|| body.strip_prefix("Text:"))
                 .unwrap_or(body)
-                .trim();
-            captured(SourceKind::SearchResult, entry, snippet)
+                .trim()
+                .to_owned();
+            captured(SourceKind::SearchResult, entry, &snippet)
         })
         .collect()
 }
 
+/// The pages of a page read. StoryOS identifies a page only by a requested URL: a page starts at
+/// a header whose URL is a requested URL that no earlier page answered, at the first line or after
+/// an empty line, with an empty line or the end of the text after the header. A header with another URL, for example of
+/// a page that the server read at a changed URL, ends the page before it and gives no Snapshot, so
+/// that no page text goes under the wrong URL; its requested URL gets a `missing` Gap. Each other
+/// line is page text.
 fn page_blocks(text: &str, requested: &[String]) -> ResearchCapture {
     let mut lines: Vec<&str> = text.split('\n').collect();
-    let mut failed = Vec::new();
+    let mut failed: Vec<usize> = Vec::new();
     while let Some(last) = lines.last() {
         if last.trim().is_empty() {
             lines.pop();
-        } else if let Some((url, _reason)) = last
+        } else if let Some(position) = last
             .strip_prefix("Error fetching ")
-            .and_then(|rest| rest.rsplit_once(": "))
+            .and_then(|rest| error_url(rest, requested))
         {
-            failed.push(url.trim().to_owned());
+            failed.push(position);
             lines.pop();
         } else {
             break;
         }
     }
-    let pages = entries(&lines, "# ", "(no title)");
-    let same =
-        |url: &str, locator: &str| url.trim_end_matches('/') == locator.trim_end_matches('/');
-    let mut claimed: Vec<Option<usize>> = vec![None; requested.len()];
-    let mut used = vec![false; pages.len()];
-    for (position, url) in requested.iter().enumerate() {
-        if let Some(index) =
-            (0..pages.len()).find(|&index| !used[index] && same(url, &pages[index].locator))
-        {
-            used[index] = true;
-            claimed[position] = Some(index);
+    // Each page: the requested URL that it answers, or `None` for a page at another URL.
+    let mut pages: Vec<(Option<usize>, Entry<'_>)> = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        let at_boundary = index == 0 || lines[index - 1].trim().is_empty();
+        let started = header(&lines, index, "# ", "(no title)")
+            .filter(|(_, body)| at_boundary && lines.get(*body).is_none_or(|line| line.is_empty()));
+        match started {
+            Some((entry, body)) => {
+                let answered = requested
+                    .iter()
+                    .position(|url| same_url(url, &entry.locator));
+                let answered = answered.filter(|position| {
+                    !failed.contains(position)
+                        && !pages.iter().any(|(page, _)| *page == Some(*position))
+                });
+                pages.push((answered, entry));
+                index = body;
+            }
+            None => {
+                if let Some((_, entry)) = pages.last_mut() {
+                    entry.body.push(lines[index]);
+                }
+                index += 1;
+            }
         }
     }
-    // A page whose URL the server changed, for example after a redirect, answers the next
-    // requested URL that no page and no error answered.
-    let mut spare = (0..pages.len()).filter(|&index| !used[index]);
-    for (position, url) in requested.iter().enumerate() {
-        if claimed[position].is_none() && !failed.iter().any(|failed| same(url, failed)) {
-            claimed[position] = spare.next();
+    let mut snapshots = Vec::new();
+    let mut answered: Vec<Option<bool>> = vec![None; requested.len()];
+    for (position, entry) in pages {
+        let Some(position) = position else { continue };
+        let body = entry.body.join("\n").trim().to_owned();
+        answered[position] = Some(!body.is_empty());
+        if !body.is_empty() {
+            snapshots.push(captured(SourceKind::Page, entry, &body));
         }
     }
-    let bodies: Vec<String> = pages
-        .iter()
-        .map(|page| page.body.join("\n").trim().to_owned())
-        .collect();
     let gaps = requested
         .iter()
-        .zip(&claimed)
-        .filter_map(|(url, claimed)| {
-            let reason = match claimed {
-                Some(index) if bodies[*index].is_empty() => SourceGapReason::Empty,
-                Some(_) => return None,
-                None if failed.iter().any(|failed| same(url, failed)) => SourceGapReason::Failed,
+        .enumerate()
+        .filter_map(|(position, url)| {
+            let reason = match answered[position] {
+                Some(true) => return None,
+                Some(false) => SourceGapReason::Empty,
+                None if failed.contains(&position) => SourceGapReason::Failed,
                 None => SourceGapReason::Missing,
             };
             Some(SourceGap {
@@ -264,13 +306,28 @@ fn page_blocks(text: &str, requested: &[String]) -> ResearchCapture {
             })
         })
         .collect();
-    let snapshots = pages
-        .into_iter()
-        .zip(&bodies)
-        .filter(|(_, body)| !body.is_empty())
-        .map(|(page, body)| captured(SourceKind::Page, page, body))
-        .collect();
     ResearchCapture { snapshots, gaps }
+}
+
+/// The requested URL that an error line names: the longest requested URL that the line starts
+/// with, before `": "` and the reason. The reason can contain `": "` too.
+fn error_url(rest: &str, requested: &[String]) -> Option<usize> {
+    requested
+        .iter()
+        .enumerate()
+        .filter(|(_, url)| {
+            [url.as_str(), url.trim_end_matches('/')].iter().any(|url| {
+                rest.strip_prefix(url)
+                    .is_some_and(|tail| tail.starts_with(": "))
+            })
+        })
+        .max_by_key(|(_, url)| url.len())
+        .map(|(position, _)| position)
+}
+
+/// Two URLs are the same when they differ at most by a trailing slash.
+fn same_url(url: &str, locator: &str) -> bool {
+    url.trim_end_matches('/') == locator.trim_end_matches('/')
 }
 
 fn captured(kind: SourceKind, entry: Entry<'_>, text: &str) -> CapturedSource {
@@ -310,10 +367,12 @@ fn bounded(text: &str) -> (String, bool) {
     (format!("{}{}", &text[..end], mark(end)), true)
 }
 
-/// A reported header value, or `None` for the value that the server writes when it has none.
-fn reported(value: &str, none: &str) -> Option<String> {
+/// A reported header value, or `None` for the value that the server writes when it has none and
+/// for a value above `max_chars`, which the store cannot keep.
+fn reported(value: &str, none: &str, max_chars: usize) -> Option<String> {
     let value = value.trim();
-    (!value.is_empty() && value != none).then(|| value.to_owned())
+    (!value.is_empty() && value != none && value.chars().count() <= max_chars)
+        .then(|| value.to_owned())
 }
 
 #[cfg(test)]

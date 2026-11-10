@@ -65,8 +65,7 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
           "locator": "https://example.org/tides",
           "original_bytes": "20",
           "published": "1890-01-01T00:00:00.000Z",
-          "revision": "1",
-          "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
+              "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
           "text_bytes": "20",
           "title": "Liverpool tide table 1890",
           "tool_call_id": "018f0000-0000-7001-8000-000000000d02",
@@ -111,7 +110,6 @@ pub(super) const GET_RESEARCH_SOURCE_ROW: OperationRow = OperationRow {
         "locator": "https://example.org/tides",
         "original_bytes": "20",
         "published": null,
-        "revision": "2",
         "source_snapshot_id": "018f0000-0000-7001-8000-000000000d07",
         "text_bytes": "20",
         "title": null,
@@ -150,7 +148,6 @@ const LIST_RESEARCH_SOURCES_RESPONSE: &[Patch] = &[
         U64,
         &[
             "/$defs/SourceSnapshotInspect/properties/original_bytes",
-            "/$defs/SourceSnapshotInspect/properties/revision",
             "/$defs/SourceSnapshotInspect/properties/text_bytes",
         ],
     ),
@@ -180,7 +177,6 @@ const GET_RESEARCH_SOURCE_RESPONSE: &[Patch] = &[
         U64,
         &[
             "/$defs/SourceSnapshotInspect/properties/original_bytes",
-            "/$defs/SourceSnapshotInspect/properties/revision",
             "/$defs/SourceSnapshotInspect/properties/text_bytes",
         ],
     ),

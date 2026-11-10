@@ -90,8 +90,6 @@ pub struct SourceSnapshotInspect {
     pub title: Option<String>,
     pub published: Option<String>,
     pub captured_at: String,
-    // The position of this revision in the lineage of its locator in the Project, from 1.
-    pub revision: String,
     pub content_digest: String,
     // The byte length of the stored text.
     pub text_bytes: String,

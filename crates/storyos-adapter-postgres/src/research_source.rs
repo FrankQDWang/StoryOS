@@ -1,7 +1,8 @@
 //! The Source Snapshots and Source Gaps of research ToolCalls (S5-06). The settlement of a
 //! ToolCall writes them in its own transaction, so a crash leaves no half-captured result. The
 //! store has no update or delete path, and the runtime role has only SELECT and INSERT on both
-//! tables. The revisions of one locator in a Project form one lineage in capture order.
+//! tables. The revisions of one locator in a Project form one lineage. Each revision has its own
+//! identity and capture time; no stored or computed rank can change after a read.
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreateAgentRunError, ProjectScope,
@@ -82,16 +83,11 @@ pub(crate) async fn capture(
     Ok(())
 }
 
-/// The Snapshot columns of the query responses. The revision is the position of the Snapshot in
-/// the lineage of its locator, in capture order.
+/// The Snapshot columns of the query responses. Each column is immutable, so a response never
+/// changes when a later capture of the same locator commits.
 const SNAPSHOT_COLUMNS: &str = "snapshot.source_snapshot_id::text, snapshot.tool_call_id::text,
     snapshot.kind, snapshot.locator, snapshot.title, snapshot.published,
     to_char(snapshot.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-    (SELECT count(*) FROM storyos.source_snapshots AS earlier
-      WHERE (earlier.owner_user_id, earlier.project_id, earlier.locator)
-            = (snapshot.owner_user_id, snapshot.project_id, snapshot.locator)
-        AND (earlier.captured_at, earlier.source_snapshot_id)
-            <= (snapshot.captured_at, snapshot.source_snapshot_id))::text,
     snapshot.content_digest, snapshot.text_bytes::text, snapshot.original_bytes::text,
     snapshot.truncated";
 
@@ -108,11 +104,10 @@ fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAg
         title: row.get(/*idx*/ 4),
         published: row.get(/*idx*/ 5),
         captured_at: row.get(/*idx*/ 6),
-        revision: row.get(/*idx*/ 7),
-        content_digest: row.get(/*idx*/ 8),
-        text_bytes: row.get(/*idx*/ 9),
-        original_bytes: row.get(/*idx*/ 10),
-        truncated: row.get(/*idx*/ 11),
+        content_digest: row.get(/*idx*/ 7),
+        text_bytes: row.get(/*idx*/ 8),
+        original_bytes: row.get(/*idx*/ 9),
+        truncated: row.get(/*idx*/ 10),
     })
 }
 
@@ -225,7 +220,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 .map(|row| {
                     Ok(ResearchSourceText {
                         snapshot: snapshot(&row)?,
-                        text: row.get(/*idx*/ 12),
+                        text: row.get(/*idx*/ 11),
                     })
                 })
                 .transpose()

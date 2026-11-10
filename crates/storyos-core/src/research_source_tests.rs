@@ -41,12 +41,12 @@ fn gap(locator: &str, reason: SourceGapReason) -> SourceGap {
 }
 
 #[test]
-fn each_search_entry_with_a_url_is_one_search_result_snapshot() {
+fn each_search_entry_with_a_url_is_one_search_result_snapshot_and_a_snippet_line_starts_none() {
     let text = "Title: Liverpool tide table 1890\nURL: https://e.org/tides\n\
                 Published: 1890-01-01T00:00:00.000Z\nAuthor: N/A\nHighlights:\n\
                 High water at 10.42.\n\n...\n\nLow water at 4.55.\n\n---\n\n\
                 Title: N/A\nURL: https://e.org/port\nPublished: N/A\nAuthor: Harbour Board\n\
-                Text: The port log.";
+                Text: The port log.\nTitle: Quoted\nURL: https://other.example/";
     let settlement = settle_tool_call(&WEB_SEARCH_TOOL_SPEC, &called(text, false));
     let intake = ToolIntake::WebSearch {
         query: "tide tables of 1890".to_owned(),
@@ -69,7 +69,7 @@ fn each_search_entry_with_a_url_is_one_search_result_snapshot() {
                     "https://e.org/port",
                     None,
                     None,
-                    "The port log."
+                    "The port log.\nTitle: Quoted\nURL: https://other.example/"
                 ),
             ],
             gaps: Vec::new(),
@@ -79,10 +79,14 @@ fn each_search_entry_with_a_url_is_one_search_result_snapshot() {
 
 #[test]
 fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
-    let text = "# Tide table\nURL: https://e.org/a\nPublished: 1890-01-01\n\nHigh water at 10.42.\n\n\
-                # (no title)\nURL: https://e.org/b/\n\nThe port log.\n\n\
-                # Empty page\nURL: https://e.org/e\n\n\n\
-                Error fetching https://e.org/c: CRAWL_NOT_FOUND";
+    // Page a quotes a header of another page, and the reason of c contains ": ".
+    let quote = "High water at 10.42.\n\n# Example\nURL: https://other.example/\nQuoted text.";
+    let text = format!(
+        "# Tide table\nURL: https://e.org/a\nPublished: 1890-01-01\n\n{quote}\n\n\
+         # (no title)\nURL: https://e.org/b/\n\nThe port log.\n\n\
+         # Empty page\nURL: https://e.org/e\n\n\n\
+         Error fetching https://e.org/c: HTTP error: 404"
+    );
     let urls = [
         "https://e.org/a",
         "https://e.org/b",
@@ -90,7 +94,7 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
         "https://e.org/d",
         "https://e.org/e",
     ];
-    let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(text, false));
+    let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(&text, false));
 
     assert_eq!(
         capture_research_sources(ResultFormat::PageBlocks, &fetch(&urls), &settlement),
@@ -101,7 +105,7 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
                     "https://e.org/a",
                     Some("Tide table"),
                     Some("1890-01-01"),
-                    "High water at 10.42."
+                    quote
                 ),
                 source(
                     SourceKind::Page,
@@ -121,26 +125,54 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
 }
 
 #[test]
-fn a_page_at_a_changed_url_answers_the_requested_url_with_no_gap() {
-    let text = "# Tide table\nURL: https://e.org/tides\n\nHigh water at 10.42.";
+fn a_page_at_a_changed_url_is_no_snapshot_and_its_requested_url_is_missing() {
+    let text = "# Tide table\nURL: https://e.org/a\n\nHigh water at 10.42.\n\n\
+                # Moved page\nURL: https://e.org/new\n\nThe port log.";
     let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(text, false));
 
     assert_eq!(
         capture_research_sources(
             ResultFormat::PageBlocks,
-            &fetch(&["http://e.org/old"]),
+            &fetch(&["https://e.org/a", "https://e.org/old"]),
             &settlement
         ),
         ResearchCapture {
             snapshots: vec![source(
                 SourceKind::Page,
-                "https://e.org/tides",
+                "https://e.org/a",
                 Some("Tide table"),
                 None,
                 "High water at 10.42."
             )],
-            gaps: Vec::new(),
+            gaps: vec![gap("https://e.org/old", SourceGapReason::Missing)],
         }
+    );
+}
+
+#[test]
+fn metadata_above_the_store_bounds_is_absent_and_an_entry_with_a_long_url_is_dropped() {
+    let title = "T".repeat(SOURCE_TITLE_MAX_CHARS + 1);
+    let published = "1".repeat(SOURCE_PUBLISHED_MAX_CHARS + 1);
+    let long_url = format!("https://e.org/{}", "u".repeat(SOURCE_LOCATOR_MAX_CHARS));
+    let text = format!(
+        "Title: {title}\nURL: https://e.org/a\nPublished: {published}\nText: High water.\n\n---\n\n\
+         Title: Long\nURL: {long_url}\nText: Dropped."
+    );
+    let settlement = settle_tool_call(&WEB_SEARCH_TOOL_SPEC, &called(&text, false));
+    let intake = ToolIntake::WebSearch {
+        query: "tides".to_owned(),
+        result_count: None,
+    };
+
+    assert_eq!(
+        capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement).snapshots,
+        vec![source(
+            SourceKind::SearchResult,
+            "https://e.org/a",
+            None,
+            None,
+            "High water."
+        )]
     );
 }
 

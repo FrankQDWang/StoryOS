@@ -151,11 +151,10 @@ fn snapshot(
     locator: &str,
     title: Value,
     published: Value,
-    revision: u32,
     text: &str,
 ) -> Value {
     json!({"tool_call_id": call, "kind": kind, "locator": locator, "title": title,
-           "published": published, "revision": revision.to_string(),
+           "published": published,
            "content_digest": digest(text), "text_bytes": text.len().to_string(),
            "original_bytes": text.len().to_string(), "truncated": false})
 }
@@ -234,14 +233,59 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
                 "snapshots": [
                     snapshot("call_01", "search_result", "https://example.org/tides",
                              json!("Liverpool tide table 1890"),
-                             json!("1890-01-01T00:00:00.000Z"), 1, "High water at 10.42."),
+                             json!("1890-01-01T00:00:00.000Z"), "High water at 10.42."),
                     snapshot("call_01", "search_result", "https://example.org/port",
-                             json!("Port log"), Value::Null, 1, "The port log."),
+                             json!("Port log"), Value::Null, "The port log."),
                 ],
                 "gaps": [],
             }),
             "High water at 10.42.".to_owned(),
             json!({"recorded": ids, "versions": [ids.join(",")]}),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn metadata_above_the_store_bounds_keeps_the_settlement_and_reads_as_absent() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
+    let text = format!(
+        "Title: {}\nURL: https://example.org/tides\nPublished: {}\nAuthor: N/A\nHighlights:\n\
+         High water at 10.42.",
+        "T".repeat(storyos_core::SOURCE_TITLE_MAX_CHARS + 1),
+        "1".repeat(storyos_core::SOURCE_PUBLISHED_MAX_CHARS + 1),
+    );
+    let (scope, run_id) = research_run(
+        &store,
+        &admin,
+        "5a6",
+        0x5a6a,
+        &[("call_01", "web_search", search)],
+        &[&text],
+    )
+    .await;
+    let state: String = admin
+        .query_one(
+            "SELECT state FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    assert_eq!(
+        (state, listed(&store, &admin, &scope, &run_id).await),
+        (
+            "settled".to_owned(),
+            json!({
+                "snapshots": [snapshot("call_01", "search_result", "https://example.org/tides",
+                                       Value::Null, Value::Null, "High water at 10.42.")],
+                "gaps": [],
+            })
         )
     );
 }
@@ -272,7 +316,7 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
         listed(&store, &admin, &scope, &run_id).await,
         json!({
             "snapshots": [snapshot("call_01", "page", "https://example.org/a",
-                                   json!("Tide table"), Value::Null, 1, "High water at 10.42.")],
+                                   json!("Tide table"), Value::Null, "High water at 10.42.")],
             "gaps": [
                 gap("https://example.org/c", "failed"),
                 gap("https://example.org/d", "missing"),
@@ -329,30 +373,41 @@ async fn a_second_fetch_of_one_url_is_a_new_revision_and_no_snapshot_changes() {
         .await
         .unwrap()
         .unwrap();
-    let page = |call: &str, revision: u32, text: &str| {
+    let page = |call: &str, text: &str| {
         snapshot(
             call,
             "page",
             "https://example.org/tides",
             json!("Tide table"),
             Value::Null,
-            revision,
             text,
         )
     };
+    // The two revisions of the lineage of the URL: each with its own identity and capture time.
+    let captured: Vec<String> = store
+        .list_research_sources(&scope, &run_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .snapshots
+        .into_iter()
+        .map(|snapshot| snapshot.captured_at)
+        .collect();
 
     assert_eq!(
         (
             listed(&store, &admin, &scope, &run_id).await,
+            (ids[0] != ids[1], captured[0] < captured[1]),
             first.text,
             refused
         ),
         (
             json!({
-                "snapshots": [page("call_01", 1, "High water at 10.42."),
-                              page("call_02", 2, "High water at 11.07.")],
+                "snapshots": [page("call_01", "High water at 10.42."),
+                              page("call_02", "High water at 11.07.")],
                 "gaps": [],
             }),
+            (true, true),
             "High water at 10.42.".to_owned(),
             vec![Err(Some("42501".to_owned())); 4],
         )
