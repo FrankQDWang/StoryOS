@@ -83,11 +83,13 @@ pub enum McpObservation {
     /// The fresh tool list of a Dispatch drifted from the pinned contract, so `tools/call` was
     /// not sent.
     Drift(Vec<ContractDifference>),
-    /// A timeout or a dropped body after the operation request left.
+    /// A timeout or a lost connection after the operation request left, before a response
+    /// status arrived.
     OutcomeUnknown,
-    /// The server answered the operation request with an HTTP 5xx status. It received the
-    /// request, and the result is not known.
-    ServerError {
+    /// The server answered the operation request, so it received the request, but the answer has
+    /// no result: an HTTP 5xx status (`http_` and the status), or a response body that ended or timed out
+    /// before the response message (`response_incomplete`).
+    AnsweredWithoutResult {
         reason: String,
     },
 }
@@ -217,7 +219,7 @@ impl McpObservation {
             Self::Called(_) => "called",
             Self::Drift(_) => "drift",
             Self::OutcomeUnknown => "outcome_unknown",
-            Self::ServerError { .. } => "server_error",
+            Self::AnsweredWithoutResult { .. } => "answered_without_result",
         }
     }
 }

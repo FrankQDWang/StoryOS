@@ -43,6 +43,6 @@ pub(crate) async fn discover_exa(resolver: SettingsCredentials) -> i32 {
         | McpObservation::Called(_)
         | McpObservation::Drift(_)
         | McpObservation::OutcomeUnknown
-        | McpObservation::ServerError { .. } => 1,
+        | McpObservation::AnsweredWithoutResult { .. } => 1,
     }
 }

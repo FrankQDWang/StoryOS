@@ -35,11 +35,11 @@ enum Failure {
     Rejected(String),
     JsonRpc(i64),
     Invalid(&'static str),
-    /// The request left, and its result is not known.
+    /// The request left, no response status arrived, and the result is not known.
     Lost,
-    /// The server answered with an HTTP 5xx status: it received the request, and the result is
-    /// not known.
-    ServerError(String),
+    /// The response status arrived, so the server received the request, but the response has no
+    /// result: an HTTP 5xx status, or a body that ended or timed out before the response message.
+    AnsweredWithoutResult(String),
     /// HTTP 404 to a request with a session identifier: the server ended the session and did
     /// not process the request.
     SessionEnded,
@@ -49,7 +49,9 @@ impl Failure {
     /// Before the operation request, a lost answer proves that the operation was not sent.
     fn before_operation(self) -> McpObservation {
         match self {
-            Self::Unsent | Self::Lost | Self::ServerError(_) => McpObservation::NotSubmitted,
+            Self::Unsent | Self::Lost | Self::AnsweredWithoutResult(_) => {
+                McpObservation::NotSubmitted
+            }
             other => other.after_operation(),
         }
     }
@@ -61,7 +63,7 @@ impl Failure {
             Self::JsonRpc(code) => McpObservation::JsonRpcError { code },
             Self::Invalid(reason) => McpObservation::InvalidResult { reason },
             Self::Lost => McpObservation::OutcomeUnknown,
-            Self::ServerError(reason) => McpObservation::ServerError { reason },
+            Self::AnsweredWithoutResult(reason) => McpObservation::AnsweredWithoutResult { reason },
             // The exchange does not send the request again: each resend is a new Destination
             // Attempt (ADR 0039). The next exchange starts a new session.
             Self::SessionEnded => McpObservation::Rejected {
@@ -328,7 +330,10 @@ impl Session<'_> {
         };
         let status = response.status();
         if status.is_server_error() {
-            return Err(Failure::ServerError(format!("http_{}", status.as_u16())));
+            return Err(Failure::AnsweredWithoutResult(format!(
+                "http_{}",
+                status.as_u16()
+            )));
         }
         if status == reqwest::StatusCode::NOT_FOUND && self.session_id.is_some() {
             return Err(Failure::SessionEnded);
@@ -370,7 +375,7 @@ impl Session<'_> {
         loop {
             let chunk = match tokio::time::timeout_at(self.deadline, response.chunk()).await {
                 Ok(Ok(chunk)) => chunk,
-                Ok(Err(_)) | Err(_) => return Err(Failure::Lost),
+                Ok(Err(_)) | Err(_) => return Err(incomplete()),
             };
             let ended = chunk.is_none();
             if let Some(chunk) = chunk {
@@ -393,7 +398,7 @@ impl Session<'_> {
         }
         if events {
             // The stream ended before the response.
-            return Err(Failure::Lost);
+            return Err(incomplete());
         }
         let message = message(&buffer)?;
         self.answer(message, id)
@@ -502,6 +507,11 @@ impl EventStream {
         buffer.drain(..end + separator);
         Some(line)
     }
+}
+
+/// A response body that ended or timed out after its status arrived.
+fn incomplete() -> Failure {
+    Failure::AnsweredWithoutResult("response_incomplete".to_owned())
 }
 
 fn message(bytes: &[u8]) -> Result<Value, Failure> {

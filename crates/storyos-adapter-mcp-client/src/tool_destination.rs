@@ -39,7 +39,9 @@ impl<R: CredentialResolver> ToolDestinationAdapter for McpClient<R> {
             }
             McpObservation::Drift(differences) => ToolObservation::Drift(differences),
             McpObservation::OutcomeUnknown => ToolObservation::OutcomeUnknown,
-            McpObservation::ServerError { reason } => ToolObservation::ServerError { reason },
+            McpObservation::AnsweredWithoutResult { reason } => {
+                ToolObservation::AnsweredWithoutResult { reason }
+            }
         }
     }
 }

@@ -354,10 +354,13 @@ async fn each_failure_of_the_server_is_one_observation() {
             |_| Reply::Error(-32602),
             McpObservation::JsonRpcError { code: -32602 },
         ),
+        // The status arrived, so the server received the call, and the body ended early.
         (
             "tools/call",
             |_| Reply::Drop,
-            McpObservation::OutcomeUnknown,
+            McpObservation::AnsweredWithoutResult {
+                reason: "response_incomplete".to_owned(),
+            },
         ),
         (
             "tools/call",
@@ -708,18 +711,20 @@ fn pinned_server(
 }
 
 /// The sent `tools/call` body is the prepared Wire Payload Projection, with the id 0 after two
-/// `tools/list` pages. A 5xx answer to it is a server error, not a rejection.
+/// `tools/list` pages. A 5xx answer to it, or a body that ends early, is an answer without a
+/// result, not a rejection.
 #[tokio::test]
-async fn a_dispatch_sends_the_projected_call_body_and_a_server_error_is_not_a_rejection() {
+async fn a_dispatch_sends_the_projected_call_body_and_an_answer_without_a_result_is_not_a_rejection()
+ {
     let client = McpClient {
         resolver: CanaryResolver,
         timeout: Duration::from_secs(/*secs*/ 1),
     };
     let reference = CredentialReference(REFERENCE.to_owned());
     let mut outcomes = Vec::new();
-    for call in [conforming as fn(&Value) -> Reply, |_: &Value| {
-        Reply::Unavailable
-    }] {
+    let unavailable: fn(&Value) -> Reply = |_| Reply::Unavailable;
+    let dropped: fn(&Value) -> Reply = |_| Reply::Drop;
+    for call in [conforming, unavailable, dropped] {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let (url, received) = serve(
             Body::Json,
@@ -764,8 +769,16 @@ async fn a_dispatch_sends_the_projected_call_body_and_a_server_error_is_not_a_re
         [
             (called(), true, json!(0), expected_methods()),
             (
-                McpObservation::ServerError {
+                McpObservation::AnsweredWithoutResult {
                     reason: "http_503".to_owned()
+                },
+                true,
+                json!(0),
+                expected_methods()
+            ),
+            (
+                McpObservation::AnsweredWithoutResult {
+                    reason: "response_incomplete".to_owned()
                 },
                 true,
                 json!(0),

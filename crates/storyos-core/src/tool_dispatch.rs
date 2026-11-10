@@ -284,9 +284,10 @@ pub enum ToolObservation {
         is_error: bool,
     },
     OutcomeUnknown,
-    /// The server answered the operation request with an HTTP 5xx status: the disclosure is
+    /// The server answered the operation request with no result: an HTTP 5xx status, or a
+    /// response body that ended or timed out after the status arrived. The disclosure is
     /// confirmed, and the external read is not known.
-    ServerError {
+    AnsweredWithoutResult {
         reason: String,
     },
 }
@@ -417,7 +418,7 @@ pub fn settle_tool_call(spec: &ToolSpec, observation: &ToolObservation) -> ToolC
             Unknown,
             None,
         ),
-        ToolObservation::ServerError { .. } => settlement(
+        ToolObservation::AnsweredWithoutResult { .. } => settlement(
             ToolCallState::Unknown,
             ToolAttemptSettlement::OutcomeUnknown,
             Unknown,

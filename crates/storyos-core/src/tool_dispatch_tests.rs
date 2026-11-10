@@ -181,8 +181,11 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
                 reason: "non_text_block"
             }),
             settle(ToolObservation::OutcomeUnknown),
-            settle(ToolObservation::ServerError {
+            settle(ToolObservation::AnsweredWithoutResult {
                 reason: "http_503".to_owned()
+            }),
+            settle(ToolObservation::AnsweredWithoutResult {
+                reason: "response_incomplete".to_owned()
             }),
             settle(ToolObservation::NotSubmitted),
             settle(ToolObservation::Drift(vec![
@@ -252,6 +255,13 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
                 ToolCallState::Unknown,
                 ToolAttemptSettlement::OutcomeUnknown,
                 read("unknown", "unknown"),
+                None,
+                None
+            ),
+            (
+                ToolCallState::Unknown,
+                ToolAttemptSettlement::OutcomeUnknown,
+                read("unknown", "confirmed"),
                 None,
                 None
             ),
