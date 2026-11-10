@@ -295,6 +295,43 @@ async fn record_exchange(
 
 /// A ToolCall that stayed `dispatched` after a crash or a lost lease: its outcome is not known,
 /// and the Gateway does not send it again.
+/// Settles each `dispatched` ToolCall of a Run that the author cancels, in the cancel
+/// transaction: the Worker that holds the old fence cannot record its observation, so the
+/// ToolCall settles `unknown` with its Tool Effect Outcome and its Run Event, with no exchange.
+pub(crate) async fn settle_dispatched_on_cancel(
+    client: &tokio_postgres::Client,
+    project_scope: &storyos_application::ProjectScope,
+    run_id: &str,
+) -> Result<(), CompleteAgentRunError> {
+    let run = ClaimedAgentRun {
+        project_scope: project_scope.clone(),
+        run_id: run_id.to_owned(),
+        // The cancel transaction holds the Run lock; no fence check follows.
+        fence_token: 0,
+    };
+    let dispatched = client
+        .query(
+            "SELECT tool_call_id::text FROM storyos.tool_calls
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND state = 'dispatched'
+              ORDER BY decision_position, call_position",
+            &[
+                &project_scope.owner_user_id.as_ref(),
+                &project_scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    for found in dispatched {
+        let tool_call_id: String = found.get(0);
+        if let Some(row) = locked(client, &run, &tool_call_id, ToolCallState::Dispatched).await? {
+            settle_interrupted(client, &run, &row).await?;
+        }
+    }
+    Ok(())
+}
+
 async fn settle_interrupted(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,

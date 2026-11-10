@@ -32,6 +32,7 @@ fn search_effect(spec: &ToolSpec) -> ToolEffectRequest {
 fn admitted_facts(effect: &ToolEffectRequest) -> ToolDispatchFacts<'_> {
     ToolDispatchFacts {
         same_scope: true,
+        run_grant_names_tool: true,
         lifecycle: ToolRegistrationLifecycle::Active,
         enablement: Some(ToolEnablement::Enabled),
         compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -117,6 +118,7 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
             admit_tool_dispatch(&admitted_facts(&fetch)).map_err(|r| (r.code(), r.state())),
             admit_tool_dispatch(&admitted_facts(&write)).map_err(|r| (r.code(), r.state())),
             refusal(|facts| facts.same_scope = false),
+            refusal(|facts| facts.run_grant_names_tool = false),
             refusal(|facts| facts.enablement = Some(ToolEnablement::Disabled)),
             refusal(|facts| facts.enablement = None),
             refusal(|facts| facts.lifecycle = ToolRegistrationLifecycle::Quarantined),
@@ -132,6 +134,7 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
             Ok(()),
             Err(("tool_approval_required", ToolCallState::AwaitingApproval)),
             Err(("disclosure_outside_grant", ToolCallState::Refused)),
+            Err(("tool_outside_run_grant", ToolCallState::Refused)),
             Err(("tool_not_enabled", ToolCallState::Refused)),
             Err(("tool_not_enabled", ToolCallState::Refused)),
             Err(("tool_registration_unavailable", ToolCallState::Refused)),
@@ -178,6 +181,9 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
                 reason: "non_text_block"
             }),
             settle(ToolObservation::OutcomeUnknown),
+            settle(ToolObservation::ServerError {
+                reason: "http_503".to_owned()
+            }),
             settle(ToolObservation::NotSubmitted),
             settle(ToolObservation::Drift(vec![
                 ContractDifference::ToolRemoved {
@@ -246,6 +252,13 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
                 ToolCallState::Unknown,
                 ToolAttemptSettlement::OutcomeUnknown,
                 read("unknown", "unknown"),
+                None,
+                None
+            ),
+            (
+                ToolCallState::Unknown,
+                ToolAttemptSettlement::OutcomeUnknown,
+                read("unknown", "confirmed"),
                 None,
                 None
             ),

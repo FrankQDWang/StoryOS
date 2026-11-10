@@ -60,6 +60,8 @@ enum Reply {
     Flood,
     /// HTTP 404 with no body.
     NotFound,
+    /// HTTP 503 with no body.
+    Unavailable,
 }
 
 /// The method and the MCP headers of one message that the fake server received.
@@ -115,6 +117,7 @@ async fn serve(
                     format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{}data: {result}\n\n", event.repeat(1100))
                 }
                 Reply::NotFound => "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
+                Reply::Unavailable => "HTTP/1.1 503 Service Unavailable\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
             };
             stream.write_all(response.as_bytes()).await.unwrap();
             if matches!(body, Body::HeldCrEvents) {
@@ -652,5 +655,122 @@ async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_initialize_or_tool_l
             McpObservation::NotSubmitted,
             1,
         )
+    );
+}
+
+const DISCOVERY: &str = include_str!("../../../docs/research/exa-mcp-discovery-2026-11-03.md");
+
+/// The tools of the Discovery Record appendix, as a server lists them.
+fn exa_tools() -> Vec<Value> {
+    let appendix = &DISCOVERY[DISCOVERY.find("## Appendix").unwrap()..];
+    let start = appendix.find("```json\n").unwrap() + "```json\n".len();
+    let end = start + appendix[start..].find("\n```").unwrap();
+    let recorded: Value = serde_json::from_str(&appendix[start..end]).unwrap();
+    recorded["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| {
+            let mut listed = json!({"name": tool["name"], "description": tool["description"],
+                "inputSchema": tool["input_schema"], "annotations": tool["annotations"]});
+            if !tool["output_schema"].is_null() {
+                listed["outputSchema"] = tool["output_schema"].clone();
+            }
+            listed
+        })
+        .collect()
+}
+
+/// The pinned Exa server with its tools on two pages. It keeps each `tools/call` body and
+/// answers it with `call`.
+fn pinned_server(
+    calls: Arc<Mutex<Vec<Value>>>,
+    call: fn(&Value) -> Reply,
+) -> impl Fn(&Value) -> Reply + Send + 'static {
+    let tools = exa_tools();
+    move |message: &Value| match message["method"].as_str().unwrap() {
+        "initialize" => Reply::Result(json!({
+            "protocolVersion": PROTOCOL_REVISION,
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "exa-search-server", "version": "3.5.1"},
+        })),
+        "notifications/initialized" => Reply::Accepted,
+        "tools/list" if message["params"]["cursor"] == "page-2" => {
+            Reply::Result(json!({"tools": tools[1..]}))
+        }
+        "tools/list" => Reply::Result(json!({"tools": tools[..1], "nextCursor": "page-2"})),
+        "tools/call" => {
+            calls.lock().unwrap().push(message.clone());
+            call(message)
+        }
+        method => panic!("unexpected method {method}"),
+    }
+}
+
+/// The sent `tools/call` body is the prepared Wire Payload Projection, with the id 0 after two
+/// `tools/list` pages. A 5xx answer to it is a server error, not a rejection.
+#[tokio::test]
+async fn a_dispatch_sends_the_projected_call_body_and_a_server_error_is_not_a_rejection() {
+    let client = McpClient {
+        resolver: CanaryResolver,
+        timeout: Duration::from_secs(/*secs*/ 1),
+    };
+    let reference = CredentialReference(REFERENCE.to_owned());
+    let mut outcomes = Vec::new();
+    for call in [conforming as fn(&Value) -> Reply, |_: &Value| {
+        Reply::Unavailable
+    }] {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let (url, received) = serve(
+            Body::Json,
+            Some(SESSION),
+            pinned_server(Arc::clone(&calls), call),
+        )
+        .await;
+        let request = McpRequest::Dispatch {
+            server_url: url,
+            registration: &EXA_TOOL_REGISTRATION,
+            tool: "web_search_exa".to_owned(),
+            arguments: json!({"query": CONTENT_CANARY})
+                .as_object()
+                .unwrap()
+                .clone(),
+        };
+        let prepared = client
+            .prepare(&request, Some(&reference))
+            .await
+            .ok()
+            .unwrap();
+        let projected: Value =
+            serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap())
+                .unwrap();
+        let observation = client.exchange(prepared.prepared).await;
+        let sent_calls = std::mem::take(&mut *calls.lock().unwrap());
+        let methods = std::mem::take(&mut *received.lock().unwrap());
+        outcomes.push((
+            observation,
+            sent_calls == [projected.clone()],
+            projected["id"].clone(),
+            methods,
+        ));
+    }
+    let expected_methods = || {
+        let mut methods = sent(DISCOVER, Some(SESSION));
+        methods.extend(sent(&["tools/call"], Some(SESSION)));
+        methods
+    };
+    assert_eq!(
+        outcomes,
+        [
+            (called(), true, json!(0), expected_methods()),
+            (
+                McpObservation::ServerError {
+                    reason: "http_503".to_owned()
+                },
+                true,
+                json!(0),
+                expected_methods()
+            ),
+        ]
     );
 }

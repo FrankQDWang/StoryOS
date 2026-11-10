@@ -37,6 +37,9 @@ enum Failure {
     Invalid(&'static str),
     /// The request left, and its result is not known.
     Lost,
+    /// The server answered with an HTTP 5xx status: it received the request, and the result is
+    /// not known.
+    ServerError(String),
     /// HTTP 404 to a request with a session identifier: the server ended the session and did
     /// not process the request.
     SessionEnded,
@@ -46,7 +49,7 @@ impl Failure {
     /// Before the operation request, a lost answer proves that the operation was not sent.
     fn before_operation(self) -> McpObservation {
         match self {
-            Self::Unsent | Self::Lost => McpObservation::NotSubmitted,
+            Self::Unsent | Self::Lost | Self::ServerError(_) => McpObservation::NotSubmitted,
             other => other.after_operation(),
         }
     }
@@ -58,6 +61,7 @@ impl Failure {
             Self::JsonRpc(code) => McpObservation::JsonRpcError { code },
             Self::Invalid(reason) => McpObservation::InvalidResult { reason },
             Self::Lost => McpObservation::OutcomeUnknown,
+            Self::ServerError(reason) => McpObservation::ServerError { reason },
             // The exchange does not send the request again: each resend is a new Destination
             // Attempt (ADR 0039). The next exchange starts a new session.
             Self::SessionEnded => McpObservation::Rejected {
@@ -65,6 +69,22 @@ impl Failure {
             },
         }
     }
+}
+
+/// The JSON-RPC id of the `tools/call` of a Dispatch. It does not depend on the number of
+/// `tools/list` pages, so the Wire Payload Projection is the exact body before the claim. The
+/// other requests of the session use ids from 1.
+pub(crate) const DISPATCH_CALL_ID: u64 = 0;
+
+/// The exact `tools/call` body of a Dispatch. It has no key.
+pub(crate) fn dispatch_call_body(tool: &str, arguments: &Map<String, Value>) -> String {
+    json!({
+        "jsonrpc": "2.0",
+        "id": DISPATCH_CALL_ID,
+        "method": "tools/call",
+        "params": {"name": tool, "arguments": arguments},
+    })
+    .to_string()
 }
 
 struct Session<'a> {
@@ -87,6 +107,7 @@ pub(crate) async fn run(
     url: &str,
     credential: &ResolvedCredential,
     request: &McpRequest,
+    call_body: Option<&str>,
     timeout: Duration,
 ) -> McpObservation {
     let Ok(client) = reqwest::Client::builder()
@@ -184,9 +205,15 @@ pub(crate) async fn run(
             };
             match record.check(registration) {
                 ContractCheck::Drift(differences) => McpObservation::Drift(differences),
-                ContractCheck::Unchanged | ContractCheck::ProvenanceChange => {
-                    session.call(tool, arguments).await
-                }
+                // The prepared body is the Wire Payload Projection of the claim.
+                ContractCheck::Unchanged | ContractCheck::ProvenanceChange => match call_body {
+                    Some(body) => session.call_exact(body).await,
+                    None => {
+                        session
+                            .call_exact(&dispatch_call_body(tool, arguments))
+                            .await
+                    }
+                },
             }
         }
     }
@@ -226,11 +253,33 @@ impl Session<'_> {
         }
     }
 
+    /// The prepared `tools/call` body of a Dispatch, sent as it is.
+    async fn call_exact(&mut self, body: &str) -> McpObservation {
+        match self
+            .send("tools/call", DISPATCH_CALL_ID, body.to_owned())
+            .await
+        {
+            Ok(result) => match record::call_result(result) {
+                Ok(result) => McpObservation::Called(result),
+                Err(reason) => McpObservation::InvalidResult { reason },
+            },
+            Err(failure) => failure.after_operation(),
+        }
+    }
+
     async fn request(&mut self, method: &'static str, params: Value) -> Result<Value, Failure> {
         let id = self.next_id;
         self.next_id += 1;
         let body = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-        let sent = body.to_string();
+        self.send(method, id, body.to_string()).await
+    }
+
+    async fn send(
+        &mut self,
+        method: &'static str,
+        id: u64,
+        sent: String,
+    ) -> Result<Value, Failure> {
         let sent_bytes = sent.len() as u64;
         self.received = 0;
         let reply = match self.post(method, sent).await {
@@ -279,7 +328,7 @@ impl Session<'_> {
         };
         let status = response.status();
         if status.is_server_error() {
-            return Err(Failure::Lost);
+            return Err(Failure::ServerError(format!("http_{}", status.as_u16())));
         }
         if status == reqwest::StatusCode::NOT_FOUND && self.session_id.is_some() {
             return Err(Failure::SessionEnded);

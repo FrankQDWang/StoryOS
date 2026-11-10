@@ -1,11 +1,12 @@
-//! The Context Assembly gates of ADR 0005 for the Tool destination. The dispatch claim commits
-//! them in its transaction before the Destination Attempt. Gate one: the Operation Requirement is
+//! The Context Assembly gates of ADR 0005 for the Tool destination. The transaction that selects
+//! the next ToolCall commits them, before the preparation and before the dispatch claim. The claim
+//! rechecks them before the Destination Attempt. Gate one: the Operation Requirement is
 //! the ToolCall. Gate two: the candidate is the validated arguments as data. Gate three: the
 //! eligibility is the Project Scope and the grant scope `research_tool_v1`. Gate four: the one
 //! candidate is the selection, with no ranking. Gate five: the Bounded Projection is the typed
 //! intake. Gate six: the Context Assembly Manifest, the Destination Context Manifest, and the
-//! Outbound Disclosure Manifest commit with the preparation step, before the dispatch claim.
-//! Gate seven is the claim itself, in a later transaction.
+//! Outbound Disclosure Manifest commit in that transaction. Gate seven is the claim itself, in a
+//! later transaction.
 
 use serde_json::{Value, json};
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};

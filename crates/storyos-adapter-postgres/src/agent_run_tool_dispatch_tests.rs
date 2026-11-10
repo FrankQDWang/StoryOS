@@ -283,7 +283,7 @@ async fn a_claimed_search_settles_with_its_result_text_and_one_run_event() {
         .await;
     let (store, admin) = stores().await;
     let call = reply(
-        3,
+        0,
         json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
     );
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
@@ -394,6 +394,16 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
             ),
             "disclosure_outside_grant",
         ),
+        (
+            "dce",
+            0xdcea,
+            // The Run Capability Grant narrows: the Exposure of the Step Snapshot names no Tool.
+            "UPDATE storyos.model_attempts
+                SET payload = jsonb_set(payload, '{step_snapshot,tool_exposure,tools}', '[]')
+              WHERE project_id = '{project}'"
+                .to_owned(),
+            "tool_outside_run_grant",
+        ),
     ];
     let mut observed = Vec::new();
     for (prefix, suffix, statement, _) in &cases {
@@ -469,7 +479,7 @@ async fn a_tool_call_that_a_crash_left_dispatched_settles_unknown_and_is_not_sen
         .await;
     let (store, admin) = stores().await;
     let call = reply(
-        3,
+        0,
         json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
     );
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
@@ -678,6 +688,158 @@ async fn a_claim_in_another_project_scope_sends_nothing_and_changes_no_tool_call
             Value::Null,
             Value::Null,
             Vec::<String>::new(),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_protocol_revision_with_a_null_character_quarantines_and_settles() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let initialize = reply(
+        1,
+        json!({"protocolVersion": "2025-11-25\u{0}x", "capabilities": {"tools": {}},
+               "serverInfo": {"name": "exa-search-server", "version": "3.5.1"}}),
+    );
+    let (mcp_base, mcp) = destination(vec![initialize]).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dcf", 0xdcfa, &mcp_base).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    let tools = Hooked {
+        admin: &admin,
+        after_prepare: String::new(),
+        after_exchange: String::new(),
+    };
+    let completed = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &tools,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await;
+    let lifecycle: String = admin
+        .query_one(
+            "WITH lifecycle AS (SELECT lifecycle FROM storyos.tool_registration_revisions
+                                 WHERE tool_registration_revision = $1::text::uuid),
+                  restored AS (UPDATE storyos.tool_registration_revisions
+                                  SET lifecycle = 'active', quarantine_differences = NULL,
+                                      quarantined_at = NULL
+                                WHERE tool_registration_revision = $1::text::uuid)
+             SELECT lifecycle FROM lifecycle",
+            &[&EXA_TOOL_REGISTRATION.revision],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    completed.unwrap();
+    let facts = tool_facts(&admin, &run_id).await;
+
+    assert_eq!(
+        (
+            lifecycle,
+            facts["events"][0]["differences"].clone(),
+            facts["tool_call"]["state"].clone(),
+            facts["events"][1]["kind"].clone(),
+            mcp.await.unwrap(),
+        ),
+        (
+            "quarantined".to_owned(),
+            json!([{"kind": "protocol_revision", "pinned": "2025-11-25",
+                    "observed": {"nul_separated": ["2025-11-25", "x"]}}]),
+            json!("refused"),
+            json!("tool_call_settled"),
+            vec![POST.to_owned()],
+        )
+    );
+}
+
+/// The real MCP client, and the cancellation of the Run by the author after the exchange, while
+/// the Worker holds the old fence.
+struct CancelAfterExchange<'a> {
+    store: &'a crate::PostgresProjectReader,
+    cancel: crate::command_sequence::tests::CommandCall<storyos_application::CancelAgentRunInput>,
+}
+
+impl ToolDestinationAdapter for CancelAfterExchange<'_> {
+    type Prepared = McpExchange;
+
+    async fn prepare(
+        &self,
+        request: &ToolCallRequest,
+    ) -> Result<PreparedRequest<McpExchange>, PreDispatchRefusal> {
+        ToolDestinationAdapter::prepare(&client(), request).await
+    }
+
+    async fn exchange(&self, prepared: McpExchange) -> ToolObservation {
+        let observation = ToolDestinationAdapter::exchange(&client(), prepared).await;
+        self.store
+            .cancel_agent_run(&self.cancel.envelope, &self.cancel.input)
+            .await
+            .unwrap();
+        observation
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_cancel_during_a_tool_exchange_settles_the_tool_call_unknown() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = reply(
+        0,
+        json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
+    );
+    let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dd1", 0xdd1a, &mcp_base).await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let tools = CancelAfterExchange {
+        store: &store,
+        cancel: crate::command_sequence::tests::issued(
+            &store,
+            &scope,
+            0xdd1b,
+            &crate::command_sequence::tests::CANCEL_AGENT_RUN,
+            storyos_application::CancelAgentRunInput {
+                run_id: run_id.clone(),
+            },
+        )
+        .await,
+    };
+    let completed = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &tools,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await;
+    let outcome = json!({"external_read": "unknown", "outbound_disclosure": "unknown"});
+    let facts = tool_facts(&admin, &run_id).await;
+
+    assert_eq!(
+        (
+            matches!(completed, Err(CompleteAgentRunError::StaleFence)),
+            facts["run"]["status"].clone(),
+            facts["tool_call"].clone(),
+            facts["events"].clone(),
+            mcp.await.unwrap(),
+        ),
+        (
+            true,
+            json!("cancelled"),
+            json!({"state": "unknown", "refusal": null,
+                   "attempt": attempt("outcome_unknown", "unknown"), "has_attempt_id": true,
+                   "effect_outcome": outcome, "result_text": null, "result_digest": null,
+                   "result_bytes": null}),
+            json!([settled_event("unknown", Value::Null, outcome, Value::Null)]),
+            vec![POST.to_owned(); 4],
         )
     );
 }

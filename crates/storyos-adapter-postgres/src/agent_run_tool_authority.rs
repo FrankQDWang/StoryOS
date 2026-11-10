@@ -120,6 +120,7 @@ pub(crate) struct ToolAuthority {
     grant_scope: Option<GrantScope>,
     pub grant_id: Option<String>,
     same_scope: bool,
+    run_grant_names_tool: bool,
     pub endpoint: Option<String>,
     lifecycle: ToolRegistrationLifecycle,
     /// The exact enablement, compatibility Decision, external-use binding, Processing
@@ -132,6 +133,7 @@ impl ToolAuthority {
     pub fn admit(&self, row: &ToolCallRow, plan: &ToolCallPlan) -> Result<(), ToolDispatchRefusal> {
         storyos_core::admit_tool_dispatch(&ToolDispatchFacts {
             same_scope: self.same_scope,
+            run_grant_names_tool: self.run_grant_names_tool,
             lifecycle: self.lifecycle,
             enablement: self.enablement,
             compatibility: self.compatibility,
@@ -171,7 +173,24 @@ pub(crate) async fn read_authority(
                       binding.project_model_use_binding_revision,
                       'processing_destination_identity', binding.processing_destination_identity,
                       'evidence_revision', binding.evidence_revision,
-                      'grant_id', binding.grant_id)::text
+                      'grant_id', binding.grant_id)::text,
+                    EXISTS (
+                      SELECT 1 FROM storyos.tool_calls AS call
+                        JOIN storyos.model_attempts AS attempt
+                          ON (attempt.owner_user_id, attempt.project_id, attempt.model_attempt_id)
+                             = (call.owner_user_id, call.project_id, call.model_attempt_id)
+                       CROSS JOIN LATERAL jsonb_array_elements(
+                         CASE WHEN jsonb_typeof(attempt.payload
+                                     #> '{step_snapshot,tool_exposure,tools}') = 'array'
+                              THEN attempt.payload #> '{step_snapshot,tool_exposure,tools}'
+                              ELSE '[]'::jsonb END) AS tool
+                       WHERE call.owner_user_id = $1::text::uuid
+                         AND call.project_id = $2::text::uuid
+                         AND call.tool_call_id = $5::text::uuid
+                         AND tool ->> 'name' = call.function_name
+                         AND tool ->> 'registration_id' = call.registration_id
+                         AND tool ->> 'registration_revision' = call.tool_registration_revision::text
+                         AND tool ->> 'spec_revision' = call.tool_spec_revision)
                FROM (SELECT 1) AS one
                LEFT JOIN LATERAL (
                  SELECT * FROM storyos.project_tool_enablements
@@ -201,6 +220,7 @@ pub(crate) async fn read_authority(
                 &claim.project_scope.project_id.as_ref(),
                 &plan.registration.id,
                 &row.registration_revision,
+                &row.tool_call_id,
             ],
         )
         .await
@@ -226,6 +246,7 @@ pub(crate) async fn read_authority(
         same_scope: row.get(/*idx*/ 6),
         endpoint: row.get(/*idx*/ 7),
         lifecycle,
+        run_grant_names_tool: row.get(/*idx*/ 10),
         evidence: serde_json::from_str(row.get(/*idx*/ 9))
             .map_err(|_| damaged("Tool authority evidence is damaged"))?,
     })
@@ -326,8 +347,10 @@ pub(crate) async fn quarantine(
     row: &ToolCallRow,
     differences: &[ContractDifference],
 ) -> Result<(), CompleteAgentRunError> {
-    let differences = serde_json::to_value(differences)
-        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let differences = storage_safe(
+        serde_json::to_value(differences)
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?,
+    );
     let changed = client
         .execute(
             "UPDATE storyos.tool_registration_revisions
@@ -352,6 +375,24 @@ pub(crate) async fn quarantine(
         }),
     )
     .await
+}
+
+/// The observed server strings in a form that PostgreSQL stores. A string with U+0000 becomes
+/// `{"nul_separated": [<segments>]}`, which keeps each character of the observed value.
+fn storage_safe(value: Value) -> Value {
+    match value {
+        Value::String(text) if text.contains('\0') => {
+            json!({ "nul_separated": text.split('\0').collect::<Vec<_>>() })
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(storage_safe).collect()),
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(name, field)| (name, storage_safe(field)))
+                .collect(),
+        ),
+        other => other,
+    }
 }
 
 async fn append_event(

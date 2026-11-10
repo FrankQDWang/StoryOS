@@ -167,6 +167,10 @@ impl ToolCallPlan {
 pub struct ToolDispatchFacts<'a> {
     /// Whether the ToolCall row and the claimed AgentRun have one Project Scope.
     pub same_scope: bool,
+    /// Whether the Run Capability Grant names the Registration revision and the function of the
+    /// ToolCall. The Run Capability Grant of a ToolCall is the Tool Exposure that the Step
+    /// Snapshot of its Model Attempt pinned: the Host gave the Run only those Tools.
+    pub run_grant_names_tool: bool,
     pub lifecycle: ToolRegistrationLifecycle,
     /// The latest enablement of the Registration, or `None` when the Project has none.
     pub enablement: Option<ToolEnablement>,
@@ -188,6 +192,7 @@ pub enum ToolDispatchRefusal {
     RegistrationIncompatible,
     CredentialUnbound,
     ToolApprovalRequired,
+    ToolOutsideRunGrant,
 }
 
 impl ToolDispatchRefusal {
@@ -199,6 +204,7 @@ impl ToolDispatchRefusal {
             Self::RegistrationIncompatible => "tool_registration_incompatible",
             Self::CredentialUnbound => "credential_unbound",
             Self::ToolApprovalRequired => "tool_approval_required",
+            Self::ToolOutsideRunGrant => "tool_outside_run_grant",
         }
     }
 
@@ -210,13 +216,15 @@ impl ToolDispatchRefusal {
             | Self::ToolNotEnabled
             | Self::RegistrationUnavailable
             | Self::RegistrationIncompatible
-            | Self::CredentialUnbound => ToolCallState::Refused,
+            | Self::CredentialUnbound
+            | Self::ToolOutsideRunGrant => ToolCallState::Refused,
         }
     }
 }
 
 /// Admits the dispatch of one ToolCall at the final local dispatch boundary: the non-expanding
-/// intersection of the current Project Tool Enablement, the exact Project Scope, the Registration
+/// intersection of the current Project Tool Enablement, the exact Project Scope, the Run
+/// Capability Grant, the Registration
 /// lifecycle, the compatibility Decision, the Credential Reference of the use binding, and the
 /// grant scope with the Tool Effect Request (ADR 0034). A covered effect needs no confirmation.
 pub fn admit_tool_dispatch(facts: &ToolDispatchFacts<'_>) -> Result<(), ToolDispatchRefusal> {
@@ -225,6 +233,9 @@ pub fn admit_tool_dispatch(facts: &ToolDispatchFacts<'_>) -> Result<(), ToolDisp
     }
     if !facts.same_scope {
         return Err(ToolDispatchRefusal::DisclosureOutsideGrant);
+    }
+    if !facts.run_grant_names_tool {
+        return Err(ToolDispatchRefusal::ToolOutsideRunGrant);
     }
     if facts.lifecycle.admit_new_tool_call().is_err() {
         return Err(ToolDispatchRefusal::RegistrationUnavailable);
@@ -273,6 +284,11 @@ pub enum ToolObservation {
         is_error: bool,
     },
     OutcomeUnknown,
+    /// The server answered the operation request with an HTTP 5xx status: the disclosure is
+    /// confirmed, and the external read is not known.
+    ServerError {
+        reason: String,
+    },
 }
 
 /// The outcome of one requested effect.
@@ -399,6 +415,13 @@ pub fn settle_tool_call(spec: &ToolSpec, observation: &ToolObservation) -> ToolC
             ToolAttemptSettlement::OutcomeUnknown,
             Unknown,
             Unknown,
+            None,
+        ),
+        ToolObservation::ServerError { .. } => settlement(
+            ToolCallState::Unknown,
+            ToolAttemptSettlement::OutcomeUnknown,
+            Unknown,
+            Confirmed,
             None,
         ),
         ToolObservation::Rejected { .. }

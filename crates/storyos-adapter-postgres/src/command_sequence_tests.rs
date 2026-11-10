@@ -70,7 +70,7 @@ mod author_edit;
 #[path = "command_sequence_tests/secondary_operation_tests.rs"]
 mod secondary_operation;
 
-pub(crate) use agent_run::CREATE_AGENT_RUN;
+pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN};
 pub(crate) use project_session::{
     SET_PROJECT_TOOL_ENABLEMENT, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE,
 };

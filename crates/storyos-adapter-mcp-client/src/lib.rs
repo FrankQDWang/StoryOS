@@ -83,8 +83,13 @@ pub enum McpObservation {
     /// The fresh tool list of a Dispatch drifted from the pinned contract, so `tools/call` was
     /// not sent.
     Drift(Vec<ContractDifference>),
-    /// A timeout, a dropped body, or a server error after the operation request left.
+    /// A timeout or a dropped body after the operation request left.
     OutcomeUnknown,
+    /// The server answered the operation request with an HTTP 5xx status. It received the
+    /// request, and the result is not known.
+    ServerError {
+        reason: String,
+    },
 }
 
 /// Sends each prepared exchange once, with no retry, redirect, or proxy. It resolves the
@@ -99,6 +104,8 @@ pub struct McpClient<R> {
 pub struct McpExchange {
     request: McpRequest,
     credential: ResolvedCredential,
+    /// The exact `tools/call` body of a Dispatch, which the projection records.
+    call_body: Option<String>,
 }
 
 impl<R: CredentialResolver> McpClient<R> {
@@ -122,26 +129,24 @@ impl<R: CredentialResolver> McpClient<R> {
                 "method": "tools/call",
                 "params": {"name": tool, "arguments": arguments},
             }),
-            McpRequest::Dispatch {
-                registration,
-                tool,
-                arguments,
-                ..
-            } => json!({
-                "contract_check": {
-                    "method": "tools/list",
-                    "registration_revision": registration.revision,
-                },
-                "method": "tools/call",
-                "params": {"name": tool, "arguments": arguments},
-            }),
+            McpRequest::Dispatch { .. } => Value::Null,
         };
-        let wire = storyos_core::canonical_json(&json!({
-            "server_url": server_url,
-            "protocol_revision": PROTOCOL_REVISION,
-            "initialize": session::initialize_params(),
-            "operation": operation,
-        }));
+        // A Dispatch records the exact JSON-RPC body of its `tools/call`. The other requests
+        // record a description of their session.
+        let call_body = match request {
+            McpRequest::Dispatch {
+                tool, arguments, ..
+            } => Some(session::dispatch_call_body(tool, arguments)),
+            McpRequest::Discover { .. } | McpRequest::Call { .. } => None,
+        };
+        let wire = call_body.clone().unwrap_or_else(|| {
+            storyos_core::canonical_json(&json!({
+                "server_url": server_url,
+                "protocol_revision": PROTOCOL_REVISION,
+                "initialize": session::initialize_params(),
+                "operation": operation,
+            }))
+        });
         let Some(reference) = credential_reference else {
             return Err(PreDispatchRefusal::CredentialUnavailable);
         };
@@ -161,6 +166,7 @@ impl<R: CredentialResolver> McpClient<R> {
             prepared: McpExchange {
                 request: request.clone(),
                 credential,
+                call_body,
             },
         })
     }
@@ -171,9 +177,17 @@ impl<R: CredentialResolver> McpClient<R> {
         let McpExchange {
             request,
             credential,
+            call_body,
         } = prepared;
         let server_url = request.server_url();
-        let observation = session::run(server_url, &credential, &request, self.timeout).await;
+        let observation = session::run(
+            server_url,
+            &credential,
+            &request,
+            call_body.as_deref(),
+            self.timeout,
+        )
+        .await;
         tracing::info!(
             server_url = DiagnosticId(server_url).diagnostic(),
             observation = observation.category().diagnostic(),
@@ -203,6 +217,7 @@ impl McpObservation {
             Self::Called(_) => "called",
             Self::Drift(_) => "drift",
             Self::OutcomeUnknown => "outcome_unknown",
+            Self::ServerError { .. } => "server_error",
         }
     }
 }
