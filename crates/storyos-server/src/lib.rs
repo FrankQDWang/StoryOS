@@ -53,6 +53,7 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod request_origin;
 mod request_span;
+mod research_source;
 mod selection_references;
 mod session_bootstrap;
 mod set_current_chapter;
@@ -117,6 +118,7 @@ use reopen_rejected_operations::reopen_rejected_operations;
 use reopen_withdrawn_proposal::reopen_withdrawn_proposal;
 use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
+use research_source::{get_research_source, list_research_sources};
 use set_current_chapter::set_current_chapter;
 use set_project_tool_enablement::set_project_tool_enablement;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -360,6 +362,20 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
+            ),
+        )
+        .route(
+            contracts::LIST_RESEARCH_SOURCES_PATH,
+            routing::on(
+                method_filter(contracts::LIST_RESEARCH_SOURCES_METHOD),
+                list_research_sources,
+            ),
+        )
+        .route(
+            contracts::GET_RESEARCH_SOURCE_PATH,
+            routing::on(
+                method_filter(contracts::GET_RESEARCH_SOURCE_METHOD),
+                get_research_source,
             ),
         )
         .route(

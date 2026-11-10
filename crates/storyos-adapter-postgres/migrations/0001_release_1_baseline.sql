@@ -4274,6 +4274,83 @@ CREATE POLICY agent_run_events_exact_scope ON storyos.agent_run_events USING (((
 
 GRANT SELECT,INSERT ON TABLE storyos.agent_run_events TO storyos_runtime;
 
+-- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
+-- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
+-- requested URL that the server reported as failed, empty, or missing. The revisions of one URL in a
+-- Project form one lineage in capture order. Each Snapshot, and each Gap that a line of the result
+-- gives, records its byte span (offset, length) in the exact result text of its ToolCall. The
+-- runtime role can only read and insert them.
+
+CREATE TABLE storyos.source_snapshots (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    source_snapshot_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    tool_call_id uuid NOT NULL,
+    entry_position integer NOT NULL,
+    kind text NOT NULL,
+    locator text NOT NULL,
+    title text,
+    published text,
+    text text NOT NULL,
+    text_bytes integer NOT NULL,
+    result_offset integer NOT NULL,
+    content_digest text NOT NULL,
+    captured_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT source_snapshots_pkey PRIMARY KEY (owner_user_id, project_id, source_snapshot_id),
+    CONSTRAINT source_snapshots_entry_key UNIQUE (owner_user_id, project_id, tool_call_id, entry_position),
+    CONSTRAINT source_snapshots_entry_position_check CHECK ((entry_position >= 0)),
+    CONSTRAINT source_snapshots_kind_check CHECK ((kind = ANY (ARRAY['search_result'::text, 'page'::text]))),
+    CONSTRAINT source_snapshots_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192) AND (char_length(title) BETWEEN 1 AND 8192) AND (char_length(published) BETWEEN 1 AND 128)),
+    CONSTRAINT source_snapshots_text_shape CHECK ((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (result_offset BETWEEN 0 AND 262144 - text_bytes) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_snapshots_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT source_snapshots_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
+);
+
+CREATE INDEX source_snapshots_lineage_idx ON storyos.source_snapshots USING btree (owner_user_id, project_id, locator, captured_at, source_snapshot_id);
+
+CREATE INDEX source_snapshots_run_idx ON storyos.source_snapshots USING btree (owner_user_id, project_id, run_id);
+
+ALTER TABLE storyos.source_snapshots ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.source_snapshots FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY source_snapshots_exact_scope ON storyos.source_snapshots USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.source_snapshots TO storyos_runtime;
+
+CREATE TABLE storyos.source_gaps (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    source_gap_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    tool_call_id uuid NOT NULL,
+    gap_position integer NOT NULL,
+    locator text NOT NULL,
+    reason text NOT NULL,
+    result_offset integer,
+    result_bytes integer,
+    recorded_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT source_gaps_pkey PRIMARY KEY (owner_user_id, project_id, source_gap_id),
+    CONSTRAINT source_gaps_position_key UNIQUE (owner_user_id, project_id, tool_call_id, gap_position),
+    CONSTRAINT source_gaps_position_check CHECK ((gap_position >= 0)),
+    CONSTRAINT source_gaps_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192)),
+    CONSTRAINT source_gaps_reason_check CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text, 'unattributed'::text]))),
+    CONSTRAINT source_gaps_result_span_check CHECK (((result_offset IS NULL) = (result_bytes IS NULL)) AND (result_offset >= 0) AND (result_bytes >= 0) AND (result_offset + result_bytes <= 262144)),
+    CONSTRAINT source_gaps_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT source_gaps_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
+);
+
+CREATE INDEX source_gaps_run_idx ON storyos.source_gaps USING btree (owner_user_id, project_id, run_id);
+
+ALTER TABLE storyos.source_gaps ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.source_gaps FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY source_gaps_exact_scope ON storyos.source_gaps USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.source_gaps TO storyos_runtime;
+
 -- Proposals
 
 CREATE TABLE storyos.proposals (

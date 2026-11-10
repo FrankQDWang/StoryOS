@@ -136,6 +136,8 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("model_attempts", "canonical/model_attempts.json"),
     ("tool_calls", "canonical/tool_calls.json"),
+    ("source_snapshots", "canonical/source_snapshots.json"),
+    ("source_gaps", "canonical/source_gaps.json"),
     (
         "operation_requirements",
         "canonical/operation_requirements.json",
@@ -594,4 +596,4 @@ fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ArchiveBuil
 
 #[cfg(test)]
 #[path = "project_archive_build_tests.rs"]
-mod tests;
+pub(crate) mod tests;

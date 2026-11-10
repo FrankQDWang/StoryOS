@@ -136,7 +136,35 @@ async function buildReadFixture() {
   const tree = await client.getManuscriptTree({ baseUrl: story.baseUrl, projectId: story.projectId,
     fetchImpl: story.fetchImpl });
   return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id,
-    archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id };
+    archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id,
+    sourceSnapshotId: await researchSource(proposal.source.run_id) };
+}
+
+/** One Source Snapshot of a refused ToolCall of the Run. This file has no research Tool server, so the row writes the
+ * records that a settled research ToolCall writes; the store tests prove the capture. */
+async function researchSource(runId: string): Promise<string> {
+  return queryStoryOSPostgres(`
+    WITH attempt AS (
+      SELECT owner_user_id, project_id, run_id, decision_position, model_attempt_id
+        FROM storyos.model_attempts WHERE run_id = '${runId}'::uuid ORDER BY model_attempt_id LIMIT 1),
+    call AS (
+      INSERT INTO storyos.tool_calls (owner_user_id, project_id, tool_call_id, run_id, decision_position,
+        model_attempt_id, decision_id, call_id, call_position, caller_route, function_name, registration_id,
+        tool_registration_revision, tool_spec_revision, arguments, argument_digest, state, refusal)
+      SELECT owner_user_id, project_id, gen_random_uuid(), run_id, decision_position, model_attempt_id,
+             gen_random_uuid(), 'call_01', 0, 'model', 'web_fetch', 'web_research', gen_random_uuid(),
+             'storyos.tool.web-fetch.v1', '{}'::jsonb, 'sha256:' || repeat('0', 64), 'refused', 'tool_not_enabled'
+        FROM attempt
+      RETURNING owner_user_id, project_id, run_id, tool_call_id),
+    snapshot AS (
+      INSERT INTO storyos.source_snapshots (owner_user_id, project_id, source_snapshot_id, run_id, tool_call_id,
+        entry_position, kind, locator, title, published, text, text_bytes, result_offset, content_digest)
+      SELECT owner_user_id, project_id, gen_random_uuid(), run_id, tool_call_id, 0, 'page',
+             'https://example.org/tides', 'Tide table', NULL, 'High water at 10.42.', 20, 0,
+             'sha256:' || encode(sha256(convert_to('High water at 10.42.', 'UTF8')), 'hex')
+        FROM call
+      RETURNING source_snapshot_id)
+    SELECT source_snapshot_id::text FROM snapshot;`);
 }
 
 let readFixture: ReturnType<typeof buildReadFixture> | undefined;
@@ -557,6 +585,14 @@ const READS: Record<string, ReadRow> = {
   getAgentRun: {
     call: ({ story, proposal }, fetchImpl) => client.getAgentRun({ ...scope(story), fetchImpl,
       runId: proposal.source.run_id }),
+  },
+  listResearchSources: {
+    call: ({ story, proposal }, fetchImpl) => client.listResearchSources({ ...scope(story), fetchImpl,
+      runId: proposal.source.run_id }),
+  },
+  getResearchSource: {
+    call: ({ story, sourceSnapshotId }, fetchImpl) => client.getResearchSource({ ...scope(story), fetchImpl,
+      sourceSnapshotId }),
   },
   getManuscriptTree: {
     call: ({ story }, fetchImpl) => client.getManuscriptTree({ ...scope(story), fetchImpl }),

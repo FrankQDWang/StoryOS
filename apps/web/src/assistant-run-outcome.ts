@@ -1,4 +1,6 @@
-import type { GetAgentRunResponse, ToolCallInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  GetAgentRunResponse, ListResearchSourcesResponse, ToolCallInspect,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 /** The sentence for a request whose result did not arrive. The author approved it (ADR 0057). */
 export const NO_RESULT_SENTENCE = "没有收到这次的结果，正文没有改动。请开始新对话重试。";
@@ -27,6 +29,20 @@ export function toolCallLines(calls: readonly ToolCallInspect[]): string {
       ? `${done ? "已联网搜索" : "正在联网搜索"}：${call.query}`
       : `${done ? "已阅读" : "正在阅读"}：${call.urls.join("、")}`;
   }).join("\n");
+}
+
+/** The words for a requested page that StoryOS could not capture (ADR 0040). */
+export const SOURCE_NOT_AVAILABLE = "无法获取";
+
+/** One line for each research source of a Run: the title or the URL with the capture time, then
+ * each page that is not available, with no identifier (ADR 0040). */
+export function researchSourceLines(sources: ListResearchSourcesResponse): string[] {
+  const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+  return [
+    ...sources.snapshots.map(snapshot =>
+      `${snapshot.title ?? snapshot.locator}（获取于 ${time.format(new Date(snapshot.captured_at))}）`),
+    ...sources.gaps.map(gap => `${gap.locator}：${SOURCE_NOT_AVAILABLE}`),
+  ];
 }
 
 /** The sentence for a model reply that looks like a structured reply but does not validate (#1145). */

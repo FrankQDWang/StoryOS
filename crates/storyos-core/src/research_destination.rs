@@ -1,8 +1,8 @@
 //! The one MCP research destination of Stage 5 (ADR 0083) and its Tool Registration.
 
 use crate::{
-    MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool, ServerArguments, ToolRegistration,
-    ToolRegistrationKind, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool, ResultFormat, ServerArguments,
+    ToolRegistration, ToolRegistrationKind, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
 /// The remote Exa MCP server. It takes the MCP Streamable HTTP transport.
@@ -52,6 +52,7 @@ pub const EXA_TOOL_REGISTRATION: ToolRegistration = ToolRegistration {
                 goal: Some("objective"),
                 result_count: "numResults",
             },
+            result_format: ResultFormat::TitledEntries,
             input_schema_digest: "sha256:ea70b6dbd4ca5363f0ac82944520016e45d810ecfa332c39aa1c6ece65f2e4df",
             input_contract_digest: "sha256:0653bc2961e1ce90bd0ca07a029a919f31dab615ec2a7ac3850879f3cc4ea87f",
             output_schema_digest: None,
@@ -61,6 +62,7 @@ pub const EXA_TOOL_REGISTRATION: ToolRegistration = ToolRegistration {
             name: "web_fetch_exa",
             spec: &WEB_FETCH_TOOL_SPEC,
             arguments: ServerArguments::Fetch { urls: "urls" },
+            result_format: ResultFormat::PageBlocks,
             input_schema_digest: "sha256:d72ee7687517df49ee4374713985811b9a87c252590b2ef26c9218786b0f805b",
             input_contract_digest: "sha256:1e44be9a7159e1a2e95b5214dc238706a3bf834b72290530d889c4d53513aaf0",
             output_schema_digest: None,

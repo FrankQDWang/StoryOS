@@ -1,0 +1,34 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000d01",
+  "gaps": [
+    {
+      "locator": "https://example.org/port",
+      "reason": "failed",
+      "recorded_at": "2026-11-10T03:00:01.000Z",
+      "result_bytes": "45",
+      "result_offset": "0",
+      "source_gap_id": "018f0000-0000-7001-8000-000000000d05",
+      "tool_call_id": "018f0000-0000-7001-8000-000000000d03"
+    }
+  ],
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "run_id": "018f0000-0000-7001-8000-000000000a34",
+  "schema_id": "storyos.query.research-sources.response.v1",
+  "snapshots": [
+    {
+      "captured_at": "2026-11-10T03:00:00.000Z",
+      "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "search_result",
+      "locator": "https://example.org/tides",
+      "published": "1890-01-01T00:00:00.000Z",
+      "result_offset": "88",
+      "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
+      "text_bytes": "20",
+      "title": "Liverpool tide table 1890",
+      "tool_call_id": "018f0000-0000-7001-8000-000000000d02"
+    }
+  ]
+}

@@ -35,6 +35,8 @@ pub struct RegisteredTool {
     pub name: &'static str,
     pub spec: &'static ToolSpec,
     pub arguments: ServerArguments,
+    /// The text format of a result, which the Source Snapshot capture reads.
+    pub result_format: crate::ResultFormat,
     pub input_schema_digest: &'static str,
     pub input_contract_digest: &'static str,
     /// `None` when the server declares no output schema.

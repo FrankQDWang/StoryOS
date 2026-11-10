@@ -25,6 +25,7 @@ struct StoredToolCall {
     decision_id: String,
     state: ToolCallState,
     result_text: Option<String>,
+    source_snapshot_ids: Vec<String>,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -81,6 +82,7 @@ pub(crate) async fn open_continuation(
             decision_id: &call.decision_id,
             state: call.state,
             result_text: call.result_text.as_deref(),
+            source_snapshot_ids: &call.source_snapshot_ids,
         })
         .collect();
     let next_position = (run
@@ -141,8 +143,14 @@ async fn stored_tool_calls(
     let rows = client
         .query(
             "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
-                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text
-               FROM storyos.tool_calls
+                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
+                    ARRAY(SELECT snapshot.source_snapshot_id::text
+                            FROM storyos.source_snapshots AS snapshot
+                           WHERE (snapshot.owner_user_id, snapshot.project_id,
+                                  snapshot.tool_call_id)
+                                 = (call.owner_user_id, call.project_id, call.tool_call_id)
+                           ORDER BY snapshot.entry_position)
+               FROM storyos.tool_calls AS call
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
               ORDER BY decision_position, call_position",
@@ -167,6 +175,7 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
+                source_snapshot_ids: row.get(/*idx*/ 9),
             })
         })
         .collect()
@@ -190,7 +199,7 @@ pub(crate) async fn tool_outputs(
         .filter(|item| item.source_class == ContextSourceClass::ToolResult);
     let mut outputs = Vec::new();
     for (source, item) in sources.iter().zip(selected) {
-        if item.source_version != source.tool_call_id {
+        if item.source_version != source.source_version() {
             return Err(damaged("The tool_result Context item is damaged"));
         }
         let row = client

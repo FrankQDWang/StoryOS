@@ -22,7 +22,7 @@ const RECONFIRMATION_PATH: &str = "canonical/author_command_admission_reconfirma
 
 /// StoryOS Project Export ZIP files use STORE only, so local headers carry the
 /// uncompressed payload immediately after the name and extra fields.
-fn zip_store_files(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
+pub(crate) fn zip_store_files(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
     let mut files = Vec::new();
     let mut offset = 0;
     while offset + 30 <= bytes.len() {
@@ -43,7 +43,12 @@ fn zip_store_files(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
     files
 }
 
-fn export_command(scope: &ProjectScope) -> (ProjectCommandEnvelope, ExportProjectArchiveInput) {
+/// The export command of `scope`. Its identities end with `lead` and one more digit.
+pub(crate) fn export_command(
+    scope: &ProjectScope,
+    lead: &str,
+) -> (ProjectCommandEnvelope, ExportProjectArchiveInput) {
+    let id = |last: u8| format!("018f0000-0000-7001-8000-000000000{lead}{last}");
     let client_binding = EditorClientBinding {
         binding_ref: "binding:author-edit".to_owned(),
         session_generation: 1,
@@ -81,20 +86,18 @@ fn export_command(scope: &ProjectScope) -> (ProjectCommandEnvelope, ExportProjec
             command_schema: PROJECT_EXPORT_REQUEST_SCHEMA.to_owned(),
             command_kind: PROJECT_EXPORT_COMMAND_KIND.to_owned(),
             canonical_command_digest: command_digest,
-            idempotency_key: "018f0000-0000-7001-8000-0000000009e4".to_owned(),
+            idempotency_key: id(4),
         },
-        nonce_digest: "sha256:nonce-export-reconfirm".to_owned(),
+        nonce_digest: format!("sha256:nonce-export-reconfirm-{lead}"),
         canonical_command_bytes,
-        correlation_id: "018f0000-0000-7001-8000-0000000009e0".to_owned(),
+        correlation_id: id(0),
         ids: AuthorCommandAdmissionIds {
-            command_id: "018f0000-0000-7001-8000-0000000009e1".to_owned(),
-            author_command_admission_id: "018f0000-0000-7001-8000-0000000009e2".to_owned(),
-            receipt_id: "018f0000-0000-7001-8000-0000000009e3".to_owned(),
+            command_id: id(1),
+            author_command_admission_id: id(2),
+            receipt_id: id(3),
         },
     };
-    let input = ExportProjectArchiveInput {
-        export_id: "018f0000-0000-7001-8000-0000000009e6".to_owned(),
-    };
+    let input = ExportProjectArchiveInput { export_id: id(6) };
     (envelope, input)
 }
 
@@ -239,7 +242,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         });
     assert_eq!(queried, expected);
 
-    let (export, input) = export_command(&scope);
+    let (export, input) = export_command(&scope, "9e");
     issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
