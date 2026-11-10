@@ -31,8 +31,9 @@ pub struct ToolResultSource {
     pub trust: String,
     /// The token count of the result text that the projection keeps, when the bound cut it.
     pub kept_result_tokens: Option<u64>,
-    /// The Source Snapshots of the result, in result order.
-    #[serde(default)]
+    /// The Source Snapshots of the result, in result order. A ToolCall with no Snapshot, or one
+    /// that a record before S5-06 names, has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_snapshot_ids: Vec<String>,
 }
 

@@ -596,4 +596,4 @@ fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ArchiveBuil
 
 #[cfg(test)]
 #[path = "project_archive_build_tests.rs"]
-mod tests;
+pub(crate) mod tests;

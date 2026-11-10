@@ -561,35 +561,11 @@ export type SourceSnapshotKind = "search_result" | "page";
 
 export type SourceGapReason = "failed" | "empty" | "missing";
 
-export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, 
-/**
- * The URL that the server reported: the Evidence Locator.
- */
-locator: string, title: string | null, published: string | null, captured_at: string, 
-/**
- * The position of this revision in the lineage of its locator in the Project, from 1.
- */
-revision: string, content_digest: string, 
-/**
- * The byte length of the stored text.
- */
-text_bytes: string, 
-/**
- * The byte length of the text before the 256 KiB bound.
- */
-original_bytes: string, truncated: boolean, };
+export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, locator: string, title: string | null, published: string | null, captured_at: string, revision: string, content_digest: string, text_bytes: string, original_bytes: string, truncated: boolean, };
 
 export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, };
 
-export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, 
-/**
- * In ToolCall order, then in result order.
- */
-snapshots: Array<SourceSnapshotInspect>, 
-/**
- * In ToolCall order, then in request order.
- */
-gaps: Array<SourceGapInspect>, };
+export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, };
 
 export type GetResearchSourceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, snapshot: SourceSnapshotInspect, text: string, };
 

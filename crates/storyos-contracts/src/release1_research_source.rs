@@ -85,17 +85,17 @@ pub struct SourceSnapshotInspect {
     pub source_snapshot_id: String,
     pub tool_call_id: String,
     pub kind: SourceSnapshotKind,
-    /// The URL that the server reported: the Evidence Locator.
+    // The URL that the server reported: the Evidence Locator.
     pub locator: String,
     pub title: Option<String>,
     pub published: Option<String>,
     pub captured_at: String,
-    /// The position of this revision in the lineage of its locator in the Project, from 1.
+    // The position of this revision in the lineage of its locator in the Project, from 1.
     pub revision: String,
     pub content_digest: String,
-    /// The byte length of the stored text.
+    // The byte length of the stored text.
     pub text_bytes: String,
-    /// The byte length of the text before the 256 KiB bound.
+    // The byte length of the text before the 256 KiB bound.
     pub original_bytes: String,
     pub truncated: bool,
 }
@@ -119,9 +119,9 @@ pub struct ListResearchSourcesResponse {
     #[ts(type = "ProjectScope")]
     pub project_scope: ProjectScope,
     pub run_id: String,
-    /// In ToolCall order, then in result order.
+    // In ToolCall order, then in result order.
     pub snapshots: Vec<SourceSnapshotInspect>,
-    /// In ToolCall order, then in request order.
+    // In ToolCall order, then in request order.
     pub gaps: Vec<SourceGapInspect>,
 }
 
