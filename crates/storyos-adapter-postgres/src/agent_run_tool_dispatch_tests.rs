@@ -10,19 +10,20 @@ use tokio_postgres::Client;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_retrieval::tests::{TestCredential, adapter, destination, real_run};
 use crate::agent_run_tool_call::tests::{set_research_tool, text_and_call_stream};
+use crate::agent_run_tool_exposure::tests::advisory_stream;
 
-const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
-const RESULT: &str = "Tide tables of 1890 list two high waters each day.";
+pub(crate) const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
+pub(crate) const RESULT: &str = "Tide tables of 1890 list two high waters each day.";
 const DISCOVERY: &str = include_str!("../../../docs/research/exa-mcp-discovery-2026-11-03.md");
 /// The value that `TestCredential` resolves. No record may hold it.
 const KEY: &str = "storyos-test-credential";
 
 /// The real MCP client. After its preparation and after its exchange, a statement can change
 /// the disposable database, as an author, an operator, or a crash does.
-struct Hooked<'a> {
-    admin: &'a Client,
-    after_prepare: String,
-    after_exchange: String,
+pub(crate) struct Hooked<'a> {
+    pub admin: &'a Client,
+    pub after_prepare: String,
+    pub after_exchange: String,
 }
 
 impl ToolDestinationAdapter for Hooked<'_> {
@@ -47,14 +48,14 @@ impl ToolDestinationAdapter for Hooked<'_> {
     }
 }
 
-fn client() -> McpClient<TestCredential> {
+pub(crate) fn client() -> McpClient<TestCredential> {
     McpClient {
         resolver: TestCredential,
         timeout: std::time::Duration::from_secs(/*secs*/ 10),
     }
 }
 
-fn reply(id: u64, result: Value) -> String {
+pub(crate) fn reply(id: u64, result: Value) -> String {
     let body = json!({"jsonrpc": "2.0", "id": id, "result": result}).to_string();
     format!(
         "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
@@ -63,7 +64,7 @@ fn reply(id: u64, result: Value) -> String {
 }
 
 /// The `tools/list` result of the Discovery Record appendix, after `edit`.
-fn exa_tools(edit: fn(&mut Value)) -> Value {
+pub(crate) fn exa_tools(edit: fn(&mut Value)) -> Value {
     let appendix = &DISCOVERY[DISCOVERY.find("## Appendix").unwrap()..];
     let start = appendix.find("```json\n").unwrap() + "```json\n".len();
     let end = start + appendix[start..].find("\n```").unwrap();
@@ -87,7 +88,7 @@ fn exa_tools(edit: fn(&mut Value)) -> Value {
 }
 
 /// The answers of the fake MCP server: the session, the tool list, and then `call`, if any.
-fn mcp_replies(tools: Value, call: Option<String>) -> Vec<String> {
+pub(crate) fn mcp_replies(tools: Value, call: Option<String>) -> Vec<String> {
     let mut replies = vec![
         reply(
             1,
@@ -102,7 +103,8 @@ fn mcp_replies(tools: Value, call: Option<String>) -> Vec<String> {
 }
 
 /// One Run whose decision requests one `web_search` ToolCall, with the research Tool enabled
-/// and its evidence endpoint at the fake MCP server `mcp_base`.
+/// and its evidence endpoint at the fake MCP server `mcp_base`. The continuation RunStep gets an
+/// Advisory.
 async fn tool_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
@@ -110,16 +112,29 @@ async fn tool_run(
     suffix: u16,
     mcp_base: &str,
 ) -> (storyos_application::ProjectScope, String) {
-    let (model_base, _model) = destination(vec![text_and_call_stream(
-        &format!("resp_{prefix}"),
-        "call_01",
-        "web_search",
-        SEARCH,
-        "completed",
-    )])
+    let (model_base, _model) = destination(vec![
+        text_and_call_stream(
+            &format!("resp_{prefix}"),
+            "call_01",
+            "web_search",
+            SEARCH,
+            "completed",
+        ),
+        advisory_stream(&format!("resp_{prefix}_2")),
+    ])
     .await;
     let (scope, run_id) = real_run(store, admin, prefix, &model_base).await;
     set_research_tool(store, &scope, suffix, ToolEnablement::Enabled).await;
+    point_mcp(admin, &scope, mcp_base).await;
+    (scope, run_id)
+}
+
+/// Points the MCP evidence of the Project at the fake MCP server `mcp_base`.
+pub(crate) async fn point_mcp(
+    admin: &Client,
+    scope: &storyos_application::ProjectScope,
+    mcp_base: &str,
+) {
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions SET endpoint = $2
@@ -128,7 +143,6 @@ async fn tool_run(
         )
         .await
         .unwrap();
-    (scope, run_id)
 }
 
 /// The Run, its one ToolCall without volatile identities, and its Activity Run Events.
@@ -273,7 +287,7 @@ fn tool_manifest() -> Value {
     })
 }
 
-const POST: &str = "POST /api/plan/v3 HTTP/1.1";
+pub(crate) const POST: &str = "POST /api/plan/v3 HTTP/1.1";
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]

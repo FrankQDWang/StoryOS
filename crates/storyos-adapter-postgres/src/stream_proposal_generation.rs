@@ -139,13 +139,17 @@ async fn open_generating(
     let proposal_id = Uuid::now_v7().to_string();
     let revision_id = Uuid::now_v7().to_string();
     let generation_id = Uuid::now_v7().to_string();
+    let lineage = crate::agent_run_tool_result::proposal_source_lineage(client, claim)
+        .await
+        .map_err(stream_err)?;
     client
         .execute(
             "INSERT INTO storyos.proposals
                (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
-                source_run_id, source_decision_id, bundle_policy)
+                source_run_id, source_decision_id, bundle_policy, source_lineage)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'block_edit',
-                     $4::text::uuid, $5::text::uuid, $6::text::uuid, $7::text::uuid, 'none')",
+                     $4::text::uuid, $5::text::uuid, $6::text::uuid, $7::text::uuid, 'none',
+                     $8::text::jsonb)",
             &[
                 &owner,
                 &project,
@@ -154,6 +158,7 @@ async fn open_generating(
                 &first.block_id,
                 &claim.run_id,
                 &decision_id,
+                &lineage,
             ],
         )
         .await

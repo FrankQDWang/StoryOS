@@ -291,7 +291,7 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
 }
 
 #[test]
-fn a_function_request_goes_to_the_gateway_refuses_or_completes() {
+fn a_function_request_goes_to_the_gateway_refuses_or_continues() {
     let steps = [
         (true, true, true),
         (true, true, false),
@@ -305,7 +305,7 @@ fn a_function_request_goes_to_the_gateway_refuses_or_completes() {
         steps,
         [
             FunctionRequestStep::ToolGateway,
-            FunctionRequestStep::Complete,
+            FunctionRequestStep::Continue,
             FunctionRequestStep::Refuse,
             FunctionRequestStep::Complete,
             FunctionRequestStep::ToolGateway,

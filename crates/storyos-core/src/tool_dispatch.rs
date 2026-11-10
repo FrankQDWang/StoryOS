@@ -121,7 +121,9 @@ impl GrantScope {
                         IntakeField::Query | IntakeField::UrlList
                     )
             }
-            Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2 => false,
+            Self::ProjectWritingAssistanceV1
+            | Self::ProjectWritingAssistanceV2
+            | Self::ProjectWritingAssistanceV3 => false,
         }
     }
 }
@@ -465,7 +467,10 @@ pub enum FunctionRequestStep {
     ToolGateway,
     /// The function request has no validated ToolCall: the Run refuses with one sentence.
     Refuse,
-    /// No function request, or each ToolCall is resolved: the Run completes.
+    /// Each ToolCall of the durable Decision is resolved: the Run opens the continuation RunStep
+    /// with the results (S5-05).
+    Continue,
+    /// No function request: the Run completes.
     Complete,
 }
 
@@ -477,8 +482,9 @@ pub fn function_request_step(
 ) -> FunctionRequestStep {
     match (requests_function, supplies_tool_call, unresolved_tool_call) {
         (_, true, true) => FunctionRequestStep::ToolGateway,
+        (_, true, false) => FunctionRequestStep::Continue,
         (true, false, _) => FunctionRequestStep::Refuse,
-        _ => FunctionRequestStep::Complete,
+        (false, false, _) => FunctionRequestStep::Complete,
     }
 }
 

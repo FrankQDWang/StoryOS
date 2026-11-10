@@ -157,6 +157,7 @@ pub(crate) async fn create_request(
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
+    let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
         None => {
@@ -164,6 +165,7 @@ pub(crate) async fn create_request(
                 .await?
         }
     };
+    let input = record_input(record, assembly, &run.author_message);
     Ok(CreateRequest {
         attempt,
         purpose: probe.map_or(CreatePurpose::Decision, |probe| {
@@ -172,8 +174,34 @@ pub(crate) async fn create_request(
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),
+        passage_resolution: input.passage_resolution,
+        passage_input: input.passage_input,
+        context: input.context,
+        declared_targets,
+        selection_references: input.selection_references,
+        previous_response_reference,
+        tool_exposure,
+        successor_of: None,
+        tool_outputs,
+    })
+}
+
+/// The parts of the request input that the decision record of the active RunStep gives.
+pub(crate) struct RecordInput {
+    pub passage_resolution: Option<storyos_core::OrdinaryPassageResolution>,
+    pub passage_input: Option<serde_json::Value>,
+    pub context: Vec<RequestContextItem>,
+    pub selection_references: Vec<storyos_core::AdmittedSelection>,
+}
+
+pub(crate) fn record_input(
+    record: &serde_json::Value,
+    assembly: storyos_core::CurrentPassageAssemblyRecord,
+    author_message: &str,
+) -> RecordInput {
+    RecordInput {
         passage_resolution: assembly.operation_requirement.ordinary_resolution,
-        passage_input: crate::passage_collection::passage_input(record, &run.author_message),
+        passage_input: crate::passage_collection::passage_input(record, author_message),
         context: assembly
             .selected
             .into_iter()
@@ -182,16 +210,11 @@ pub(crate) async fn create_request(
                 content: item.content,
             })
             .collect(),
-        declared_targets,
         selection_references: assembly
             .operation_requirement
             .selection_references
-            .clone()
             .unwrap_or_default(),
-        previous_response_reference,
-        tool_exposure,
-        successor_of: None,
-    })
+    }
 }
 
 /// The admitted Proposal targets that a request of the active decision declares.

@@ -11,6 +11,9 @@ pub enum GrantScope {
     /// The first scope, the active compaction of the current Conversation, and the Host-managed
     /// summary of the same Conversation.
     ProjectWritingAssistanceV2,
+    /// The second scope and the source class `tool_result`: the projected results of the
+    /// resolved ToolCalls of the Run for its continuation RunStep (S5-05).
+    ProjectWritingAssistanceV3,
     /// The research destination of Project Tool Enablement (ADR 0083): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
@@ -19,12 +22,13 @@ pub enum GrantScope {
 
 impl GrantScope {
     /// The scope that each new grant records.
-    pub const CURRENT: Self = Self::ProjectWritingAssistanceV2;
+    pub const CURRENT: Self = Self::ProjectWritingAssistanceV3;
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProjectWritingAssistanceV1 => "project_writing_assistance_v1",
             Self::ProjectWritingAssistanceV2 => "project_writing_assistance_v2",
+            Self::ProjectWritingAssistanceV3 => "project_writing_assistance_v3",
             Self::ResearchToolV1 => "research_tool_v1",
         }
     }
@@ -33,6 +37,7 @@ impl GrantScope {
         match value {
             "project_writing_assistance_v1" => Some(Self::ProjectWritingAssistanceV1),
             "project_writing_assistance_v2" => Some(Self::ProjectWritingAssistanceV2),
+            "project_writing_assistance_v3" => Some(Self::ProjectWritingAssistanceV3),
             "research_tool_v1" => Some(Self::ResearchToolV1),
             _ => None,
         }
@@ -41,10 +46,15 @@ impl GrantScope {
     fn names_purpose(self, purpose: ContextPurpose) -> bool {
         match (self, purpose) {
             (
-                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                Self::ProjectWritingAssistanceV1
+                | Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3,
                 ContextPurpose::CurrentPassageAssistance,
             )
-            | (Self::ProjectWritingAssistanceV2, ContextPurpose::ActiveContextCompaction) => true,
+            | (
+                Self::ProjectWritingAssistanceV2 | Self::ProjectWritingAssistanceV3,
+                ContextPurpose::ActiveContextCompaction,
+            ) => true,
             (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction)
             | (
                 Self::ResearchToolV1,
@@ -56,24 +66,37 @@ impl GrantScope {
     fn names_source_class(self, class: ContextSourceClass) -> bool {
         match (self, class) {
             (
-                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                Self::ProjectWritingAssistanceV1
+                | Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3,
                 ContextSourceClass::AuthorInstruction
                 | ContextSourceClass::WorkingTarget
                 | ContextSourceClass::InstructionBinding,
             )
-            | (Self::ProjectWritingAssistanceV2, ContextSourceClass::ConversationSummary) => true,
+            | (
+                Self::ProjectWritingAssistanceV2 | Self::ProjectWritingAssistanceV3,
+                ContextSourceClass::ConversationSummary,
+            )
+            | (Self::ProjectWritingAssistanceV3, ContextSourceClass::ToolResult) => true,
             (
-                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                Self::ProjectWritingAssistanceV1
+                | Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3,
                 ContextSourceClass::HostControl,
             )
             | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary)
+            | (
+                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                ContextSourceClass::ToolResult,
+            )
             | (
                 Self::ResearchToolV1,
                 ContextSourceClass::AuthorInstruction
                 | ContextSourceClass::WorkingTarget
                 | ContextSourceClass::InstructionBinding
                 | ContextSourceClass::ConversationSummary
-                | ContextSourceClass::HostControl,
+                | ContextSourceClass::HostControl
+                | ContextSourceClass::ToolResult,
             ) => false,
         }
     }

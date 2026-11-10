@@ -10,6 +10,7 @@ use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, real_run};
+use crate::agent_run_tool_exposure::tests::advisory_stream;
 use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -112,6 +113,7 @@ async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -166,13 +168,17 @@ async fn a_durable_function_request_decision_derives_one_tool_call_once() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![text_and_call_stream(
-        "resp_f75",
-        "call_01",
-        "web_search",
-        SEARCH_ARGUMENTS,
-        "completed",
-    )])
+    let (base, served) = destination(vec![
+        text_and_call_stream(
+            "resp_f75",
+            "call_01",
+            "web_search",
+            SEARCH_ARGUMENTS,
+            "completed",
+        ),
+        // The continuation RunStep answers the refused ToolCall.
+        advisory_stream("resp_f75b"),
+    ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "f75", &base).await;
     enable_research_tool(&store, &scope, 0xf75a).await;
@@ -276,7 +282,7 @@ async fn a_durable_function_request_decision_derives_one_tool_call_once() {
             Some("23505".to_owned()),
             false,
             Some(true),
-            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 2],
         )
     );
 }

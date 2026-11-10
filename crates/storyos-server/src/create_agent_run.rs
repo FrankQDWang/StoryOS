@@ -746,6 +746,9 @@ fn inspect_context(
                         ContextBlockReason::WorkingTargetRevisionUnavailable => {
                             contracts::ContextBlockReason::WorkingTargetRevisionUnavailable
                         }
+                        ContextBlockReason::ToolResultUnavailable => {
+                            contracts::ContextBlockReason::ToolResultUnavailable
+                        }
                     })
                     .collect(),
             },
@@ -773,6 +776,9 @@ fn inspect_context(
                     storyos_core::ProjectionMode::DerivedSummary => {
                         contracts::ProjectionMode::DerivedSummary
                     }
+                    storyos_core::ProjectionMode::DeterministicExcerpt => {
+                        contracts::ProjectionMode::DeterministicExcerpt
+                    }
                 },
                 token_count: source.token_count.to_string(),
                 content: source.content.clone(),
@@ -797,6 +803,9 @@ fn inspect_context(
                     }
                     RejectionReason::WorkingTargetRevisionUnavailable => {
                         contracts::ContextRejectionReason::WorkingTargetRevisionUnavailable
+                    }
+                    RejectionReason::ToolResultUnavailable => {
+                        contracts::ContextRejectionReason::ToolResultUnavailable
                     }
                 },
             })
@@ -867,6 +876,7 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
         storyos_core::ContextSourceClass::ConversationSummary => {
             contracts::ContextSourceClass::ConversationSummary
         }
+        storyos_core::ContextSourceClass::ToolResult => contracts::ContextSourceClass::ToolResult,
     }
 }
 

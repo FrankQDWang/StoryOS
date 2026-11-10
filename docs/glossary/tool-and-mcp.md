@@ -52,6 +52,10 @@ _Avoid_: Tool Registration, project enablement, authorization
 An Operational Record for one requested invocation of an exact Tool Registration, including its caller route, validated arguments, resolved targets, Tool Effect Request, authorization state, execution lifecycle, and outcome. A ToolCall may produce Artifacts or other Operational Records but never inherits their lifecycle or authority.
 _Avoid_: Tool result, Artifact, Approval, model message
 
+**Tool Result Continuation**:
+The RunStep that a Run opens when each ToolCall of its durable function request Decision is resolved. Each resolved ToolCall is one Context Candidate of the source class `tool_result`, with the ToolCall identity as its Context Source Version and the trust `data_only`. The request sends one function output for each call with its original call identifier, and its text always comes from the stored ToolCall. A delivery never starts a Tool exchange ([ADR 0085](../adr/0085-reenter-each-settled-tool-result-through-context-assembly.md)).
+_Avoid_: Tool replay, second ToolCall, author message
+
 **Tool Gateway**:
 The sole StoryOS-owned authorization and execution boundary for every StoryOS-dispatched ToolCall, regardless of whether its caller is a model, generated program, MCP App, or host component. It resolves the Tool Registration, enforces the caller's exact Project Scope, derives effects, enforces grants and Approval, invokes the trusted implementation, validates output, and records the outcome; provider-hosted execution cannot claim this StoryOS-controlled guarantee.
 _Avoid_: Tool Registry, provider runtime, direct adapter call

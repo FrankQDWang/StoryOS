@@ -208,6 +208,7 @@ pub enum ContextSourceClass {
     WorkingTarget,
     InstructionBinding,
     ConversationSummary,
+    ToolResult,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -215,6 +216,7 @@ pub enum ContextSourceClass {
 pub enum ProjectionMode {
     ExactRequired,
     DerivedSummary,
+    DeterministicExcerpt,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -230,6 +232,7 @@ pub enum ContextBlockReason {
     ExactRequiredOverLimit { source_class: ContextSourceClass },
     RequiredInstructionRevisionUnavailable,
     WorkingTargetRevisionUnavailable,
+    ToolResultUnavailable,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -239,6 +242,7 @@ pub enum ContextRejectionReason {
     OverCollectionTokenLimit,
     RequiredRevisionUnavailable,
     WorkingTargetRevisionUnavailable,
+    ToolResultUnavailable,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

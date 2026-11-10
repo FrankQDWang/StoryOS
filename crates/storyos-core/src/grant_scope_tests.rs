@@ -158,3 +158,34 @@ fn only_scope_v2_covers_the_compaction_summary_request() {
     );
     assert!(summary.selected.is_empty());
 }
+
+#[test]
+fn only_the_third_scope_covers_a_tool_result() {
+    let mut request = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
+    request.selected.push(SelectedProjection {
+        source_class: ContextSourceClass::ToolResult,
+        source_version: "tool-call-1".to_owned(),
+        projection_mode: ProjectionMode::ExactRequired,
+        token_count: 4,
+        content: "data".to_owned(),
+    });
+
+    assert_eq!(
+        [
+            "project_writing_assistance_v1",
+            "project_writing_assistance_v2",
+            "project_writing_assistance_v3",
+            "research_tool_v1",
+        ]
+        .map(|scope| admit_disclosure(&GrantFacts {
+            grant_scope: Some(scope),
+            ..facts(&request)
+        })),
+        [
+            Err("disclosure_outside_grant"),
+            Err("disclosure_outside_grant"),
+            Ok(GrantScope::ProjectWritingAssistanceV3),
+            Err("disclosure_outside_grant"),
+        ]
+    );
+}

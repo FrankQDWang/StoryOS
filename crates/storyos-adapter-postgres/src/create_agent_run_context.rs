@@ -18,6 +18,8 @@ pub(crate) struct PassageContextInput<'a> {
     pub passage_targets: Option<&'a [storyos_core::PassageContextTarget]>,
     pub candidate_target: Option<&'a storyos_core::ProposalCandidateTarget>,
     pub selection_references: Option<&'a [storyos_core::SelectionReference]>,
+    /// The resolved ToolCalls of a `tool_result_continuation`, in item order.
+    pub tool_results: Option<&'a [storyos_core::ToolResultCandidate<'a>]>,
 }
 
 pub(crate) async fn persist_current_passage_assembly(
@@ -128,6 +130,10 @@ pub(crate) async fn persist_current_passage_assembly(
             },
         }
     };
+    let mut record = record;
+    if let Some(candidates) = command.tool_results {
+        storyos_core::assemble_tool_result_continuation(&mut record, candidates);
+    }
     let payload = encode_assembly_record(&record).to_string();
     client
         .execute(

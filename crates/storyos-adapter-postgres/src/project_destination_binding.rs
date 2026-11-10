@@ -191,4 +191,4 @@ mod qualification_tests;
 
 #[cfg(test)]
 #[path = "grant_scope_tests.rs"]
-mod grant_scope_tests;
+pub(crate) mod grant_scope_tests;

@@ -7,7 +7,6 @@ use storyos_core::{
     AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
     CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification, stream_batch_plan,
 };
-use uuid::Uuid;
 
 use crate::agent_run_compaction::CompactionAdvance;
 use crate::agent_run_create_dispatch::PriorContext;
@@ -490,7 +489,7 @@ pub(crate) async fn settle_one_phase(
         .and_then(serde_json::Value::as_str)
         == Some("tool_request")
     {
-        return crate::agent_run_tool_dispatch::advance(client, claim).await;
+        return crate::agent_run_tool_dispatch::advance(client, claim, &run).await;
     }
     if payload.pointer("/decision/locations").is_none()
         && stream_batch_plan(author_message).is_some()
@@ -516,39 +515,14 @@ pub(crate) async fn settle_one_phase(
             .and_then(serde_json::Value::as_bool)
             == Some(true)
     {
-        let binding = Uuid::now_v7().to_string();
-        let mut next_payload = payload.clone();
-        if let Some(wire) = crate::agent_run_continuation::parse_wire(&payload) {
-            next_payload["produced_binding"] =
-                crate::agent_run_continuation::encode_produced_binding(
-                    &binding,
-                    &attempt_id,
-                    &wire.admission,
-                );
-        }
-        client
-            .execute(
-                "UPDATE storyos.model_attempts
-                    SET continuation_binding_id = $4::text::uuid,
-                        dispatch_state = 'settled',
-                        payload = $6::text::jsonb
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                    AND decision_id = $5::text::uuid
-                    AND continuation_binding_id IS NULL
-                    AND attempt_role = 'decision'",
-                &[
-                    &claim.project_scope.owner_user_id.as_ref(),
-                    &claim.project_scope.project_id.as_ref(),
-                    &claim.run_id,
-                    &binding,
-                    &decision,
-                    &next_payload.to_string(),
-                ],
-            )
-            .await
-            .map_err(complete_database_error)?;
+        crate::agent_run_continuation::bind_produced_continuation(
+            client,
+            claim,
+            decision,
+            &attempt_id,
+            &payload,
+        )
+        .await?;
         return complete(client, claim).await;
     }
     complete(client, claim).await
