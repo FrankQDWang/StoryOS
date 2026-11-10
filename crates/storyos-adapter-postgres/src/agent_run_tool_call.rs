@@ -5,8 +5,8 @@
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
-    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolCallBatch, ToolEnablement,
-    ToolRegistrationLifecycle, ValidatedToolCall,
+    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolCallBatch, ToolCallState,
+    ToolEnablement, ToolRegistrationLifecycle, ValidatedToolCall,
 };
 use uuid::Uuid;
 
@@ -88,6 +88,65 @@ pub(crate) async fn pending_tool_call_exists(
         .await
         .map(|row| row.get(0))
         .map_err(complete_database_error)
+}
+
+/// Fills the calls of a function request Decision from its ToolCall rows in item order: the
+/// validated arguments and the outcome, and no identifier (ADR 0040).
+pub(crate) async fn hydrate_calls(
+    client: &tokio_postgres::Client,
+    scope: &storyos_application::ProjectScope,
+    decision: &mut storyos_application::AgentRunDecisionInspect,
+) -> Result<(), storyos_application::CreateAgentRunError> {
+    use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
+    let storyos_application::AgentRunDecisionInspect::ToolRequest { decision_id, calls } = decision
+    else {
+        return Ok(());
+    };
+    let rows = client
+        .query(
+            "SELECT tool_spec_revision, arguments::text, state FROM storyos.tool_calls
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND decision_id = $3::text::uuid
+              ORDER BY call_position",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &decision_id.as_str(),
+            ],
+        )
+        .await
+        .map_err(crate::create_agent_run::agent_run_database_error)?;
+    let damaged = || {
+        storyos_application::CreateAgentRunError::Unavailable(Box::new(std::io::Error::other(
+            "The ToolCall is damaged",
+        )))
+    };
+    for row in rows {
+        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 1))
+            .map_err(crate::create_agent_run::agent_run_parse_error)?;
+        let intake = storyos_core::tool_spec(row.get(/*idx*/ 0))
+            .and_then(|spec| spec.intake(&arguments).ok())
+            .ok_or_else(damaged)?;
+        let outcome = match storyos_core::ToolCallState::parse(row.get(/*idx*/ 2))
+            .ok_or_else(damaged)?
+        {
+            ToolCallState::Pending | ToolCallState::Dispatched => ToolCallOutcomeInspect::Pending,
+            ToolCallState::Settled => ToolCallOutcomeInspect::Settled,
+            ToolCallState::Failed
+            | ToolCallState::Unknown
+            | ToolCallState::Refused
+            | ToolCallState::AwaitingApproval => ToolCallOutcomeInspect::Failed,
+        };
+        calls.push(match intake {
+            storyos_core::ToolIntake::WebSearch { query, .. } => {
+                ToolCallInspect::Search { query, outcome }
+            }
+            storyos_core::ToolIntake::WebFetch { urls } => {
+                ToolCallInspect::PageRead { urls, outcome }
+            }
+        });
+    }
+    Ok(())
 }
 
 /// The evidence record of the batch validation on the Attempt payload. `None` when the response

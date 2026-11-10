@@ -466,6 +466,36 @@ pub enum OptionalDecisionInspect {
         required_reply: String,
         continuation: OptionalContinuationInspect,
     },
+    /// A function request Decision: one entry for each ToolCall in item order (ADR 0040).
+    ToolRequest {
+        decision_id: String,
+        calls: Vec<ToolCallInspect>,
+    },
+}
+
+/// What one ToolCall asked for, from its validated arguments, and how it settled.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ToolCallInspect {
+    Search {
+        query: String,
+        outcome: ToolCallOutcomeInspect,
+    },
+    PageRead {
+        urls: Vec<String>,
+        outcome: ToolCallOutcomeInspect,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallOutcomeInspect {
+    /// The ToolCall is not resolved.
+    Pending,
+    /// The server answered with a terminal result.
+    Settled,
+    /// The call failed, its outcome is unknown, or the Host refused it.
+    Failed,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

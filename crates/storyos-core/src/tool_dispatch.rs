@@ -216,15 +216,15 @@ impl ToolDispatchRefusal {
 }
 
 /// Admits the dispatch of one ToolCall at the final local dispatch boundary: the non-expanding
-/// intersection of the exact Project Scope, the current Project Tool Enablement, the Registration
+/// intersection of the current Project Tool Enablement, the exact Project Scope, the Registration
 /// lifecycle, the compatibility Decision, the Credential Reference of the use binding, and the
 /// grant scope with the Tool Effect Request (ADR 0034). A covered effect needs no confirmation.
 pub fn admit_tool_dispatch(facts: &ToolDispatchFacts<'_>) -> Result<(), ToolDispatchRefusal> {
-    if !facts.same_scope {
-        return Err(ToolDispatchRefusal::DisclosureOutsideGrant);
-    }
     if facts.enablement != Some(ToolEnablement::Enabled) {
         return Err(ToolDispatchRefusal::ToolNotEnabled);
+    }
+    if !facts.same_scope {
+        return Err(ToolDispatchRefusal::DisclosureOutsideGrant);
     }
     if facts.lifecycle.admit_new_tool_call().is_err() {
         return Err(ToolDispatchRefusal::RegistrationUnavailable);

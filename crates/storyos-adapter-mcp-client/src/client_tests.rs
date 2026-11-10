@@ -574,3 +574,45 @@ async fn another_protocol_revision_gives_a_record_whose_drift_check_names_it() {
         }])
     );
 }
+
+#[tokio::test]
+async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
+    let dispatch = |url: &str| McpRequest::Dispatch {
+        server_url: url.to_owned(),
+        registration: &EXA_TOOL_REGISTRATION,
+        tool: "web_search_exa".to_owned(),
+        arguments: json!({"query": CONTENT_CANARY})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let (drifted_url, drifted) = serve(Body::Json, Some(SESSION), conforming).await;
+    let (failed_url, failed) = serve(Body::Json, Some(SESSION), |message| match message["method"]
+        .as_str()
+        .unwrap()
+    {
+        "tools/list" => Reply::Error(-32603),
+        _ => conforming(message),
+    })
+    .await;
+    let drift = exchange(dispatch(&drifted_url)).await;
+
+    assert_eq!(
+        (
+            matches!(&drift, McpObservation::Drift(differences)
+            if differences.contains(&ContractDifference::ServerName {
+                pinned: "exa-search-server".to_owned(),
+                observed: "fake-exa".to_owned(),
+            })),
+            std::mem::take(&mut *drifted.lock().unwrap()),
+            exchange(dispatch(&failed_url)).await,
+            std::mem::take(&mut *failed.lock().unwrap()),
+        ),
+        (
+            true,
+            sent(DISCOVER, Some(SESSION)),
+            McpObservation::NotSubmitted,
+            sent(&DISCOVER[..3], Some(SESSION)),
+        )
+    );
+}

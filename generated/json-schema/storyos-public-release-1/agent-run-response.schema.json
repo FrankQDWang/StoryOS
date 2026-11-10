@@ -1218,6 +1218,32 @@
             "continuation"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A function request Decision: one entry for each ToolCall in item order (ADR 0040).",
+          "properties": {
+            "calls": {
+              "items": {
+                "$ref": "#/$defs/ToolCallInspect"
+              },
+              "type": "array"
+            },
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "tool_request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "calls"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2138,6 +2164,75 @@
         "item_token_limit"
       ],
       "type": "object"
+    },
+    "ToolCallInspect": {
+      "description": "What one ToolCall asked for, from its validated arguments, and how it settled.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "search",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/ToolCallOutcomeInspect"
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "page_read",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/ToolCallOutcomeInspect"
+            },
+            "urls": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "urls",
+            "outcome"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ToolCallOutcomeInspect": {
+      "oneOf": [
+        {
+          "const": "pending",
+          "description": "The ToolCall is not resolved.",
+          "type": "string"
+        },
+        {
+          "const": "settled",
+          "description": "The server answered with a terminal result.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The call failed, its outcome is unknown, or the Host refused it.",
+          "type": "string"
+        }
+      ]
     },
     "UnknownCreateSuccessorDisposition": {
       "enum": [

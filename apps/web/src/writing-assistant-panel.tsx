@@ -17,6 +17,7 @@ import { AssistantComposer } from "./assistant-composer.tsx";
 import {
   CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE, malformedStructuredReply, settledRun,
+  toolCallLines,
   stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
@@ -172,6 +173,8 @@ function resultText(run: GetAgentRunResponse): string | undefined {
         : "本次修改建议已生成，可以在正文中查看。";
     case "clarification":
       return run.decision.question;
+    case "tool_request":
+      return toolCallLines(run.decision.calls);
     case "execution_refused":
       switch (run.decision.capability) {
         case "model_runtime_qualification_pending":

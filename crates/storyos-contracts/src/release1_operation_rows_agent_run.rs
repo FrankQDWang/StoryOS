@@ -23,8 +23,8 @@ use crate::release1_agent_run::{
     OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
     OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
     ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
+    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{ClientOverride, RegisteredOperation};
 use crate::release1_project_activity::ProjectActivityKind;
@@ -174,6 +174,8 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         ProseChangeLocationInspect::decl,
         ProseChangeLocationOutcome::decl,
         ProseChangeLocationCurrent::decl,
+        ToolCallOutcomeInspect::decl,
+        ToolCallInspect::decl,
         OptionalDecisionInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
@@ -391,6 +393,7 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
             "/$defs/OptionalDecisionInspect/oneOf/2/properties/decision_id",
             "/$defs/OptionalDecisionInspect/oneOf/3/properties/decision_id",
             "/$defs/OptionalDecisionInspect/oneOf/4/properties/decision_id",
+            "/$defs/OptionalDecisionInspect/oneOf/5/properties/decision_id",
             "/$defs/OptionalManifestRef/oneOf/1/properties/manifest_id",
             "/$defs/OptionalModelAttemptInspect/oneOf/1/properties/destination_attempt_id",
             "/$defs/OptionalModelAttemptInspect/oneOf/1/properties/model_attempt_id",

@@ -259,6 +259,10 @@ pub enum AgentRunDecisionInspect {
         required_reply: String,
         continuation_binding_id: Option<String>,
     },
+    ToolRequest {
+        decision_id: String,
+        calls: Vec<storyos_contracts::ToolCallInspect>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
