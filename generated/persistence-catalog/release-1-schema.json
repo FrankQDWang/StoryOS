@@ -7244,7 +7244,7 @@
         "source_gaps_pkey": "PRIMARY KEY (owner_user_id, project_id, source_gap_id)",
         "source_gaps_position_check": "CHECK ((gap_position >= 0))",
         "source_gaps_position_key": "UNIQUE (owner_user_id, project_id, tool_call_id, gap_position)",
-        "source_gaps_reason_check": "CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text])))"
+        "source_gaps_reason_check": "CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text, 'unattributed'::text])))"
       },
       "indexes": {
         "source_gaps_pkey": "CREATE UNIQUE INDEX source_gaps_pkey ON storyos.source_gaps USING btree (owner_user_id, project_id, source_gap_id)",
