@@ -1885,6 +1885,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "storyos-adapter-fake-destination",
+ "storyos-adapter-mcp-client",
  "storyos-adapter-volcengine-responses",
  "storyos-application",
  "storyos-contracts",

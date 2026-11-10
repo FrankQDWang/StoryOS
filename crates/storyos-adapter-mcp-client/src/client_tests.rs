@@ -60,6 +60,8 @@ enum Reply {
     Flood,
     /// HTTP 404 with no body.
     NotFound,
+    /// HTTP 503 with no body.
+    Unavailable,
 }
 
 /// The method and the MCP headers of one message that the fake server received.
@@ -115,6 +117,7 @@ async fn serve(
                     format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{}data: {result}\n\n", event.repeat(1100))
                 }
                 Reply::NotFound => "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
+                Reply::Unavailable => "HTTP/1.1 503 Service Unavailable\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_owned(),
             };
             stream.write_all(response.as_bytes()).await.unwrap();
             if matches!(body, Body::HeldCrEvents) {
@@ -351,10 +354,13 @@ async fn each_failure_of_the_server_is_one_observation() {
             |_| Reply::Error(-32602),
             McpObservation::JsonRpcError { code: -32602 },
         ),
+        // The status arrived, so the server received the call, and the body ended early.
         (
             "tools/call",
             |_| Reply::Drop,
-            McpObservation::OutcomeUnknown,
+            McpObservation::AnsweredWithoutResult {
+                reason: "response_incomplete".to_owned(),
+            },
         ),
         (
             "tools/call",
@@ -572,5 +578,212 @@ async fn another_protocol_revision_gives_a_record_whose_drift_check_names_it() {
             pinned: PROTOCOL_REVISION.to_owned(),
             observed: "2026-06-18".to_owned(),
         }])
+    );
+}
+
+#[tokio::test]
+async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_initialize_or_tool_list() {
+    let dispatch = |url: &str| McpRequest::Dispatch {
+        server_url: url.to_owned(),
+        registration: &EXA_TOOL_REGISTRATION,
+        tool: "web_search_exa".to_owned(),
+        arguments: json!({"query": CONTENT_CANARY})
+            .as_object()
+            .unwrap()
+            .clone(),
+    };
+    let (drifted_url, drifted) = serve(Body::Json, Some(SESSION), conforming).await;
+    let (failed_url, failed) = serve(Body::Json, Some(SESSION), |message| match message["method"]
+        .as_str()
+        .unwrap()
+    {
+        "tools/list" => Reply::Error(-32603),
+        _ => conforming(message),
+    })
+    .await;
+    let (revision_url, revision) =
+        serve(
+            Body::Json,
+            Some(SESSION),
+            |message| match message["method"].as_str().unwrap() {
+                "initialize" => Reply::Result(json!({
+                    "protocolVersion": "2026-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "exa-search-server", "version": "1.2.3"},
+                })),
+                _ => conforming(message),
+            },
+        )
+        .await;
+    let (rejected_url, rejected) =
+        serve(
+            Body::Json,
+            Some(SESSION),
+            |message| match message["method"].as_str().unwrap() {
+                "initialize" => Reply::Error(-32603),
+                _ => conforming(message),
+            },
+        )
+        .await;
+    let drift = exchange(dispatch(&drifted_url)).await;
+    let not_submitted = exchange(dispatch(&failed_url)).await;
+    let revision_drift = exchange(dispatch(&revision_url)).await;
+    let initialize_failure = exchange(dispatch(&rejected_url)).await;
+
+    assert_eq!(
+        (
+            matches!(&drift, McpObservation::Drift(differences)
+            if differences.contains(&ContractDifference::ServerName {
+                pinned: "exa-search-server".to_owned(),
+                observed: "fake-exa".to_owned(),
+            })),
+            std::mem::take(&mut *drifted.lock().unwrap()),
+            not_submitted,
+            std::mem::take(&mut *failed.lock().unwrap()),
+            revision_drift,
+            std::mem::take(&mut *revision.lock().unwrap()).len(),
+            initialize_failure,
+            std::mem::take(&mut *rejected.lock().unwrap()).len(),
+        ),
+        (
+            true,
+            sent(DISCOVER, Some(SESSION)),
+            McpObservation::NotSubmitted,
+            sent(&DISCOVER[..3], Some(SESSION)),
+            McpObservation::Drift(vec![ContractDifference::ProtocolRevision {
+                pinned: PROTOCOL_REVISION.to_owned(),
+                observed: "2026-06-18".to_owned(),
+            }]),
+            1,
+            McpObservation::NotSubmitted,
+            1,
+        )
+    );
+}
+
+const DISCOVERY: &str = include_str!("../../../docs/research/exa-mcp-discovery-2026-11-03.md");
+
+/// The tools of the Discovery Record appendix, as a server lists them.
+fn exa_tools() -> Vec<Value> {
+    let appendix = &DISCOVERY[DISCOVERY.find("## Appendix").unwrap()..];
+    let start = appendix.find("```json\n").unwrap() + "```json\n".len();
+    let end = start + appendix[start..].find("\n```").unwrap();
+    let recorded: Value = serde_json::from_str(&appendix[start..end]).unwrap();
+    recorded["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| {
+            let mut listed = json!({"name": tool["name"], "description": tool["description"],
+                "inputSchema": tool["input_schema"], "annotations": tool["annotations"]});
+            if !tool["output_schema"].is_null() {
+                listed["outputSchema"] = tool["output_schema"].clone();
+            }
+            listed
+        })
+        .collect()
+}
+
+/// The pinned Exa server with its tools on two pages. It keeps each `tools/call` body and
+/// answers it with `call`.
+fn pinned_server(
+    calls: Arc<Mutex<Vec<Value>>>,
+    call: fn(&Value) -> Reply,
+) -> impl Fn(&Value) -> Reply + Send + 'static {
+    let tools = exa_tools();
+    move |message: &Value| match message["method"].as_str().unwrap() {
+        "initialize" => Reply::Result(json!({
+            "protocolVersion": PROTOCOL_REVISION,
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "exa-search-server", "version": "3.5.1"},
+        })),
+        "notifications/initialized" => Reply::Accepted,
+        "tools/list" if message["params"]["cursor"] == "page-2" => {
+            Reply::Result(json!({"tools": tools[1..]}))
+        }
+        "tools/list" => Reply::Result(json!({"tools": tools[..1], "nextCursor": "page-2"})),
+        "tools/call" => {
+            calls.lock().unwrap().push(message.clone());
+            call(message)
+        }
+        method => panic!("unexpected method {method}"),
+    }
+}
+
+/// The sent `tools/call` body is the prepared Wire Payload Projection, with the id 0 after two
+/// `tools/list` pages. A 5xx answer to it, or a body that ends early, is an answer without a
+/// result, not a rejection.
+#[tokio::test]
+async fn a_dispatch_sends_the_projected_call_body_and_an_answer_without_a_result_is_not_a_rejection()
+ {
+    let client = McpClient {
+        resolver: CanaryResolver,
+        timeout: Duration::from_secs(/*secs*/ 1),
+    };
+    let reference = CredentialReference(REFERENCE.to_owned());
+    let mut outcomes = Vec::new();
+    let unavailable: fn(&Value) -> Reply = |_| Reply::Unavailable;
+    let dropped: fn(&Value) -> Reply = |_| Reply::Drop;
+    for call in [conforming, unavailable, dropped] {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let (url, received) = serve(
+            Body::Json,
+            Some(SESSION),
+            pinned_server(Arc::clone(&calls), call),
+        )
+        .await;
+        let request = McpRequest::Dispatch {
+            server_url: url,
+            registration: &EXA_TOOL_REGISTRATION,
+            tool: "web_search_exa".to_owned(),
+            arguments: json!({"query": CONTENT_CANARY})
+                .as_object()
+                .unwrap()
+                .clone(),
+        };
+        let prepared = client
+            .prepare(&request, Some(&reference))
+            .await
+            .ok()
+            .unwrap();
+        let projected: Value =
+            serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap())
+                .unwrap();
+        let observation = client.exchange(prepared.prepared).await;
+        let sent_calls = std::mem::take(&mut *calls.lock().unwrap());
+        let methods = std::mem::take(&mut *received.lock().unwrap());
+        outcomes.push((
+            observation,
+            sent_calls == [projected.clone()],
+            projected["id"].clone(),
+            methods,
+        ));
+    }
+    let expected_methods = || {
+        let mut methods = sent(DISCOVER, Some(SESSION));
+        methods.extend(sent(&["tools/call"], Some(SESSION)));
+        methods
+    };
+    assert_eq!(
+        outcomes,
+        [
+            (called(), true, json!(0), expected_methods()),
+            (
+                McpObservation::AnsweredWithoutResult {
+                    reason: "http_503".to_owned()
+                },
+                true,
+                json!(0),
+                expected_methods()
+            ),
+            (
+                McpObservation::AnsweredWithoutResult {
+                    reason: "response_incomplete".to_owned()
+                },
+                true,
+                json!(0),
+                expected_methods()
+            ),
+        ]
     );
 }

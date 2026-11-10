@@ -1,4 +1,4 @@
-import type { GetAgentRunResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetAgentRunResponse, ToolCallInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 /** The sentence for a request whose result did not arrive. The author approved it (ADR 0057). */
 export const NO_RESULT_SENTENCE = "没有收到这次的结果，正文没有改动。请开始新对话重试。";
@@ -14,6 +14,20 @@ export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开
 
 /** The sentence for a model that asked for research before the research tool exists (#1398). */
 export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "模型想要联网检索，但检索功能还没有开放，正文没有改动。你可以重试，或继续手动写作。";
+
+/** The line of a research call that did not give a result (ADR 0040). */
+export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
+
+/** One line for each research call of a function request, in order, with no identifier (ADR 0040). */
+export function toolCallLines(calls: readonly ToolCallInspect[]): string {
+  return calls.map(call => {
+    if (call.outcome === "failed") return TOOL_CALL_FAILED_SENTENCE;
+    const done = call.outcome === "settled";
+    return call.kind === "search"
+      ? `${done ? "已联网搜索" : "正在联网搜索"}：${call.query}`
+      : `${done ? "已阅读" : "正在阅读"}：${call.urls.join("、")}`;
+  }).join("\n");
+}
 
 /** The sentence for a model reply that looks like a structured reply but does not validate (#1145). */
 export const MALFORMED_REPLY_SENTENCE = "模型这次的回复格式不正确，正文没有改动。你可以重试，或继续手动写作。";

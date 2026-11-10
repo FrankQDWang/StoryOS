@@ -7,15 +7,30 @@ use crate::model_gateway_ports::{
 };
 use crate::model_lease_renewal::renew_while;
 use crate::model_stream_commit::GatewaySink;
+use crate::tool_gateway::dispatch_tool_calls;
+use crate::tool_gateway_ports::{NoToolDestination, ToolDestinationAdapter, ToolDispatchStore};
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
 };
 
 /// Gets the next work, prepares, claims, exchanges with no open transaction, and records,
-/// until the claimed AgentRun needs no destination I/O.
+/// until the claimed AgentRun needs no destination I/O. A process with no Tool adapter refuses
+/// each ToolCall before its claim.
 pub async fn complete_agent_run(
-    store: &impl ModelDispatchStore,
+    store: &(impl ModelDispatchStore + ToolDispatchStore),
     adapter: &impl ModelProviderAdapter,
+    observer: &impl ContractFaultObserver,
+    clock: &impl GatewayClock,
+    claim: &ClaimedAgentRun,
+) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+    complete_agent_run_with_tools(store, adapter, &NoToolDestination, observer, clock, claim).await
+}
+
+/// `complete_agent_run` with the Tool destination `tools` for the ToolDispatch phase.
+pub async fn complete_agent_run_with_tools(
+    store: &(impl ModelDispatchStore + ToolDispatchStore),
+    adapter: &impl ModelProviderAdapter,
+    tools: &impl ToolDestinationAdapter,
     observer: &impl ContractFaultObserver,
     clock: &impl GatewayClock,
     claim: &ClaimedAgentRun,
@@ -32,6 +47,10 @@ pub async fn complete_agent_run(
             NextDispatchWork::Settled(result) => return Ok(result),
             NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
+            NextDispatchWork::ToolCalls => {
+                dispatch_tool_calls(store, tools, clock, claim).await?;
+                continue;
+            }
         };
         if let Some(cancellation) = gateway.dispatch(request).await? {
             gateway.dispatch(cancellation.into_abort()).await?;

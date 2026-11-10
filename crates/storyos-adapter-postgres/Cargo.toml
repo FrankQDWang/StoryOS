@@ -17,6 +17,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
+storyos-adapter-mcp-client = { path = "../storyos-adapter-mcp-client" }
 storyos-adapter-volcengine-responses = { path = "../storyos-adapter-volcengine-responses" }
 
 [build-dependencies]

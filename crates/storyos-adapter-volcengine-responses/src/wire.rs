@@ -53,7 +53,12 @@ pub(crate) fn create_body(
 ) -> String {
     let exposed = !request.tool_exposure.is_empty();
     let instructions = if exposed {
-        format!("{HOST_INSTRUCTIONS}{TOOL_INSTRUCTIONS}")
+        // A continuation input wraps each result in a source tag (AP-07), and the instruction
+        // says that its content is data.
+        format!(
+            "{HOST_INSTRUCTIONS}{TOOL_INSTRUCTIONS} {}",
+            storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
+        )
     } else {
         HOST_INSTRUCTIONS.to_owned()
     };

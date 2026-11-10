@@ -17,7 +17,7 @@ const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://
 
 /// A stream that reports `reference`, one complete message, and one complete function call with
 /// `call_id`, and ends with the terminal `status` of the response.
-fn text_and_call_stream(
+pub(crate) fn text_and_call_stream(
     reference: &str,
     call_id: &str,
     name: &str,
@@ -161,7 +161,7 @@ fn validated_search_call() -> storyos_core::ValidatedToolCall {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_durable_function_request_decision_derives_one_pending_tool_call_once() {
+async fn a_durable_function_request_decision_derives_one_tool_call_once() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -205,7 +205,7 @@ async fn a_durable_function_request_decision_derives_one_pending_tool_call_once(
                SELECT owner_user_id, project_id, gen_random_uuid(), run_id, decision_position,
                       model_attempt_id, decision_id, call_id, 1, caller_route, function_name,
                       registration_id, tool_registration_revision, tool_spec_revision,
-                      arguments, argument_digest, state
+                      arguments, argument_digest, 'pending'
                  FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -231,9 +231,10 @@ async fn a_durable_function_request_decision_derives_one_pending_tool_call_once(
             served.await.unwrap(),
         ),
         (
+            // A process with no Tool adapter refuses the ToolCall before its claim.
             json!({
-                "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "status": "completed",
+                "settlement": null,
                 "model_attempt_id": attempt_id,
                 "decision_id": decision_id,
                 "dispatch_state": "settled",
@@ -262,11 +263,18 @@ async fn a_durable_function_request_decision_derives_one_pending_tool_call_once(
                 "tool_spec_revision": "storyos.tool.web-search.v1",
                 "arguments": {"query": "tide tables of 1890", "result_count": null},
                 "argument_digest": call.argument_digest(),
-                "state": "pending"
+                "state": "refused",
+                "refusal": "destination_request_unsupported",
+                "destination_attempt_id": null,
+                "attempt": null,
+                "effect_outcome": null,
+                "result_text": null,
+                "result_digest": null,
+                "result_bytes": null
             })],
             1,
             Some("23505".to_owned()),
-            true,
+            false,
             Some(true),
             vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
         )
@@ -911,8 +919,8 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
         (facts, rows, delivered_twice),
         (
             json!({
-                "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "status": "completed",
+                "settlement": null,
                 "successor_decision_id": decision_id,
                 "marker_decision_id": decision_id,
                 "supplies_tool_call": true,

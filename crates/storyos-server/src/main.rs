@@ -136,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let destination = storyos_worker::ModelDestination {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,
+            tools: storyos_application::NoToolDestination,
         };
         let worker = tokio::spawn(storyos_worker::run(store, destination));
         tokio::spawn(async move {

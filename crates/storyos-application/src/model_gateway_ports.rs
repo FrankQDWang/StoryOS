@@ -339,6 +339,8 @@ pub enum NextDispatchWork {
     Settled(CompleteAgentRun),
     Request(Box<DestinationRequest>),
     Abort(CommittedCancellation),
+    /// The durable Decision has pending ToolCalls: the ToolDispatch phase dispatches them.
+    ToolCalls,
 }
 
 /// Why an exchange must stop at its next durable boundary.

@@ -40,6 +40,8 @@ mod model_gateway;
 mod model_gateway_ports;
 mod model_lease_renewal;
 mod model_stream_commit;
+mod tool_gateway;
+mod tool_gateway_ports;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
 mod author_edit_outcome;
 mod diagnostics;
@@ -154,7 +156,7 @@ pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
-pub use model_gateway::complete_agent_run;
+pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
 pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
     ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
@@ -227,6 +229,10 @@ pub use reopen_withdrawn_proposal::{
 pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
+};
+pub use tool_gateway_ports::{
+    NoToolDestination, ToolCallRequest, ToolDestinationAdapter, ToolDispatchClaim,
+    ToolDispatchRecord, ToolDispatchStore,
 };
 pub use undo_latest_author_action::{
     AuthorUndoFrontierPosition, UndoApplied, UndoLatestAuthorActionInput,

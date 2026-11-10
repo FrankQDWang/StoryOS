@@ -55,6 +55,7 @@ Superseded on 2026-11-03 by [ADR 0084](0084-execute-the-research-tool-in-storyos
 ## Consequences
 
 - Stage 5 has one live external dependency beyond the model Provider. Its availability, its schema drift, and its cost are the operator's. The Registration quarantine of S5-01b makes drift visible, not silent.
+- 2026-11-10 (S5-03): the quarantine event is a Run Event (`tool_registration_quarantined` in `agent_run_events`) of the Run whose drift check found the drift. The quarantine itself stays on the global Registration revision row.
 - The operator spends from the Exa account for each search and each page. Each live request of an executor needs the author's planned count on the ticket, as ADR 0049 requires for the model route.
 - The source classes of the Context contract grow by `tool_result`, `agent_query`, and `agent_url_selection`. The Context contract document records them when S5-03 and S5-05 land.
 - [GLOSSARY.md](../../GLOSSARY.md) and the tool glossary get the terms Project Destination Grant scope `research_tool_v1` and Research Artifact when their tickets land.

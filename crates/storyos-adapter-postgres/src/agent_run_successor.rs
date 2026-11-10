@@ -23,6 +23,8 @@ pub(crate) enum SuccessorWork {
     Hold(&'static str),
     Create(CreateRequest),
     Retrieve(RetrieveRequest),
+    /// The successor Decision supplied ToolCalls for the Tool Gateway.
+    ToolCalls,
 }
 
 pub(crate) struct SuccessorSelection {

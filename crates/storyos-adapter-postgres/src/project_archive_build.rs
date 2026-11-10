@@ -49,6 +49,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "active_context_compactions",
         "canonical/active_context_compactions.json",
     ),
+    ("agent_run_events", "canonical/agent_run_events.json"),
     ("agent_runs", "canonical/agent_runs.json"),
     (
         "author_action_entries",

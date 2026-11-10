@@ -85,6 +85,9 @@ impl ProjectCommand for CancelAgentRunInput {
         prohibit_automatic_successor(client, scope, &self.run_id)
             .await
             .map_err(unavailable)?;
+        crate::agent_run_tool_dispatch::settle_dispatched_on_cancel(client, scope, &self.run_id)
+            .await
+            .map_err(unavailable)?;
         Ok(CommandWrite {
             profile: ActivityWrite {
                 activity: serde_json::json!({

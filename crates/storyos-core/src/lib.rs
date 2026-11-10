@@ -28,8 +28,10 @@ mod rebuild_expired_reference;
 mod research_destination;
 mod retrieve_original_result;
 mod tool_call;
+mod tool_dispatch;
 mod tool_exposure;
 mod tool_registration;
+mod tool_result;
 mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -264,6 +266,11 @@ pub use tool_call::{
     CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch,
     ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
 };
+pub use tool_dispatch::{
+    EffectOutcome, FunctionRequestStep, ToolAttemptSettlement, ToolCallPlan, ToolCallSettlement,
+    ToolCallState, ToolDispatchFacts, ToolDispatchRefusal, ToolEffectOutcome, ToolEffectRequest,
+    ToolObservation, ToolResultText, admit_tool_dispatch, function_request_step, settle_tool_call,
+};
 pub use tool_exposure::{
     EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
     RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
@@ -273,10 +280,11 @@ pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,
     ToolCallRefusal, ToolRegistration, ToolRegistrationKind, ToolRegistrationLifecycle,
 };
+pub use tool_result::{TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection};
 pub use tool_spec::{
-    ExternalRead, IntakeField, IntakeRefusal, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES,
-    ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC,
-    WEB_SEARCH_TOOL_SPEC,
+    ExternalRead, ExternalWrite, IntakeField, IntakeRefusal, ServerArguments,
+    TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec,
+    WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{

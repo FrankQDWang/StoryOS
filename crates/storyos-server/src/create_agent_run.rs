@@ -420,6 +420,12 @@ fn inspect_decision(
             required_reply: required_reply.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
         },
+        storyos_application::AgentRunDecisionInspect::ToolRequest { decision_id, calls } => {
+            contracts::OptionalDecisionInspect::ToolRequest {
+                decision_id: decision_id.clone(),
+                calls: calls.clone(),
+            }
+        }
     }
 }
 

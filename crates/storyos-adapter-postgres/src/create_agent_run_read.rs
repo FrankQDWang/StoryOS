@@ -207,6 +207,7 @@ pub(super) async fn load_agent_run(
     }
     crate::prose_change_location_read::hydrate_locations(client, scope, &mut record.decision)
         .await?;
+    crate::agent_run_tool_call::hydrate_calls(client, scope, &mut record.decision).await?;
     Ok(Some(record))
 }
 
@@ -303,6 +304,11 @@ fn inspect_decision(
                 continuation_binding_id,
             }
         }
+        // The read fills the calls from the ToolCall rows.
+        Some("tool_request") => AgentRunDecisionInspect::ToolRequest {
+            decision_id,
+            calls: Vec::new(),
+        },
         _ => AgentRunDecisionInspect::Absent,
     }
 }

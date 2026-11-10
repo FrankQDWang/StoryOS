@@ -477,7 +477,11 @@ export type ProseChangeLocationOutcome = { "kind": "revised", proposal_id: strin
 
 export type ProseChangeLocationCurrent = { revision_id: string, generation: string, validation: string, closure: string, resolution: string, reservation_state: string, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
+export type ToolCallOutcomeInspect = "pending" | "settled" | "failed";
+
+export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCallOutcomeInspect, } | { "kind": "page_read", urls: Array<string>, outcome: ToolCallOutcomeInspect, };
+
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
