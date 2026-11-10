@@ -1993,7 +1993,7 @@
       "constraints": {
         "context_assembly_manifests_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "context_assembly_manifests_destination_pair": "CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE))",
-        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'research_tool_v1'::text])))",
+        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'research_tool_v1'::text])))",
         "context_assembly_manifests_disclosure_grant_shape": "CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL)))",
         "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))",
         "context_assembly_manifests_owner_user_id_project_id_operat_fkey": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
@@ -4555,7 +4555,7 @@
         }
       },
       "constraints": {
-        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'research_tool_v1'::text])))",
+        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'research_tool_v1'::text])))",
         "project_destination_grants_kind_check": "CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text])))",
         "project_destination_grants_owner_user_id_project_id_proces_fkey": "FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL",
         "project_destination_grants_pkey": "PRIMARY KEY (owner_user_id, project_id, grant_id)",
@@ -6722,6 +6722,11 @@
           "nullable": true,
           "type": "uuid"
         },
+        "source_lineage": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
         "source_run_id": {
           "default": null,
           "nullable": true,
@@ -6729,6 +6734,7 @@
         }
       },
       "constraints": {
+        "proposal_source_lineage_shape": "CHECK (((source_lineage IS NULL) OR ((jsonb_typeof(source_lineage) = 'object'::text) AND ((source_lineage ->> 'kind'::text) = 'tool_result_continuation'::text) AND ((source_lineage ->> 'run_id'::text) = (source_run_id)::text))))",
         "proposal_source_shape": "CHECK (((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL)))",
         "proposals_bundle_policy_check": "CHECK ((bundle_policy = ANY (ARRAY['none'::text, 'atomic'::text])))",
         "proposals_kind_check": "CHECK ((kind = ANY (ARRAY['block_edit'::text, 'reversal'::text])))",
