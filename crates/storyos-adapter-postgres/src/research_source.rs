@@ -34,9 +34,9 @@ pub(crate) async fn capture(
                 "INSERT INTO storyos.source_snapshots
                    (owner_user_id, project_id, source_snapshot_id, run_id, tool_call_id,
                     entry_position, kind, locator, title, published, text, text_bytes,
-                    content_digest)
+                    result_offset, content_digest)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, $6, $7, $8, $9, $10, $11, $12, $13)",
+                         $5::text::uuid, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
                 &[
                     &owner,
                     &project,
@@ -50,6 +50,7 @@ pub(crate) async fn capture(
                     &source.published,
                     &source.text,
                     &int(source.text.len())?,
+                    &int(source.span.offset)?,
                     &source.digest,
                 ],
             )
@@ -61,9 +62,9 @@ pub(crate) async fn capture(
             .execute(
                 "INSERT INTO storyos.source_gaps
                    (owner_user_id, project_id, source_gap_id, run_id, tool_call_id, gap_position,
-                    locator, reason)
+                    locator, reason, result_offset, result_bytes)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, $6, $7, $8)",
+                         $5::text::uuid, $6, $7, $8, $9, $10)",
                 &[
                     &owner,
                     &project,
@@ -73,6 +74,8 @@ pub(crate) async fn capture(
                     &int(position)?,
                     &gap.locator,
                     &gap.reason.as_str(),
+                    &gap.span.map(|span| int(span.offset)).transpose()?,
+                    &gap.span.map(|span| int(span.bytes)).transpose()?,
                 ],
             )
             .await
@@ -86,7 +89,7 @@ pub(crate) async fn capture(
 const SNAPSHOT_COLUMNS: &str = "snapshot.source_snapshot_id::text, snapshot.tool_call_id::text,
     snapshot.kind, snapshot.locator, snapshot.title, snapshot.published,
     to_char(snapshot.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-    snapshot.content_digest, snapshot.text_bytes::text";
+    snapshot.content_digest, snapshot.text_bytes::text, snapshot.result_offset::text";
 
 fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAgentRunError> {
     let damaged = || agent_run_parse_error(std::io::Error::other("The Source Snapshot is damaged"));
@@ -103,6 +106,7 @@ fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAg
         captured_at: row.get(/*idx*/ 6),
         content_digest: row.get(/*idx*/ 7),
         text_bytes: row.get(/*idx*/ 8),
+        result_offset: row.get(/*idx*/ 9),
     })
 }
 
@@ -155,7 +159,8 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                     "SELECT gap.source_gap_id::text, gap.tool_call_id::text, gap.locator,
                             gap.reason,
                             to_char(gap.recorded_at AT TIME ZONE 'UTC',
-                                    'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                                    'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                            gap.result_offset::text, gap.result_bytes::text
                        FROM storyos.source_gaps AS gap
                        JOIN storyos.tool_calls AS call
                          USING (owner_user_id, project_id, tool_call_id)
@@ -184,6 +189,8 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                             }
                         },
                         recorded_at: row.get(/*idx*/ 4),
+                        result_offset: row.get(/*idx*/ 5),
+                        result_bytes: row.get(/*idx*/ 6),
                     })
                 })
                 .collect::<Result<_, CreateAgentRunError>>()?;
@@ -218,7 +225,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 .map(|row| {
                     Ok(ResearchSourceText {
                         snapshot: snapshot(&row)?,
-                        text: row.get(/*idx*/ 9),
+                        text: row.get(/*idx*/ 10),
                     })
                 })
                 .transpose()

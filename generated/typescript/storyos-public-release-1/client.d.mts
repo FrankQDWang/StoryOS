@@ -561,9 +561,9 @@ export type SourceSnapshotKind = "search_result" | "page";
 
 export type SourceGapReason = "failed" | "empty" | "missing" | "unattributed";
 
-export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, locator: string, title: string | null, published: string | null, captured_at: string, content_digest: string, text_bytes: string, };
+export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, locator: string, title: string | null, published: string | null, captured_at: string, content_digest: string, text_bytes: string, result_offset: string, };
 
-export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, };
+export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, result_offset: string | null, result_bytes: string | null, };
 
 export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, };
 

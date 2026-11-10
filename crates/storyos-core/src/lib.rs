@@ -246,7 +246,7 @@ pub use research_destination::{
     RESEARCH_TOOL_OFFER, ResearchToolOffer, tool_registration,
 };
 pub use research_source::{
-    CapturedSource, ResearchCapture, ResultFormat, SOURCE_LOCATOR_MAX_CHARS,
+    CapturedSource, ResearchCapture, ResultFormat, ResultSpan, SOURCE_LOCATOR_MAX_CHARS,
     SOURCE_PUBLISHED_MAX_CHARS, SOURCE_TITLE_MAX_CHARS, SourceGap, SourceGapReason, SourceKind,
     capture_research_sources, tool_result_source_version,
 };

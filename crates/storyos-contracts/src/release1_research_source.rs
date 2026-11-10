@@ -94,6 +94,9 @@ pub struct SourceSnapshotInspect {
     pub content_digest: String,
     // The byte length of the stored text, at most 256 KiB. StoryOS never cuts a source.
     pub text_bytes: String,
+    // The byte offset of the text in the exact result text of its ToolCall. The text is exactly
+    // the `text_bytes` bytes at this offset.
+    pub result_offset: String,
 }
 
 /// One requested URL with no Snapshot. It is never a citation.
@@ -105,6 +108,10 @@ pub struct SourceGapInspect {
     pub locator: String,
     pub reason: SourceGapReason,
     pub recorded_at: String,
+    // The byte span of the result line that gives the Gap, in the exact result text of its
+    // ToolCall. Both are null when no line gives the Gap.
+    pub result_offset: Option<String>,
+    pub result_bytes: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

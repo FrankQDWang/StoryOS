@@ -4277,7 +4277,9 @@ GRANT SELECT,INSERT ON TABLE storyos.agent_run_events TO storyos_runtime;
 -- Source Snapshots and Source Gaps. The settlement of a research ToolCall writes them in its own
 -- transaction: one immutable Snapshot for each captured search entry or page, and one Gap for each
 -- requested URL that the server reported as failed, empty, or missing. The revisions of one URL in a
--- Project form one lineage in capture order. The runtime role can only read and insert them.
+-- Project form one lineage in capture order. Each Snapshot, and each Gap that a line of the result
+-- gives, records its byte span (offset, length) in the exact result text of its ToolCall. The
+-- runtime role can only read and insert them.
 
 CREATE TABLE storyos.source_snapshots (
     owner_user_id uuid NOT NULL,
@@ -4292,6 +4294,7 @@ CREATE TABLE storyos.source_snapshots (
     published text,
     text text NOT NULL,
     text_bytes integer NOT NULL,
+    result_offset integer NOT NULL,
     content_digest text NOT NULL,
     captured_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT source_snapshots_pkey PRIMARY KEY (owner_user_id, project_id, source_snapshot_id),
@@ -4299,7 +4302,7 @@ CREATE TABLE storyos.source_snapshots (
     CONSTRAINT source_snapshots_entry_position_check CHECK ((entry_position >= 0)),
     CONSTRAINT source_snapshots_kind_check CHECK ((kind = ANY (ARRAY['search_result'::text, 'page'::text]))),
     CONSTRAINT source_snapshots_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192) AND (char_length(title) BETWEEN 1 AND 8192) AND (char_length(published) BETWEEN 1 AND 128)),
-    CONSTRAINT source_snapshots_text_shape CHECK ((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_snapshots_text_shape CHECK ((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (result_offset BETWEEN 0 AND 262144 - text_bytes) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT source_snapshots_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT source_snapshots_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
 );
@@ -4325,12 +4328,15 @@ CREATE TABLE storyos.source_gaps (
     gap_position integer NOT NULL,
     locator text NOT NULL,
     reason text NOT NULL,
+    result_offset integer,
+    result_bytes integer,
     recorded_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT source_gaps_pkey PRIMARY KEY (owner_user_id, project_id, source_gap_id),
     CONSTRAINT source_gaps_position_key UNIQUE (owner_user_id, project_id, tool_call_id, gap_position),
     CONSTRAINT source_gaps_position_check CHECK ((gap_position >= 0)),
     CONSTRAINT source_gaps_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192)),
     CONSTRAINT source_gaps_reason_check CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text, 'unattributed'::text]))),
+    CONSTRAINT source_gaps_result_span_check CHECK (((result_offset IS NULL) = (result_bytes IS NULL)) AND (result_offset >= 0) AND (result_bytes >= 0) AND (result_offset + result_bytes <= 262144)),
     CONSTRAINT source_gaps_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT source_gaps_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
 );

@@ -107,8 +107,28 @@ async fn call_ids(admin: &Client, run_id: &str) -> std::collections::BTreeMap<St
         .collect()
 }
 
+/// The exact result text of each ToolCall of the Run, by its ToolCall identity.
+async fn result_texts(
+    admin: &Client,
+    run_id: &str,
+) -> std::collections::BTreeMap<String, Option<String>> {
+    admin
+        .query(
+            "SELECT tool_call_id::text, result_text FROM storyos.tool_calls
+              WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
+        .collect()
+}
+
 /// The listed sources of the Run, with each ToolCall identity as its native call identifier and
-/// with no volatile identity or time. A capture time must be an RFC 3339 UTC time.
+/// with no volatile identity or time. A capture time must be an RFC 3339 UTC time. The span of
+/// each Snapshot must hold exactly its text in the stored result text of its ToolCall, and the span
+/// of a Gap reads as the result line that it names.
 async fn listed(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -116,6 +136,14 @@ async fn listed(
     run_id: &str,
 ) -> Value {
     let calls = call_ids(admin, run_id).await;
+    let results = result_texts(admin, run_id).await;
+    let span = |tool_call_id: &str, offset: &Value, bytes: usize| {
+        let offset: usize = offset.as_str().unwrap().parse().unwrap();
+        let result = results[tool_call_id]
+            .as_deref()
+            .expect("a span has a result text");
+        String::from_utf8(result.as_bytes()[offset..offset + bytes].to_vec()).unwrap()
+    };
     let sources = store
         .list_research_sources(scope, run_id)
         .await
@@ -131,12 +159,37 @@ async fn listed(
         object.insert("tool_call_id".to_owned(), json!(call));
         value
     };
+    let mut snapshots = Vec::new();
+    for snapshot in &sources.snapshots {
+        let text = store
+            .get_research_source(scope, &snapshot.source_snapshot_id)
+            .await
+            .unwrap()
+            .expect("the Snapshot is in Scope")
+            .text;
+        let mut value = stable(serde_json::to_value(snapshot).unwrap(), "captured_at");
+        let offset = value
+            .as_object_mut()
+            .unwrap()
+            .remove("result_offset")
+            .unwrap();
+        assert_eq!(span(&snapshot.tool_call_id, &offset, text.len()), text);
+        snapshots.push(value);
+    }
     json!({
-        "snapshots": sources.snapshots.iter()
-            .map(|snapshot| stable(serde_json::to_value(snapshot).unwrap(), "captured_at"))
-            .collect::<Vec<_>>(),
+        "snapshots": snapshots,
         "gaps": sources.gaps.iter()
-            .map(|gap| stable(serde_json::to_value(gap).unwrap(), "recorded_at"))
+            .map(|gap| {
+                let mut value = stable(serde_json::to_value(gap).unwrap(), "recorded_at");
+                let object = value.as_object_mut().unwrap();
+                let (offset, bytes) = (object.remove("result_offset").unwrap(),
+                                       object.remove("result_bytes").unwrap());
+                let line = (!offset.is_null()).then(|| {
+                    span(&gap.tool_call_id, &offset, bytes.as_str().unwrap().parse().unwrap())
+                });
+                object.insert("result_line".to_owned(), json!(line));
+                value
+            })
             .collect::<Vec<_>>(),
     })
 }
@@ -309,7 +362,7 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
         &[page],
     )
     .await;
-    let gap = |locator: &str, reason: &str| json!({"tool_call_id": "call_01", "locator": locator, "reason": reason});
+    let gap = |locator: &str, reason: &str, line: Option<&str>| json!({"tool_call_id": "call_01", "locator": locator, "reason": reason, "result_line": line});
 
     assert_eq!(
         listed(&store, &admin, &scope, &run_id).await,
@@ -317,9 +370,11 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
             "snapshots": [snapshot("call_01", "page", "https://example.org/a",
                                    json!("Tide table"), Value::Null, "High water at 10.42.")],
             "gaps": [
-                gap("https://example.org/c", "failed"),
-                gap("https://example.org/d", "missing"),
-                gap("https://example.org/e", "empty"),
+                gap("https://example.org/c", "failed",
+                    Some("Error fetching https://example.org/c: CRAWL_NOT_FOUND")),
+                gap("https://example.org/d", "missing", None),
+                gap("https://example.org/e", "empty",
+                    Some("# Empty page\nURL: https://example.org/e")),
             ],
         })
     );
@@ -355,8 +410,10 @@ async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_
         .await
         .unwrap()
         .get(/*idx*/ 0);
-    let gap =
-        |locator: &str| json!({"tool_call_id": "call_01", "locator": locator, "reason": "failed"});
+    let gap = |locator: &str| {
+        json!({"tool_call_id": "call_01", "locator": locator, "reason": "failed",
+                               "result_line": null})
+    };
 
     assert_eq!(
         (state, listed(&store, &admin, &scope, &run_id).await),
@@ -405,7 +462,7 @@ async fn a_page_that_quotes_a_header_is_unattributed_and_the_call_stays_settled(
             json!({
                 "snapshots": [],
                 "gaps": [{"tool_call_id": "call_01", "locator": "https://example.org/a",
-                          "reason": "unattributed"}],
+                          "reason": "unattributed", "result_line": null}],
             })
         )
     );

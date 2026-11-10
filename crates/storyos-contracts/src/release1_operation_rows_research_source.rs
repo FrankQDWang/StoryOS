@@ -6,6 +6,7 @@ use super::{
     DATE_TIME, Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources,
     U64, UUID, raw_schema,
 };
+use crate::release1_wire::U64_WIRE;
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_research_source::{
     GET_RESEARCH_SOURCE, GetResearchSourceResponse, LIST_RESEARCH_SOURCES,
@@ -47,6 +48,8 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
           "locator": "https://example.org/port",
           "reason": "failed",
           "recorded_at": "2026-11-10T03:00:01.000Z",
+          "result_bytes": "45",
+          "result_offset": "0",
           "source_gap_id": "018f0000-0000-7001-8000-000000000d05",
           "tool_call_id": "018f0000-0000-7001-8000-000000000d03"
         }
@@ -64,6 +67,7 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
           "kind": "search_result",
           "locator": "https://example.org/tides",
           "published": "1890-01-01T00:00:00.000Z",
+          "result_offset": "88",
           "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
           "text_bytes": "20",
           "title": "Liverpool tide table 1890",
@@ -107,6 +111,7 @@ pub(super) const GET_RESEARCH_SOURCE_ROW: OperationRow = OperationRow {
         "kind": "page",
         "locator": "https://example.org/tides",
         "published": null,
+        "result_offset": "41",
         "source_snapshot_id": "018f0000-0000-7001-8000-000000000d07",
         "text_bytes": "20",
         "title": null,
@@ -140,7 +145,20 @@ const LIST_RESEARCH_SOURCES_RESPONSE: &[Patch] = &[
             "/$defs/SourceSnapshotInspect/properties/captured_at",
         ],
     ),
-    Patch(U64, &["/$defs/SourceSnapshotInspect/properties/text_bytes"]),
+    Patch(
+        U64,
+        &[
+            "/$defs/SourceSnapshotInspect/properties/result_offset",
+            "/$defs/SourceSnapshotInspect/properties/text_bytes",
+        ],
+    ),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &[
+            "/$defs/SourceGapInspect/properties/result_bytes",
+            "/$defs/SourceGapInspect/properties/result_offset",
+        ],
+    ),
     Patch(
         DIGEST,
         &["/$defs/SourceSnapshotInspect/properties/content_digest"],
@@ -163,7 +181,13 @@ const GET_RESEARCH_SOURCE_RESPONSE: &[Patch] = &[
         DATE_TIME,
         &["/$defs/SourceSnapshotInspect/properties/captured_at"],
     ),
-    Patch(U64, &["/$defs/SourceSnapshotInspect/properties/text_bytes"]),
+    Patch(
+        U64,
+        &[
+            "/$defs/SourceSnapshotInspect/properties/result_offset",
+            "/$defs/SourceSnapshotInspect/properties/text_bytes",
+        ],
+    ),
     Patch(
         DIGEST,
         &["/$defs/SourceSnapshotInspect/properties/content_digest"],

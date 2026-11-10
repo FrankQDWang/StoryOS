@@ -14,7 +14,17 @@ fn fetch(urls: &[&str]) -> ToolIntake {
     }
 }
 
+/// The span of the first `part` of the result text `result`.
+fn at(result: &str, part: &str) -> ResultSpan {
+    ResultSpan {
+        offset: result.find(part).expect("the part is in the result text"),
+        bytes: part.len(),
+    }
+}
+
+/// A Snapshot whose text is at `offset` of its result text.
 fn source(
+    offset: usize,
     kind: SourceKind,
     locator: &str,
     title: Option<&str>,
@@ -27,15 +37,28 @@ fn source(
         title: title.map(str::to_owned),
         published: published.map(str::to_owned),
         text: text.to_owned(),
+        span: ResultSpan {
+            offset,
+            bytes: text.len(),
+        },
         digest: format!("sha256:{}", crate::hex_sha256(text.as_bytes())),
     }
 }
 
-fn gap(locator: &str, reason: SourceGapReason) -> SourceGap {
+fn gap(locator: &str, reason: SourceGapReason, span: Option<ResultSpan>) -> SourceGap {
     SourceGap {
         locator: locator.to_owned(),
         reason,
+        span,
     }
+}
+
+/// Each Snapshot text is exactly the bytes of its span in the result text.
+fn exact(result: &str, capture: &ResearchCapture) -> bool {
+    capture.snapshots.iter().all(|source| {
+        result.get(source.span.offset..source.span.offset + source.span.bytes)
+            == Some(source.text.as_str())
+    })
 }
 
 #[test]
@@ -51,23 +74,31 @@ fn each_search_entry_with_a_url_is_one_search_result_snapshot_and_a_snippet_line
         result_count: None,
     };
 
+    let tides = "High water at 10.42.\n\n...\n\nLow water at 4.55.";
+    let port = "The port log.\nTitle: Quoted\nURL: https://other.example/";
+    let capture = capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement);
+
+    assert!(exact(text, &capture));
     assert_eq!(
-        capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement),
+        capture,
         ResearchCapture {
             snapshots: vec![
                 source(
+                    at(text, tides).offset,
                     SourceKind::SearchResult,
                     "https://e.org/tides",
                     Some("Liverpool tide table 1890"),
                     Some("1890-01-01T00:00:00.000Z"),
-                    "High water at 10.42.\n\n...\n\nLow water at 4.55.",
+                    tides,
                 ),
+                // 6 bytes after the line start: the `Text: ` wrapper is not snippet text.
                 source(
+                    at(text, "Text: The port").offset + 6,
                     SourceKind::SearchResult,
                     "https://e.org/port",
                     None,
                     None,
-                    "The port log.\nTitle: Quoted\nURL: https://other.example/"
+                    port
                 ),
             ],
             gaps: Vec::new(),
@@ -93,12 +124,15 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
         "https://e.org/e",
     ];
     let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(&text, false));
+    let capture = capture_research_sources(ResultFormat::PageBlocks, &fetch(&urls), &settlement);
 
+    assert!(exact(&text, &capture));
     assert_eq!(
-        capture_research_sources(ResultFormat::PageBlocks, &fetch(&urls), &settlement),
+        capture,
         ResearchCapture {
             snapshots: vec![
                 source(
+                    at(&text, quote).offset,
                     SourceKind::Page,
                     "https://e.org/a",
                     Some("Tide table"),
@@ -106,6 +140,7 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
                     quote
                 ),
                 source(
+                    at(&text, "The port log.").offset,
                     SourceKind::Page,
                     "https://e.org/b/",
                     None,
@@ -114,9 +149,17 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
                 ),
             ],
             gaps: vec![
-                gap("https://e.org/c", SourceGapReason::Failed),
-                gap("https://e.org/d", SourceGapReason::Missing),
-                gap("https://e.org/e", SourceGapReason::Empty),
+                gap(
+                    "https://e.org/c",
+                    SourceGapReason::Failed,
+                    Some(at(&text, "Error fetching https://e.org/c: HTTP error: 404"))
+                ),
+                gap("https://e.org/d", SourceGapReason::Missing, None),
+                gap(
+                    "https://e.org/e",
+                    SourceGapReason::Empty,
+                    Some(at(&text, "# Empty page\nURL: https://e.org/e"))
+                ),
             ],
         }
     );
@@ -133,7 +176,7 @@ fn a_header_that_answers_no_requested_url_in_order_makes_the_page_read_unattribu
         snapshots: Vec::new(),
         gaps: urls
             .iter()
-            .map(|url| gap(url, SourceGapReason::Unattributed))
+            .map(|url| gap(url, SourceGapReason::Unattributed, None))
             .collect(),
     };
     let a = "https://e.org/a";
@@ -176,6 +219,7 @@ fn a_quoted_error_line_at_the_end_of_a_page_stays_page_text() {
         ),
         ResearchCapture {
             snapshots: vec![source(
+                at(text, "The log said:").offset,
                 SourceKind::Page,
                 "https://e.org/a",
                 Some("Page"),
@@ -199,6 +243,7 @@ fn the_last_search_snippet_keeps_a_literal_separator() {
     assert_eq!(
         capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement).snapshots,
         vec![source(
+            at(text, "Example---").offset,
             SourceKind::SearchResult,
             "https://e.org/port",
             Some("Port"),
@@ -226,6 +271,7 @@ fn metadata_above_the_store_bounds_is_absent_and_an_entry_with_a_long_url_is_dro
     assert_eq!(
         capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement).snapshots,
         vec![source(
+            at(&text, "High water.").offset,
             SourceKind::SearchResult,
             "https://e.org/a",
             None,
@@ -256,12 +302,38 @@ fn a_server_error_fails_each_requested_url_and_an_unknown_outcome_captures_nothi
             ResearchCapture {
                 snapshots: Vec::new(),
                 gaps: vec![
-                    gap("https://e.org/a", SourceGapReason::Failed),
-                    gap("https://e.org/c", SourceGapReason::Failed),
+                    gap("https://e.org/a", SourceGapReason::Failed, None),
+                    gap("https://e.org/c", SourceGapReason::Failed, None),
                 ],
             },
             ResearchCapture::default(),
         ]
+    );
+}
+
+#[test]
+fn a_source_keeps_its_exact_bytes_with_leading_and_trailing_whitespace() {
+    // An indented first line, a Markdown code block, a line with trailing spaces, and an extra
+    // empty line at the end of the page all belong to the source.
+    let page = "    indented first line\n\n```\ncode  \n```\nlast line with spaces   \n";
+    let text = format!(
+        "# Page\nURL: https://e.org/a\n\n{page}\n\n# Next\nURL: https://e.org/b\n\n \tB text \n\n"
+    );
+    let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(&text, false));
+    let capture = capture_research_sources(
+        ResultFormat::PageBlocks,
+        &fetch(&["https://e.org/a", "https://e.org/b"]),
+        &settlement,
+    );
+
+    assert!(exact(&text, &capture));
+    assert_eq!(
+        capture
+            .snapshots
+            .iter()
+            .map(|source| source.text.as_str())
+            .collect::<Vec<_>>(),
+        [page, " \tB text "]
     );
 }
 
