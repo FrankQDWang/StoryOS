@@ -462,6 +462,76 @@
       },
       "triggers": {}
     },
+    "agent_run_events": {
+      "columns": {
+        "event_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "event_kind": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "payload": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "recorded_at": {
+          "default": "clock_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        }
+      },
+      "constraints": {
+        "agent_run_events_kind_check": "CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_registration_quarantined'::text])))",
+        "agent_run_events_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "agent_run_events_payload_check": "CHECK ((jsonb_typeof(payload) = 'object'::text))",
+        "agent_run_events_pkey": "PRIMARY KEY (owner_user_id, project_id, event_id)"
+      },
+      "indexes": {
+        "agent_run_events_pkey": "CREATE UNIQUE INDEX agent_run_events_pkey ON storyos.agent_run_events USING btree (owner_user_id, project_id, event_id)",
+        "agent_run_events_run_idx": "CREATE INDEX agent_run_events_run_idx ON storyos.agent_run_events USING btree (owner_user_id, project_id, run_id, event_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "agent_run_events_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "agent_runs": {
       "columns": {
         "active_decision_position": {
@@ -7204,6 +7274,11 @@
           "nullable": false,
           "type": "jsonb"
         },
+        "attempt": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
         "call_id": {
           "default": null,
           "nullable": false,
@@ -7229,6 +7304,16 @@
           "nullable": false,
           "type": "numeric(20,0)"
         },
+        "destination_attempt_id": {
+          "default": null,
+          "nullable": true,
+          "type": "uuid"
+        },
+        "effect_outcome": {
+          "default": null,
+          "nullable": true,
+          "type": "jsonb"
+        },
         "function_name": {
           "default": null,
           "nullable": false,
@@ -7249,9 +7334,29 @@
           "nullable": false,
           "type": "uuid"
         },
+        "refusal": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
         "registration_id": {
           "default": null,
           "nullable": false,
+          "type": "text"
+        },
+        "result_bytes": {
+          "default": null,
+          "nullable": true,
+          "type": "integer"
+        },
+        "result_digest": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "result_text": {
+          "default": null,
+          "nullable": true,
           "type": "text"
         },
         "run_id": {
@@ -7283,16 +7388,20 @@
       "constraints": {
         "tool_calls_attempt_call_key": "UNIQUE (owner_user_id, project_id, model_attempt_id, call_id)",
         "tool_calls_attempt_position_key": "UNIQUE (owner_user_id, project_id, model_attempt_id, call_position)",
+        "tool_calls_attempt_shape": "CHECK ((((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= (attempt IS NOT NULL)) AND ((attempt IS NULL) OR (jsonb_typeof(attempt) = 'object'::text))))",
         "tool_calls_call_id_check": "CHECK (((char_length(call_id) >= 1) AND (char_length(call_id) <= 256)))",
         "tool_calls_call_position_check": "CHECK ((call_position >= 0))",
         "tool_calls_caller_route_check": "CHECK ((caller_route = 'model'::text))",
         "tool_calls_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "tool_calls_digest_check": "CHECK ((argument_digest ~ '^sha256:[0-9a-f]{64}$'::text))",
         "tool_calls_name_check": "CHECK ((((char_length(function_name) >= 1) AND (char_length(function_name) <= 128)) AND ((char_length(registration_id) >= 1) AND (char_length(registration_id) <= 128)) AND ((char_length(tool_spec_revision) >= 1) AND (char_length(tool_spec_revision) <= 200))))",
+        "tool_calls_outcome_shape": "CHECK ((((effect_outcome IS NULL) = ((state = ANY (ARRAY['pending'::text, 'dispatched'::text])) OR (attempt IS NULL))) AND ((effect_outcome IS NULL) OR (jsonb_typeof(effect_outcome) = 'object'::text))))",
         "tool_calls_owner_user_id_project_id_model_attempt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL",
         "tool_calls_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "tool_calls_pkey": "PRIMARY KEY (owner_user_id, project_id, tool_call_id)",
-        "tool_calls_state_check": "CHECK ((state = 'pending'::text))"
+        "tool_calls_refusal_shape": "CHECK ((((state = ANY (ARRAY['refused'::text, 'awaiting_approval'::text])) = (refusal IS NOT NULL)) AND ((char_length(refusal) >= 1) AND (char_length(refusal) <= 64))))",
+        "tool_calls_result_shape": "CHECK ((((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND ((result_text IS NULL) OR (state = 'settled'::text)) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((result_bytes >= 0) AND (result_bytes <= 262144))))",
+        "tool_calls_state_check": "CHECK ((state = ANY (ARRAY['pending'::text, 'dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text, 'refused'::text, 'awaiting_approval'::text])))"
       },
       "indexes": {
         "tool_calls_attempt_call_key": "CREATE UNIQUE INDEX tool_calls_attempt_call_key ON storyos.tool_calls USING btree (owner_user_id, project_id, model_attempt_id, call_id)",
