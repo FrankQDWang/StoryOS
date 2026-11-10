@@ -91,11 +91,8 @@ pub struct SourceSnapshotInspect {
     pub published: Option<String>,
     pub captured_at: String,
     pub content_digest: String,
-    // The byte length of the stored text.
+    // The byte length of the stored text, at most 256 KiB. StoryOS never cuts a source.
     pub text_bytes: String,
-    // The byte length of the text before the 256 KiB bound.
-    pub original_bytes: String,
-    pub truncated: bool,
 }
 
 /// One requested URL with no Snapshot. It is never a citation.

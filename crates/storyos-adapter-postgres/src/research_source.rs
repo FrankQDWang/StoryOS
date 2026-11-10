@@ -34,9 +34,9 @@ pub(crate) async fn capture(
                 "INSERT INTO storyos.source_snapshots
                    (owner_user_id, project_id, source_snapshot_id, run_id, tool_call_id,
                     entry_position, kind, locator, title, published, text, text_bytes,
-                    original_bytes, truncated, content_digest)
+                    content_digest)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                         $5::text::uuid, $6, $7, $8, $9, $10, $11, $12, $13)",
                 &[
                     &owner,
                     &project,
@@ -50,8 +50,6 @@ pub(crate) async fn capture(
                     &source.published,
                     &source.text,
                     &int(source.text.len())?,
-                    &int(source.original_bytes)?,
-                    &source.truncated,
                     &source.digest,
                 ],
             )
@@ -88,8 +86,7 @@ pub(crate) async fn capture(
 const SNAPSHOT_COLUMNS: &str = "snapshot.source_snapshot_id::text, snapshot.tool_call_id::text,
     snapshot.kind, snapshot.locator, snapshot.title, snapshot.published,
     to_char(snapshot.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-    snapshot.content_digest, snapshot.text_bytes::text, snapshot.original_bytes::text,
-    snapshot.truncated";
+    snapshot.content_digest, snapshot.text_bytes::text";
 
 fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAgentRunError> {
     let damaged = || agent_run_parse_error(std::io::Error::other("The Source Snapshot is damaged"));
@@ -106,8 +103,6 @@ fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAg
         captured_at: row.get(/*idx*/ 6),
         content_digest: row.get(/*idx*/ 7),
         text_bytes: row.get(/*idx*/ 8),
-        original_bytes: row.get(/*idx*/ 9),
-        truncated: row.get(/*idx*/ 10),
     })
 }
 
@@ -220,7 +215,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 .map(|row| {
                     Ok(ResearchSourceText {
                         snapshot: snapshot(&row)?,
-                        text: row.get(/*idx*/ 11),
+                        text: row.get(/*idx*/ 9),
                     })
                 })
                 .transpose()

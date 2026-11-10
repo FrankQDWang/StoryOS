@@ -63,13 +63,11 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
           "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "kind": "search_result",
           "locator": "https://example.org/tides",
-          "original_bytes": "20",
           "published": "1890-01-01T00:00:00.000Z",
-              "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
+          "source_snapshot_id": "018f0000-0000-7001-8000-000000000d04",
           "text_bytes": "20",
           "title": "Liverpool tide table 1890",
-          "tool_call_id": "018f0000-0000-7001-8000-000000000d02",
-          "truncated": false
+          "tool_call_id": "018f0000-0000-7001-8000-000000000d02"
         }
       ]
     }"#,
@@ -108,13 +106,11 @@ pub(super) const GET_RESEARCH_SOURCE_ROW: OperationRow = OperationRow {
         "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "kind": "page",
         "locator": "https://example.org/tides",
-        "original_bytes": "20",
         "published": null,
         "source_snapshot_id": "018f0000-0000-7001-8000-000000000d07",
         "text_bytes": "20",
         "title": null,
-        "tool_call_id": "018f0000-0000-7001-8000-000000000d08",
-        "truncated": false
+        "tool_call_id": "018f0000-0000-7001-8000-000000000d08"
       },
       "text": "High water at 10.42."
     }"#,
@@ -144,13 +140,7 @@ const LIST_RESEARCH_SOURCES_RESPONSE: &[Patch] = &[
             "/$defs/SourceSnapshotInspect/properties/captured_at",
         ],
     ),
-    Patch(
-        U64,
-        &[
-            "/$defs/SourceSnapshotInspect/properties/original_bytes",
-            "/$defs/SourceSnapshotInspect/properties/text_bytes",
-        ],
-    ),
+    Patch(U64, &["/$defs/SourceSnapshotInspect/properties/text_bytes"]),
     Patch(
         DIGEST,
         &["/$defs/SourceSnapshotInspect/properties/content_digest"],
@@ -173,13 +163,7 @@ const GET_RESEARCH_SOURCE_RESPONSE: &[Patch] = &[
         DATE_TIME,
         &["/$defs/SourceSnapshotInspect/properties/captured_at"],
     ),
-    Patch(
-        U64,
-        &[
-            "/$defs/SourceSnapshotInspect/properties/original_bytes",
-            "/$defs/SourceSnapshotInspect/properties/text_bytes",
-        ],
-    ),
+    Patch(U64, &["/$defs/SourceSnapshotInspect/properties/text_bytes"]),
     Patch(
         DIGEST,
         &["/$defs/SourceSnapshotInspect/properties/content_digest"],

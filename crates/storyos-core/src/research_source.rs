@@ -6,8 +6,6 @@
 
 use crate::{ToolAttemptSettlement, ToolCallSettlement, ToolCallState, ToolIntake};
 
-/// The bound of the stored text of one Source Snapshot, with its truncation mark.
-pub const SOURCE_TEXT_MAX_BYTES: usize = 256 * 1024;
 /// The character bounds of the stored metadata of one Source Snapshot. They are the CHECK bounds
 /// of the store, so that a capture never fails the settlement transaction.
 pub const SOURCE_LOCATOR_MAX_CHARS: usize = 8192;
@@ -83,11 +81,10 @@ pub struct CapturedSource {
     pub title: Option<String>,
     /// The published date as the server reported it.
     pub published: Option<String>,
-    /// The snippet of a search entry or the text of a page, bounded with its truncation mark.
+    /// The snippet of a search entry or the text of a page, as the server reported it. It is at
+    /// most `TOOL_RESULT_TEXT_MAX_BYTES`, because the Tool Gateway fails a longer result before
+    /// any capture: StoryOS never cuts a source.
     pub text: String,
-    /// The byte length of the text before the bound.
-    pub original_bytes: usize,
-    pub truncated: bool,
     /// The SHA-256 of the stored text bytes.
     pub digest: String,
 }
@@ -331,7 +328,6 @@ fn same_url(url: &str, locator: &str) -> bool {
 }
 
 fn captured(kind: SourceKind, entry: Entry<'_>, text: &str) -> CapturedSource {
-    let (stored, truncated) = bounded(text);
     CapturedSource {
         kind,
         locator: entry.locator,
@@ -339,32 +335,10 @@ fn captured(kind: SourceKind, entry: Entry<'_>, text: &str) -> CapturedSource {
         published: entry.published,
         digest: format!(
             "sha256:{}",
-            crate::project_archive::hex_sha256(stored.as_bytes())
+            crate::project_archive::hex_sha256(text.as_bytes())
         ),
-        original_bytes: text.len(),
-        text: stored,
-        truncated,
+        text: text.to_owned(),
     }
-}
-
-/// The text kept at or below `SOURCE_TEXT_MAX_BYTES`. A longer text keeps a prefix and ends with
-/// an explicit mark that gives the kept and the total byte counts.
-fn bounded(text: &str) -> (String, bool) {
-    if text.len() <= SOURCE_TEXT_MAX_BYTES {
-        return (text.to_owned(), false);
-    }
-    let mark = |kept: usize| {
-        format!(
-            "\n[StoryOS cut this source here. It keeps {kept} of its {} bytes.]",
-            text.len()
-        )
-    };
-    // The mark with the largest kept count is the longest mark.
-    let mut end = SOURCE_TEXT_MAX_BYTES - mark(text.len()).len();
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    (format!("{}{}", &text[..end], mark(end)), true)
 }
 
 /// A reported header value, or `None` for the value that the server writes when it has none and

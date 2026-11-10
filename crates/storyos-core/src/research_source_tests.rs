@@ -27,8 +27,6 @@ fn source(
         title: title.map(str::to_owned),
         published: published.map(str::to_owned),
         text: text.to_owned(),
-        original_bytes: text.len(),
-        truncated: false,
         digest: format!("sha256:{}", crate::hex_sha256(text.as_bytes())),
     }
 }
@@ -204,50 +202,6 @@ fn a_server_error_fails_each_requested_url_and_an_unknown_outcome_captures_nothi
             ResearchCapture::default(),
         ]
     );
-}
-
-#[test]
-fn a_text_above_the_bound_keeps_a_prefix_with_an_explicit_mark_and_its_digest_covers_the_kept_bytes()
- {
-    // A two-byte character, so that the cut must find a character boundary.
-    let page = "é".repeat(SOURCE_TEXT_MAX_BYTES / 2 + 10);
-    let settlement = ToolCallSettlement {
-        result: Some(crate::ToolResultText {
-            text: format!("# Long\nURL: https://e.org/long\n\n{page}"),
-            digest: String::new(),
-            bytes: 0,
-        }),
-        ..settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called("x", false))
-    };
-
-    let captured = capture_research_sources(
-        ResultFormat::PageBlocks,
-        &fetch(&["https://e.org/long"]),
-        &settlement,
-    )
-    .snapshots
-    .remove(0);
-
-    let mark = format!(
-        "\n[StoryOS cut this source here. It keeps 262074 of its {} bytes.]",
-        page.len()
-    );
-    let kept = format!("{}{mark}", "é".repeat(262_074 / 2));
-    assert_eq!(
-        captured,
-        CapturedSource {
-            original_bytes: page.len(),
-            truncated: true,
-            ..source(
-                SourceKind::Page,
-                "https://e.org/long",
-                Some("Long"),
-                None,
-                &kept
-            )
-        }
-    );
-    assert!(captured.text.len() <= SOURCE_TEXT_MAX_BYTES);
 }
 
 #[test]

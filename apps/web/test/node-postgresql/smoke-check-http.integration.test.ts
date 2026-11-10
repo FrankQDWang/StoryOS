@@ -158,9 +158,9 @@ async function researchSource(runId: string): Promise<string> {
       RETURNING owner_user_id, project_id, run_id, tool_call_id),
     snapshot AS (
       INSERT INTO storyos.source_snapshots (owner_user_id, project_id, source_snapshot_id, run_id, tool_call_id,
-        entry_position, kind, locator, title, published, text, text_bytes, original_bytes, truncated, content_digest)
+        entry_position, kind, locator, title, published, text, text_bytes, content_digest)
       SELECT owner_user_id, project_id, gen_random_uuid(), run_id, tool_call_id, 0, 'page',
-             'https://example.org/tides', 'Tide table', NULL, 'High water at 10.42.', 20, 20, false,
+             'https://example.org/tides', 'Tide table', NULL, 'High water at 10.42.', 20,
              'sha256:' || encode(sha256(convert_to('High water at 10.42.', 'UTF8')), 'hex')
         FROM call
       RETURNING source_snapshot_id)

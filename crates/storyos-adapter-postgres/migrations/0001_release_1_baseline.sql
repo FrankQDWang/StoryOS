@@ -4292,8 +4292,6 @@ CREATE TABLE storyos.source_snapshots (
     published text,
     text text NOT NULL,
     text_bytes integer NOT NULL,
-    original_bytes integer NOT NULL,
-    truncated boolean NOT NULL,
     content_digest text NOT NULL,
     captured_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT source_snapshots_pkey PRIMARY KEY (owner_user_id, project_id, source_snapshot_id),
@@ -4301,7 +4299,7 @@ CREATE TABLE storyos.source_snapshots (
     CONSTRAINT source_snapshots_entry_position_check CHECK ((entry_position >= 0)),
     CONSTRAINT source_snapshots_kind_check CHECK ((kind = ANY (ARRAY['search_result'::text, 'page'::text]))),
     CONSTRAINT source_snapshots_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192) AND (char_length(title) BETWEEN 1 AND 8192) AND (char_length(published) BETWEEN 1 AND 128)),
-    CONSTRAINT source_snapshots_text_shape CHECK ((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (truncated = (original_bytes > 262144)) AND (truncated OR (original_bytes = text_bytes)) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_snapshots_text_shape CHECK ((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT source_snapshots_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT source_snapshots_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
 );

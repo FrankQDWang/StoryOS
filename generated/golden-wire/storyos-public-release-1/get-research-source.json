@@ -10,13 +10,11 @@
     "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "kind": "page",
     "locator": "https://example.org/tides",
-    "original_bytes": "20",
     "published": null,
     "source_snapshot_id": "018f0000-0000-7001-8000-000000000d07",
     "text_bytes": "20",
     "title": null,
-    "tool_call_id": "018f0000-0000-7001-8000-000000000d08",
-    "truncated": false
+    "tool_call_id": "018f0000-0000-7001-8000-000000000d08"
   },
   "text": "High water at 10.42."
 }

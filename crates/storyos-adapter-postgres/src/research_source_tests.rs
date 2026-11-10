@@ -155,8 +155,7 @@ fn snapshot(
 ) -> Value {
     json!({"tool_call_id": call, "kind": kind, "locator": locator, "title": title,
            "published": published,
-           "content_digest": digest(text), "text_bytes": text.len().to_string(),
-           "original_bytes": text.len().to_string(), "truncated": false})
+           "content_digest": digest(text), "text_bytes": text.len().to_string()})
 }
 
 /// The Source Snapshot identities of the Run, in list order.
@@ -323,6 +322,51 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
                 gap("https://example.org/e", "empty"),
             ],
         })
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_cuts_nothing() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let urls = r#"{"urls":["https://example.org/a","https://example.org/b"]}"#;
+    // One byte above the bound of the whole Tool result (S5-03), which is the bound of a source.
+    let page = format!(
+        "# Tide table\nURL: https://example.org/a\n\n{}",
+        "x".repeat(storyos_core::TOOL_RESULT_TEXT_MAX_BYTES)
+    );
+    let (scope, run_id) = research_run(
+        &store,
+        &admin,
+        "5a7",
+        0x5a7a,
+        &[("call_01", "web_fetch", urls)],
+        &[&page],
+    )
+    .await;
+    let state: String = admin
+        .query_one(
+            "SELECT state FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let gap =
+        |locator: &str| json!({"tool_call_id": "call_01", "locator": locator, "reason": "failed"});
+
+    assert_eq!(
+        (state, listed(&store, &admin, &scope, &run_id).await),
+        (
+            "failed".to_owned(),
+            json!({
+                "snapshots": [],
+                "gaps": [gap("https://example.org/a"), gap("https://example.org/b")],
+            })
+        )
     );
 }
 
