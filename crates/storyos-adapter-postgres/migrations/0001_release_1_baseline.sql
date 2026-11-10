@@ -4330,7 +4330,7 @@ CREATE TABLE storyos.source_gaps (
     CONSTRAINT source_gaps_position_key UNIQUE (owner_user_id, project_id, tool_call_id, gap_position),
     CONSTRAINT source_gaps_position_check CHECK ((gap_position >= 0)),
     CONSTRAINT source_gaps_locator_check CHECK ((char_length(locator) BETWEEN 1 AND 8192)),
-    CONSTRAINT source_gaps_reason_check CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text]))),
+    CONSTRAINT source_gaps_reason_check CHECK ((reason = ANY (ARRAY['failed'::text, 'empty'::text, 'missing'::text, 'unattributed'::text]))),
     CONSTRAINT source_gaps_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT source_gaps_owner_user_id_project_id_tool_call_id_fkey FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL
 );

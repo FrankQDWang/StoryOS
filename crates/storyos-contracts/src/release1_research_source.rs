@@ -76,6 +76,7 @@ pub enum SourceGapReason {
     Failed,
     Empty,
     Missing,
+    Unattributed,
 }
 
 /// One immutable Source Snapshot revision, with no captured text.

@@ -123,27 +123,88 @@ fn a_failed_an_empty_and_a_missing_url_are_gaps_and_never_snapshots() {
 }
 
 #[test]
-fn a_page_at_a_changed_url_is_no_snapshot_and_its_requested_url_is_missing() {
-    let text = "# Tide table\nURL: https://e.org/a\n\nHigh water at 10.42.\n\n\
-                # Moved page\nURL: https://e.org/new\n\nThe port log.";
+fn a_header_that_answers_no_requested_url_in_order_makes_the_page_read_unattributed() {
+    let page = |url: &str, text: &str| format!("# Page\nURL: {url}\n\n{text}");
+    let read = |text: &str, urls: &[&str]| {
+        let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(text, false));
+        capture_research_sources(ResultFormat::PageBlocks, &fetch(urls), &settlement)
+    };
+    let unattributed = |urls: &[&str]| ResearchCapture {
+        snapshots: Vec::new(),
+        gaps: urls
+            .iter()
+            .map(|url| gap(url, SourceGapReason::Unattributed))
+            .collect(),
+    };
+    let a = "https://e.org/a";
+    let b = "https://e.org/b";
+    // Page a quotes its own header, with an empty line after the quoted header.
+    let quotes_itself = page(a, &format!("Before.\n\n{}", page(a, "After.")));
+    // Page a quotes the header of b, and the page of b follows.
+    let quotes_the_next = format!("{}\n\n{}", page(a, &page(b, "Quoted.")), page(b, "Real."));
+    // The server read b at a changed URL.
+    let changed = format!(
+        "{}\n\n{}",
+        page(a, "High water."),
+        page("https://e.org/new", "Moved.")
+    );
+
+    assert_eq!(
+        [
+            read(&quotes_itself, &[a]),
+            read(&quotes_the_next, &[a, b]),
+            read(&changed, &[a, b]),
+        ],
+        [
+            unattributed(&[a]),
+            unattributed(&[a, b]),
+            unattributed(&[a, b])
+        ]
+    );
+}
+
+#[test]
+fn a_quoted_error_line_at_the_end_of_a_page_stays_page_text() {
+    let text = "# Page\nURL: https://e.org/a\n\nThe log said:\nError fetching https://e.org/a: HTTP error: 404";
     let settlement = settle_tool_call(&WEB_FETCH_TOOL_SPEC, &called(text, false));
 
     assert_eq!(
         capture_research_sources(
             ResultFormat::PageBlocks,
-            &fetch(&["https://e.org/a", "https://e.org/old"]),
+            &fetch(&["https://e.org/a"]),
             &settlement
         ),
         ResearchCapture {
             snapshots: vec![source(
                 SourceKind::Page,
                 "https://e.org/a",
-                Some("Tide table"),
+                Some("Page"),
                 None,
-                "High water at 10.42."
+                "The log said:\nError fetching https://e.org/a: HTTP error: 404"
             )],
-            gaps: vec![gap("https://e.org/old", SourceGapReason::Missing)],
+            gaps: Vec::new(),
         }
+    );
+}
+
+#[test]
+fn the_last_search_snippet_keeps_a_literal_separator() {
+    let text = "Title: Port\nURL: https://e.org/port\nText: Example---";
+    let settlement = settle_tool_call(&WEB_SEARCH_TOOL_SPEC, &called(text, false));
+    let intake = ToolIntake::WebSearch {
+        query: "port".to_owned(),
+        result_count: None,
+    };
+
+    assert_eq!(
+        capture_research_sources(ResultFormat::TitledEntries, &intake, &settlement).snapshots,
+        vec![source(
+            SourceKind::SearchResult,
+            "https://e.org/port",
+            Some("Port"),
+            None,
+            "Example---"
+        )]
     );
 }
 

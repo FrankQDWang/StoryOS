@@ -372,6 +372,47 @@ async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_page_that_quotes_a_header_is_unattributed_and_the_call_stays_settled() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let urls = r#"{"urls":["https://example.org/a"]}"#;
+    let page = "# Page\nURL: https://example.org/a\n\nBefore.\n\n\
+                # Quoted\nURL: https://example.org/a\n\nAfter.";
+    let (scope, run_id) = research_run(
+        &store,
+        &admin,
+        "5a8",
+        0x5a8a,
+        &[("call_01", "web_fetch", urls)],
+        &[page],
+    )
+    .await;
+    let state: String = admin
+        .query_one(
+            "SELECT state FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    assert_eq!(
+        (state, listed(&store, &admin, &scope, &run_id).await),
+        (
+            "settled".to_owned(),
+            json!({
+                "snapshots": [],
+                "gaps": [{"tool_call_id": "call_01", "locator": "https://example.org/a",
+                          "reason": "unattributed"}],
+            })
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_second_fetch_of_one_url_is_a_new_revision_and_no_snapshot_changes() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()

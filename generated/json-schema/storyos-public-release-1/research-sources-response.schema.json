@@ -54,7 +54,8 @@
       "enum": [
         "failed",
         "empty",
-        "missing"
+        "missing",
+        "unattributed"
       ],
       "type": "string"
     },

@@ -559,7 +559,7 @@ export type CancelAgentRunResponse = { schema_id: string, correlation_id: string
 
 export type SourceSnapshotKind = "search_result" | "page";
 
-export type SourceGapReason = "failed" | "empty" | "missing";
+export type SourceGapReason = "failed" | "empty" | "missing" | "unattributed";
 
 export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, locator: string, title: string | null, published: string | null, captured_at: string, content_digest: string, text_bytes: string, };
 

@@ -54,6 +54,9 @@ pub enum SourceGapReason {
     Empty,
     /// The result has no entry for the URL.
     Missing,
+    /// The server answered, but StoryOS cannot split the result text into its pages with
+    /// certainty, for example because a page quotes a header of the format.
+    Unattributed,
 }
 
 impl SourceGapReason {
@@ -62,11 +65,12 @@ impl SourceGapReason {
             Self::Failed => "failed",
             Self::Empty => "empty",
             Self::Missing => "missing",
+            Self::Unattributed => "unattributed",
         }
     }
 
     pub fn parse(value: &str) -> Option<Self> {
-        [Self::Failed, Self::Empty, Self::Missing]
+        [Self::Failed, Self::Empty, Self::Missing, Self::Unattributed]
             .into_iter()
             .find(|reason| reason.as_str() == value)
     }
@@ -197,6 +201,12 @@ fn titled_entries(text: &str) -> Vec<CapturedSource> {
     while index < lines.len() {
         match header(&lines, index, "Title: ", "N/A").filter(|_| separated(index)) {
             Some((entry, body)) => {
+                // The separator before a confirmed entry is not snippet text of the entry before.
+                if let Some(previous) = entries.last_mut() {
+                    previous
+                        .body
+                        .truncate(previous.body.len().saturating_sub(3));
+                }
                 entries.push(entry);
                 index = body;
             }
@@ -215,8 +225,7 @@ fn titled_entries(text: &str) -> Vec<CapturedSource> {
         })
         .map(|entry| {
             let body = entry.body.join("\n");
-            let body = body.trim_end();
-            let body = body.strip_suffix("---").unwrap_or(body).trim();
+            let body = body.trim();
             let snippet = body
                 .strip_prefix("Highlights:")
                 .or_else(|| body.strip_prefix("Text:"))
@@ -228,79 +237,110 @@ fn titled_entries(text: &str) -> Vec<CapturedSource> {
         .collect()
 }
 
-/// The pages of a page read. StoryOS identifies a page only by a requested URL: a page starts at
-/// a header whose URL is a requested URL that no earlier page answered, at the first line or after
-/// an empty line, with an empty line or the end of the text after the header. A header with another URL, for example of
-/// a page that the server read at a changed URL, ends the page before it and gives no Snapshot, so
-/// that no page text goes under the wrong URL; its requested URL gets a `missing` Gap. Each other
-/// line is page text.
+/// The pages of a page read. The text format has no boundary that page text cannot also hold,
+/// so StoryOS attributes a page only when the result is unambiguous:
+///
+/// - A header candidate is a `# <title>` line and a `URL:` line, with optional `Published:` and
+///   `Author:` lines, at the first line or after an empty line, with an empty line or the end of
+///   the text after it.
+/// - The trailing `Error fetching <url>: <reason>` lines name requested URLs with no candidate.
+/// - Each candidate must answer the next requested URL in request order that did not fail.
+///
+/// When each candidate answers a requested URL in that order and no text comes before the first
+/// one, each candidate starts one page, which ends at the next candidate. Otherwise, for example
+/// when a page quotes a header or when the server read a page at a changed URL, StoryOS cannot
+/// split the text with certainty: it keeps no Snapshot, and each requested URL that did not fail
+/// gets an `unattributed` Gap. StoryOS never guesses a split and never cuts a page.
 fn page_blocks(text: &str, requested: &[String]) -> ResearchCapture {
     let mut lines: Vec<&str> = text.split('\n').collect();
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    let candidates: Vec<(usize, Entry<'_>, usize)> = (0..lines.len())
+        .filter(|&index| index == 0 || lines[index - 1].trim().is_empty())
+        .filter_map(|index| {
+            header(&lines, index, "# ", "(no title)")
+                .filter(|(_, body)| lines.get(*body).is_none_or(|line| line.is_empty()))
+                .map(|(entry, body)| (index, entry, body))
+        })
+        .collect();
+    let has_candidate = |position: usize| {
+        candidates
+            .iter()
+            .any(|(_, entry, _)| same_url(&requested[position], &entry.locator))
+    };
     let mut failed: Vec<usize> = Vec::new();
     while let Some(last) = lines.last() {
-        if last.trim().is_empty() {
-            lines.pop();
-        } else if let Some(position) = last
+        let named = last
             .strip_prefix("Error fetching ")
             .and_then(|rest| error_url(rest, requested))
-        {
-            failed.push(position);
-            lines.pop();
-        } else {
-            break;
+            .filter(|position| !has_candidate(*position));
+        match named {
+            Some(position) => failed.push(position),
+            None if last.trim().is_empty() => {}
+            None => break,
         }
+        lines.pop();
     }
-    // Each page: the requested URL that it answers, or `None` for a page at another URL.
-    let mut pages: Vec<(Option<usize>, Entry<'_>)> = Vec::new();
-    let mut index = 0;
-    while index < lines.len() {
-        let at_boundary = index == 0 || lines[index - 1].trim().is_empty();
-        let started = header(&lines, index, "# ", "(no title)")
-            .filter(|(_, body)| at_boundary && lines.get(*body).is_none_or(|line| line.is_empty()));
-        match started {
-            Some((entry, body)) => {
-                let answered = requested
-                    .iter()
-                    .position(|url| same_url(url, &entry.locator));
-                let answered = answered.filter(|position| {
-                    !failed.contains(position)
-                        && !pages.iter().any(|(page, _)| *page == Some(*position))
-                });
-                pages.push((answered, entry));
-                index = body;
-            }
-            None => {
-                if let Some((_, entry)) = pages.last_mut() {
-                    entry.body.push(lines[index]);
-                }
-                index += 1;
-            }
-        }
+    // Each candidate answers the next requested URL, in request order, that did not fail.
+    let mut answers: Vec<usize> = Vec::new();
+    let attributed = candidates.iter().all(|(start, entry, _)| {
+        let next = answers.last().map_or(0, |last| last + 1);
+        let answer = (next..requested.len()).find(|position| {
+            !failed.contains(position) && same_url(&requested[*position], &entry.locator)
+        });
+        answer.is_some_and(|answer| {
+            answers.push(answer);
+            *start < lines.len()
+        })
+    }) && lines[..candidates
+        .first()
+        .map_or(lines.len(), |(start, _, _)| *start)]
+        .iter()
+        .all(|line| line.trim().is_empty());
+    let gap = |position: usize, reason| SourceGap {
+        locator: requested[position].clone(),
+        reason,
+    };
+    if !attributed {
+        return ResearchCapture {
+            snapshots: Vec::new(),
+            gaps: (0..requested.len())
+                .map(|position| {
+                    let failed = failed.contains(&position);
+                    gap(
+                        position,
+                        if failed {
+                            SourceGapReason::Failed
+                        } else {
+                            SourceGapReason::Unattributed
+                        },
+                    )
+                })
+                .collect(),
+        };
     }
     let mut snapshots = Vec::new();
     let mut answered: Vec<Option<bool>> = vec![None; requested.len()];
-    for (position, entry) in pages {
-        let Some(position) = position else { continue };
-        let body = entry.body.join("\n").trim().to_owned();
-        answered[position] = Some(!body.is_empty());
-        if !body.is_empty() {
-            snapshots.push(captured(SourceKind::Page, entry, &body));
+    let ends = candidates
+        .iter()
+        .skip(1)
+        .map(|(start, _, _)| *start)
+        .chain([lines.len()])
+        .collect::<Vec<_>>();
+    for (((_, entry, body), end), position) in candidates.into_iter().zip(ends).zip(answers) {
+        let text = lines[body.min(end)..end].join("\n").trim().to_owned();
+        answered[position] = Some(!text.is_empty());
+        if !text.is_empty() {
+            snapshots.push(captured(SourceKind::Page, entry, &text));
         }
     }
-    let gaps = requested
-        .iter()
-        .enumerate()
-        .filter_map(|(position, url)| {
-            let reason = match answered[position] {
-                Some(true) => return None,
-                Some(false) => SourceGapReason::Empty,
-                None if failed.contains(&position) => SourceGapReason::Failed,
-                None => SourceGapReason::Missing,
-            };
-            Some(SourceGap {
-                locator: url.clone(),
-                reason,
-            })
+    let gaps = (0..requested.len())
+        .filter_map(|position| match answered[position] {
+            Some(true) => None,
+            Some(false) => Some(gap(position, SourceGapReason::Empty)),
+            None if failed.contains(&position) => Some(gap(position, SourceGapReason::Failed)),
+            None => Some(gap(position, SourceGapReason::Missing)),
         })
         .collect();
     ResearchCapture { snapshots, gaps }

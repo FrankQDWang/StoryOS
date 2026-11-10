@@ -179,6 +179,9 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                             SourceGapReason::Failed => storyos_contracts::SourceGapReason::Failed,
                             SourceGapReason::Empty => storyos_contracts::SourceGapReason::Empty,
                             SourceGapReason::Missing => storyos_contracts::SourceGapReason::Missing,
+                            SourceGapReason::Unattributed => {
+                                storyos_contracts::SourceGapReason::Unattributed
+                            }
                         },
                         recorded_at: row.get(/*idx*/ 4),
                     })
