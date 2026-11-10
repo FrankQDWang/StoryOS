@@ -5,7 +5,7 @@ use std::time::Duration;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
 use serde_json::{Map, Value, json};
 use storyos_application::{DiagnosticField as _, DiagnosticId, ResolvedCredential};
-use storyos_core::ContractCheck;
+use storyos_core::{ContractCheck, ContractDifference};
 use tokio::time::Instant;
 
 use crate::record::{self, DiscoveredTool, MAX_TEXT_BYTES, ToolDiscoveryRecord};
@@ -108,13 +108,22 @@ pub(crate) async fn run(
         received: 0,
         deadline: Instant::now() + timeout,
     };
+    // A Dispatch failure before `tools/call` sent no argument of the ToolCall.
+    let dispatch = matches!(request, McpRequest::Dispatch { .. });
+    let before_call = |failure: Failure| {
+        if dispatch {
+            McpObservation::NotSubmitted
+        } else {
+            failure.before_operation()
+        }
+    };
     let identity = match session.request("initialize", initialize_params()).await {
         Ok(result) => record::server_identity(&result),
-        Err(failure) => return failure.before_operation(),
+        Err(failure) => return before_call(failure),
     };
     let (server_name, server_version, protocol_revision) = match identity {
         Ok(identity) => identity,
-        Err(reason) => return McpObservation::InvalidResult { reason },
+        Err(reason) => return before_call(Failure::Invalid(reason)),
     };
     if protocol_revision != PROTOCOL_REVISION {
         // The client sends nothing more in a revision that it does not speak.
@@ -126,15 +135,19 @@ pub(crate) async fn run(
                 protocol_revision,
                 tools: Vec::new(),
             }),
-            McpRequest::Call { .. } | McpRequest::Dispatch { .. } => {
-                McpObservation::InvalidResult {
-                    reason: "protocol_revision",
-                }
+            McpRequest::Call { .. } => McpObservation::InvalidResult {
+                reason: "protocol_revision",
+            },
+            McpRequest::Dispatch { registration, .. } => {
+                McpObservation::Drift(vec![ContractDifference::ProtocolRevision {
+                    pinned: registration.protocol_revision.to_owned(),
+                    observed: protocol_revision,
+                }])
             }
         };
     }
     if let Err(failure) = session.notify("notifications/initialized").await {
-        return failure.before_operation();
+        return before_call(failure);
     }
     match request {
         McpRequest::Discover { .. } => match session.list_tools().await {

@@ -122,6 +122,9 @@ pub(crate) struct ToolAuthority {
     same_scope: bool,
     pub endpoint: Option<String>,
     lifecycle: ToolRegistrationLifecycle,
+    /// The exact enablement, compatibility Decision, external-use binding, Processing
+    /// Destination Identity, evidence revision, and grant that this authority comes from.
+    pub evidence: Value,
 }
 
 impl ToolAuthority {
@@ -159,7 +162,16 @@ pub(crate) async fn read_authority(
                           binding.processing_destination_identity, false),
                     evidence.endpoint,
                     (SELECT lifecycle FROM storyos.tool_registration_revisions
-                      WHERE tool_registration_revision = $4::text::uuid)
+                      WHERE tool_registration_revision = $4::text::uuid),
+                    jsonb_build_object(
+                      'enablement_revision', enablement.enablement_revision,
+                      'external_compatibility_decision',
+                      enablement.external_compatibility_decision,
+                      'project_model_use_binding_revision',
+                      binding.project_model_use_binding_revision,
+                      'processing_destination_identity', binding.processing_destination_identity,
+                      'evidence_revision', binding.evidence_revision,
+                      'grant_id', binding.grant_id)::text
                FROM (SELECT 1) AS one
                LEFT JOIN LATERAL (
                  SELECT * FROM storyos.project_tool_enablements
@@ -214,6 +226,8 @@ pub(crate) async fn read_authority(
         same_scope: row.get(/*idx*/ 6),
         endpoint: row.get(/*idx*/ 7),
         lifecycle,
+        evidence: serde_json::from_str(row.get(/*idx*/ 9))
+            .map_err(|_| damaged("Tool authority evidence is damaged"))?,
     })
 }
 

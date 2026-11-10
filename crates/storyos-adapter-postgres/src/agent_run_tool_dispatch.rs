@@ -15,10 +15,9 @@ use uuid::Uuid;
 
 use super::PostgresProjectReader;
 use crate::agent_run_tool_authority::{
-    Resolution, ToolCallRow, damaged, locked, next_unresolved, quarantine, read_authority, refuse,
-    resolve,
+    Resolution, ToolCallRow, locked, next_unresolved, quarantine, read_authority, refuse, resolve,
 };
-use crate::agent_run_tool_context::{ToolContext, commit_tool_context};
+use crate::agent_run_tool_context::{ToolContext, commit_tool_context, committed_tool_context};
 use crate::agent_run_work::{
     WorkPhase, complete_challenge_error, complete_database_error, load_run_phase,
 };
@@ -44,13 +43,28 @@ impl ToolDispatchStore for PostgresProjectReader {
                     refuse(client, claim, &row, refusal.state(), refusal.code()).await?;
                     continue;
                 }
+                // Gates one to six commit with this transaction, before the preparation and
+                // before the dispatch claim.
+                let endpoint = authority.endpoint.clone().unwrap_or_default();
+                let manifest = commit_tool_context(
+                    client,
+                    claim,
+                    ToolContext {
+                        row: &row,
+                        plan: &plan,
+                        endpoint: &endpoint,
+                        authority: &authority.evidence,
+                    },
+                )
+                .await?;
                 return Ok(Some(ToolCallRequest {
                     tool_call_id: row.tool_call_id,
                     registration: plan.registration,
                     tool: plan.tool,
                     server_arguments: plan.server_arguments,
-                    endpoint: authority.endpoint.unwrap_or_default(),
+                    endpoint,
                     credential_reference: authority.credential_reference.map(CredentialReference),
+                    context_assembly_manifest_id: manifest,
                 }));
             }
             Ok(None)
@@ -91,21 +105,19 @@ impl ToolDispatchStore for PostgresProjectReader {
             {
                 return Ok(None);
             }
-            let Some(grant_id) = authority.grant_id.as_deref() else {
-                return Err(damaged("An admitted ToolCall has no grant"));
-            };
-            let manifests = commit_tool_context(
+            // The claim refers to the committed manifest of this preparation. A manifest of
+            // other authority evidence means that the authority changed: prepare again.
+            let Some(manifests) = committed_tool_context(
                 client,
                 claim,
-                ToolContext {
-                    row: &row,
-                    plan: &plan,
-                    grant_id,
-                    endpoint: &request.endpoint,
-                    projection,
-                },
+                &row,
+                &request.context_assembly_manifest_id,
+                &authority.evidence,
             )
-            .await?;
+            .await?
+            else {
+                return Ok(None);
+            };
             let destination_attempt_id = Uuid::now_v7().to_string();
             let attempt = json!({
                 "context_assembly": manifests.record(),
@@ -113,6 +125,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                     "decision": "admitted",
                     "grant_id": authority.grant_id,
                     "grant_scope": storyos_core::GrantScope::ResearchToolV1.as_str(),
+                    "authority": authority.evidence,
                     "effect_request": plan.effect.record(),
                 },
                 "wire_payload_projection": {
@@ -211,10 +224,15 @@ pub(crate) async fn advance(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    if crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await? {
-        return Ok(WorkPhase::ToolCalls);
+    let unresolved = crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?;
+    match storyos_core::function_request_step(
+        /*requests_function*/ true, /*supplies_tool_call*/ true, unresolved,
+    ) {
+        storyos_core::FunctionRequestStep::ToolGateway => Ok(WorkPhase::ToolCalls),
+        storyos_core::FunctionRequestStep::Refuse | storyos_core::FunctionRequestStep::Complete => {
+            crate::agent_run_work::complete(client, claim).await
+        }
     }
-    crate::agent_run_work::complete(client, claim).await
 }
 
 impl PostgresProjectReader {
@@ -304,11 +322,15 @@ async fn settle_interrupted(
     .await
 }
 
-/// The claimed attempt record with its settlement and the final state of its Disclosure Event.
+/// The claimed attempt record with its settlement. The Outbound Disclosure Event stays as the
+/// claim recorded it (`outcome_unknown`); a separate confirmation records what the exchange proved.
 fn settled_attempt(row: &ToolCallRow, settlement: &str, outcome: Value) -> Value {
     let mut attempt = row.attempt.clone().unwrap_or_else(|| json!({}));
     attempt["destination_attempt"]["settlement"] = json!(settlement);
-    attempt["outbound_disclosure_event"]["state"] = outcome["outbound_disclosure"].clone();
+    attempt["disclosure_confirmation"] = json!({
+        "event_id": attempt["outbound_disclosure_event"]["event_id"].clone(),
+        "state": outcome["outbound_disclosure"].clone(),
+    });
     attempt
 }
 

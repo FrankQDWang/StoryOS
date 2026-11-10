@@ -23,6 +23,9 @@ pub struct ToolCallRequest {
     pub server_arguments: Map<String, Value>,
     /// The Credential Reference of the current use binding. `None` refuses before the claim.
     pub credential_reference: Option<CredentialReference>,
+    /// The Context Assembly Manifest that the store committed for this preparation (ADR 0005
+    /// gate six). The dispatch claim refers to it.
+    pub context_assembly_manifest_id: String,
 }
 
 /// The committed dispatch claim of one Tool Destination Attempt.

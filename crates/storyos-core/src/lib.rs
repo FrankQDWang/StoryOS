@@ -267,9 +267,9 @@ pub use tool_call::{
     ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
 };
 pub use tool_dispatch::{
-    EffectOutcome, ToolAttemptSettlement, ToolCallPlan, ToolCallSettlement, ToolCallState,
-    ToolDispatchFacts, ToolDispatchRefusal, ToolEffectOutcome, ToolEffectRequest, ToolObservation,
-    ToolResultText, admit_tool_dispatch, settle_tool_call,
+    EffectOutcome, FunctionRequestStep, ToolAttemptSettlement, ToolCallPlan, ToolCallSettlement,
+    ToolCallState, ToolDispatchFacts, ToolDispatchRefusal, ToolEffectOutcome, ToolEffectRequest,
+    ToolObservation, ToolResultText, admit_tool_dispatch, function_request_step, settle_tool_call,
 };
 pub use tool_exposure::{
     EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,

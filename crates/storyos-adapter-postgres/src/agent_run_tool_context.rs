@@ -4,10 +4,11 @@
 //! eligibility is the Project Scope and the grant scope `research_tool_v1`. Gate four: the one
 //! candidate is the selection, with no ranking. Gate five: the Bounded Projection is the typed
 //! intake. Gate six: the Context Assembly Manifest, the Destination Context Manifest, and the
-//! Outbound Disclosure Manifest commit. Gate seven is the claim itself.
+//! Outbound Disclosure Manifest commit with the preparation step, before the dispatch claim.
+//! Gate seven is the claim itself, in a later transaction.
 
 use serde_json::{Value, json};
-use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, WirePayloadProjection};
+use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{GrantScope, ToolCallPlan};
 use uuid::Uuid;
 
@@ -34,23 +35,23 @@ impl ToolContextManifests {
 pub(crate) struct ToolContext<'a> {
     pub row: &'a ToolCallRow,
     pub plan: &'a ToolCallPlan,
-    pub grant_id: &'a str,
     pub endpoint: &'a str,
-    pub projection: &'a WirePayloadProjection,
+    /// The exact authority evidence of the admission.
+    pub authority: &'a Value,
 }
 
-/// Commits gates one to six for the ToolCall. A missing Run requirement is a damaged Run.
+/// Commits gates one to six for the ToolCall and returns the Context Assembly Manifest identity.
+/// A missing Run requirement is a damaged Run.
 pub(crate) async fn commit_tool_context(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     context: ToolContext<'_>,
-) -> Result<ToolContextManifests, CompleteAgentRunError> {
+) -> Result<String, CompleteAgentRunError> {
     let ToolContext {
         row,
         plan,
-        grant_id,
         endpoint,
-        projection,
+        authority,
     } = context;
     let requirement_id = Uuid::now_v7().to_string();
     let manifests = ToolContextManifests {
@@ -81,10 +82,11 @@ pub(crate) async fn commit_tool_context(
             "endpoint": endpoint,
             "registration_revision": row.registration_revision,
             "spec_revision": row.spec_revision,
+            "authority": authority,
         },
         "outbound_disclosure": {
             "source_class": plan.effect.outbound_disclosure.source_class(),
-            "wire_payload_digest": projection.digest,
+            "disclosed": plan.effect.disclosed,
         },
     });
     let inserted = client
@@ -128,7 +130,7 @@ pub(crate) async fn commit_tool_context(
                 &manifests.destination,
                 &manifests.outbound,
                 &manifest.to_string(),
-                &grant_id,
+                &authority["grant_id"].as_str(),
                 &GrantScope::ResearchToolV1.as_str(),
             ],
         )
@@ -139,5 +141,45 @@ pub(crate) async fn commit_tool_context(
             "The primary Operation Requirement of the Run is missing",
         ));
     }
-    Ok(manifests)
+    Ok(manifests.assembly)
+}
+
+/// The committed manifests of `manifest_id` when they belong to the ToolCall and record the same
+/// authority evidence, and `None` otherwise.
+pub(crate) async fn committed_tool_context(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    row: &ToolCallRow,
+    manifest_id: &str,
+    authority: &Value,
+) -> Result<Option<ToolContextManifests>, CompleteAgentRunError> {
+    let found = client
+        .query_opt(
+            "SELECT manifest.destination_context_manifest_id::text,
+                    manifest.outbound_disclosure_manifest_id::text
+               FROM storyos.context_assembly_manifests AS manifest
+               JOIN storyos.operation_requirements AS requirement
+                 USING (owner_user_id, project_id, operation_requirement_id)
+              WHERE manifest.owner_user_id = $1::text::uuid AND manifest.project_id = $2::text::uuid
+                AND manifest.run_id = $3::text::uuid
+                AND manifest.context_assembly_manifest_id = $4::text::uuid
+                AND manifest.manifest_role = 'tool_call' AND manifest.sufficiency = 'complete'
+                AND requirement.payload ->> 'tool_call_id' = $5
+                AND manifest.payload #> '{destination_context,authority}' = $6::text::jsonb",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &manifest_id,
+                &row.tool_call_id,
+                &authority.to_string(),
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(found.map(|found| ToolContextManifests {
+        assembly: manifest_id.to_owned(),
+        destination: found.get(0),
+        outbound: found.get(1),
+    }))
 }

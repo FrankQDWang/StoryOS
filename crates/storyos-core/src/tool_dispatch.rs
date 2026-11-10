@@ -434,6 +434,30 @@ pub fn settle_tool_call(spec: &ToolSpec, observation: &ToolObservation) -> ToolC
     }
 }
 
+/// The next step of a Run whose response asked for a function (ADR 0084).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FunctionRequestStep {
+    /// The durable Decision has an unresolved ToolCall: the Tool Gateway handles it.
+    ToolGateway,
+    /// The function request has no validated ToolCall: the Run refuses with one sentence.
+    Refuse,
+    /// No function request, or each ToolCall is resolved: the Run completes.
+    Complete,
+}
+
+/// Decides the next step from the facts of the response and of its ToolCalls.
+pub fn function_request_step(
+    requests_function: bool,
+    supplies_tool_call: bool,
+    unresolved_tool_call: bool,
+) -> FunctionRequestStep {
+    match (requests_function, supplies_tool_call, unresolved_tool_call) {
+        (_, true, true) => FunctionRequestStep::ToolGateway,
+        (true, false, _) => FunctionRequestStep::Refuse,
+        _ => FunctionRequestStep::Complete,
+    }
+}
+
 #[cfg(test)]
 #[path = "tool_dispatch_tests.rs"]
 mod tests;

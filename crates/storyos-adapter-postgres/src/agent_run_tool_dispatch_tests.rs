@@ -139,8 +139,17 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                       'run', jsonb_build_object('status', run.status, 'settlement', run.settlement),
                       'tool_call', (SELECT jsonb_build_object(
                           'state', call.state, 'refusal', call.refusal,
-                          'attempt', call.attempt #- '{context_assembly}'
+                          'attempt', (call.attempt #- '{context_assembly}'
+                                                 #- '{admission_decision,authority}'
                                                  #- '{outbound_disclosure_event,event_id}'
+                                                 #- '{disclosure_confirmation,event_id}')
+                                     || CASE WHEN call.attempt ? 'disclosure_confirmation'
+                                        THEN jsonb_build_object('disclosure_confirmation',
+                                          ((call.attempt -> 'disclosure_confirmation') - 'event_id')
+                                          || jsonb_build_object('same_event',
+                                             call.attempt #> '{disclosure_confirmation,event_id}'
+                                             = call.attempt #> '{outbound_disclosure_event,event_id}'))
+                                        ELSE '{}'::jsonb END
                                                  #- '{admission_decision,grant_id}'
                                                  #- '{wire_payload_projection,digest}'
                                                  #- '{wire_payload_projection,serialized_payload}'
@@ -162,7 +171,13 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                           'grant_scope', manifest.disclosure_grant_scope,
                           'gates', manifest.payload #- '{eligibility,project_scope}'
                                                     #- '{destination_context,endpoint}'
-                                                    #- '{outbound_disclosure,wire_payload_digest}',
+                                                    #- '{destination_context,authority}',
+                          'authority', jsonb_build_object(
+                              'kept', manifest.payload #> '{destination_context,authority}'
+                                      = call.attempt #> '{admission_decision,authority}',
+                              'exact', (SELECT array_agg(key ORDER BY key) FROM jsonb_each(
+                                  manifest.payload #> '{destination_context,authority}')
+                                  WHERE value <> 'null'::jsonb)),
                           'exact_scope', manifest.payload #>> '{eligibility,project_scope,project_id}'
                                            = manifest.project_id::text,
                           'claim_refers_to_it', call.attempt -> 'context_assembly' = jsonb_build_object(
@@ -211,7 +226,8 @@ fn attempt(settlement: &str, disclosure: &str) -> Value {
         "wire_payload_projection": {"execution_profile": "storyos.mcp-streamable-http.v1",
                                     "mapping_revision": "2025-11-25"},
         "destination_attempt": {"settlement": settlement},
-        "outbound_disclosure_event": {"source_class": "agent_query", "state": disclosure},
+        "outbound_disclosure_event": {"source_class": "agent_query", "state": "outcome_unknown"},
+        "disclosure_confirmation": {"same_event": true, "state": disclosure},
     })
 }
 
@@ -231,8 +247,14 @@ fn tool_manifest() -> Value {
             "destination_context": {"destination": "tool",
                                     "registration_revision": EXA_TOOL_REGISTRATION.revision,
                                     "spec_revision": "storyos.tool.web-search.v1"},
-            "outbound_disclosure": {"source_class": "agent_query"},
+            "outbound_disclosure": {"source_class": "agent_query",
+                                    "disclosed": ["tide tables of 1890"]},
         },
+        "authority": {"kept": true,
+                      "exact": ["enablement_revision", "evidence_revision",
+                                "external_compatibility_decision", "grant_id",
+                                "processing_destination_identity",
+                                "project_model_use_binding_revision"]},
         "exact_scope": true,
         "claim_refers_to_it": true,
     })
@@ -399,7 +421,7 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         observed.push((
             facts["tool_call"].clone(),
             facts["events"].clone(),
-            facts["manifests"].clone(),
+            json!(facts["manifests"].as_array().map_or(0, Vec::len)),
             mcp.await.unwrap(),
         ));
     }
@@ -418,7 +440,8 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
                     Value::Null,
                     Value::Null
                 )]),
-                Value::Null,
+                // Gate six committed before the preparation, and the claim refused.
+                json!(1),
                 Vec::<String>::new(),
             ))
             .collect::<Vec<_>>()
@@ -565,6 +588,83 @@ async fn tool_contract_drift_quarantines_the_revision_and_sends_no_call() {
                 Value::Null
             ),
             vec![POST.to_owned(); 3],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_claim_in_another_project_scope_sends_nothing_and_changes_no_tool_call() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The fake server listens for no message: a sent request finds no answer.
+    let (mcp_base, mcp) = destination(Vec::new()).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dc9", 0xdc9a, &mcp_base).await;
+    let (other_scope, other_run_id) = tool_run(&store, &admin, "dcb", 0xdcba, &mcp_base).await;
+    // A lost lease after the preparation leaves the derived ToolCall `pending`.
+    let lost_lease = Hooked {
+        admin: &admin,
+        after_prepare: format!(
+            "UPDATE storyos.agent_runs SET fence_token = fence_token + 1 WHERE run_id = '{run_id}'"
+        ),
+        after_exchange: String::new(),
+    };
+    let first = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let lost = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &lost_lease,
+        &NoContractFaults,
+        &RuntimeClock,
+        &first,
+    )
+    .await;
+    let before = tool_facts(&admin, &run_id).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    let foreign = storyos_application::ClaimedAgentRun {
+        project_scope: other_scope,
+        ..claim
+    };
+    let tools = Hooked {
+        admin: &admin,
+        after_prepare: String::new(),
+        after_exchange: String::new(),
+    };
+    let next = storyos_application::ToolDispatchStore::next_tool_call(&store, &foreign).await;
+    let completed = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &tools,
+        &NoContractFaults,
+        &RuntimeClock,
+        &foreign,
+    )
+    .await;
+    let after = tool_facts(&admin, &run_id).await;
+    let other = tool_facts(&admin, &other_run_id).await;
+
+    assert_eq!(
+        (
+            matches!(lost, Err(CompleteAgentRunError::StaleFence)),
+            before["tool_call"]["state"].clone(),
+            next.is_err(),
+            completed.is_err(),
+            after["tool_call"] == before["tool_call"] && after["manifests"] == before["manifests"],
+            after["events"].clone(),
+            other["tool_call"].clone(),
+            mcp.await.unwrap(),
+        ),
+        (
+            true,
+            json!("pending"),
+            true,
+            true,
+            true,
+            Value::Null,
+            Value::Null,
+            Vec::<String>::new(),
         )
     );
 }

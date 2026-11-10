@@ -481,15 +481,18 @@ pub(crate) async fn finish_dispatched(
             .await?,
         }));
     }
-    // A successor Decision with ToolCalls continues to the Tool Gateway. A successor that asked
-    // for a function with a batch that did not validate refuses the Run (ADR 0084).
     let supplies_tool_call = flag(marker, "supplies_tool_call");
-    if supplies_tool_call
-        && crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?
-    {
+    let unresolved = supplies_tool_call
+        && crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?;
+    let step = storyos_core::function_request_step(
+        flag(marker, "successor_requests_function"),
+        supplies_tool_call,
+        unresolved,
+    );
+    if step == storyos_core::FunctionRequestStep::ToolGateway {
         return Ok(SuccessorWork::ToolCalls);
     }
-    let refusal = (flag(marker, "successor_requests_function") && !supplies_tool_call)
+    let refusal = (step == storyos_core::FunctionRequestStep::Refuse)
         .then(crate::agent_run_observation::research_refusal);
     update_run(
         client,

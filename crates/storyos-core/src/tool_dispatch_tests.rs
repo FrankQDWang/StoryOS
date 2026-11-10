@@ -266,3 +266,26 @@ fn each_observation_settles_the_tool_call_the_attempt_and_the_effect_outcome() {
         ]
     );
 }
+
+#[test]
+fn a_function_request_goes_to_the_gateway_refuses_or_completes() {
+    let steps = [
+        (true, true, true),
+        (true, true, false),
+        (true, false, false),
+        (false, false, false),
+        (false, true, true),
+    ]
+    .map(|(requests, supplies, unresolved)| function_request_step(requests, supplies, unresolved));
+
+    assert_eq!(
+        steps,
+        [
+            FunctionRequestStep::ToolGateway,
+            FunctionRequestStep::Complete,
+            FunctionRequestStep::Refuse,
+            FunctionRequestStep::Complete,
+            FunctionRequestStep::ToolGateway,
+        ]
+    );
+}

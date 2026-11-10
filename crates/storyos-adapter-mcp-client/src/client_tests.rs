@@ -576,7 +576,7 @@ async fn another_protocol_revision_gives_a_record_whose_drift_check_names_it() {
 }
 
 #[tokio::test]
-async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
+async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_initialize_or_tool_list() {
     let dispatch = |url: &str| McpRequest::Dispatch {
         server_url: url.to_owned(),
         registration: &EXA_TOOL_REGISTRATION,
@@ -595,8 +595,34 @@ async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
         _ => conforming(message),
     })
     .await;
+    let (revision_url, revision) =
+        serve(
+            Body::Json,
+            Some(SESSION),
+            |message| match message["method"].as_str().unwrap() {
+                "initialize" => Reply::Result(json!({
+                    "protocolVersion": "2026-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "exa-search-server", "version": "1.2.3"},
+                })),
+                _ => conforming(message),
+            },
+        )
+        .await;
+    let (rejected_url, rejected) =
+        serve(
+            Body::Json,
+            Some(SESSION),
+            |message| match message["method"].as_str().unwrap() {
+                "initialize" => Reply::Error(-32603),
+                _ => conforming(message),
+            },
+        )
+        .await;
     let drift = exchange(dispatch(&drifted_url)).await;
     let not_submitted = exchange(dispatch(&failed_url)).await;
+    let revision_drift = exchange(dispatch(&revision_url)).await;
+    let initialize_failure = exchange(dispatch(&rejected_url)).await;
 
     assert_eq!(
         (
@@ -608,12 +634,23 @@ async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
             std::mem::take(&mut *drifted.lock().unwrap()),
             not_submitted,
             std::mem::take(&mut *failed.lock().unwrap()),
+            revision_drift,
+            std::mem::take(&mut *revision.lock().unwrap()).len(),
+            initialize_failure,
+            std::mem::take(&mut *rejected.lock().unwrap()).len(),
         ),
         (
             true,
             sent(DISCOVER, Some(SESSION)),
             McpObservation::NotSubmitted,
             sent(&DISCOVER[..3], Some(SESSION)),
+            McpObservation::Drift(vec![ContractDifference::ProtocolRevision {
+                pinned: PROTOCOL_REVISION.to_owned(),
+                observed: "2026-06-18".to_owned(),
+            }]),
+            1,
+            McpObservation::NotSubmitted,
+            1,
         )
     );
 }
