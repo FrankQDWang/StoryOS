@@ -34,18 +34,14 @@ pub(crate) async fn decide_continuation(
         mapping_can_represent: continuation_mapping_can_represent(author_message)
             && model_registration(&assistance.model_registration_revision)
                 .is_some_and(ModelRegistration::continues),
-    });
-    // A reference that the destination confirmed expired or unusable never continues: the
-    // request sends the full input (ADR 0033).
-    let mapping = match (
-        mapping,
-        prior
+        prior_reference_unusable: prior
             .as_ref()
             .is_some_and(|loaded| loaded.confirmed_unusable),
-    ) {
-        (ContinuationInputMapping::Incremental, true) => ContinuationInputMapping::Full,
-        (mapping, _) => mapping,
-    };
+        current_input_changed: crate::agent_run_tool_result::continuation_input_changed(
+            client, claim,
+        )
+        .await?,
+    });
     let prior_binding_id = match mapping {
         ContinuationInputMapping::Incremental => known_prior_binding_id.clone(),
         ContinuationInputMapping::None

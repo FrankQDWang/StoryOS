@@ -33,6 +33,12 @@ pub struct ContinuationMappingInput {
     pub current: ContinuationIdentity,
     pub prior: Option<ContinuationIdentity>,
     pub mapping_can_represent: bool,
+    /// The destination confirmed that the prior reference expired or is unusable.
+    pub prior_reference_unusable: bool,
+    /// The input of a Tool result continuation, other than its Tool results, differs from the
+    /// input that the prior response read: for example, the author edited the Chapter during the
+    /// Tool exchange (ADR 0085).
+    pub current_input_changed: bool,
 }
 
 /// Ordinary author text can use a delta plus an eligible prior reference.
@@ -53,7 +59,12 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     {
         return ContinuationInputMapping::NewTransport;
     }
-    if input.mapping_can_represent {
+    // An incremental request sends only the new items, so it needs a usable prior reference that
+    // holds the current input. Otherwise the request sends the full input (ADR 0033).
+    if input.mapping_can_represent
+        && !input.prior_reference_unusable
+        && !input.current_input_changed
+    {
         ContinuationInputMapping::Incremental
     } else {
         ContinuationInputMapping::Full

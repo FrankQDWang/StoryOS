@@ -108,7 +108,7 @@ pub(super) async fn open_session(
 }
 
 /// Issues one Create Editor Session Command Challenge and returns the request that uses it.
-pub(super) async fn open_session_request(
+pub(crate) async fn open_session_request(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,

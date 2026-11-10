@@ -1,10 +1,12 @@
 use serde_json::{Value, json};
+use storyos_adapter_mcp_client::McpExchange;
 use storyos_application::{
-    NoContractFaults, ProjectScope, complete_agent_run, complete_agent_run_with_tools,
+    EditorSessionStore, NoContractFaults, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    ToolCallRequest, ToolDestinationAdapter, complete_agent_run, complete_agent_run_with_tools,
 };
 use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, DeploymentDestination, ToolCallState, ToolEnablement,
-    ToolResultProjection,
+    ToolObservation, ToolResultProjection,
 };
 use tokio_postgres::Client;
 
@@ -12,18 +14,74 @@ use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run, claim_run, store
 use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
 use crate::agent_run_tool_call::tests::{set_research_tool, text_and_call_stream};
 use crate::agent_run_tool_dispatch::tests::{
-    Hooked, POST, RESULT, SEARCH, exa_tools, mcp_replies, point_mcp, reply,
+    Hooked, POST, RESULT, SEARCH, client, exa_tools, mcp_replies, point_mcp, reply,
 };
 use crate::agent_run_tool_exposure::tests::{advisory_stream, sse};
+use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
 use crate::project_destination_binding::grant_scope_tests::current_grant;
+use crate::set_current_chapter_authority_tests::open_session_request;
 
 const MODEL_POST: &str = "POST /api/plan/v3/responses HTTP/1.1";
 const V3: &str = "project_writing_assistance_v3";
+const EDITED: &str = "The tide came in at dawn.";
 
 /// The Tool side of one test Run: the result of its one `tools/call`, or no Tool adapter.
 enum ToolSide {
     Result(Value),
+    /// The result, and then an Author Edit of the Chapter of the Run, during the Tool exchange.
+    ResultThenEdit(Value),
     NoAdapter,
+}
+
+/// The real MCP client. After its exchange, the author opens an editor session and edits the
+/// Chapter of the Run, as an author can do during a search.
+struct EditDuringExchange<'a> {
+    store: &'a crate::PostgresProjectReader,
+    scope: ProjectScope,
+    chapter_id: String,
+}
+
+impl ToolDestinationAdapter for EditDuringExchange<'_> {
+    type Prepared = McpExchange;
+
+    async fn prepare(
+        &self,
+        request: &ToolCallRequest,
+    ) -> Result<PreparedRequest<McpExchange>, PreDispatchRefusal> {
+        ToolDestinationAdapter::prepare(&client(), request).await
+    }
+
+    async fn exchange(&self, prepared: McpExchange) -> ToolObservation {
+        let observation = ToolDestinationAdapter::exchange(&client(), prepared).await;
+        let request = open_session_request(self.store, &self.scope, "e5a0").await;
+        let session = self.store.create_editor_session(&request).await.unwrap();
+        apply_named_edit(
+            self.store,
+            &self.scope,
+            NamedEdit {
+                editor_session_id: request.editor_session_id.as_ref(),
+                chapter_id: &self.chapter_id,
+                expected_revision_id: &session.base_snapshot.authoritative_revision_id,
+                suffix: "e5a1",
+                local_intent_sequence: 1,
+                text: EDITED,
+                proposal_target: None,
+            },
+        )
+        .await;
+        observation
+    }
+}
+
+async fn run_chapter(admin: &Client, run_id: &str) -> String {
+    admin
+        .query_one(
+            "SELECT chapter_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0)
 }
 
 /// The facts of one settled Run, and the request lines that each fake destination received.
@@ -114,29 +172,52 @@ async fn continue_run(
         .unwrap();
     set_research_tool(&store, &scope, suffix, ToolEnablement::Enabled).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let mcp = match tool {
-        ToolSide::Result(result) => {
+    let (result, edit) = match tool {
+        ToolSide::Result(result) => (Some(result), false),
+        ToolSide::ResultThenEdit(result) => (Some(result), true),
+        ToolSide::NoAdapter => (None, false),
+    };
+    let mcp = match result {
+        Some(result) => {
             let call = reply(/*id*/ 0, result);
             let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
             point_mcp(&admin, &scope, &mcp_base).await;
-            let tools = Hooked {
+            let hooked = Hooked {
                 admin: &admin,
                 after_prepare: String::new(),
                 after_exchange: after_exchange.replace("{run}", &run_id),
             };
-            complete_agent_run_with_tools(
-                &store,
-                &adapter(),
-                &tools,
-                &NoContractFaults,
-                &RuntimeClock,
-                &claim,
-            )
-            .await
-            .unwrap();
+            let edited = EditDuringExchange {
+                store: &store,
+                scope: scope.clone(),
+                chapter_id: run_chapter(&admin, &run_id).await,
+            };
+            let model = adapter();
+            let settled = if edit {
+                complete_agent_run_with_tools(
+                    &store,
+                    &model,
+                    &edited,
+                    &NoContractFaults,
+                    &RuntimeClock,
+                    &claim,
+                )
+                .await
+            } else {
+                complete_agent_run_with_tools(
+                    &store,
+                    &model,
+                    &hooked,
+                    &NoContractFaults,
+                    &RuntimeClock,
+                    &claim,
+                )
+                .await
+            };
+            settled.unwrap();
             served(mcp).await
         }
-        ToolSide::NoAdapter => {
+        None => {
             complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
                 .await
                 .unwrap();
@@ -453,14 +534,7 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
     .await;
     let facts = run_facts(&admin, &ran.run_id).await;
     let (old_grant, _) = current_grant(&store, &admin, &ran.scope).await;
-    let chapter_id: String = admin
-        .query_one(
-            "SELECT chapter_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&ran.run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
+    let chapter_id = run_chapter(&admin, &ran.run_id).await;
     let rebound_run = admit_run(
         &store,
         &ran.scope,
@@ -607,6 +681,64 @@ async fn a_result_above_the_item_limit_reenters_with_a_prefix_and_an_explicit_ma
             true,
             true,
             true,
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let ToolSide::Result(result) = text_result(RESULT, false) else {
+        unreachable!("text_result gives a result")
+    };
+    let (_store, admin, ran) = continue_run(
+        "e5b",
+        0xe5ba,
+        ToolSide::ResultThenEdit(result),
+        |_| vec![advisory_stream("resp_e5b_2")],
+        "",
+    )
+    .await;
+    let source = source(&admin, &ran.run_id, "ok", None).await;
+    let mut rebuilt = continuation_step(
+        "e5b",
+        "advisory",
+        json!([
+            {"role": "user"},
+            {"type": "function_call", "call_id": "call_01", "name": "web_search",
+             "arguments": SEARCH},
+            ok_output(RESULT),
+        ]),
+        &source,
+    );
+    // The prior response read the Chapter before the edit, so the request does not continue it.
+    rebuilt["previous_response_id"] = Value::Null;
+    let message: String = admin
+        .query_one(
+            "SELECT (payload #>> '{wire,serialized_payload}')::jsonb #>> '{input,0,content,0,text}'
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND decision_position = 1",
+            &[&ran.run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    assert_eq!(
+        (
+            run_facts(&admin, &ran.run_id).await,
+            message.contains(EDITED),
+            ran.model,
+            ran.mcp,
+        ),
+        (
+            completed(vec![request_step(), rebuilt]),
+            true,
+            vec![MODEL_POST.to_owned(); 2],
+            vec![POST.to_owned(); 4],
         )
     );
 }

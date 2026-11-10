@@ -227,6 +227,53 @@ pub(crate) async fn tool_outputs(
     Ok(outputs)
 }
 
+/// True when the active RunStep is a `tool_result_continuation` and the text that its request
+/// sends, other than its Tool results, differs from that of the RunStep before it. The source
+/// version of the author instruction is new in each RunStep, so only the class and the content of
+/// each selected item count. The prior response read the items of that RunStep, so an incremental
+/// request cannot carry the change.
+pub(crate) async fn continuation_input_changed(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<bool, CompleteAgentRunError> {
+    let row = client
+        .query_opt(
+            "WITH items AS (
+               SELECT requirement.decision_position,
+                      requirement.payload #> '{operation_requirement,tool_results}' IS NOT NULL
+                        AS continuation,
+                      (SELECT jsonb_agg(jsonb_build_array(item -> 'source_class',
+                                                          item -> 'content')
+                                        ORDER BY ordinality)
+                         FROM jsonb_array_elements(requirement.payload -> 'selected')
+                              WITH ORDINALITY AS selected(item, ordinality)
+                        WHERE item ->> 'source_class' NOT IN ('tool_result', 'host_control'))
+                        AS input
+                 FROM storyos.operation_requirements AS requirement
+                 JOIN storyos.agent_runs AS run
+                   ON (run.owner_user_id, run.project_id, run.run_id) =
+                      (requirement.owner_user_id, requirement.project_id, requirement.run_id)
+                WHERE requirement.owner_user_id = $1::text::uuid
+                  AND requirement.project_id = $2::text::uuid
+                  AND requirement.run_id = $3::text::uuid
+                  AND requirement.requirement_role = 'primary'
+                  AND requirement.decision_position
+                      IN (run.active_decision_position, run.active_decision_position - 1))
+             SELECT active.input IS DISTINCT FROM earlier.input
+               FROM items AS active
+               JOIN items AS earlier ON earlier.decision_position = active.decision_position - 1
+              WHERE active.continuation",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(row.is_some_and(|row| row.get(/*idx*/ 0)))
+}
+
 /// The lineage of a Proposal that the active RunStep opens, when that RunStep is a
 /// `tool_result_continuation`: the Run, the RunStep (its position and Operation Requirement), the
 /// Model Attempt, and the ToolCall identities.
