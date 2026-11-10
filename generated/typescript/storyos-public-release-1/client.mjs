@@ -521,6 +521,18 @@ export async function cancelAgentRun({ projectId, runId, request, idempotencyKey
   return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/cancel`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function listResearchSources({ projectId, runId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listResearchSources requires projectId");
+  if (typeof runId !== "string" || runId.length === 0) throw new TypeError("listResearchSources requires runId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/research-sources` });
+}
+
+export async function getResearchSource({ projectId, sourceSnapshotId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getResearchSource requires projectId");
+  if (typeof sourceSnapshotId !== "string" || sourceSnapshotId.length === 0) throw new TypeError("getResearchSource requires sourceSnapshotId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/research-sources/${encodeURIComponent(sourceSnapshotId)}` });
+}
+
 export async function digestExportProjectArchive(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestExportProjectArchive requires request");
   const canonical = canonicalJson(request);

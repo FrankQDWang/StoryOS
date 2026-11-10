@@ -136,6 +136,8 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("model_attempts", "canonical/model_attempts.json"),
     ("tool_calls", "canonical/tool_calls.json"),
+    ("source_snapshots", "canonical/source_snapshots.json"),
+    ("source_gaps", "canonical/source_gaps.json"),
     (
         "operation_requirements",
         "canonical/operation_requirements.json",

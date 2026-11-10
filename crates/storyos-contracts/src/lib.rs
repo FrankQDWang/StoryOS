@@ -35,6 +35,7 @@ mod release1_reject_proposal_operations;
 mod release1_reopen_rejected_operations;
 mod release1_reopen_withdrawn_proposal;
 mod release1_replan_proposal;
+mod release1_research_source;
 mod release1_route_catalog;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
@@ -272,6 +273,12 @@ pub use release1_replan_proposal::{
     ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalRefusalReason,
     ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult,
     ReplanSourceCondition,
+};
+pub use release1_research_source::{
+    GET_RESEARCH_SOURCE_METHOD, GET_RESEARCH_SOURCE_PATH, GET_RESEARCH_SOURCE_RESPONSE_SCHEMA_ID,
+    GetResearchSourceResponse, LIST_RESEARCH_SOURCES_METHOD, LIST_RESEARCH_SOURCES_PATH,
+    LIST_RESEARCH_SOURCES_RESPONSE_SCHEMA_ID, ListResearchSourcesResponse, SourceGapInspect,
+    SourceGapReason, SourceSnapshotInspect, SourceSnapshotKind,
 };
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,

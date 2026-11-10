@@ -36,6 +36,7 @@ fn candidate<'a>(
         decision_id: "decision-1",
         state,
         result_text,
+        source_snapshot_ids: &[],
     }
 }
 
@@ -48,6 +49,7 @@ fn source(tool_call_id: &str, state: &str, kept_result_tokens: Option<u64>) -> T
         state: state.to_owned(),
         trust: "data_only".to_owned(),
         kept_result_tokens,
+        source_snapshot_ids: Vec::new(),
     }
 }
 
@@ -68,13 +70,17 @@ fn tool_items(record: &CurrentPassageAssemblyRecord) -> Vec<(String, ProjectionM
 }
 
 #[test]
-fn each_resolved_tool_call_is_one_data_only_candidate_and_states_its_outcome_in_one_sentence() {
+fn each_resolved_tool_call_is_one_data_only_candidate_named_by_its_snapshots_with_one_sentence() {
     let mut record = passage();
+    let snapshots = ["s1".to_owned(), "s2".to_owned()];
 
     assemble_tool_result_continuation(
         &mut record,
         &[
-            candidate("c1", ToolCallState::Settled, Some("Built in 1890.")),
+            ToolResultCandidate {
+                source_snapshot_ids: &snapshots,
+                ..candidate("c1", ToolCallState::Settled, Some("Built in 1890."))
+            },
             candidate("c2", ToolCallState::Failed, None),
             candidate("c3", ToolCallState::Unknown, None),
             candidate("c4", ToolCallState::Refused, None),
@@ -92,14 +98,17 @@ fn each_resolved_tool_call_is_one_data_only_candidate_and_states_its_outcome_in_
         (
             ContextCause::ToolResultContinuation,
             Some(vec![
-                source("c1", "ok", None),
+                ToolResultSource {
+                    source_snapshot_ids: snapshots.to_vec(),
+                    ..source("c1", "ok", None)
+                },
                 source("c2", "unavailable", None),
                 source("c3", "unavailable", None),
                 source("c4", "rejected", None),
             ]),
             vec![
                 (
-                    "c1".to_owned(),
+                    "s1,s2".to_owned(),
                     exact,
                     r#"<tool_result source="c1" state="ok">Built in 1890.</tool_result>"#
                         .to_owned()

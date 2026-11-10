@@ -26,6 +26,7 @@ mod ordinary_passage_request;
 mod project_tool_enablement;
 mod rebuild_expired_reference;
 mod research_destination;
+mod research_source;
 mod retrieve_original_result;
 mod tool_call;
 mod tool_dispatch;
@@ -243,6 +244,10 @@ pub use replan_proposal::{
 pub use research_destination::{
     EXA_ACCOUNT_BOUNDARY, EXA_CREDENTIAL_REFERENCE, EXA_MCP_SERVER_URL, EXA_TOOL_REGISTRATION,
     RESEARCH_TOOL_OFFER, ResearchToolOffer, tool_registration,
+};
+pub use research_source::{
+    CapturedSource, ResearchCapture, ResultFormat, SOURCE_TEXT_MAX_BYTES, SourceGap,
+    SourceGapReason, SourceKind, capture_research_sources, tool_result_source_version,
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,

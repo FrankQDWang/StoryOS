@@ -903,7 +903,7 @@ fn refusal_problem(refusal: CreateAgentRunRefusal) -> ApiError {
     }
 }
 
-fn agent_run_read_error(error: CreateAgentRunError) -> ApiError {
+pub(super) fn agent_run_read_error(error: CreateAgentRunError) -> ApiError {
     CREATE_AGENT_RUN.problem(match error {
         CreateAgentRunError::BindingConflict => ProjectCommandError::BindingConflict,
         CreateAgentRunError::Unavailable(source) => ProjectCommandError::Unavailable(source),

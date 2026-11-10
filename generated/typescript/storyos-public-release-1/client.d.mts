@@ -557,6 +557,42 @@ export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: 
 
 export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
 
+export type SourceSnapshotKind = "search_result" | "page";
+
+export type SourceGapReason = "failed" | "empty" | "missing";
+
+export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: string, kind: SourceSnapshotKind, 
+/**
+ * The URL that the server reported: the Evidence Locator.
+ */
+locator: string, title: string | null, published: string | null, captured_at: string, 
+/**
+ * The position of this revision in the lineage of its locator in the Project, from 1.
+ */
+revision: string, content_digest: string, 
+/**
+ * The byte length of the stored text.
+ */
+text_bytes: string, 
+/**
+ * The byte length of the text before the 256 KiB bound.
+ */
+original_bytes: string, truncated: boolean, };
+
+export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, };
+
+export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, 
+/**
+ * In ToolCall order, then in result order.
+ */
+snapshots: Array<SourceSnapshotInspect>, 
+/**
+ * In ToolCall order, then in request order.
+ */
+gaps: Array<SourceGapInspect>, };
+
+export type GetResearchSourceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, snapshot: SourceSnapshotInspect, text: string, };
+
 export type ExportProjectArchiveInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, archive_profile: string, archive_path_profile: string, };
 
 export type ExportProjectArchiveRequest = { command_schema: string, export_project_archive_input: ExportProjectArchiveInput, };
@@ -738,6 +774,8 @@ export declare function digestPauseAgentRun(request: PauseAgentRunRequest, crypt
 export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;
 export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
+export declare function listResearchSources(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<ListResearchSourcesResponse>;
+export declare function getResearchSource(options: StoryOSQueryOptions & { projectId: string; sourceSnapshotId: string }): Promise<GetResearchSourceResponse>;
 export declare function digestExportProjectArchive(request: ExportProjectArchiveRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function exportProjectArchive(options: StoryOSQueryOptions & { projectId: string; request: ExportProjectArchiveRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportProjectArchiveResponse>;
 export declare function digestExportHumanReadableManuscript(request: ExportHumanReadableManuscriptRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

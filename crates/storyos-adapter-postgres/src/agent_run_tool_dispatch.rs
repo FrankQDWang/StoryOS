@@ -294,7 +294,14 @@ async fn record_exchange(
             result: settlement.result.as_ref(),
         },
     )
-    .await
+    .await?;
+    // The result that the settlement validated is captured once, in the same transaction.
+    let capture = storyos_core::capture_research_sources(
+        request.tool.result_format,
+        &row.plan()?.intake,
+        &settlement,
+    );
+    crate::research_source::capture(client, claim, &row.tool_call_id, &capture).await
 }
 
 /// A ToolCall that stayed `dispatched` after a crash or a lost lease: its outcome is not known,

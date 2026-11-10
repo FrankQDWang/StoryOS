@@ -1,0 +1,185 @@
+{
+  "$defs": {
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "SourceGapInspect": {
+      "additionalProperties": false,
+      "description": "One requested URL with no Snapshot. It is never a citation.",
+      "properties": {
+        "locator": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/SourceGapReason"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "source_gap_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "tool_call_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_gap_id",
+        "tool_call_id",
+        "locator",
+        "reason",
+        "recorded_at"
+      ],
+      "type": "object"
+    },
+    "SourceGapReason": {
+      "enum": [
+        "failed",
+        "empty",
+        "missing"
+      ],
+      "type": "string"
+    },
+    "SourceSnapshotInspect": {
+      "additionalProperties": false,
+      "description": "One immutable Source Snapshot revision, with no captured text.",
+      "properties": {
+        "captured_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SourceSnapshotKind"
+        },
+        "locator": {
+          "description": "The URL that the server reported: the Evidence Locator.",
+          "type": "string"
+        },
+        "original_bytes": {
+          "description": "The byte length of the text before the 256 KiB bound.",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "published": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "The position of this revision in the lineage of its locator in the Project, from 1.",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "source_snapshot_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "text_bytes": {
+          "description": "The byte length of the stored text.",
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_call_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source_snapshot_id",
+        "tool_call_id",
+        "kind",
+        "locator",
+        "captured_at",
+        "revision",
+        "content_digest",
+        "text_bytes",
+        "original_bytes",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "SourceSnapshotKind": {
+      "enum": [
+        "search_result",
+        "page"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.query.research-sources.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "gaps": {
+      "description": "In ToolCall order, then in request order.",
+      "items": {
+        "$ref": "#/$defs/SourceGapInspect"
+      },
+      "type": "array"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "run_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "schema_id": {
+      "const": "storyos.query.research-sources.response.v1",
+      "type": "string"
+    },
+    "snapshots": {
+      "description": "In ToolCall order, then in result order.",
+      "items": {
+        "$ref": "#/$defs/SourceSnapshotInspect"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "run_id",
+    "snapshots",
+    "gaps"
+  ],
+  "title": "StoryOS Research Sources Response",
+  "type": "object"
+}

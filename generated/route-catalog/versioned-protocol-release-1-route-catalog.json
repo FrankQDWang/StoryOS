@@ -2976,6 +2976,122 @@
       "wire_owner": "protocol"
     },
     {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.listResearchSources.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "listResearchSources",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}/research-sources",
+      "preconditions": [
+        "server_derived_project_scope",
+        "run_scope_join"
+      ],
+      "schemas": {
+        "request": "storyos.query.research-sources.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.research-sources.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "research-source:list",
+      "wire_owner": "protocol"
+    },
+    {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.getResearchSource.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getResearchSource",
+      "path": "/api/v1/projects/{project_id}/research-sources/{source_snapshot_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "research_source_scope_join"
+      ],
+      "schemas": {
+        "request": "storyos.query.research-source.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.research-source.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "research-source:read",
+      "wire_owner": "protocol"
+    },
+    {
       "action_class": "explicit_project_command",
       "activity": {
         "no_effect": [],

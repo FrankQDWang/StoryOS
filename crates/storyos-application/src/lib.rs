@@ -76,6 +76,7 @@ mod reject_proposal_operations;
 mod reopen_rejected_operations;
 mod reopen_withdrawn_proposal;
 mod replan_proposal;
+mod research_source;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -228,6 +229,7 @@ pub use reopen_withdrawn_proposal::{
     ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
 pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
+pub use research_source::{ResearchSourceReadStore, ResearchSourceText, ResearchSources};
 pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
