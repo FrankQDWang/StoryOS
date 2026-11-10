@@ -61,6 +61,7 @@ pub(crate) async fn advance(
             SuccessorWork::Retrieve(request) => {
                 WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(request)))
             }
+            SuccessorWork::ToolCalls => WorkPhase::ToolCalls,
         },
     )
 }

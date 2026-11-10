@@ -349,7 +349,6 @@ pub(crate) async fn record(
                                 &wire.admission,
                             );
                     }
-                    // A pending ToolCall refuses the Run until execution exists (ADR 0084).
                     ("settled", Some(decision_id), binding_id, tool_calls_pending)
                 }
                 // A successor that asks for a function keeps its items as evidence, and the Run
@@ -482,9 +481,15 @@ pub(crate) async fn finish_dispatched(
             .await?,
         }));
     }
-    // A successor that asked for a function refuses the Run, because no Tool executes: its batch
-    // did not validate, or its ToolCalls stay `pending` (ADR 0084).
-    let refusal = flag(marker, "successor_requests_function")
+    // A successor Decision with ToolCalls continues to the Tool Gateway. A successor that asked
+    // for a function with a batch that did not validate refuses the Run (ADR 0084).
+    let supplies_tool_call = flag(marker, "supplies_tool_call");
+    if supplies_tool_call
+        && crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?
+    {
+        return Ok(SuccessorWork::ToolCalls);
+    }
+    let refusal = (flag(marker, "successor_requests_function") && !supplies_tool_call)
         .then(crate::agent_run_observation::research_refusal);
     update_run(
         client,

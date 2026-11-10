@@ -8,22 +8,31 @@ use storyos_application::{
     ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
     CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
     ContractFaultObserver, DiagnosticField, DiagnosticId, ExportWorkStore, GatewayClock,
-    ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState, claim_next_agent_run,
-    claim_next_export_work, complete_agent_run, complete_archive_export, complete_readable_export,
+    ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState, ToolDestinationAdapter,
+    ToolDispatchStore, claim_next_agent_run, claim_next_export_work, complete_agent_run_with_tools,
+    complete_archive_export, complete_readable_export,
 };
 
 const ATTEMPTS: u64 = 4;
 const SERIALIZATION_FAILURE: &str = "40001";
 
 /// Combined persistence port for the packaged Worker loop.
-pub trait WorkerStore: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore {}
+pub trait WorkerStore:
+    ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+{
+}
 
-impl<T> WorkerStore for T where T: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore {}
+impl<T> WorkerStore for T where
+    T: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore + ToolDispatchStore
+{
+}
 
-/// The destination side of the Worker loop: one Model Provider Adapter and its fault observer.
-pub struct ModelDestination<A, O> {
+/// The destination side of the Worker loop: one Model Provider Adapter, its fault observer, and
+/// the Tool destination of the ToolDispatch phase.
+pub struct ModelDestination<A, O, T> {
     pub adapter: A,
     pub observer: O,
+    pub tools: T,
 }
 
 /// The lease of a readable export claim: the `STORYOS_EXPORT_LEASE_TTL_SECS` setting, or 30
@@ -32,9 +41,9 @@ pub fn readable_export_lease_ttl(seconds: Option<u64>) -> Duration {
     Duration::from_secs(seconds.unwrap_or(/*default*/ 30))
 }
 
-pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver>(
+pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
     store: impl WorkerStore,
-    destination: ModelDestination<A, O>,
+    destination: ModelDestination<A, O, T>,
 ) {
     loop {
         if !step(&store, &destination).await {
@@ -43,9 +52,13 @@ pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver>(
     }
 }
 
-pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
+pub async fn run_once<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+>(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O>,
+    destination: &ModelDestination<A, O, T>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match claim_after_contention(|| claim_next_export_work(store)).await? {
         Some(ClaimedExportWork::Readable(claim)) => {
@@ -78,9 +91,9 @@ pub async fn claim_only<A: ModelProviderAdapter>(
     Ok(())
 }
 
-async fn step<A: ModelProviderAdapter, O: ContractFaultObserver>(
+async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinationAdapter>(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O>,
+    destination: &ModelDestination<A, O, T>,
 ) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
@@ -181,18 +194,23 @@ async fn archive_export_claim(
     attempt = tracing::field::Empty,
     outcome = tracing::field::Empty,
 ))]
-async fn agent_run_claim<A: ModelProviderAdapter, O: ContractFaultObserver>(
+async fn agent_run_claim<
+    A: ModelProviderAdapter,
+    O: ContractFaultObserver,
+    T: ToolDestinationAdapter,
+>(
     store: &impl WorkerStore,
-    destination: &ModelDestination<A, O>,
+    destination: &ModelDestination<A, O, T>,
     claim: &ClaimedAgentRun,
     attempts: u64,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     retry(
         attempts,
         || {
-            complete_agent_run(
+            complete_agent_run_with_tools(
                 store,
                 &destination.adapter,
+                &destination.tools,
                 &destination.observer,
                 &RuntimeClock,
                 claim,

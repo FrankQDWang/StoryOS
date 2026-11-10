@@ -4186,8 +4186,9 @@ GRANT SELECT,INSERT,UPDATE ON TABLE storyos.model_attempts TO storyos_runtime;
 
 -- ToolCalls (ADR 0034, ADR 0084). One row for each member of the validated function request batch of
 -- one durable Agent Decision, in item order. The identity is the Model Attempt and the native call
--- identifier, so a second delivery of the same observation creates no second row. A row holds no result
--- and no authority: the state stays pending until a later ticket executes the ToolCall.
+-- identifier, so a second delivery of the same observation creates no second row. The Tool Gateway
+-- claims each row one time: `attempt` holds the Admission Decision, the Wire Payload Projection
+-- without the key, the Destination Attempt, and the Outbound Disclosure Event. The result text is data.
 
 CREATE TABLE storyos.tool_calls (
     owner_user_id uuid NOT NULL,
@@ -4207,6 +4208,13 @@ CREATE TABLE storyos.tool_calls (
     arguments jsonb NOT NULL,
     argument_digest text NOT NULL,
     state text NOT NULL,
+    refusal text,
+    destination_attempt_id uuid,
+    attempt jsonb,
+    effect_outcome jsonb,
+    result_text text,
+    result_digest text,
+    result_bytes integer,
     CONSTRAINT tool_calls_pkey PRIMARY KEY (owner_user_id, project_id, tool_call_id),
     CONSTRAINT tool_calls_attempt_call_key UNIQUE (owner_user_id, project_id, model_attempt_id, call_id),
     CONSTRAINT tool_calls_attempt_position_key UNIQUE (owner_user_id, project_id, model_attempt_id, call_position),
@@ -4216,7 +4224,11 @@ CREATE TABLE storyos.tool_calls (
     CONSTRAINT tool_calls_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT tool_calls_digest_check CHECK (argument_digest ~ '^sha256:[0-9a-f]{64}$'::text),
     CONSTRAINT tool_calls_name_check CHECK (char_length(function_name) BETWEEN 1 AND 128 AND char_length(registration_id) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
-    CONSTRAINT tool_calls_state_check CHECK ((state = 'pending'::text)),
+    CONSTRAINT tool_calls_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text, 'refused'::text, 'awaiting_approval'::text]))),
+    CONSTRAINT tool_calls_refusal_shape CHECK (((state = ANY (ARRAY['refused'::text, 'awaiting_approval'::text])) = (refusal IS NOT NULL)) AND (char_length(refusal) BETWEEN 1 AND 64)),
+    CONSTRAINT tool_calls_attempt_shape CHECK (((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= (attempt IS NOT NULL)) AND (attempt IS NULL OR jsonb_typeof(attempt) = 'object'::text)),
+    CONSTRAINT tool_calls_outcome_shape CHECK (((effect_outcome IS NULL) = ((state = ANY (ARRAY['pending'::text, 'dispatched'::text])) OR (attempt IS NULL))) AND (effect_outcome IS NULL OR jsonb_typeof(effect_outcome) = 'object'::text)),
+    CONSTRAINT tool_calls_result_shape CHECK (((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND (result_text IS NULL OR state = 'settled'::text) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (result_bytes BETWEEN 0 AND 262144)),
     CONSTRAINT tool_calls_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT tool_calls_owner_user_id_project_id_model_attempt_id_fkey FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL
 );
@@ -4230,6 +4242,36 @@ ALTER TABLE storyos.tool_calls FORCE ROW LEVEL SECURITY;
 CREATE POLICY tool_calls_exact_scope ON storyos.tool_calls USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
 
 GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
+
+GRANT UPDATE(state, refusal, destination_attempt_id, attempt, effect_outcome, result_text, result_digest, result_bytes) ON TABLE storyos.tool_calls TO storyos_runtime;
+
+-- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
+-- resolved ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract
+-- Drift. The payload holds identities, the outcome, and the byte count, and no result text.
+
+CREATE TABLE storyos.agent_run_events (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    event_kind text NOT NULL,
+    payload jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT agent_run_events_pkey PRIMARY KEY (owner_user_id, project_id, event_id),
+    CONSTRAINT agent_run_events_kind_check CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_registration_quarantined'::text]))),
+    CONSTRAINT agent_run_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT agent_run_events_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
+);
+
+CREATE INDEX agent_run_events_run_idx ON storyos.agent_run_events USING btree (owner_user_id, project_id, run_id, event_id);
+
+ALTER TABLE storyos.agent_run_events ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.agent_run_events FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_run_events_exact_scope ON storyos.agent_run_events USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.agent_run_events TO storyos_runtime;
 
 -- Proposals
 

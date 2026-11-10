@@ -378,3 +378,5 @@ fn retrieve() -> RetrieveRequest {
         declared_targets: Vec::new(),
     }
 }
+
+crate::tool_gateway_ports::no_tool_calls!(ScriptedStore);

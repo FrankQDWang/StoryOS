@@ -18,6 +18,7 @@
 mod contract_check;
 mod record;
 mod session;
+mod tool_destination;
 
 use std::time::Duration;
 
@@ -26,6 +27,7 @@ use storyos_application::{
     CredentialReference, CredentialResolver, DiagnosticField as _, DiagnosticId,
     PreDispatchRefusal, PreparedRequest, ResolvedCredential, WirePayloadProjection,
 };
+use storyos_core::{ContractDifference, ToolRegistration};
 
 pub use record::{CallResult, DiscoveredTool, ToolDiscoveryRecord};
 
@@ -46,6 +48,14 @@ pub enum McpRequest {
     /// `initialize`, then one `tools/call`.
     Call {
         server_url: String,
+        tool: String,
+        arguments: Map<String, Value>,
+    },
+    /// `initialize`, each page of `tools/list`, the Tool Contract Drift check against
+    /// `registration`, and then one `tools/call` of `tool` only when the contract has no drift.
+    Dispatch {
+        server_url: String,
+        registration: &'static ToolRegistration,
         tool: String,
         arguments: Map<String, Value>,
     },
@@ -70,6 +80,9 @@ pub enum McpObservation {
     },
     Discovered(ToolDiscoveryRecord),
     Called(CallResult),
+    /// The fresh tool list of a Dispatch drifted from the pinned contract, so `tools/call` was
+    /// not sent.
+    Drift(Vec<ContractDifference>),
     /// A timeout, a dropped body, or a server error after the operation request left.
     OutcomeUnknown,
 }
@@ -97,7 +110,7 @@ impl<R: CredentialResolver> McpClient<R> {
         request: &McpRequest,
         credential_reference: Option<&CredentialReference>,
     ) -> Result<PreparedRequest<McpExchange>, PreDispatchRefusal> {
-        let (McpRequest::Discover { server_url } | McpRequest::Call { server_url, .. }) = request;
+        let server_url = request.server_url();
         if !plain_url(server_url) {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
@@ -106,6 +119,19 @@ impl<R: CredentialResolver> McpClient<R> {
             McpRequest::Call {
                 tool, arguments, ..
             } => json!({
+                "method": "tools/call",
+                "params": {"name": tool, "arguments": arguments},
+            }),
+            McpRequest::Dispatch {
+                registration,
+                tool,
+                arguments,
+                ..
+            } => json!({
+                "contract_check": {
+                    "method": "tools/list",
+                    "registration_revision": registration.revision,
+                },
                 "method": "tools/call",
                 "params": {"name": tool, "arguments": arguments},
             }),
@@ -146,7 +172,7 @@ impl<R: CredentialResolver> McpClient<R> {
             request,
             credential,
         } = prepared;
-        let (McpRequest::Discover { server_url } | McpRequest::Call { server_url, .. }) = &request;
+        let server_url = request.server_url();
         let observation = session::run(server_url, &credential, &request, self.timeout).await;
         tracing::info!(
             server_url = DiagnosticId(server_url).diagnostic(),
@@ -154,6 +180,15 @@ impl<R: CredentialResolver> McpClient<R> {
             "mcp exchange"
         );
         observation
+    }
+}
+
+impl McpRequest {
+    fn server_url(&self) -> &str {
+        let (Self::Discover { server_url }
+        | Self::Call { server_url, .. }
+        | Self::Dispatch { server_url, .. }) = self;
+        server_url
     }
 }
 
@@ -166,6 +201,7 @@ impl McpObservation {
             Self::InvalidResult { reason } => reason,
             Self::Discovered(_) => "discovered",
             Self::Called(_) => "called",
+            Self::Drift(_) => "drift",
             Self::OutcomeUnknown => "outcome_unknown",
         }
     }

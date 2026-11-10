@@ -68,7 +68,7 @@ pub(crate) async fn insert_tool_calls(
     Ok(())
 }
 
-/// Whether the Run has a ToolCall that no execution resolved.
+/// Whether the Run has a ToolCall that no observation or refusal resolved.
 pub(crate) async fn pending_tool_call_exists(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -78,7 +78,7 @@ pub(crate) async fn pending_tool_call_exists(
             "SELECT EXISTS (
                SELECT 1 FROM storyos.tool_calls
                 WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                  AND run_id = $3::text::uuid AND state = 'pending')",
+                  AND run_id = $3::text::uuid AND state IN ('pending', 'dispatched'))",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

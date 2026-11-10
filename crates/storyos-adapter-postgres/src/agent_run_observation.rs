@@ -31,7 +31,7 @@ pub(crate) enum CreateSettlement<'a> {
     /// (ADR 0084). The items stay as evidence, and the Run refuses with one result sentence.
     FunctionRequested,
     /// The Decision is a validated function request: its ToolCalls become durable with it, in
-    /// state `pending`. Execution is later work, so the Run refuses with the same sentence.
+    /// state `pending`, and the claimed Run continues to the Tool Gateway.
     ToolCallsPending,
     NotSubmitted,
     Rejected(&'a str),
@@ -129,9 +129,8 @@ pub(crate) async fn persist_create_result(
     let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
-        CreateSettlement::FunctionRequested | CreateSettlement::ToolCallsPending => {
-            refusal = Some(research_refusal());
-        }
+        CreateSettlement::FunctionRequested => refusal = Some(research_refusal()),
+        CreateSettlement::ToolCallsPending => {}
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
@@ -202,16 +201,18 @@ pub(crate) async fn persist_create_result(
         )
         .await?;
     }
+    let tool_calls = matches!(result.settlement, CreateSettlement::ToolCallsPending);
     update_run(
         client,
         claim,
         match (&refusal, hold) {
             (Some(_), _) => "refused",
             (None, Some(_)) => "claimed",
+            (None, None) if tool_calls => "claimed",
             (None, None) => "completed",
         },
         refusal.as_ref(),
-        /*clear_lease*/ hold.is_none(),
+        /*clear_lease*/ hold.is_none() && !tool_calls,
     )
     .await?;
     if stream_hold {
@@ -219,13 +220,13 @@ pub(crate) async fn persist_create_result(
     }
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
+        None if tool_calls => WorkPhase::ToolCalls,
         None => WorkPhase::Done(CompleteAgentRun::Settled),
     })
 }
 
-/// The settlement of a Run whose response asks for a function while no Tool executes
-/// (ADR 0084): the batch did not validate, or its ToolCalls stay `pending`. The author sees one
-/// result sentence.
+/// The settlement of a Run whose response asks for a function and whose batch did not validate
+/// (ADR 0084). The author sees one result sentence.
 pub(crate) fn research_refusal() -> serde_json::Value {
     serde_json::json!({
         "kind": "execution_refused",

@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use crate::{
     FUNCTION_CALL_NATIVE_TYPE, IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState,
-    ToolIntake, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    ToolIntake, ToolRegistrationLifecycle,
 };
 
 /// The longest native call identifier that a ToolCall row keeps.
@@ -281,9 +281,7 @@ fn validate_member(
     if authority.lifecycle.admit_new_tool_call().is_err() {
         return Err(ToolCallBatchRefusal::RegistrationUnavailable { call_id });
     }
-    let Some(spec) = [&WEB_SEARCH_TOOL_SPEC, &WEB_FETCH_TOOL_SPEC]
-        .into_iter()
-        .find(|spec| spec.revision == exposed.spec_revision)
+    let Some(spec) = crate::tool_spec(&exposed.spec_revision)
         .filter(|spec| spec.operation.function_name() == exposed.name)
     else {
         return Err(ToolCallBatchRefusal::UnknownSpec { call_id });

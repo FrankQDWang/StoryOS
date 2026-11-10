@@ -17,7 +17,7 @@ const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://
 
 /// A stream that reports `reference`, one complete message, and one complete function call with
 /// `call_id`, and ends with the terminal `status` of the response.
-fn text_and_call_stream(
+pub(crate) fn text_and_call_stream(
     reference: &str,
     call_id: &str,
     name: &str,

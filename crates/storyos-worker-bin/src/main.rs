@@ -17,6 +17,9 @@ use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_a
 use storyos_adapter_volcengine_responses::AgentPlanResponses;
 use storyos_worker::ModelDestination;
 
+/// The bound of one complete Tool exchange: the session, the drift check, and the call.
+const TOOL_EXCHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(/*secs*/ 60);
+
 type WorkerAdapters = registered_adapters::RegisteredAdapters<credential::SettingsCredentials>;
 
 #[tokio::main]
@@ -65,11 +68,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             agent_plan: AgentPlanResponses {
                 resolver: credential::SettingsCredentials {
                     agent_plan_api_key: settings.agent_plan_api_key,
-                    exa_api_key: settings.exa_api_key,
+                    exa_api_key: None,
                 },
             },
         },
         observer: contract_fault_holds::ContractFaultHolds::from_env(),
+        tools: storyos_adapter_mcp_client::McpClient {
+            resolver: credential::SettingsCredentials {
+                agent_plan_api_key: None,
+                exa_api_key: settings.exa_api_key,
+            },
+            timeout: TOOL_EXCHANGE_TIMEOUT,
+        },
     };
     if arguments.iter().any(|argument| argument == "--once") {
         or_exit(

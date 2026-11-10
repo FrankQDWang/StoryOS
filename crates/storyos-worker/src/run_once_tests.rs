@@ -86,6 +86,32 @@ impl AgentRunWorkStore for RaceStore {
     }
 }
 
+impl storyos_application::ToolDispatchStore for RaceStore {
+    async fn next_tool_call(
+        &self,
+        _claim: &ClaimedAgentRun,
+    ) -> Result<Option<storyos_application::ToolCallRequest>, CompleteAgentRunError> {
+        unreachable!("the AgentRun settles without a ToolCall")
+    }
+
+    async fn commit_tool_dispatch_claim(
+        &self,
+        _claim: &ClaimedAgentRun,
+        _request: &storyos_application::ToolCallRequest,
+        _projection: &WirePayloadProjection,
+    ) -> Result<Option<storyos_application::ToolDispatchClaim>, CompleteAgentRunError> {
+        unreachable!("the AgentRun settles without a ToolCall")
+    }
+
+    async fn record_tool_call(
+        &self,
+        _claim: &ClaimedAgentRun,
+        _record: storyos_application::ToolDispatchRecord<'_>,
+    ) -> Result<(), CompleteAgentRunError> {
+        unreachable!("the AgentRun settles without a ToolCall")
+    }
+}
+
 impl ModelDispatchStore for RaceStore {
     async fn next_dispatch_work(
         &self,
@@ -166,6 +192,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
     let destination = ModelDestination {
         adapter: NoDestination,
         observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
     };
 
     run_once(&store, &destination)

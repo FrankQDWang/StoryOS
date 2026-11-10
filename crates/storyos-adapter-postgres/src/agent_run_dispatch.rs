@@ -48,6 +48,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 WorkPhase::Abort(cancellation) => {
                     return Ok(NextDispatchWork::Abort(cancellation));
                 }
+                WorkPhase::ToolCalls => return Ok(NextDispatchWork::ToolCalls),
             }
         }
     }

@@ -43,6 +43,8 @@ pub(crate) enum WorkPhase {
     Hold(&'static str),
     Dispatch(Box<DestinationRequest>),
     Abort(CommittedCancellation),
+    /// The durable Decision has unresolved ToolCalls for the Tool Gateway.
+    ToolCalls,
 }
 
 /// Claims the next AgentRun whose Model Registration binds one of `model_kinds`.
@@ -482,6 +484,13 @@ pub(crate) async fn settle_one_phase(
             )
             .await?,
         ))));
+    }
+    if payload
+        .pointer("/decision/kind")
+        .and_then(serde_json::Value::as_str)
+        == Some("tool_request")
+    {
+        return crate::agent_run_tool_dispatch::advance(client, claim).await;
     }
     if payload.pointer("/decision/locations").is_none()
         && stream_batch_plan(author_message).is_some()

@@ -3,11 +3,12 @@
 use std::time::Duration;
 
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use storyos_application::{DiagnosticField as _, DiagnosticId, ResolvedCredential};
+use storyos_core::ContractCheck;
 use tokio::time::Instant;
 
-use crate::record::{self, MAX_TEXT_BYTES, ToolDiscoveryRecord};
+use crate::record::{self, DiscoveredTool, MAX_TEXT_BYTES, ToolDiscoveryRecord};
 use crate::{McpObservation, McpRequest, PROTOCOL_REVISION};
 
 const SESSION_HEADER: &str = "mcp-session-id";
@@ -125,57 +126,93 @@ pub(crate) async fn run(
                 protocol_revision,
                 tools: Vec::new(),
             }),
-            McpRequest::Call { .. } => McpObservation::InvalidResult {
-                reason: "protocol_revision",
-            },
+            McpRequest::Call { .. } | McpRequest::Dispatch { .. } => {
+                McpObservation::InvalidResult {
+                    reason: "protocol_revision",
+                }
+            }
         };
     }
     if let Err(failure) = session.notify("notifications/initialized").await {
         return failure.before_operation();
     }
     match request {
-        McpRequest::Discover { .. } => {
-            let mut tools = Vec::new();
-            let mut cursor = None;
-            loop {
-                let params = match &cursor {
-                    Some(cursor) => json!({"cursor": cursor}),
-                    None => json!({}),
-                };
-                let page = match session.request("tools/list", params).await {
-                    Ok(page) => page,
-                    Err(failure) => return failure.after_operation(),
-                };
-                match record::tools_page(&page, &mut tools) {
-                    Ok(Some(next)) => cursor = Some(next),
-                    Ok(None) => break,
-                    Err(reason) => return McpObservation::InvalidResult { reason },
-                }
-            }
-            McpObservation::Discovered(ToolDiscoveryRecord {
+        McpRequest::Discover { .. } => match session.list_tools().await {
+            Ok(tools) => McpObservation::Discovered(ToolDiscoveryRecord {
                 server_url: url.to_owned(),
                 server_name,
                 server_version,
                 protocol_revision,
                 tools,
-            })
-        }
+            }),
+            Err(observation) => observation,
+        },
         McpRequest::Call {
             tool, arguments, ..
+        } => session.call(tool, arguments).await,
+        McpRequest::Dispatch {
+            registration,
+            tool,
+            arguments,
+            ..
         } => {
-            let params = json!({"name": tool, "arguments": arguments});
-            match session.request("tools/call", params).await {
-                Ok(result) => match record::call_result(result) {
-                    Ok(result) => McpObservation::Called(result),
-                    Err(reason) => McpObservation::InvalidResult { reason },
-                },
-                Err(failure) => failure.after_operation(),
+            // A failed list stops the exchange before `tools/call`, so no argument left.
+            let Ok(tools) = session.list_tools().await else {
+                return McpObservation::NotSubmitted;
+            };
+            // The endpoint is the evidence of the admitted Processing Destination Identity, so
+            // the check compares the server identity and the tool contract.
+            let record = ToolDiscoveryRecord {
+                server_url: registration.server_url.to_owned(),
+                server_name,
+                server_version,
+                protocol_revision,
+                tools,
+            };
+            match record.check(registration) {
+                ContractCheck::Drift(differences) => McpObservation::Drift(differences),
+                ContractCheck::Unchanged | ContractCheck::ProvenanceChange => {
+                    session.call(tool, arguments).await
+                }
             }
         }
     }
 }
 
 impl Session<'_> {
+    /// Each page of `tools/list`.
+    async fn list_tools(&mut self) -> Result<Vec<DiscoveredTool>, McpObservation> {
+        let mut tools = Vec::new();
+        let mut cursor = None;
+        loop {
+            let params = match &cursor {
+                Some(cursor) => json!({"cursor": cursor}),
+                None => json!({}),
+            };
+            let page = self
+                .request("tools/list", params)
+                .await
+                .map_err(Failure::after_operation)?;
+            match record::tools_page(&page, &mut tools) {
+                Ok(Some(next)) => cursor = Some(next),
+                Ok(None) => return Ok(tools),
+                Err(reason) => return Err(McpObservation::InvalidResult { reason }),
+            }
+        }
+    }
+
+    /// One `tools/call`.
+    async fn call(&mut self, tool: &str, arguments: &Map<String, Value>) -> McpObservation {
+        let params = json!({"name": tool, "arguments": arguments});
+        match self.request("tools/call", params).await {
+            Ok(result) => match record::call_result(result) {
+                Ok(result) => McpObservation::Called(result),
+                Err(reason) => McpObservation::InvalidResult { reason },
+            },
+            Err(failure) => failure.after_operation(),
+        }
+    }
+
     async fn request(&mut self, method: &'static str, params: Value) -> Result<Value, Failure> {
         let id = self.next_id;
         self.next_id += 1;
