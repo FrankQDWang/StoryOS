@@ -362,10 +362,14 @@ async fn append_event(
 ) -> Result<(), CompleteAgentRunError> {
     client
         .execute(
+            // The serializable transaction makes the next position of the Run unique.
             "INSERT INTO storyos.agent_run_events
-               (owner_user_id, project_id, run_id, event_id, event_kind, payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5,
-                     $6::text::jsonb)",
+               (owner_user_id, project_id, run_id, event_id, event_position, event_kind, payload)
+             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                    COALESCE(max(event_position) + 1, 0), $5, $6::text::jsonb
+               FROM storyos.agent_run_events
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

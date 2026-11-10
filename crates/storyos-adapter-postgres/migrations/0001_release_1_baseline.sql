@@ -4254,16 +4254,17 @@ CREATE TABLE storyos.agent_run_events (
     project_id uuid NOT NULL,
     run_id uuid NOT NULL,
     event_id uuid NOT NULL,
+    event_position bigint NOT NULL,
     event_kind text NOT NULL,
     payload jsonb NOT NULL,
     recorded_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT agent_run_events_pkey PRIMARY KEY (owner_user_id, project_id, event_id),
+    CONSTRAINT agent_run_events_position_key UNIQUE (owner_user_id, project_id, run_id, event_position),
+    CONSTRAINT agent_run_events_position_check CHECK ((event_position >= 0)),
     CONSTRAINT agent_run_events_kind_check CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_registration_quarantined'::text]))),
     CONSTRAINT agent_run_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
     CONSTRAINT agent_run_events_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );
-
-CREATE INDEX agent_run_events_run_idx ON storyos.agent_run_events USING btree (owner_user_id, project_id, run_id, event_id);
 
 ALTER TABLE storyos.agent_run_events ENABLE ROW LEVEL SECURITY;
 

@@ -165,8 +165,9 @@ async fn tool_facts_without(admin: &Client, run_id: &str, key: &str) -> Value {
                         FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id),
                       'events', (SELECT jsonb_agg((event.payload - 'tool_call_id'
                                    - 'destination_attempt_id')
-                                   || jsonb_build_object('kind', event.event_kind)
-                                   ORDER BY event.event_id)
+                                   || jsonb_build_object('kind', event.event_kind,
+                                                         'position', event.event_position)
+                                   ORDER BY event.event_position)
                                    FROM storyos.agent_run_events AS event
                                   WHERE event.run_id = run.run_id),
                       'manifests', (SELECT jsonb_agg(jsonb_build_object(
@@ -213,7 +214,19 @@ async fn tool_facts_without(admin: &Client, run_id: &str, key: &str) -> Value {
 }
 
 fn settled_event(state: &str, refusal: Value, outcome: Value, bytes: Value) -> Value {
-    json!({"kind": "tool_call_settled", "call_id": "call_01",
+    let mut event = settled_event_after_quarantine(state, refusal, outcome, bytes);
+    event["position"] = json!(0);
+    event
+}
+
+/// The settlement event at position 1 of the Run, after its quarantine event at position 0.
+fn settled_event_after_quarantine(
+    state: &str,
+    refusal: Value,
+    outcome: Value,
+    bytes: Value,
+) -> Value {
+    json!({"kind": "tool_call_settled", "call_id": "call_01", "position": 1,
            "tool_registration_revision": EXA_TOOL_REGISTRATION.revision,
            "tool_spec_revision": "storyos.tool.web-search.v1", "state": state,
            "refusal": refusal, "outcome": outcome, "result_bytes": bytes})
@@ -586,7 +599,7 @@ async fn tool_contract_drift_quarantines_the_revision_and_sends_no_call() {
                    "attempt": attempt("not_submitted", "not_attempted"), "has_attempt_id": true,
                    "effect_outcome": outcome, "result_text": null, "result_digest": null,
                    "result_bytes": null}),
-            settled_event(
+            settled_event_after_quarantine(
                 "refused",
                 json!("tool_registration_unavailable"),
                 outcome,
