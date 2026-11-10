@@ -7300,11 +7300,6 @@
           "nullable": false,
           "type": "text"
         },
-        "original_bytes": {
-          "default": null,
-          "nullable": false,
-          "type": "integer"
-        },
         "owner_user_id": {
           "default": null,
           "nullable": false,
@@ -7349,11 +7344,6 @@
           "default": null,
           "nullable": false,
           "type": "uuid"
-        },
-        "truncated": {
-          "default": null,
-          "nullable": false,
-          "type": "boolean"
         }
       },
       "constraints": {
@@ -7364,7 +7354,7 @@
         "source_snapshots_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "source_snapshots_owner_user_id_project_id_tool_call_id_fkey": "FOREIGN KEY (owner_user_id, project_id, tool_call_id) REFERENCES storyos.tool_calls(owner_user_id, project_id, tool_call_id) MATCH FULL",
         "source_snapshots_pkey": "PRIMARY KEY (owner_user_id, project_id, source_snapshot_id)",
-        "source_snapshots_text_shape": "CHECK (((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (truncated = (original_bytes > 262144)) AND (truncated OR (original_bytes = text_bytes)) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)))"
+        "source_snapshots_text_shape": "CHECK (((text_bytes = octet_length(text)) AND (text_bytes <= 262144) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text)))"
       },
       "indexes": {
         "source_snapshots_entry_key": "CREATE UNIQUE INDEX source_snapshots_entry_key ON storyos.source_snapshots USING btree (owner_user_id, project_id, tool_call_id, entry_position)",
