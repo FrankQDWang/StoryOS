@@ -461,7 +461,7 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
         .await
         .unwrap()
         .get(/*idx*/ 0);
-    admit_run(
+    let rebound_run = admit_run(
         &store,
         &ran.scope,
         &chapter_id,
@@ -473,9 +473,33 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
     )
     .await;
     let (new_grant, new_scope) = current_grant(&store, &admin, &ran.scope).await;
+    // The rebound Run dispatches under the current scope.
+    let (model_base, model) = destination(vec![advisory_stream("resp_e57")]).await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions
+                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL
+                AND evidence_kind <> 'mcp_remote_boundary'",
+            &[&ran.scope.project_id.as_ref(), &model_base],
+        )
+        .await
+        .unwrap();
+    let claim = claim_run(&admin, ran.scope.clone(), rebound_run.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let rebound = run_facts(&admin, &rebound_run).await;
 
     assert_eq!(
-        (facts, ran.model, new_grant == old_grant, new_scope),
+        (
+            facts,
+            ran.model,
+            new_grant == old_grant,
+            new_scope,
+            rebound["status"].clone(),
+            rebound["steps"][0]["grant_scope"].clone(),
+            served(model).await,
+        ),
         (
             json!({"status": "refused",
                    "settlement": {"kind": "execution_refused",
@@ -485,6 +509,9 @@ async fn a_grant_scope_without_tool_results_refuses_the_continuation_and_the_nex
             vec![MODEL_POST.to_owned()],
             false,
             Some(V3.to_owned()),
+            json!("completed"),
+            json!(V3),
+            vec![MODEL_POST.to_owned()],
         )
     );
 }
