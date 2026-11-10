@@ -176,6 +176,97 @@ pub struct DeclaredTarget {
     pub block_text: String,
 }
 
+impl CreateRequest {
+    /// The input of this request that the model reads, other than the Tool outputs and the Host
+    /// instructions.
+    pub fn current_input(&self) -> CurrentInput<'_> {
+        CurrentInput {
+            author_message: &self.author_message,
+            chapter_id: &self.chapter_id,
+            passage_resolution: self.passage_resolution,
+            passage_input: self.passage_input.as_ref(),
+            context: &self.context,
+            declared_targets: &self.declared_targets,
+            selection_references: &self.selection_references,
+        }
+    }
+}
+
+/// The input of a decision request that the model reads, other than the Tool outputs and the
+/// Host instructions: the author message, the Chapter, the passage input, each selected Context
+/// item that the message sends, each declared target, and each selection reference.
+#[derive(Clone, Copy, Debug)]
+pub struct CurrentInput<'a> {
+    pub author_message: &'a str,
+    pub chapter_id: &'a str,
+    pub passage_resolution: Option<OrdinaryPassageResolution>,
+    pub passage_input: Option<&'a serde_json::Value>,
+    pub context: &'a [RequestContextItem],
+    pub declared_targets: &'a [DeclaredTarget],
+    pub selection_references: &'a [storyos_core::AdmittedSelection],
+}
+
+impl CurrentInput<'_> {
+    /// One digest over the input. A continuation whose digest differs from that of its prior
+    /// request sends a full input (ADR 0085), because the prior response read the earlier input.
+    pub fn digest(&self) -> String {
+        let context: Vec<serde_json::Value> = self
+            .context
+            .iter()
+            .filter(|item| {
+                !matches!(
+                    item.source_class,
+                    ContextSourceClass::HostControl | ContextSourceClass::ToolResult
+                )
+            })
+            .map(|item| serde_json::json!([item.source_class.name(), item.content]))
+            .collect();
+        let targets: Vec<serde_json::Value> = self
+            .declared_targets
+            .iter()
+            .map(|target| {
+                let kind = match target.kind {
+                    storyos_core::DeclaredTargetKind::ChapterBlock => {
+                        serde_json::json!("chapter_block")
+                    }
+                    storyos_core::DeclaredTargetKind::PendingCandidate => {
+                        serde_json::json!("pending_candidate")
+                    }
+                    storyos_core::DeclaredTargetKind::JoinableBlock { distance } => {
+                        serde_json::json!({ "joinable_block": distance })
+                    }
+                };
+                serde_json::json!([
+                    target.chapter_id,
+                    target.block_id,
+                    target.base_revision_id,
+                    target.collection,
+                    kind,
+                    target.block_text,
+                ])
+            })
+            .collect();
+        // The passage input repeats the selected items with their source versions, which are new
+        // in each RunStep. The Context items above carry their text.
+        let passage_input = self.passage_input.cloned().map(|mut input| {
+            if let Some(object) = input.as_object_mut() {
+                object.remove("selected");
+            }
+            input
+        });
+        let text = storyos_core::canonical_json(&serde_json::json!({
+            "author_message": self.author_message,
+            "chapter_id": self.chapter_id,
+            "passage_resolution": self.passage_resolution,
+            "passage_input": passage_input,
+            "context": context,
+            "declared_targets": targets,
+            "selection_references": self.selection_references,
+        }));
+        format!("sha256:{}", storyos_core::hex_sha256(text.as_bytes()))
+    }
+}
+
 impl DeclaredTarget {
     /// The location that prose changes must match.
     pub fn location(&self) -> storyos_core::DeclaredLocation {

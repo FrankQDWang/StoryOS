@@ -742,3 +742,62 @@ async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() 
         )
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_target_reservation_during_the_tool_exchange_sends_the_full_current_input() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    // Another Proposal reserves the target block during the search. The Chapter text stays the
+    // same, but the declared targets of the continuation change.
+    let reserve = "INSERT INTO storyos.proposals
+                     (owner_user_id, project_id, proposal_id, kind, chapter_id,
+                      manuscript_block_id, source_run_id, source_decision_id)
+                   SELECT owner_user_id, project_id, '018f0000-0000-7001-8000-0000000e5c01',
+                          'block_edit', (payload #>> '{operation_requirement,chapter_id}')::uuid,
+                          (payload #>> '{operation_requirement,proposal_target_block_ids,0}')::uuid,
+                          run_id, '018f0000-0000-7001-8000-0000000e5c02'
+                     FROM storyos.operation_requirements
+                    WHERE run_id = '{run}' AND decision_position = 0
+                      AND requirement_role = 'primary';
+                   INSERT INTO storyos.proposal_operations
+                     (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                      resolution, reservation_state, candidate_text)
+                   SELECT owner_user_id, project_id, proposal_id,
+                          '018f0000-0000-7001-8000-0000000e5c03', manuscript_block_id,
+                          'pending', 'unresolved', 'Reserved during the search.'
+                     FROM storyos.proposals
+                    WHERE proposal_id = '018f0000-0000-7001-8000-0000000e5c01'";
+    let (_store, admin, ran) = continue_run(
+        "e5c",
+        0xe5ca,
+        text_result(RESULT, false),
+        |_| vec![advisory_stream("resp_e5c_2")],
+        reserve,
+    )
+    .await;
+    let source = source(&admin, &ran.run_id, "ok", None).await;
+    let mut rebuilt = continuation_step(
+        "e5c",
+        "advisory",
+        json!([
+            {"role": "user"},
+            {"type": "function_call", "call_id": "call_01", "name": "web_search",
+             "arguments": SEARCH},
+            ok_output(RESULT),
+        ]),
+        &source,
+    );
+    // The prior response read the earlier targets, so the request does not continue it.
+    rebuilt["previous_response_id"] = Value::Null;
+
+    assert_eq!(
+        (run_facts(&admin, &ran.run_id).await, ran.model, ran.mcp),
+        (
+            completed(vec![request_step(), rebuilt]),
+            vec![MODEL_POST.to_owned(); 2],
+            vec![POST.to_owned(); 4],
+        )
+    );
+}

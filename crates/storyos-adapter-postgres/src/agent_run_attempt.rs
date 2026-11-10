@@ -86,7 +86,9 @@ pub(crate) async fn persist_uncertain_attempt(
             "digest": projection.digest,
             "author_message": author_message,
             "chapter_id": chapter_id,
-            "prior_continuation_binding_id": continuation.prior_binding_id
+            "prior_continuation_binding_id": continuation.prior_binding_id,
+            // A later continuation compares its input with this one (ADR 0085).
+            "current_input_digest": request.current_input().digest()
         },
         "items": [],
         "decision": null,

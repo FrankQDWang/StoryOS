@@ -364,6 +364,13 @@ fn decode_purpose(value: &str) -> Option<ContextPurpose> {
     }
 }
 
+impl ContextSourceClass {
+    /// The persisted name of the class.
+    pub fn name(self) -> &'static str {
+        encode_source_class(self)
+    }
+}
+
 fn encode_source_class(class: ContextSourceClass) -> &'static str {
     match class {
         ContextSourceClass::HostControl => "host_control",

@@ -227,42 +227,34 @@ pub(crate) async fn tool_outputs(
     Ok(outputs)
 }
 
-/// True when the active RunStep is a `tool_result_continuation` and the text that its request
-/// sends, other than its Tool results, differs from that of the RunStep before it. The source
-/// version of the author instruction is new in each RunStep, so only the class and the content of
-/// each selected item count. The prior response read the items of that RunStep, so an incremental
-/// request cannot carry the change.
+/// True when the active RunStep is a `tool_result_continuation` and the input that its request
+/// sends, other than its Tool outputs, differs from the input of the function request Attempt
+/// before it. The input is all that the model reads: the selected Context text, the declared
+/// targets, the selection references, and the passage input. The prior response read the input
+/// of that Attempt, so an incremental request cannot carry a change.
 pub(crate) async fn continuation_input_changed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<bool, CompleteAgentRunError> {
-    let row = client
+    let Some(row) = client
         .query_opt(
-            "WITH items AS (
-               SELECT requirement.decision_position,
-                      requirement.payload #> '{operation_requirement,tool_results}' IS NOT NULL
-                        AS continuation,
-                      (SELECT jsonb_agg(jsonb_build_array(item -> 'source_class',
-                                                          item -> 'content')
-                                        ORDER BY ordinality)
-                         FROM jsonb_array_elements(requirement.payload -> 'selected')
-                              WITH ORDINALITY AS selected(item, ordinality)
-                        WHERE item ->> 'source_class' NOT IN ('tool_result', 'host_control'))
-                        AS input
-                 FROM storyos.operation_requirements AS requirement
-                 JOIN storyos.agent_runs AS run
-                   ON (run.owner_user_id, run.project_id, run.run_id) =
-                      (requirement.owner_user_id, requirement.project_id, requirement.run_id)
-                WHERE requirement.owner_user_id = $1::text::uuid
-                  AND requirement.project_id = $2::text::uuid
-                  AND requirement.run_id = $3::text::uuid
-                  AND requirement.requirement_role = 'primary'
-                  AND requirement.decision_position
-                      IN (run.active_decision_position, run.active_decision_position - 1))
-             SELECT active.input IS DISTINCT FROM earlier.input
-               FROM items AS active
-               JOIN items AS earlier ON earlier.decision_position = active.decision_position - 1
-              WHERE active.continuation",
+            "SELECT requirement.payload::text, run.author_message, run.chapter_id::text,
+                    attempt.payload #>> '{wire,current_input_digest}'
+               FROM storyos.agent_runs AS run
+               JOIN storyos.operation_requirements AS requirement
+                 ON (requirement.owner_user_id, requirement.project_id, requirement.run_id,
+                     requirement.decision_position) =
+                    (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
+                AND requirement.requirement_role = 'primary'
+               LEFT JOIN storyos.model_attempts AS attempt
+                 ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
+                    (run.owner_user_id, run.project_id, run.run_id)
+                AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = run.active_decision_position - 1
+              WHERE run.owner_user_id = $1::text::uuid
+                AND run.project_id = $2::text::uuid
+                AND run.run_id = $3::text::uuid
+                AND requirement.payload #> '{operation_requirement,tool_results}' IS NOT NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -270,8 +262,30 @@ pub(crate) async fn continuation_input_changed(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
-    Ok(row.is_some_and(|row| row.get(/*idx*/ 0)))
+        .map_err(complete_database_error)?
+    else {
+        return Ok(false);
+    };
+    let record: serde_json::Value = serde_json::from_str(row.get::<_, &str>(/*idx*/ 0))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let assembly = storyos_core::decode_assembly_record(&record)
+        .ok_or_else(|| damaged("The continuation Context is invalid"))?;
+    let author_message: String = row.get(/*idx*/ 1);
+    let chapter_id: String = row.get(/*idx*/ 2);
+    let declared_targets =
+        crate::agent_run_create_dispatch::declared_targets(client, claim, &chapter_id).await?;
+    let input = crate::agent_run_create_dispatch::record_input(&record, assembly, &author_message);
+    let current = storyos_application::CurrentInput {
+        author_message: &author_message,
+        chapter_id: &chapter_id,
+        passage_resolution: input.passage_resolution,
+        passage_input: input.passage_input.as_ref(),
+        context: &input.context,
+        declared_targets: &declared_targets,
+        selection_references: &input.selection_references,
+    };
+    let prior: Option<String> = row.get(/*idx*/ 3);
+    Ok(prior.as_deref() != Some(current.digest().as_str()))
 }
 
 /// The lineage of a Proposal that the active RunStep opens, when that RunStep is a

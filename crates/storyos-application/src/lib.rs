@@ -160,9 +160,9 @@ pub use model_gateway::{complete_agent_run, complete_agent_run_with_tools};
 pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
     ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
-    CredentialResolver, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord,
-    GatewayClock, ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink,
-    ModelUsage, NextDispatchWork, NoContractFaults, Observation,
+    CredentialResolver, CurrentInput, DeclaredTarget, DestinationRequest, DispatchClaim,
+    DispatchRecord, GatewayClock, ModelDispatchStore, ModelProviderAdapter, ModelResponse,
+    ModelStreamSink, ModelUsage, NextDispatchWork, NoContractFaults, Observation,
     PROVISIONAL_STREAM_COMMIT_INTERVAL, PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal,
     PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds,
     RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose,
