@@ -139,7 +139,8 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                       'run', jsonb_build_object('status', run.status, 'settlement', run.settlement),
                       'tool_call', (SELECT jsonb_build_object(
                           'state', call.state, 'refusal', call.refusal,
-                          'attempt', call.attempt #- '{outbound_disclosure_event,event_id}'
+                          'attempt', call.attempt #- '{context_assembly}'
+                                                 #- '{outbound_disclosure_event,event_id}'
                                                  #- '{admission_decision,grant_id}'
                                                  #- '{wire_payload_projection,digest}'
                                                  #- '{wire_payload_projection,serialized_payload}'
@@ -154,6 +155,27 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                                    ORDER BY event.event_id)
                                    FROM storyos.agent_run_events AS event
                                   WHERE event.run_id = run.run_id),
+                      'manifests', (SELECT jsonb_agg(jsonb_build_object(
+                          'requirement', requirement.payload - 'tool_call_id',
+                          'position', manifest.decision_position,
+                          'sufficiency', manifest.sufficiency,
+                          'grant_scope', manifest.disclosure_grant_scope,
+                          'gates', manifest.payload #- '{eligibility,project_scope}'
+                                                    #- '{destination_context,endpoint}'
+                                                    #- '{outbound_disclosure,wire_payload_digest}',
+                          'exact_scope', manifest.payload #>> '{eligibility,project_scope,project_id}'
+                                           = manifest.project_id::text,
+                          'claim_refers_to_it', call.attempt -> 'context_assembly' = jsonb_build_object(
+                              'context_assembly_manifest_id', manifest.context_assembly_manifest_id,
+                              'destination_context_manifest_id',
+                              manifest.destination_context_manifest_id,
+                              'outbound_disclosure_manifest_id',
+                              manifest.outbound_disclosure_manifest_id)))
+                        FROM storyos.context_assembly_manifests AS manifest
+                        JOIN storyos.operation_requirements AS requirement
+                          USING (owner_user_id, project_id, operation_requirement_id)
+                        LEFT JOIN storyos.tool_calls AS call ON call.run_id = manifest.run_id
+                       WHERE manifest.run_id = run.run_id AND manifest.manifest_role = 'tool_call'),
                       'holds_key', (SELECT bool_or(position($2 IN record::text) > 0)
                                       FROM (SELECT to_jsonb(call) AS record
                                               FROM storyos.tool_calls AS call
@@ -190,6 +212,29 @@ fn attempt(settlement: &str, disclosure: &str) -> Value {
                                     "mapping_revision": "2025-11-25"},
         "destination_attempt": {"settlement": settlement},
         "outbound_disclosure_event": {"source_class": "agent_query", "state": disclosure},
+    })
+}
+
+/// Gates one to six of the search ToolCall, with no volatile identity.
+fn tool_manifest() -> Value {
+    let effect = attempt("", "")["admission_decision"]["effect_request"].take();
+    json!({
+        "requirement": {"kind": "tool_call", "call_id": "call_01",
+                        "registration_revision": EXA_TOOL_REGISTRATION.revision,
+                        "spec_revision": "storyos.tool.web-search.v1"},
+        "position": 0, "sufficiency": "complete", "grant_scope": "research_tool_v1",
+        "gates": {
+            "candidate": {"arguments": serde_json::from_str::<Value>(SEARCH).unwrap()},
+            "eligibility": {"grant_scope": "research_tool_v1"},
+            "selection": "one_candidate",
+            "bounded_projection": {"intake": "typed_arguments", "effect_request": effect},
+            "destination_context": {"destination": "tool",
+                                    "registration_revision": EXA_TOOL_REGISTRATION.revision,
+                                    "spec_revision": "storyos.tool.web-search.v1"},
+            "outbound_disclosure": {"source_class": "agent_query"},
+        },
+        "exact_scope": true,
+        "claim_refers_to_it": true,
     })
 }
 
@@ -241,6 +286,7 @@ async fn a_claimed_search_settles_with_its_result_text_and_one_run_event() {
                     "result_bytes": RESULT.len(),
                 },
                 "events": [settled_event("settled", Value::Null, outcome, json!(RESULT.len()))],
+                "manifests": [tool_manifest()],
                 "holds_key": false,
             }),
             vec![POST.to_owned(); 4],
@@ -353,6 +399,7 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         observed.push((
             facts["tool_call"].clone(),
             facts["events"].clone(),
+            facts["manifests"].clone(),
             mcp.await.unwrap(),
         ));
     }
@@ -371,6 +418,7 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
                     Value::Null,
                     Value::Null
                 )]),
+                Value::Null,
                 Vec::<String>::new(),
             ))
             .collect::<Vec<_>>()

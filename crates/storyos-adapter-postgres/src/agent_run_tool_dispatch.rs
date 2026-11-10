@@ -15,8 +15,10 @@ use uuid::Uuid;
 
 use super::PostgresProjectReader;
 use crate::agent_run_tool_authority::{
-    Resolution, ToolCallRow, locked, next_unresolved, quarantine, read_authority, refuse, resolve,
+    Resolution, ToolCallRow, damaged, locked, next_unresolved, quarantine, read_authority, refuse,
+    resolve,
 };
+use crate::agent_run_tool_context::{ToolContext, commit_tool_context};
 use crate::agent_run_work::{
     WorkPhase, complete_challenge_error, complete_database_error, load_run_phase,
 };
@@ -89,8 +91,24 @@ impl ToolDispatchStore for PostgresProjectReader {
             {
                 return Ok(None);
             }
+            let Some(grant_id) = authority.grant_id.as_deref() else {
+                return Err(damaged("An admitted ToolCall has no grant"));
+            };
+            let manifests = commit_tool_context(
+                client,
+                claim,
+                ToolContext {
+                    row: &row,
+                    plan: &plan,
+                    grant_id,
+                    endpoint: &request.endpoint,
+                    projection,
+                },
+            )
+            .await?;
             let destination_attempt_id = Uuid::now_v7().to_string();
             let attempt = json!({
+                "context_assembly": manifests.record(),
                 "admission_decision": {
                     "decision": "admitted",
                     "grant_id": authority.grant_id,

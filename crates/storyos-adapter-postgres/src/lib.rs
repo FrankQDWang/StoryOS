@@ -105,6 +105,7 @@ mod agent_run_successor;
 mod agent_run_successor_dispatch;
 mod agent_run_tool_authority;
 mod agent_run_tool_call;
+mod agent_run_tool_context;
 mod agent_run_tool_dispatch;
 mod agent_run_tool_exposure;
 mod agent_run_tool_probe;
