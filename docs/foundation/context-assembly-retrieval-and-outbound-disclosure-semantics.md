@@ -844,10 +844,14 @@ Scope.
 
 Each grant records its standing scope, and a request outside it refuses
 before the dispatch claim. A new grant records the current scope
-`project_writing_assistance_v2`
-([ADR 0055](../adr/0055-install-a-host-managed-compaction-summary-for-the-decision-request.md)).
-It names all items of the first scope, the Purpose `active_context_compaction`,
-and the source class `conversation_summary`.
+`project_writing_assistance_v3`
+([ADR 0085](../adr/0085-reenter-each-settled-tool-result-through-context-assembly.md)).
+It names all items of the second scope and the source class `tool_result`.
+The second scope `project_writing_assistance_v2`
+([ADR 0055](../adr/0055-install-a-host-managed-compaction-summary-for-the-decision-request.md))
+names all items of the first scope, the Purpose `active_context_compaction`,
+and the source class `conversation_summary`. A stored grant with the second
+scope keeps this meaning, and it refuses a Tool result continuation.
 
 [ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)
 records the first scope `project_writing_assistance_v1`: all current content of

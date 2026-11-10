@@ -377,4 +377,4 @@ fn settled_attempt(row: &ToolCallRow, settlement: &str, outcome: Value) -> Value
 
 #[cfg(test)]
 #[path = "agent_run_tool_dispatch_tests.rs"]
-mod tests;
+pub(crate) mod tests;

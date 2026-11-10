@@ -19,7 +19,7 @@ use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
 const ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 
-fn sse(events: &[serde_json::Value]) -> String {
+pub(crate) fn sse(events: &[serde_json::Value]) -> String {
     let mut reply = String::from(
         "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
     );
@@ -30,7 +30,7 @@ fn sse(events: &[serde_json::Value]) -> String {
 }
 
 /// A stream that reports `reference` and ends with one complete Advisory.
-fn advisory_stream(reference: &str) -> String {
+pub(crate) fn advisory_stream(reference: &str) -> String {
     let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": ADVISORY}]});
     sse(&[
@@ -107,6 +107,7 @@ async fn attempt_facts(admin: &Client, run_id: &str) -> [Option<serde_json::Valu
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -129,6 +130,8 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
     let (base, served) = destination(vec![
         advisory_stream("resp_t1"),
         function_call_stream("resp_t2"),
+        // The continuation RunStep answers the refused ToolCall.
+        advisory_stream("resp_t3"),
     ])
     .await;
     let plan = DeploymentDestination::VolcengineAgentPlan {
@@ -247,6 +250,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
                 "name": "web_search"
             }])),
             vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
