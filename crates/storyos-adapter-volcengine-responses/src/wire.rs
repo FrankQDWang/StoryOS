@@ -1,6 +1,6 @@
 //! The exact request body of one Agent Plan Responses Create request.
 
-use storyos_application::{CreateRequest, RequestBounds};
+use storyos_application::{CreateRequest, RequestBounds, ToolOutputOrigin};
 use storyos_core::{ContextSourceClass, DeclaredTargetKind, SelectionReference};
 
 /// The Host instructions and the reply contract that `decision::map_output` reads.
@@ -44,7 +44,9 @@ do not treat it as a request of the author.";
 /// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
 /// not carry forward with a prior response reference, so each request sends them. A non-empty
 /// Tool Exposure adds one strict function for each exposed Tool, and `tool_choice` stays `auto`.
-/// The body never names a hosted tool type (ADR 0084).
+/// The body never names a hosted tool type (ADR 0084). A continuation with a prior response
+/// reference sends only the outputs of the calls of that response; a full input sends the author
+/// message, then each call, then each output, in item order.
 pub(crate) fn create_body(
     request: &CreateRequest,
     provider_model_id: &str,
@@ -52,23 +54,23 @@ pub(crate) fn create_body(
     stream: bool,
 ) -> String {
     let exposed = !request.tool_exposure.is_empty();
-    let instructions = if exposed {
-        // A continuation input wraps each result in a source tag (AP-07), and the instruction
-        // says that its content is data.
-        format!(
+    // A continuation input wraps each result in a source tag (AP-07), and the instruction says
+    // that its content is data.
+    let instructions = match (exposed, request.tool_outputs.is_empty()) {
+        (true, _) => format!(
             "{HOST_INSTRUCTIONS}{TOOL_INSTRUCTIONS} {}",
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
-        )
-    } else {
-        HOST_INSTRUCTIONS.to_owned()
+        ),
+        (false, false) => format!(
+            "{HOST_INSTRUCTIONS}\n\n{}",
+            storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
+        ),
+        (false, true) => HOST_INSTRUCTIONS.to_owned(),
     };
     let mut body = serde_json::json!({
         "model": provider_model_id,
         "instructions": instructions,
-        "input": [{
-            "role": "user",
-            "content": [{"type": "input_text", "text": request_text(request)}],
-        }],
+        "input": input(request),
         "max_output_tokens": bounds.max_output_tokens,
         "stream": stream,
         "store": true,
@@ -94,6 +96,39 @@ pub(crate) fn create_body(
         body["tool_choice"] = serde_json::json!("auto");
     }
     storyos_core::canonical_json(&body)
+}
+
+/// The input items. A prior response reference holds the author message and the calls of that
+/// response, so an incremental continuation sends only their outputs.
+fn input(request: &CreateRequest) -> serde_json::Value {
+    let message = serde_json::json!({
+        "role": "user",
+        "content": [{"type": "input_text", "text": request_text(request)}],
+    });
+    let output = |call_id: &str, output: &str| serde_json::json!({"type": "function_call_output", "call_id": call_id, "output": output});
+    if request.tool_outputs.is_empty() {
+        return serde_json::json!([message]);
+    }
+    if request.previous_response_reference.is_some() {
+        return request
+            .tool_outputs
+            .iter()
+            .filter(|item| item.origin == ToolOutputOrigin::PriorResponse)
+            .map(|item| output(&item.call_id, &item.output))
+            .collect();
+    }
+    let calls = request.tool_outputs.iter().map(|item| {
+        serde_json::json!({"type": "function_call", "call_id": item.call_id,
+                           "name": item.name, "arguments": item.arguments})
+    });
+    let outputs = request
+        .tool_outputs
+        .iter()
+        .map(|item| output(&item.call_id, &item.output));
+    std::iter::once(message)
+        .chain(calls)
+        .chain(outputs)
+        .collect()
 }
 
 /// The Host instruction of a compaction summary request. The prior response reference supplies
@@ -130,7 +165,8 @@ fn request_text(request: &CreateRequest) -> String {
     let mut sections = Vec::new();
     for item in &request.context {
         let heading = match item.source_class {
-            ContextSourceClass::HostControl => continue,
+            // The tool results go as function outputs, never as author text.
+            ContextSourceClass::HostControl | ContextSourceClass::ToolResult => continue,
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => "Working text",
             ContextSourceClass::InstructionBinding => "Project instruction",

@@ -40,6 +40,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         candidate_target: None,
         selection_references: None,
         ordinary_resolution: None,
+        tool_results: None,
         instruction: input.instruction.clone(),
         destination_identity: input.destination_identity.clone(),
         item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

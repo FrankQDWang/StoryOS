@@ -554,6 +554,19 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "tool_result_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -670,6 +683,19 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "tool_result_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -679,7 +705,8 @@
         "author_instruction",
         "working_target",
         "instruction_binding",
-        "conversation_summary"
+        "conversation_summary",
+        "tool_result"
       ],
       "type": "string"
     },
@@ -1752,7 +1779,8 @@
     "ProjectionMode": {
       "enum": [
         "exact_required",
-        "derived_summary"
+        "derived_summary",
+        "deterministic_excerpt"
       ],
       "type": "string"
     },

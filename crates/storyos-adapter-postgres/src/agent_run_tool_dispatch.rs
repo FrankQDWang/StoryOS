@@ -219,16 +219,20 @@ impl ToolDispatchStore for PostgresProjectReader {
 }
 
 /// The work phase of a Run whose durable Decision requested ToolCalls: the Tool Gateway while a
-/// ToolCall is unresolved, and then the completed Run.
+/// ToolCall is unresolved, and then the continuation RunStep with the results.
 pub(crate) async fn advance(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &crate::agent_run_work::RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let unresolved = crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?;
     match storyos_core::function_request_step(
         /*requests_function*/ true, /*supplies_tool_call*/ true, unresolved,
     ) {
         storyos_core::FunctionRequestStep::ToolGateway => Ok(WorkPhase::ToolCalls),
+        storyos_core::FunctionRequestStep::Continue => {
+            crate::agent_run_tool_result::open_continuation(client, claim, run).await
+        }
         storyos_core::FunctionRequestStep::Refuse | storyos_core::FunctionRequestStep::Complete => {
             crate::agent_run_work::complete(client, claim).await
         }

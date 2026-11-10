@@ -35,6 +35,17 @@ pub(crate) async fn decide_continuation(
             && model_registration(&assistance.model_registration_revision)
                 .is_some_and(ModelRegistration::continues),
     });
+    // A reference that the destination confirmed expired or unusable never continues: the
+    // request sends the full input (ADR 0033).
+    let mapping = match (
+        mapping,
+        prior
+            .as_ref()
+            .is_some_and(|loaded| loaded.confirmed_unusable),
+    ) {
+        (ContinuationInputMapping::Incremental, true) => ContinuationInputMapping::Full,
+        (mapping, _) => mapping,
+    };
     let prior_binding_id = match mapping {
         ContinuationInputMapping::Incremental => known_prior_binding_id.clone(),
         ContinuationInputMapping::None
@@ -82,6 +93,47 @@ pub(crate) fn encode_produced_binding(
     value["continuation_binding_id"] = serde_json::json!(binding_id);
     value["original_attempt_id"] = serde_json::json!(attempt_id);
     value
+}
+
+/// Gives the selected Decision `decision_id` of `attempt_id` its Model Continuation Binding, so
+/// that a later request of the Conversation can continue its response (ADR 0033).
+pub(crate) async fn bind_produced_continuation(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    decision_id: &str,
+    attempt_id: &str,
+    payload: &serde_json::Value,
+) -> Result<(), CompleteAgentRunError> {
+    let binding = uuid::Uuid::now_v7().to_string();
+    let mut next_payload = payload.clone();
+    if let Some(wire) = parse_wire(payload) {
+        next_payload["produced_binding"] =
+            encode_produced_binding(&binding, attempt_id, &wire.admission);
+    }
+    client
+        .execute(
+            "UPDATE storyos.model_attempts
+                SET continuation_binding_id = $4::text::uuid,
+                    dispatch_state = 'settled',
+                    payload = $6::text::jsonb
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid
+                AND decision_id = $5::text::uuid
+                AND continuation_binding_id IS NULL
+                AND attempt_role = 'decision'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &binding,
+                &decision_id,
+                &next_payload.to_string(),
+            ],
+        )
+        .await
+        .map_err(crate::agent_run_work::complete_database_error)?;
+    Ok(())
 }
 
 pub(crate) fn inspect_mapping(mapping: ContinuationInputMapping) -> AgentRunInputMapping {
@@ -147,6 +199,7 @@ pub(crate) fn current_identity(
 struct LoadedPrior {
     binding_id: String,
     identity: ContinuationIdentity,
+    confirmed_unusable: bool,
 }
 
 async fn load_prior_binding(
@@ -167,7 +220,10 @@ async fn load_prior_binding(
                 AND attempt.attempt_role = 'decision'
                 AND attempt.continuation_binding_id IS NOT NULL
                 AND attempt.dispatch_state = 'settled'
-                AND ((run.status = 'completed' AND run.run_id <> $4::text::uuid) OR run.run_id = $4::text::uuid)
+                AND ((run.status = 'completed' AND run.run_id <> $4::text::uuid
+                      -- A function request response has calls with no output outside its Run.
+                      AND attempt.payload #>> '{decision,kind}' IS DISTINCT FROM 'tool_request')
+                     OR run.run_id = $4::text::uuid)
               ORDER BY run.run_id DESC, attempt.decision_position DESC LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -187,9 +243,16 @@ async fn load_prior_binding(
     let Some(identity) = payload.get("produced_binding").and_then(parse_identity) else {
         return Ok(None);
     };
+    let confirmed_unusable = matches!(
+        payload
+            .pointer("/produced_binding/reference_condition")
+            .and_then(serde_json::Value::as_str),
+        Some("confirmed_expired" | "confirmed_unusable")
+    );
     Ok(Some(LoadedPrior {
         binding_id,
         identity,
+        confirmed_unusable,
     }))
 }
 

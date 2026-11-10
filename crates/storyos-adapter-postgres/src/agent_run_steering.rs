@@ -144,6 +144,7 @@ pub(crate) async fn advance(
             passage_targets: retained.operation_requirement.passage_targets.as_deref(),
             candidate_target: retained.operation_requirement.candidate_target.as_ref(),
             selection_references: references.as_deref(),
+            tool_results: None,
         },
         &assistance.processing_destination_identity,
     )

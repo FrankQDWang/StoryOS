@@ -157,6 +157,7 @@ pub(crate) async fn create_request(
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
+    let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
         None => {
@@ -191,6 +192,7 @@ pub(crate) async fn create_request(
         previous_response_reference,
         tool_exposure,
         successor_of: None,
+        tool_outputs,
     })
 }
 

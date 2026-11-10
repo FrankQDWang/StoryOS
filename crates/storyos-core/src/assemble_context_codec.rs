@@ -51,6 +51,10 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(references) = &record.operation_requirement.selection_references {
         payload["operation_requirement"]["selection_references"] = serde_json::json!(references);
     }
+    if let Some(sources) = &record.operation_requirement.tool_results {
+        payload["operation_requirement"]["cause"] = serde_json::json!("tool_result_continuation");
+        payload["operation_requirement"]["tool_results"] = serde_json::json!(sources);
+    }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
             "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
@@ -99,7 +103,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 None => ContextPurpose::CurrentPassageAssistance,
                 Some(value) => decode_purpose(value.as_str()?)?,
             },
-            cause: ContextCause::AuthorRequest,
+            cause: match requirement.get("cause").map(serde_json::Value::as_str) {
+                None => ContextCause::AuthorRequest,
+                Some(Some("tool_result_continuation")) => ContextCause::ToolResultContinuation,
+                Some(_) => return None,
+            },
             chapter_id: requirement.get("chapter_id")?.as_str()?.to_owned(),
             chapter_revision_id: match requirement.get("chapter_revision_id")? {
                 serde_json::Value::Null => None,
@@ -125,6 +133,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .ok()?,
             passage_targets: requirement
                 .get("passage_targets")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
+            tool_results: requirement
+                .get("tool_results")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,
@@ -232,6 +245,9 @@ fn encode_block_reason(reason: &ContextBlockReason) -> serde_json::Value {
         ContextBlockReason::WorkingTargetRevisionUnavailable => {
             serde_json::json!({"kind": "working_target_revision_unavailable"})
         }
+        ContextBlockReason::ToolResultUnavailable => {
+            serde_json::json!({"kind": "tool_result_unavailable"})
+        }
     }
 }
 
@@ -246,6 +262,7 @@ fn decode_block_reason(value: &serde_json::Value) -> Option<ContextBlockReason> 
         "working_target_revision_unavailable" => {
             Some(ContextBlockReason::WorkingTargetRevisionUnavailable)
         }
+        "tool_result_unavailable" => Some(ContextBlockReason::ToolResultUnavailable),
         _ => None,
     }
 }
@@ -275,6 +292,7 @@ fn encode_selected(source: &SelectedProjection) -> serde_json::Value {
         "projection_mode": match source.projection_mode {
             ProjectionMode::ExactRequired => "exact_required",
             ProjectionMode::DerivedSummary => "derived_summary",
+            ProjectionMode::DeterministicExcerpt => "deterministic_excerpt",
         },
         "token_count": source.token_count,
         "content": source.content,
@@ -288,6 +306,7 @@ fn decode_selected(value: &serde_json::Value) -> Option<SelectedProjection> {
         projection_mode: match value.get("projection_mode")?.as_str()? {
             "exact_required" => ProjectionMode::ExactRequired,
             "derived_summary" => ProjectionMode::DerivedSummary,
+            "deterministic_excerpt" => ProjectionMode::DeterministicExcerpt,
             _ => return None,
         },
         token_count: value.get("token_count")?.as_u64()?,
@@ -307,6 +326,7 @@ fn encode_rejected(source: &RejectedSource) -> serde_json::Value {
             RejectionReason::WorkingTargetRevisionUnavailable => {
                 "working_target_revision_unavailable"
             }
+            RejectionReason::ToolResultUnavailable => "tool_result_unavailable",
         },
     })
 }
@@ -323,6 +343,7 @@ fn decode_rejected(value: &serde_json::Value) -> Option<RejectedSource> {
             "working_target_revision_unavailable" => {
                 RejectionReason::WorkingTargetRevisionUnavailable
             }
+            "tool_result_unavailable" => RejectionReason::ToolResultUnavailable,
             _ => return None,
         },
     })
@@ -350,6 +371,7 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::WorkingTarget => "working_target",
         ContextSourceClass::InstructionBinding => "instruction_binding",
         ContextSourceClass::ConversationSummary => "conversation_summary",
+        ContextSourceClass::ToolResult => "tool_result",
     }
 }
 
@@ -360,6 +382,7 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "working_target" => Some(ContextSourceClass::WorkingTarget),
         "instruction_binding" => Some(ContextSourceClass::InstructionBinding),
         "conversation_summary" => Some(ContextSourceClass::ConversationSummary),
+        "tool_result" => Some(ContextSourceClass::ToolResult),
         _ => None,
     }
 }

@@ -109,6 +109,7 @@ mod agent_run_tool_context;
 mod agent_run_tool_dispatch;
 mod agent_run_tool_exposure;
 mod agent_run_tool_probe;
+mod agent_run_tool_result;
 mod agent_run_work;
 mod author_edit;
 mod author_edit_admission_recovery;

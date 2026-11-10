@@ -431,15 +431,15 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result";
 
-export type ProjectionMode = "exact_required" | "derived_summary";
+export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt";
 
 export type ContextSufficiency = { "kind": "complete" } | { "kind": "blocked", reasons: Array<ContextBlockReason>, };
 
-export type ContextBlockReason = { "kind": "exact_required_over_limit", source_class: ContextSourceClass, } | { "kind": "required_instruction_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
+export type ContextBlockReason = { "kind": "exact_required_over_limit", source_class: ContextSourceClass, } | { "kind": "required_instruction_revision_unavailable" } | { "kind": "working_target_revision_unavailable" } | { "kind": "tool_result_unavailable" };
 
-export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "over_collection_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
+export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "over_collection_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" } | { "kind": "tool_result_unavailable" };
 
 export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" } | { "kind": "volcengine_agent_plan" };
 

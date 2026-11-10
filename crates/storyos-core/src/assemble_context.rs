@@ -47,6 +47,9 @@ pub enum ContextPurpose {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextCause {
     AuthorRequest,
+    /// Each ToolCall of the durable function request Decision of the prior RunStep is resolved,
+    /// and its result goes to the model (Operation Requirement `tool_result_continuation`).
+    ToolResultContinuation,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,6 +60,8 @@ pub enum ContextSourceClass {
     InstructionBinding,
     /// The Host-managed summary of the same Conversation.
     ConversationSummary,
+    /// The projected result of one resolved ToolCall of the Run. It is Data-only Context.
+    ToolResult,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,6 +69,8 @@ pub enum ProjectionMode {
     ExactRequired,
     /// A Host-managed summary of earlier content. It does not satisfy Exact Required input.
     DerivedSummary,
+    /// A prefix of the content with an explicit truncation mark.
+    DeterministicExcerpt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,9 +86,13 @@ pub enum ContextSufficiency {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContextBlockReason {
-    ExactRequiredOverLimit { source_class: ContextSourceClass },
+    ExactRequiredOverLimit {
+        source_class: ContextSourceClass,
+    },
     RequiredInstructionRevisionUnavailable,
     WorkingTargetRevisionUnavailable,
+    /// A ToolCall of the continuation is not resolved, or is not a ToolCall of the same Run.
+    ToolResultUnavailable,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -91,6 +102,7 @@ pub enum RejectionReason {
     OverCollectionTokenLimit,
     RequiredRevisionUnavailable,
     WorkingTargetRevisionUnavailable,
+    ToolResultUnavailable,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -109,6 +121,8 @@ pub struct OperationRequirementRecord {
     pub candidate_target: Option<super::ProposalCandidateTarget>,
     pub selection_references: Option<Vec<super::AdmittedSelection>>,
     pub ordinary_resolution: Option<super::OrdinaryPassageResolution>,
+    /// The ToolCall sources of a `tool_result_continuation`, in item order.
+    pub tool_results: Option<Vec<super::ToolResultSource>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -265,6 +279,7 @@ pub fn assemble_current_passage_context(
             candidate_target: None,
             selection_references: None,
             ordinary_resolution: None,
+            tool_results: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

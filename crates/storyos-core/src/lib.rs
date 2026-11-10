@@ -32,6 +32,7 @@ mod tool_dispatch;
 mod tool_exposure;
 mod tool_registration;
 mod tool_result;
+mod tool_result_context;
 mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -82,10 +83,11 @@ pub use archive_path::{
     ArchivePathRefusal, admit_archive_path,
 };
 pub use assemble_context::{
-    CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
-    CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput,
-    PassageContextTarget, ProjectionMode, RejectionReason, assemble_current_passage_context,
-    assemble_passage_collection, decode_assembly_record, encode_assembly_record,
+    CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextCause, ContextSourceClass,
+    ContextSufficiency, CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo,
+    InstructionBindingInput, PassageContextTarget, ProjectionMode, RejectionReason,
+    assemble_current_passage_context, assemble_passage_collection, decode_assembly_record,
+    encode_assembly_record,
 };
 pub use compact_active_context::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
@@ -280,7 +282,12 @@ pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,
     ToolCallRefusal, ToolRegistration, ToolRegistrationKind, ToolRegistrationLifecycle,
 };
-pub use tool_result::{TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection};
+pub use tool_result::{
+    BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
+};
+pub use tool_result_context::{
+    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
+};
 pub use tool_spec::{
     ExternalRead, ExternalWrite, IntakeField, IntakeRefusal, ServerArguments,
     TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec,

@@ -129,6 +129,32 @@ pub struct CreateRequest {
     pub tool_exposure: ToolExposure,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
+    /// The function outputs of a continuation RunStep, in item order: one for each resolved
+    /// ToolCall of the Run, from its selected `tool_result` Context item.
+    pub tool_outputs: Vec<ToolOutput>,
+}
+
+/// One native function call of the Run and its projected output (ADR 0033: the request keeps
+/// the native tool-call and result correlation).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ToolOutput {
+    pub call_id: String,
+    pub name: String,
+    /// The validated arguments of the call as canonical JSON text.
+    pub arguments: String,
+    /// The bounded `tool_result` projection of the stored ToolCall.
+    pub output: String,
+    pub origin: ToolOutputOrigin,
+}
+
+/// Where the native function call of one output is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ToolOutputOrigin {
+    /// The response that the prior response reference names: an incremental request sends only
+    /// the output.
+    PriorResponse,
+    /// An earlier RunStep of the Run: only a full input sends it again, with its call.
+    EarlierStep,
 }
 
 /// One selected Context Assembly item that the request sends.

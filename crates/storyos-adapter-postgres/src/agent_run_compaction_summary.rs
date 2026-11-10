@@ -127,6 +127,7 @@ pub(crate) async fn summary_request(
         previous_response_reference,
         tool_exposure: storyos_core::ToolExposure::empty(),
         successor_of: None,
+        tool_outputs: Vec::new(),
     }))
 }
 
