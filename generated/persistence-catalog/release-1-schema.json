@@ -1986,9 +1986,9 @@
       "constraints": {
         "context_assembly_manifests_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "context_assembly_manifests_destination_pair": "CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE))",
-        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text])))",
+        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'research_tool_v1'::text])))",
         "context_assembly_manifests_disclosure_grant_shape": "CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL)))",
-        "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text])))",
+        "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))",
         "context_assembly_manifests_owner_user_id_project_id_operat_fkey": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
         "context_assembly_manifests_owner_user_id_project_id_operati_key": "UNIQUE (owner_user_id, project_id, operation_requirement_id)",
         "context_assembly_manifests_owner_user_id_project_id_receip_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
@@ -3705,7 +3705,7 @@
         "operation_requirements_owner_user_id_project_id_receipt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
         "operation_requirements_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "operation_requirements_pkey": "PRIMARY KEY (owner_user_id, project_id, operation_requirement_id)",
-        "operation_requirements_requirement_role_check": "CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text])))"
+        "operation_requirements_requirement_role_check": "CHECK ((requirement_role = ANY (ARRAY['primary'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))"
       },
       "indexes": {
         "operation_requirements_one_role": "CREATE UNIQUE INDEX operation_requirements_one_role ON storyos.operation_requirements USING btree (owner_user_id, project_id, run_id, requirement_role, decision_position)",
