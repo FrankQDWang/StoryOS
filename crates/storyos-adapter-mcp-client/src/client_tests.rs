@@ -596,6 +596,7 @@ async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
     })
     .await;
     let drift = exchange(dispatch(&drifted_url)).await;
+    let not_submitted = exchange(dispatch(&failed_url)).await;
 
     assert_eq!(
         (
@@ -605,7 +606,7 @@ async fn a_dispatch_sends_no_call_after_a_drifted_or_failed_tool_list() {
                 observed: "fake-exa".to_owned(),
             })),
             std::mem::take(&mut *drifted.lock().unwrap()),
-            exchange(dispatch(&failed_url)).await,
+            not_submitted,
             std::mem::take(&mut *failed.lock().unwrap()),
         ),
         (
