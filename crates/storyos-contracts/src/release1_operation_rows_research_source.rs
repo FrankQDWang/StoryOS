@@ -6,7 +6,6 @@ use super::{
     DATE_TIME, Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources,
     U64, UUID, raw_schema,
 };
-use crate::release1_wire::U64_WIRE;
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_research_source::{
     GET_RESEARCH_SOURCE, GetResearchSourceResponse, LIST_RESEARCH_SOURCES,
@@ -14,6 +13,7 @@ use crate::release1_research_source::{
     SourceSnapshotKind,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
+use crate::release1_wire::U64_WIRE;
 
 pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::query(
