@@ -7,7 +7,7 @@ import type { BrowserContext } from "playwright";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { uuidV7 } from "../../src/acceptance-journal.ts";
-import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal, cancelAgentRun, digestCancelAgentRun, pauseAgentRun, digestPauseAgentRun,
+import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal, pauseAgentRun, digestPauseAgentRun,
   updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, queryStoryOSPostgres, sessionFetch } from "./node-integration.ts";
@@ -167,18 +167,11 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
       }, { url: String(input), body: String(init?.body), headers: [...new Headers(init?.headers)], method: init?.method ?? "POST" });
       return new Response(response.body, { status: response.status, headers: response.headers });
     };
-    const cancel = { command_schema: "storyos.command.cancel-agent-run.request.v1" as const,
-      cancel_agent_run_input: { client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: id() } };
-    const cancelKey = id();
+    // The author cancels the queued Run in the panel (#1425).
+    await page.getByRole("button", { name: "取消任务", exact: true }).click();
+    await expect(page.getByRole("status")).toHaveText("任务已取消。");
+    await expect(page.getByRole("button", { name: "取消任务", exact: true })).toHaveCount(0);
     const cancelOptions = { ...options, fetchImpl: browserFetch };
-    const cancelChallenge = await createProjectCommandChallenge({ ...cancelOptions, request: { method: "POST",
-      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel", command_schema: cancel.command_schema,
-      canonical_command_digest: await digestCancelAgentRun(cancel), idempotency_key: cancelKey } });
-    const cancelled = await cancelAgentRun({ ...cancelOptions, runId: cancelledId, request: cancel,
-      idempotencyKey: cancelKey, antiForgery: cancelChallenge.nonce });
-    assert.ok(cancelled.effect.kind === "applied" && cancelled.effect.status === "cancelled");
-    assert.equal(cancelled.receipt.command_kind, "cancelAgentRun");
     await page.reload();
     await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
     assert.equal((await getAgentRun({ ...options, runId: cancelledId })).status, "cancelled");
@@ -186,7 +179,8 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter.current_revision, revision);
     await expect(page.getByRole("button", { name: "暂停", exact: true })).toHaveCount(0);
     const pauseRequest = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
-      pause_agent_run_input: { ...cancel.cancel_agent_run_input, correlation_id: id() } };
+      pause_agent_run_input: { client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+        security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: id() } };
     const pauseKey = id();
     const refusedChallenge = await createProjectCommandChallenge({ ...cancelOptions, request: { method: "POST",
       route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", command_schema: pauseRequest.command_schema,

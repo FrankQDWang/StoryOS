@@ -8,11 +8,11 @@ import {
   getAgentRun, getChapter, getResearchArtifact, listResearchSources,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, prepare, settleOnce } from "./acceptance.ts";
+import { USER_A, drainLeftoverWork, prepare, settleOnce } from "./acceptance.ts";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 import {
-  MISSING_URL, PAGE_URL, SEARCH_QUERY, callsReply, fakeAgentPlan, fakeExaMcp, functionOutputs, messageReply,
+  HELD_QUERY, MISSING_URL, PAGE_URL, SEARCH_QUERY, callsReply, fakeAgentPlan, fakeExaMcp, functionOutputs, messageReply,
   taggedIdentities,
 } from "./research-journey-fakes.ts";
 
@@ -68,7 +68,8 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
         changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
       // An empty URL list fails the typed intake, so the batch does not validate.
       callsReply("resp_s509_5", [["call_invalid", "web_fetch", { urls: [] }]]),
-      messageReply("resp_s509_6", () => "这一段可以写得更安静。"),
+      callsReply("resp_s509_6", [["call_held", "web_search", { query: HELD_QUERY, result_count: null }]]),
+      messageReply("resp_s509_7", () => "这一段可以写得更安静。"),
     ]);
     started.push(model.close);
     const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
@@ -81,6 +82,8 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     page.on("pageerror", (error) => errors.push(error.message));
     page.setDefaultTimeout(10_000);
     await page.setViewportSize({ width: 1487, height: 1058 });
+    // Each `settleOnce` claims the oldest queued Run, so the Runs that earlier journeys left settle first.
+    await drainLeftoverWork();
     const setup = await prepare(server.baseUrl, "018f0000-0000-7001-8000-0000005e0900", "Research journey", "5e091");
     const options = { baseUrl: server.baseUrl, projectId: setup.projectId, fetchImpl: setup.fetchImpl };
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
@@ -174,6 +177,39 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await expect(page.locator("[data-assistant-result]"))
       .toHaveText("模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。");
 
+    // The author cancels a Run in the panel while the fake Exa server holds its search answer. The cancel fences the
+    // dispatched ToolCall, and the Worker drops the exchange at its next lease renewal (ADR 0086, #1425).
+    const held = mcp.hold();
+    const cancelRun = await send(page, "再查一下 1890 年利物浦港口的早晨记录。");
+    await pointAtFakes(setup.projectId, model.base, mcp.base);
+    // A lease of 3 seconds makes the Worker renew it each second, so it reads the fence soon after the cancel.
+    const worker = settleOnce({ ...WORKER_ENV, STORYOS_EXPORT_LEASE_TTL_SECS: "3" });
+    started.push(() => worker.catch(() => undefined));
+    // The dispatch claim commits before the exchange, so the held call has a dispatched ToolCall.
+    await expect.poll(() => mcp.calls().length).toBe(3);
+    await page.locator("[data-cancel-agent-run]").click();
+    await expect(page.getByRole("status")).toHaveText("任务已取消。");
+    const uncertain = `可能已联网搜索，但没有收到结果：${HELD_QUERY}`;
+    await expect(page.locator("[data-assistant-result]")).toHaveText(uncertain);
+    await expect(page.locator("[data-cancel-agent-run]")).toHaveCount(0);
+    // The Worker exits only after it drops the exchange. Then the fake answers late, to a closed connection.
+    await worker;
+    assert.deepEqual(held.release(), { connectionOpen: false });
+    const cancelled = await getAgentRun({ ...options, runId: cancelRun });
+    assert.equal(cancelled.status, "cancelled");
+    assert.deepEqual(cancelled.decision.kind === "tool_request" ? cancelled.decision.calls : cancelled.decision,
+      [{ kind: "search", query: HELD_QUERY, outcome: "unknown" }]);
+    const unknownSources = await listResearchSources({ ...options, runId: cancelRun });
+    assert.deepEqual({ snapshots: unknownSources.snapshots, gaps: unknownSources.gaps,
+      unknown: unknownSources.unknown_calls.map(({ call, late_result }) => ({ call, late_result })) },
+    { snapshots: [], gaps: [], unknown: [{ call: { kind: "search", query: HELD_QUERY, outcome: "unknown" }, late_result: false }] });
+    // The fence of the cancel settled the ToolCall, and no late answer reached the store.
+    assert.equal(await queryStoryOSPostgres(`SELECT state || ':' || (attempt->'fence'->>'cause') || ':'
+        || (attempt->'fence'->>'local_stop') || ':' || (attempt ? 'late_observation')::text
+      FROM storyos.tool_calls WHERE run_id = '${cancelRun}'::uuid`), "unknown:run_cancelled:drop_exchange:false");
+    await page.reload();
+    await expect(page.locator("[data-assistant-result]")).toHaveText(uncertain);
+
     // The author disables web research. The next request exposes no Tool, and manual writing saves.
     await page.locator('[data-research-tool="enabled"] input[role="switch"]').click();
     await page.locator('[data-research-tool="disabled"]').waitFor();
@@ -181,9 +217,9 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
     assert.equal((await getAgentRun({ ...options, runId: plainRun })).decision.kind, "advisory");
-    assert.equal(model.bodies.length, 6);
-    assert.equal("tools" in model.bodies[5]!, false);
-    assert.equal(mcp.calls().length, 2);
+    assert.equal(model.bodies.length, 7);
+    assert.equal("tools" in model.bodies[6]!, false);
+    assert.equal(mcp.calls().length, 3);
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText("雾散了。");
@@ -192,8 +228,8 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await saved.waitFor();
     assert.deepEqual(errors, []);
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 4,
-      rejectProposalOperations: 1 }, authorActions: 7 });
+      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 5,
+      rejectProposalOperations: 1, cancelAgentRun: 1 }, authorActions: 7 });
   } finally {
     for (const close of started.reverse()) await close();
   }

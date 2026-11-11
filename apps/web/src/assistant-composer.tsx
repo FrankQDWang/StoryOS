@@ -47,6 +47,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
   const pause = active && run.status !== "paused" && message.trim().length === 0;
   const enabled = available && context?.canSubmit === true && context.chapterId !== undefined
     && !sending && !busy && pending === undefined && (current === undefined || known);
+  // The cancellation ends the Run and needs no chapter, so it shows for each known Run that is not settled.
+  const cancellable = available && context?.canSubmit === true && !sending && !busy && pending === undefined;
 
   const submitControl = async (intent: RunControlIntent) => {
     if (context === undefined) return;
@@ -82,7 +84,8 @@ export function AssistantComposer({ context, available, sending, current, run, o
         return;
       }
       onStatus(response.effect.kind === "conflicted" ? "任务已结束，这次操作未执行。"
-        : intent.kind === "pause" ? "任务已暂停，候选文字保持原样。" : "要求已收到，将用于当前任务。");
+        : intent.kind === "pause" ? "任务已暂停，候选文字保持原样。"
+        : intent.kind === "cancel" ? "任务已取消。" : "要求已收到，将用于当前任务。");
     } catch (error) {
       if (!alive.current) return;
       if (historicalAcknowledgementUnavailable(error)) {
@@ -175,6 +178,10 @@ export function AssistantComposer({ context, available, sending, current, run, o
         }}
         placeholder="描述想修改的当前章节文字" />
       <div className="composer-controls">
+        {active && context !== undefined ? <button className="cancel-run-button" type="button" data-cancel-agent-run=""
+          disabled={!cancellable} onClick={() => {
+            if (cancellable) void submitControl(freezeRunControl(context, run, { kind: "cancel" }));
+          }}>取消任务</button> : null}
         <button className="send-button" type="submit" aria-label={pause ? "暂停" : "发送"}
           disabled={!enabled || (!pause && message.trim().length === 0)}>{pause ? "■" : "↑"}</button>
       </div>
