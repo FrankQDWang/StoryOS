@@ -66,7 +66,9 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
       }),
       messageReply("resp_s509_4", () => JSON.stringify({ kind: "prose_change", summary: "加入涨潮时间。",
         changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
-      messageReply("resp_s509_5", () => "这一段可以写得更安静。"),
+      // An empty URL list fails the typed intake, so the batch does not validate.
+      callsReply("resp_s509_5", [["call_invalid", "web_fetch", { urls: [] }]]),
+      messageReply("resp_s509_6", () => "这一段可以写得更安静。"),
     ]);
     started.push(model.close);
     const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
@@ -149,6 +151,16 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await saved.waitFor();
     assert.deepEqual(await keptRecords(), kept);
 
+    // The model sends a research request that StoryOS cannot accept. The Run refuses, and no Tool runs.
+    const invalidRun = await send(page, "再查一下 1890 年的港口日志。");
+    await pointAtFakes(setup.projectId, model.base, mcp.base);
+    await settleOnce(WORKER_ENV);
+    assert.deepEqual((await getAgentRun({ ...options, runId: invalidRun })).decision,
+      { kind: "execution_refused", capability: "tool_request_invalid" });
+    await page.reload();
+    await expect(page.locator("[data-assistant-result]"))
+      .toHaveText("模型发出的联网检索请求不符合要求，这次没有检索，正文没有改动。你可以重试，或继续手动写作。");
+
     // The author disables web research. The next request exposes no Tool, and manual writing saves.
     await page.locator('[data-research-tool="enabled"] input[role="switch"]').click();
     await page.locator('[data-research-tool="disabled"]').waitFor();
@@ -156,8 +168,8 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
     assert.equal((await getAgentRun({ ...options, runId: plainRun })).decision.kind, "advisory");
-    assert.equal(model.bodies.length, 5);
-    assert.equal("tools" in model.bodies[4]!, false);
+    assert.equal(model.bodies.length, 6);
+    assert.equal("tools" in model.bodies[5]!, false);
     assert.equal(mcp.calls().length, 2);
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
@@ -167,7 +179,7 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await saved.waitFor();
     assert.deepEqual(errors, []);
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 3,
+      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 4,
       rejectProposalOperations: 1 }, authorActions: 7 });
   } finally {
     for (const close of started.reverse()) await close();

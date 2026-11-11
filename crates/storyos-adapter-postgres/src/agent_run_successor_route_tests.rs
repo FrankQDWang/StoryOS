@@ -183,7 +183,7 @@ async fn a_successor_function_request_settles_the_run_with_the_research_refusal(
             [
                 Some("refused".to_owned()),
                 Some(
-                    r#"{"kind": "execution_refused", "capability": "research_tool_unavailable"}"#
+                    r#"{"kind": "execution_refused", "capability": "tool_request_invalid"}"#
                         .to_owned()
                 ),
                 Some("dispatched".to_owned()),

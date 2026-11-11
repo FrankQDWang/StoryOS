@@ -397,3 +397,74 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
         )
     );
 }
+
+/// The refusal capability that the author sees for `refusal`. The match has no wildcard, so a
+/// new refusal must choose its capability here.
+fn expected_capability(refusal: &ToolCallBatchRefusal) -> &'static str {
+    match refusal {
+        ToolCallBatchRefusal::NotEnabled { .. }
+        | ToolCallBatchRefusal::RegistrationUnavailable { .. }
+        | ToolCallBatchRefusal::UnknownSpec { .. } => crate::RESEARCH_TOOL_UNAVAILABLE_CAPABILITY,
+        ToolCallBatchRefusal::ResponseIncomplete
+        | ToolCallBatchRefusal::UnexpectedItem { .. }
+        | ToolCallBatchRefusal::Incomplete { .. }
+        | ToolCallBatchRefusal::InvalidCallId { .. }
+        | ToolCallBatchRefusal::Unexposed { .. }
+        | ToolCallBatchRefusal::Malformed { .. }
+        | ToolCallBatchRefusal::Intake { .. }
+        | ToolCallBatchRefusal::DuplicateCallId { .. } => crate::TOOL_REQUEST_INVALID_CAPABILITY,
+    }
+}
+
+#[test]
+fn only_an_unavailable_tool_refuses_the_function_request_as_research_unavailable() {
+    let item = || "fc_01".to_owned();
+    let call = || "call_01".to_owned();
+    let refusals = [
+        ToolCallBatchRefusal::ResponseIncomplete,
+        ToolCallBatchRefusal::UnexpectedItem { item_id: item() },
+        ToolCallBatchRefusal::Incomplete { item_id: item() },
+        ToolCallBatchRefusal::InvalidCallId { item_id: item() },
+        ToolCallBatchRefusal::Unexposed { call_id: call() },
+        ToolCallBatchRefusal::NotEnabled { call_id: call() },
+        ToolCallBatchRefusal::RegistrationUnavailable { call_id: call() },
+        ToolCallBatchRefusal::UnknownSpec { call_id: call() },
+        ToolCallBatchRefusal::Malformed { call_id: call() },
+        ToolCallBatchRefusal::Intake {
+            call_id: call(),
+            refusal: IntakeRefusal::Malformed,
+        },
+        ToolCallBatchRefusal::Intake {
+            call_id: call(),
+            refusal: IntakeRefusal::Query,
+        },
+        ToolCallBatchRefusal::Intake {
+            call_id: call(),
+            refusal: IntakeRefusal::ResultCount,
+        },
+        ToolCallBatchRefusal::Intake {
+            call_id: call(),
+            refusal: IntakeRefusal::UrlCount,
+        },
+        ToolCallBatchRefusal::Intake {
+            call_id: call(),
+            refusal: IntakeRefusal::Url,
+        },
+        ToolCallBatchRefusal::DuplicateCallId { call_id: call() },
+    ];
+    let mapped: Vec<_> = refusals
+        .iter()
+        .map(|refusal| {
+            (
+                refusal.label(),
+                crate::function_request_refusal_capability(refusal.label()),
+            )
+        })
+        .collect();
+    let expected: Vec<_> = refusals
+        .iter()
+        .map(|refusal| (refusal.label(), expected_capability(refusal)))
+        .collect();
+
+    assert_eq!(mapped, expected);
+}

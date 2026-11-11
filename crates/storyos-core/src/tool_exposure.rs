@@ -260,10 +260,27 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
     })
 }
 
-/// The refusal capability of a Run whose response asks for a function while no Tool executes
-/// (ADR 0084): the batch did not validate, or its ToolCalls stay `pending`. The author sees one
-/// result sentence.
+/// The refusal capability of a Run whose function request batch did not validate because no Tool
+/// can execute the request now (ADR 0084): the Project does not enable the pinned Registration
+/// now, its pinned revision does not admit a new ToolCall now, or this build does not have its
+/// pinned ToolSpec revision. The author sees one result sentence.
 pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
+
+/// The refusal capability of a Run whose function request batch did not validate for each other
+/// refusal (ADR 0084): StoryOS could not accept the request of the model. The Attempt keeps the
+/// refusal as evidence, and the author sees one result sentence.
+pub const TOOL_REQUEST_INVALID_CAPABILITY: &str = "tool_request_invalid";
+
+/// The refusal capability of a Run whose function request batch did not validate, from the
+/// `label` of its `ToolCallBatchRefusal` on the Attempt evidence.
+pub fn function_request_refusal_capability(label: &str) -> &'static str {
+    match label {
+        "tool_not_enabled" | "tool_registration_unavailable" | "unknown_spec" => {
+            RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
+        }
+        _ => TOOL_REQUEST_INVALID_CAPABILITY,
+    }
+}
 
 /// What the Host does with one terminal response after core validation (ADR 0084).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -271,13 +288,13 @@ pub enum ResponseDisposition {
     /// Core validation made an Agent Decision. The response settles as that decision.
     Decision,
     /// Core validation made an Agent Decision of a validated function request batch. The store
-    /// derives one ToolCall for each member with the durable Decision, in state `pending`. Until
-    /// execution exists, the Run refuses with `research_tool_unavailable` and keeps the Decision
-    /// and the ToolCalls as evidence.
+    /// derives one ToolCall for each member with the durable Decision, in state `pending`, and
+    /// the Run continues to the Tool Gateway.
     ToolCallsPending,
     /// The response of an ordinary request made no Agent Decision and asks for a function: the
     /// batch did not validate. No ToolCall exists: the items and the usage stay as evidence, and
-    /// the Run refuses with `research_tool_unavailable`. A probe never gets this disposition.
+    /// the Run refuses with the capability of `function_request_refusal_capability`. A probe
+    /// never gets this disposition.
     FunctionRequested,
     /// No Agent Decision and no function request: a probe response, or a reply that validation
     /// did not accept.

@@ -39,9 +39,12 @@ it.each([
   ["an input above the model window", { status: "refused",
     decision: { kind: "execution_refused", capability: "conversation_too_long" } },
   "这段对话已经太长，请开始一个新对话。你可以继续手动写作。"],
-  ["a model that asked for research before the research tool exists", { status: "refused",
+  ["a research request that no Tool can execute now", { status: "refused",
     decision: { kind: "execution_refused", capability: "research_tool_unavailable" } },
-  "模型想要联网检索，但检索功能还没有开放，正文没有改动。你可以重试，或继续手动写作。"],
+  "联网检索现在不可用，这次没有检索，正文没有改动。你可以重试，或继续手动写作。"],
+  ["a research request that StoryOS could not accept while research is enabled", { status: "refused",
+    decision: { kind: "execution_refused", capability: "tool_request_invalid" } },
+  "模型发出的联网检索请求不符合要求，这次没有检索，正文没有改动。你可以重试，或继续手动写作。"],
 ])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
@@ -80,14 +83,19 @@ it.each([
     for (let turn = 0; turn < 5; turn += 1) await act(async () => { await Promise.resolve(); });
     const newConversation = host.querySelector<HTMLButtonElement>("[data-assistant-new-conversation]");
 
+    const result = host.querySelector("[data-assistant-result]")?.textContent ?? null;
+
     expect({
-      result: host.querySelector("[data-assistant-result]")?.textContent ?? null,
+      result,
+      // No stopped request tells the author that research is not open (#1426).
+      saysResearchNotOpen: result?.includes("没有开放") ?? null,
       runStatus: host.querySelector("[data-assistant-run-status]")?.textContent ?? null,
       newConversationEnabled: newConversation?.disabled === false,
       sendLabel: host.querySelector(".send-button")?.getAttribute("aria-label") ?? null,
       pendingRefreshes,
     }).toEqual({
       result: sentence,
+      saysResearchNotOpen: false,
       runStatus: null,
       newConversationEnabled: true,
       sendLabel: "发送",

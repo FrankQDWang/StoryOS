@@ -292,7 +292,8 @@ pub use tool_dispatch::{
 pub use tool_exposure::{
     EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
     RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
-    ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
+    TOOL_REQUEST_INVALID_CAPABILITY, ToolCompatibilityDecision, ToolExposure,
+    function_request_refusal_capability, requests_function, response_disposition,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,

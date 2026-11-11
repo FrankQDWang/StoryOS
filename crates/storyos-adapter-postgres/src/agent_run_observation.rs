@@ -150,7 +150,7 @@ pub(crate) async fn persist_create_result(
     let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
-        CreateSettlement::FunctionRequested => refusal = Some(research_refusal()),
+        CreateSettlement::FunctionRequested => refusal = Some(research_refusal(&payload)),
         CreateSettlement::ToolCallsPending => {}
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
@@ -247,11 +247,16 @@ pub(crate) async fn persist_create_result(
 }
 
 /// The settlement of a Run whose response asks for a function and whose batch did not validate
-/// (ADR 0084). The author sees one result sentence.
-pub(crate) fn research_refusal() -> serde_json::Value {
+/// (ADR 0084). The refusal label of the batch evidence on `attempt_payload` gives the capability,
+/// and the author sees one result sentence for it.
+pub(crate) fn research_refusal(attempt_payload: &serde_json::Value) -> serde_json::Value {
+    let label = attempt_payload
+        .pointer("/tool_call_batch/refusal")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
     serde_json::json!({
         "kind": "execution_refused",
-        "capability": storyos_core::RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
+        "capability": storyos_core::function_request_refusal_capability(label)
     })
 }
 
