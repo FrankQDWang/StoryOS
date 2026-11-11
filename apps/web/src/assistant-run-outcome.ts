@@ -1,5 +1,5 @@
 import type {
-  GetAgentRunResponse, ListResearchSourcesResponse, ResearchArtifactInspect, SourceGapReason, ToolCallInspect,
+  GetAgentRunResponse, ListResearchSourcesResponse, ResearchArtifactInspect, SourceGapInspect, SourceGapReason, ToolCallInspect,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 /** The sentence for a request whose result did not arrive. The author approved it (ADR 0057). */
@@ -42,10 +42,23 @@ function toolCallLine(call: ToolCallInspect): string {
 /** The words for a requested page that StoryOS could not capture (ADR 0040). */
 export const SOURCE_NOT_AVAILABLE = "无法获取";
 
+/** The reason words of a Source Gap. The source list and the citation list use the same words. */
+const gapReasons: Record<SourceGapReason, string> = {
+  failed: "读取失败",
+  empty: "网页没有文字",
+  missing: "检索结果中没有这个网页",
+  unattributed: "无法确认内容来自这个网页",
+};
+
+/** The line of a page that is not available: its URL, "not available", and the reason (ADR 0040). */
+function gapLine(gap: SourceGapInspect): string {
+  return `${gap.locator}：${SOURCE_NOT_AVAILABLE}（${gapReasons[gap.reason]}）`;
+}
+
 /** One line for each research source of a Run: the title or the URL with the capture time, then
- * each page that is not available, with no identifier (ADR 0040). Then each call that may have
- * run follows, except a call of the function request `shownDecisionId` that the panel shows with
- * its calls (ADR 0086). */
+ * each page that is not available with its reason, with no identifier (ADR 0040). Then each call
+ * that may have run follows, except a call of the function request `shownDecisionId` that the
+ * panel shows with its calls (ADR 0086). */
 export function researchSourceLines(
   sources: ListResearchSourcesResponse, shownDecisionId: string | undefined,
 ): string[] {
@@ -53,7 +66,7 @@ export function researchSourceLines(
   return [
     ...sources.snapshots.map(snapshot =>
       `${snapshot.title ?? snapshot.locator}（获取于 ${time.format(new Date(snapshot.captured_at))}）`),
-    ...sources.gaps.map(gap => `${gap.locator}：${SOURCE_NOT_AVAILABLE}`),
+    ...sources.gaps.map(gapLine),
     ...sources.unknown_calls
       .filter(unknown => unknown.decision_id !== shownDecisionId)
       .map(unknown => toolCallLine(unknown.call)),
@@ -66,13 +79,6 @@ export const RESEARCH_SYNTHESIS_SENTENCE = "研究结果如下。每条结论后
 /** The message of the "Use this in the story" button: an ordinary request in the same conversation. */
 export const USE_RESEARCH_MESSAGE = "请根据上面的研究结果修改当前章节的正文。";
 
-const gapReasons: Record<SourceGapReason, string> = {
-  failed: "读取失败",
-  empty: "网页没有文字",
-  missing: "检索结果中没有这个网页",
-  unattributed: "无法确认内容来自这个网页",
-};
-
 /** The text of one Research Artifact with no identifier (ADR 0040, ADR 0087): each claim with the
  * numbers of its citations, and each numbered citation as the title or URL of its Snapshot with
  * the capture time, or as the URL of its Gap with "not available" and the reason. */
@@ -82,7 +88,7 @@ export function researchArtifactLines(artifact: ResearchArtifactInspect): { clai
     claims: artifact.claims.map(claim => `${claim.text} ${claim.citations.map(number => `[${number}]`).join("")}`),
     citations: artifact.citations.map((citation, index) => citation.kind === "snapshot"
       ? `[${index + 1}] ${citation.snapshot.title ?? citation.snapshot.locator}（获取于 ${time.format(new Date(citation.snapshot.captured_at))}）`
-      : `[${index + 1}] ${citation.gap.locator}：${SOURCE_NOT_AVAILABLE}（${gapReasons[citation.gap.reason]}）`),
+      : `[${index + 1}] ${gapLine(citation.gap)}`),
   };
 }
 

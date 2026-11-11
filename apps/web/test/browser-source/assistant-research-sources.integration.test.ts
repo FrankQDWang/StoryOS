@@ -1,15 +1,19 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
+import type {
+  ListResearchSourcesResponse, SourceGapReason,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
 import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
+import { researchSourceLines } from "../../src/assistant-run-outcome.ts";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c91";
 
-it("lists the sources of the current turn by title or URL with the capture time, a gap as not available, and a call that may have run", async () => {
+it("lists the sources of the current turn by title or URL with the capture time, a gap as not available with its reason, and a call that may have run", async () => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Check the tide tables of 1890.", chapterId: CHAPTER,
@@ -57,7 +61,7 @@ it("lists the sources of the current turn by title or URL with the capture time,
       lines: [
         `Liverpool tide table 1890（获取于 ${time.format(new Date("2026-11-10T03:00:00.000Z"))}）`,
         `https://example.org/port-log（获取于 ${time.format(new Date("2026-11-10T03:05:00.000Z"))}）`,
-        "https://example.org/port：无法获取",
+        "https://example.org/port：无法获取（读取失败）",
         "可能已联网搜索，但没有收到结果：harbour log of 1890",
       ],
       showsIdentifier: false,
@@ -68,4 +72,19 @@ it("lists the sources of the current turn by title or URL with the capture time,
     sessionStorage.clear();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
   }
+});
+
+it("shows the reason of each gap in the source list with the words of the citation list", () => {
+  const [gap] = sourcesFixture.gaps;
+  const reasons: SourceGapReason[] = ["failed", "empty", "missing", "unattributed"];
+  const sources: ListResearchSourcesResponse = {
+    ...sourcesFixture, snapshots: [], unknown_calls: [],
+    gaps: reasons.map(reason => ({ ...gap!, locator: `https://example.org/${reason}`, reason })),
+  };
+  expect(researchSourceLines(sources, undefined)).toEqual([
+    "https://example.org/failed：无法获取（读取失败）",
+    "https://example.org/empty：无法获取（网页没有文字）",
+    "https://example.org/missing：无法获取（检索结果中没有这个网页）",
+    "https://example.org/unattributed：无法获取（无法确认内容来自这个网页）",
+  ]);
 });

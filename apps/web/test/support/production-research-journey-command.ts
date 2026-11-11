@@ -117,7 +117,7 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await page.reload();
     const sources = page.locator("[data-assistant-research-sources] li");
     await expect(sources).toHaveText([/^Liverpool tide table 1890（获取于 /u, /^Mersey port log（获取于 /u,
-      /^Liverpool tide table 1890（获取于 /u, `${MISSING_URL}：无法获取`]);
+      /^Liverpool tide table 1890（获取于 /u, `${MISSING_URL}：无法获取（读取失败）`]);
     const artifactPanel = page.locator("[data-assistant-research-artifact]");
     await expect(artifactPanel.locator('ul[aria-label="研究结论"] li'))
       .toHaveText(["王子码头上午十点四十二分涨潮。 [1][2]", "港口日志不可用。 [3]"]);
