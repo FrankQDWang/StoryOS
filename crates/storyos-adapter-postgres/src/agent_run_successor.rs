@@ -34,20 +34,20 @@ pub(crate) struct SuccessorSelection {
 
 /// The Host gates of the successor of one unknown create. The fake profile scripts them by the
 /// author message. A real route derives them from the pinned use binding, the committed items,
-/// and the pending ToolCalls of the Run.
+/// and the ToolCalls of the Run whose effect is unresolved.
 pub(crate) fn conditions(
     run: &RunPhaseRow,
     payload: &serde_json::Value,
-    pending_tool_call: bool,
+    unresolved_tool_call: bool,
 ) -> Option<SuccessorConditions> {
     match storyos_core::model_registration(&run.model_registration_revision)
         .map(|registration| registration.adapter)
     {
         Some(ModelAdapter::VolcengineAgentPlanResponses) => {
-            // A committed Tool item is a Tool effect, and so is a ToolCall that no execution
-            // resolved (ADR 0033). The adapter maps each native item that is not a message or a
-            // reasoning item to a Tool item.
-            let effect = pending_tool_call
+            // A committed Tool item is a Tool or hosted-operation effect, and so is a ToolCall
+            // whose effect no evidence settled (ADR 0033). The adapter maps each native item that
+            // is not a message or a reasoning item to a Tool item.
+            let effect = unresolved_tool_call
                 || payload
                     .get("items")
                     .and_then(serde_json::Value::as_array)
@@ -226,8 +226,9 @@ pub(crate) async fn prohibit_automatic_successor(
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0",
+                AND run_id = $3::text::uuid AND attempt_role = 'decision'
+                AND payload ? 'unknown_create_successor'
+              ORDER BY decision_position DESC LIMIT 1",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -316,10 +317,12 @@ pub(crate) async fn load_unknown_create_successor(
     }))
 }
 
+/// The selected Decision of the successor at `decision_position`, the shown position.
 pub(crate) async fn load_successor_selection(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
+    decision_position: &str,
 ) -> Result<Option<SuccessorSelection>, storyos_application::CreateAgentRunError> {
     let Some(row) = client
         .query_opt(
@@ -328,11 +331,12 @@ pub(crate) async fn load_successor_selection(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'successor'",
+                AND attempt_role = 'successor' AND decision_position = $4::text::numeric",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+                &decision_position,
             ],
         )
         .await
@@ -404,7 +408,8 @@ pub(crate) async fn load_decision(
                JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
+                AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = run.active_decision_position
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -436,8 +441,9 @@ async fn decision_payload(
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0",
+                AND run_id = $3::text::uuid AND attempt_role = 'decision'
+                AND payload ? 'unknown_create_successor'
+              ORDER BY decision_position DESC LIMIT 1",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -467,8 +473,7 @@ pub(crate) async fn write_decision_payload(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0
-                AND decision_id IS NULL",
+                AND attempt_role = 'decision' AND decision_id IS NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

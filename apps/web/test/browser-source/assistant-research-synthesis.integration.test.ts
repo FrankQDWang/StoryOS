@@ -15,8 +15,29 @@ const RUN = artifactFixture.artifact.lineage.run_id;
 const NEXT_RUN = createFixture.effect.run_id;
 const CONVERSATION = agentRunFixture.conversation_id;
 const ARTIFACT = artifactFixture.artifact.research_artifact_id;
+const PREDECESSOR = "018f0000-0000-7001-8000-000000000e95";
 
-it("shows the synthesis with numbered citations and a gap reason, and sends the ordinary request to use it", async () => {
+// The getAgentRun facts of a continuation whose Retrieve answered 404 and whose one successor
+// settled the synthesis (ADR 0088): the retrieval keeps the unknown outcome of the predecessor.
+const recovered = {
+  original_result_retrieval: { kind: "present", reconciliation_id: "018f0000-0000-7001-8000-000000000e96",
+    disposition: "kept_unknown", keep_reason: "unknown_result", original_model_attempt_id: PREDECESSOR,
+    repeats_original_create: false, resumes_stream: false, proves_create_idempotency: false,
+    supplies_decision: false, supplies_tool_call: false, advances_continuation: false,
+    reservation_released: false, usage_kind: "unknown" },
+  unknown_create_successor: { kind: "present", recovery_id: "018f0000-0000-7001-8000-000000000e97",
+    disposition: "dispatched", predecessor_model_attempt_id: PREDECESSOR,
+    successor_model_attempt_id: artifactFixture.artifact.lineage.model_attempt_id,
+    model_invocation_id: "018f0000-0000-7001-8000-000000000e98", predecessor_fenced: true,
+    allowance_consumed: true, predecessor_usage_kind: "reported", predecessor_reservation_released: true,
+    successor_settles_predecessor: false, supplies_tool_call: false,
+    advances_predecessor_continuation: false, reuses_changed_context: false },
+};
+
+it.each([
+  ["a synthesis", {}],
+  ["the synthesis of a continuation successor", recovered],
+])("shows %s with numbered citations and a gap reason, and sends the ordinary request to use it", async (_, recovery) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Check the tide tables of 1890.", chapterId: CHAPTER,
@@ -33,7 +54,7 @@ it("shows the synthesis with numbered citations and a gap reason, and sends the 
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN, status: "completed",
         decision: { kind: "research_synthesis", decision_id: artifactFixture.artifact.lineage.decision_id,
-          selected: true, research_artifact_id: ARTIFACT, continuation: { kind: "absent" } } });
+          selected: true, research_artifact_id: ARTIFACT, continuation: { kind: "absent" } }, ...recovery });
     }
     if (path.endsWith(`/agent-runs/${RUN}/research-sources`)) return jsonResponse({ code: "resource_unavailable" }, 404);
     if (path.endsWith(`/research-artifacts/${ARTIFACT}`)) return jsonResponse({ ...artifactFixture, project_scope: scope });

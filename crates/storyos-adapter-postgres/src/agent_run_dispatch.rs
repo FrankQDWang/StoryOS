@@ -98,8 +98,10 @@ impl ModelDispatchStore for PostgresProjectReader {
                         paused.store(/*val*/ true, std::sync::atomic::Ordering::Relaxed);
                         return Ok(None);
                     }
-                    return crate::agent_run_successor_dispatch::commit(client, claim, projection)
-                        .await;
+                    return crate::agent_run_successor_dispatch::commit(
+                        client, claim, &run, projection,
+                    )
+                    .await;
                 }
                 DestinationRequest::Create(create) => create,
                 DestinationRequest::Retrieve(retrieve) => {

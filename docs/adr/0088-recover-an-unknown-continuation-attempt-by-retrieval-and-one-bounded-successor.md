@@ -45,7 +45,7 @@ When the conditions fail or the allowance is spent, the Run stops with an inspec
 
 ### 4. Delivery
 
-#1435 delivers section 1. Until #1436 delivers section 2, the Run waits with `outcome_unknown` when the retrieval gives no result, and no successor marker is recorded at position 1 or later. This ADR amends the position-0 rule of ADR 0086 section 5.
+#1435 delivers section 1, and #1436 delivers sections 2 and 3. The Host records the successor marker of an unknown Attempt at each Decision position, in the same write as the retrieval subject and after it. The successor Attempt, its Context Assembly manifest, its Operation Requirement, and the late Retrieve of the predecessor have the Decision position of the interrupted Attempt. The manifest and the requirement are copies of the active Context Assembly of that position, as for the Retrieve. A ToolCall of the Run that has no observation, or whose outcome Core classifies as unknown, is an unresolved Tool effect: the successor pauses with `unresolved_effect` before its fence. This ADR amends the position-0 rule of ADR 0086 section 5.
 
 ## Considered options
 
@@ -57,4 +57,4 @@ When the conditions fail or the allowance is spent, the Run stops with an inspec
 
 - An unknown continuation Attempt whose response finished and was stored settles without a new Conversation.
 - `getAgentRun` shows the retrieval of the latest Decision position that has one.
-- #1436 adds the successor marker for a continuation Attempt where the retrieval subject is recorded, and the successor follows the retrieval as at position 0.
+- The successor marker exists at each Decision position where the retrieval subject is recorded, and the successor follows the retrieval as at position 0. `getAgentRun` shows the successor selection of the shown Decision position.

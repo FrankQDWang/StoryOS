@@ -28,6 +28,10 @@ it.each([
   ["an unknown outcome that waits", { status: "waiting", original_result_retrieval: retrieval }, NO_RESULT],
   ["a paused successor", { status: "paused", original_result_retrieval: retrieval,
     unknown_create_successor: successor("paused") }, NO_RESULT],
+  // A continuation whose ToolCall effect is unknown pauses before its fence (ADR 0088).
+  ["a paused continuation successor", { status: "paused", original_result_retrieval: retrieval,
+    unknown_create_successor: { ...successor("paused"), pause_reason: "unresolved_effect",
+      predecessor_fenced: false, allowance_consumed: false } }, NO_RESULT],
   ["a successor with no result", { status: "completed", original_result_retrieval: retrieval,
     unknown_create_successor: successor("dispatched") }, NO_RESULT],
   ["a request after one with no result", { status: "refused",

@@ -610,10 +610,12 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
                    "effect_outcome": outcome, "result_text": null, "result_digest": null,
                    "result_bytes": null}),
             // The continuation Attempt gets one Retrieve, and the route did not store the
-            // response (ADR 0088).
-            json!({"status": "waiting",
-                   "settlement": {"kind": "outcome_unknown", "reason": "unknown_result"},
-                   "model_attempts": 3, "successor_marker": false, "source_snapshots": 0}),
+            // response. The unknown ToolCall is an unresolved effect, so the successor pauses
+            // before its fence and sends nothing (ADR 0088).
+            json!({"status": "paused",
+                   "settlement": {"kind": "unknown_create_successor",
+                                  "reason": "unresolved_effect"},
+                   "model_attempts": 3, "successor_marker": true, "source_snapshots": 0}),
             Vec::<String>::new(),
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),

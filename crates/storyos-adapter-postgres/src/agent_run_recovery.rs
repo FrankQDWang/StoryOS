@@ -294,20 +294,17 @@ async fn write_subject(
         .await
         .map_err(complete_database_error)?
         .get(0);
-    let pending_tool_call =
-        crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?;
-    // The successor of a continuation Attempt at a later Decision position is not yet
-    // implemented (ADR 0088). Such an Attempt gets the retrieval only.
-    if run.decision_position == "0"
-        && let Some(marker) = crate::agent_run_successor::prepare_subject(
-            crate::agent_run_successor::conditions(run, &payload, pending_tool_call),
-            &crate::agent_run_successor::SuccessorOrigin {
-                predecessor_attempt_id: &dispatch.model_attempt_id,
-                model_invocation_id: &invocation_id,
-            },
-            lookup,
-        )
-    {
+    // The successor marker follows the retrieval subject at each Decision position (ADR 0088).
+    let unresolved_tool_call =
+        crate::agent_run_tool_call::unresolved_tool_effect(client, claim).await?;
+    if let Some(marker) = crate::agent_run_successor::prepare_subject(
+        crate::agent_run_successor::conditions(run, &payload, unresolved_tool_call),
+        &crate::agent_run_successor::SuccessorOrigin {
+            predecessor_attempt_id: &dispatch.model_attempt_id,
+            model_invocation_id: &invocation_id,
+        },
+        lookup,
+    ) {
         payload["unknown_create_successor"] = marker;
     }
     payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});

@@ -78,7 +78,7 @@ pub(crate) async fn computed(
 }
 
 /// A stream that reports `reference` and ends with one message of `text` in `status`.
-fn message_stream(reference: &str, text: &str, status: &str) -> String {
+pub(crate) fn message_stream(reference: &str, text: &str, status: &str) -> String {
     let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": status, "content": [{"type": "output_text", "text": text}]});
     sse(&[
