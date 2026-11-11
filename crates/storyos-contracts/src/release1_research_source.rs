@@ -126,6 +126,18 @@ pub struct ListResearchSourcesResponse {
     pub snapshots: Vec<SourceSnapshotInspect>,
     // In ToolCall order, then in request order.
     pub gaps: Vec<SourceGapInspect>,
+    // In ToolCall order. Each call may have run, and gave the Run no result (ADR 0086).
+    pub unknown_calls: Vec<UnknownResearchCallInspect>,
+}
+
+/// One research ToolCall whose outcome is not known. It has no Snapshot and no Gap.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UnknownResearchCallInspect {
+    pub tool_call_id: String,
+    pub call: crate::ToolCallInspect,
+    // True when a result arrived after the fence of the call. It is evidence only.
+    pub late_result: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

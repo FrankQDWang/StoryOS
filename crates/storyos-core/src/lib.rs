@@ -29,6 +29,7 @@ mod research_destination;
 mod research_source;
 mod retrieve_original_result;
 mod tool_call;
+mod tool_call_recovery;
 mod tool_dispatch;
 mod tool_exposure;
 mod tool_registration;
@@ -273,6 +274,9 @@ pub use take_over_project_writer::{
 pub use tool_call::{
     CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch,
     ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
+};
+pub use tool_call_recovery::{
+    LateToolEvidence, ToolCallClass, claimed_tool_reservation, late_tool_evidence, tool_call_class,
 };
 pub use tool_dispatch::{
     EffectOutcome, FunctionRequestStep, ToolAttemptSettlement, ToolCallPlan, ToolCallSettlement,

@@ -1,8 +1,9 @@
 //! The Tool Gateway store (ADR 0039, ADR 0084). Each operation is one serializable transaction
 //! that checks the Run Lease fence first. The dispatch claim checks the current authority again
-//! and commits the Admission Decision, the Wire Payload Projection, the Destination Attempt, and
-//! the Outbound Disclosure Event in OutcomeUnknown before I/O. A ToolCall that a crash left
-//! `dispatched` settles `unknown` and is not sent again.
+//! and commits the Admission Decision, the Wire Payload Projection, the Destination Attempt, the
+//! Outbound Disclosure Event in OutcomeUnknown, and the request reservation before I/O. A ToolCall
+//! that a crash left `dispatched` settles `unknown` with its restart fence and is not sent again
+//! (ADR 0086).
 
 use serde_json::{Value, json};
 use storyos_application::{
@@ -18,6 +19,7 @@ use crate::agent_run_tool_authority::{
     Resolution, ToolCallRow, locked, next_unresolved, quarantine, read_authority, refuse, resolve,
 };
 use crate::agent_run_tool_context::{ToolContext, commit_tool_context, committed_tool_context};
+use crate::agent_run_tool_recovery::{ToolCallFence, record_late, settle_interrupted};
 use crate::agent_run_work::{
     WorkPhase, complete_challenge_error, complete_database_error, load_run_phase,
 };
@@ -34,7 +36,10 @@ impl ToolDispatchStore for PostgresProjectReader {
             }
             while let Some(row) = next_unresolved(client, claim).await? {
                 if row.state == ToolCallState::Dispatched {
-                    settle_interrupted(client, claim, &row).await?;
+                    let fence = ToolCallFence::Restart {
+                        fence_token: claim.fence_token,
+                    };
+                    settle_interrupted(client, claim, &row, fence).await?;
                     continue;
                 }
                 let plan = row.plan()?;
@@ -143,6 +148,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                     "source_class": plan.effect.outbound_disclosure.source_class(),
                     "state": "outcome_unknown",
                 },
+                "reservation": storyos_core::claimed_tool_reservation(),
             });
             client
                 .execute(
@@ -175,8 +181,20 @@ impl ToolDispatchStore for PostgresProjectReader {
         record: ToolDispatchRecord<'_>,
     ) -> Result<(), CompleteAgentRunError> {
         self.in_tool_transaction(claim, async |client| {
-            load_run_phase(client, claim).await?;
+            let fenced = match load_run_phase(client, claim).await {
+                Ok(_) => false,
+                Err(CompleteAgentRunError::StaleFence) => true,
+                Err(error) => return Err(error),
+            };
             match record {
+                ToolDispatchRecord::Refusal { .. } if fenced => {
+                    Err(CompleteAgentRunError::StaleFence)
+                }
+                ToolDispatchRecord::Exchange {
+                    claim: dispatch,
+                    request,
+                    observation,
+                } if fenced => record_late(client, claim, request, dispatch, &observation).await,
                 ToolDispatchRecord::Refusal { request, refusal } => {
                     let Some(row) =
                         locked(client, claim, &request.tool_call_id, ToolCallState::Pending)
@@ -277,11 +295,16 @@ async fn record_exchange(
     if let ToolObservation::Drift(differences) = observation {
         quarantine(client, claim, row, differences).await?;
     }
-    let attempt = settled_attempt(
+    let mut attempt = settled_attempt(
         row,
         settlement.attempt.as_str(),
         settlement.outcome.record(),
     );
+    if let Some(class) =
+        storyos_core::tool_call_class(settlement.state, Some(settlement.attempt), None)
+    {
+        attempt["reservation"] = class.reservation();
+    }
     resolve(
         client,
         claim,
@@ -304,75 +327,9 @@ async fn record_exchange(
     crate::research_source::capture(client, claim, &row.tool_call_id, &capture).await
 }
 
-/// A ToolCall that stayed `dispatched` after a crash or a lost lease: its outcome is not known,
-/// and the Gateway does not send it again.
-/// Settles each `dispatched` ToolCall of a Run that the author cancels, in the cancel
-/// transaction: the Worker that holds the old fence cannot record its observation, so the
-/// ToolCall settles `unknown` with its Tool Effect Outcome and its Run Event, with no exchange.
-pub(crate) async fn settle_dispatched_on_cancel(
-    client: &tokio_postgres::Client,
-    project_scope: &storyos_application::ProjectScope,
-    run_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let run = ClaimedAgentRun {
-        project_scope: project_scope.clone(),
-        run_id: run_id.to_owned(),
-        // The cancel transaction holds the Run lock; no fence check follows.
-        fence_token: 0,
-    };
-    let dispatched = client
-        .query(
-            "SELECT tool_call_id::text FROM storyos.tool_calls
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND state = 'dispatched'
-              ORDER BY decision_position, call_position",
-            &[
-                &project_scope.owner_user_id.as_ref(),
-                &project_scope.project_id.as_ref(),
-                &run_id,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?;
-    for found in dispatched {
-        let tool_call_id: String = found.get(0);
-        if let Some(row) = locked(client, &run, &tool_call_id, ToolCallState::Dispatched).await? {
-            settle_interrupted(client, &run, &row).await?;
-        }
-    }
-    Ok(())
-}
-
-async fn settle_interrupted(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    row: &ToolCallRow,
-) -> Result<(), CompleteAgentRunError> {
-    let settlement =
-        storyos_core::settle_tool_call(row.plan()?.tool.spec, &ToolObservation::OutcomeUnknown);
-    let attempt = settled_attempt(
-        row,
-        settlement.attempt.as_str(),
-        settlement.outcome.record(),
-    );
-    resolve(
-        client,
-        claim,
-        row,
-        Resolution {
-            state: settlement.state,
-            refusal: None,
-            attempt: Some(&attempt),
-            outcome: Some(settlement.outcome.record()),
-            result: None,
-        },
-    )
-    .await
-}
-
 /// The claimed attempt record with its settlement. The Outbound Disclosure Event stays as the
 /// claim recorded it (`outcome_unknown`); a separate confirmation records what the exchange proved.
-fn settled_attempt(row: &ToolCallRow, settlement: &str, outcome: Value) -> Value {
+pub(crate) fn settled_attempt(row: &ToolCallRow, settlement: &str, outcome: Value) -> Value {
     let mut attempt = row.attempt.clone().unwrap_or_else(|| json!({}));
     attempt["destination_attempt"]["settlement"] = json!(settlement);
     attempt["disclosure_confirmation"] = json!({

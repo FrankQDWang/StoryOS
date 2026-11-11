@@ -592,13 +592,17 @@ pub trait CredentialResolver: Sync {
     ) -> impl Future<Output = Option<ResolvedCredential>> + Send;
 }
 
-/// One Contract Fault Point that the Model Gateway reaches after a commit.
+/// One Contract Fault Point that the Model Gateway or the Tool Gateway reaches after a commit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContractFaultPoint {
     DispatchClaimed,
     StreamCommitted,
     /// The store recorded the result of a compaction summary request.
     CompactionStaged,
+    /// The store committed the Context Assembly of one ToolCall, before its dispatch claim.
+    ToolContextCommitted,
+    /// The dispatch claim of one ToolCall committed, before its exchange.
+    ToolDispatchClaimed,
 }
 
 /// Receives each reached Contract Fault Point. Production uses `NoContractFaults`.

@@ -30,5 +30,16 @@
       "title": "Liverpool tide table 1890",
       "tool_call_id": "018f0000-0000-7001-8000-000000000d02"
     }
+  ],
+  "unknown_calls": [
+    {
+      "call": {
+        "kind": "search",
+        "outcome": "unknown",
+        "query": "harbour log of 1890"
+      },
+      "late_result": false,
+      "tool_call_id": "018f0000-0000-7001-8000-000000000d09"
+    }
   ]
 }

@@ -27,6 +27,9 @@ impl ContractFaultObserver for ContractFaultHolds {
             ContractFaultPoint::DispatchClaimed => &self.dispatch,
             ContractFaultPoint::StreamCommitted => &self.stream,
             ContractFaultPoint::CompactionStaged => &self.compaction,
+            ContractFaultPoint::ToolContextCommitted | ContractFaultPoint::ToolDispatchClaimed => {
+                return;
+            }
         };
         let Some(path) = hold else {
             return;

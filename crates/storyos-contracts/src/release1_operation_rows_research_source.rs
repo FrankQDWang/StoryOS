@@ -10,7 +10,7 @@ use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_research_source::{
     GET_RESEARCH_SOURCE, GetResearchSourceResponse, LIST_RESEARCH_SOURCES,
     ListResearchSourcesResponse, SourceGapInspect, SourceGapReason, SourceSnapshotInspect,
-    SourceSnapshotKind,
+    SourceSnapshotKind, UnknownResearchCallInspect,
 };
 use crate::release1_route_catalog::{Binding, OperationCatalog, Owner};
 use crate::release1_wire::U64_WIRE;
@@ -38,6 +38,7 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
         SourceGapReason::decl,
         SourceSnapshotInspect::decl,
         SourceGapInspect::decl,
+        UnknownResearchCallInspect::decl,
         ListResearchSourcesResponse::decl,
     ],
     fixture: Fixture::Json(
@@ -72,6 +73,13 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
           "text_bytes": "20",
           "title": "Liverpool tide table 1890",
           "tool_call_id": "018f0000-0000-7001-8000-000000000d02"
+        }
+      ],
+      "unknown_calls": [
+        {
+          "call": {"kind": "search", "outcome": "unknown", "query": "harbour log of 1890"},
+          "late_result": false,
+          "tool_call_id": "018f0000-0000-7001-8000-000000000d09"
         }
       ]
     }"#,
@@ -134,6 +142,7 @@ const LIST_RESEARCH_SOURCES_RESPONSE: &[Patch] = &[
             "/$defs/SourceGapInspect/properties/tool_call_id",
             "/$defs/SourceSnapshotInspect/properties/source_snapshot_id",
             "/$defs/SourceSnapshotInspect/properties/tool_call_id",
+            "/$defs/UnknownResearchCallInspect/properties/tool_call_id",
             "/properties/correlation_id",
             "/properties/run_id",
         ],

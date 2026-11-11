@@ -8,7 +8,7 @@ use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreateAgentRunError, ProjectScope,
     ResearchSourceReadStore, ResearchSourceText, ResearchSources,
 };
-use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect};
+use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect, UnknownResearchCallInspect};
 use storyos_core::{ResearchCapture, SourceGapReason, SourceKind};
 use uuid::Uuid;
 
@@ -194,7 +194,36 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                     })
                 })
                 .collect::<Result<_, CreateAgentRunError>>()?;
-            Ok(Some(ResearchSources { snapshots, gaps }))
+            let unknown_calls = client
+                .query(
+                    "SELECT tool_call_id::text, tool_spec_revision, arguments::text, state,
+                            attempt ? 'late_observation'
+                       FROM storyos.tool_calls
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND run_id = $3::text::uuid AND state = 'unknown'
+                      ORDER BY decision_position, call_position",
+                    &params,
+                )
+                .await
+                .map_err(agent_run_database_error)?
+                .iter()
+                .map(|row| {
+                    Ok(UnknownResearchCallInspect {
+                        tool_call_id: row.get(/*idx*/ 0),
+                        call: crate::agent_run_tool_call::call_inspect(
+                            row.get(/*idx*/ 1),
+                            row.get(/*idx*/ 2),
+                            row.get(/*idx*/ 3),
+                        )?,
+                        late_result: row.get(/*idx*/ 4),
+                    })
+                })
+                .collect::<Result<_, CreateAgentRunError>>()?;
+            Ok(Some(ResearchSources {
+                snapshots,
+                gaps,
+                unknown_calls,
+            }))
         })
         .await
     }
@@ -268,4 +297,4 @@ impl PostgresProjectReader {
 
 #[cfg(test)]
 #[path = "research_source_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -16,20 +16,20 @@ use crate::agent_run_retrieval::tests::{adapter, real_run};
 const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
 
 /// A Deterministic Test Scheduler. A renewal waits until the test advances one step.
-struct SteppedClock {
+pub(crate) struct SteppedClock {
     steps: watch::Sender<u64>,
     waits: watch::Sender<u64>,
 }
 
 impl SteppedClock {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             steps: watch::Sender::new(/*init*/ 0),
             waits: watch::Sender::new(/*init*/ 0),
         }
     }
 
-    fn step(&self) {
+    pub(crate) fn step(&self) {
         self.steps.send_modify(|steps| *steps += 1);
     }
 

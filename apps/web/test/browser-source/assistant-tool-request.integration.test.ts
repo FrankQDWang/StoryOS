@@ -25,6 +25,8 @@ it("shows one line for each research call of a function request and no identifie
           { kind: "search", query: "tide tables of 1890", outcome: "settled" },
           { kind: "page_read", urls: ["https://e.org/tides", "https://e.org/port"], outcome: "settled" },
           { kind: "search", query: "harbour log", outcome: "failed" },
+          { kind: "search", query: "port records", outcome: "unknown" },
+          { kind: "page_read", urls: ["https://e.org/log"], outcome: "unknown" },
         ] } });
     }
     throw new Error(`Unexpected request ${path}`);
@@ -48,7 +50,8 @@ it("shows one line for each research call of a function request and no identifie
       result: host.querySelector("[data-assistant-result]")?.textContent ?? null,
       showsIdentifier: [RUN, DECISION].some(id => host.textContent?.includes(id) ?? false),
     }).toEqual({
-      result: "已联网搜索：tide tables of 1890\n已阅读：https://e.org/tides、https://e.org/port\n有一次联网检索没有完成。",
+      result: "已联网搜索：tide tables of 1890\n已阅读：https://e.org/tides、https://e.org/port\n有一次联网检索没有完成。"
+        + "\n可能已联网搜索，但没有收到结果：port records\n可能已阅读，但没有收到结果：https://e.org/log",
       showsIdentifier: false,
     });
   } finally {

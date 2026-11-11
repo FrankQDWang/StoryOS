@@ -24,7 +24,7 @@ Title: Port log\nURL: https://example.org/port\nPublished: N/A\nAuthor: N/A\nHig
 The port log.";
 
 /// One response that requests each `(call_id, name, arguments)` call in order.
-fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> String {
+pub(crate) fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> String {
     let items: Vec<Value> = calls
         .iter()
         .enumerate()

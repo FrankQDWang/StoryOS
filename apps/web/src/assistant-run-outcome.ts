@@ -20,10 +20,16 @@ export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "模型想要联网检索，�
 /** The line of a research call that did not give a result (ADR 0040). */
 export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
 
-/** One line for each research call of a function request, in order, with no identifier (ADR 0040). */
+/** One line for each research call of a function request, in order, with no identifier (ADR 0040).
+ * A call with an unknown outcome may have run, and its line says so (ADR 0086). */
 export function toolCallLines(calls: readonly ToolCallInspect[]): string {
   return calls.map(call => {
     if (call.outcome === "failed") return TOOL_CALL_FAILED_SENTENCE;
+    if (call.outcome === "unknown") {
+      return call.kind === "search"
+        ? `可能已联网搜索，但没有收到结果：${call.query}`
+        : `可能已阅读，但没有收到结果：${call.urls.join("、")}`;
+    }
     const done = call.outcome === "settled";
     return call.kind === "search"
       ? `${done ? "已联网搜索" : "正在联网搜索"}：${call.query}`

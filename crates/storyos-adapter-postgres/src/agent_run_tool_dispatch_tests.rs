@@ -105,7 +105,7 @@ pub(crate) fn mcp_replies(tools: Value, call: Option<String>) -> Vec<String> {
 /// One Run whose decision requests one `web_search` ToolCall, with the research Tool enabled
 /// and its evidence endpoint at the fake MCP server `mcp_base`. The continuation RunStep gets an
 /// Advisory.
-async fn tool_run(
+pub(crate) async fn tool_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
@@ -146,7 +146,7 @@ pub(crate) async fn point_mcp(
 }
 
 /// The Run, its one ToolCall without volatile identities, and its Activity Run Events.
-async fn tool_facts(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_object(
@@ -167,7 +167,10 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                                                  #- '{admission_decision,grant_id}'
                                                  #- '{wire_payload_projection,digest}'
                                                  #- '{wire_payload_projection,serialized_payload}'
-                                                 #- '{destination_attempt,endpoint}',
+                                                 #- '{destination_attempt,endpoint}'
+                                                 #- '{fence,fence_id}'
+                                                 #- '{fence,run_fence_token}'
+                                                 #- '{late_observation,disclosure_confirmation,event_id}',
                           'has_attempt_id', call.destination_attempt_id IS NOT NULL,
                           'effect_outcome', call.effect_outcome, 'result_text', call.result_text,
                           'result_digest', call.result_digest, 'result_bytes', call.result_bytes)
@@ -222,7 +225,7 @@ async fn tool_facts(admin: &Client, run_id: &str) -> Value {
     serde_json::from_str(row.get::<_, &str>(0)).unwrap()
 }
 
-fn settled_event(state: &str, refusal: Value, outcome: Value, bytes: Value) -> Value {
+pub(crate) fn settled_event(state: &str, refusal: Value, outcome: Value, bytes: Value) -> Value {
     let mut event = settled_event_after_quarantine(state, refusal, outcome, bytes);
     event["position"] = json!(0);
     event
@@ -241,8 +244,10 @@ fn settled_event_after_quarantine(
            "refusal": refusal, "outcome": outcome, "result_bytes": bytes})
 }
 
-fn attempt(settlement: &str, disclosure: &str) -> Value {
+/// The claimed attempt record with its settlement and its request reservation.
+pub(crate) fn attempt(settlement: &str, disclosure: &str, released: bool) -> Value {
     json!({
+        "reservation": {"kind": "worst_case", "requests": 1, "released": released},
         "admission_decision": {
             "decision": "admitted",
             "grant_scope": "research_tool_v1",
@@ -260,7 +265,7 @@ fn attempt(settlement: &str, disclosure: &str) -> Value {
 
 /// Gates one to six of the search ToolCall, with no volatile identity.
 fn tool_manifest() -> Value {
-    let effect = attempt("", "")["admission_decision"]["effect_request"].take();
+    let effect = attempt("", "", /*released*/ false)["admission_decision"]["effect_request"].take();
     json!({
         "requirement": {"kind": "tool_call", "call_id": "call_01",
                         "registration_revision": EXA_TOOL_REGISTRATION.revision,
@@ -327,7 +332,7 @@ async fn a_claimed_search_settles_with_its_result_text_and_one_run_event() {
                 "run": {"status": "completed", "settlement": null},
                 "tool_call": {
                     "state": "settled", "refusal": null,
-                    "attempt": attempt("terminal_result", "confirmed"),
+                    "attempt": attempt("terminal_result", "confirmed", /*released*/ true),
                     "has_attempt_id": true,
                     "effect_outcome": outcome,
                     "result_text": RESULT,
@@ -546,13 +551,22 @@ async fn a_tool_call_that_a_crash_left_dispatched_settles_unknown_and_is_not_sen
             true,
             json!({"status": "completed", "settlement": null}),
             json!({"state": "unknown", "refusal": null,
-                   "attempt": attempt("outcome_unknown", "unknown"), "has_attempt_id": true,
+                   "attempt": interrupted_attempt("worker_restart"), "has_attempt_id": true,
                    "effect_outcome": outcome, "result_text": null, "result_digest": null,
                    "result_bytes": null}),
             json!([settled_event("unknown", Value::Null, outcome, Value::Null)]),
             vec![POST.to_owned(); 4],
         )
     );
+}
+
+/// The attempt record of a ToolCall that the fence of `cause` settled `unknown`, with no volatile
+/// identity.
+pub(crate) fn interrupted_attempt(cause: &str) -> Value {
+    let mut attempt = attempt("outcome_unknown", "unknown", /*released*/ false);
+    attempt["fence"] = json!({"cause": cause, "local_stop": "drop_exchange",
+                              "remote_abort": "unsupported"});
+    attempt
 }
 
 #[tokio::test]
@@ -615,7 +629,8 @@ async fn tool_contract_drift_quarantines_the_revision_and_sends_no_call() {
             json!("tool_registration_quarantined"),
             json!("input_schema"),
             json!({"state": "refused", "refusal": "tool_registration_unavailable",
-                   "attempt": attempt("not_submitted", "not_attempted"), "has_attempt_id": true,
+                   "attempt": attempt("not_submitted", "not_attempted", /*released*/ true),
+                   "has_attempt_id": true,
                    "effect_outcome": outcome, "result_text": null, "result_digest": null,
                    "result_bytes": null}),
             settled_event_after_quarantine(
@@ -767,93 +782,6 @@ async fn a_protocol_revision_with_a_null_character_quarantines_and_settles() {
             json!("refused"),
             json!("tool_call_settled"),
             vec![POST.to_owned()],
-        )
-    );
-}
-
-/// The real MCP client, and the cancellation of the Run by the author after the exchange, while
-/// the Worker holds the old fence.
-struct CancelAfterExchange<'a> {
-    store: &'a crate::PostgresProjectReader,
-    cancel: crate::command_sequence::tests::CommandCall<storyos_application::CancelAgentRunInput>,
-}
-
-impl ToolDestinationAdapter for CancelAfterExchange<'_> {
-    type Prepared = McpExchange;
-
-    async fn prepare(
-        &self,
-        request: &ToolCallRequest,
-    ) -> Result<PreparedRequest<McpExchange>, PreDispatchRefusal> {
-        ToolDestinationAdapter::prepare(&client(), request).await
-    }
-
-    async fn exchange(&self, prepared: McpExchange) -> ToolObservation {
-        let observation = ToolDestinationAdapter::exchange(&client(), prepared).await;
-        self.store
-            .cancel_agent_run(&self.cancel.envelope, &self.cancel.input)
-            .await
-            .unwrap();
-        observation
-    }
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_cancel_during_a_tool_exchange_settles_the_tool_call_unknown() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let call = reply(
-        0,
-        json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
-    );
-    let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dd1", 0xdd1a, &mcp_base).await;
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let tools = CancelAfterExchange {
-        store: &store,
-        cancel: crate::command_sequence::tests::issued(
-            &store,
-            &scope,
-            0xdd1b,
-            &crate::command_sequence::tests::CANCEL_AGENT_RUN,
-            storyos_application::CancelAgentRunInput {
-                run_id: run_id.clone(),
-            },
-        )
-        .await,
-    };
-    let completed = complete_agent_run_with_tools(
-        &store,
-        &adapter(),
-        &tools,
-        &NoContractFaults,
-        &RuntimeClock,
-        &claim,
-    )
-    .await;
-    let outcome = json!({"external_read": "unknown", "outbound_disclosure": "unknown"});
-    let facts = tool_facts(&admin, &run_id).await;
-
-    assert_eq!(
-        (
-            matches!(completed, Err(CompleteAgentRunError::StaleFence)),
-            facts["run"]["status"].clone(),
-            facts["tool_call"].clone(),
-            facts["events"].clone(),
-            mcp.await.unwrap(),
-        ),
-        (
-            true,
-            json!("cancelled"),
-            json!({"state": "unknown", "refusal": null,
-                   "attempt": attempt("outcome_unknown", "unknown"), "has_attempt_id": true,
-                   "effect_outcome": outcome, "result_text": null, "result_digest": null,
-                   "result_bytes": null}),
-            json!([settled_event("unknown", Value::Null, outcome, Value::Null)]),
-            vec![POST.to_owned(); 4],
         )
     );
 }

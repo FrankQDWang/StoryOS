@@ -2,15 +2,17 @@
 //! Gaps are Operational Records that the settlement of a research ToolCall writes; no port
 //! updates or removes one.
 
-use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect};
+use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect, UnknownResearchCallInspect};
 
 use crate::{CreateAgentRunError, ProjectScope};
 
-/// The Source Snapshots, with no captured text, and the Source Gaps of one AgentRun.
+/// The Source Snapshots, with no captured text, the Source Gaps, and the research calls with
+/// an unknown outcome of one AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResearchSources {
     pub snapshots: Vec<SourceSnapshotInspect>,
     pub gaps: Vec<SourceGapInspect>,
+    pub unknown_calls: Vec<UnknownResearchCallInspect>,
 }
 
 /// One Source Snapshot revision with its captured text.
