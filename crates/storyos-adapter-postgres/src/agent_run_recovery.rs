@@ -145,9 +145,9 @@ pub(crate) async fn settle_cancelled(
     Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled))
 }
 
-/// Records the reference of an unknown create as the retrieval subject of the first decision.
-/// A probe has no recovery: its Attempt stays uncertain, and the executor sends the probe again
-/// at most one time (ADR 0049).
+/// Records the reference of an unknown create as the retrieval subject of the active decision, at
+/// each Decision position (ADR 0088). A probe has no recovery: its Attempt stays uncertain, and
+/// the executor sends the probe again at most one time (ADR 0049).
 pub(crate) async fn record_unknown_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -160,7 +160,7 @@ pub(crate) async fn record_unknown_create(
         .as_deref()
         .and_then(|payload| serde_json::from_str(payload).ok())
         .is_some_and(|payload| crate::agent_run_tool_probe::is_probe(&payload));
-    if run.decision_position != "0" || probe {
+    if probe {
         update_run(
             client,
             claim,
@@ -296,14 +296,18 @@ async fn write_subject(
         .get(0);
     let pending_tool_call =
         crate::agent_run_tool_call::pending_tool_call_exists(client, claim).await?;
-    if let Some(marker) = crate::agent_run_successor::prepare_subject(
-        crate::agent_run_successor::conditions(run, &payload, pending_tool_call),
-        &crate::agent_run_successor::SuccessorOrigin {
-            predecessor_attempt_id: &dispatch.model_attempt_id,
-            model_invocation_id: &invocation_id,
-        },
-        lookup,
-    ) {
+    // The successor of a continuation Attempt at a later Decision position is not yet
+    // implemented (ADR 0088). Such an Attempt gets the retrieval only.
+    if run.decision_position == "0"
+        && let Some(marker) = crate::agent_run_successor::prepare_subject(
+            crate::agent_run_successor::conditions(run, &payload, pending_tool_call),
+            &crate::agent_run_successor::SuccessorOrigin {
+                predecessor_attempt_id: &dispatch.model_attempt_id,
+                model_invocation_id: &invocation_id,
+            },
+            lookup,
+        )
+    {
         payload["unknown_create_successor"] = marker;
     }
     payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});

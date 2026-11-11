@@ -16,7 +16,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
 use crate::agent_run_lease::tests::SteppedClock;
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run};
+use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, not_found, real_run};
 use crate::agent_run_tool_call::tests::{set_research_tool, text_and_call_stream};
 use crate::agent_run_tool_dispatch::tests::{
     POST, RESULT, SEARCH, attempt, client, exa_tools, interrupted_attempt, mcp_replies, point_mcp,
@@ -554,9 +554,10 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (model_base, _model) = destination(vec![
+    let (model_base, model) = destination(vec![
         text_and_call_stream("resp_086", "call_01", "web_search", SEARCH, "completed"),
         broken_stream("resp_086_2"),
+        not_found(),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "086", &model_base).await;
@@ -600,6 +601,7 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
             tool_facts(&admin, &run_id).await["tool_call"].clone(),
             run_counts(&admin, &run_id).await,
             mcp.await.unwrap(),
+            model.await.unwrap(),
         ),
         (
             true,
@@ -607,10 +609,17 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
                    "attempt": interrupted_attempt("worker_restart"), "has_attempt_id": true,
                    "effect_outcome": outcome, "result_text": null, "result_digest": null,
                    "result_bytes": null}),
+            // The continuation Attempt gets one Retrieve, and the route did not store the
+            // response (ADR 0088).
             json!({"status": "waiting",
                    "settlement": {"kind": "outcome_unknown", "reason": "unknown_result"},
-                   "model_attempts": 2, "successor_marker": false, "source_snapshots": 0}),
+                   "model_attempts": 3, "successor_marker": false, "source_snapshots": 0}),
             Vec::<String>::new(),
+            vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_086_2 HTTP/1.1".to_owned(),
+            ],
         )
     );
 }

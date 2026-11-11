@@ -555,12 +555,14 @@ async fn commit_retrieve(
         .query_one(
             "SELECT count(*) FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND attempt_role = $4 AND decision_position = 0",
+                AND run_id = $3::text::uuid AND attempt_role = $4
+                AND decision_position = $5::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &role,
+                &run.decision_position,
             ],
         )
         .await

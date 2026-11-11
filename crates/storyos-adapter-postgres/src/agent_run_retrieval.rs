@@ -158,11 +158,12 @@ pub(crate) async fn advance_original_result_retrieval(
             "SELECT model_attempt_id::text FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'retrieval' AND decision_position = 0",
+                AND attempt_role = 'retrieval' AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &advance.run.decision_position,
             ],
         )
         .await
@@ -230,7 +231,9 @@ pub(crate) async fn load_original_result_retrieval(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0",
+                AND attempt_role = 'decision' AND payload ? 'original_result_retrieval'
+              ORDER BY decision_position DESC
+              LIMIT 1",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -404,7 +407,7 @@ async fn write_unsettled_payload(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0
+                AND attempt_role = 'decision'
                 AND dispatch_state = 'uncertain'
                 AND decision_id IS NULL",
             &[
@@ -525,3 +528,7 @@ fn read_error(
 #[cfg(test)]
 #[path = "agent_run_retrieval_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "agent_run_continuation_retrieval_tests.rs"]
+mod continuation_tests;
