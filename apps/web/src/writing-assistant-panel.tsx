@@ -581,7 +581,7 @@ export function WritingAssistantPanel({
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
               {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
               {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
-                : <ResearchTurn context={context} run={exchange.run} />}
+                : <ResearchTurn context={context} run={exchange.run} history />}
               {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
                 sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
             </section>

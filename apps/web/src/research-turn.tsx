@@ -12,10 +12,7 @@ import type { AssistantContext } from "./writing-assistant-panel.tsx";
 
 type ReadContext = Pick<AssistantContext, "scope" | "baseUrl" | "fetchImpl">;
 
-// The reads of each settled Run, for the life of the page. The Research Artifact is immutable (ADR 0087), and the
-// sources of a settled Run do not change, so a Run is read once also when its turn moves into the history. The
-// text stays in memory and does not go into the session storage. A failed read leaves the cache, so that a later
-// turn display can read again.
+// The research of a settled Run does not change (ADR 0087), so the page reads each Run once; a failed read can repeat.
 const sourceReads = new Map<string, Promise<ListResearchSourcesResponse | undefined>>();
 const artifactReads = new Map<string, Promise<ResearchArtifactInspect | undefined>>();
 
@@ -63,9 +60,12 @@ export function researchDecision(run: GetAgentRunResponse): boolean {
  * Research Artifact (ADR 0040, ADR 0087). `children` go after the citation list. A failed read shows nothing, so
  * the turn shows only its result sentence.
  */
-export function ResearchTurn({ context, run, children }: {
+export function ResearchTurn({ context, run, history = false, children }: {
   context: ReadContext;
   run: GetAgentRunResponse;
+  /** A history turn of a synthesis shows its sources only with its Artifact, so a failed Artifact read shows only
+   * the result sentence (#1427). */
+  history?: boolean;
   children?: ReactNode;
 }) {
   const [sources, setSources] = useState<{ runId: string; listed: ListResearchSourcesResponse }>();
@@ -88,9 +88,10 @@ export function ResearchTurn({ context, run, children }: {
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, runId, settled, artifactId]);
 
-  const sourceLines = sources?.runId === runId ? researchSourceLines(sources.listed,
-    run.decision.kind === "tool_request" ? run.decision.decision_id : undefined) : [];
   const artifactLines = artifact?.runId === runId ? researchArtifactLines(artifact.read) : undefined;
+  const withoutArtifact = history && artifactId !== undefined && artifactLines === undefined;
+  const sourceLines = sources?.runId === runId && !withoutArtifact ? researchSourceLines(sources.listed,
+    run.decision.kind === "tool_request" ? run.decision.decision_id : undefined) : [];
   return <>
     {sourceLines.length > 0
       ? <ul className="assistant-research-sources" aria-label="本次检索的来源" data-assistant-research-sources="">

@@ -178,6 +178,9 @@ it("shows only the result sentence for an earlier research turn whose Artifact r
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     if (path.endsWith("/assistance")) return jsonResponse({ ...assistanceFixture, project_scope: scope });
     if (path.endsWith(`/agent-runs/${current.run_id}`)) return jsonResponse(current);
+    if (path.endsWith(`/agent-runs/${earlier.run_id}/research-sources`)) {
+      return jsonResponse({ ...sourcesFixture, project_scope: scope, run_id: earlier.run_id });
+    }
     if (path.includes("/research-")) return jsonResponse({ code: "resource_unavailable" }, 404);
     throw new Error(`Unexpected request ${path}`);
   };
