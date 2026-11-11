@@ -320,7 +320,7 @@ export function WritingAssistantPanel({
       if (stillCurrent() && listed.run_id === runId
         && listed.project_scope.owner_user_id === current.scope.owner_user_id
         && listed.project_scope.project_id === current.scope.project_id) {
-        setSources({ runId, lines: researchSourceLines(listed) });
+        setSources({ runId, lines: researchSourceLines(listed, result.decision.kind === "tool_request") });
       }
     }).catch(() => undefined);
     // The Run exists, so its references go from the composer also after a lost acknowledgement.

@@ -23,31 +23,36 @@ export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
 /** One line for each research call of a function request, in order, with no identifier (ADR 0040).
  * A call with an unknown outcome may have run, and its line says so (ADR 0086). */
 export function toolCallLines(calls: readonly ToolCallInspect[]): string {
-  return calls.map(call => {
-    if (call.outcome === "failed") return TOOL_CALL_FAILED_SENTENCE;
-    if (call.outcome === "unknown") {
-      return call.kind === "search"
-        ? `可能已联网搜索，但没有收到结果：${call.query}`
-        : `可能已阅读，但没有收到结果：${call.urls.join("、")}`;
-    }
-    const done = call.outcome === "settled";
+  return calls.map(toolCallLine).join("\n");
+}
+
+function toolCallLine(call: ToolCallInspect): string {
+  if (call.outcome === "failed") return TOOL_CALL_FAILED_SENTENCE;
+  if (call.outcome === "unknown") {
     return call.kind === "search"
-      ? `${done ? "已联网搜索" : "正在联网搜索"}：${call.query}`
-      : `${done ? "已阅读" : "正在阅读"}：${call.urls.join("、")}`;
-  }).join("\n");
+      ? `可能已联网搜索，但没有收到结果：${call.query}`
+      : `可能已阅读，但没有收到结果：${call.urls.join("、")}`;
+  }
+  const done = call.outcome === "settled";
+  return call.kind === "search"
+    ? `${done ? "已联网搜索" : "正在联网搜索"}：${call.query}`
+    : `${done ? "已阅读" : "正在阅读"}：${call.urls.join("、")}`;
 }
 
 /** The words for a requested page that StoryOS could not capture (ADR 0040). */
 export const SOURCE_NOT_AVAILABLE = "无法获取";
 
 /** One line for each research source of a Run: the title or the URL with the capture time, then
- * each page that is not available, with no identifier (ADR 0040). */
-export function researchSourceLines(sources: ListResearchSourcesResponse): string[] {
+ * each page that is not available, with no identifier (ADR 0040). When the Decision of the Run
+ * does not show its research calls, as after a continuation, each call that may have run follows
+ * (ADR 0086). */
+export function researchSourceLines(sources: ListResearchSourcesResponse, callsShown: boolean): string[] {
   const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
   return [
     ...sources.snapshots.map(snapshot =>
       `${snapshot.title ?? snapshot.locator}（获取于 ${time.format(new Date(snapshot.captured_at))}）`),
     ...sources.gaps.map(gap => `${gap.locator}：${SOURCE_NOT_AVAILABLE}`),
+    ...(callsShown ? [] : sources.unknown_calls.map(unknown => toolCallLine(unknown.call))),
   ];
 }
 
