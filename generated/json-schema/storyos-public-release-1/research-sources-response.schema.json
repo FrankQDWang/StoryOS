@@ -20,7 +20,7 @@
     },
     "SourceGapInspect": {
       "additionalProperties": false,
-      "description": "One requested URL with no Snapshot. It is never a citation.",
+      "description": "One requested URL with no Snapshot. A research synthesis can cite it to report what is not available.",
       "properties": {
         "locator": {
           "type": "string"

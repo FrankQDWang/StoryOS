@@ -533,6 +533,12 @@ export async function getResearchSource({ projectId, sourceSnapshotId, ...option
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/research-sources/${encodeURIComponent(sourceSnapshotId)}` });
 }
 
+export async function getResearchArtifact({ projectId, researchArtifactId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getResearchArtifact requires projectId");
+  if (typeof researchArtifactId !== "string" || researchArtifactId.length === 0) throw new TypeError("getResearchArtifact requires researchArtifactId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/research-artifacts/${encodeURIComponent(researchArtifactId)}` });
+}
+
 export async function digestExportProjectArchive(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestExportProjectArchive requires request");
   const canonical = canonicalJson(request);

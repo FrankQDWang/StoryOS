@@ -169,6 +169,7 @@ pub(crate) async fn record_original_result(
                 SET dispatch_state = $5,
                     payload = attempt.payload || jsonb_build_object(
                       'result', $6::text, 'items', $7::text::jsonb)
+                      || jsonb_strip_nulls(jsonb_build_object('synthesis_refusal', $8::text::jsonb))
                FROM storyos.context_assembly_manifests AS assembly
               WHERE attempt.owner_user_id = $1::text::uuid
                 AND attempt.project_id = $2::text::uuid
@@ -186,6 +187,7 @@ pub(crate) async fn record_original_result(
                 &dispatch_state,
                 &retrieved.label(),
                 &retrieved.items.to_string(),
+                &retrieved.synthesis_refusal,
             ],
         )
         .await
@@ -311,6 +313,7 @@ pub(crate) async fn record_late_result(
             "UPDATE storyos.model_attempts
                 SET dispatch_state = $7,
                     payload = payload || jsonb_build_object('result', $5::text, 'items', $6::text::jsonb)
+                      || jsonb_strip_nulls(jsonb_build_object('synthesis_refusal', $8::text::jsonb))
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid",
             &[
@@ -325,6 +328,7 @@ pub(crate) async fn record_late_result(
                 } else {
                     "settled"
                 },
+                &retrieved.synthesis_refusal,
             ],
         )
         .await
@@ -353,6 +357,8 @@ pub(crate) struct RetrievedResult {
     pub usage: ModelUsage,
     /// The evidence of the batch validation, when the response has a Tool item.
     pub batch_evidence: Option<serde_json::Value>,
+    /// The reason why Core refused a research synthesis of the response (ADR 0087).
+    pub synthesis_refusal: Option<String>,
 }
 
 /// A complete original response that settles the original Attempt: core validation selected its
@@ -384,6 +390,7 @@ impl RetrievedResult {
                 selected: None,
                 usage: ModelUsage::Unknown,
                 batch_evidence: None,
+                synthesis_refusal: None,
             });
         };
         let items = encode_items(&response.items);
@@ -393,6 +400,7 @@ impl RetrievedResult {
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
         let mut batch_evidence = None;
+        let mut synthesis_refusal = None;
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
@@ -404,7 +412,11 @@ impl RetrievedResult {
             )
             .await?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
-            validate_agent_decision(response.output.as_ref(), declared, batch)
+            let output = response.output.as_ref();
+            let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
+            synthesis_refusal = crate::research_artifact::refusal_evidence(output, &citable)
+                .map(|refusal| refusal.to_string());
+            validate_agent_decision(output, declared, &citable, batch)
         };
         Ok(match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
@@ -417,6 +429,7 @@ impl RetrievedResult {
                 }),
                 usage,
                 batch_evidence,
+                synthesis_refusal,
             },
             AgentDecisionOutcome::NoDecision
                 if complete
@@ -436,6 +449,7 @@ impl RetrievedResult {
                     }),
                     usage,
                     batch_evidence,
+                    synthesis_refusal,
                 }
             }
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
@@ -444,6 +458,7 @@ impl RetrievedResult {
                 selected: None,
                 usage,
                 batch_evidence,
+                synthesis_refusal,
             },
         })
     }

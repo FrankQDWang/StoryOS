@@ -37,8 +37,12 @@ The single closed producer identity that directly created an Artifact Revision: 
 _Avoid_: Generic System, browser event, model, MCP App, contributors array
 
 **External Source Snapshot**:
-A Research Artifact Revision containing an immutable captured version of externally retrieved evidence, including when and where it was obtained and an integrity digest of the captured content. Re-fetching creates a new Snapshot, while annotation or correction creates a derived Research Artifact; a live URL alone is not a Snapshot.
-_Avoid_: Bookmark, source URL
+An immutable captured version of externally retrieved evidence that one ToolCall read, including when and where it was obtained and an integrity digest of the captured content. It is not a Research Artifact Revision: a Research Synthesis cites it. Re-fetching creates a new Snapshot, while annotation or correction creates a derived Research Artifact; a live URL alone is not a Snapshot.
+_Avoid_: Bookmark, source URL, Research Artifact Revision
+
+**Source Gap**:
+The immutable record of one requested source that a ToolCall did not capture, with its locator and its reason (failed, empty, missing, or unattributed). A Research Synthesis can cite it to report what the research did not find; the panel shows it as not available.
+_Avoid_: Empty result, failed Snapshot
 
 **Imported Source Snapshot**:
 A Research Artifact Revision containing an immutable capture of evidence supplied from a local file or explicit import. Re-importing creates a new Snapshot, while annotation or correction creates a derived Research Artifact.
@@ -53,7 +57,7 @@ A Claim-scoped relationship to an exact Source Snapshot Revision and Evidence Lo
 _Avoid_: Source list, whole-document citation, context availability as support
 
 **Research Synthesis**:
-A Research Artifact that combines or interprets evidence and binds its claims to exact Source Snapshot revisions through supported-by Provenance Edges.
+A Research Artifact that combines or interprets evidence. Each of its claims cites exact Source Snapshot revisions or Source Gaps of the same AgentRun. In Release 1 it has one immutable revision, the Research Artifact Revision, and a citation records no support, conflict, or quality classification (ADR 0087).
 _Avoid_: Source Snapshot, uncited summary
 
 **Research Claim**:

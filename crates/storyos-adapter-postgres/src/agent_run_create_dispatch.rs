@@ -85,7 +85,12 @@ pub(crate) async fn record_create(
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }
-        validate_agent_decision(response.output.as_ref(), &declared, batch)
+        let output = response.output.as_ref();
+        let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
+        if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable) {
+            retained["synthesis_refusal"] = refusal;
+        }
+        validate_agent_decision(output, &declared, &citable, batch)
     };
     // Core decides the disposition of the response (ADR 0084).
     let settlement = match response_disposition(&ResponseFacts {

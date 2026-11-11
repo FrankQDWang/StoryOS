@@ -35,6 +35,7 @@ mod release1_reject_proposal_operations;
 mod release1_reopen_rejected_operations;
 mod release1_reopen_withdrawn_proposal;
 mod release1_replan_proposal;
+mod release1_research_artifact;
 mod release1_research_source;
 mod release1_route_catalog;
 mod release1_selection_reference;
@@ -273,6 +274,11 @@ pub use release1_replan_proposal::{
     ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalRefusalReason,
     ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt, ReplanReceiptResult,
     ReplanSourceCondition,
+};
+pub use release1_research_artifact::{
+    GET_RESEARCH_ARTIFACT_METHOD, GET_RESEARCH_ARTIFACT_PATH,
+    GET_RESEARCH_ARTIFACT_RESPONSE_SCHEMA_ID, GetResearchArtifactResponse, ResearchArtifactInspect,
+    ResearchArtifactLineage, ResearchCitationInspect, ResearchClaimInspect,
 };
 pub use release1_research_source::{
     GET_RESEARCH_SOURCE_METHOD, GET_RESEARCH_SOURCE_PATH, GET_RESEARCH_SOURCE_RESPONSE_SCHEMA_ID,

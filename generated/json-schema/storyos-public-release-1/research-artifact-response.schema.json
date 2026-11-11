@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ResearchArtifactInspect": {
+      "additionalProperties": false,
+      "description": "One immutable Research Artifact: the synthesis of the model with its claims. It has no support,\nconflict, or quality classification, because the Host computes none.",
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/ResearchCitationInspect"
+          },
+          "type": "array"
+        },
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/ResearchClaimInspect"
+          },
+          "type": "array"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "lineage": {
+          "$ref": "#/$defs/ResearchArtifactLineage"
+        },
+        "research_artifact_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "research_artifact_id",
+        "created_at",
+        "content_digest",
+        "lineage",
+        "summary",
+        "claims",
+        "citations"
+      ],
+      "type": "object"
+    },
+    "ResearchArtifactLineage": {
+      "additionalProperties": false,
+      "description": "The producer of a Research Artifact: one RunStep of one AgentRun.",
+      "properties": {
+        "decision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "decision_position": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "model_attempt_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "operation_requirement_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "tool_call_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "run_id",
+        "decision_position",
+        "operation_requirement_id",
+        "model_attempt_id",
+        "decision_id",
+        "tool_call_ids"
+      ],
+      "type": "object"
+    },
+    "ResearchCitationInspect": {
+      "description": "One cited source, resolved to its locator: a Source Snapshot revision or a Source Gap.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "snapshot",
+              "type": "string"
+            },
+            "snapshot": {
+              "$ref": "#/$defs/SourceSnapshotInspect"
+            }
+          },
+          "required": [
+            "kind",
+            "snapshot"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "gap": {
+              "$ref": "#/$defs/SourceGapInspect"
+            },
+            "kind": {
+              "const": "gap",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "gap"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ResearchClaimInspect": {
+      "additionalProperties": false,
+      "description": "One claim of the synthesis with the numbers of its citations.",
+      "properties": {
+        "citations": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "citations"
+      ],
+      "type": "object"
+    },
+    "SourceGapInspect": {
+      "additionalProperties": false,
+      "description": "One requested URL with no Snapshot. A research synthesis can cite it to report what is not available.",
+      "properties": {
+        "locator": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/SourceGapReason"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "result_bytes": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_offset": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_gap_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "tool_call_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_gap_id",
+        "tool_call_id",
+        "locator",
+        "reason",
+        "recorded_at"
+      ],
+      "type": "object"
+    },
+    "SourceGapReason": {
+      "enum": [
+        "failed",
+        "empty",
+        "missing",
+        "unattributed"
+      ],
+      "type": "string"
+    },
+    "SourceSnapshotInspect": {
+      "additionalProperties": false,
+      "description": "One immutable Source Snapshot revision, with no captured text.",
+      "properties": {
+        "captured_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SourceSnapshotKind"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "published": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_offset": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "source_snapshot_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "text_bytes": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_call_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_snapshot_id",
+        "tool_call_id",
+        "kind",
+        "locator",
+        "captured_at",
+        "content_digest",
+        "text_bytes",
+        "result_offset"
+      ],
+      "type": "object"
+    },
+    "SourceSnapshotKind": {
+      "enum": [
+        "search_result",
+        "page"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.query.research-artifact.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact": {
+      "$ref": "#/$defs/ResearchArtifactInspect"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.query.research-artifact.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "artifact"
+  ],
+  "title": "StoryOS Research Artifact Response",
+  "type": "object"
+}

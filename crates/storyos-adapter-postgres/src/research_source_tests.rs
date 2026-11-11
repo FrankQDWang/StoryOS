@@ -18,7 +18,7 @@ use crate::command_sequence::tests::seed_project;
 use crate::project_archive_build::tests::{export_command, zip_store_files};
 
 /// A search result in the text format of the research Tool: two entries with a URL each.
-const SEARCH_TEXT: &str = "Title: Liverpool tide table 1890\nURL: https://example.org/tides\n\
+pub(crate) const SEARCH_TEXT: &str = "Title: Liverpool tide table 1890\nURL: https://example.org/tides\n\
 Published: 1890-01-01T00:00:00.000Z\nAuthor: N/A\nHighlights:\nHigh water at 10.42.\n\n---\n\n\
 Title: Port log\nURL: https://example.org/port\nPublished: N/A\nAuthor: N/A\nHighlights:\n\
 The port log.";

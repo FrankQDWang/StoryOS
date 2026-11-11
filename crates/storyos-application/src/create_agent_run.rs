@@ -263,6 +263,12 @@ pub enum AgentRunDecisionInspect {
         decision_id: String,
         calls: Vec<storyos_contracts::ToolCallInspect>,
     },
+    ResearchSynthesis {
+        decision_id: String,
+        selected: bool,
+        research_artifact_id: String,
+        continuation_binding_id: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

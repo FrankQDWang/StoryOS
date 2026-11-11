@@ -1,4 +1,4 @@
-use storyos_application::ResearchSourceReadStore;
+use storyos_application::{ResearchArtifactReadStore, ResearchSourceReadStore};
 
 use super::*;
 use crate::create_agent_run::agent_run_read_error;
@@ -62,5 +62,34 @@ pub(super) async fn get_research_source(
         project_scope: contract_scope(&scope),
         snapshot: source.snapshot,
         text: source.text,
+    }))
+}
+
+/// One Research Artifact of the authenticated Project Scope, with its citations resolved.
+pub(super) async fn get_research_artifact(
+    State(state): State<Arc<ServerState>>,
+    Path((project_id, research_artifact_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Json<contracts::GetResearchArtifactResponse>, ApiError> {
+    let scope = authenticate_scope(
+        &state,
+        &headers,
+        &project_id,
+        RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
+    )?;
+    valid_uuid(&research_artifact_id)?;
+    let reader = project_reader(&state).await?;
+    let Some(artifact) = reader
+        .get_research_artifact(&scope, &research_artifact_id)
+        .await
+        .map_err(agent_run_read_error)?
+    else {
+        return Err(resource_unavailable());
+    };
+    Ok(Json(contracts::GetResearchArtifactResponse {
+        schema_id: contracts::GET_RESEARCH_ARTIFACT_RESPONSE_SCHEMA_ID.to_owned(),
+        correlation_id: Uuid::now_v7().to_string(),
+        project_scope: contract_scope(&scope),
+        artifact,
     }))
 }

@@ -5,10 +5,10 @@ use super::{
     validate_tool_call_batch,
 };
 use crate::{
-    AgentDecisionKind, AgentDecisionOutcome, DecisionCandidate, EXA_TOOL_REGISTRATION, EnabledTool,
-    ExposureFacts, IntakeRefusal, ModelOutput, NativeStreamItem, OutputPhase, StreamItemRole,
-    StreamItemState, ToolCompatibilityDecision, ToolExposure, ToolIntake,
-    ToolRegistrationLifecycle, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, CitableSources, DecisionCandidate,
+    EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, IntakeRefusal, ModelOutput,
+    NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
+    ToolExposure, ToolIntake, ToolRegistrationLifecycle, validate_agent_decision,
 };
 
 /// The Snapshot of the research Exposure, as the Worker pins it at the dispatch claim.
@@ -357,11 +357,16 @@ fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
 
     assert_eq!(
         [
-            validate_agent_decision(None, &[], valid.clone()),
-            validate_agent_decision(Some(&advisory), &[], valid),
-            validate_agent_decision(Some(&advisory), &[], invalid.clone()),
-            validate_agent_decision(None, &[], invalid),
-            validate_agent_decision(None, &[], ToolCallBatch::none()),
+            validate_agent_decision(None, &[], &CitableSources::default(), valid.clone()),
+            validate_agent_decision(Some(&advisory), &[], &CitableSources::default(), valid),
+            validate_agent_decision(
+                Some(&advisory),
+                &[],
+                &CitableSources::default(),
+                invalid.clone()
+            ),
+            validate_agent_decision(None, &[], &CitableSources::default(), invalid),
+            validate_agent_decision(None, &[], &CitableSources::default(), ToolCallBatch::none()),
         ],
         [
             tool_request.clone(),

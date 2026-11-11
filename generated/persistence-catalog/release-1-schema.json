@@ -6734,7 +6734,7 @@
         }
       },
       "constraints": {
-        "proposal_source_lineage_shape": "CHECK (((source_lineage IS NULL) OR ((jsonb_typeof(source_lineage) = 'object'::text) AND ((source_lineage ->> 'kind'::text) = 'tool_result_continuation'::text) AND ((source_lineage ->> 'run_id'::text) = (source_run_id)::text))))",
+        "proposal_source_lineage_shape": "CHECK (((source_lineage IS NULL) OR ((jsonb_typeof(source_lineage) = 'object'::text) AND ((source_lineage ->> 'kind'::text) = ANY (ARRAY['tool_result_continuation'::text, 'research_artifact'::text])) AND ((source_lineage ->> 'run_id'::text) = (source_run_id)::text))))",
         "proposal_source_shape": "CHECK (((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL)))",
         "proposals_bundle_policy_check": "CHECK ((bundle_policy = ANY (ARRAY['none'::text, 'atomic'::text])))",
         "proposals_kind_check": "CHECK ((kind = ANY (ARRAY['block_edit'::text, 'reversal'::text])))",
@@ -6995,6 +6995,103 @@
       "owner": "storyos_owner",
       "policies": {
         "replay_generations_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "research_artifacts": {
+      "columns": {
+        "content": {
+          "default": null,
+          "nullable": false,
+          "type": "jsonb"
+        },
+        "content_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "created_at": {
+          "default": "clock_timestamp()",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "decision_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "decision_position": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
+        "model_attempt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "operation_requirement_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "research_artifact_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "tool_call_ids": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid[]"
+        }
+      },
+      "constraints": {
+        "research_artifacts_content_shape": "CHECK (((jsonb_typeof((content -> 'summary'::text)) = 'string'::text) AND (jsonb_typeof((content -> 'claims'::text)) = 'array'::text) AND (jsonb_array_length((content -> 'claims'::text)) >= 1) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (cardinality(tool_call_ids) >= 1)))",
+        "research_artifacts_decision_key": "UNIQUE (owner_user_id, project_id, decision_id)",
+        "research_artifacts_owner_user_id_project_id_model_attempt_id_fk": "FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL",
+        "research_artifacts_owner_user_id_project_id_operation_requireme": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
+        "research_artifacts_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "research_artifacts_pkey": "PRIMARY KEY (owner_user_id, project_id, research_artifact_id)"
+      },
+      "indexes": {
+        "research_artifacts_decision_key": "CREATE UNIQUE INDEX research_artifacts_decision_key ON storyos.research_artifacts USING btree (owner_user_id, project_id, decision_id)",
+        "research_artifacts_pkey": "CREATE UNIQUE INDEX research_artifacts_pkey ON storyos.research_artifacts USING btree (owner_user_id, project_id, research_artifact_id)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "research_artifacts_exact_scope": {
           "command": "ALL",
           "permissive": "PERMISSIVE",
           "roles": [

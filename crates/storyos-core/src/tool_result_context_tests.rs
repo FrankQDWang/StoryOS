@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    CurrentPassageAssembly, InstructionBindingInput, assemble_current_passage_context,
-    decode_assembly_record, encode_assembly_record,
+    CitableSource, CitedSource, CurrentPassageAssembly, InstructionBindingInput, SourceGapReason,
+    assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
 };
 
 fn passage() -> CurrentPassageAssemblyRecord {
@@ -36,7 +36,7 @@ fn candidate<'a>(
         decision_id: "decision-1",
         state,
         result_text,
-        source_snapshot_ids: &[],
+        sources: &[],
     }
 }
 
@@ -70,15 +70,28 @@ fn tool_items(record: &CurrentPassageAssemblyRecord) -> Vec<(String, ProjectionM
 }
 
 #[test]
-fn each_resolved_tool_call_is_one_data_only_candidate_named_by_its_snapshots_with_one_sentence() {
+fn each_resolved_tool_call_is_one_candidate_named_by_its_snapshots_with_its_citable_ids() {
     let mut record = passage();
     let snapshots = ["s1".to_owned(), "s2".to_owned()];
+    let cited = |id: &str, cited: CitedSource| CitableSource {
+        id: id.to_owned(),
+        cited,
+        locator: format!("https://example.org/{id}"),
+        owner_user_id: "user-1".to_owned(),
+        project_id: "proj-1".to_owned(),
+        run_id: "run-1".to_owned(),
+    };
+    let sources = [
+        cited("s1", CitedSource::Snapshot),
+        cited("s2", CitedSource::Snapshot),
+        cited("g1", CitedSource::Gap(SourceGapReason::Failed)),
+    ];
 
     assemble_tool_result_continuation(
         &mut record,
         &[
             ToolResultCandidate {
-                source_snapshot_ids: &snapshots,
+                sources: &sources,
                 ..candidate("c1", ToolCallState::Settled, Some("Built in 1890."))
             },
             candidate("c2", ToolCallState::Failed, None),
@@ -110,7 +123,11 @@ fn each_resolved_tool_call_is_one_data_only_candidate_named_by_its_snapshots_wit
                 (
                     "s1,s2".to_owned(),
                     exact,
-                    r#"<tool_result source="c1" state="ok">Built in 1890.</tool_result>"#
+                    "<tool_result source=\"c1\" state=\"ok\">Built in 1890.</tool_result>\
+                     <tool_sources source=\"c1\"><source id=\"s1\" \
+                     locator=\"https://example.org/s1\"/><source id=\"s2\" \
+                     locator=\"https://example.org/s2\"/><gap id=\"g1\" \
+                     locator=\"https://example.org/g1\" reason=\"failed\"/></tool_sources>"
                         .to_owned()
                 ),
                 (
@@ -217,6 +234,92 @@ fn a_result_above_the_item_limit_keeps_a_prefix_and_an_explicit_truncation_mark(
             .as_str(),
             true,
             true,
+        )
+    );
+}
+
+#[test]
+fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
+    let mut record = passage();
+    record.operation_requirement.item_token_limit = 300;
+    let long = "a<b".repeat(40);
+    let sources = [CitableSource {
+        id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
+        cited: CitedSource::Snapshot,
+        locator: "https://example.org/tides".to_owned(),
+        owner_user_id: "user-1".to_owned(),
+        project_id: "proj-1".to_owned(),
+        run_id: "run-1".to_owned(),
+    }];
+    let tag = crate::citable_sources_tag("c1", &sources);
+
+    assemble_tool_result_continuation(
+        &mut record,
+        &[ToolResultCandidate {
+            sources: &sources,
+            ..candidate("c1", ToolCallState::Settled, Some(&long))
+        }],
+    );
+
+    let item = record
+        .selected
+        .iter()
+        .find(|item| item.source_class == ContextSourceClass::ToolResult)
+        .unwrap();
+    let kept = record.operation_requirement.tool_results.as_ref().unwrap()[0].kept_result_tokens;
+    assert_eq!(
+        (
+            item.content.ends_with(&format!("</tool_result>{tag}")),
+            item.token_count <= 300,
+            kept.is_some_and(|kept| kept < 40),
+        ),
+        (true, true, true)
+    );
+}
+
+#[test]
+fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continuation() {
+    let mut record = passage();
+    record.operation_requirement.item_token_limit = 300;
+    let sources = [CitableSource {
+        id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
+        cited: CitedSource::Snapshot,
+        locator: format!("https://example.org/{}", "a".repeat(2000)),
+        owner_user_id: "user-1".to_owned(),
+        project_id: "proj-1".to_owned(),
+        run_id: "run-1".to_owned(),
+    }];
+
+    assemble_tool_result_continuation(
+        &mut record,
+        &[ToolResultCandidate {
+            sources: &sources,
+            ..candidate("c1", ToolCallState::Settled, Some("High water at 10.42."))
+        }],
+    );
+
+    assert_eq!(
+        (
+            record
+                .selected
+                .iter()
+                .any(|item| item.source_class == ContextSourceClass::ToolResult),
+            record
+                .rejected
+                .iter()
+                .filter(|item| item.source_class == ContextSourceClass::ToolResult)
+                .map(|item| item.reason.clone())
+                .collect::<Vec<_>>(),
+            record.sufficiency.clone(),
+        ),
+        (
+            false,
+            vec![RejectionReason::OverItemTokenLimit],
+            ContextSufficiency::Blocked {
+                reasons: vec![ContextBlockReason::ExactRequiredOverLimit {
+                    source_class: ContextSourceClass::ToolResult,
+                }],
+            },
         )
     );
 }

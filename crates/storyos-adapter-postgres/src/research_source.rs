@@ -89,12 +89,15 @@ pub(crate) async fn capture(
 
 /// The Snapshot columns of the query responses. Each column is immutable, so a response never
 /// changes when a later capture of the same locator commits.
-const SNAPSHOT_COLUMNS: &str = "snapshot.source_snapshot_id::text, snapshot.tool_call_id::text,
+pub(crate) const SNAPSHOT_COLUMNS: &str =
+    "snapshot.source_snapshot_id::text, snapshot.tool_call_id::text,
     snapshot.kind, snapshot.locator, snapshot.title, snapshot.published,
     to_char(snapshot.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
     snapshot.content_digest, snapshot.text_bytes::text, snapshot.result_offset::text";
 
-fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAgentRunError> {
+pub(crate) fn snapshot(
+    row: &tokio_postgres::Row,
+) -> Result<SourceSnapshotInspect, CreateAgentRunError> {
     let damaged = || agent_run_parse_error(std::io::Error::other("The Source Snapshot is damaged"));
     Ok(SourceSnapshotInspect {
         source_snapshot_id: row.get(/*idx*/ 0),
@@ -110,6 +113,31 @@ fn snapshot(row: &tokio_postgres::Row) -> Result<SourceSnapshotInspect, CreateAg
         content_digest: row.get(/*idx*/ 7),
         text_bytes: row.get(/*idx*/ 8),
         result_offset: row.get(/*idx*/ 9),
+    })
+}
+
+/// The Gap columns of the query responses.
+pub(crate) const GAP_COLUMNS: &str = "gap.source_gap_id::text, gap.tool_call_id::text,
+    gap.locator, gap.reason,
+    to_char(gap.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+    gap.result_offset::text, gap.result_bytes::text";
+
+pub(crate) fn gap(row: &tokio_postgres::Row) -> Result<SourceGapInspect, CreateAgentRunError> {
+    let reason = SourceGapReason::parse(row.get(/*idx*/ 3))
+        .ok_or_else(|| agent_run_parse_error(std::io::Error::other("The Source Gap is damaged")))?;
+    Ok(SourceGapInspect {
+        source_gap_id: row.get(/*idx*/ 0),
+        tool_call_id: row.get(/*idx*/ 1),
+        locator: row.get(/*idx*/ 2),
+        reason: match reason {
+            SourceGapReason::Failed => storyos_contracts::SourceGapReason::Failed,
+            SourceGapReason::Empty => storyos_contracts::SourceGapReason::Empty,
+            SourceGapReason::Missing => storyos_contracts::SourceGapReason::Missing,
+            SourceGapReason::Unattributed => storyos_contracts::SourceGapReason::Unattributed,
+        },
+        recorded_at: row.get(/*idx*/ 4),
+        result_offset: row.get(/*idx*/ 5),
+        result_bytes: row.get(/*idx*/ 6),
     })
 }
 
@@ -159,43 +187,21 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 .collect::<Result<_, _>>()?;
             let gaps = client
                 .query(
-                    "SELECT gap.source_gap_id::text, gap.tool_call_id::text, gap.locator,
-                            gap.reason,
-                            to_char(gap.recorded_at AT TIME ZONE 'UTC',
-                                    'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                            gap.result_offset::text, gap.result_bytes::text
+                    &format!(
+                        "SELECT {GAP_COLUMNS}
                        FROM storyos.source_gaps AS gap
                        JOIN storyos.tool_calls AS call
                          USING (owner_user_id, project_id, tool_call_id)
                       WHERE gap.owner_user_id = $1::text::uuid
                         AND gap.project_id = $2::text::uuid AND gap.run_id = $3::text::uuid
-                      ORDER BY call.decision_position, call.call_position, gap.gap_position",
+                      ORDER BY call.decision_position, call.call_position, gap.gap_position"
+                    ),
                     &params,
                 )
                 .await
                 .map_err(agent_run_database_error)?
                 .iter()
-                .map(|row| {
-                    let reason = SourceGapReason::parse(row.get(/*idx*/ 3)).ok_or_else(|| {
-                        agent_run_parse_error(std::io::Error::other("The Source Gap is damaged"))
-                    })?;
-                    Ok(SourceGapInspect {
-                        source_gap_id: row.get(/*idx*/ 0),
-                        tool_call_id: row.get(/*idx*/ 1),
-                        locator: row.get(/*idx*/ 2),
-                        reason: match reason {
-                            SourceGapReason::Failed => storyos_contracts::SourceGapReason::Failed,
-                            SourceGapReason::Empty => storyos_contracts::SourceGapReason::Empty,
-                            SourceGapReason::Missing => storyos_contracts::SourceGapReason::Missing,
-                            SourceGapReason::Unattributed => {
-                                storyos_contracts::SourceGapReason::Unattributed
-                            }
-                        },
-                        recorded_at: row.get(/*idx*/ 4),
-                        result_offset: row.get(/*idx*/ 5),
-                        result_bytes: row.get(/*idx*/ 6),
-                    })
-                })
+                .map(gap)
                 .collect::<Result<_, CreateAgentRunError>>()?;
             let unknown_calls = client
                 .query(
@@ -287,7 +293,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
 
 impl PostgresProjectReader {
     /// Runs `body` in one read-only transaction under the exact Project Scope.
-    async fn in_read_transaction<T>(
+    pub(crate) async fn in_read_transaction<T>(
         &self,
         scope: &ProjectScope,
         body: impl AsyncFnOnce(&tokio_postgres::Client) -> Result<T, CreateAgentRunError>,

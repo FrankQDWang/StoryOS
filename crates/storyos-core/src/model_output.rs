@@ -46,9 +46,19 @@ pub enum OutputPhase {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DecisionCandidate {
-    Advisory { text: String },
-    ProseChange { text: String },
-    Clarification { question: String },
+    Advisory {
+        text: String,
+    },
+    ProseChange {
+        text: String,
+    },
+    Clarification {
+        question: String,
+    },
+    ResearchSynthesis {
+        summary: String,
+        claims: Vec<crate::ClaimCandidate>,
+    },
 }
 
 /// The structured part of one complete model output.
@@ -76,6 +86,8 @@ pub enum AgentDecisionKind {
     ToolRequest {
         calls: Vec<crate::ValidatedToolCall>,
     },
+    /// A research synthesis whose citations each name a source that this AgentRun captured.
+    ResearchSynthesis(crate::ResearchSynthesis),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,10 +102,12 @@ pub enum AgentDecisionOutcome {
 
 /// Select an Agent Decision only from a valid final answer and a valid batch; only a selected
 /// non-question without a ToolCall advances. An invalid batch makes no Decision. A valid batch
-/// with members is the Decision, and the ordinary continuation waits for its ToolCalls.
+/// with members is the Decision, and the ordinary continuation waits for its ToolCalls. A research
+/// synthesis is valid only when each of its citations names a source in `citable`.
 pub fn validate_agent_decision(
     output: Option<&ModelOutput>,
     declared_targets: &[crate::DeclaredLocation],
+    citable: &crate::CitableSources,
     batch: crate::ToolCallBatch,
 ) -> AgentDecisionOutcome {
     let calls = match batch {
@@ -125,6 +139,12 @@ pub fn validate_agent_decision(
         DecisionCandidate::Clarification { question } => AgentDecisionKind::Clarification {
             question: question.clone(),
         },
+        DecisionCandidate::ResearchSynthesis { summary, claims } => {
+            match crate::validate_research_synthesis(summary, claims, citable) {
+                Ok(synthesis) => AgentDecisionKind::ResearchSynthesis(synthesis),
+                Err(_) => return AgentDecisionOutcome::NoDecision,
+            }
+        }
     };
     let selected = matches!(output.phase, OutputPhase::FinalAnswer);
     let advances_continuation =

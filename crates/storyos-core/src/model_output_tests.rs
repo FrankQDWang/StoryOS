@@ -1,5 +1,5 @@
 use super::*;
-use crate::{DeclaredLocation, DeclaredTargetKind, ToolCallBatch};
+use crate::{CitableSources, DeclaredLocation, DeclaredTargetKind, ToolCallBatch};
 
 fn declared(block: &str, kind: DeclaredTargetKind) -> DeclaredLocation {
     DeclaredLocation {
@@ -33,13 +33,24 @@ fn a_prose_change_is_selected_only_for_the_declared_targets() {
 
     assert_eq!(
         (
-            validate_agent_decision(Some(&matching), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&matching),
+                &declared,
+                &CitableSources::default(),
+                ToolCallBatch::none()
+            ),
             validate_agent_decision(
                 Some(&prose_change("block-2")),
                 &declared,
+                &CitableSources::default(),
                 ToolCallBatch::none()
             ),
-            validate_agent_decision(Some(&matching), &[], ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&matching),
+                &[],
+                &CitableSources::default(),
+                ToolCallBatch::none()
+            ),
         ),
         (
             AgentDecisionOutcome::Decision {
@@ -78,16 +89,28 @@ fn a_prose_change_can_change_a_subset_of_the_declared_targets_once_each() {
 
     assert_eq!(
         [
-            validate_agent_decision(Some(&subset), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&subset),
+                &declared,
+                &CitableSources::default(),
+                ToolCallBatch::none()
+            ),
             validate_agent_decision(
                 Some(&with_changes(&["block-2", "block-2"])),
                 &declared,
+                &CitableSources::default(),
                 ToolCallBatch::none()
             ),
-            validate_agent_decision(Some(&with_changes(&[])), &declared, ToolCallBatch::none()),
+            validate_agent_decision(
+                Some(&with_changes(&[])),
+                &declared,
+                &CitableSources::default(),
+                ToolCallBatch::none()
+            ),
             validate_agent_decision(
                 Some(&with_changes(&["block-2", "block-3"])),
                 &declared,
+                &CitableSources::default(),
                 ToolCallBatch::none()
             ),
         ],
@@ -133,6 +156,7 @@ fn a_prose_change_of_a_pending_candidate_is_the_only_change_of_its_result() {
             validate_agent_decision(
                 Some(&with_changes(blocks)),
                 &declared,
+                &CitableSources::default(),
                 ToolCallBatch::none()
             ),
             AgentDecisionOutcome::Decision { .. }
@@ -186,6 +210,7 @@ fn a_growth_changes_the_candidate_and_one_adjacent_run_of_joinable_blocks() {
             validate_agent_decision(
                 Some(&with_changes(blocks)),
                 &declared,
+                &CitableSources::default(),
                 ToolCallBatch::none()
             ),
             AgentDecisionOutcome::Decision { .. }

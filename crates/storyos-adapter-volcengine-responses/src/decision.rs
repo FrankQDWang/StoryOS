@@ -1,7 +1,9 @@
 //! Map the complete message text of one response to a decision candidate.
 
 use storyos_application::DeclaredTarget;
-use storyos_core::{DecisionCandidate, ModelOutput, OutputPhase, ProseChangeCandidate};
+use storyos_core::{
+    ClaimCandidate, DecisionCandidate, ModelOutput, OutputPhase, ProseChangeCandidate,
+};
 
 /// Text that satisfies the reply contract maps to its candidate, and other text to an Advisory.
 /// Core validation of the complete candidate decides whether it becomes the Agent Decision.
@@ -40,6 +42,21 @@ fn contract_candidate(text: &str, targets: &[DeclaredTarget]) -> Option<Mapped> 
             },
             None,
         )),
+        "research_synthesis" => {
+            let claims = reply
+                .get("claims")?
+                .as_array()?
+                .iter()
+                .map(synthesis_claim)
+                .collect::<Option<Vec<_>>>()?;
+            Some((
+                DecisionCandidate::ResearchSynthesis {
+                    summary: field("summary")?,
+                    claims,
+                },
+                None,
+            ))
+        }
         "prose_change" if !targets.is_empty() => {
             let changes = reply
                 .get("changes")?
@@ -56,6 +73,20 @@ fn contract_candidate(text: &str, targets: &[DeclaredTarget]) -> Option<Mapped> 
         }
         _ => None,
     }
+}
+
+/// A claim of a synthesis reply. Core validation decides whether each cited identity is citable.
+fn synthesis_claim(claim: &serde_json::Value) -> Option<ClaimCandidate> {
+    let citations = claim
+        .get("citations")?
+        .as_array()?
+        .iter()
+        .map(|id| id.as_str().map(str::to_owned))
+        .collect::<Option<Vec<_>>>()?;
+    Some(ClaimCandidate {
+        text: claim.get("text")?.as_str()?.to_owned(),
+        citations,
+    })
 }
 
 /// A change for an undeclared block keeps an empty base revision, so core validation refuses it.

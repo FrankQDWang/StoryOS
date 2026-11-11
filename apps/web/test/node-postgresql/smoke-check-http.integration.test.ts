@@ -137,13 +137,14 @@ async function buildReadFixture() {
     fetchImpl: story.fetchImpl });
   return { story, proposal, edit, session, snapshotId: tree.snapshot.snapshot_id,
     archiveId: archive.response.effect.export_id, readableId: readable.response.effect.export_id,
-    sourceSnapshotId: await researchSource(proposal.source.run_id) };
+    ...await researchSource(proposal.source.run_id) };
 }
 
-/** One Source Snapshot of a refused ToolCall of the Run. This file has no research Tool server, so the row writes the
- * records that a settled research ToolCall writes; the store tests prove the capture. */
-async function researchSource(runId: string): Promise<string> {
-  return queryStoryOSPostgres(`
+/** One Source Snapshot of a refused ToolCall of the Run, and one Research Artifact that cites it. This file has no
+ * research Tool server, so the rows write the records that a settled research ToolCall and a synthesis write; the
+ * store tests prove the capture and the synthesis. */
+async function researchSource(runId: string): Promise<{ sourceSnapshotId: string; researchArtifactId: string }> {
+  const [sourceSnapshotId = "", researchArtifactId = ""] = (await queryStoryOSPostgres(`
     WITH attempt AS (
       SELECT owner_user_id, project_id, run_id, decision_position, model_attempt_id
         FROM storyos.model_attempts WHERE run_id = '${runId}'::uuid ORDER BY model_attempt_id LIMIT 1),
@@ -163,8 +164,27 @@ async function researchSource(runId: string): Promise<string> {
              'https://example.org/tides', 'Tide table', NULL, 'High water at 10.42.', 20, 0,
              'sha256:' || encode(sha256(convert_to('High water at 10.42.', 'UTF8')), 'hex')
         FROM call
-      RETURNING source_snapshot_id)
-    SELECT source_snapshot_id::text FROM snapshot;`);
+      RETURNING owner_user_id, project_id, run_id, tool_call_id, source_snapshot_id),
+    artifact AS (
+      INSERT INTO storyos.research_artifacts (owner_user_id, project_id, research_artifact_id, run_id,
+        decision_position, operation_requirement_id, model_attempt_id, decision_id, tool_call_ids, content,
+        content_digest)
+      SELECT snapshot.owner_user_id, snapshot.project_id, gen_random_uuid(), snapshot.run_id,
+             attempt.decision_position, requirement.operation_requirement_id, attempt.model_attempt_id,
+             gen_random_uuid(), ARRAY[snapshot.tool_call_id],
+             jsonb_build_object('summary', 'High water was at 10.42.', 'claims', jsonb_build_array(
+               jsonb_build_object('text', 'High water was at 10.42.', 'citations', jsonb_build_array(
+                 jsonb_build_object('kind', 'snapshot', 'source_snapshot_id', snapshot.source_snapshot_id::text))))),
+             'sha256:' || repeat('0', 64)
+        FROM snapshot
+        JOIN attempt USING (owner_user_id, project_id, run_id)
+        JOIN storyos.operation_requirements AS requirement
+          ON (requirement.owner_user_id, requirement.project_id, requirement.run_id, requirement.decision_position)
+           = (attempt.owner_user_id, attempt.project_id, attempt.run_id, attempt.decision_position)
+         AND requirement.requirement_role = 'primary'
+      RETURNING research_artifact_id)
+    SELECT source_snapshot_id::text || ' ' || research_artifact_id::text FROM snapshot, artifact;`)).split(" ");
+  return { sourceSnapshotId, researchArtifactId };
 }
 
 let readFixture: ReturnType<typeof buildReadFixture> | undefined;
@@ -593,6 +613,10 @@ const READS: Record<string, ReadRow> = {
   getResearchSource: {
     call: ({ story, sourceSnapshotId }, fetchImpl) => client.getResearchSource({ ...scope(story), fetchImpl,
       sourceSnapshotId }),
+  },
+  getResearchArtifact: {
+    call: ({ story, researchArtifactId }, fetchImpl) => client.getResearchArtifact({ ...scope(story), fetchImpl,
+      researchArtifactId }),
   },
   getManuscriptTree: {
     call: ({ story }, fetchImpl) => client.getManuscriptTree({ ...scope(story), fetchImpl }),

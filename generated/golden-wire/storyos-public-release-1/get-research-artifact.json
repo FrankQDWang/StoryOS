@@ -1,0 +1,67 @@
+{
+  "artifact": {
+    "citations": [
+      {
+        "kind": "snapshot",
+        "snapshot": {
+          "captured_at": "2026-11-11T03:00:00.000Z",
+          "content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "page",
+          "locator": "https://example.org/tides",
+          "published": null,
+          "result_offset": "41",
+          "source_snapshot_id": "018f0000-0000-7001-8000-000000000e04",
+          "text_bytes": "20",
+          "title": "Liverpool tide table 1890",
+          "tool_call_id": "018f0000-0000-7001-8000-000000000e03"
+        }
+      },
+      {
+        "gap": {
+          "locator": "https://example.org/port",
+          "reason": "failed",
+          "recorded_at": "2026-11-11T03:00:00.000Z",
+          "result_bytes": "45",
+          "result_offset": "62",
+          "source_gap_id": "018f0000-0000-7001-8000-000000000e05",
+          "tool_call_id": "018f0000-0000-7001-8000-000000000e03"
+        },
+        "kind": "gap"
+      }
+    ],
+    "claims": [
+      {
+        "citations": [
+          1
+        ],
+        "text": "High water at Liverpool was at 10.42."
+      },
+      {
+        "citations": [
+          2
+        ],
+        "text": "The port log could not be read."
+      }
+    ],
+    "content_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "created_at": "2026-11-11T03:00:02.000Z",
+    "lineage": {
+      "decision_id": "018f0000-0000-7001-8000-000000000e08",
+      "decision_position": "1",
+      "model_attempt_id": "018f0000-0000-7001-8000-000000000e07",
+      "operation_requirement_id": "018f0000-0000-7001-8000-000000000e06",
+      "run_id": "018f0000-0000-7001-8000-000000000e02",
+      "tool_call_ids": [
+        "018f0000-0000-7001-8000-000000000e03"
+      ]
+    },
+    "research_artifact_id": "018f0000-0000-7001-8000-000000000e01",
+    "summary": "High water was at 10.42. The port log is not available."
+  },
+  "correlation_id": "018f0000-0000-7001-8000-000000000e00",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.research-artifact.response.v1"
+}

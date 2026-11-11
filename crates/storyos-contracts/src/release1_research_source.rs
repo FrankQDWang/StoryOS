@@ -99,7 +99,7 @@ pub struct SourceSnapshotInspect {
     pub result_offset: String,
 }
 
-/// One requested URL with no Snapshot. It is never a citation.
+/// One requested URL with no Snapshot. A research synthesis can cite it to report what is not available.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct SourceGapInspect {
