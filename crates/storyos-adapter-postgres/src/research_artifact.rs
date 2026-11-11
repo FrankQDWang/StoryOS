@@ -365,4 +365,4 @@ fn cited_ids<'a>(content: &'a serde_json::Value, kind: &str, field: &str) -> Vec
 
 #[cfg(test)]
 #[path = "research_artifact_tests.rs"]
-mod tests;
+pub(crate) mod tests;

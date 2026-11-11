@@ -115,6 +115,17 @@ pub(crate) fn stored(reference: &str, status: &str) -> String {
     )
 }
 
+/// The answer of the route to a Retrieve of a stream that broke before its terminal event
+/// (ADR 0057).
+pub(crate) fn not_found() -> String {
+    let body = r#"{"error":{"code":"ResourceNotFound","message":"The response is not found."}}"#;
+    format!(
+        "HTTP/1.1 404 Not Found\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\
+         connection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
 /// Admits one Agent Plan AgentRun on the qualified head Registration and sends it to `base`.
 pub(crate) async fn real_run(
     store: &crate::PostgresProjectReader,

@@ -33,7 +33,7 @@ pub(crate) async fn commit(
         RetrievePurpose::OriginalResult => (
             "retrieval",
             "retrieve_original_result",
-            copy_retrieval_context(client, claim).await?,
+            copy_retrieval_context(client, claim, &run.decision_position).await?,
         ),
         RetrievePurpose::LateResult => (
             "late_retrieval",
@@ -90,15 +90,17 @@ pub(crate) async fn commit(
                (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
                 outbound_disclosure_event_id, destination_context_manifest_id,
                 outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role)
+                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role,
+                decision_position)
              SELECT owner_user_id, project_id, run_id, $4::text::uuid, $5::text::uuid,
                     $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid,
-                    model_invocation_id, conversation_id, 'uncertain', $10::text::jsonb, $11::text
+                    model_invocation_id, conversation_id, 'uncertain', $10::text::jsonb, $11::text,
+                    decision_position
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0",
+                AND attempt_role = 'decision' AND decision_position = $12::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -111,6 +113,7 @@ pub(crate) async fn commit(
                 &Uuid::now_v7().to_string(),
                 &retrieval_payload.to_string(),
                 &role,
+                &run.decision_position,
             ],
         )
         .await
@@ -177,7 +180,8 @@ pub(crate) async fn record_original_result(
                 AND attempt.model_attempt_id = $4::text::uuid
                 AND (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (attempt.owner_user_id, attempt.project_id, attempt.run_id)
-                AND assembly.manifest_role = 'retrieval' AND assembly.decision_position = 0
+                AND assembly.manifest_role = 'retrieval'
+                AND assembly.decision_position = attempt.decision_position
           RETURNING assembly.context_assembly_manifest_id::text",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -484,9 +488,12 @@ struct RetrievalManifests {
     outbound: String,
 }
 
+/// Copies the active Context Assembly of the interrupted Attempt at `decision_position` as the
+/// retrieval Context Assembly of the same position.
 async fn copy_retrieval_context(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<RetrievalManifests, CompleteAgentRunError> {
     let requirement_id = Uuid::now_v7().to_string();
     let manifests = RetrievalManifests {
@@ -497,14 +504,15 @@ async fn copy_retrieval_context(
         .execute(
             "INSERT INTO storyos.operation_requirements
                (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, requirement_role)
+                input_snapshot_id, receipt_id, payload, requirement_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, run_id,
-                    $5::text::uuid, receipt_id, payload, 'retrieval'
+                    $5::text::uuid, receipt_id, payload, 'retrieval', decision_position
                FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND requirement_role IN ('primary', 'later_request') AND decision_position = 0
+                AND requirement_role IN ('primary', 'later_request')
+                AND decision_position = $6::text::numeric
                 AND (requirement_role = 'primary' OR NOT EXISTS (
                   SELECT 1 FROM storyos.active_context_compactions AS refused
                    WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
@@ -518,6 +526,7 @@ async fn copy_retrieval_context(
                 &claim.run_id,
                 &requirement_id,
                 &Uuid::now_v7().to_string(),
+                &decision_position,
             ],
         )
         .await
@@ -528,15 +537,17 @@ async fn copy_retrieval_context(
                (owner_user_id, project_id, context_assembly_manifest_id,
                 operation_requirement_id, run_id, sufficiency,
                 destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope)
+                payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope,
+                decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
                     sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'retrieval',
-                    disclosure_grant_id, disclosure_grant_scope
+                    disclosure_grant_id, disclosure_grant_scope, decision_position
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND manifest_role IN ('decision', 'later_request') AND decision_position = 0
+                AND manifest_role IN ('decision', 'later_request')
+                AND decision_position = $8::text::numeric
                 AND (manifest_role = 'decision' OR NOT EXISTS (
                   SELECT 1 FROM storyos.active_context_compactions AS refused
                    WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
@@ -552,6 +563,7 @@ async fn copy_retrieval_context(
                 &requirement_id,
                 &manifests.destination,
                 &manifests.outbound,
+                &decision_position,
             ],
         )
         .await
