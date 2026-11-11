@@ -521,6 +521,7 @@ pub(crate) async fn settle_one_phase(
             decision,
             &attempt_id,
             &payload,
+            &payload,
         )
         .await?;
         return complete(client, claim).await;

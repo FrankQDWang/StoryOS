@@ -33,12 +33,12 @@ pub(crate) async fn commit(
         RetrievePurpose::OriginalResult => (
             "retrieval",
             "retrieve_original_result",
-            copy_retrieval_context(client, claim, &run.decision_position).await?,
+            copy_active_context(client, claim, &run.decision_position, "retrieval").await?,
         ),
         RetrievePurpose::LateResult => (
             "late_retrieval",
             "retrieve_late_result",
-            retrieval_manifests(client, claim).await?,
+            retrieval_manifests(client, claim, &run.decision_position).await?,
         ),
     };
     let payload: serde_json::Value =
@@ -483,20 +483,25 @@ impl RetrievedResult {
     }
 }
 
-struct RetrievalManifests {
-    destination: String,
-    outbound: String,
+pub(crate) struct RetrievalManifests {
+    /// The copied Context Assembly manifest. A late Retrieve copies none.
+    pub assembly: Option<String>,
+    pub destination: String,
+    pub outbound: String,
 }
 
 /// Copies the active Context Assembly of the interrupted Attempt at `decision_position` as the
-/// retrieval Context Assembly of the same position.
-async fn copy_retrieval_context(
+/// Context Assembly of `role` (`retrieval` or `successor`) at the same position.
+pub(crate) async fn copy_active_context(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     decision_position: &str,
+    role: &str,
 ) -> Result<RetrievalManifests, CompleteAgentRunError> {
     let requirement_id = Uuid::now_v7().to_string();
+    let assembly = Uuid::now_v7().to_string();
     let manifests = RetrievalManifests {
+        assembly: Some(assembly.clone()),
         destination: Uuid::now_v7().to_string(),
         outbound: Uuid::now_v7().to_string(),
     };
@@ -506,7 +511,7 @@ async fn copy_retrieval_context(
                (owner_user_id, project_id, operation_requirement_id, run_id,
                 input_snapshot_id, receipt_id, payload, requirement_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, run_id,
-                    $5::text::uuid, receipt_id, payload, 'retrieval', decision_position
+                    $5::text::uuid, receipt_id, payload, $7::text, decision_position
                FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -527,6 +532,7 @@ async fn copy_retrieval_context(
                 &requirement_id,
                 &Uuid::now_v7().to_string(),
                 &decision_position,
+                &role,
             ],
         )
         .await
@@ -540,7 +546,7 @@ async fn copy_retrieval_context(
                 payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope,
                 decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'retrieval',
+                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, $9::text,
                     disclosure_grant_id, disclosure_grant_scope, decision_position
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid
@@ -559,11 +565,12 @@ async fn copy_retrieval_context(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
-                &Uuid::now_v7().to_string(),
+                &assembly,
                 &requirement_id,
                 &manifests.destination,
                 &manifests.outbound,
                 &decision_position,
+                &role,
             ],
         )
         .await
@@ -576,10 +583,12 @@ async fn copy_retrieval_context(
     Ok(manifests)
 }
 
-/// A late Retrieve reuses the Destination Context Manifest of the original retrieval.
+/// A late Retrieve reuses the Destination Context Manifest of the original retrieval at
+/// `decision_position`.
 async fn retrieval_manifests(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<RetrievalManifests, CompleteAgentRunError> {
     let row = client
         .query_one(
@@ -588,16 +597,18 @@ async fn retrieval_manifests(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'retrieval' AND decision_position = 0",
+                AND attempt_role = 'retrieval' AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_position,
             ],
         )
         .await
         .map_err(unavailable)?;
     Ok(RetrievalManifests {
+        assembly: None,
         destination: row.get(0),
         outbound: row.get(1),
     })

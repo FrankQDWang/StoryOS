@@ -46,7 +46,7 @@ The dispatch claim records a worst-case reservation of one request on the attemp
 
 ### 5. No automatic successor and no retry
 
-An unknown or partial ToolCall has no automatic retry, because nothing can reconcile it. The one automatic successor of [ADR 0033](0033-use-volcengine-responses-for-the-first-real-model-path.md) exists only for the first Decision position, before any ToolCall exists. A Model Attempt with an unknown outcome on a later position makes the Run wait with `outcome_unknown`. Recovery is the existing path of S4-04: the author sends the next message, a new Run starts, and a new ToolCall with fresh admission and its own dispatch claim runs when the model asks again. The old ToolCall stays as history. [ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md) amends this rule for the Model Attempt: an unknown continuation Attempt gets the retrieval first and then one bounded successor.
+An unknown or partial ToolCall has no automatic retry, because nothing can reconcile it. The one automatic successor of [ADR 0033](0033-use-volcengine-responses-for-the-first-real-model-path.md) exists only for the first Decision position, before any ToolCall exists. A Model Attempt with an unknown outcome on a later position makes the Run wait with `outcome_unknown`. Recovery is the existing path of S4-04: the author sends the next message, a new Run starts, and a new ToolCall with fresh admission and its own dispatch claim runs when the model asks again. The old ToolCall stays as history. [ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md) amends this rule for the Model Attempt: an unknown continuation Attempt gets the retrieval first and then one bounded successor. An unknown or partial ToolCall still has no retry: an unknown ToolCall of the Run is an unresolved effect, and it pauses that successor.
 
 ### 6. Visible state
 
@@ -68,5 +68,5 @@ The Tool Gateway reports `ToolContextCommitted` after the store committed the Co
 
 ## Consequences
 
-- An uncertain Model Attempt on a continuation RunStep has no automatic successor and no retrieval. The author starts a new conversation (ADR 0057). [ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md) owns that gap.
+- An uncertain Model Attempt on a continuation RunStep gets the retrieval and one bounded successor ([ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md)). When the recovery stops without a result, the author starts a new conversation (ADR 0057).
 - S5-09 (#405) can read the class of a cancelled ToolCall from `listResearchSources` and from the Run Events.

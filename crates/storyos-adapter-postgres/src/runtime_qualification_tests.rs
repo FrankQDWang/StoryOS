@@ -344,9 +344,10 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 None,
                 None,
             ],
+            // The unknown successor spends the allowance, so the Run waits (ADR 0088).
             [
-                text("completed"),
-                None,
+                text("waiting"),
+                text(r#"{"kind": "outcome_unknown", "reason": "unknown_result"}"#),
                 text("2"),
                 None,
                 text("true"),

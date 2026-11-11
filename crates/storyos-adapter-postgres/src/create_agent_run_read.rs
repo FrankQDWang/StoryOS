@@ -180,9 +180,13 @@ pub(super) async fn load_agent_run(
         )
         .await?,
     };
-    if row.get::<_, String>(16) == "0"
-        && let Some(selection) =
-            crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
+    if let Some(selection) = crate::agent_run_successor::load_successor_selection(
+        client,
+        scope,
+        run_id,
+        &row.get::<_, String>(16),
+    )
+    .await?
         && let Some(model) = record.model.as_mut()
     {
         record.decision = inspect_decision(

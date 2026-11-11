@@ -5,8 +5,9 @@
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
-    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolCallBatch, ToolCallState,
-    ToolEnablement, ToolRegistrationLifecycle, ValidatedToolCall,
+    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolAttemptSettlement, ToolCallBatch,
+    ToolCallClass, ToolCallState, ToolEnablement, ToolRegistrationLifecycle, ValidatedToolCall,
+    tool_call_class,
 };
 use uuid::Uuid;
 
@@ -88,6 +89,41 @@ pub(crate) async fn pending_tool_call_exists(
         .await
         .map(|row| row.get(0))
         .map_err(complete_database_error)
+}
+
+/// Whether a ToolCall of the Run has an effect that no evidence settled: a ToolCall with no
+/// observation, or one whose outcome Core classifies as unknown (ADR 0033 section 5, ADR 0086).
+/// A ToolCall of an earlier Decision can keep an unknown effect when a continuation starts.
+pub(crate) async fn unresolved_tool_effect(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<bool, CompleteAgentRunError> {
+    let rows = client
+        .query(
+            "SELECT state, attempt -> 'destination_attempt' ->> 'settlement',
+                    attempt -> 'late_observation' ->> 'settlement'
+               FROM storyos.tool_calls
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    let settlement = |value: Option<&str>| value.and_then(ToolAttemptSettlement::parse);
+    Ok(rows.iter().any(|row| {
+        let class = ToolCallState::parse(row.get(/*idx*/ 0)).and_then(|state| {
+            tool_call_class(
+                state,
+                settlement(row.get(/*idx*/ 1)),
+                settlement(row.get(/*idx*/ 2)),
+            )
+        });
+        matches!(class, None | Some(ToolCallClass::Unknown))
+    }))
 }
 
 /// Fills the calls of a function request Decision from its ToolCall rows in item order: the

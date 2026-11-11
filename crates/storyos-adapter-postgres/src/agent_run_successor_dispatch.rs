@@ -2,7 +2,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget,
-    DispatchClaim, Observation, RequestAttempt, RetrievePurpose, RetrieveRequest,
+    DispatchClaim, ModelUsage, Observation, RequestAttempt, RetrievePurpose, RetrieveRequest,
     WirePayloadProjection,
 };
 use storyos_core::{
@@ -33,11 +33,13 @@ pub(crate) async fn successor_request(
         .query_opt(
             "SELECT model_attempt_id::text FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND attempt_role = 'successor'",
+                AND run_id = $3::text::uuid AND attempt_role = 'successor'
+                AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &run.decision_position,
             ],
         )
         .await
@@ -101,11 +103,13 @@ pub(crate) async fn same_request(
     Ok(false)
 }
 
-/// Commits the successor Destination Attempt and Outbound Disclosure Event. The predecessor
-/// already holds the consumed one-successor allowance.
+/// Commits the successor Destination Attempt and Outbound Disclosure Event at the Decision
+/// position of its predecessor. The predecessor already holds the consumed one-successor
+/// allowance.
 pub(crate) async fn commit(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     projection: &WirePayloadProjection,
 ) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
     let row = load_decision(client, claim).await?;
@@ -125,20 +129,14 @@ pub(crate) async fn commit(
         return Ok(None);
     }
     let attempt_id = Uuid::now_v7().to_string();
-    let manifest_id = Uuid::now_v7().to_string();
-    let requirement_id = Uuid::now_v7().to_string();
-    let destination_manifest_id = Uuid::now_v7().to_string();
-    let outbound_manifest_id = Uuid::now_v7().to_string();
-    copy_requirement(client, claim, &requirement_id, &Uuid::now_v7().to_string()).await?;
-    copy_manifest(
+    let manifests = crate::agent_run_retrieval_dispatch::copy_active_context(
         client,
         claim,
-        &manifest_id,
-        &requirement_id,
-        &destination_manifest_id,
-        &outbound_manifest_id,
+        &run.decision_position,
+        "successor",
     )
     .await?;
+    let manifest_id = manifests.assembly.unwrap_or_default();
     let mut successor_payload = serde_json::json!({
         "operation": "unknown_create_successor",
         "predecessor_model_attempt_id": row.attempt_id,
@@ -173,11 +171,12 @@ pub(crate) async fn commit(
                (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
                 outbound_disclosure_event_id, destination_context_manifest_id,
                 outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role)
+                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role,
+                decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'successor')",
+                     $12::text::jsonb, 'successor', $13::text::numeric)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -185,12 +184,13 @@ pub(crate) async fn commit(
                 &attempt_id,
                 &Uuid::now_v7().to_string(),
                 &Uuid::now_v7().to_string(),
-                &destination_manifest_id,
-                &outbound_manifest_id,
+                &manifests.destination,
+                &manifests.outbound,
                 &Uuid::now_v7().to_string(),
                 &row.invocation_id,
                 &row.conversation_id,
                 &successor_payload.to_string(),
+                &run.decision_position,
             ],
         )
         .await
@@ -247,6 +247,9 @@ pub(crate) async fn record(
             payload["items"] =
                 crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
             payload["usage"] = crate::agent_run_observation::encode_usage(response.usage);
+            // Only known usage settles the worst-case reservation of the successor (ADR 0033).
+            payload["reservation"]["released"] =
+                serde_json::json!(!matches!(response.usage, ModelUsage::Unknown));
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);
             }
@@ -432,11 +435,13 @@ pub(crate) async fn record(
         .query_one(
             "SELECT context_assembly_manifest_id::text FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND manifest_role = 'successor'",
+                AND run_id = $3::text::uuid AND manifest_role = 'successor'
+                AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &run.decision_position,
             ],
         )
         .await
@@ -446,6 +451,7 @@ pub(crate) async fn record(
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
     marker["successor_decision_id"] = serde_json::json!(decision_id);
     marker["successor_requests_function"] = serde_json::json!(function_requested);
+    marker["successor_outcome_unknown"] = serde_json::json!(dispatch_state == "uncertain");
     seal(
         &mut marker,
         "dispatched",
@@ -480,11 +486,13 @@ pub(crate) async fn finish_dispatched(
                 "SELECT model_attempt_id::text FROM storyos.model_attempts
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
-                    AND attempt_role = 'late_retrieval' AND decision_position = 0",
+                    AND attempt_role = 'late_retrieval'
+                    AND decision_position = $4::text::numeric",
                 &[
                     &claim.project_scope.owner_user_id.as_ref(),
                     &claim.project_scope.project_id.as_ref(),
                     &claim.run_id,
+                    &run.decision_position,
                 ],
             )
             .await
@@ -519,25 +527,41 @@ pub(crate) async fn finish_dispatched(
     if step == storyos_core::FunctionRequestStep::ToolGateway {
         return Ok(SuccessorWork::ToolCalls);
     }
+    // The ToolCalls of the successor Decision are resolved: the next RunStep sends their results
+    // as the continuation of the successor response (ADR 0085, ADR 0088).
+    if step == storyos_core::FunctionRequestStep::Continue {
+        let (attempt_id, payload) = successor_payload(client, claim, marker).await?;
+        let decision_id = text(marker, "successor_decision_id").ok_or_else(|| {
+            unavailable(std::io::Error::other("The successor Decision is missing"))
+        })?;
+        crate::agent_run_continuation::bind_produced_continuation(
+            client,
+            claim,
+            decision_id,
+            attempt_id,
+            &payload,
+            &row.payload,
+        )
+        .await?;
+        crate::agent_run_tool_result::open_next_step(client, claim, run).await?;
+        return Ok(SuccessorWork::Hold("tool_result_continuation"));
+    }
+    // The allowance is spent and the successor outcome is unknown: the Run waits with
+    // `outcome_unknown` and keeps the evidence of each Attempt (ADR 0033, ADR 0088 section 3).
+    if flag(marker, "successor_outcome_unknown") {
+        update_run(
+            client,
+            claim,
+            "waiting",
+            Some(&serde_json::json!({"kind": "outcome_unknown", "reason": "unknown_result"})),
+            /*clear_lease*/ true,
+        )
+        .await?;
+        return Ok(SuccessorWork::Done(CompleteAgentRun::Settled));
+    }
     let refusal = if step == storyos_core::FunctionRequestStep::Refuse {
         // The recorded successor Attempt keeps the batch evidence of its refusal.
-        let attempt_id = text(marker, "successor_model_attempt_id").ok_or_else(|| {
-            unavailable(std::io::Error::other("The successor Attempt is missing"))
-        })?;
-        let row = client
-            .query_one(
-                "SELECT payload::text FROM storyos.model_attempts
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
-                &[
-                    &claim.project_scope.owner_user_id.as_ref(),
-                    &claim.project_scope.project_id.as_ref(),
-                    &attempt_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+        let (_, payload) = successor_payload(client, claim, marker).await?;
         Some(crate::agent_run_observation::research_refusal(&payload))
     } else {
         None
@@ -557,106 +581,37 @@ pub(crate) async fn finish_dispatched(
     Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
 }
 
+/// The identity and the payload of the recorded successor Attempt.
+async fn successor_payload<'a>(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    marker: &'a serde_json::Value,
+) -> Result<(&'a str, serde_json::Value), CompleteAgentRunError> {
+    let attempt_id = text(marker, "successor_model_attempt_id")
+        .ok_or_else(|| unavailable(std::io::Error::other("The successor Attempt is missing")))?;
+    let row = client
+        .query_one(
+            "SELECT payload::text FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &attempt_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+    Ok((attempt_id, payload))
+}
+
 /// The predecessor reference to read for a late result, once, after the original retrieval.
 fn late_check_reference(payload: &serde_json::Value, marker: &serde_json::Value) -> Option<String> {
     let subject = payload.get("original_result_retrieval")?;
     (!flag(marker, "late_result_checked") && text(subject, "retrieval_attempt_id").is_some())
         .then(|| text(subject, "reference_id").map(str::to_owned))
         .flatten()
-}
-
-/// Copies the first decision Context Assembly, or the one of the later request of a compaction.
-async fn copy_requirement(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    requirement_id: &str,
-    snapshot_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, requirement_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id,
-                    $5::text::uuid, receipt_id, payload, 'successor'
-               FROM storyos.operation_requirements
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND requirement_role IN ('primary', 'later_request') AND decision_position = 0
-                AND (requirement_role = 'primary' OR NOT EXISTS (
-                  SELECT 1 FROM storyos.active_context_compactions AS refused
-                   WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
-                         ($1::text::uuid, $2::text::uuid, $3::text::uuid)
-                     AND refused.install_state = 'refused'))
-              ORDER BY requirement_role = 'later_request' DESC
-              LIMIT 1",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &requirement_id,
-                &snapshot_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if inserted != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The primary operation requirement is missing",
-        )));
-    }
-    Ok(())
-}
-
-async fn copy_manifest(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    manifest_id: &str,
-    requirement_id: &str,
-    destination_manifest_id: &str,
-    outbound_manifest_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let manifested = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'successor',
-                    disclosure_grant_id, disclosure_grant_scope
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND manifest_role IN ('decision', 'later_request') AND decision_position = 0
-                AND (manifest_role = 'decision' OR NOT EXISTS (
-                  SELECT 1 FROM storyos.active_context_compactions AS refused
-                   WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
-                         ($1::text::uuid, $2::text::uuid, $3::text::uuid)
-                     AND refused.install_state = 'refused'))
-              ORDER BY manifest_role = 'later_request' DESC
-              LIMIT 1",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &manifest_id,
-                &requirement_id,
-                &destination_manifest_id,
-                &outbound_manifest_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if manifested != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The decision Context Assembly Manifest is missing",
-        )));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
