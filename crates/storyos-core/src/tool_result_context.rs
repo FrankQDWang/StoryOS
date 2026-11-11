@@ -74,7 +74,8 @@ impl ToolResultCandidate<'_> {
 
 /// Makes `record` the Context Assembly of a `tool_result_continuation`: each candidate, in item
 /// order, is selected with its bounded projection, or rejected. A rejected candidate blocks the
-/// continuation, because each native function call needs its output.
+/// continuation, because each native function call needs its output. A candidate whose citable
+/// tag and minimum boundary are above the item limit is rejected (ADR 0087).
 pub fn assemble_tool_result_continuation(
     record: &mut CurrentPassageAssemblyRecord,
     candidates: &[ToolResultCandidate<'_>],
@@ -82,7 +83,7 @@ pub fn assemble_tool_result_continuation(
     let requirement = &mut record.operation_requirement;
     requirement.cause = ContextCause::ToolResultContinuation;
     let mut sources = Vec::new();
-    let mut blocked = false;
+    let mut blocks = Vec::new();
     for candidate in candidates {
         let snapshot_ids = candidate.source_snapshot_ids();
         let source_version =
@@ -94,7 +95,9 @@ pub fn assemble_tool_result_continuation(
             .then(|| ToolResultProjection::of(candidate.state, candidate.result_text))
             .flatten();
         let Some(projection) = projection else {
-            blocked = true;
+            if !blocks.contains(&ContextBlockReason::ToolResultUnavailable) {
+                blocks.push(ContextBlockReason::ToolResultUnavailable);
+            }
             record.considered.push(ConsideredSource {
                 source_class: ContextSourceClass::ToolResult,
                 source_version: source_version.clone(),
@@ -116,13 +119,32 @@ pub fn assemble_tool_result_continuation(
             candidate.call_id,
             requirement.item_token_limit.saturating_sub(tag_tokens),
         );
+        let content = format!("{}{tag}", bounded.text);
+        let token_count = count_context_item_tokens(&content);
+        // A tag whose identities and the minimum boundary do not fit together in the item limit
+        // blocks the continuation, because a cut identity cannot be cited.
+        let fits = token_count <= requirement.item_token_limit;
         record.considered.push(ConsideredSource {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
             token_count: bounded.source_tokens + tag_tokens,
-            eligible: true,
+            eligible: fits,
         });
-        let content = format!("{}{tag}", bounded.text);
+        if !fits {
+            let reason = ContextBlockReason::ExactRequiredOverLimit {
+                source_class: ContextSourceClass::ToolResult,
+            };
+            if !blocks.contains(&reason) {
+                blocks.push(reason);
+            }
+            record.rejected.push(RejectedSource {
+                source_class: ContextSourceClass::ToolResult,
+                source_version: source_version.clone(),
+                token_count,
+                reason: RejectionReason::OverItemTokenLimit,
+            });
+            continue;
+        }
         record.selected.push(SelectedProjection {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
@@ -130,7 +152,7 @@ pub fn assemble_tool_result_continuation(
                 Some(_) => ProjectionMode::DeterministicExcerpt,
                 None => ProjectionMode::ExactRequired,
             },
-            token_count: count_context_item_tokens(&content),
+            token_count,
             content,
         });
         sources.push(ToolResultSource {
@@ -145,15 +167,12 @@ pub fn assemble_tool_result_continuation(
         });
     }
     requirement.tool_results = Some(sources);
-    if blocked {
-        let reason = ContextBlockReason::ToolResultUnavailable;
+    if !blocks.is_empty() {
         record.sufficiency =
             match std::mem::replace(&mut record.sufficiency, ContextSufficiency::Complete) {
-                ContextSufficiency::Complete => ContextSufficiency::Blocked {
-                    reasons: vec![reason],
-                },
+                ContextSufficiency::Complete => ContextSufficiency::Blocked { reasons: blocks },
                 ContextSufficiency::Blocked { mut reasons } => {
-                    reasons.push(reason);
+                    reasons.extend(blocks);
                     ContextSufficiency::Blocked { reasons }
                 }
             };

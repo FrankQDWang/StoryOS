@@ -16,7 +16,7 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
+use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run};
 use crate::agent_run_tool_call::tests::set_research_tool;
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
 use crate::agent_run_tool_exposure::tests::sse;
@@ -653,5 +653,60 @@ async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged()
             store.get_research_artifact(&scope, &id).await.unwrap(),
         ),
         (1, before)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps_its_refusal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The first RunStep has no ToolResult, so the Run captured no source to cite.
+    let text = json!({"kind": "research_synthesis", "summary": "The tides of 1890.",
+        "claims": [{"text": "High water came at 10.42.",
+                    "citations": ["018f0000-0000-7001-8000-0000000c38ff"]}]})
+    .to_string();
+    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
+        "status": "completed", "content": [{"type": "output_text", "text": text}]});
+    let body = json!({"id": "resp_c38", "status": "completed", "output": [message],
+        "usage": {"input_tokens": 40, "output_tokens": 12}})
+    .to_string();
+    let (base, _served) = destination(vec![
+        broken_stream("resp_c38"),
+        format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\
+             connection: close\r\n\r\n{body}",
+            body.len()
+        ),
+    ])
+    .await;
+    let (scope, run_id) = real_run(&store, &admin, "c38", &base).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let row = admin
+        .query_one(
+            "SELECT attempt.payload ->> 'result', attempt.payload ->> 'synthesis_refusal'
+               FROM storyos.model_attempts AS attempt
+              WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'retrieval'",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            row.get::<_, Option<String>>(0),
+            row.get::<_, Option<String>>(1),
+            artifact_count(&admin, &run_id).await,
+        ),
+        (
+            Some("incomplete".to_owned()),
+            Some("uncaptured_citation".to_owned()),
+            0
+        )
     );
 }

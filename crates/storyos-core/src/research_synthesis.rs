@@ -65,6 +65,8 @@ pub struct ResearchSynthesis {
 pub enum SynthesisRefusal {
     NoClaim,
     EmptyText,
+    /// The summary or a claim text has U+0000, which the Artifact store cannot hold.
+    UnstorableText,
     UncitedClaim,
     /// A citation names no Snapshot and no Gap that this AgentRun captured.
     UncapturedCitation,
@@ -77,6 +79,7 @@ impl SynthesisRefusal {
         match self {
             Self::NoClaim => "no_claim",
             Self::EmptyText => "empty_text",
+            Self::UnstorableText => "unstorable_text",
             Self::UncitedClaim => "uncited_claim",
             Self::UncapturedCitation => "uncaptured_citation",
             Self::OtherScopeCitation => "other_scope_citation",
@@ -95,6 +98,9 @@ pub fn validate_research_synthesis(
     }
     if summary.trim().is_empty() || claims.iter().any(|claim| claim.text.trim().is_empty()) {
         return Err(SynthesisRefusal::EmptyText);
+    }
+    if summary.contains('\0') || claims.iter().any(|claim| claim.text.contains('\0')) {
+        return Err(SynthesisRefusal::UnstorableText);
     }
     let claims = claims
         .iter()

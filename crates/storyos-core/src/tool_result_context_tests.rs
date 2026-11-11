@@ -276,3 +276,50 @@ fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
         (true, true, true)
     );
 }
+
+#[test]
+fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continuation() {
+    let mut record = passage();
+    record.operation_requirement.item_token_limit = 300;
+    let sources = [CitableSource {
+        id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
+        cited: CitedSource::Snapshot,
+        locator: format!("https://example.org/{}", "a".repeat(2000)),
+        owner_user_id: "user-1".to_owned(),
+        project_id: "proj-1".to_owned(),
+        run_id: "run-1".to_owned(),
+    }];
+
+    assemble_tool_result_continuation(
+        &mut record,
+        &[ToolResultCandidate {
+            sources: &sources,
+            ..candidate("c1", ToolCallState::Settled, Some("High water at 10.42."))
+        }],
+    );
+
+    assert_eq!(
+        (
+            record
+                .selected
+                .iter()
+                .any(|item| item.source_class == ContextSourceClass::ToolResult),
+            record
+                .rejected
+                .iter()
+                .filter(|item| item.source_class == ContextSourceClass::ToolResult)
+                .map(|item| item.reason.clone())
+                .collect::<Vec<_>>(),
+            record.sufficiency.clone(),
+        ),
+        (
+            false,
+            vec![RejectionReason::OverItemTokenLimit],
+            ContextSufficiency::Blocked {
+                reasons: vec![ContextBlockReason::ExactRequiredOverLimit {
+                    source_class: ContextSourceClass::ToolResult,
+                }],
+            },
+        )
+    );
+}

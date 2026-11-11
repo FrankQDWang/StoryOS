@@ -275,6 +275,10 @@ pub(crate) async fn record(
                 let output = response.output.as_ref();
                 let citable =
                     crate::research_artifact::decision_citable(client, claim, output).await?;
+                if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable)
+                {
+                    payload["synthesis_refusal"] = refusal;
+                }
                 validate_agent_decision(output, &declared, &citable, batch)
             };
             match outcome {

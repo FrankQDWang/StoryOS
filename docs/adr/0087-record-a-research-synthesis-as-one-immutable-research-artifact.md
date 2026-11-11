@@ -22,7 +22,7 @@ The Agent Decision has the variant `research_synthesis`. It has a summary and an
 
 ### 2. How the model learns the citable identities
 
-The function output of each resolved ToolCall has one data-only `tool_sources` tag after its `tool_result` boundary. The tag lists each Snapshot of the result in result order, then each Gap in request order. Each entry has its identity and locator, and a Gap entry has its reason. The Host escapes each value, so no locator closes the tag. The token bound of a ToolResult ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)) cuts only the result text, never the tag, so each identity stays whole. The Host instructions of a continuation request add the reply form above and the cite rules. A first RunStep has no ToolResult. A synthesis there cites nothing that the Run captured, so the validation refuses it.
+The function output of each resolved ToolCall has one data-only `tool_sources` tag after its `tool_result` boundary. The tag lists each Snapshot of the result in result order, then each Gap in request order. Each entry has its identity and locator, and a Gap entry has its reason. The Host escapes each value, so no locator closes the tag. The token bound of a ToolResult ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)) cuts only the result text, never the tag, so each identity stays whole. When the complete tag and the minimum boundary are above the item limit, the Context Assembly rejects the item as `over_item_token_limit` and blocks the continuation with `exact_required_over_limit`, because a cut identity cannot be cited. The Host instructions of a continuation request add the reply form above and the cite rules. A first RunStep has no ToolResult. A synthesis there cites nothing that the Run captured, so the validation refuses it.
 
 ### 3. Core validation
 
@@ -32,11 +32,12 @@ The function output of each resolved ToolCall has one data-only `tool_sources` t
 |---|---|
 | `no_claim` | The synthesis has no claim. |
 | `empty_text` | The summary or a claim text is blank. |
+| `unstorable_text` | The summary or a claim text has U+0000, which the Artifact store cannot hold. |
 | `uncited_claim` | A claim has no citation. |
 | `uncaptured_citation` | A citation names no Snapshot and no Gap that this AgentRun captured. |
 | `other_scope_citation` | A citation names a source of another Project Scope or another AgentRun. |
 
-An invalid synthesis gets the existing repair rule of the typed-output mapping: the RunStep has no Decision, and the Run completes with no result. The decision attempt keeps the reason as `synthesis_refusal`. A reply that is not valid JSON, or that has a citation that is not a string, stays an Advisory, and the panel shows the malformed reply sentence (#1145).
+An invalid synthesis gets the existing repair rule of the typed-output mapping: the RunStep has no Decision, and the Run completes with no result. The Model Attempt that observed the response keeps the reason as `synthesis_refusal`: the decision attempt of a create or a successor, or the retrieval attempt of a Retrieve. A synthesis that reaches a successor or a Retrieve is on the first RunStep, which has no captured source, so its reason is `uncaptured_citation`. A reply that is not valid JSON, or that has a citation that is not a string, stays an Advisory, and the panel shows the malformed reply sentence (#1145).
 
 ### 4. The Research Artifact
 
