@@ -8,7 +8,7 @@ import {
   getAgentRun, getChapter, getResearchArtifact, listResearchSources,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, prepare, settleOnce } from "./acceptance.ts";
+import { USER_A, drainLeftoverWork, prepare, settleOnce } from "./acceptance.ts";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 import {
@@ -82,6 +82,8 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     page.on("pageerror", (error) => errors.push(error.message));
     page.setDefaultTimeout(10_000);
     await page.setViewportSize({ width: 1487, height: 1058 });
+    // Each `settleOnce` claims the oldest queued Run, so the Runs that earlier journeys left settle first.
+    await drainLeftoverWork();
     const setup = await prepare(server.baseUrl, "018f0000-0000-7001-8000-0000005e0900", "Research journey", "5e091");
     const options = { baseUrl: server.baseUrl, projectId: setup.projectId, fetchImpl: setup.fetchImpl };
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
