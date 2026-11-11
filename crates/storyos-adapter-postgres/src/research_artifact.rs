@@ -171,8 +171,9 @@ pub(crate) async fn record(
 
 /// The lineage of a Proposal that the active RunStep opens when its Model Attempt continues the
 /// response of a research synthesis: that response is the prior response of the request, so the
-/// model read the Artifact. A request with a full input reads no earlier response, and its
-/// Proposal names no Artifact.
+/// model read the Artifact. The lineage names the Model Attempt that produced the Proposal: the
+/// successor of an unknown create, or else the decision attempt. A request with a full input reads
+/// no earlier response, and its Proposal names no Artifact.
 pub(crate) async fn proposal_lineage(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -184,7 +185,7 @@ pub(crate) async fn proposal_lineage(
                       'run_id', run.run_id::text,
                       'decision_position', run.active_decision_position,
                       'operation_requirement_id', requirement.operation_requirement_id::text,
-                      'model_attempt_id', attempt.model_attempt_id::text,
+                      'model_attempt_id', producer.model_attempt_id::text,
                       'research_artifact_id', artifact.research_artifact_id::text)::text
                FROM storyos.agent_runs AS run
                JOIN storyos.operation_requirements AS requirement
@@ -197,6 +198,16 @@ pub(crate) async fn proposal_lineage(
                      attempt.decision_position) =
                     (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
                 AND attempt.attempt_role = 'decision'
+               -- The successor of an unknown create sends the same request again, so the decision
+               -- attempt names the prior response, and the last attempt produced the Proposal.
+               CROSS JOIN LATERAL (
+                 SELECT producer.model_attempt_id FROM storyos.model_attempts AS producer
+                  WHERE (producer.owner_user_id, producer.project_id, producer.run_id,
+                         producer.decision_position) =
+                        (attempt.owner_user_id, attempt.project_id, attempt.run_id,
+                         attempt.decision_position)
+                    AND producer.attempt_role IN ('decision', 'successor')
+                  ORDER BY producer.model_attempt_id DESC LIMIT 1) AS producer
                JOIN storyos.model_attempts AS prior
                  ON (prior.owner_user_id, prior.project_id) = (run.owner_user_id, run.project_id)
                 AND prior.continuation_binding_id::text =

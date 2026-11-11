@@ -61,7 +61,7 @@ The panel shows the summary, each claim with its citation numbers, and the numbe
 
 ### 8. "Use this in the story"
 
-The button sends the ordinary `createAgentRun` request of S5-05 in the same Project Conversation, with a fixed author message and no selection reference. The model reads the synthesis through the prior response of the continuation binding. When the next Decision opens a prose Proposal, `proposals.source_lineage` has the kind `research_artifact`. It names the RunStep of that Proposal and the Artifact whose response the request continued. A request with a full input reads no earlier response, so its Proposal names no Artifact. A rejection of the Proposal changes no Artifact and no source.
+The button sends the ordinary `createAgentRun` request of S5-05 in the same Project Conversation, with a fixed author message and no selection reference. The model reads the synthesis through the prior response of the continuation binding. When the next Decision opens a prose Proposal, `proposals.source_lineage` has the kind `research_artifact`. It names the RunStep of that Proposal, the Model Attempt that produced it (the successor of an unknown create, or else the decision attempt), and the Artifact whose response the request continued. A request with a full input reads no earlier response, so its Proposal names no Artifact. A rejection of the Proposal changes no Artifact and no source.
 
 ## Considered options
 

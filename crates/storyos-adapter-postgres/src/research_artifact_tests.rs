@@ -16,7 +16,7 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run};
+use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run, stored};
 use crate::agent_run_tool_call::tests::set_research_tool;
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
 use crate::agent_run_tool_exposure::tests::sse;
@@ -103,14 +103,15 @@ fn tagged(body: &Value, tag: &str) -> Vec<String> {
 }
 
 /// A synthesis reply in `status` whose claims cite the tagged identities that `cite` selects.
-fn synthesis(reference: &'static str, status: &'static str, cite: Cite) -> Reply {
+fn synthesis(reference: &str, status: &'static str, cite: Cite) -> Reply {
+    let reference = reference.to_owned();
     Box::new(move |body| {
         let claims = cite(&tagged(body, "<source id=\""), &tagged(body, "<gap id=\""));
         let text = json!({"kind": "research_synthesis", "summary": "The tides of 1890.",
             "claims": claims.iter()
                 .map(|(text, citations)| json!({"text": text, "citations": citations}))
                 .collect::<Vec<_>>()});
-        message_stream(reference, &text.to_string(), status)
+        message_stream(&reference, &text.to_string(), status)
     })
 }
 
@@ -470,15 +471,26 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
     );
 }
 
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_keeps_it() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
+/// The facts of "Use this in the story": the settled synthesis Run and its Artifact, and the
+/// second Run of the conversation with its Proposal row. The Proposal row has its identity, its
+/// lineage, its head revision, its operations, and the identities of the Operation Requirement and
+/// of the Model Attempt that produced it. With `successor`, the create of the second Run has an
+/// unknown outcome, and its successor produces the Proposal.
+struct Story {
+    store: PostgresProjectReader,
+    admin: Client,
+    scope: ProjectScope,
+    run_id: String,
+    artifact_id: String,
+    story_run: String,
+    proposal: tokio_postgres::Row,
+}
+
+async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
+    let reference = |suffix: &str| format!("resp_{prefix}{suffix}");
     let (store, admin, scope, run_id) = synthesis_run(
-        "c35",
-        0xc35a,
+        prefix,
+        u16::from_str_radix(&format!("{prefix}a"), 16).unwrap(),
         ("web_search", SEARCH),
         SEARCH_TEXT,
         |block| {
@@ -486,18 +498,30 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
                 "changes": [{"block_id": block, "candidate_text": "High water came at 10.42.",
                              "explanation": "The research gives the tides."}]})
             .to_string();
-            vec![
-                synthesis("resp_c35_2", "completed", two_snapshot_claims),
-                Box::new(move |_| message_stream("resp_c35_3", &change, "completed")),
-            ]
+            let (lost, retrieved, late) = (reference("_3"), reference("_3"), reference("_3"));
+            let story = reference("_4");
+            let mut replies: Vec<Reply> = vec![synthesis(
+                &reference("_2"),
+                "completed",
+                two_snapshot_claims,
+            )];
+            if successor {
+                replies.push(Box::new(move |_| broken_stream(&lost)));
+                replies.push(Box::new(move |_| stored(&retrieved, "in_progress")));
+                replies.push(Box::new(move |_| {
+                    message_stream(&story, &change, "completed")
+                }));
+                replies.push(Box::new(move |_| stored(&late, "completed")));
+            } else {
+                replies.push(Box::new(move |_| {
+                    message_stream(&story, &change, "completed")
+                }));
+            }
+            replies
         },
     )
     .await;
-    let id = artifact_id(&store, &scope, &run_id).await;
-    let before = (
-        store.get_research_artifact(&scope, &id).await.unwrap(),
-        store.list_research_sources(&scope, &run_id).await.unwrap(),
-    );
+    let artifact_id = artifact_id(&store, &scope, &run_id).await;
     let run: tokio_postgres::Row = admin
         .query_one(
             "SELECT chapter_id::text, conversation_id::text FROM storyos.agent_runs
@@ -510,7 +534,7 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
         &store,
         &scope,
         run.get(/*idx*/ 0),
-        "c36",
+        story,
         DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
@@ -539,17 +563,59 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
                 AND requirement.decision_position = 0 AND requirement.requirement_role = 'primary'
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = proposal.source_run_id AND attempt.decision_position = 0
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = $2
               WHERE proposal.source_run_id = $1::text::uuid",
-            &[&story_run],
+            &[
+                &story_run,
+                &if successor { "successor" } else { "decision" },
+            ],
         )
         .await
         .unwrap();
-    let request = open_session_request(&store, &scope, "c3c0").await;
+    Story {
+        store,
+        admin,
+        scope,
+        run_id,
+        artifact_id,
+        story_run,
+        proposal,
+    }
+}
+
+/// The lineage that the Proposal of `story` must have: the RunStep of the Proposal, the Model
+/// Attempt that produced it, and the Artifact that it read.
+fn story_lineage(story: &Story) -> Value {
+    json!({"kind": "research_artifact", "run_id": story.story_run, "decision_position": 0,
+           "operation_requirement_id": story.proposal.get::<_, String>(4),
+           "model_attempt_id": story.proposal.get::<_, String>(5),
+           "research_artifact_id": story.artifact_id})
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_keeps_it() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let story = use_in_the_story("c35", "c36", /*successor*/ false).await;
+    let Story {
+        store,
+        scope,
+        run_id,
+        artifact_id: id,
+        proposal,
+        ..
+    } = &story;
+    let before = (
+        store.get_research_artifact(scope, id).await.unwrap(),
+        store.list_research_sources(scope, run_id).await.unwrap(),
+    );
+    let request = open_session_request(store, scope, "c3c0").await;
     let session = store.create_editor_session(&request).await.unwrap();
     let rejection = issued(
-        &store,
-        &scope,
+        store,
+        scope,
         /*suffix*/ 0xc3ca,
         &REJECT_PROPOSAL_OPERATIONS,
         RejectProposalOperationsInput {
@@ -567,8 +633,8 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
         .await
         .unwrap();
     let after = (
-        store.get_research_artifact(&scope, &id).await.unwrap(),
-        store.list_research_sources(&scope, &run_id).await.unwrap(),
+        store.get_research_artifact(scope, id).await.unwrap(),
+        store.list_research_sources(scope, run_id).await.unwrap(),
     );
 
     assert_eq!(
@@ -576,13 +642,36 @@ async fn use_in_the_story_opens_a_proposal_with_the_artifact_and_a_rejection_kee
             serde_json::from_str::<Value>(proposal.get::<_, &str>(1)).unwrap(),
             after,
         ),
+        (story_lineage(&story), before)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_successor_proposal_names_the_successor_attempt_and_the_artifact() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let story = use_in_the_story("c39", "c3b", /*successor*/ true).await;
+    let roles: String = story
+        .admin
+        .query_one(
+            "SELECT string_agg(attempt_role, ',' ORDER BY model_attempt_id)
+               FROM storyos.model_attempts WHERE run_id = $1::text::uuid",
+            &[&story.story_run],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+
+    assert_eq!(
         (
-            // The lineage names the RunStep of the Proposal and the Artifact that it read.
-            json!({"kind": "research_artifact", "run_id": story_run, "decision_position": 0,
-                   "operation_requirement_id": proposal.get::<_, String>(4),
-                   "model_attempt_id": proposal.get::<_, String>(5),
-                   "research_artifact_id": id}),
-            before,
+            serde_json::from_str::<Value>(story.proposal.get::<_, &str>(1)).unwrap(),
+            roles,
+        ),
+        (
+            story_lineage(&story),
+            "decision,retrieval,successor,late_retrieval".to_owned()
         )
     );
 }
