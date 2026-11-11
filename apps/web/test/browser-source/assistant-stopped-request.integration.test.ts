@@ -41,11 +41,11 @@ it.each([
   "这段对话已经太长，请开始一个新对话。你可以继续手动写作。"],
   ["a research request that no Tool can execute now", { status: "refused",
     decision: { kind: "execution_refused", capability: "research_tool_unavailable" } },
-  "联网检索现在不可用，这次没有检索，正文没有改动。你可以重试，或继续手动写作。"],
+  "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。"],
   ["a research request that StoryOS could not accept while research is enabled", { status: "refused",
     decision: { kind: "execution_refused", capability: "tool_request_invalid" } },
-  "模型发出的联网检索请求不符合要求，这次没有检索，正文没有改动。你可以重试，或继续手动写作。"],
-])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
+  "模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。", "enabled"],
+])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence, researchTool = "disabled") => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
@@ -54,7 +54,9 @@ it.each([
   }));
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
-    if (path.endsWith("/assistance")) return jsonResponse({ ...assistanceFixture, project_scope: scope });
+    if (path.endsWith("/assistance")) {
+      return jsonResponse({ ...assistanceFixture, project_scope: scope, research_tool: researchTool });
+    }
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN,
         decision: { kind: "absent" }, original_result_retrieval: { kind: "absent" },
@@ -87,6 +89,7 @@ it.each([
 
     expect({
       result,
+      researchTool: host.querySelector("[data-research-tool]")?.getAttribute("data-research-tool") ?? null,
       // No stopped request tells the author that research is not open (#1426).
       saysResearchNotOpen: result?.includes("没有开放") ?? null,
       runStatus: host.querySelector("[data-assistant-run-status]")?.textContent ?? null,
@@ -95,6 +98,7 @@ it.each([
       pendingRefreshes,
     }).toEqual({
       result: sentence,
+      researchTool,
       saysResearchNotOpen: false,
       runStatus: null,
       newConversationEnabled: true,

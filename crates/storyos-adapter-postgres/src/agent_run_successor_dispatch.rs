@@ -520,9 +520,25 @@ pub(crate) async fn finish_dispatched(
         return Ok(SuccessorWork::ToolCalls);
     }
     let refusal = if step == storyos_core::FunctionRequestStep::Refuse {
-        Some(crate::agent_run_observation::research_refusal(
-            &successor_payload(client, claim, marker).await?,
-        ))
+        // The recorded successor Attempt keeps the batch evidence of its refusal.
+        let attempt_id = text(marker, "successor_model_attempt_id").ok_or_else(|| {
+            unavailable(std::io::Error::other("The successor Attempt is missing"))
+        })?;
+        let row = client
+            .query_one(
+                "SELECT payload::text FROM storyos.model_attempts
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &attempt_id,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+        Some(crate::agent_run_observation::research_refusal(&payload))
     } else {
         None
     };
@@ -539,30 +555,6 @@ pub(crate) async fn finish_dispatched(
     )
     .await?;
     Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
-}
-
-/// The payload of the recorded successor Attempt of `marker`, which keeps the batch evidence.
-async fn successor_payload(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    marker: &serde_json::Value,
-) -> Result<serde_json::Value, CompleteAgentRunError> {
-    let attempt_id = text(marker, "successor_model_attempt_id")
-        .ok_or_else(|| unavailable(std::io::Error::other("The successor Attempt is missing")))?;
-    let row = client
-        .query_one(
-            "SELECT payload::text FROM storyos.model_attempts
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &attempt_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)
 }
 
 /// The predecessor reference to read for a late result, once, after the original retrieval.

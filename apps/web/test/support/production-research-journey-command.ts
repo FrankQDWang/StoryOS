@@ -159,7 +159,7 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
       { kind: "execution_refused", capability: "tool_request_invalid" });
     await page.reload();
     await expect(page.locator("[data-assistant-result]"))
-      .toHaveText("模型发出的联网检索请求不符合要求，这次没有检索，正文没有改动。你可以重试，或继续手动写作。");
+      .toHaveText("模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。");
 
     // The author disables web research. The next request exposes no Tool, and manual writing saves.
     await page.locator('[data-research-tool="enabled"] input[role="switch"]').click();

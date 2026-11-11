@@ -16,10 +16,10 @@ export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开
 
 /** The sentence for a research request that no Tool could execute now: the Project does not enable the research
  * Tool now, or its Registration is not available now (#1426). */
-export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "联网检索现在不可用，这次没有检索，正文没有改动。你可以重试，或继续手动写作。";
+export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。";
 
 /** The sentence for a research request of the model that StoryOS could not accept (#1426). */
-export const TOOL_REQUEST_INVALID_SENTENCE = "模型发出的联网检索请求不符合要求，这次没有检索，正文没有改动。你可以重试，或继续手动写作。";
+export const TOOL_REQUEST_INVALID_SENTENCE = "模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。";
 
 /** The line of a research call that did not give a result (ADR 0040). */
 export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
