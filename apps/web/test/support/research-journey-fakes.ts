@@ -71,11 +71,9 @@ export function fakeAgentPlan(replies: readonly ModelReply[]): Promise<FakeDesti
   });
 }
 
-const created = (id: string) => ({ type: "response.created", response: { id, status: "in_progress", output: [] } });
-
 function completed(id: string, output: readonly unknown[]): unknown[] {
   return [
-    created(id),
+    { type: "response.created", response: { id, status: "in_progress", output: [] } },
     ...output.map((item, index) => ({ type: "response.output_item.done", output_index: index, item })),
     { type: "response.completed", response: { id, status: "completed", output,
       usage: { input_tokens: 90, output_tokens: 30 } } },

@@ -49,30 +49,36 @@ async function send(page: Page, message: string, button = page.locator(".compose
 export async function verifyProductionResearchJourney(context: BrowserContext): Promise<void> {
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
   let blockIds: string[] = [];
-  const mcp = await fakeExaMcp(repositoryRoot);
-  const model = await fakeAgentPlan([
-    callsReply("resp_s509_1", [["call_search", "web_search", { query: SEARCH_QUERY, result_count: null }]]),
-    callsReply("resp_s509_2", [["call_fetch", "web_fetch", { urls: [PAGE_URL, MISSING_URL] }]]),
-    messageReply("resp_s509_3", (body, earlier) => {
-      const [search, page] = [...earlier.slice(-1), body].map((request) => taggedIdentities(request, '<source id="'));
-      const [gap] = taggedIdentities(body, '<gap id="');
-      return JSON.stringify({ kind: "research_synthesis", summary: "1890 年利物浦的潮汐。", claims: [
-        { text: "王子码头上午十点四十二分涨潮。", citations: [page![0], search![0]] },
-        { text: "港口日志不可用。", citations: [gap] }] });
-    }),
-    messageReply("resp_s509_4", () => JSON.stringify({ kind: "prose_change", summary: "加入涨潮时间。",
-      changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
-    messageReply("resp_s509_5", () => "这一段可以写得更安静。"),
-  ]);
-  const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
-    serverBinary: join(repositoryRoot, "target/release-package/storyos-server"),
-    extraEnv: { STORYOS_MODEL_DESTINATION: "volcengine_agent_plan" } });
-  const page = await context.newPage();
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  page.setDefaultTimeout(10_000);
-  await page.setViewportSize({ width: 1487, height: 1058 });
+  // Each started resource adds its close step, so a failed start closes the resources before it.
+  const started: (() => Promise<unknown>)[] = [];
   try {
+    const mcp = await fakeExaMcp(repositoryRoot);
+    started.push(mcp.close);
+    const model = await fakeAgentPlan([
+      callsReply("resp_s509_1", [["call_search", "web_search", { query: SEARCH_QUERY, result_count: null }]]),
+      callsReply("resp_s509_2", [["call_fetch", "web_fetch", { urls: [PAGE_URL, MISSING_URL] }]]),
+      messageReply("resp_s509_3", (body, earlier) => {
+        const [search, page] = [...earlier.slice(-1), body].map((request) => taggedIdentities(request, '<source id="'));
+        const [gap] = taggedIdentities(body, '<gap id="');
+        return JSON.stringify({ kind: "research_synthesis", summary: "1890 年利物浦的潮汐。", claims: [
+          { text: "王子码头上午十点四十二分涨潮。", citations: [page![0], search![0]] },
+          { text: "港口日志不可用。", citations: [gap] }] });
+      }),
+      messageReply("resp_s509_4", () => JSON.stringify({ kind: "prose_change", summary: "加入涨潮时间。",
+        changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
+      messageReply("resp_s509_5", () => "这一段可以写得更安静。"),
+    ]);
+    started.push(model.close);
+    const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
+      serverBinary: join(repositoryRoot, "target/release-package/storyos-server"),
+      extraEnv: { STORYOS_MODEL_DESTINATION: "volcengine_agent_plan" } });
+    started.push(() => stopStoryOSServer(server.server));
+    const page = await context.newPage();
+    started.push(() => page.close());
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.setDefaultTimeout(10_000);
+    await page.setViewportSize({ width: 1487, height: 1058 });
     const setup = await prepare(server.baseUrl, "018f0000-0000-7001-8000-0000005e0900", "Research journey", "5e091");
     const options = { baseUrl: server.baseUrl, projectId: setup.projectId, fetchImpl: setup.fetchImpl };
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
@@ -101,7 +107,11 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     // Each continuation gives the model its result under the original call_id, and each call ran once.
     assert.deepEqual(model.bodies.slice(1, 3).map((body) => functionOutputs(body).map((output) => output.call_id)),
       [["call_search"], ["call_fetch"]]);
-    assert.deepEqual(mcp.calls().map((call) => (call.params as { name: string }).name), ["web_search_exa", "web_fetch_exa"]);
+    // The first request exposes exactly the two research functions, and the server gets the arguments of the model.
+    assert.deepEqual((model.bodies[0]!.tools as { name: string }[]).map((tool) => tool.name), ["web_search", "web_fetch"]);
+    assert.deepEqual(mcp.calls().map((call) => call.params as { name: string; arguments: Record<string, unknown> })
+      .map(({ name, arguments: { query, urls } }) => [name, query ?? urls]),
+    [["web_search_exa", SEARCH_QUERY], ["web_fetch_exa", [PAGE_URL, MISSING_URL]]]);
 
     // The panel shows the settled sources, the gap, and the synthesis with numbered citations.
     await page.reload();
@@ -160,9 +170,6 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
       createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 3,
       rejectProposalOperations: 1 }, authorActions: 7 });
   } finally {
-    await page.close();
-    await stopStoryOSServer(server.server);
-    await model.close();
-    await mcp.close();
+    for (const close of started.reverse()) await close();
   }
 }

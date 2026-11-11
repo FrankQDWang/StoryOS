@@ -1,6 +1,6 @@
 # Stage 5 governed research journey S5-JRN-001 (2026-11-11)
 
-This record is the live evidence of [S5-09: Verify the Governed Research Journey](https://github.com/FrankQDWang/StoryOS/issues/405) for [Deliver Stage 5](https://github.com/FrankQDWang/StoryOS/issues/363). It records what StoryOS did on the real Agent Plan route and the real Exa MCP server, the live request log, each journey step, the requirement and evidence crosswalk, the gaps, and the claim boundary.
+This record is the live evidence of [S5-09: Verify the Governed Research Journey](https://github.com/FrankQDWang/StoryOS/issues/405) for [Deliver Stage 5](https://github.com/FrankQDWang/StoryOS/issues/363). It records what StoryOS did on the real Agent Plan route and the real Exa MCP server. It has the live request log and each journey step. It also has the requirement and evidence crosswalk, the gaps, and the claim boundary.
 
 Claim ceiling: implementation evidence completeness only (HND-003). This record does not emit HND-004, EV-SR, or PASS-STAGE. The parent #363 evaluates them.
 
