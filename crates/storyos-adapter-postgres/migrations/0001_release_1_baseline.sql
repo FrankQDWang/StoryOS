@@ -4352,6 +4352,42 @@ CREATE POLICY source_gaps_exact_scope ON storyos.source_gaps USING (((owner_user
 
 GRANT SELECT,INSERT ON TABLE storyos.source_gaps TO storyos_runtime;
 
+-- Research Artifacts (S5-07, ADR 0087)
+-- Each row is one Research Synthesis: one immutable Research Artifact with its one revision. A
+-- valid research_synthesis Decision writes it in the transaction of the Decision. The lineage names
+-- the Run, the RunStep (its position and Operation Requirement), the Model Attempt, the Decision,
+-- and the ToolCalls whose results the RunStep read. The content names each cited Source Snapshot
+-- or Source Gap of the Run. The runtime role can only read and insert it.
+
+CREATE TABLE storyos.research_artifacts (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    research_artifact_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    decision_position numeric(20,0) NOT NULL,
+    operation_requirement_id uuid NOT NULL,
+    model_attempt_id uuid NOT NULL,
+    decision_id uuid NOT NULL,
+    tool_call_ids uuid[] NOT NULL,
+    content jsonb NOT NULL,
+    content_digest text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT research_artifacts_pkey PRIMARY KEY (owner_user_id, project_id, research_artifact_id),
+    CONSTRAINT research_artifacts_decision_key UNIQUE (owner_user_id, project_id, decision_id),
+    CONSTRAINT research_artifacts_content_shape CHECK ((jsonb_typeof(content -> 'summary'::text) = 'string'::text) AND (jsonb_typeof(content -> 'claims'::text) = 'array'::text) AND (jsonb_array_length(content -> 'claims'::text) >= 1) AND (content_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (cardinality(tool_call_ids) >= 1)),
+    CONSTRAINT research_artifacts_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT research_artifacts_owner_user_id_project_id_model_attempt_id_fkey FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL,
+    CONSTRAINT research_artifacts_owner_user_id_project_id_operation_requirement_id_fkey FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL
+);
+
+ALTER TABLE storyos.research_artifacts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.research_artifacts FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY research_artifacts_exact_scope ON storyos.research_artifacts USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.research_artifacts TO storyos_runtime;
+
 -- Proposals
 
 CREATE TABLE storyos.proposals (
@@ -4365,7 +4401,7 @@ CREATE TABLE storyos.proposals (
     source_decision_id uuid,
     bundle_policy text DEFAULT 'none'::text NOT NULL,
     source_lineage jsonb,
-    CONSTRAINT proposal_source_lineage_shape CHECK (((source_lineage IS NULL) OR ((jsonb_typeof(source_lineage) = 'object'::text) AND ((source_lineage ->> 'kind'::text) = 'tool_result_continuation'::text) AND ((source_lineage ->> 'run_id'::text) = (source_run_id)::text)))),
+    CONSTRAINT proposal_source_lineage_shape CHECK (((source_lineage IS NULL) OR ((jsonb_typeof(source_lineage) = 'object'::text) AND ((source_lineage ->> 'kind'::text) = ANY (ARRAY['tool_result_continuation'::text, 'research_artifact'::text])) AND ((source_lineage ->> 'run_id'::text) = (source_run_id)::text)))),
     CONSTRAINT proposal_source_shape CHECK (((source_run_id IS NOT NULL) AND (source_decision_id IS NOT NULL))),
     CONSTRAINT proposals_bundle_policy_check CHECK ((bundle_policy = ANY (ARRAY['none'::text, 'atomic'::text]))),
     CONSTRAINT proposals_kind_check CHECK ((kind = ANY (ARRAY['block_edit'::text, 'reversal'::text]))),

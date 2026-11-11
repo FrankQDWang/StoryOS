@@ -144,7 +144,7 @@ fn mark(kept: u64, total: u64) -> String {
 }
 
 /// Replaces each character that can start or end markup, so that no text closes the boundary.
-fn escape(text: &str) -> String {
+pub(crate) fn escape(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
         match character {

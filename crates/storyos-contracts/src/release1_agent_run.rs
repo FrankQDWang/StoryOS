@@ -475,6 +475,13 @@ pub enum OptionalDecisionInspect {
         decision_id: String,
         calls: Vec<ToolCallInspect>,
     },
+    /// A research synthesis Decision. `getResearchArtifact` reads its Research Artifact.
+    ResearchSynthesis {
+        decision_id: String,
+        selected: bool,
+        research_artifact_id: String,
+        continuation: OptionalContinuationInspect,
+    },
 }
 
 /// What one ToolCall asked for, from its validated arguments, and how it settled.

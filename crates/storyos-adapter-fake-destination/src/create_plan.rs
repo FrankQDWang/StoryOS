@@ -173,7 +173,8 @@ fn complete(candidate: DecisionCandidate, phase: OutputPhase) -> FakeCreate {
     let text = match &candidate {
         DecisionCandidate::Advisory { text }
         | DecisionCandidate::ProseChange { text }
-        | DecisionCandidate::Clarification { question: text } => text.clone(),
+        | DecisionCandidate::Clarification { question: text }
+        | DecisionCandidate::ResearchSynthesis { summary: text, .. } => text.clone(),
     };
     FakeCreate {
         items: vec![assistant_item("1", StreamItemState::Complete, &text)],

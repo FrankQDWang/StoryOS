@@ -404,7 +404,9 @@ impl RetrievedResult {
             )
             .await?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
-            validate_agent_decision(response.output.as_ref(), declared, batch)
+            let output = response.output.as_ref();
+            let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
+            validate_agent_decision(output, declared, &citable, batch)
         };
         Ok(match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {

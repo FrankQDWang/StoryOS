@@ -304,6 +304,16 @@ fn inspect_decision(
                 continuation_binding_id,
             }
         }
+        Some("research_synthesis") => AgentRunDecisionInspect::ResearchSynthesis {
+            decision_id,
+            selected,
+            research_artifact_id: decision
+                .get("research_artifact_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            continuation_binding_id,
+        },
         // The read fills the calls from the ToolCall rows.
         Some("tool_request") => AgentRunDecisionInspect::ToolRequest {
             decision_id,

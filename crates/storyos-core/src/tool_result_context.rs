@@ -1,7 +1,8 @@
 //! The Context Candidates of the source class `tool_result` for the continuation RunStep of a
 //! durable function request Decision (ADR 0005, ADR 0084). Each resolved ToolCall of the Run is
 //! one candidate; its source version is its Source Snapshot ids, or its ToolCall identity when it
-//! captured no Snapshot. It crosses identity, Project
+//! captured no Snapshot. Its text ends with the citable identities of its Snapshots and Gaps
+//! (ADR 0087). It crosses identity, Project
 //! Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the pinned grant
 //! decides its disclosure eligibility at Create admission (ADR 0051).
 
@@ -56,8 +57,19 @@ pub struct ToolResultCandidate<'a> {
     pub decision_id: &'a str,
     pub state: ToolCallState,
     pub result_text: Option<&'a str>,
-    /// The Source Snapshots that the settlement of the ToolCall captured, in result order.
-    pub source_snapshot_ids: &'a [String],
+    /// The Source Snapshots, in result order, and then the Source Gaps, in request order, that
+    /// the settlement of the ToolCall captured.
+    pub sources: &'a [crate::CitableSource],
+}
+
+impl ToolResultCandidate<'_> {
+    fn source_snapshot_ids(&self) -> Vec<String> {
+        self.sources
+            .iter()
+            .filter(|source| source.cited == crate::CitedSource::Snapshot)
+            .map(|source| source.id.clone())
+            .collect()
+    }
 }
 
 /// Makes `record` the Context Assembly of a `tool_result_continuation`: each candidate, in item
@@ -72,10 +84,9 @@ pub fn assemble_tool_result_continuation(
     let mut sources = Vec::new();
     let mut blocked = false;
     for candidate in candidates {
-        let source_version = crate::tool_result_source_version(
-            candidate.tool_call_id,
-            candidate.source_snapshot_ids,
-        );
+        let snapshot_ids = candidate.source_snapshot_ids();
+        let source_version =
+            crate::tool_result_source_version(candidate.tool_call_id, &snapshot_ids);
         let same_run = candidate.owner_user_id == requirement.owner_user_id
             && candidate.project_id == requirement.project_id
             && candidate.run_id == requirement.run_id;
@@ -98,13 +109,20 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
-        let bounded = projection.bounded_text(candidate.call_id, requirement.item_token_limit);
+        // The bound never cuts an identity: it applies to the result text only.
+        let tag = crate::citable_sources_tag(candidate.call_id, candidate.sources);
+        let tag_tokens = count_context_item_tokens(&tag);
+        let bounded = projection.bounded_text(
+            candidate.call_id,
+            requirement.item_token_limit.saturating_sub(tag_tokens),
+        );
         record.considered.push(ConsideredSource {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
-            token_count: bounded.source_tokens,
+            token_count: bounded.source_tokens + tag_tokens,
             eligible: true,
         });
+        let content = format!("{}{tag}", bounded.text);
         record.selected.push(SelectedProjection {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
@@ -112,8 +130,8 @@ pub fn assemble_tool_result_continuation(
                 Some(_) => ProjectionMode::DeterministicExcerpt,
                 None => ProjectionMode::ExactRequired,
             },
-            token_count: count_context_item_tokens(&bounded.text),
-            content: bounded.text,
+            token_count: count_context_item_tokens(&content),
+            content,
         });
         sources.push(ToolResultSource {
             tool_call_id: candidate.tool_call_id.to_owned(),
@@ -123,7 +141,7 @@ pub fn assemble_tool_result_continuation(
             state: projection.label().to_owned(),
             trust: TOOL_RESULT_TRUST.to_owned(),
             kept_result_tokens: bounded.kept_result_tokens,
-            source_snapshot_ids: candidate.source_snapshot_ids.to_vec(),
+            source_snapshot_ids: snapshot_ids,
         });
     }
     requirement.tool_results = Some(sources);

@@ -481,7 +481,7 @@ export type ToolCallOutcomeInspect = "pending" | "settled" | "failed" | "unknown
 
 export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCallOutcomeInspect, } | { "kind": "page_read", urls: Array<string>, outcome: ToolCallOutcomeInspect, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, };
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, } | { "kind": "research_synthesis", decision_id: string, selected: boolean, research_artifact_id: string, continuation: OptionalContinuationInspect, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
@@ -570,6 +570,16 @@ export type UnknownResearchCallInspect = { tool_call_id: string, decision_id: st
 export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, unknown_calls: Array<UnknownResearchCallInspect>, };
 
 export type GetResearchSourceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, snapshot: SourceSnapshotInspect, text: string, };
+
+export type ResearchArtifactLineage = { run_id: string, decision_position: string, operation_requirement_id: string, model_attempt_id: string, decision_id: string, tool_call_ids: Array<string>, };
+
+export type ResearchClaimInspect = { text: string, citations: Array<number>, };
+
+export type ResearchCitationInspect = { "kind": "snapshot", snapshot: SourceSnapshotInspect, } | { "kind": "gap", gap: SourceGapInspect, };
+
+export type ResearchArtifactInspect = { research_artifact_id: string, created_at: string, content_digest: string, lineage: ResearchArtifactLineage, summary: string, claims: Array<ResearchClaimInspect>, citations: Array<ResearchCitationInspect>, };
+
+export type GetResearchArtifactResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, artifact: ResearchArtifactInspect, };
 
 export type ExportProjectArchiveInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, archive_profile: string, archive_path_profile: string, };
 
@@ -754,6 +764,7 @@ export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cry
 export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
 export declare function listResearchSources(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<ListResearchSourcesResponse>;
 export declare function getResearchSource(options: StoryOSQueryOptions & { projectId: string; sourceSnapshotId: string }): Promise<GetResearchSourceResponse>;
+export declare function getResearchArtifact(options: StoryOSQueryOptions & { projectId: string; researchArtifactId: string }): Promise<GetResearchArtifactResponse>;
 export declare function digestExportProjectArchive(request: ExportProjectArchiveRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function exportProjectArchive(options: StoryOSQueryOptions & { projectId: string; request: ExportProjectArchiveRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportProjectArchiveResponse>;
 export declare function digestExportHumanReadableManuscript(request: ExportHumanReadableManuscriptRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

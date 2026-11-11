@@ -229,7 +229,9 @@ pub use reopen_withdrawn_proposal::{
     ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
 pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
-pub use research_source::{ResearchSourceReadStore, ResearchSourceText, ResearchSources};
+pub use research_source::{
+    ResearchArtifactReadStore, ResearchSourceReadStore, ResearchSourceText, ResearchSources,
+};
 pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };

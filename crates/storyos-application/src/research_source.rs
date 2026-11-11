@@ -2,7 +2,9 @@
 //! Gaps are Operational Records that the settlement of a research ToolCall writes; no port
 //! updates or removes one.
 
-use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect, UnknownResearchCallInspect};
+use storyos_contracts::{
+    ResearchArtifactInspect, SourceGapInspect, SourceSnapshotInspect, UnknownResearchCallInspect,
+};
 
 use crate::{CreateAgentRunError, ProjectScope};
 
@@ -36,4 +38,14 @@ pub trait ResearchSourceReadStore: Sync {
         scope: &ProjectScope,
         source_snapshot_id: &str,
     ) -> impl Future<Output = Result<Option<ResearchSourceText>, CreateAgentRunError>> + Send;
+}
+
+/// Reads one immutable Research Artifact in exact Project Scope, with each citation resolved to
+/// its Source Snapshot or Source Gap. An Artifact of another Scope reads as `None`.
+pub trait ResearchArtifactReadStore: Sync {
+    fn get_research_artifact(
+        &self,
+        scope: &ProjectScope,
+        research_artifact_id: &str,
+    ) -> impl Future<Output = Result<Option<ResearchArtifactInspect>, CreateAgentRunError>> + Send;
 }

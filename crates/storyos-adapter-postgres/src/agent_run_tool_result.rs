@@ -25,7 +25,7 @@ struct StoredToolCall {
     decision_id: String,
     state: ToolCallState,
     result_text: Option<String>,
-    source_snapshot_ids: Vec<String>,
+    sources: Vec<storyos_core::CitableSource>,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -82,7 +82,7 @@ pub(crate) async fn open_continuation(
             decision_id: &call.decision_id,
             state: call.state,
             result_text: call.result_text.as_deref(),
-            source_snapshot_ids: &call.source_snapshot_ids,
+            sources: &call.sources,
         })
         .collect();
     let next_position = (run
@@ -143,13 +143,7 @@ async fn stored_tool_calls(
     let rows = client
         .query(
             "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
-                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
-                    ARRAY(SELECT snapshot.source_snapshot_id::text
-                            FROM storyos.source_snapshots AS snapshot
-                           WHERE (snapshot.owner_user_id, snapshot.project_id,
-                                  snapshot.tool_call_id)
-                                 = (call.owner_user_id, call.project_id, call.tool_call_id)
-                           ORDER BY snapshot.entry_position)
+                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text
                FROM storyos.tool_calls AS call
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
@@ -162,10 +156,17 @@ async fn stored_tool_calls(
         )
         .await
         .map_err(complete_database_error)?;
+    let sources = crate::research_artifact::run_sources(client, claim).await?;
     rows.into_iter()
         .map(|row| {
+            let tool_call_id: String = row.get(/*idx*/ 0);
             Ok(StoredToolCall {
-                tool_call_id: row.get(/*idx*/ 0),
+                sources: sources
+                    .iter()
+                    .filter(|(call, _)| *call == tool_call_id)
+                    .map(|(_, source)| source.clone())
+                    .collect(),
+                tool_call_id,
                 call_id: row.get(/*idx*/ 1),
                 owner_user_id: row.get(/*idx*/ 2),
                 project_id: row.get(/*idx*/ 3),
@@ -175,7 +176,6 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
-                source_snapshot_ids: row.get(/*idx*/ 9),
             })
         })
         .collect()
@@ -299,12 +299,13 @@ pub(crate) async fn continuation_input_changed(
 
 /// The lineage of a Proposal that the active RunStep opens, when that RunStep is a
 /// `tool_result_continuation`: the Run, the RunStep (its position and Operation Requirement), the
-/// Model Attempt, and the ToolCall identities.
+/// Model Attempt, and the ToolCall identities. Otherwise, the lineage names the Research Artifact
+/// whose response the request continues, if any (ADR 0087).
 pub(crate) async fn proposal_source_lineage(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<Option<String>, tokio_postgres::Error> {
-    client
+    let lineage = client
         .query_opt(
             "SELECT jsonb_build_object(
                       'kind', 'tool_result_continuation',
@@ -336,8 +337,12 @@ pub(crate) async fn proposal_source_lineage(
                 &claim.run_id,
             ],
         )
-        .await
-        .map(|row| row.map(|row| row.get(/*idx*/ 0)))
+        .await?
+        .map(|row| row.get(/*idx*/ 0));
+    match lineage {
+        Some(lineage) => Ok(Some(lineage)),
+        None => crate::research_artifact::proposal_lineage(client, claim).await,
+    }
 }
 
 #[cfg(test)]

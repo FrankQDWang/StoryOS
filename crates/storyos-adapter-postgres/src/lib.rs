@@ -846,5 +846,6 @@ pub(crate) fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
 mod candidate_revision_target;
 mod grow_block_proposal;
 mod joinable_blocks;
+mod research_artifact;
 mod research_source;
 mod revise_candidate_generation;

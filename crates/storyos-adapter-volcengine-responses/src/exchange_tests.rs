@@ -550,6 +550,39 @@ fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() 
 }
 
 #[test]
+fn a_synthesis_reply_maps_to_its_ordered_claims_and_a_malformed_one_to_an_advisory() {
+    let map = |text: &str| super::decision::map_output(text, &[]);
+    let reply = r#"{"kind":"research_synthesis","summary":"High water was at 10.42.","claims":[{"text":"High water was at 10.42.","citations":["s1","g1"]},{"text":"The port log is not available.","citations":["g1"]}]}"#;
+    let claim = |text: &str, citations: &[&str]| storyos_core::ClaimCandidate {
+        text: text.to_owned(),
+        citations: citations.iter().map(|id| (*id).to_owned()).collect(),
+    };
+    let malformed = r#"{"kind":"research_synthesis","summary":"Tides.","claims":[{"text":"High water.","citations":[7]}]}"#;
+
+    assert_eq!(
+        [map(reply), map(malformed)],
+        [
+            final_answer(
+                DecisionCandidate::ResearchSynthesis {
+                    summary: "High water was at 10.42.".to_owned(),
+                    claims: vec![
+                        claim("High water was at 10.42.", &["s1", "g1"]),
+                        claim("The port log is not available.", &["g1"]),
+                    ],
+                },
+                None
+            ),
+            final_answer(
+                DecisionCandidate::Advisory {
+                    text: malformed.to_owned()
+                },
+                None
+            ),
+        ]
+    );
+}
+
+#[test]
 fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
     let observe = |status: &str, output: serde_json::Value| {
         let body = json!({"id": "resp_01", "status": status, "output": [output]});

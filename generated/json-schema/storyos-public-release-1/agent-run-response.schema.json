@@ -1271,6 +1271,38 @@
             "calls"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A research synthesis Decision. `getResearchArtifact` reads its Research Artifact.",
+          "properties": {
+            "continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
+            },
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "research_synthesis",
+              "type": "string"
+            },
+            "research_artifact_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "selected": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "selected",
+            "research_artifact_id",
+            "continuation"
+          ],
+          "type": "object"
         }
       ]
     },

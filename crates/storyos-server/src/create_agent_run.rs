@@ -426,6 +426,17 @@ fn inspect_decision(
                 calls: calls.clone(),
             }
         }
+        storyos_application::AgentRunDecisionInspect::ResearchSynthesis {
+            decision_id,
+            selected,
+            research_artifact_id,
+            continuation_binding_id,
+        } => contracts::OptionalDecisionInspect::ResearchSynthesis {
+            decision_id: decision_id.clone(),
+            selected: *selected,
+            research_artifact_id: research_artifact_id.clone(),
+            continuation: inspect_continuation(continuation_binding_id.as_deref()),
+        },
     }
 }
 

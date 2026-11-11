@@ -3092,6 +3092,64 @@
       "wire_owner": "protocol"
     },
     {
+      "action_class": "none",
+      "activity": {
+        "no_effect": [],
+        "pre_admission": "none",
+        "success": [],
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "takeover": "no",
+        "writer_generation": "not-applicable"
+      },
+      "error_profile": "query_canonical",
+      "fixtures": {
+        "positive": "storyos.golden.getResearchArtifact.positive.v1"
+      },
+      "idempotency": "none",
+      "kind": "query",
+      "method": "GET",
+      "operation_id": "getResearchArtifact",
+      "path": "/api/v1/projects/{project_id}/research-artifacts/{research_artifact_id}",
+      "preconditions": [
+        "server_derived_project_scope",
+        "research_artifact_scope_join"
+      ],
+      "schemas": {
+        "request": "storyos.query.research-artifact.request.v1",
+        "request_source": "protocol",
+        "response": "storyos.query.research-artifact.response.v1",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "semantic_owner": "context",
+      "settlement": {
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "mode": "read",
+        "operation_ref": null,
+        "settlement_query": null
+      },
+      "shape": "research-artifact:read",
+      "wire_owner": "protocol"
+    },
+    {
       "action_class": "explicit_project_command",
       "activity": {
         "no_effect": [],

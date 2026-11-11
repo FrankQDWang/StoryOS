@@ -88,6 +88,26 @@ pub(crate) async fn persist_create_result(
         }
         _ => (None, None, false),
     };
+    let research_artifact = match (decision_id.as_deref(), &result.outcome) {
+        (
+            Some(decision_id),
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::ResearchSynthesis(synthesis),
+                ..
+            },
+        ) => Some(
+            crate::research_artifact::record(
+                client,
+                claim,
+                run,
+                result.attempt_id,
+                decision_id,
+                synthesis,
+            )
+            .await?,
+        ),
+        _ => None,
+    };
     let mut payload = retained_payload;
     payload["items"] = merge_items(payload["items"].take(), result.items);
     payload["decision"] = match (&result.outcome, decision_id.as_deref()) {
@@ -104,6 +124,7 @@ pub(crate) async fn persist_create_result(
             *selected,
             *advances_continuation,
             opened_proposal.as_deref(),
+            research_artifact.as_deref(),
         ),
         _ => serde_json::Value::Null,
     };
@@ -395,6 +416,7 @@ pub(crate) fn encode_decision(
     selected: bool,
     advances_continuation: bool,
     opened_proposal: Option<&str>,
+    research_artifact: Option<&str>,
 ) -> serde_json::Value {
     match kind {
         AgentDecisionKind::Advisory { text } => serde_json::json!({
@@ -435,6 +457,14 @@ pub(crate) fn encode_decision(
             "decision_id": decision_id,
             "selected": selected,
             "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
+            "authoritative": false,
+            "advances_continuation": advances_continuation
+        }),
+        AgentDecisionKind::ResearchSynthesis(_) => serde_json::json!({
+            "kind": "research_synthesis",
+            "decision_id": decision_id,
+            "selected": selected,
+            "research_artifact_id": research_artifact,
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),

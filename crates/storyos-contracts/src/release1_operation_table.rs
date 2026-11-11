@@ -29,6 +29,8 @@ mod proposal_recovery_rows;
 mod proposal_rows;
 #[path = "release1_operation_rows_query.rs"]
 mod query_rows;
+#[path = "release1_operation_rows_research_artifact.rs"]
+mod research_artifact_rows;
 #[path = "release1_operation_rows_research_source.rs"]
 mod research_source_rows;
 #[path = "release1_operation_rows_run_control.rs"]
@@ -362,6 +364,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &run_control_rows::CANCEL_AGENT_RUN_ROW,
     &research_source_rows::LIST_RESEARCH_SOURCES_ROW,
     &research_source_rows::GET_RESEARCH_SOURCE_ROW,
+    &research_artifact_rows::GET_RESEARCH_ARTIFACT_ROW,
     &export_rows::EXPORT_PROJECT_ARCHIVE_ROW,
     &export_rows::EXPORT_HUMAN_READABLE_MANUSCRIPT_ROW,
     &query_rows::GET_MANUSCRIPT_TREE_ROW,

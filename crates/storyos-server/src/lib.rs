@@ -118,7 +118,7 @@ use reopen_rejected_operations::reopen_rejected_operations;
 use reopen_withdrawn_proposal::reopen_withdrawn_proposal;
 use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
-use research_source::{get_research_source, list_research_sources};
+use research_source::{get_research_artifact, get_research_source, list_research_sources};
 use set_current_chapter::set_current_chapter;
 use set_project_tool_enablement::set_project_tool_enablement;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -376,6 +376,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_RESEARCH_SOURCE_METHOD),
                 get_research_source,
+            ),
+        )
+        .route(
+            contracts::GET_RESEARCH_ARTIFACT_PATH,
+            routing::on(
+                method_filter(contracts::GET_RESEARCH_ARTIFACT_METHOD),
+                get_research_artifact,
             ),
         )
         .route(

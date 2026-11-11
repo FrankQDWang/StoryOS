@@ -27,6 +27,7 @@ mod project_tool_enablement;
 mod rebuild_expired_reference;
 mod research_destination;
 mod research_source;
+mod research_synthesis;
 mod retrieve_original_result;
 mod tool_call;
 mod tool_call_recovery;
@@ -250,6 +251,11 @@ pub use research_source::{
     CapturedSource, ResearchCapture, ResultFormat, ResultSpan, SOURCE_LOCATOR_MAX_CHARS,
     SOURCE_PUBLISHED_MAX_CHARS, SOURCE_TITLE_MAX_CHARS, SourceGap, SourceGapReason, SourceKind,
     capture_research_sources, tool_result_source_version,
+};
+pub use research_synthesis::{
+    CITABLE_SOURCES_INSTRUCTION, CitableSource, CitableSources, Citation, CitedSource,
+    ClaimCandidate, ResearchClaim, ResearchSynthesis, SynthesisRefusal, citable_sources_tag,
+    validate_research_synthesis,
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,

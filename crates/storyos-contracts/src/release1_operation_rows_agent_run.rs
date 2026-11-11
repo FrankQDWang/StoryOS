@@ -394,6 +394,8 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
             "/$defs/OptionalDecisionInspect/oneOf/3/properties/decision_id",
             "/$defs/OptionalDecisionInspect/oneOf/4/properties/decision_id",
             "/$defs/OptionalDecisionInspect/oneOf/5/properties/decision_id",
+            "/$defs/OptionalDecisionInspect/oneOf/6/properties/decision_id",
+            "/$defs/OptionalDecisionInspect/oneOf/6/properties/research_artifact_id",
             "/$defs/OptionalManifestRef/oneOf/1/properties/manifest_id",
             "/$defs/OptionalModelAttemptInspect/oneOf/1/properties/destination_attempt_id",
             "/$defs/OptionalModelAttemptInspect/oneOf/1/properties/model_attempt_id",
