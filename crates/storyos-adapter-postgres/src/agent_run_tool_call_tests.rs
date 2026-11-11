@@ -323,7 +323,7 @@ async fn an_intake_violation_rejects_the_batch_and_keeps_the_attempt_as_evidence
         (
             json!({
                 "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
                 "model_attempt_id": attempt_id,
                 "decision_id": null,
                 "dispatch_state": "settled",
@@ -374,7 +374,7 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
         (
             json!({
                 "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+                "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
                 "model_attempt_id": attempt_id,
                 "decision_id": null,
                 "dispatch_state": "settled",
@@ -456,7 +456,7 @@ fn rejected_create(
     (
         json!({
             "status": "refused",
-            "settlement": {"kind": "execution_refused", "capability": "research_tool_unavailable"},
+            "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
             "decision_id": null,
             "dispatch_state": "settled",
             "decision": null,

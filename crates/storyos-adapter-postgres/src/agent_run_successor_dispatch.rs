@@ -519,8 +519,29 @@ pub(crate) async fn finish_dispatched(
     if step == storyos_core::FunctionRequestStep::ToolGateway {
         return Ok(SuccessorWork::ToolCalls);
     }
-    let refusal = (step == storyos_core::FunctionRequestStep::Refuse)
-        .then(crate::agent_run_observation::research_refusal);
+    let refusal = if step == storyos_core::FunctionRequestStep::Refuse {
+        // The recorded successor Attempt keeps the batch evidence of its refusal.
+        let attempt_id = text(marker, "successor_model_attempt_id").ok_or_else(|| {
+            unavailable(std::io::Error::other("The successor Attempt is missing"))
+        })?;
+        let row = client
+            .query_one(
+                "SELECT payload::text FROM storyos.model_attempts
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &attempt_id,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+        Some(crate::agent_run_observation::research_refusal(&payload))
+    } else {
+        None
+    };
     update_run(
         client,
         claim,
