@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
-  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance, getResearchArtifact,
-  listResearchSources,
+  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance,
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -18,11 +17,12 @@ import { AssistantComposer } from "./assistant-composer.tsx";
 import {
   CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_SYNTHESIS_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE,
-  USE_RESEARCH_MESSAGE, malformedStructuredReply, researchArtifactLines, researchSourceLines, settledRun, toolCallLines,
+  USE_RESEARCH_MESSAGE, malformedStructuredReply, settledRun, toolCallLines,
   stoppedWithoutResult, TOOL_REQUEST_INVALID_SENTENCE,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ResearchToolControl } from "./research-tool-control.tsx";
+import { ResearchTurn, researchDecision } from "./research-turn.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
@@ -253,11 +253,6 @@ export function WritingAssistantPanel({
     () => context === undefined ? undefined : readReference(context.scope),
   );
   const [run, setRun] = useState<GetAgentRunResponse>();
-  // The research sources of a settled Run of the current exchange.
-  const [sources, setSources] = useState<{ runId: string; lines: readonly string[] }>();
-  // The Research Artifact of a settled research synthesis Run of the current exchange.
-  const [artifact, setArtifact] = useState<{ runId: string; summary: string; claims: readonly string[];
-    citations: readonly string[] }>();
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState(false);
@@ -321,28 +316,6 @@ export function WritingAssistantPanel({
     saveReference(current);
     setReference(current);
     setRun(result);
-    // The sources only add to the result, so a failed read shows none.
-    if (settledRun(result)) void listResearchSources({
-      baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: current.scope.project_id, runId,
-    }).then((listed) => {
-      if (stillCurrent() && listed.run_id === runId
-        && listed.project_scope.owner_user_id === current.scope.owner_user_id
-        && listed.project_scope.project_id === current.scope.project_id) {
-        setSources({ runId, lines: researchSourceLines(listed,
-          result.decision.kind === "tool_request" ? result.decision.decision_id : undefined) });
-      }
-    }).catch(() => undefined);
-    // A failed read of the Artifact shows only the result sentence.
-    if (settledRun(result) && result.decision.kind === "research_synthesis") void getResearchArtifact({
-      baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: current.scope.project_id,
-      researchArtifactId: result.decision.research_artifact_id,
-    }).then((read) => {
-      if (stillCurrent() && read.artifact.lineage.run_id === runId
-        && read.project_scope.owner_user_id === current.scope.owner_user_id
-        && read.project_scope.project_id === current.scope.project_id) {
-        setArtifact({ runId, summary: read.artifact.summary, ...researchArtifactLines(read.artifact) });
-      }
-    }).catch(() => undefined);
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
     if (result.decision.kind === "prose_change") {
@@ -606,6 +579,9 @@ export function WritingAssistantPanel({
               <AuthorMessages message={exchange.message} labels={exchange.referenceLabels} run={exchange.run}
                 guidance={exchange.guidance} />
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+              {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
+              {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
+                : <ResearchTurn context={context} run={exchange.run} />}
               {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
                 sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
             </section>
@@ -619,19 +595,10 @@ export function WritingAssistantPanel({
                 guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
-                {sources?.runId === run.run_id && sources.lines.length > 0
-                  ? <ul className="assistant-research-sources" aria-label="本次检索的来源" data-assistant-research-sources="">
-                    {sources.lines.map((line, index) => <li key={index}>{line}</li>)}
-                  </ul> : null}
-                {artifact?.runId === run.run_id ? <div className="assistant-research-artifact" data-assistant-research-artifact="">
-                  <p>{artifact.summary}</p>
-                  <ul aria-label="研究结论">{artifact.claims.map((line, index) => <li key={index}>{line}</li>)}</ul>
-                  <ul aria-label="结论引用的来源" data-assistant-research-citations="">
-                    {artifact.citations.map((line, index) => <li key={index}>{line}</li>)}
-                  </ul>
+                {context === undefined ? null : <ResearchTurn context={context} run={run}>
                   <button type="button" data-assistant-use-research="" disabled={sending || unresolved}
                     onClick={() => submit(USE_RESEARCH_MESSAGE, () => {}, { references: [], labels: [], keys: [] })}>用到故事里</button>
-                </div> : null}
+                </ResearchTurn>}
                 <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
               {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
                 void inspectResult();
