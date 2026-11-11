@@ -126,6 +126,12 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await expect(page.locator("[data-assistant-research-citations] li")).toHaveText([
       /^\[1\] Liverpool tide table 1890（获取于 /u, /^\[2\] Liverpool tide table 1890（获取于 /u,
       `[3] ${MISSING_URL}：无法获取（读取失败）`]);
+    // The exact lines of the current turn, which the history turn shows again after the next Run.
+    const shownResearch = {
+      sources: await sources.allTextContents(),
+      claims: await artifactPanel.locator('ul[aria-label="研究结论"] li').allTextContents(),
+      citations: await page.locator("[data-assistant-research-citations] li").allTextContents(),
+    };
     const artifactRead = { ...options, researchArtifactId: research.decision.research_artifact_id };
     // Each read has its own correlation identity, so the comparison leaves it out.
     const keptRecords = async () => [await getResearchArtifact(artifactRead), await listResearchSources({ ...options, runId: researchRun })]
@@ -146,6 +152,13 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     `research_artifact:${research.decision.research_artifact_id}`);
     await page.reload();
     await expect(page.locator("[data-assistant-result]")).toContainText("这次修改涉及 1 个章节、1 处文字");
+    // The synthesis turn is in the history now. It shows the same sources, claims, and citations, and it has no
+    // "用到故事里" button, because that button sends in the current Conversation (#1427).
+    const researchTurn = page.locator(`[data-assistant-history-run="${researchRun}"]`);
+    await expect(researchTurn.locator("[data-assistant-research-sources] li")).toHaveText(shownResearch.sources);
+    await expect(researchTurn.locator('ul[aria-label="研究结论"] li')).toHaveText(shownResearch.claims);
+    await expect(researchTurn.locator("[data-assistant-research-citations] li")).toHaveText(shownResearch.citations);
+    await expect(researchTurn.locator("[data-assistant-use-research]")).toHaveCount(0);
     await page.locator(`[data-proposal-id="${location.proposal_id}"] [data-proposal-reject]`).click();
     await expect(page.locator(`[data-proposal-id="${location.proposal_id}"]`)).toHaveCount(0);
     await saved.waitFor();
