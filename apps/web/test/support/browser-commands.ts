@@ -25,6 +25,7 @@ import { verifyProductionComposerControls } from "./production-composer-controls
 
 import { verifyProductionMultiProposal } from "./production-multi-proposal-command.ts";
 import { verifyProductionSelectionReference } from "./production-selection-reference-command.ts";
+import { verifyProductionResearchJourney } from "./production-research-journey-command.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -118,6 +119,8 @@ export const storyOSBrowserCommands = {
       } else if (request.scenario === "selection_reference") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionSelectionReference(context.context, process.env.STORYOS_DEV_SERVER);
+      } else if (request.scenario === "research_journey") {
+        await verifyProductionResearchJourney(context.context);
       } else if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {

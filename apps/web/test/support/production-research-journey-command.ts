@@ -1,0 +1,168 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { BrowserContext, Page } from "playwright";
+import { expect } from "playwright/test";
+
+import {
+  getAgentRun, getChapter, getResearchArtifact, listResearchSources,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { USER_A, prepare, settleOnce } from "./acceptance.ts";
+import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
+import { assertProjectReceipts } from "./project-receipts.ts";
+import {
+  MISSING_URL, PAGE_URL, SEARCH_QUERY, callsReply, fakeAgentPlan, fakeExaMcp, functionOutputs, messageReply,
+  taggedIdentities,
+} from "./research-journey-fakes.ts";
+
+// The Worker takes test-only keys from its process environment and reads no env file (ADR 0050).
+const WORKER_ENV = {
+  STORYOS_MODEL_DESTINATION: "host_fake",
+  STORYOS_AGENT_PLAN_API_KEY: "test-only-agent-plan-key",
+  STORYOS_EXA_API_KEY: "test-only-exa-key",
+};
+const PARAGRAPHS = ["潮水退到码头下面。", "她在雾里等那条船。"];
+const PROSE = "上午十点四十二分，涨潮漫过了王子码头。";
+
+/** Points the model and MCP destination evidence of the Project at the fakes, as the Postgres tests do. */
+async function pointAtFakes(projectId: string, model: string, mcp: string) {
+  await queryStoryOSPostgres(`
+    UPDATE storyos.processing_destination_identity_evidence_revisions
+       SET endpoint = CASE evidence_kind WHEN 'mcp_remote_boundary' THEN '${mcp}' ELSE '${model}' END
+     WHERE project_id = '${projectId}'::uuid AND endpoint IS NOT NULL;
+    UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+     WHERE project_id = '${projectId}'::uuid`);
+}
+
+/** Sends one author message through the panel composer and returns the admitted Run. */
+async function send(page: Page, message: string, button = page.locator(".composer .send-button")) {
+  const admitted = page.waitForResponse((response) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/agent-runs"));
+  if (message.length > 0) await page.locator('[name="assistant-message"]').fill(message);
+  await button.click();
+  const response = await admitted;
+  assert.equal(response.status(), 202);
+  return (await response.json() as CreateAgentRunResponse).effect.run_id;
+}
+
+export async function verifyProductionResearchJourney(context: BrowserContext): Promise<void> {
+  const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+  let blockIds: string[] = [];
+  const mcp = await fakeExaMcp(repositoryRoot);
+  const model = await fakeAgentPlan([
+    callsReply("resp_s509_1", [["call_search", "web_search", { query: SEARCH_QUERY, result_count: null }]]),
+    callsReply("resp_s509_2", [["call_fetch", "web_fetch", { urls: [PAGE_URL, MISSING_URL] }]]),
+    messageReply("resp_s509_3", (body, earlier) => {
+      const [search, page] = [...earlier.slice(-1), body].map((request) => taggedIdentities(request, '<source id="'));
+      const [gap] = taggedIdentities(body, '<gap id="');
+      return JSON.stringify({ kind: "research_synthesis", summary: "1890 年利物浦的潮汐。", claims: [
+        { text: "王子码头上午十点四十二分涨潮。", citations: [page![0], search![0]] },
+        { text: "港口日志不可用。", citations: [gap] }] });
+    }),
+    messageReply("resp_s509_4", () => JSON.stringify({ kind: "prose_change", summary: "加入涨潮时间。",
+      changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
+    messageReply("resp_s509_5", () => "这一段可以写得更安静。"),
+  ]);
+  const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
+    serverBinary: join(repositoryRoot, "target/release-package/storyos-server"),
+    extraEnv: { STORYOS_MODEL_DESTINATION: "volcengine_agent_plan" } });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.setDefaultTimeout(10_000);
+  await page.setViewportSize({ width: 1487, height: 1058 });
+  try {
+    const setup = await prepare(server.baseUrl, "018f0000-0000-7001-8000-0000005e0900", "Research journey", "5e091");
+    const options = { baseUrl: server.baseUrl, projectId: setup.projectId, fetchImpl: setup.fetchImpl };
+    await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
+    await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
+    const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
+    const saved = page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]');
+    await editor.click();
+    await page.keyboard.insertText(PARAGRAPHS[0]!);
+    await page.keyboard.press("Enter");
+    await page.keyboard.insertText(PARAGRAPHS[1]!);
+    await expect.poll(async () => (await getChapter({ ...options, chapterId: setup.chapterId })).chapter
+      .current_revision.blocks.map((block) => block.text)).toEqual(PARAGRAPHS);
+    await saved.waitFor();
+    blockIds = (await getChapter({ ...options, chapterId: setup.chapterId })).chapter.current_revision.blocks
+      .map((block) => block.manuscript_block_id);
+
+    // The author enables web research in the panel. The grant covers both operations, so no prompt follows.
+    await page.locator('[data-research-tool="disabled"] input[role="switch"]').click();
+    await page.locator('[data-research-tool="enabled"]').waitFor();
+    const researchRun = await send(page, "1890 年利物浦的涨潮时间是几点？请查找来源。");
+    await pointAtFakes(setup.projectId, model.base, mcp.base);
+    await settleOnce(WORKER_ENV);
+    const research = await getAgentRun({ ...options, runId: researchRun });
+    assert.equal(research.status, "completed");
+    assert.ok(research.decision.kind === "research_synthesis");
+    // Each continuation gives the model its result under the original call_id, and each call ran once.
+    assert.deepEqual(model.bodies.slice(1, 3).map((body) => functionOutputs(body).map((output) => output.call_id)),
+      [["call_search"], ["call_fetch"]]);
+    assert.deepEqual(mcp.calls().map((call) => (call.params as { name: string }).name), ["web_search_exa", "web_fetch_exa"]);
+
+    // The panel shows the settled sources, the gap, and the synthesis with numbered citations.
+    await page.reload();
+    const sources = page.locator("[data-assistant-research-sources] li");
+    await expect(sources).toHaveText([/^Liverpool tide table 1890（获取于 /u, /^Mersey port log（获取于 /u,
+      /^Liverpool tide table 1890（获取于 /u, `${MISSING_URL}：无法获取`]);
+    const artifactPanel = page.locator("[data-assistant-research-artifact]");
+    await expect(artifactPanel.locator('ul[aria-label="研究结论"] li'))
+      .toHaveText(["王子码头上午十点四十二分涨潮。 [1][2]", "港口日志不可用。 [3]"]);
+    await expect(page.locator("[data-assistant-research-citations] li")).toHaveText([
+      /^\[1\] Liverpool tide table 1890（获取于 /u, /^\[2\] Liverpool tide table 1890（获取于 /u,
+      `[3] ${MISSING_URL}：无法获取（读取失败）`]);
+    const artifactRead = { ...options, researchArtifactId: research.decision.research_artifact_id };
+    // Each read has its own correlation identity, so the comparison leaves it out.
+    const keptRecords = async () => [await getResearchArtifact(artifactRead), await listResearchSources({ ...options, runId: researchRun })]
+      .map(({ correlation_id: _, ...read }) => read);
+    const kept = await keptRecords();
+
+    // "用到故事里" asks for a prose Proposal in the same Conversation, and the author rejects it.
+    const storyRun = await send(page, "", artifactPanel.locator("[data-assistant-use-research]"));
+    await pointAtFakes(setup.projectId, model.base, mcp.base);
+    await settleOnce(WORKER_ENV);
+    const story = await getAgentRun({ ...options, runId: storyRun });
+    assert.equal(story.conversation_id, research.conversation_id);
+    assert.ok(story.decision.kind === "prose_change");
+    const location = story.decision.locations?.[0]?.outcome;
+    assert.ok(location?.kind === "opened");
+    assert.equal(await queryStoryOSPostgres(`SELECT source_lineage->>'kind' || ':' || (source_lineage->>'research_artifact_id')
+      FROM storyos.proposals WHERE proposal_id = '${location.proposal_id}'::uuid`),
+    `research_artifact:${research.decision.research_artifact_id}`);
+    await page.reload();
+    await expect(page.locator("[data-assistant-result]")).toContainText("这次修改涉及 1 个章节、1 处文字");
+    await page.locator(`[data-proposal-id="${location.proposal_id}"] [data-proposal-reject]`).click();
+    await expect(page.locator(`[data-proposal-id="${location.proposal_id}"]`)).toHaveCount(0);
+    await saved.waitFor();
+    assert.deepEqual(await keptRecords(), kept);
+
+    // The author disables web research. The next request exposes no Tool, and manual writing saves.
+    await page.locator('[data-research-tool="enabled"] input[role="switch"]').click();
+    await page.locator('[data-research-tool="disabled"]').waitFor();
+    const plainRun = await send(page, "这一段怎么写得更安静？");
+    await pointAtFakes(setup.projectId, model.base, mcp.base);
+    await settleOnce(WORKER_ENV);
+    assert.equal((await getAgentRun({ ...options, runId: plainRun })).decision.kind, "advisory");
+    assert.equal(model.bodies.length, 5);
+    assert.equal("tools" in model.bodies[4]!, false);
+    assert.equal(mcp.calls().length, 2);
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.insertText("雾散了。");
+    await expect.poll(async () => (await getChapter({ ...options, chapterId: setup.chapterId })).chapter
+      .current_revision.blocks.map((block) => block.text)).toEqual([PARAGRAPHS[0], `${PARAGRAPHS[1]}雾散了。`]);
+    await saved.waitFor();
+    assert.deepEqual(errors, []);
+    await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
+      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 3,
+      rejectProposalOperations: 1 }, authorActions: 7 });
+  } finally {
+    await page.close();
+    await stopStoryOSServer(server.server);
+    await model.close();
+    await mcp.close();
+  }
+}

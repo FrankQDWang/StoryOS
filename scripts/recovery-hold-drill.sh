@@ -163,3 +163,26 @@ assert_stage4_model_facts_present() {
     exit 1
   fi
 }
+
+# Stage 5 research records: the ToolCalls, Source Snapshots, Source Gaps, Research Artifacts,
+# Project Tool Enablements, and Tool Registration revisions. Each line is a count and a digest of
+# the ordered complete rows.
+stage5_research_facts() {
+  facts_container=$1
+  for facts_table in tool_calls source_snapshots source_gaps research_artifacts \
+    project_tool_enablements tool_registration_revisions; do
+    docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+      "SELECT '$facts_table|' || count(*) || '|' ||
+              md5(coalesce(string_agg(row_to_json(record)::text, ';'
+                ORDER BY row_to_json(record)::text), ''))
+         FROM storyos.$facts_table AS record"
+  done
+}
+
+assert_stage5_research_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -c '|0|')" != "0" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "6" ]; then
+    echo "The recovery seed did not create each Stage 5 research record family: $1" >&2
+    exit 1
+  fi
+}
