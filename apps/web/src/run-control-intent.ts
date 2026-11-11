@@ -1,7 +1,7 @@
-import { createProjectCommandChallenge, digestPauseAgentRun, digestSteerAgentRun,
+import { cancelAgentRun, createProjectCommandChallenge, digestCancelAgentRun, digestPauseAgentRun, digestSteerAgentRun,
   pauseAgentRun, steerAgentRun } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetAgentRunResponse, PauseAgentRunRequest, ProjectScope, SelectionReference, SteerAgentRunRequest }
-  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { CancelAgentRunRequest, GetAgentRunResponse, PauseAgentRunRequest, ProjectScope, SelectionReference,
+  SteerAgentRunRequest } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { uuidV7 } from "./acceptance-journal.ts";
 import type { AssistantContext } from "./writing-assistant-panel.tsx";
@@ -9,6 +9,7 @@ import type { AssistantContext } from "./writing-assistant-panel.tsx";
 type Target = { scope: ProjectScope; runId: string; conversationId: string; idempotencyKey: string };
 export type RunControlIntent = Target & (
   { kind: "pause"; request: PauseAgentRunRequest }
+  | { kind: "cancel"; request: CancelAgentRunRequest }
   | { kind: "guidance"; request: SteerAgentRunRequest; labels?: string[]; referenceKeys?: string[];
     /** The Server found the Run settled, so the message waits to go as the next AgentRun. */
     resend?: true }
@@ -30,6 +31,9 @@ export function readRunControl(scope: ProjectScope): RunControlIntent | undefine
       case "pause":
         return intent.request.command_schema === "storyos.command.pause-agent-run.request.v1"
           && typeof intent.request.pause_agent_run_input.correlation_id === "string" ? intent : undefined;
+      case "cancel":
+        return intent.request.command_schema === "storyos.command.cancel-agent-run.request.v1"
+          && typeof intent.request.cancel_agent_run_input.correlation_id === "string" ? intent : undefined;
       case "guidance":
         return intent.request.command_schema === "storyos.command.steer-agent-run.request.v1"
           && intent.request.steer_agent_run_input.conversation_id === intent.conversationId
@@ -58,7 +62,7 @@ export function clearResendRunControl(scope: ProjectScope) {
 }
 
 export function freezeRunControl(context: AssistantContext, run: GetAgentRunResponse,
-  action: { kind: "pause" }
+  action: { kind: "pause" } | { kind: "cancel" }
     | { kind: "guidance"; text: string; references: SelectionReference[]; labels: string[]; keys: string[] },
 ): RunControlIntent {
   const target = { scope: context.scope, runId: run.run_id, conversationId: run.conversation_id,
@@ -72,6 +76,9 @@ export function freezeRunControl(context: AssistantContext, run: GetAgentRunResp
     case "pause":
       return { ...target, kind: "pause", request: { command_schema: "storyos.command.pause-agent-run.request.v1",
         pause_agent_run_input: binding } };
+    case "cancel":
+      return { ...target, kind: "cancel", request: { command_schema: "storyos.command.cancel-agent-run.request.v1",
+        cancel_agent_run_input: binding } };
     case "guidance":
       return { ...target, kind: "guidance", labels: action.labels, referenceKeys: action.keys,
         request: { command_schema: "storyos.command.steer-agent-run.request.v1",
@@ -86,8 +93,9 @@ export async function submitRunControl(context: AssistantContext, intent: RunCon
     || context.scope.project_id !== intent.scope.project_id) throw new Error("Run control Scope changed");
   const options = { baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: intent.scope.project_id };
   const digest = intent.kind === "pause" ? await digestPauseAgentRun(intent.request, context.cryptoImpl)
+    : intent.kind === "cancel" ? await digestCancelAgentRun(intent.request, context.cryptoImpl)
     : await digestSteerAgentRun(intent.request, context.cryptoImpl);
-  const route = intent.kind === "pause" ? "pause" : "steering-inputs";
+  const route = { pause: "pause", cancel: "cancel", guidance: "steering-inputs" }[intent.kind];
   const challenge = await createProjectCommandChallenge({ ...options, request: { method: "POST",
     route_template: `/api/v1/projects/{project_id}/agent-runs/{run_id}/${route}`,
     command_schema: intent.request.command_schema, canonical_command_digest: digest,
@@ -95,10 +103,12 @@ export async function submitRunControl(context: AssistantContext, intent: RunCon
   const command = { ...options, runId: intent.runId, idempotencyKey: intent.idempotencyKey,
     antiForgery: challenge.nonce };
   const response = intent.kind === "pause" ? await pauseAgentRun({ ...command, request: intent.request })
+    : intent.kind === "cancel" ? await cancelAgentRun({ ...command, request: intent.request })
     : await steerAgentRun({ ...command, request: intent.request });
+  const commandKind = { pause: "pauseAgentRun", cancel: "cancelAgentRun", guidance: "steerAgentRun" }[intent.kind];
   if (response.project_scope.owner_user_id !== intent.scope.owner_user_id
     || response.project_scope.project_id !== intent.scope.project_id
-    || response.receipt.command_kind !== (intent.kind === "pause" ? "pauseAgentRun" : "steerAgentRun")
+    || response.receipt.command_kind !== commandKind
     || ("run_id" in response.effect && response.effect.run_id !== intent.runId)) {
     throw new Error("Run control response Scope mismatch");
   }

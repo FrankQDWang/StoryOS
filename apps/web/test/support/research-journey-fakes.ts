@@ -111,6 +111,8 @@ export function taggedIdentities(body: ReceivedBody, tag: string): string[] {
 export const SEARCH_QUERY = "Liverpool tide table 1890 high water";
 export const PAGE_URL = "https://example.org/liverpool-tides-1890";
 export const MISSING_URL = "https://example.org/missing-harbour-log";
+/** The query of the search that the fake holds while the author cancels the Run. */
+export const HELD_QUERY = "Liverpool port log 1890 morning";
 export const SEARCH_TEXT = `Title: Liverpool tide table 1890\nURL: ${PAGE_URL}\nPublished: 1890-01-01T00:00:00.000Z\nAuthor: N/A\n`
   + "Highlights:\nHigh water at the Prince's Dock came at 10.42.\n\n---\n\n"
   + "Title: Mersey port log\nURL: https://example.org/mersey-port-log\nPublished: N/A\nAuthor: N/A\nHighlights:\n"
@@ -137,9 +139,28 @@ function callText(params: { name: string; arguments: { urls?: string[] } }): str
     .map((url) => url === PAGE_URL ? PAGE_TEXT : `Error fetching ${url}: CRAWL_NOT_FOUND`).join("\n\n");
 }
 
-/** A fake Exa MCP server with the recorded tool list. It answers each JSON-RPC request by its method. */
-export function fakeExaMcp(repositoryRoot: string): Promise<FakeDestination & { readonly calls: () => ReceivedBody[] }> {
+/** A held answer of one `tools/call`. `release` sends it and tells whether the connection of the caller was
+ * still open. */
+export interface HeldAnswer {
+  readonly release: () => { readonly connectionOpen: boolean };
+}
+
+/** A fake Exa MCP server with the recorded tool list. It answers each JSON-RPC request by its method.
+ * `hold` makes the server keep the answer of the next `tools/call` until the test releases it. */
+export function fakeExaMcp(repositoryRoot: string): Promise<FakeDestination & {
+  readonly calls: () => ReceivedBody[];
+  readonly hold: () => HeldAnswer;
+}> {
   const tools = recordedTools(repositoryRoot);
+  let holdNext = false;
+  let heldAnswer: (() => { connectionOpen: boolean }) | undefined;
+  const hold = (): HeldAnswer => {
+    holdNext = true;
+    return { release: () => {
+      if (heldAnswer === undefined) throw new Error("no tools/call is held");
+      return heldAnswer();
+    } };
+  };
   return listen((body, _request, response) => {
     const answer = (result: unknown) => response.writeHead(200, { "content-type": "application/json" })
       .end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
@@ -151,14 +172,30 @@ export function fakeExaMcp(repositoryRoot: string): Promise<FakeDestination & { 
       case "tools/list":
         answer(tools);
         return;
-      case "tools/call":
-        answer({ content: [{ type: "text", text: callText(body.params as Parameters<typeof callText>[0]) }], isError: false });
+      case "tools/call": {
+        const send = () => answer({ content: [{ type: "text", text: callText(body.params as Parameters<typeof callText>[0]) }],
+          isError: false });
+        if (!holdNext) {
+          send();
+          return;
+        }
+        // The answer waits. A caller that drops the exchange closes the connection before the release.
+        holdNext = false;
+        let closed = false;
+        response.on("close", () => { closed = true; });
+        heldAnswer = () => {
+          const connectionOpen = !closed;
+          send();
+          return { connectionOpen };
+        };
         return;
+      }
       default:
         response.writeHead(202).end();
     }
   }, "/mcp").then((started) => ({
     ...started,
     calls: () => started.bodies.filter((body) => body.method === "tools/call"),
+    hold,
   }));
 }

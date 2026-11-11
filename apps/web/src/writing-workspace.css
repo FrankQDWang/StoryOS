@@ -361,6 +361,8 @@ input:focus-visible {
 .composer-controls { display: flex; justify-content: flex-end; padding: 1px 8px 8px; }
 .composer-controls .send-button { width: 28px; height: 28px; margin: 0; padding: 0; border: 1px solid #aaa7a0; border-radius: 50%; background: #aaa7a0; color: white; font-size: 19px; }
 .composer-controls .send-button:disabled { opacity: 0.5; cursor: default; }
+.composer-controls .cancel-run-button { height: 28px; margin: 0 8px 0 0; padding: 0 10px; border: 1px solid #dfdcd7; border-radius: 14px; background: transparent; color: #6f6b64; font-size: 12px; }
+.composer-controls .cancel-run-button:disabled { opacity: 0.5; cursor: default; }
 
 .assistant-toggle {
   position: absolute;
