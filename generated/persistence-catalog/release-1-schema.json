@@ -506,7 +506,7 @@
         }
       },
       "constraints": {
-        "agent_run_events_kind_check": "CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_registration_quarantined'::text])))",
+        "agent_run_events_kind_check": "CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_call_late_result'::text, 'tool_registration_quarantined'::text])))",
         "agent_run_events_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
         "agent_run_events_payload_check": "CHECK ((jsonb_typeof(payload) = 'object'::text))",
         "agent_run_events_pkey": "PRIMARY KEY (owner_user_id, project_id, event_id)",

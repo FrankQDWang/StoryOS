@@ -61,4 +61,4 @@ impl PostgresProjectReader {
 
 #[cfg(test)]
 #[path = "agent_run_lease_tests.rs"]
-mod tests;
+pub(crate) mod tests;

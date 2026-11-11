@@ -8,8 +8,11 @@ use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreateAgentRunError, ProjectScope,
     ResearchSourceReadStore, ResearchSourceText, ResearchSources,
 };
-use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect};
-use storyos_core::{ResearchCapture, SourceGapReason, SourceKind};
+use storyos_contracts::{SourceGapInspect, SourceSnapshotInspect, UnknownResearchCallInspect};
+use storyos_core::{
+    ResearchCapture, SourceGapReason, SourceKind, ToolAttemptSettlement, ToolCallClass,
+    ToolCallState, tool_call_class,
+};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -194,7 +197,55 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                     })
                 })
                 .collect::<Result<_, CreateAgentRunError>>()?;
-            Ok(Some(ResearchSources { snapshots, gaps }))
+            let unknown_calls = client
+                .query(
+                    "SELECT tool_call_id::text, tool_spec_revision, arguments::text, state,
+                            attempt -> 'destination_attempt' ->> 'settlement',
+                            attempt -> 'late_observation' ->> 'settlement', decision_id::text
+                       FROM storyos.tool_calls
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND run_id = $3::text::uuid AND state = 'unknown'
+                      ORDER BY decision_position, call_position",
+                    &params,
+                )
+                .await
+                .map_err(agent_run_database_error)?
+                .iter()
+                .map(|row| {
+                    let settlement = |idx| {
+                        row.get::<_, Option<&str>>(idx)
+                            .map(|value| {
+                                ToolAttemptSettlement::parse(value).ok_or_else(|| {
+                                    agent_run_parse_error(std::io::Error::other(
+                                        "The ToolCall settlement is damaged",
+                                    ))
+                                })
+                            })
+                            .transpose()
+                    };
+                    // Only a terminal answer after the fence makes the call partial.
+                    let class = tool_call_class(
+                        ToolCallState::Unknown,
+                        settlement(/*idx*/ 4)?,
+                        settlement(/*idx*/ 5)?,
+                    );
+                    Ok(UnknownResearchCallInspect {
+                        tool_call_id: row.get(/*idx*/ 0),
+                        decision_id: row.get(/*idx*/ 6),
+                        call: crate::agent_run_tool_call::call_inspect(
+                            row.get(/*idx*/ 1),
+                            row.get(/*idx*/ 2),
+                            row.get(/*idx*/ 3),
+                        )?,
+                        late_result: class == Some(ToolCallClass::Partial),
+                    })
+                })
+                .collect::<Result<_, CreateAgentRunError>>()?;
+            Ok(Some(ResearchSources {
+                snapshots,
+                gaps,
+                unknown_calls,
+            }))
         })
         .await
     }
@@ -268,4 +319,4 @@ impl PostgresProjectReader {
 
 #[cfg(test)]
 #[path = "research_source_tests.rs"]
-mod tests;
+pub(crate) mod tests;

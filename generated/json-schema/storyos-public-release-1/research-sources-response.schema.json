@@ -146,6 +146,107 @@
         "page"
       ],
       "type": "string"
+    },
+    "ToolCallInspect": {
+      "description": "What one ToolCall asked for, from its validated arguments, and how it settled.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "search",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/ToolCallOutcomeInspect"
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "query",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "page_read",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/ToolCallOutcomeInspect"
+            },
+            "urls": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "urls",
+            "outcome"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ToolCallOutcomeInspect": {
+      "oneOf": [
+        {
+          "const": "pending",
+          "description": "The ToolCall is not resolved.",
+          "type": "string"
+        },
+        {
+          "const": "settled",
+          "description": "The server answered with a terminal result.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The call failed, or the Host refused it.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "The dispatch claim committed and no result reached the Run: the call may have run\n(ADR 0086).",
+          "type": "string"
+        }
+      ]
+    },
+    "UnknownResearchCallInspect": {
+      "additionalProperties": false,
+      "description": "One research ToolCall whose outcome is not known. It has no Snapshot and no Gap.",
+      "properties": {
+        "call": {
+          "$ref": "#/$defs/ToolCallInspect"
+        },
+        "decision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "late_result": {
+          "type": "boolean"
+        },
+        "tool_call_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "decision_id",
+        "call",
+        "late_result"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.query.research-sources.response.v1",
@@ -178,6 +279,12 @@
         "$ref": "#/$defs/SourceSnapshotInspect"
       },
       "type": "array"
+    },
+    "unknown_calls": {
+      "items": {
+        "$ref": "#/$defs/UnknownResearchCallInspect"
+      },
+      "type": "array"
     }
   },
   "required": [
@@ -186,7 +293,8 @@
     "project_scope",
     "run_id",
     "snapshots",
-    "gaps"
+    "gaps",
+    "unknown_calls"
   ],
   "title": "StoryOS Research Sources Response",
   "type": "object"

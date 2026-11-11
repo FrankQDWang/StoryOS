@@ -39,6 +39,28 @@ pub(crate) async fn renew_while<T>(
     .await
 }
 
+/// `renew_while` for an exchange that the Host can only drop. Returns `None` when the claim has
+/// lost its lease, to a cancellation fence or a takeover: `work` does not start after a fence that
+/// committed before it, and a `work` in progress is dropped. Nothing stops the request at the
+/// destination.
+pub(crate) async fn renew_or_drop<T>(
+    store: &impl ModelDispatchStore,
+    clock: &impl GatewayClock,
+    claim: &ClaimedAgentRun,
+    work: impl Future<Output = T>,
+) -> Option<T> {
+    let delay = renew_once(store, claim).await?;
+    let mut work = pin!(work);
+    let mut renewal = pin!(renew(store, clock, claim, delay));
+    poll_fn(|context| {
+        if let Poll::Ready(output) = work.as_mut().poll(context) {
+            return Poll::Ready(Some(output));
+        }
+        renewal.as_mut().poll(context).map(|()| None)
+    })
+    .await
+}
+
 /// Renews after each delay. Completes when the claim has lost its lease.
 async fn renew(
     store: &impl ModelDispatchStore,

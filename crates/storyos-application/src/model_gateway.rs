@@ -48,7 +48,7 @@ pub async fn complete_agent_run_with_tools(
             NextDispatchWork::Request(request) => *request,
             NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
             NextDispatchWork::ToolCalls => {
-                dispatch_tool_calls(store, tools, clock, claim).await?;
+                dispatch_tool_calls(store, tools, observer, clock, claim).await?;
                 continue;
             }
         };

@@ -97,7 +97,6 @@ pub(crate) async fn hydrate_calls(
     scope: &storyos_application::ProjectScope,
     decision: &mut storyos_application::AgentRunDecisionInspect,
 ) -> Result<(), storyos_application::CreateAgentRunError> {
-    use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
     let storyos_application::AgentRunDecisionInspect::ToolRequest { decision_id, calls } = decision
     else {
         return Ok(());
@@ -116,37 +115,48 @@ pub(crate) async fn hydrate_calls(
         )
         .await
         .map_err(crate::create_agent_run::agent_run_database_error)?;
+    for row in rows {
+        calls.push(call_inspect(
+            row.get(/*idx*/ 0),
+            row.get(/*idx*/ 1),
+            row.get(/*idx*/ 2),
+        )?);
+    }
+    Ok(())
+}
+
+/// What one ToolCall asked for, from its stored pins and arguments, and how it settled. An
+/// `unknown` ToolCall may have run (ADR 0086).
+pub(crate) fn call_inspect(
+    spec_revision: &str,
+    arguments: &str,
+    state: &str,
+) -> Result<storyos_contracts::ToolCallInspect, storyos_application::CreateAgentRunError> {
+    use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
     let damaged = || {
         storyos_application::CreateAgentRunError::Unavailable(Box::new(std::io::Error::other(
             "The ToolCall is damaged",
         )))
     };
-    for row in rows {
-        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 1))
-            .map_err(crate::create_agent_run::agent_run_parse_error)?;
-        let intake = storyos_core::tool_spec(row.get(/*idx*/ 0))
-            .and_then(|spec| spec.intake(&arguments).ok())
-            .ok_or_else(damaged)?;
-        let outcome = match storyos_core::ToolCallState::parse(row.get(/*idx*/ 2))
-            .ok_or_else(damaged)?
-        {
-            ToolCallState::Pending | ToolCallState::Dispatched => ToolCallOutcomeInspect::Pending,
-            ToolCallState::Settled => ToolCallOutcomeInspect::Settled,
-            ToolCallState::Failed
-            | ToolCallState::Unknown
-            | ToolCallState::Refused
-            | ToolCallState::AwaitingApproval => ToolCallOutcomeInspect::Failed,
-        };
-        calls.push(match intake {
-            storyos_core::ToolIntake::WebSearch { query, .. } => {
-                ToolCallInspect::Search { query, outcome }
-            }
-            storyos_core::ToolIntake::WebFetch { urls } => {
-                ToolCallInspect::PageRead { urls, outcome }
-            }
-        });
-    }
-    Ok(())
+    let arguments: serde_json::Value =
+        serde_json::from_str(arguments).map_err(crate::create_agent_run::agent_run_parse_error)?;
+    let intake = storyos_core::tool_spec(spec_revision)
+        .and_then(|spec| spec.intake(&arguments).ok())
+        .ok_or_else(damaged)?;
+    let outcome = match ToolCallState::parse(state).ok_or_else(damaged)? {
+        ToolCallState::Pending | ToolCallState::Dispatched => ToolCallOutcomeInspect::Pending,
+        ToolCallState::Settled => ToolCallOutcomeInspect::Settled,
+        ToolCallState::Unknown => ToolCallOutcomeInspect::Unknown,
+        ToolCallState::Failed | ToolCallState::Refused | ToolCallState::AwaitingApproval => {
+            ToolCallOutcomeInspect::Failed
+        }
+    };
+    Ok(match intake {
+        storyos_core::ToolIntake::WebSearch { query, .. } => {
+            ToolCallInspect::Search { query, outcome }
+        }
+        storyos_core::ToolIntake::WebFetch { urls } => ToolCallInspect::PageRead { urls, outcome },
+    })
 }
 
 /// The evidence record of the batch validation on the Attempt payload. `None` when the response

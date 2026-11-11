@@ -31,6 +31,7 @@ pub(super) async fn list_research_sources(
         run_id,
         snapshots: sources.snapshots,
         gaps: sources.gaps,
+        unknown_calls: sources.unknown_calls,
     }))
 }
 

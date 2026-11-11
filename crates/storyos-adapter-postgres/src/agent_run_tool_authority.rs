@@ -395,7 +395,7 @@ fn storage_safe(value: Value) -> Value {
     }
 }
 
-async fn append_event(
+pub(crate) async fn append_event(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     kind: &str,

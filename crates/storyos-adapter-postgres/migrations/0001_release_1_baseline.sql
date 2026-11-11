@@ -4246,8 +4246,9 @@ GRANT SELECT,INSERT ON TABLE storyos.tool_calls TO storyos_runtime;
 GRANT UPDATE(state, refusal, destination_attempt_id, attempt, effect_outcome, result_text, result_digest, result_bytes) ON TABLE storyos.tool_calls TO storyos_runtime;
 
 -- Activity Run Events. An append-only record of the AgentRun: one `tool_call_settled` event for each
--- resolved ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract
--- Drift. The payload holds identities, the outcome, and the byte count, and no result text.
+-- resolved ToolCall, one `tool_call_late_result` event when a result arrived after the fence of a
+-- ToolCall, and one `tool_registration_quarantined` event when a dispatch found Tool Contract Drift.
+-- The payload holds identities, the outcome, and the byte count, and no result text.
 
 CREATE TABLE storyos.agent_run_events (
     owner_user_id uuid NOT NULL,
@@ -4261,7 +4262,7 @@ CREATE TABLE storyos.agent_run_events (
     CONSTRAINT agent_run_events_pkey PRIMARY KEY (owner_user_id, project_id, event_id),
     CONSTRAINT agent_run_events_position_key UNIQUE (owner_user_id, project_id, run_id, event_position),
     CONSTRAINT agent_run_events_position_check CHECK ((event_position >= 0)),
-    CONSTRAINT agent_run_events_kind_check CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_registration_quarantined'::text]))),
+    CONSTRAINT agent_run_events_kind_check CHECK ((event_kind = ANY (ARRAY['tool_call_settled'::text, 'tool_call_late_result'::text, 'tool_registration_quarantined'::text]))),
     CONSTRAINT agent_run_events_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
     CONSTRAINT agent_run_events_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL
 );

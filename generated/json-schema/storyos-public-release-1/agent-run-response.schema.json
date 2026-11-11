@@ -2257,7 +2257,12 @@
         },
         {
           "const": "failed",
-          "description": "The call failed, its outcome is unknown, or the Host refused it.",
+          "description": "The call failed, or the Host refused it.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "The dispatch claim committed and no result reached the Run: the call may have run\n(ADR 0086).",
           "type": "string"
         }
       ]

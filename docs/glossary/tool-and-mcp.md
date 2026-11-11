@@ -76,6 +76,10 @@ _Avoid_: Model self-classification, Tool Effect Envelope, actual outcome
 The structured observation of which requested effects were not attempted, confirmed, partially confirmed, or remain unknown after a ToolCall attempt. It binds actual project reads, Artifact Revisions, Outbound Disclosures, external reads, and external writes to evidence; an uncertain external effect remains unknown and cannot be treated as an ordinary failure or automatically retried.
 _Avoid_: Tool success flag, Tool Effect Request, inferred side effect
 
+**ToolCall Cancellation**:
+The immutable fence that `cancelAgentRun` writes on each dispatched ToolCall of the Run in the cancel transaction, before any local stop. The Worker can only drop its exchange, because the MCP transport has no remote abort. The fenced ToolCall settles `unknown`; a result that arrives later is evidence only and makes the ToolCall `partial`, never its result ([ADR 0086](../adr/0086-fence-an-interrupted-tool-call-and-classify-it-from-retained-records.md)).
+_Avoid_: Tool abort, remote stop, retry, discarded late result
+
 **External MCP Surface**:
 The later StoryOS Server surface that exposes a bounded set of public operations as MCP tools to an external MCP host, ChatGPT first, for a User that the host authenticates. Each exposed operation is one tool read from the Operation Registry; the Server maps the host identity to the User at its boundary, and the Core sees no connector. ADR 0082 records the intent and the constraints; a later ADR owns the design, and no implementation exists.
 _Avoid_: Plugin, ChatGPT app, Tool Exposure, MCP App, connector identity

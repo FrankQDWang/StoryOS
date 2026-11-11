@@ -477,7 +477,7 @@ export type ProseChangeLocationOutcome = { "kind": "revised", proposal_id: strin
 
 export type ProseChangeLocationCurrent = { revision_id: string, generation: string, validation: string, closure: string, resolution: string, reservation_state: string, };
 
-export type ToolCallOutcomeInspect = "pending" | "settled" | "failed";
+export type ToolCallOutcomeInspect = "pending" | "settled" | "failed" | "unknown";
 
 export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCallOutcomeInspect, } | { "kind": "page_read", urls: Array<string>, outcome: ToolCallOutcomeInspect, };
 
@@ -565,7 +565,9 @@ export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: 
 
 export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, result_offset: string | null, result_bytes: string | null, };
 
-export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, };
+export type UnknownResearchCallInspect = { tool_call_id: string, decision_id: string, call: ToolCallInspect, late_result: boolean, };
+
+export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, unknown_calls: Array<UnknownResearchCallInspect>, };
 
 export type GetResearchSourceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, snapshot: SourceSnapshotInspect, text: string, };
 

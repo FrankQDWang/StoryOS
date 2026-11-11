@@ -498,8 +498,11 @@ pub enum ToolCallOutcomeInspect {
     Pending,
     /// The server answered with a terminal result.
     Settled,
-    /// The call failed, its outcome is unknown, or the Host refused it.
+    /// The call failed, or the Host refused it.
     Failed,
+    /// The dispatch claim committed and no result reached the Run: the call may have run
+    /// (ADR 0086).
+    Unknown,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
