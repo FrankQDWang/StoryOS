@@ -317,14 +317,16 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
         .unwrap();
     let reserved = json!({"kind": "worst_case", "released": false});
     let released = json!({"kind": "worst_case", "released": true});
+    let during = restart.during.lock().unwrap().as_ref().map(inspect);
+    let retrieved_again = again.during.lock().unwrap().is_some();
 
     assert_eq!(
         (
             matches!(crashed, Err(CompleteAgentRunError::StaleFence)),
-            restart.during.lock().unwrap().as_ref().map(inspect),
+            during,
             inspect(&after),
             read(&store, &scope, &run_id).await == after,
-            again.during.lock().unwrap().is_none(),
+            retrieved_again,
             attempts(&admin, &run_id).await,
             retrieval_context(&admin, &run_id).await,
             lineage,
@@ -339,7 +341,7 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                    "dispatch_state": "settled", "disposition": "settled", "keep_reason": null,
                    "reservation_released": true, "usage_kind": "reported"}),
             true,
-            true,
+            false,
             vec![
                 json!({"role": "decision", "position": "0", "dispatch_state": "settled",
                        "usage": {"kind": "reported", "input_tokens": 90, "output_tokens": 30},
@@ -392,13 +394,15 @@ async fn a_not_found_retrieve_of_a_continuation_keeps_the_unknown_outcome_and_th
         .unwrap()
         .get(/*idx*/ 0);
     let reserved = json!({"kind": "worst_case", "released": false});
+    let during = model.during.lock().unwrap().as_ref().map(inspect);
+    let retrieved_again = restart.during.lock().unwrap().is_some();
 
     assert_eq!(
         (
-            model.during.lock().unwrap().as_ref().map(inspect),
+            during,
             inspect(&after),
             read(&store, &scope, &run_id).await == after,
-            restart.during.lock().unwrap().is_none(),
+            retrieved_again,
             settlement,
             attempts(&admin, &run_id).await,
             retrieval_context(&admin, &run_id).await,
@@ -413,7 +417,7 @@ async fn a_not_found_retrieve_of_a_continuation_keeps_the_unknown_outcome_and_th
                    "disposition": "kept_unknown", "keep_reason": "unknown_result",
                    "reservation_released": false, "usage_kind": "unknown"}),
             true,
-            true,
+            false,
             Some(r#"{"kind": "outcome_unknown", "reason": "unknown_result"}"#.to_owned()),
             vec![
                 json!({"role": "decision", "position": "0", "dispatch_state": "settled",
