@@ -691,6 +691,7 @@ enum DuplicatePlan {
     Unknown,
     FunctionCall,
     LateResult,
+    Advisory,
 }
 
 impl DuplicateSuccessorDelivery<'_> {
@@ -742,6 +743,10 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
             DestinationRequest::Create(create) if create.successor_of.is_some() => {
                 *self.successor.lock().unwrap() = Some(create.clone());
                 ("sha256:create", DuplicatePlan::FunctionCall)
+            }
+            // The next RunStep sends the refused ToolCalls of the successor (ADR 0088).
+            DestinationRequest::Create(create) if !create.tool_outputs.is_empty() => {
+                ("sha256:continuation", DuplicatePlan::Advisory)
             }
             DestinationRequest::Create(_) => ("sha256:create", DuplicatePlan::Unknown),
             DestinationRequest::Retrieve(retrieve)
@@ -809,6 +814,19 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
                     )
                     .await;
                 *self.delivered_twice.lock().unwrap() = Some(delivered.is_ok());
+            }
+            DuplicatePlan::Advisory => {
+                return Observation::Terminal(storyos_application::ModelResponse {
+                    output: Some(storyos_core::ModelOutput {
+                        phase: storyos_core::OutputPhase::FinalAnswer,
+                        candidate: storyos_core::DecisionCandidate::Advisory {
+                            text: "No source was read.".to_owned(),
+                        },
+                        prose_changes: None,
+                    }),
+                    items: Vec::new(),
+                    ..Self::function_response()
+                });
             }
             DuplicatePlan::Unknown => {}
         }
@@ -887,6 +905,7 @@ async fn successor_run(
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
                JOIN storyos.model_attempts AS successor
                  ON successor.run_id = run.run_id AND successor.attempt_role = 'successor'
               WHERE run.run_id = $1::text::uuid",
@@ -939,7 +958,8 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
                     "advances_continuation": false
                 },
                 "tool_call_batch": {"kind": "valid", "call_ids": ["call_01", "call_02"]},
-                "roles": "decision,retrieval,successor,late_retrieval"
+                // The refused ToolCalls continue at position 1, whose Advisory completes the Run.
+                "roles": "decision,retrieval,successor,late_retrieval,decision"
             }),
             vec![
                 (json!("call_01"), json!(0), decision_id.clone()),
