@@ -599,3 +599,53 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
         )
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_answer_with_no_result_after_the_fence_keeps_the_tool_call_unknown() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let failed = "HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+    let (mcp_base, mcp) =
+        destination(mcp_replies(exa_tools(|_| {}), Some(failed.to_owned()))).await;
+    let (scope, run_id) = tool_run(&store, &admin, "087", 0x087a, &mcp_base).await;
+    let tools = CancelAfterExchange {
+        store: &store,
+        cancel: cancel_call(&store, &scope, 0x087b, &run_id).await,
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let completed = complete_agent_run_with_tools(
+        &store,
+        &adapter(),
+        &tools,
+        &NoContractFaults,
+        &SteppedClock::new(),
+        &claim,
+    )
+    .await;
+    let disclosed = json!({"external_read": "unknown", "outbound_disclosure": "confirmed"});
+    let facts = tool_facts(&admin, &run_id).await;
+
+    assert_eq!(
+        (
+            matches!(completed, Err(CompleteAgentRunError::StaleFence)),
+            facts["tool_call"]["state"].clone(),
+            facts["tool_call"]["attempt"]["late_observation"]["settlement"].clone(),
+            facts["tool_call"]["effect_outcome"].clone(),
+            facts["events"][1]["class"].clone(),
+            unknown_calls(&store, &scope, &run_id).await,
+            mcp.await.unwrap(),
+        ),
+        (
+            true,
+            json!("unknown"),
+            json!("outcome_unknown"),
+            disclosed,
+            json!("unknown"),
+            json!([{"call": unknown_search(), "late_result": false}]),
+            vec![POST.to_owned(); 4],
+        )
+    );
+}

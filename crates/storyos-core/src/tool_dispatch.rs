@@ -348,6 +348,17 @@ impl ToolAttemptSettlement {
             Self::OutcomeUnknown => "outcome_unknown",
         }
     }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        [
+            Self::NotSubmitted,
+            Self::TerminalResult,
+            Self::NativeError,
+            Self::OutcomeUnknown,
+        ]
+        .into_iter()
+        .find(|settlement| settlement.as_str() == value)
+    }
 }
 
 /// The result text of one settled ToolCall, kept as data.

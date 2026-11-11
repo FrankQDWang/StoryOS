@@ -50,7 +50,7 @@ An unknown or partial ToolCall has no automatic retry, because nothing can recon
 
 ### 6. Visible state
 
-`getAgentRun` shows an unknown or partial ToolCall with the outcome `unknown`. `listResearchSources` lists it in `unknown_calls`, with `late_result`. The panel shows one line for it:
+`getAgentRun` shows an unknown or partial ToolCall with the outcome `unknown`. `listResearchSources` lists it in `unknown_calls`, with `late_result`. `late_result` comes from the class: it is true only for a `partial` ToolCall. A late answer with no terminal result keeps the class `unknown` and `late_result` false. The panel shows one line for it:
 
 - `可能已联网搜索，但没有收到结果：<query>`
 - `可能已阅读，但没有收到结果：<URLs>`

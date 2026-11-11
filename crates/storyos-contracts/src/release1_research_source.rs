@@ -136,7 +136,8 @@ pub struct ListResearchSourcesResponse {
 pub struct UnknownResearchCallInspect {
     pub tool_call_id: String,
     pub call: crate::ToolCallInspect,
-    // True when a result arrived after the fence of the call. It is evidence only.
+    // True when a terminal answer arrived after the fence of the call (the class `partial`). It is
+    // evidence only.
     pub late_result: bool,
 }
 
