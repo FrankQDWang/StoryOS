@@ -351,3 +351,7 @@ fn cited_ids<'a>(content: &'a serde_json::Value, kind: &str, field: &str) -> Vec
         .filter_map(|citation| citation[field].as_str())
         .collect()
 }
+
+#[cfg(test)]
+#[path = "research_artifact_tests.rs"]
+mod tests;
