@@ -57,7 +57,7 @@ enum Fault<'a> {
     /// The author cancels the Run.
     Cancel {
         store: &'a PostgresProjectReader,
-        call: CommandCall<CancelAgentRunInput>,
+        call: Box<CommandCall<CancelAgentRunInput>>,
     },
     /// Another Worker takes the Run over, as after a crash of this Worker.
     TakeOver { admin: &'a Client, run_id: String },
@@ -253,7 +253,7 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
         /*nth*/ 1,
         Fault::Cancel {
             store: &store,
-            call: cancel_call(&store, &scope, 0x081b, &run_id).await,
+            call: Box::new(cancel_call(&store, &scope, 0x081b, &run_id).await),
         },
     );
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -484,7 +484,7 @@ async fn a_cancel_between_two_tool_calls_keeps_the_settled_one_and_refuses_the_p
         /*nth*/ 2,
         Fault::Cancel {
             store: &store,
-            call: cancel_call(&store, &scope, 0x085b, &run_id).await,
+            call: Box::new(cancel_call(&store, &scope, 0x085b, &run_id).await),
         },
     );
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
