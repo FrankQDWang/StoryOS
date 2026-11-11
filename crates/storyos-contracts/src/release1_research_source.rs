@@ -135,6 +135,8 @@ pub struct ListResearchSourcesResponse {
 #[serde(deny_unknown_fields)]
 pub struct UnknownResearchCallInspect {
     pub tool_call_id: String,
+    // The function request Decision that asked for the call.
+    pub decision_id: String,
     pub call: crate::ToolCallInspect,
     // True when a terminal answer arrived after the fence of the call (the class `partial`). It is
     // evidence only.

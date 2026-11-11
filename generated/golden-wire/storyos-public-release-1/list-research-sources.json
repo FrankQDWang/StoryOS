@@ -38,6 +38,7 @@
         "outcome": "unknown",
         "query": "harbour log of 1890"
       },
+      "decision_id": "018f0000-0000-7001-8000-000000000d0a",
       "late_result": false,
       "tool_call_id": "018f0000-0000-7001-8000-000000000d09"
     }

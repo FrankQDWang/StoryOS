@@ -9,6 +9,20 @@ use crate::{
     ToolResultText, ToolSpec, settle_tool_call,
 };
 
+impl ToolAttemptSettlement {
+    /// The settlement that a retained record names.
+    pub fn parse(value: &str) -> Option<Self> {
+        [
+            Self::NotSubmitted,
+            Self::TerminalResult,
+            Self::NativeError,
+            Self::OutcomeUnknown,
+        ]
+        .into_iter()
+        .find(|settlement| settlement.as_str() == value)
+    }
+}
+
 /// The outcome class of one resolved ToolCall.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolCallClass {

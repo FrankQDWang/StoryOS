@@ -78,6 +78,7 @@ pub(super) const LIST_RESEARCH_SOURCES_ROW: OperationRow = OperationRow {
       "unknown_calls": [
         {
           "call": {"kind": "search", "outcome": "unknown", "query": "harbour log of 1890"},
+          "decision_id": "018f0000-0000-7001-8000-000000000d0a",
           "late_result": false,
           "tool_call_id": "018f0000-0000-7001-8000-000000000d09"
         }
@@ -142,6 +143,7 @@ const LIST_RESEARCH_SOURCES_RESPONSE: &[Patch] = &[
             "/$defs/SourceGapInspect/properties/tool_call_id",
             "/$defs/SourceSnapshotInspect/properties/source_snapshot_id",
             "/$defs/SourceSnapshotInspect/properties/tool_call_id",
+            "/$defs/UnknownResearchCallInspect/properties/decision_id",
             "/$defs/UnknownResearchCallInspect/properties/tool_call_id",
             "/properties/correlation_id",
             "/properties/run_id",

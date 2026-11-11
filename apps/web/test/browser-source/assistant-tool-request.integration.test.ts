@@ -3,13 +3,14 @@ import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import agentRunFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-agent-run.json";
 import assistanceFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-project-assistance.json";
+import sourcesFixture from "../../../../generated/golden-wire/storyos-public-release-1/list-research-sources.json";
 import { WritingAssistantPanel } from "../../src/writing-assistant-panel.tsx";
 import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c81";
 const DECISION = "018f0000-0000-7001-8000-000000000c85";
 
-it("shows one line for each research call of a function request and no identifier", async () => {
+it("shows one line for each research call of a function request, an earlier call that may have run, and no identifier", async () => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Check the tide tables of 1890.", chapterId: CHAPTER,
@@ -29,6 +30,13 @@ it("shows one line for each research call of a function request and no identifie
           { kind: "page_read", urls: ["https://e.org/log"], outcome: "unknown" },
         ] } });
     }
+    if (path.endsWith(`/agent-runs/${RUN}/research-sources`)) {
+      const [earlier] = sourcesFixture.unknown_calls;
+      const shown = { ...earlier!, decision_id: DECISION, tool_call_id: "018f0000-0000-7001-8000-000000000c86",
+        call: { kind: "search", query: "port records", outcome: "unknown" } };
+      return jsonResponse({ ...sourcesFixture, project_scope: scope, run_id: RUN, snapshots: [], gaps: [],
+        unknown_calls: [earlier, shown] });
+    }
     throw new Error(`Unexpected request ${path}`);
   };
   const host = document.createElement("div");
@@ -44,14 +52,16 @@ it("shows one line for each research call of a function request and no identifie
         scheduleRefresh: () => () => {},
       }));
     });
-    for (let turn = 0; turn < 5; turn += 1) await act(async () => { await Promise.resolve(); });
+    for (let turn = 0; turn < 8; turn += 1) await act(async () => { await Promise.resolve(); });
 
     expect({
       result: host.querySelector("[data-assistant-result]")?.textContent ?? null,
+      sources: [...host.querySelectorAll("[data-assistant-research-sources] li")].map(item => item.textContent),
       showsIdentifier: [RUN, DECISION].some(id => host.textContent?.includes(id) ?? false),
     }).toEqual({
       result: "已联网搜索：tide tables of 1890\n已阅读：https://e.org/tides、https://e.org/port\n有一次联网检索没有完成。"
         + "\n可能已联网搜索，但没有收到结果：port records\n可能已阅读，但没有收到结果：https://e.org/log",
+      sources: ["可能已联网搜索，但没有收到结果：harbour log of 1890"],
       showsIdentifier: false,
     });
   } finally {

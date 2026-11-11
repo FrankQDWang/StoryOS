@@ -228,6 +228,10 @@
         "call": {
           "$ref": "#/$defs/ToolCallInspect"
         },
+        "decision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
         "late_result": {
           "type": "boolean"
         },
@@ -238,6 +242,7 @@
       },
       "required": [
         "tool_call_id",
+        "decision_id",
         "call",
         "late_result"
       ],

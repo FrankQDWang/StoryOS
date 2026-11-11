@@ -16,7 +16,7 @@ The MCP transport has no remote abort. The Exa server has no operation that tell
 
 ### 1. The fence
 
-- The cancel transaction writes one ToolCall Cancellation fence on each `dispatched` ToolCall of the Run: `tool_calls.attempt.fence` with the cause `run_cancelled`, the Run fence token of the cancel, `local_stop = drop_exchange`, and `remote_abort = unsupported`. The same transaction settles the ToolCall `unknown` with its Tool Effect Outcome and its `tool_call_settled` Run Event. The cancel also increments the Run fence token.
+- The cancel transaction writes one ToolCall Cancellation fence on each `dispatched` ToolCall of the Run. The fence is `tool_calls.attempt.fence`. It records the cause `run_cancelled` and the Run fence token of the cancel. It also records `local_stop = drop_exchange` and `remote_abort = unsupported`. The same transaction settles the ToolCall `unknown` with its Tool Effect Outcome and its `tool_call_settled` Run Event. The cancel also increments the Run fence token.
 - The cancel refuses each `pending` ToolCall of the Run with `run_cancelled`. It has no Destination Attempt and no Disclosure Event.
 - The next claim after a lost lease writes the same fence with the cause `worker_restart` on a `dispatched` ToolCall, and settles it `unknown`. It never sends the ToolCall again.
 - The Worker stops only after it reads a committed fence. The Tool Gateway renews the Run Lease before the exchange and during it. When a renewal finds that the lease is lost, the Gateway drops the exchange, or does not start it. The Host never claims that the server stopped.
@@ -36,7 +36,7 @@ The row lock orders the settlement and the fence. A terminal answer that commits
 
 ### 3. A late result is evidence only
 
-The store records the observation of a Worker whose lease a fence ended only on a ToolCall that a fence settled, with the same Destination Attempt, one time. It writes `attempt.late_observation`: the settlement, the Tool Effect Outcome, a disclosure confirmation that refers to the Outbound Disclosure Event, and the validated result text with its digest and length. It sets the Tool Effect Outcome of the row to the effects that the observation confirmed, and it appends one `tool_call_late_result` Run Event with the class.
+A fence can end the lease of a Worker while its exchange continues. The store keeps the observation of that Worker only on a ToolCall that a fence settled. The observation must have the same Destination Attempt, and the store keeps it one time. It writes `attempt.late_observation`. This record has the settlement and the Tool Effect Outcome. It also has a disclosure confirmation that refers to the Outbound Disclosure Event, and the validated result text with its digest and length. It sets the Tool Effect Outcome of the row to the effects that the observation confirmed, and it appends one `tool_call_late_result` Run Event with the class.
 
 The state stays `unknown` and `result_text` stays empty. Thus the late result never enters a continuation input, never creates a Source Snapshot, and never supplies a Decision. The Outbound Disclosure Event keeps its state `outcome_unknown`. A late observation on a ToolCall that no fence settled yet is not kept: the next claim settles that ToolCall.
 
@@ -50,7 +50,7 @@ An unknown or partial ToolCall has no automatic retry, because nothing can recon
 
 ### 6. Visible state
 
-`getAgentRun` shows an unknown or partial ToolCall with the outcome `unknown`. `listResearchSources` lists it in `unknown_calls`, with `late_result`. `late_result` comes from the class: it is true only for a `partial` ToolCall. A late answer with no terminal result keeps the class `unknown` and `late_result` false. The panel shows one line for it. While the Decision of the Run is the function request, the line is in the list of its calls. When a continuation replaced that Decision, the line comes from `unknown_calls` and follows the research sources of the Run:
+`getAgentRun` shows an unknown or partial ToolCall with the outcome `unknown`. `listResearchSources` lists it in `unknown_calls`, with `late_result`. `late_result` comes from the class: it is true only for a `partial` ToolCall. A late answer with no terminal result keeps the class `unknown` and `late_result` false. Each entry has the function request Decision of the call. The panel shows one line for each unknown call. A call of the Decision that the panel shows is in the list of the calls of that Decision. Each other unknown call comes from `unknown_calls`, and its line follows the research sources of the Run. An example is a call of an earlier Decision that a continuation replaced:
 
 - `可能已联网搜索，但没有收到结果：<query>`
 - `可能已阅读，但没有收到结果：<URLs>`

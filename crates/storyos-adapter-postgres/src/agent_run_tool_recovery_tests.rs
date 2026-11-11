@@ -212,18 +212,33 @@ async fn run_counts(admin: &Client, run_id: &str) -> Value {
         .unwrap()
 }
 
-/// The listed research calls with an unknown outcome, with no identifier.
-async fn unknown_calls(store: &PostgresProjectReader, scope: &ProjectScope, run_id: &str) -> Value {
+/// The listed research calls with an unknown outcome, with no identifier. Each listed Decision
+/// must be the Decision of the ToolCall row.
+async fn unknown_calls(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Value {
     let sources = store
         .list_research_sources(scope, run_id)
         .await
         .unwrap()
         .unwrap();
-    sources
-        .unknown_calls
-        .into_iter()
-        .map(|call| json!({"call": call.call, "late_result": call.late_result}))
-        .collect()
+    let mut listed = Vec::new();
+    for call in sources.unknown_calls {
+        let decision: String = admin
+            .query_one(
+                "SELECT decision_id::text FROM storyos.tool_calls WHERE tool_call_id = $1::text::uuid",
+                &[&call.tool_call_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        assert_eq!(call.decision_id, decision);
+        listed.push(json!({"call": call.call, "late_result": call.late_result}));
+    }
+    Value::Array(listed)
 }
 
 fn unknown_search() -> Value {
@@ -320,7 +335,7 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
             before_next["run"]["status"].clone(),
             before_next["tool_call"].clone(),
             before_next["events"].clone(),
-            unknown_calls(&store, &scope, &run_id).await,
+            unknown_calls(&store, &admin, &scope, &run_id).await,
             tool_facts(&admin, &run_id).await == before_next,
             tool_facts(&admin, &next_run).await["tool_call"]["attempt"].clone(),
             identities,
@@ -379,7 +394,7 @@ async fn a_cancel_during_the_exchange_drops_it_locally_and_keeps_the_tool_call_u
             facts["run"]["status"].clone(),
             facts["tool_call"].clone(),
             facts["events"].clone(),
-            unknown_calls(&store, &scope, &run_id).await,
+            unknown_calls(&store, &admin, &scope, &run_id).await,
             mcp.await.unwrap(),
         ),
         (
@@ -438,7 +453,7 @@ async fn a_result_after_the_cancellation_fence_is_kept_as_evidence_only() {
             facts["tool_call"].clone(),
             facts["events"].clone(),
             run_counts(&admin, &run_id).await,
-            unknown_calls(&store, &scope, &run_id).await,
+            unknown_calls(&store, &admin, &scope, &run_id).await,
             mcp.await.unwrap(),
         ),
         (
@@ -514,7 +529,7 @@ async fn a_cancel_between_two_tool_calls_keeps_the_settled_one_and_refuses_the_p
         (
             matches!(cancelled, Err(CompleteAgentRunError::StaleFence)),
             rows,
-            unknown_calls(&store, &scope, &run_id).await,
+            unknown_calls(&store, &admin, &scope, &run_id).await,
             mcp.await.unwrap(),
         ),
         (
@@ -635,7 +650,7 @@ async fn an_answer_with_no_result_after_the_fence_keeps_the_tool_call_unknown() 
             facts["tool_call"]["attempt"]["late_observation"]["settlement"].clone(),
             facts["tool_call"]["effect_outcome"].clone(),
             facts["events"][1]["class"].clone(),
-            unknown_calls(&store, &scope, &run_id).await,
+            unknown_calls(&store, &admin, &scope, &run_id).await,
             mcp.await.unwrap(),
         ),
         (

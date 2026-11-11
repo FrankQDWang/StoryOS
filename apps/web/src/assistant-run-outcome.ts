@@ -43,16 +43,20 @@ function toolCallLine(call: ToolCallInspect): string {
 export const SOURCE_NOT_AVAILABLE = "无法获取";
 
 /** One line for each research source of a Run: the title or the URL with the capture time, then
- * each page that is not available, with no identifier (ADR 0040). When the Decision of the Run
- * does not show its research calls, as after a continuation, each call that may have run follows
- * (ADR 0086). */
-export function researchSourceLines(sources: ListResearchSourcesResponse, callsShown: boolean): string[] {
+ * each page that is not available, with no identifier (ADR 0040). Then each call that may have
+ * run follows, except a call of the function request `shownDecisionId` that the panel shows with
+ * its calls (ADR 0086). */
+export function researchSourceLines(
+  sources: ListResearchSourcesResponse, shownDecisionId: string | undefined,
+): string[] {
   const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" });
   return [
     ...sources.snapshots.map(snapshot =>
       `${snapshot.title ?? snapshot.locator}（获取于 ${time.format(new Date(snapshot.captured_at))}）`),
     ...sources.gaps.map(gap => `${gap.locator}：${SOURCE_NOT_AVAILABLE}`),
-    ...(callsShown ? [] : sources.unknown_calls.map(unknown => toolCallLine(unknown.call))),
+    ...sources.unknown_calls
+      .filter(unknown => unknown.decision_id !== shownDecisionId)
+      .map(unknown => toolCallLine(unknown.call)),
   ];
 }
 

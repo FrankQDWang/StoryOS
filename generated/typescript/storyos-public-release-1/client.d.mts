@@ -565,7 +565,7 @@ export type SourceSnapshotInspect = { source_snapshot_id: string, tool_call_id: 
 
 export type SourceGapInspect = { source_gap_id: string, tool_call_id: string, locator: string, reason: SourceGapReason, recorded_at: string, result_offset: string | null, result_bytes: string | null, };
 
-export type UnknownResearchCallInspect = { tool_call_id: string, call: ToolCallInspect, late_result: boolean, };
+export type UnknownResearchCallInspect = { tool_call_id: string, decision_id: string, call: ToolCallInspect, late_result: boolean, };
 
 export type ListResearchSourcesResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, run_id: string, snapshots: Array<SourceSnapshotInspect>, gaps: Array<SourceGapInspect>, unknown_calls: Array<UnknownResearchCallInspect>, };
 

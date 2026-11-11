@@ -201,7 +201,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                 .query(
                     "SELECT tool_call_id::text, tool_spec_revision, arguments::text, state,
                             attempt -> 'destination_attempt' ->> 'settlement',
-                            attempt -> 'late_observation' ->> 'settlement'
+                            attempt -> 'late_observation' ->> 'settlement', decision_id::text
                        FROM storyos.tool_calls
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid AND state = 'unknown'
@@ -231,6 +231,7 @@ impl ResearchSourceReadStore for PostgresProjectReader {
                     );
                     Ok(UnknownResearchCallInspect {
                         tool_call_id: row.get(/*idx*/ 0),
+                        decision_id: row.get(/*idx*/ 6),
                         call: crate::agent_run_tool_call::call_inspect(
                             row.get(/*idx*/ 1),
                             row.get(/*idx*/ 2),
