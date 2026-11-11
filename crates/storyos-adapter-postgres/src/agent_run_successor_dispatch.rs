@@ -451,6 +451,7 @@ pub(crate) async fn record(
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
     marker["successor_decision_id"] = serde_json::json!(decision_id);
     marker["successor_requests_function"] = serde_json::json!(function_requested);
+    marker["successor_outcome_unknown"] = serde_json::json!(dispatch_state == "uncertain");
     seal(
         &mut marker,
         "dispatched",
@@ -526,25 +527,41 @@ pub(crate) async fn finish_dispatched(
     if step == storyos_core::FunctionRequestStep::ToolGateway {
         return Ok(SuccessorWork::ToolCalls);
     }
+    // The ToolCalls of the successor Decision are resolved: the next RunStep sends their results
+    // as the continuation of the successor response (ADR 0085, ADR 0088).
+    if step == storyos_core::FunctionRequestStep::Continue {
+        let (attempt_id, payload) = successor_payload(client, claim, marker).await?;
+        let decision_id = text(marker, "successor_decision_id").ok_or_else(|| {
+            unavailable(std::io::Error::other("The successor Decision is missing"))
+        })?;
+        crate::agent_run_continuation::bind_produced_continuation(
+            client,
+            claim,
+            decision_id,
+            attempt_id,
+            &payload,
+            &row.payload,
+        )
+        .await?;
+        crate::agent_run_tool_result::open_next_step(client, claim, run).await?;
+        return Ok(SuccessorWork::Hold("tool_result_continuation"));
+    }
+    // The allowance is spent and the successor outcome is unknown: the Run waits with
+    // `outcome_unknown` and keeps the evidence of each Attempt (ADR 0033, ADR 0088 section 3).
+    if flag(marker, "successor_outcome_unknown") {
+        update_run(
+            client,
+            claim,
+            "waiting",
+            Some(&serde_json::json!({"kind": "outcome_unknown", "reason": "unknown_result"})),
+            /*clear_lease*/ true,
+        )
+        .await?;
+        return Ok(SuccessorWork::Done(CompleteAgentRun::Settled));
+    }
     let refusal = if step == storyos_core::FunctionRequestStep::Refuse {
         // The recorded successor Attempt keeps the batch evidence of its refusal.
-        let attempt_id = text(marker, "successor_model_attempt_id").ok_or_else(|| {
-            unavailable(std::io::Error::other("The successor Attempt is missing"))
-        })?;
-        let row = client
-            .query_one(
-                "SELECT payload::text FROM storyos.model_attempts
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
-                &[
-                    &claim.project_scope.owner_user_id.as_ref(),
-                    &claim.project_scope.project_id.as_ref(),
-                    &attempt_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+        let (_, payload) = successor_payload(client, claim, marker).await?;
         Some(crate::agent_run_observation::research_refusal(&payload))
     } else {
         None
@@ -562,6 +579,31 @@ pub(crate) async fn finish_dispatched(
     )
     .await?;
     Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
+}
+
+/// The identity and the payload of the recorded successor Attempt.
+async fn successor_payload<'a>(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    marker: &'a serde_json::Value,
+) -> Result<(&'a str, serde_json::Value), CompleteAgentRunError> {
+    let attempt_id = text(marker, "successor_model_attempt_id")
+        .ok_or_else(|| unavailable(std::io::Error::other("The successor Attempt is missing")))?;
+    let row = client
+        .query_one(
+            "SELECT payload::text FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND model_attempt_id = $3::text::uuid AND attempt_role = 'successor'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &attempt_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    let payload = serde_json::from_str(&row.get::<_, String>(0)).map_err(unavailable)?;
+    Ok((attempt_id, payload))
 }
 
 /// The predecessor reference to read for a late result, once, after the original retrieval.

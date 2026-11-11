@@ -322,7 +322,12 @@ async fn continuation_run(
         /*id*/ 0,
         json!({"content": [{"type": "text", "text": SEARCH_TEXT}], "isError": false}),
     );
-    let (mcp_base, _mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(result))).await;
+    // The fake MCP server answers up to two searches, each in its own session.
+    let mcp = [result.clone(), result]
+        .into_iter()
+        .flat_map(|call| mcp_replies(exa_tools(|_| {}), Some(call)))
+        .collect();
+    let (mcp_base, _mcp) = destination(mcp).await;
     point_mcp(admin, &scope, &mcp_base).await;
     (scope, run_id, served)
 }
@@ -812,6 +817,161 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
                 1,
                 lines("a94"),
             ),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_interrupted_successor_of_a_continuation_waits_with_an_unknown_outcome() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let broken: Later = |reference, _| broken_stream(&format!("{reference}_s"));
+    let (scope, run_id, served) = continuation_run(
+        &store,
+        &admin,
+        "a95",
+        0xa95a,
+        &[|_, _| not_found(), broken, |_, _| not_found()],
+    )
+    .await;
+    // The Worker crashes after the successor stream broke, before its record.
+    let crashed = drain(
+        &store,
+        &admin,
+        &hooks(
+            &store,
+            &admin,
+            &scope,
+            &run_id,
+            /*crash_after*/ Some(4),
+            /*fault*/ None,
+        ),
+        &scope,
+        &run_id,
+    )
+    .await;
+    let restart = hooks(
+        &store, &admin, &scope, &run_id, /*crash_after*/ None, /*fault*/ None,
+    );
+    drain(&store, &admin, &restart, &scope, &run_id)
+        .await
+        .unwrap();
+    let again = hooks(
+        &store, &admin, &scope, &run_id, /*crash_after*/ None, /*fault*/ None,
+    );
+    drain(&store, &admin, &again, &scope, &run_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            matches!(crashed, Err(CompleteAgentRunError::StaleFence)),
+            outcome(&admin, &run_id).await,
+            attempts(&admin, &run_id).await.pop(),
+            restart.before.into_inner().unwrap().len(),
+            again.before.into_inner().unwrap().len(),
+            served.await.unwrap(),
+        ),
+        (
+            true,
+            // The allowance is spent, so the Run stops with the unknown outcome (ADR 0088).
+            json!({"status": "waiting",
+                   "roles": "decision,decision,retrieval,successor,late_retrieval",
+                   "settlement": {"kind": "outcome_unknown", "reason": "unknown_result"},
+                   "marker": {"disposition": "dispatched", "pause_reason": null,
+                              "allowance_consumed": true, "predecessor_fenced": true,
+                              "dispatch_prohibited": false, "late_evidence_applied": false}}),
+            // The successor keeps its unknown usage and its worst-case reservation.
+            Some(
+                json!({"role": "successor", "position": "1", "dispatch_state": "uncertain",
+                        "usage": {"kind": "unknown"},
+                        "reservation": {"kind": "worst_case", "released": false},
+                        "result": null, "decided": false, "own_evidence": true})
+            ),
+            // The restart re-observes the claimed successor with no egress, and then reads the
+            // late predecessor result once.
+            2,
+            0,
+            vec![
+                post(),
+                post(),
+                "GET /api/plan/v3/responses/resp_a95_2 HTTP/1.1".to_owned(),
+                post(),
+                "GET /api/plan/v3/responses/resp_a95_2 HTTP/1.1".to_owned(),
+            ],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_position() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let search: Later = |reference, _| {
+        calls_stream(
+            &format!("{reference}_s"),
+            &[("call_02", "web_search", SEARCH)],
+        )
+    };
+    let synthesis: Later = |reference, sources| {
+        let text = synthesis_text("The tides of 1890.", sources);
+        message_stream(&format!("{reference}_3"), &text, "completed")
+    };
+    let (scope, run_id, served) = continuation_run(
+        &store,
+        &admin,
+        "a96",
+        0xa96a,
+        &[|_, _| not_found(), search, |_, _| not_found(), synthesis],
+    )
+    .await;
+    let model = hooks(
+        &store, &admin, &scope, &run_id, /*crash_after*/ None, /*fault*/ None,
+    );
+    drain(&store, &admin, &model, &scope, &run_id)
+        .await
+        .unwrap();
+    let payloads = model.payloads.into_inner().unwrap();
+
+    assert_eq!(
+        (
+            inspect(&read(&store, &scope, &run_id).await),
+            outcome(&admin, &run_id).await,
+            artifacts(&admin, &run_id).await,
+            payloads.last().map(request_items),
+            served.await.unwrap(),
+        ),
+        (
+            json!({"status": "Completed", "decision": "research_synthesis",
+                   "dispatch_state": "settled", "disposition": "kept_unknown",
+                   "keep_reason": "unknown_result", "reservation_released": false,
+                   "usage_kind": "unknown"}),
+            json!({"status": "completed", "settlement": null,
+                   "roles": "decision,decision,retrieval,successor,late_retrieval,decision",
+                   "marker": {"disposition": "dispatched", "pause_reason": null,
+                              "allowance_consumed": true, "predecessor_fenced": true,
+                              "dispatch_prohibited": false, "late_evidence_applied": false}}),
+            vec![
+                json!({"role": "decision", "position": "2", "decision": true,
+                        "summary": "The tides of 1890."})
+            ],
+            // The next RunStep continues the successor response with the result of its call.
+            Some(json!({"previous_response_id": "resp_a96_2_s",
+                        "input": [["function_call_output", "call_02"]]})),
+            vec![
+                post(),
+                post(),
+                "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
+                post(),
+                "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
+                post(),
+            ],
         )
     );
 }

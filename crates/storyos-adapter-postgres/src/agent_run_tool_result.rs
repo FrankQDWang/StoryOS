@@ -49,8 +49,20 @@ pub(crate) async fn open_continuation(
         decision_id,
         attempt_id,
         &payload,
+        &payload,
     )
     .await?;
+    open_next_step(client, claim, run).await
+}
+
+/// Commits gates one to six of the next Context Assembly and makes it the active RunStep. A
+/// successor Decision calls this directly: its Attempt already holds the produced binding of its
+/// function request, so the next RunStep continues the successor response (ADR 0088).
+pub(crate) async fn open_next_step(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<WorkPhase, CompleteAgentRunError> {
     let retained = run
         .disclosure_request
         .as_ref()

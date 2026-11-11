@@ -92,17 +92,20 @@ pub(crate) fn encode_produced_binding(
 }
 
 /// Gives the selected Decision `decision_id` of `attempt_id` its Model Continuation Binding, so
-/// that a later request of the Conversation can continue its response (ADR 0033).
+/// that a later request of the Conversation can continue its response (ADR 0033). The wire
+/// admission of `wire_payload` names the binding: a successor Attempt sends the request of its
+/// predecessor, so it uses the wire admission of the predecessor (ADR 0088).
 pub(crate) async fn bind_produced_continuation(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     decision_id: &str,
     attempt_id: &str,
     payload: &serde_json::Value,
+    wire_payload: &serde_json::Value,
 ) -> Result<(), CompleteAgentRunError> {
     let binding = uuid::Uuid::now_v7().to_string();
     let mut next_payload = payload.clone();
-    if let Some(wire) = parse_wire(payload) {
+    if let Some(wire) = parse_wire(wire_payload) {
         next_payload["produced_binding"] =
             encode_produced_binding(&binding, attempt_id, &wire.admission);
     }
@@ -117,7 +120,7 @@ pub(crate) async fn bind_produced_continuation(
                 AND run_id = $3::text::uuid
                 AND decision_id = $5::text::uuid
                 AND continuation_binding_id IS NULL
-                AND attempt_role = 'decision'",
+                AND attempt_role IN ('decision', 'successor')",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -213,7 +216,9 @@ async fn load_prior_binding(
               WHERE attempt.owner_user_id = $1::text::uuid
                 AND attempt.project_id = $2::text::uuid
                 AND attempt.conversation_id = $3::text::uuid
-                AND attempt.attempt_role = 'decision'
+                -- A successor response continues only inside its own Run (ADR 0088).
+                AND (attempt.attempt_role = 'decision'
+                     OR (attempt.attempt_role = 'successor' AND run.run_id = $4::text::uuid))
                 AND attempt.continuation_binding_id IS NOT NULL
                 AND attempt.dispatch_state = 'settled'
                 AND ((run.status = 'completed' AND run.run_id <> $4::text::uuid
