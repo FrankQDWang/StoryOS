@@ -33,7 +33,7 @@ When the outcome stays unknown after the retrieval, the Host permits at most one
 - a budget that covers both Attempts;
 - a persisted fence on the predecessor before the successor starts;
 - a Recovery Decision and fresh disclosure evidence;
-- no unresolved Tool effect. At position 1 or later, the ToolCalls of the Decision settled before the continuation started, so this condition holds by construction.
+- no unresolved Tool effect and no unresolved hosted-operation effect. A later Decision position does not prove this: a ToolCall of an earlier Decision can keep an unknown effect when the continuation starts. The Host checks each ToolCall and each hosted operation of the Run, as ADR 0033 section 5 requires, before it admits the successor.
 
 A Run Cancellation prohibits the successor. The successor sends the same stored `function_call_output` items, from the stored ToolCall results (ADR 0085), after the original `function_call` items, with the same `previous_response_id`. One physical submission is not charged or disclosed twice. The predecessor keeps its unknown usage and its worst-case reservation until evidence settles them.
 
