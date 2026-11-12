@@ -31,6 +31,15 @@ pub(crate) async fn insert_tool_calls(
     owner: &ToolCallOwner<'_>,
     calls: &[ValidatedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
+    // The global row of the Host Tool Registration appears at its first ToolCall.
+    if calls
+        .iter()
+        .any(|call| call.registration_revision == storyos_core::HOST_TOOL_REGISTRATION.revision)
+    {
+        crate::tool_registration::insert_host_registration_row(client)
+            .await
+            .map_err(complete_database_error)?;
+    }
     for (position, call) in (0_i32..).zip(calls) {
         client
             .execute(

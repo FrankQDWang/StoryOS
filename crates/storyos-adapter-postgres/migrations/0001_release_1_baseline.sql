@@ -3657,21 +3657,22 @@ GRANT UPDATE(model_registration_revision) ON TABLE storyos.model_registration_he
 -- Only an active revision changes, and only to quarantined or retired. The quarantine columns are
 -- the Activity record of the quarantine. A tool row joins only the transaction that inserts its
 -- revision, so the tool set of a stored revision does not change.
+-- A Host Tool Registration (ADR 0091) has no server: its server columns are null.
 
 CREATE TABLE storyos.tool_registration_revisions (
     tool_registration_revision uuid NOT NULL,
     registration_kind text NOT NULL,
-    server_url text NOT NULL,
-    server_name text NOT NULL,
-    protocol_revision text NOT NULL,
+    server_url text,
+    server_name text,
+    protocol_revision text,
     adapter_revision text NOT NULL,
     lifecycle text DEFAULT 'active'::text NOT NULL,
     quarantine_differences jsonb,
     quarantined_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT tool_registration_revisions_pkey PRIMARY KEY (tool_registration_revision),
-    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = 'mcp_remote'::text)),
-    CONSTRAINT tool_registration_revisions_identity_check CHECK (char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = ANY (ARRAY['mcp_remote'::text, 'host'::text]))),
+    CONSTRAINT tool_registration_revisions_identity_check CHECK (((registration_kind = 'mcp_remote'::text) = (server_url IS NOT NULL)) AND ((server_url IS NULL) = (server_name IS NULL)) AND ((server_url IS NULL) = (protocol_revision IS NULL)) AND char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
     CONSTRAINT tool_registration_revisions_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'quarantined'::text, 'retired'::text]))),
     CONSTRAINT tool_registration_revisions_quarantine_check CHECK (
         ((quarantine_differences IS NULL) = (quarantined_at IS NULL))

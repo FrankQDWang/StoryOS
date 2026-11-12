@@ -10,6 +10,7 @@ pub struct HostToolRegistration {
     pub id: &'static str,
     pub revision: &'static str,
     pub kind: ToolRegistrationKind,
+    pub adapter_revision: &'static str,
     pub tools: &'static [&'static ToolSpec],
 }
 
@@ -17,6 +18,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     id: "host_tools",
     revision: "018f0000-0000-7001-8000-0000000e0101",
     kind: ToolRegistrationKind::Host,
+    adapter_revision: "storyos.host-tool.v1",
     tools: &[&FINISH_TOOL_SPEC],
 };
 

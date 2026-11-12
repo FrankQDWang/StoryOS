@@ -1,13 +1,18 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, NoContractFaults,
-    complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
+    NoContractFaults, complete_agent_run,
 };
-use storyos_core::{ADVISORY_TEXT, DeploymentDestination, HOST_TOOL_REGISTRATION};
+use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
+use storyos_core::{
+    ADVISORY_TEXT, DeploymentDestination, HOST_TOOL_REGISTRATION, RESEARCH_TOOL_OFFER,
+};
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, queued_run, stores};
+use crate::agent_run_dispatch::tests::{
+    RuntimeClock, admit_run_in, claim_run, queued_run, queued_run_offering, stores,
+};
 
 /// The `tool_result` projection of an empty result (ADR 0085).
 const EMPTY_OUTPUT: &str = r#"<tool_result source="call_finish" state="empty">The tool answered with no entry.</tool_result>"#;
@@ -119,14 +124,20 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn the_public_tool_call_list_does_not_hold_a_host_tool_call() {
+async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research_call() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, run_id) =
-        queued_run(&store, "1e2", DeploymentDestination::HostFakeToolLoop).await;
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let research = Some(&RESEARCH_TOOL_OFFER);
+    let (scope, chapter_id, first) = queued_run_offering(
+        &store,
+        "1e2",
+        DeploymentDestination::HostFakeToolLoop,
+        research,
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), first).await;
     complete_agent_run(
         &store,
         &FakeDestination,
@@ -136,6 +147,77 @@ async fn the_public_tool_call_list_does_not_hold_a_host_tool_call() {
     )
     .await
     .unwrap();
+    let run_id = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "1e3",
+        DeploymentDestination::HostFakeToolLoop,
+        "Search the web: tide tables of 1890",
+        ConversationSelection::New,
+        research,
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+
+    complete_agent_run(
+        &store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
+
+    let facts = run_facts(&admin, &run_id).await;
+    let calls: Vec<Value> = facts["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            json!([
+                call["function_name"],
+                call["state"],
+                call["refusal"],
+                call["attempt"]
+            ])
+        })
+        .collect();
+    assert_eq!(
+        (calls, &facts["steps"][1]["tool_results"], &facts["status"]),
+        (
+            vec![
+                json!([
+                    "web_search",
+                    "refused",
+                    "destination_request_unsupported",
+                    null
+                ]),
+                json!(["finish", "settled", null, null]),
+            ],
+            &json!(["rejected", "empty"]),
+            &json!("completed"),
+        )
+    );
+    let registration = admin
+        .query_one(
+            "SELECT registration_kind, lifecycle, server_url FROM storyos.tool_registration_revisions
+              WHERE tool_registration_revision = $1::text::uuid",
+            &[&HOST_TOOL_REGISTRATION.revision],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            registration.get::<_, &str>(0),
+            registration.get::<_, &str>(1),
+            registration.get::<_, Option<&str>>(2),
+        ),
+        ("host", "active", None)
+    );
+
+    // The public ToolCall list of the request Attempt holds only the research call.
     let request_attempt: String = admin
         .query_one(
             "SELECT model_attempt_id::text FROM storyos.model_attempts
@@ -145,7 +227,6 @@ async fn the_public_tool_call_list_does_not_hold_a_host_tool_call() {
         .await
         .unwrap()
         .get(0);
-
     let record = store
         .read_agent_run(
             &scope,
@@ -155,9 +236,14 @@ async fn the_public_tool_call_list_does_not_hold_a_host_tool_call() {
         .await
         .unwrap()
         .unwrap();
-
-    assert!(matches!(
-        record.decision,
-        AgentRunDecisionInspect::ToolRequest { ref calls, .. } if calls.is_empty()
-    ));
+    let AgentRunDecisionInspect::ToolRequest { calls, .. } = record.decision else {
+        panic!("the request Attempt shows its function request");
+    };
+    assert_eq!(
+        calls,
+        vec![ToolCallInspect::Search {
+            query: "tide tables of 1890".to_owned(),
+            outcome: ToolCallOutcomeInspect::Failed,
+        }]
+    );
 }

@@ -29,7 +29,7 @@ pub(crate) fn plan_create(request: &CreateRequest) -> FakeCreate {
             .iter()
             .any(|tool| tool.spec.operation == ToolOperation::Finish)
     {
-        return finish_call();
+        return finish_call(request);
     }
     let mut planned = plan_message(&request.author_message, request.passage_resolution);
     apply_prose_changes(request, &mut planned);
@@ -86,20 +86,40 @@ fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResoluti
     )
 }
 
-/// The first RunStep of the tool loop profile: one `finish` call and no text.
-fn finish_call() -> FakeCreate {
+/// The first RunStep of the tool loop profile: a `finish` call and no text. An author message
+/// `Search the web: <query>` also asks for one `web_search` call first when the Run exposes it.
+fn finish_call(request: &CreateRequest) -> FakeCreate {
+    let call = |name: &str, arguments: String| NativeStreamItem {
+        item_id: format!("fc_{name}"),
+        call_id: Some(format!("call_{name}")),
+        arguments: Some(arguments),
+        native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
+        name: Some(name.to_owned()),
+        ..evidence_item(
+            StreamItemRole::Tool,
+            StreamItemState::Complete,
+            "host_fake_function_call",
+        )
+    };
+    let search = request
+        .author_message
+        .strip_prefix("Search the web: ")
+        .filter(|_| {
+            request
+                .tool_exposure
+                .tools
+                .iter()
+                .any(|tool| tool.spec.operation == ToolOperation::WebSearch)
+        })
+        .map(|query| {
+            let arguments = serde_json::json!({"query": query, "result_count": null});
+            call("web_search", arguments.to_string())
+        });
     FakeCreate {
-        items: vec![NativeStreamItem {
-            call_id: Some("call_finish".to_owned()),
-            arguments: Some("{}".to_owned()),
-            native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
-            name: Some("finish".to_owned()),
-            ..evidence_item(
-                StreamItemRole::Tool,
-                StreamItemState::Complete,
-                "host_fake_function_call",
-            )
-        }],
+        items: search
+            .into_iter()
+            .chain([call("finish", "{}".to_owned())])
+            .collect(),
         output: None,
     }
 }
