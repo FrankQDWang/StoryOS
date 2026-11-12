@@ -40,6 +40,19 @@ async fn project_facts(admin: &Client, scope: &ProjectScope) -> (Vec<String>, i6
     (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
 }
 
+/// Pauses the queued Runs of the Project, because later HTTP files drain all queued work.
+async fn park_queued_runs(admin: &Client, scope: &ProjectScope) {
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE project_id = $1::text::uuid AND status = 'queued'",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+}
+
 /// The function names of the Step Snapshot of the first decision Attempt of the Run.
 async fn exposed_names(admin: &Client, run_id: &str) -> Value {
     admin
@@ -154,6 +167,7 @@ async fn a_later_run_writes_research_records_only_when_the_offer_changed() {
         .await;
         counts.push(project_facts(&admin, &scope).await.1);
     }
+    park_queued_runs(&admin, &scope).await;
 
     assert_eq!(counts, vec![1, 1, 2, 2]);
 }
@@ -166,7 +180,8 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_an_invalid_req
         .await;
     let (store, admin) = stores().await;
     // A first Project writes the Registration rows that the quarantine changes.
-    research_run(&store, &admin, "6e6", "http://127.0.0.1:9/api/plan/v3").await;
+    let (first, _) = research_run(&store, &admin, "6e6", "http://127.0.0.1:9/api/plan/v3").await;
+    park_queued_runs(&admin, &first).await;
     admin.batch_execute(&quarantine_statement()).await.unwrap();
     let (base, served) = destination(vec![text_and_call_stream(
         "resp_6e7",
