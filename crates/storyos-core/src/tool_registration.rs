@@ -16,12 +16,15 @@ use crate::{ServerArguments, ToolSpec};
 pub enum ToolRegistrationKind {
     /// A remote MCP server over the Streamable HTTP transport.
     McpRemote,
+    /// Built-in implementations that StoryOS executes in its own process (ADR 0091).
+    Host,
 }
 
 impl ToolRegistrationKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::McpRemote => "mcp_remote",
+            Self::Host => "host",
         }
     }
 }

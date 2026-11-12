@@ -31,6 +31,15 @@ pub(crate) async fn insert_tool_calls(
     owner: &ToolCallOwner<'_>,
     calls: &[ValidatedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
+    // The global row of the Host Tool Registration appears at its first ToolCall.
+    if calls
+        .iter()
+        .any(|call| call.registration_revision == storyos_core::HOST_TOOL_REGISTRATION.revision)
+    {
+        crate::tool_registration::insert_host_registration_row(client)
+            .await
+            .map_err(complete_database_error)?;
+    }
     for (position, call) in (0_i32..).zip(calls) {
         client
             .execute(
@@ -125,8 +134,9 @@ pub(crate) async fn unresolved_tool_effect(
     }))
 }
 
-/// Fills the calls of a function request Decision from its ToolCall rows in item order: the
-/// validated arguments and the outcome, and no identifier (ADR 0040).
+/// Fills the calls of a function request Decision from its research ToolCall rows in item order:
+/// the validated arguments and the outcome, and no identifier (ADR 0040). A Host ToolCall is not
+/// in the public list (ADR 0091).
 pub(crate) async fn hydrate_calls(
     client: &tokio_postgres::Client,
     scope: &storyos_application::ProjectScope,
@@ -140,12 +150,13 @@ pub(crate) async fn hydrate_calls(
         .query(
             "SELECT tool_spec_revision, arguments::text, state FROM storyos.tool_calls
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND decision_id = $3::text::uuid
+                AND decision_id = $3::text::uuid AND registration_id <> $4
               ORDER BY call_position",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &decision_id.as_str(),
+                &storyos_core::HOST_TOOL_REGISTRATION.id,
             ],
         )
         .await
@@ -191,6 +202,8 @@ pub(crate) fn call_inspect(
             ToolCallInspect::Search { query, outcome }
         }
         storyos_core::ToolIntake::WebFetch { urls } => ToolCallInspect::PageRead { urls, outcome },
+        // The public list holds only research calls.
+        storyos_core::ToolIntake::Finish => return Err(damaged()),
     })
 }
 

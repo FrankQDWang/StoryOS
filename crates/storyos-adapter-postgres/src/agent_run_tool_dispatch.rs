@@ -42,6 +42,12 @@ impl ToolDispatchStore for PostgresProjectReader {
                     settle_interrupted(client, claim, &row, fence).await?;
                     continue;
                 }
+                if let Some(spec) =
+                    storyos_core::host_tool(&row.registration_revision, &row.spec_revision)
+                {
+                    crate::agent_run_host_tool::execute(client, claim, &row, spec).await?;
+                    continue;
+                }
                 let plan = row.plan()?;
                 let authority = read_authority(client, claim, &row).await?;
                 if let Err(refusal) = authority.admit(&row, &plan) {
