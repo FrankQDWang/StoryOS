@@ -4,8 +4,8 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification and each ticket that must add more than 800 lines.
-- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size.
+- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 800 counted lines only when the lines above the limit are mechanical or generated.
+- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 800 counted lines.
 - **Executor:** one session for each ticket, in its own worktree and branch. It implements the ticket, opens the ticket pull request, runs the checks and the review, and sends the final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. `make review` starts it. The reviewer is never the agent tool that implements the ticket. [Codex review](#codex-review) tells who runs `make review`.
 
@@ -32,6 +32,8 @@ The coordinator uses the `implement-spec` skill for the whole specification. A t
 
 The brief of an executor names the ticket, the integration branch and its tip, the files to read, and the items that earlier tickets gave to this ticket.
 
+The ticket body is the only owner of the acceptance contract of the ticket. Before the coordinator sends a brief, it edits the ticket body with each decision that changes the scope or a criterion. The brief links to the ticket and does not give such a decision again.
+
 ### 3. Read, then claim
 
 The executor reads the current ticket, the current parent, the native dependencies, `AGENTS.md`, [CODING_STANDARDS.md](../../CODING_STANDARDS.md), and the contracts and ADRs that the ticket names. Then it claims the ticket at once. It sends no plan for approval and does not wait for a reply.
@@ -45,16 +47,21 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch. Before the final evidence, merge the current integration tip into the branch.
+- When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator. The coordinator splits the ticket.
 
 ### 5. Open the pull request
 
-Push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. Then run `make check` on the clean head, and put its Check Evidence Line in the body. The GitHub `verify` check runs on each push.
+Push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. Then run `make check` on the clean head, and put its Check Evidence Line in the body. When the ticket or a request requires `make check-full`, run only `make check-full` on the head. Its line is the Check Evidence Line of the head. The GitHub `verify` check runs on each push.
 
 When `make check-full` exits, report its result to the coordinator at once. Send this report before any change to the pull request: a push, a body edit, or a comment.
 
 ### 6. Review
 
+Before round 1, complete each evidence record that an acceptance criterion requires, for example a live request record.
+
 Run the [Codex review](#codex-review). Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
+
+When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round. Then post a new Claim, as [section 3](#3-read-then-claim) requires.
 
 ### 7. Final report
 
@@ -91,7 +98,7 @@ The three tiers of ADR 0070:
 |---|---|---|
 | `make check-fast` | After each edit. The GitHub `verify` check runs it. | about 1 minute after a build |
 | `make check` | On the head of each pull request. It is the default goal. | about 10 minutes |
-| `make check-full` | Only when the ticket or an explicit request requires a complete local run. | about 20 minutes |
+| `make check-full` | Only when the ticket or an explicit request requires a complete local run. Then run it in place of `make check`. | about 20 minutes |
 
 Each tier prints one line at the end:
 
@@ -101,7 +108,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 
 - Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence. A line of `make check-fast` is not.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
-- Copy the line into the pull request body exactly. The reviewer and the coordinator compare its commit with the head of the pull request.
+- Copy the line into the pull request body exactly. The coordinator compares its commit with the head of the pull request. A review round does not need the line.
 - Each new head needs a new line. This includes a merge of the base branch.
 - Start a long tier in the background, and wait for the process to exit. The line is the last output of the tier. A step that passed is not the result of the run.
 
@@ -118,16 +125,16 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 `make review PR=<number>` runs one round on the two axes, Standards and Spec. Before it starts, it requires these conditions:
 
 - The worktree is clean and at the head of the pull request.
-- The pull request body has a Check Evidence Line of `make check` or `make check-full` with `result=PASS` for the head.
+- No line of the pull request body has the word `pending`. The command prints each such line.
 - The GitHub `verify` check of the head passes. The command waits for it, for `WAIT` seconds (default 1200).
 
-Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The request has the base and head commits, the Check Evidence Line, the scoped diff command, the pull request body, and the bodies of the closed issues. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. It changes only the list lines of that section. The command retries GitHub network errors, and it stops the Codex brokers of its own jobs.
+Then it sends the [review prompt](review-prompt.md) and a request to one new read-only Codex thread for each axis. The request has the base and head commits, the Check Evidence Line of the head when the body has one, the scoped diff command, the pull request body, and the bodies of the closed issues. The command posts one verdict comment for each axis, and it adds a link to each verdict in the `## Review verdicts` section of the pull request body. It changes only the list lines of that section. The command retries GitHub network errors, and it stops the Codex brokers of its own jobs.
 
 ### Rounds
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
-- After a failed round, fix each blocking finding, commit, push, run `make check`, put the new line in the body, and run `make review` again.
+- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier, `make check` or `make check-full`, at the same time as a round, or after the round passes. The [merge gate](#merge-gate) still needs a line for the final head.
 - After a passed round, a new round starts only after a change to the diff of the ticket. The command refuses a round when the tree did not change.
 - A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator. The coordinator accepts the merge with this evidence.
 

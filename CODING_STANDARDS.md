@@ -89,6 +89,6 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 
 - Count only the added lines. Deleted lines and mechanical changes, for example a generated artifact, do not count.
 - Keep a change at or below 800 added lines. Keep a complex logic change at or below 500 added lines.
-- A ticket that must add more than 800 lines declares the count and the reason in its body. The author approves it with the breakdown.
+- A ticket that must add more than 800 counted lines is split before dispatch. The author approves a larger ticket only when the lines above the limit are mechanical or generated.
 - The reviewer judges the size. No script reports it.
 - Base the staging suggestion on the actual diff, dependencies, and affected call sites.
