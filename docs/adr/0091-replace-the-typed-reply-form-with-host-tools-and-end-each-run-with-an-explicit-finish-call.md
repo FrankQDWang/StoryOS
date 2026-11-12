@@ -30,8 +30,8 @@ The typed reply form goes. The Agent Decision of a RunStep is one of two things:
 
 A Host Tool is a Tool that StoryOS executes in its own process. It has no external destination, so its ToolCall has no Destination Attempt and no Outbound Disclosure Event. Its ToolCall record, its validation, and its result stay. StoryOS adds three Host Tools:
 
-- **`propose_edit`.** Its arguments are the block changes of one prose change. It runs the validation of the prose change reply (ADR 0061, ADR 0062, ADR 0071) and opens, revises, or grows the Proposal as that reply did. One call is one change set. Its result says that the Proposal waits for the decision of the author.
-- **`submit_research`.** Its arguments are the summary and the cited claims of one research synthesis. It runs the validation of ADR 0087 and records the Research Artifact.
+- **`propose_edit`.** Its arguments are the block changes of one prose change. It runs the validation of the prose change reply (ADR 0061, ADR 0062, ADR 0071) and opens, revises, or grows the Proposal as that reply did. One call is one change set. Its result says that the Proposal waits for the decision of the author. One response accepts one `propose_edit` call, and the Host refuses a second call of the same response.
+- **`submit_research`.** Its arguments are the summary and the cited claims of one research synthesis. It runs the validation of ADR 0087 and records the Research Artifact. One Agent Decision has at most one Research Artifact, as ADR 0087 section 4 says, so the Host refuses a second call of the same response. One Run records at most one Research Artifact: after a call that recorded an Artifact, the Host refuses each later `submit_research` call of that Run.
 - **`finish`.** It has no arguments, and its result is empty. Section 4 gives its rule.
 
 A Host Tool gives the Agent no new authority. A Proposal still changes the manuscript only when the author accepts it.
