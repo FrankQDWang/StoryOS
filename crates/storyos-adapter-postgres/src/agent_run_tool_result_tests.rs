@@ -24,10 +24,14 @@ use crate::set_current_chapter_authority_tests::open_session_request;
 const MODEL_POST: &str = "POST /api/plan/v3/responses HTTP/1.1";
 const V3: &str = "project_writing_assistance_v3";
 const EDITED: &str = "The tide came in at dawn.";
+const SECOND_SEARCH: &str = r#"{"query":"moon phases of 1890","result_count":null}"#;
+const SECOND_RESULT: &str = "The moon was full on the third night of 1890.";
 
 /// The Tool side of one test Run: the result of its one `tools/call`, or no Tool adapter.
 enum ToolSide {
     Result(Value),
+    /// One result for each Tool exchange of the Run, in order.
+    Results(Vec<Value>),
     /// The result, and then an Author Edit of the Chapter of the Run, during the Tool exchange.
     ResultThenEdit(Value),
     NoAdapter,
@@ -116,9 +120,13 @@ fn output(text: &str) -> Value {
 }
 
 fn ok_output(result: &str) -> Value {
-    output(&format!(
-        r#"<tool_result source="call_01" state="ok">{result}</tool_result>"#
-    ))
+    ok_call_output("call_01", result)
+}
+
+fn ok_call_output(call_id: &str, result: &str) -> Value {
+    json!({"type": "function_call_output", "call_id": call_id, "output": format!(
+        r#"<tool_result source="{call_id}" state="ok">{result}</tool_result>"#
+    )})
 }
 
 /// The request lines of a fake destination. A destination that receives fewer requests than
@@ -172,15 +180,19 @@ async fn continue_run(
         .unwrap();
     set_research_tool(&store, &scope, suffix, ToolEnablement::Enabled).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let (result, edit) = match tool {
-        ToolSide::Result(result) => (Some(result), false),
-        ToolSide::ResultThenEdit(result) => (Some(result), true),
+    let (results, edit) = match tool {
+        ToolSide::Result(result) => (Some(vec![result]), false),
+        ToolSide::Results(results) => (Some(results), false),
+        ToolSide::ResultThenEdit(result) => (Some(vec![result]), true),
         ToolSide::NoAdapter => (None, false),
     };
-    let mcp = match result {
-        Some(result) => {
-            let call = reply(/*id*/ 0, result);
-            let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
+    let mcp = match results {
+        Some(results) => {
+            let replies = results
+                .into_iter()
+                .flat_map(|result| mcp_replies(exa_tools(|_| {}), Some(reply(/*id*/ 0, result))))
+                .collect();
+            let (mcp_base, mcp) = destination(replies).await;
             point_mcp(&admin, &scope, &mcp_base).await;
             let hooked = Hooked {
                 admin: &admin,
@@ -295,6 +307,27 @@ async fn source(admin: &Client, run_id: &str, state: &str, kept: Option<u64>) ->
     json!({"tool_call_id": row.get::<_, String>(0), "call_id": "call_01",
            "model_attempt_id": row.get::<_, String>(1), "decision_id": row.get::<_, String>(2),
            "state": state, "trust": "data_only", "kept_result_tokens": kept})
+}
+
+/// The `ok` `tool_result` source of each ToolCall of the Run, in item order.
+async fn ok_sources(admin: &Client, run_id: &str) -> Vec<Value> {
+    admin
+        .query(
+            "SELECT tool_call_id::text, call_id, model_attempt_id::text, decision_id::text
+               FROM storyos.tool_calls WHERE run_id = $1::text::uuid
+              ORDER BY decision_position, call_position",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| {
+            json!({"tool_call_id": row.get::<_, String>(0), "call_id": row.get::<_, String>(1),
+                   "model_attempt_id": row.get::<_, String>(2),
+                   "decision_id": row.get::<_, String>(3),
+                   "state": "ok", "trust": "data_only", "kept_result_tokens": null})
+        })
+        .collect()
 }
 
 /// The function request RunStep of each Run here.
@@ -640,6 +673,79 @@ async fn a_rejected_prior_response_rebuilds_the_full_input_from_the_stored_tool_
             vec![MODEL_POST.to_owned(); 3],
             // The delivery of the rebuilt input starts no second Tool exchange.
             vec![POST.to_owned(); 4],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn calls_of_two_run_steps_reenter_in_item_order_in_incremental_and_full_requests() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let not_found =
+        r#"{"error":{"code":"InvalidParameter.PreviousResponseNotFound","message":"resp_e5d_2"}}"#;
+    let result =
+        |text: &str| json!({"content": [{"type": "text", "text": text}], "isError": false});
+    let (_store, admin, ran) = continue_run(
+        "e5d",
+        0xe5da,
+        ToolSide::Results(vec![result(RESULT), result(SECOND_RESULT)]),
+        |_| {
+            vec![
+                text_and_call_stream(
+                    "resp_e5d_2",
+                    "call_02",
+                    "web_search",
+                    SECOND_SEARCH,
+                    "completed",
+                ),
+                format!(
+                    "HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\n\
+                     content-length: {}\r\nconnection: close\r\n\r\n{not_found}",
+                    not_found.len()
+                ),
+                advisory_stream("resp_e5d_4"),
+            ]
+        },
+        "",
+    )
+    .await;
+    let sources = ok_sources(&admin, &ran.run_id).await;
+    let (first, second) = (
+        ok_call_output("call_01", RESULT),
+        ok_call_output("call_02", SECOND_RESULT),
+    );
+    let step = |position: u64, role: &str, decision: Value, previous: Value, input: Value| {
+        json!({"position": position, "role": role, "decision": decision,
+               "previous_response_id": previous, "input": input,
+               "cause": "tool_result_continuation",
+               "tool_results": sources[..usize::try_from(position).unwrap()],
+               "grant_scope": V3})
+    };
+
+    assert_eq!(
+        (run_facts(&admin, &ran.run_id).await, ran.model, ran.mcp),
+        (
+            json!({"status": "completed", "settlement": null, "position": 2, "steps": [
+                request_step(),
+                step(1, "decision", json!("tool_request"), json!("resp_e5d"),
+                     json!([first])),
+                step(2, "rejected_create", Value::Null, json!("resp_e5d_2"),
+                     json!([second])),
+                step(2, "decision", json!("advisory"), Value::Null, json!([
+                    {"role": "user"},
+                    {"type": "function_call", "call_id": "call_01", "name": "web_search",
+                     "arguments": SEARCH},
+                    {"type": "function_call", "call_id": "call_02", "name": "web_search",
+                     "arguments": SECOND_SEARCH},
+                    first,
+                    second,
+                ])),
+            ]}),
+            vec![MODEL_POST.to_owned(); 4],
+            // One MCP session for each ToolCall; the rebuilt input starts no third exchange.
+            vec![POST.to_owned(); 8],
         )
     );
 }
