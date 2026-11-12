@@ -1,17 +1,15 @@
 use storyos_application::{
     AcceptProposalInput, CreateChapterInput, CreateVolumeInput, DeleteChapterInput,
     DeleteVolumeInput, RejectProposalOperationsInput, ReopenWithdrawnProposalInput,
-    SetCurrentChapterInput, SetProjectToolEnablementInput, UpdateChapterInput,
-    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, WithdrawProposalInput,
+    SetCurrentChapterInput, UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateVolumeInput, WithdrawProposalInput,
 };
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
 };
 use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGenerationInput};
 use storyos_contracts::CommandKind;
-use storyos_core::{
-    AssistanceAvailability, CreateChapterPlacement, RESEARCH_TOOL_OFFER, ToolEnablement,
-};
+use storyos_core::{AssistanceAvailability, CreateChapterPlacement};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -22,8 +20,8 @@ use super::agent_run::{
     create_agent_run_call, park_run, pause_agent_run, seed_run,
 };
 use super::project_session::{
-    SET_PROJECT_TOOL_ENABLEMENT, TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT,
-    UPDATE_PROJECT_ASSISTANCE, take_over_project_writer, take_over_project_writer_call,
+    TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE, take_over_project_writer,
+    take_over_project_writer_call,
 };
 use super::proposal_decision::{
     REJECT_PROPOSAL_OPERATIONS, REOPEN_REJECTED_OPERATIONS, REOPEN_WITHDRAWN_PROPOSAL,
@@ -268,33 +266,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         )
         .await;
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
-    }
-
-    let scope = seed_project(&store, "b580").await;
-    for (suffix, registration_id) in [
-        (0xb581, "web_research"),
-        (0xb582, "web_research"),
-        (0xb583, "other_research"),
-    ] {
-        let input = SetProjectToolEnablementInput {
-            registration_id: registration_id.to_owned(),
-            requested: ToolEnablement::Enabled,
-            offer: Some(&RESEARCH_TOOL_OFFER),
-        };
-        let call = issued(&store, &scope, suffix, &SET_PROJECT_TOOL_ENABLEMENT, input).await;
-        let outcome = replayed_outcome(
-            &store,
-            &admin,
-            &call,
-            async |store: &PostgresProjectReader,
-                   call: &CommandCall<SetProjectToolEnablementInput>| {
-                store
-                    .set_project_tool_enablement(&call.envelope, &call.input)
-                    .await
-            },
-        )
-        .await;
-        observed.push((SET_PROJECT_TOOL_ENABLEMENT.kind, outcome));
     }
 
     let call = take_over_project_writer_call(&store, /*base*/ 0x5da0).await;
@@ -654,9 +625,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             (CommandKind::UpdateProjectAssistance, no_effect),
             (CommandKind::UpdateProjectAssistance, conflicted),
             (CommandKind::UpdateProjectAssistance, activity_applied),
-            (CommandKind::SetProjectToolEnablement, activity_applied),
-            (CommandKind::SetProjectToolEnablement, no_effect),
-            (CommandKind::SetProjectToolEnablement, refused),
             (CommandKind::TakeOverProjectWriter, writer_takeover),
             (CommandKind::ReopenWithdrawnProposal, proposal_revised),
             (CommandKind::ReopenWithdrawnProposal, no_effect),

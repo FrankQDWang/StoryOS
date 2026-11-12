@@ -15,7 +15,7 @@ use tokio_postgres::Client;
 use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_retrieval::tests::{
-    AfterExchange, adapter, broken_stream, destination, real_run, stored,
+    AfterExchange, adapter, broken_stream, destination, real_run, research_run, stored,
 };
 use crate::agent_run_tool_exposure::tests::function_call_stream;
 
@@ -295,27 +295,20 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
         stored("resp_e32", "in_progress"),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "e32", &base).await;
-    crate::agent_run_tool_call::tests::set_research_tool(
-        &store,
-        &scope,
-        0xe32a,
-        storyos_core::ToolEnablement::Enabled,
-    )
-    .await;
+    let (scope, run_id) = research_run(&store, &admin, "e32", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    // The author disables the research Tool after the successor request was prepared.
-    let route = crate::agent_run_tool_exposure::tests::DisableBeforeClaim {
-        store: &store,
-        scope: &scope,
-        suffix: 0xe32b,
+    // A Tool Contract Drift quarantines the research revision after the successor request was
+    // prepared.
+    let route = crate::agent_run_tool_exposure::tests::QuarantineBeforeClaim {
+        admin: &admin,
         successor: true,
-        disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
+        quarantined: std::sync::atomic::AtomicBool::new(/*v*/ false),
         prepared: Mutex::new(Vec::new()),
     };
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
+    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
     let facts = successor_facts(&admin, &run_id).await;
     let declared: Vec<bool> = route
         .prepared

@@ -33,6 +33,7 @@ async fn compact_after_first_run(
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
+        None,
     )
     .await;
     admin
@@ -231,6 +232,7 @@ async fn compact_on_agent_plan(
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
+        None,
     )
     .await;
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
@@ -433,6 +435,7 @@ async fn compact_with_change(
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
+        None,
     )
     .await;
     let adapter = ChangingFake {

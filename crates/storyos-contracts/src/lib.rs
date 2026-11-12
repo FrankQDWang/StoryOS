@@ -26,7 +26,6 @@ mod release1_project_activity;
 mod release1_project_assistance;
 mod release1_project_export;
 mod release1_project_export_query;
-mod release1_project_tool_enablement;
 mod release1_proposal;
 mod release1_proposal_generation_decision;
 mod release1_readable_export;
@@ -202,14 +201,6 @@ pub use release1_project_export::{
 pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
-};
-pub use release1_project_tool_enablement::{
-    ProjectResearchTool, SET_PROJECT_TOOL_ENABLEMENT_DIGEST_PROFILE,
-    SET_PROJECT_TOOL_ENABLEMENT_METHOD, SET_PROJECT_TOOL_ENABLEMENT_PATH,
-    SET_PROJECT_TOOL_ENABLEMENT_REQUEST_SCHEMA_ID, SET_PROJECT_TOOL_ENABLEMENT_RESPONSE_SCHEMA_ID,
-    SetProjectToolEnablementEffect, SetProjectToolEnablementInput,
-    SetProjectToolEnablementNoEffectReason, SetProjectToolEnablementRefusalReason,
-    SetProjectToolEnablementRequest, SetProjectToolEnablementResponse,
 };
 pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,

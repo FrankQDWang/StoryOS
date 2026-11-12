@@ -59,6 +59,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         conversation_id: Uuid::now_v7().to_string(),
         project_agent_id: Uuid::now_v7().to_string(),
         destination: Some(storyos_core::DeploymentDestination::HostFake),
+        research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
     }
 }
 

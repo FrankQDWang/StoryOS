@@ -43,7 +43,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                     continue;
                 }
                 let plan = row.plan()?;
-                let authority = read_authority(client, claim, &row, &plan).await?;
+                let authority = read_authority(client, claim, &row).await?;
                 if let Err(refusal) = authority.admit(&row, &plan) {
                     refuse(client, claim, &row, refusal.state(), refusal.code()).await?;
                     continue;
@@ -95,7 +95,7 @@ impl ToolDispatchStore for PostgresProjectReader {
                 return Ok(None);
             }
             let plan = row.plan()?;
-            let authority = read_authority(client, claim, &row, &plan).await?;
+            let authority = read_authority(client, claim, &row).await?;
             if let Err(refusal) = authority.admit(&row, &plan) {
                 refuse(client, claim, &row, refusal.state(), refusal.code()).await?;
                 return Ok(None);

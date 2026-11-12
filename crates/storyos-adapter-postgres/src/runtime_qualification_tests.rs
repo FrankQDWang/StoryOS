@@ -259,6 +259,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         ConversationSelection::Existing {
             conversation_id: conversation_id.clone(),
         },
+        None,
     )
     .await;
     settle(&store, &admin, &scope, &next, &advisory).await;
@@ -284,6 +285,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         authorized(),
         "Help once more.",
         ConversationSelection::Existing { conversation_id },
+        None,
     )
     .await;
     settle(&store, &admin, &scope, &upgraded, &advisory).await;
@@ -676,6 +678,7 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
         ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006ea96".to_owned(),
         },
+        None,
     )
     .await;
     let adapter = ReferenceChangingAgentPlan {

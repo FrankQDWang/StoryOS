@@ -68,8 +68,6 @@ impl ExposureSnapshot {
 pub struct CurrentToolAuthority {
     pub registration_id: String,
     pub registration_revision: String,
-    /// Whether the latest Project Tool Enablement of the Registration enables it.
-    pub enabled: bool,
     /// The current lifecycle of the pinned revision.
     pub lifecycle: ToolRegistrationLifecycle,
 }
@@ -131,10 +129,6 @@ pub enum ToolCallBatchRefusal {
     Unexposed {
         call_id: String,
     },
-    /// The Project does not enable the Registration of the name now.
-    NotEnabled {
-        call_id: String,
-    },
     /// The pinned revision of the Registration is not active now.
     RegistrationUnavailable {
         call_id: String,
@@ -165,7 +159,6 @@ impl ToolCallBatchRefusal {
             Self::Incomplete { .. } => "incomplete_arguments",
             Self::InvalidCallId { .. } => "invalid_call_id",
             Self::Unexposed { .. } => "unexposed_name",
-            Self::NotEnabled { .. } => "tool_not_enabled",
             Self::RegistrationUnavailable { .. } => "tool_registration_unavailable",
             Self::UnknownSpec { .. } => "unknown_spec",
             Self::Malformed { .. } => "malformed_arguments",
@@ -270,15 +263,12 @@ fn validate_member(
     let Some(exposed) = exposure.tools.iter().find(|tool| tool.name == name) else {
         return Err(ToolCallBatchRefusal::Unexposed { call_id });
     };
-    // A pinned revision without a current authority record is not enabled now.
-    let Some(authority) = current.iter().find(|authority| {
+    let admitted = current.iter().any(|authority| {
         authority.registration_id == exposed.registration_id
             && authority.registration_revision == exposed.registration_revision
-            && authority.enabled
-    }) else {
-        return Err(ToolCallBatchRefusal::NotEnabled { call_id });
-    };
-    if authority.lifecycle.admit_new_tool_call().is_err() {
+            && authority.lifecycle.admit_new_tool_call().is_ok()
+    });
+    if !admitted {
         return Err(ToolCallBatchRefusal::RegistrationUnavailable { call_id });
     }
     let Some(spec) = crate::tool_spec(&exposed.spec_revision)

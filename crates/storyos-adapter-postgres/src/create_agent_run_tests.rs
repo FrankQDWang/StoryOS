@@ -80,6 +80,7 @@ fn run_command(
             conversation_id: conversation_id.to_owned(),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
             destination: Some(storyos_core::DeploymentDestination::HostFake),
+            research: None,
         },
     )
 }

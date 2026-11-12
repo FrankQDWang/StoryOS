@@ -1,13 +1,13 @@
 //! The current authority of one ToolCall and the row writes of its resolution (ADR 0034,
-//! ADR 0084). The Worker reads the authority again in each transaction that can dispatch: the
-//! latest Project Tool Enablement of the Registration, its compatibility Decision, the use binding
-//! with its Credential Reference and grant, the evidence endpoint, and the revision lifecycle.
+//! ADR 0084, ADR 0090). The Worker reads the authority again in each transaction that can
+//! dispatch: the current research compatibility Decision of the Project, the use binding with its
+//! Credential Reference and grant, the evidence endpoint, and the revision lifecycle.
 
 use serde_json::{Value, json};
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
     ContractDifference, GrantScope, ToolCallPlan, ToolCallState, ToolCompatibilityDecision,
-    ToolDispatchFacts, ToolDispatchRefusal, ToolEnablement, ToolRegistrationLifecycle,
+    ToolDispatchFacts, ToolDispatchRefusal, ToolRegistrationLifecycle,
 };
 use uuid::Uuid;
 
@@ -113,7 +113,6 @@ pub(crate) async fn locked(
 
 /// The current authority of the Registration of one ToolCall.
 pub(crate) struct ToolAuthority {
-    enablement: Option<ToolEnablement>,
     compatibility: Option<ToolCompatibilityDecision>,
     pinned_revision: Option<String>,
     pub credential_reference: Option<String>,
@@ -123,7 +122,7 @@ pub(crate) struct ToolAuthority {
     run_grant_names_tool: bool,
     pub endpoint: Option<String>,
     lifecycle: ToolRegistrationLifecycle,
-    /// The exact enablement, compatibility Decision, external-use binding, Processing
+    /// The exact research compatibility Decision, external-use binding, Processing
     /// Destination Identity, evidence revision, and grant that this authority comes from.
     pub evidence: Value,
 }
@@ -135,7 +134,6 @@ impl ToolAuthority {
             same_scope: self.same_scope,
             run_grant_names_tool: self.run_grant_names_tool,
             lifecycle: self.lifecycle,
-            enablement: self.enablement,
             compatibility: self.compatibility,
             binding_pins_revision: self.pinned_revision.as_deref()
                 == Some(row.registration_revision.as_str()),
@@ -146,17 +144,16 @@ impl ToolAuthority {
     }
 }
 
-/// Reads the authority of `plan` in the transaction of the caller. A revision without a lifecycle
-/// row is the active constant, because the row appears at the first enablement.
+/// Reads the authority of the ToolCall `row` in the transaction of the caller. A revision without
+/// a lifecycle row is the active constant, because the row appears at the first binding.
 pub(crate) async fn read_authority(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
-    plan: &ToolCallPlan,
 ) -> Result<ToolAuthority, CompleteAgentRunError> {
     let row = client
         .query_one(
-            "SELECT enablement.enablement, decision.decision_kind,
+            "SELECT decision.decision_kind,
                     binding.tool_registration_revision::text, binding.credential_reference,
                     grant_row.grant_scope, grant_row.grant_id::text,
                     COALESCE(grant_row.grant_kind = 'research_tool_use'
@@ -164,11 +161,10 @@ pub(crate) async fn read_authority(
                           binding.processing_destination_identity, false),
                     evidence.endpoint,
                     (SELECT lifecycle FROM storyos.tool_registration_revisions
-                      WHERE tool_registration_revision = $4::text::uuid),
+                      WHERE tool_registration_revision = $3::text::uuid),
                     jsonb_build_object(
-                      'enablement_revision', enablement.enablement_revision,
                       'external_compatibility_decision',
-                      enablement.external_compatibility_decision,
+                      decision.external_compatibility_decision,
                       'project_model_use_binding_revision',
                       binding.project_model_use_binding_revision,
                       'processing_destination_identity', binding.processing_destination_identity,
@@ -186,22 +182,17 @@ pub(crate) async fn read_authority(
                               ELSE '[]'::jsonb END) AS tool
                        WHERE call.owner_user_id = $1::text::uuid
                          AND call.project_id = $2::text::uuid
-                         AND call.tool_call_id = $5::text::uuid
+                         AND call.tool_call_id = $4::text::uuid
                          AND tool ->> 'name' = call.function_name
                          AND tool ->> 'registration_id' = call.registration_id
                          AND tool ->> 'registration_revision' = call.tool_registration_revision::text
                          AND tool ->> 'spec_revision' = call.tool_spec_revision)
                FROM (SELECT 1) AS one
                LEFT JOIN LATERAL (
-                 SELECT * FROM storyos.project_tool_enablements
+                 SELECT * FROM storyos.external_contract_compatibility_decisions
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND registration_id = $3
-                  ORDER BY enablement_revision DESC LIMIT 1) AS enablement ON true
-               LEFT JOIN storyos.external_contract_compatibility_decisions AS decision
-                 ON (decision.owner_user_id, decision.project_id,
-                     decision.external_compatibility_decision) =
-                    (enablement.owner_user_id, enablement.project_id,
-                     enablement.external_compatibility_decision)
+                    AND decision_kind = 'tool_registration_compatible'
+                  ORDER BY external_compatibility_decision DESC LIMIT 1) AS decision ON true
                LEFT JOIN storyos.project_external_use_binding_revisions AS binding
                  ON (binding.owner_user_id, binding.project_id,
                      binding.project_model_use_binding_revision) =
@@ -218,36 +209,32 @@ pub(crate) async fn read_authority(
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
-                &plan.registration.id,
                 &row.registration_revision,
                 &row.tool_call_id,
             ],
         )
         .await
         .map_err(complete_database_error)?;
-    let lifecycle = match row.get::<_, Option<&str>>(/*idx*/ 8) {
+    let lifecycle = match row.get::<_, Option<&str>>(/*idx*/ 7) {
         None => ToolRegistrationLifecycle::Active,
         Some(lifecycle) => ToolRegistrationLifecycle::parse(lifecycle)
             .ok_or_else(|| damaged("Tool Registration is damaged"))?,
     };
     Ok(ToolAuthority {
-        enablement: row
-            .get::<_, Option<&str>>(/*idx*/ 0)
-            .and_then(ToolEnablement::parse),
         compatibility: row
-            .get::<_, Option<&str>>(/*idx*/ 1)
+            .get::<_, Option<&str>>(/*idx*/ 0)
             .and_then(ToolCompatibilityDecision::parse),
-        pinned_revision: row.get(/*idx*/ 2),
-        credential_reference: row.get(/*idx*/ 3),
+        pinned_revision: row.get(/*idx*/ 1),
+        credential_reference: row.get(/*idx*/ 2),
         grant_scope: row
-            .get::<_, Option<&str>>(/*idx*/ 4)
+            .get::<_, Option<&str>>(/*idx*/ 3)
             .and_then(GrantScope::parse),
-        grant_id: row.get(/*idx*/ 5),
-        same_scope: row.get(/*idx*/ 6),
-        endpoint: row.get(/*idx*/ 7),
+        grant_id: row.get(/*idx*/ 4),
+        same_scope: row.get(/*idx*/ 5),
+        endpoint: row.get(/*idx*/ 6),
         lifecycle,
-        run_grant_names_tool: row.get(/*idx*/ 10),
-        evidence: serde_json::from_str(row.get(/*idx*/ 9))
+        run_grant_names_tool: row.get(/*idx*/ 9),
+        evidence: serde_json::from_str(row.get(/*idx*/ 8))
             .map_err(|_| damaged("Tool authority evidence is damaged"))?,
     })
 }

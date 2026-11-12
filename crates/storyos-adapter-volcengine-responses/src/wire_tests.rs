@@ -207,7 +207,7 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
 /// The Exposure of the research Tool Registration on the current Agent Plan Registration.
 pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
     storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
-        enabled: &[storyos_core::EnabledTool {
+        bound: &[storyos_core::BoundTool {
             registration_revision: storyos_core::EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: storyos_core::ToolRegistrationLifecycle::Active,
             compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),

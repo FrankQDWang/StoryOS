@@ -526,7 +526,7 @@ fn every_registered_operation_matches_its_generated_wire() {
     assert_outcome_documents(&generated);
     assert_activity_frame_documents(&generated);
     assert_takeover_documents(&generated);
-    assert_research_tool_documents(&generated);
+    assert_project_assistance_documents(&generated);
     assert_receipt_sequence_documents(&generated);
 }
 
@@ -669,7 +669,7 @@ fn assert_activity_frame_documents(generated: &GeneratedFiles) {
     }
 }
 
-fn assert_research_tool_documents(generated: &GeneratedFiles) {
+fn assert_project_assistance_documents(generated: &GeneratedFiles) {
     let assistance = generated_validator(generated, "project-assistance-response.schema.json");
     let bound = golden_wire(generated, "getProjectAssistance");
     let unbound = with_value(&bound, "/assistance", serde_json::Value::Null);
@@ -684,21 +684,9 @@ fn assert_research_tool_documents(generated: &GeneratedFiles) {
             "/assistance/processing_destination_identity",
             serde_json::json!("not-a-uuid"),
         ),
-        with_value(&unbound, "/research_tool", serde_json::json!("exa")),
     ] {
         assert!(!assistance.is_valid(&invalid), "{invalid}");
     }
-    let enablement = generated_validator(
-        generated,
-        "set-project-tool-enablement-response.schema.json",
-    );
-    let applied = golden_wire(generated, "setProjectToolEnablement");
-    assert!(enablement.is_valid(&applied));
-    assert!(!enablement.is_valid(&with_value(
-        &applied,
-        "/effect/revision",
-        serde_json::json!("01")
-    )));
 }
 
 /// Each response whose fixture has a Receipt with no Author Action accepts a null sequence and a
@@ -737,7 +725,6 @@ fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
             "delete-volume",
             "pause-agent-run",
             "set-current-chapter",
-            "set-project-tool-enablement",
             "steer-agent-run",
             "take-over-project-writer",
             "update-chapter",

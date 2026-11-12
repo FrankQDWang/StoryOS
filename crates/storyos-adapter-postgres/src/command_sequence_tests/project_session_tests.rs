@@ -1,11 +1,8 @@
 use storyos_application::EditorSessionId;
-use storyos_application::{
-    ProjectCommandError, SetProjectToolEnablementInput, UpdateProjectAssistanceInput,
-    UpdateProjectInput,
-};
+use storyos_application::{ProjectCommandError, UpdateProjectAssistanceInput, UpdateProjectInput};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_contracts::CommandKind;
-use storyos_core::{AssistanceAvailability, RESEARCH_TOOL_OFFER, ToolEnablement};
+use storyos_core::AssistanceAvailability;
 
 use crate::PostgresProjectReader;
 use crate::set_current_chapter_authority_tests::open_session;
@@ -29,13 +26,6 @@ pub(crate) const UPDATE_PROJECT_ASSISTANCE: Route = Route {
     method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
     path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
-};
-
-pub(crate) const SET_PROJECT_TOOL_ENABLEMENT: Route = Route {
-    kind: CommandKind::SetProjectToolEnablement,
-    method: storyos_contracts::SET_PROJECT_TOOL_ENABLEMENT_METHOD,
-    path: storyos_contracts::SET_PROJECT_TOOL_ENABLEMENT_PATH,
-    schema: storyos_contracts::SET_PROJECT_TOOL_ENABLEMENT_REQUEST_SCHEMA_ID,
 };
 
 pub(crate) const TAKE_OVER_PROJECT_WRITER: Route = Route {
@@ -79,20 +69,6 @@ pub(super) async fn update_project_assistance_call(
         destination: Some(storyos_core::DeploymentDestination::HostFake),
     };
     issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
-}
-
-/// One applicable first enablement of the research Registration in a new Project.
-pub(super) async fn set_project_tool_enablement_call(
-    store: &PostgresProjectReader,
-    base: u16,
-) -> CommandCall<SetProjectToolEnablementInput> {
-    let scope = seed_project(store, &format!("{base:04x}")).await;
-    let input = SetProjectToolEnablementInput {
-        registration_id: "web_research".to_owned(),
-        requested: ToolEnablement::Enabled,
-        offer: Some(&RESEARCH_TOOL_OFFER),
-    };
-    issued(store, &scope, base + 9, &SET_PROJECT_TOOL_ENABLEMENT, input).await
 }
 
 /// One applicable Update Project in a new Project.

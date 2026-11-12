@@ -18,6 +18,7 @@ use crate::command_sequence::{
     CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand,
     ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command, unavailable,
 };
+use crate::project_research_binding::{ResearchPlan, insert_research_binding, research_plan};
 use crate::update_project_assistance::read_assistance_record;
 
 use super::*;
@@ -96,7 +97,7 @@ impl ProjectCommand for CreateAgentRunInput {
     type Error = CreateAgentRunCommandError;
     type Profile = ActivityOnly;
     type Applied = ();
-    type Plan = AssistancePlan;
+    type Plan = (AssistancePlan, ResearchPlan);
     type Settlement = CreateAgentRunSettlement;
 
     async fn classify(
@@ -153,8 +154,9 @@ impl ProjectCommand for CreateAgentRunInput {
                 destination,
             },
         };
+        let research = research_plan(client, scope, self.research).await?;
         Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), assistance)),
+            outcome: outcome.map_applied(|()| ((), (assistance, research))),
             admission: Admission::Project(ProjectActionClass::AgentRunStart),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
@@ -167,9 +169,14 @@ impl ProjectCommand for CreateAgentRunInput {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _sequences: &ActivitySequences,
-        assistance: AssistancePlan,
+        (assistance, research): (AssistancePlan, ResearchPlan),
         _applied: (),
     ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
+        if let ResearchPlan::Bind(offer) = research {
+            insert_research_binding(client, envelope, offer)
+                .await
+                .map_err(unavailable)?;
+        }
         let assistance = match assistance {
             AssistancePlan::Current(record) => record,
             AssistancePlan::Bind {

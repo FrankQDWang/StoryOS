@@ -148,6 +148,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006b4b6".to_owned(),
         },
+        None,
     )
     .await;
     authorize_tool_probes(&admin, &scope, &output).await;
@@ -213,6 +214,7 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
             ConversationSelection::Existing {
                 conversation_id: "018f0000-0000-7001-8000-00000006b4b6".to_owned(),
             },
+            None,
         )
         .await;
         authorize_tool_probes(&admin, &scope, &run).await;
