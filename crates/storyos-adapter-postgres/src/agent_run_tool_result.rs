@@ -209,33 +209,49 @@ pub(crate) async fn tool_outputs(
         .selected
         .iter()
         .filter(|item| item.source_class == ContextSourceClass::ToolResult);
+    let pairs: Vec<_> = sources.iter().zip(selected).collect();
+    if pairs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (tool_call_ids, call_ids): (Vec<&str>, Vec<&str>) = pairs
+        .iter()
+        .map(|(source, _)| (source.tool_call_id.as_str(), source.call_id.as_str()))
+        .unzip();
+    let mut stored: std::collections::BTreeMap<i64, tokio_postgres::Row> = client
+        .query(
+            "SELECT input.ordinal, call.function_name, call.arguments::text
+               FROM unnest($4::text[], $5::text[]) WITH ORDINALITY
+                    AS input(tool_call_id, call_id, ordinal)
+               JOIN storyos.tool_calls AS call
+                 ON call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
+                AND call.run_id = $3::text::uuid AND call.tool_call_id = input.tool_call_id::uuid
+                AND call.call_id = input.call_id",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &tool_call_ids,
+                &call_ids,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .into_iter()
+        .map(|row| (row.get(/*idx*/ 0), row))
+        .collect();
     let mut outputs = Vec::new();
-    for (source, item) in sources.iter().zip(selected) {
+    for (ordinal, (source, item)) in (1_i64..).zip(pairs) {
         if item.source_version != source.source_version() {
             return Err(damaged("The tool_result Context item is damaged"));
         }
-        let row = client
-            .query_opt(
-                "SELECT function_name, arguments::text FROM storyos.tool_calls
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid AND tool_call_id = $4::text::uuid
-                    AND call_id = $5",
-                &[
-                    &claim.project_scope.owner_user_id.as_ref(),
-                    &claim.project_scope.project_id.as_ref(),
-                    &claim.run_id,
-                    &source.tool_call_id,
-                    &source.call_id,
-                ],
-            )
-            .await
-            .map_err(complete_database_error)?
+        let row = stored
+            .remove(&ordinal)
             .ok_or_else(|| damaged("The ToolCall of a tool_result is missing"))?;
-        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 1))
+        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 2))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         outputs.push(ToolOutput {
             call_id: source.call_id.clone(),
-            name: row.get(/*idx*/ 0),
+            name: row.get(/*idx*/ 1),
             arguments: storyos_core::canonical_json(&arguments),
             output: item.content.clone(),
             origin: if Some(source.decision_id.as_str()) == last_decision {

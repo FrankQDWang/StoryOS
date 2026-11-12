@@ -527,6 +527,7 @@ fn every_registered_operation_matches_its_generated_wire() {
     assert_activity_frame_documents(&generated);
     assert_takeover_documents(&generated);
     assert_research_tool_documents(&generated);
+    assert_receipt_sequence_documents(&generated);
 }
 
 type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
@@ -698,6 +699,54 @@ fn assert_research_tool_documents(generated: &GeneratedFiles) {
         "/effect/revision",
         serde_json::json!("01")
     )));
+}
+
+/// Each response whose fixture has a Receipt with no Author Action accepts a null sequence and a
+/// canonical sequence, and refuses a sequence that is not canonical.
+fn assert_receipt_sequence_documents(generated: &GeneratedFiles) {
+    let pointer = "/receipt/author_action_sequence";
+    let mut checked = Vec::new();
+    for (path, bytes) in generated {
+        let Some(name) = path
+            .strip_prefix("generated/golden-wire/storyos-public-release-1/")
+            .and_then(|file| file.strip_suffix(".json"))
+        else {
+            continue;
+        };
+        let without_action: serde_json::Value =
+            serde_json::from_slice(bytes).expect("golden-wire fixture must be JSON");
+        if without_action.pointer(pointer) != Some(&serde_json::Value::Null) {
+            continue;
+        }
+        let response = generated_validator(generated, &format!("{name}-response.schema.json"));
+        let with_sequence =
+            |sequence| with_value(&without_action, pointer, serde_json::json!(sequence));
+        assert!(response.is_valid(&without_action), "{name}");
+        assert!(response.is_valid(&with_sequence("1")), "{name}");
+        assert!(!response.is_valid(&with_sequence("01")), "{name}");
+        checked.push(name);
+    }
+    assert_eq!(
+        checked,
+        [
+            "cancel-agent-run",
+            "create-chapter",
+            "create-project",
+            "create-volume",
+            "delete-chapter",
+            "delete-volume",
+            "pause-agent-run",
+            "set-current-chapter",
+            "set-project-tool-enablement",
+            "steer-agent-run",
+            "take-over-project-writer",
+            "update-chapter",
+            // The sort order of the fixture paths puts this file before `update-project.json`.
+            "update-project-assistance",
+            "update-project",
+            "update-volume",
+        ]
+    );
 }
 
 fn assert_takeover_documents(generated: &GeneratedFiles) {

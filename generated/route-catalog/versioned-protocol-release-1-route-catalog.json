@@ -2738,7 +2738,7 @@
       "idempotency": "none",
       "kind": "query",
       "method": "GET",
-      "notes": "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation/hosted-operation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.",
+      "notes": "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.",
       "operation_id": "getAgentRun",
       "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}",
       "preconditions": [

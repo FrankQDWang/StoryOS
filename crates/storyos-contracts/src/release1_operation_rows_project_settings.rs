@@ -27,6 +27,7 @@ use crate::release1_update_project::{
     UPDATE_PROJECT, UpdateProjectConflictReason, UpdateProjectEffect, UpdateProjectInput,
     UpdateProjectNoEffectReason, UpdateProjectRequest, UpdateProjectResponse,
 };
+use crate::release1_wire::U64_WIRE;
 
 pub(super) const UPDATE_PROJECT_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -392,6 +393,10 @@ const UPDATE_PROJECT_RESPONSE: &[Patch] = &[
             "/properties/correlation_id",
         ],
     ),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &["/$defs/DomainReceipt/properties/author_action_sequence"],
+    ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
 
@@ -456,6 +461,10 @@ const UPDATE_PROJECT_ASSISTANCE_RESPONSE: &[Patch] = &[
             "/$defs/ProjectAssistanceBinding/properties/revision",
         ],
     ),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &["/$defs/DomainReceipt/properties/author_action_sequence"],
+    ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
 
@@ -483,4 +492,8 @@ const SET_CURRENT_CHAPTER_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &["/$defs/DomainReceipt/properties/author_action_sequence"],
+    ),
 ];

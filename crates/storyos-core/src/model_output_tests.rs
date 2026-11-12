@@ -232,3 +232,66 @@ fn a_growth_changes_the_candidate_and_one_adjacent_run_of_joinable_blocks() {
         [true, true, true, true, false, false, false, false, false]
     );
 }
+
+#[test]
+fn a_decision_text_with_u0000_makes_no_decision_and_other_control_characters_stay() {
+    let declared = [declared("block-1", DeclaredTargetKind::ChapterBlock)];
+    let decide = |output: &ModelOutput| {
+        validate_agent_decision(
+            Some(output),
+            &declared,
+            &CitableSources::default(),
+            ToolCallBatch::none(),
+        )
+    };
+    let with_candidate = |candidate: DecisionCandidate| ModelOutput {
+        phase: OutputPhase::FinalAnswer,
+        candidate,
+        prose_changes: None,
+    };
+    let with_change = |edit: fn(&mut ProseChangeCandidate)| {
+        let mut output = prose_change("block-1");
+        output
+            .prose_changes
+            .as_mut()
+            .unwrap()
+            .iter_mut()
+            .for_each(edit);
+        output
+    };
+    let with_nul = [
+        with_candidate(DecisionCandidate::Advisory {
+            text: "Keep\0it.".to_owned(),
+        }),
+        with_candidate(DecisionCandidate::Clarification {
+            question: "Which\0scene?".to_owned(),
+        }),
+        ModelOutput {
+            candidate: DecisionCandidate::ProseChange {
+                text: "Short\0er.".to_owned(),
+            },
+            ..prose_change("block-1")
+        },
+        with_change(|change| change.candidate_text = "Rain\0hit.".to_owned()),
+        with_change(|change| change.explanation = "Short\0er.".to_owned()),
+    ];
+
+    assert_eq!(
+        (
+            with_nul.iter().map(decide).collect::<Vec<_>>(),
+            decide(&with_candidate(DecisionCandidate::Advisory {
+                text: "Keep\n\tit.".to_owned(),
+            })),
+        ),
+        (
+            vec![AgentDecisionOutcome::NoDecision; 5],
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::Advisory {
+                    text: "Keep\n\tit.".to_owned(),
+                },
+                selected: true,
+                advances_continuation: true,
+            },
+        )
+    );
+}

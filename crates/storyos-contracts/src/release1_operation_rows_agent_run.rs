@@ -296,7 +296,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
 
 const CREATE_AGENT_RUN_NOTES: &str = "Stage 3 planned v2: closed conversation selection new or existing with exact conversation_id; atomic new identity/settings and Run admission; accepted response and getAgentRun return conversation_id and captured memory_settings_revision; exact retries reuse all identities. See protocol section 13.9. Foreground admission serializes with settings changes.";
 
-const GET_AGENT_RUN_NOTES: &str = "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation/hosted-operation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.";
+const GET_AGENT_RUN_NOTES: &str = "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5.";
 
 const CREATE_AGENT_RUN_REQUEST: &[Patch] = &[
     Patch(

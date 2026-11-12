@@ -103,7 +103,8 @@ pub enum AgentDecisionOutcome {
 /// Select an Agent Decision only from a valid final answer and a valid batch; only a selected
 /// non-question without a ToolCall advances. An invalid batch makes no Decision. A valid batch
 /// with members is the Decision, and the ordinary continuation waits for its ToolCalls. A research
-/// synthesis is valid only when each of its citations names a source in `citable`.
+/// synthesis is valid only when each of its citations names a source in `citable`. A text with
+/// U+0000 makes no Decision.
 pub fn validate_agent_decision(
     output: Option<&ModelOutput>,
     declared_targets: &[crate::DeclaredLocation],
@@ -130,6 +131,21 @@ pub fn validate_agent_decision(
     let Some(output) = output else {
         return AgentDecisionOutcome::NoDecision;
     };
+    // PostgreSQL refuses U+0000 in `text` and `jsonb`; a research synthesis refuses it itself.
+    let candidate_text = match &output.candidate {
+        DecisionCandidate::Advisory { text } | DecisionCandidate::ProseChange { text } => text,
+        DecisionCandidate::Clarification { question } => question,
+        DecisionCandidate::ResearchSynthesis { .. } => "",
+    };
+    if candidate_text.contains('\0')
+        || output
+            .prose_changes
+            .iter()
+            .flatten()
+            .any(|change| change.candidate_text.contains('\0') || change.explanation.contains('\0'))
+    {
+        return AgentDecisionOutcome::NoDecision;
+    }
     let kind = match &output.candidate {
         DecisionCandidate::Advisory { text } => AgentDecisionKind::Advisory { text: text.clone() },
         DecisionCandidate::ProseChange { text } => AgentDecisionKind::ProseChange {

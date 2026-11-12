@@ -80,13 +80,21 @@ impl LoadedProposal {
                 .map(|operation| operation.candidate_text.clone())
                 .unwrap_or_else(|| self.candidate_text.clone());
         }
+        // The first selected Operation of a Block gives its text.
+        let mut candidates = std::collections::BTreeMap::new();
+        for operation in self
+            .operations
+            .iter()
+            .filter(|operation| selected.contains(operation.operation_id.as_str()))
+        {
+            candidates
+                .entry(operation.manuscript_block_id.as_str())
+                .or_insert(operation.candidate_text.as_str());
+        }
         let mut blocks = self.chapter_blocks.clone();
         for block in &mut blocks {
-            if let Some(operation) = self.operations.iter().find(|operation| {
-                selected.contains(operation.operation_id.as_str())
-                    && operation.manuscript_block_id == block.manuscript_block_id
-            }) {
-                block.text = operation.candidate_text.clone();
+            if let Some(candidate) = candidates.get(block.manuscript_block_id.as_str()) {
+                block.text = (*candidate).to_owned();
             }
         }
         crate::manuscript_block::persist_canonical_bytes(&blocks)
