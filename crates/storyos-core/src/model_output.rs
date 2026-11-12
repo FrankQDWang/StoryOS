@@ -131,7 +131,19 @@ pub fn validate_agent_decision(
     let Some(output) = output else {
         return AgentDecisionOutcome::NoDecision;
     };
-    if holds_unstorable_text(output) {
+    // PostgreSQL refuses U+0000 in `text` and `jsonb`; a research synthesis refuses it itself.
+    let candidate_text = match &output.candidate {
+        DecisionCandidate::Advisory { text } | DecisionCandidate::ProseChange { text } => text,
+        DecisionCandidate::Clarification { question } => question,
+        DecisionCandidate::ResearchSynthesis { .. } => "",
+    };
+    if candidate_text.contains('\0')
+        || output
+            .prose_changes
+            .iter()
+            .flatten()
+            .any(|change| change.candidate_text.contains('\0') || change.explanation.contains('\0'))
+    {
         return AgentDecisionOutcome::NoDecision;
     }
     let kind = match &output.candidate {
@@ -158,22 +170,6 @@ pub fn validate_agent_decision(
         selected,
         advances_continuation,
     }
-}
-
-/// PostgreSQL refuses U+0000 in a `text` and a `jsonb` value, so a Decision text or a Proposal
-/// text with U+0000 cannot persist. A research synthesis refuses it with its own label.
-fn holds_unstorable_text(output: &ModelOutput) -> bool {
-    let candidate = match &output.candidate {
-        DecisionCandidate::Advisory { text } | DecisionCandidate::ProseChange { text } => text,
-        DecisionCandidate::Clarification { question } => question,
-        DecisionCandidate::ResearchSynthesis { .. } => "",
-    };
-    candidate.contains('\0')
-        || output
-            .prose_changes
-            .iter()
-            .flatten()
-            .any(|change| change.candidate_text.contains('\0') || change.explanation.contains('\0'))
 }
 
 #[cfg(test)]
