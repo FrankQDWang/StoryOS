@@ -92,7 +92,12 @@ pub(crate) async fn record_create(
         }
         validate_agent_decision(output, &declared, &citable, batch)
     };
-    let outcome = match apply_finish_rule(request.tool_choice, outcome, &response.items) {
+    let outcome = match apply_finish_rule(
+        request.tool_choice,
+        outcome,
+        response.state,
+        &response.items,
+    ) {
         FinishRuleOutcome::Settle(outcome) => outcome,
         rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
             let settlement = match rule {

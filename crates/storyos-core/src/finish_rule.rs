@@ -68,13 +68,14 @@ pub enum FinishRuleOutcome {
     NoResult,
 }
 
-/// Applies the finish rule to the outcome of one terminal response of a request with
-/// `tool_choice`. A function request continues to its ToolCalls in each state. In the closing
-/// RunStep, the text of a complete response is the final answer as an Advisory, also when it has
-/// the shape of a reply form, and a final answer with no text gives no result.
+/// Applies the finish rule to the outcome of one terminal response in `response_state` of a
+/// request with `tool_choice`. A function request continues to its ToolCalls in each state. In
+/// the closing RunStep, the text of a complete response is the final answer as an Advisory, also
+/// when it has the shape of a reply form, and a final answer with no text gives no result.
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
     outcome: AgentDecisionOutcome,
+    response_state: StreamItemState,
     items: &[NativeStreamItem],
 ) -> FinishRuleOutcome {
     let function_request = matches!(
@@ -87,19 +88,25 @@ pub fn apply_finish_rule(
     match tool_choice {
         _ if function_request => FinishRuleOutcome::Settle(outcome),
         ToolChoice::Required => FinishRuleOutcome::NextRunStep,
-        ToolChoice::None => closing_answer(items),
+        ToolChoice::None => closing_answer(response_state, items),
         ToolChoice::Auto => FinishRuleOutcome::Settle(outcome),
     }
 }
 
 /// The final answer of a closing response with no function call: the text of its messages. A
-/// response with an incomplete item, a refusal, or a Tool item makes no Agent Decision.
-fn closing_answer(items: &[NativeStreamItem]) -> FinishRuleOutcome {
-    if items.iter().any(|item| {
-        item.state != StreamItemState::Complete
-            || item.refusal.is_some()
-            || item.role != StreamItemRole::Assistant
-    }) {
+/// response that is not complete, or that has an incomplete item, a refusal, or a Tool item,
+/// makes no Agent Decision (ADR 0052).
+fn closing_answer(
+    response_state: StreamItemState,
+    items: &[NativeStreamItem],
+) -> FinishRuleOutcome {
+    if response_state != StreamItemState::Complete
+        || items.iter().any(|item| {
+            item.state != StreamItemState::Complete
+                || item.refusal.is_some()
+                || item.role != StreamItemRole::Assistant
+        })
+    {
         return FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision);
     }
     let text = items
