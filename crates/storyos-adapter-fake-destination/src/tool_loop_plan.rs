@@ -5,7 +5,7 @@
 //! - A message that ends with `SCRIPT:text_before_finish` gets a text with no function call when
 //!   each function output of the request answers the prior response.
 //! - `SCRIPT:finish_twice` gets a second `finish` call in the first closing request.
-//! - `SCRIPT:empty_final_answer` gets a closing response with no text.
+//! - `SCRIPT:empty_final_answer` gets a closing response with an empty text.
 
 use storyos_application::{CreateRequest, ToolOutputOrigin};
 use storyos_core::{
@@ -29,13 +29,12 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         ToolChoice::None if message == "SCRIPT:finish_twice" && finished == 1 => {
             calls(request, finished)
         }
-        ToolChoice::None if message == "SCRIPT:empty_final_answer" => FakeCreate {
-            items: Vec::new(),
-            output: None,
-        },
         ToolChoice::None => complete(
             DecisionCandidate::Advisory {
-                text: ADVISORY_TEXT.to_owned(),
+                text: match message {
+                    "SCRIPT:empty_final_answer" => String::new(),
+                    _ => ADVISORY_TEXT.to_owned(),
+                },
             },
             OutputPhase::FinalAnswer,
         ),

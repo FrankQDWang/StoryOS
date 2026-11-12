@@ -38,4 +38,4 @@ pub(crate) async fn execute(
 
 #[cfg(test)]
 #[path = "agent_run_host_tool_tests.rs"]
-pub(crate) mod tests;
+mod tests;

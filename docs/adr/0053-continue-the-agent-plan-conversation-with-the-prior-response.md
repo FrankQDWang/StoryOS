@@ -65,3 +65,7 @@ At `main` `1fc55a1b`, the Agent Plan profile v2 qualifies only transport, native
 4. The exception ends when a later Registration puts the entry into the requirement, with a new mapping revision. That happens at the latest with the [S5-09](https://github.com/FrankQDWang/StoryOS/issues/405) journey, which gives the combination evidence of streaming, continuation, compaction, and a function call in one live request. [S5-02b](https://github.com/FrankQDWang/StoryOS/issues/1399) and [S5-03](https://github.com/FrankQDWang/StoryOS/issues/399) do not need it.
 
 A changed Tool Exposure digest starts a new transport continuation in the same Conversation. It does not change the processing boundary, so the expiry recovery of the same boundary continues.
+
+## Amendment 2026-11-12: the tool loop mapping
+
+[#1454](https://github.com/FrankQDWang/StoryOS/issues/1454) adds the mapping `storyos.volcengine-agent-plan.responses.create.v5` for the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md). It is the mapping `v4` with other Host instructions: they describe the Tools and the finish rule, and they hold no reply form. Each exposed Tool is a strict function, and `tool_choice` is `required` before a `finish` call that counted and `none` in the closing request. No Model Registration has the mapping `v5` yet, so the head Registration keeps the mapping `v4`.

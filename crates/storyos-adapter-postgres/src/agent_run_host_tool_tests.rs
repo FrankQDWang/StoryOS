@@ -20,7 +20,7 @@ const EMPTY_OUTPUT: &str = r#"<tool_result source="call_finish" state="empty">Th
 /// The Run, each of its RunSteps in order with the `tool_choice`, the declared function names,
 /// the sent function outputs, and the `tool_result` sources of the Operation Requirement, each
 /// ToolCall row without its identities, and each Activity Run Event.
-pub(crate) async fn run_facts(admin: &Client, run_id: &str) -> Value {
+async fn run_facts(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT jsonb_build_object(

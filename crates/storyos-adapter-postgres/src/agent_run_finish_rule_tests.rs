@@ -4,14 +4,15 @@ use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
     NoContractFaults, ProjectScope, complete_agent_run,
 };
-use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer};
+use storyos_core::{
+    ADVISORY_TEXT, AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer,
+};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{
     RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
 };
-use crate::agent_run_host_tool::tests::run_facts;
 
 /// Claims and completes the queued Run `run_id` in a process with no Tool adapter.
 async fn complete(
@@ -33,8 +34,8 @@ async fn complete(
 }
 
 /// Completes the first Run of a new Project of the tool loop profile, then completes one Run with
-/// `author_message` in `conversation` (`None` for a new one). `prefixes` give the identities of
-/// the two Runs.
+/// `author_message` in a new Conversation or in the Conversation of the first Run. `prefixes`
+/// give the identities of the two Runs.
 async fn tool_loop_run(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -47,12 +48,11 @@ async fn tool_loop_run(
     let (scope, chapter_id, first) =
         queued_run_offering(store, prefixes[0], destination.clone(), research).await;
     complete(store, admin, &scope, &first).await;
-    let conversation = if same_conversation {
-        ConversationSelection::Existing {
+    let conversation = match same_conversation {
+        true => ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
-        }
-    } else {
-        ConversationSelection::New
+        },
+        false => ConversationSelection::New,
     };
     let run_id = admit_run_in(
         store,
@@ -69,25 +69,17 @@ async fn tool_loop_run(
     (scope, first, run_id)
 }
 
-/// The decision kind and the `tool_choice` of each RunStep of the Run.
-fn steps(facts: &Value) -> Vec<Value> {
-    facts["steps"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|step| json!([step["decision"], step["tool_choice"]]))
-        .collect()
-}
-
-/// The response reference of each decision Model Attempt of the Run, and the prior response
-/// reference that its request sent, in RunStep order.
-async fn references(admin: &Client, run_id: &str) -> Vec<(Option<String>, Option<String>)> {
+/// For each decision Model Attempt of the Run in RunStep order: the decision kind, the
+/// `tool_choice` of its request, its response reference, and the prior response reference that
+/// its request sent.
+async fn steps(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
-            "SELECT payload ->> 'response_reference',
-                    (payload #>> '{wire,serialized_payload}')::jsonb
-                      ->> 'previous_response_reference'
-               FROM storyos.model_attempts
+            "SELECT jsonb_build_array(payload #>> '{decision,kind}', wire ->> 'tool_choice',
+                                      payload ->> 'response_reference',
+                                      wire ->> 'previous_response_reference')::text
+               FROM storyos.model_attempts,
+                    LATERAL (SELECT (payload #>> '{wire,serialized_payload}')::jsonb) AS w(wire)
               WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
               ORDER BY decision_position",
             &[&run_id],
@@ -95,8 +87,83 @@ async fn references(admin: &Client, run_id: &str) -> Vec<(Option<String>, Option
         .await
         .unwrap()
         .iter()
-        .map(|row| (row.get(0), row.get(1)))
+        .map(|row| serde_json::from_str(row.get(0)).unwrap())
         .collect()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_run_ends_only_with_the_text_of_the_closing_response_after_a_finish_call() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (required, none) = ("required", "none");
+    let cases = [
+        (
+            ["1f3", "1f4"],
+            "Search the web: SCRIPT:text_before_finish",
+            Some(&RESEARCH_TOOL_OFFER),
+            json!([
+                ["tool_request", required],
+                [null, required],
+                ["tool_request", required],
+                ["advisory", none]
+            ]),
+            json!(ADVISORY_TEXT),
+        ),
+        (
+            ["1f5", "1f6"],
+            "SCRIPT:finish_twice",
+            None,
+            json!([
+                ["tool_request", required],
+                ["tool_request", none],
+                ["advisory", none]
+            ]),
+            json!(ADVISORY_TEXT),
+        ),
+        (
+            ["1f7", "1f8"],
+            "SCRIPT:empty_final_answer",
+            None,
+            json!([["tool_request", required], [null, none]]),
+            Value::Null,
+        ),
+    ];
+    for (prefixes, message, research, expected_steps, expected_answer) in cases {
+        let (scope, _, run_id) =
+            tool_loop_run(&store, &admin, prefixes, message, research, false).await;
+        let steps = steps(&admin, &run_id).await;
+        let record = store
+            .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
+            .await
+            .unwrap()
+            .unwrap();
+        let answer = match record.decision {
+            AgentRunDecisionInspect::Advisory { text, .. } => json!(text),
+            AgentRunDecisionInspect::Absent => Value::Null,
+            other => panic!("{message}: {other:?}"),
+        };
+        assert_eq!(
+            (
+                json!(
+                    steps
+                        .iter()
+                        .map(|step| json!([step[0], step[1]]))
+                        .collect::<Vec<_>>()
+                ),
+                record.status,
+                answer,
+            ),
+            (expected_steps, AgentRunStatus::Completed, expected_answer),
+            "{message}"
+        );
+        // Each RunStep continues from the response of the RunStep before it, also from a text.
+        for pair in steps.windows(2) {
+            assert_eq!((&pair[1][3], pair[0][2].is_string()), (&pair[0][2], true));
+        }
+    }
 }
 
 #[tokio::test]
@@ -109,9 +176,9 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
     let (scope, first, next) =
         tool_loop_run(&store, &admin, ["1f1", "1f2"], "Help again.", None, true).await;
 
-    let closing = references(&admin, &first).await[1].0.clone();
-    assert!(closing.is_some());
-    assert_eq!(references(&admin, &next).await[0].1, closing);
+    let closing = steps(&admin, &first).await[1][2].clone();
+    assert!(closing.is_string());
+    assert_eq!(steps(&admin, &next).await[0][3], closing);
     let answer = store
         .read_agent_run(&scope, &first, &AgentRunReadSelection::Current)
         .await
@@ -124,104 +191,4 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
             ..
         }
     ));
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_text_before_a_finish_call_opens_the_next_run_step_from_that_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (_, _, run_id) = tool_loop_run(
-        &store,
-        &admin,
-        ["1f3", "1f4"],
-        "Search the web: SCRIPT:text_before_finish",
-        Some(&RESEARCH_TOOL_OFFER),
-        false,
-    )
-    .await;
-
-    let facts = run_facts(&admin, &run_id).await;
-    assert_eq!(
-        (steps(&facts), &facts["status"]),
-        (
-            vec![
-                json!(["tool_request", "required"]),
-                json!([null, "required"]),
-                json!(["tool_request", "required"]),
-                json!(["advisory", "none"]),
-            ],
-            &json!("completed"),
-        )
-    );
-    // The model continues from its own text, and the outputs of the first RunStep do not answer
-    // that text again.
-    let references = references(&admin, &run_id).await;
-    assert_eq!(references[2].1, references[1].0);
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_function_call_in_the_closing_response_makes_the_run_continue() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (_, _, run_id) = tool_loop_run(
-        &store,
-        &admin,
-        ["1f5", "1f6"],
-        "SCRIPT:finish_twice",
-        None,
-        false,
-    )
-    .await;
-
-    let facts = run_facts(&admin, &run_id).await;
-    assert_eq!(
-        (steps(&facts), &facts["status"]),
-        (
-            vec![
-                json!(["tool_request", "required"]),
-                json!(["tool_request", "none"]),
-                json!(["advisory", "none"]),
-            ],
-            &json!("completed"),
-        )
-    );
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_final_answer_with_no_text_gives_the_run_no_result() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope, _, run_id) = tool_loop_run(
-        &store,
-        &admin,
-        ["1f7", "1f8"],
-        "SCRIPT:empty_final_answer",
-        None,
-        false,
-    )
-    .await;
-
-    let facts = run_facts(&admin, &run_id).await;
-    assert_eq!(
-        (steps(&facts), &facts["status"]),
-        (
-            vec![json!(["tool_request", "required"]), json!([null, "none"]),],
-            &json!("completed"),
-        )
-    );
-    let record = store
-        .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(record.decision, AgentRunDecisionInspect::Absent);
 }

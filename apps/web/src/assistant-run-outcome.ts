@@ -110,8 +110,9 @@ export function malformedStructuredReply(text: string): boolean {
 }
 
 /**
- * A request whose recovery stopped without a result: an unknown outcome that waits, a paused
- * successor, or a successor that also gave no result. Nothing changes it later.
+ * A request that stopped without a result: an unknown outcome that waits, a paused successor, or
+ * a completed Run with no result, for example a closing response with no text (ADR 0091).
+ * Nothing changes it later.
  */
 export function stoppedWithoutResult(run: GetAgentRunResponse): boolean {
   if (run.decision.kind !== "absent") return false;
@@ -121,7 +122,7 @@ export function stoppedWithoutResult(run: GetAgentRunResponse): boolean {
     case "paused":
       return run.unknown_create_successor.kind === "present";
     case "completed":
-      return run.unknown_create_successor.kind === "present";
+      return true;
     case "queued":
     case "claimed":
     case "refused":
