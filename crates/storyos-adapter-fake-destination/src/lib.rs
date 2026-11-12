@@ -3,6 +3,7 @@
 mod create_plan;
 mod prose_changes;
 mod recovery_plan;
+mod tool_loop_plan;
 
 use storyos_application::{
     CacheUse, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,
@@ -96,6 +97,7 @@ impl ModelProviderAdapter for FakeDestination {
             wire["previous_response_reference"] = serde_json::json!(reference);
         }
         if tool_loop {
+            wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
             wire["tools"] = create
                 .tool_exposure
                 .tools

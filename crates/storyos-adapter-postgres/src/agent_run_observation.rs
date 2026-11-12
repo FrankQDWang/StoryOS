@@ -33,6 +33,9 @@ pub(crate) enum CreateSettlement<'a> {
     /// The Decision is a validated function request: its ToolCalls become durable with it, in
     /// state `pending`, and the claimed Run continues to the Tool Gateway.
     ToolCallsPending,
+    /// A text with no function call before a `finish` call that counted (ADR 0091): no Agent
+    /// Decision, and the claimed Run continues to the next RunStep.
+    NextRunStep,
     NotSubmitted,
     Rejected(&'a str),
 }
@@ -140,6 +143,7 @@ pub(crate) async fn persist_create_result(
         CreateSettlement::Response
             | CreateSettlement::FunctionRequested
             | CreateSettlement::ToolCallsPending
+            | CreateSettlement::NextRunStep
     ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
@@ -151,7 +155,7 @@ pub(crate) async fn persist_create_result(
     match result.settlement {
         CreateSettlement::Response => {}
         CreateSettlement::FunctionRequested => refusal = Some(research_refusal(&payload)),
-        CreateSettlement::ToolCallsPending => {}
+        CreateSettlement::ToolCallsPending | CreateSettlement::NextRunStep => {}
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
@@ -221,6 +225,16 @@ pub(crate) async fn persist_create_result(
             calls,
         )
         .await?;
+    }
+    if matches!(result.settlement, CreateSettlement::NextRunStep) {
+        return crate::agent_run_finish_rule::open_after_text(
+            client,
+            claim,
+            run,
+            result.attempt_id,
+            &payload,
+        )
+        .await;
     }
     let tool_calls = matches!(result.settlement, CreateSettlement::ToolCallsPending);
     update_run(

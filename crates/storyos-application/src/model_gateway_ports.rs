@@ -127,6 +127,8 @@ pub struct CreateRequest {
     /// The Tool Exposure of this RunStep. The adapter declares each exposed Tool as one function
     /// and sends no Tool for an empty Exposure (ADR 0084).
     pub tool_exposure: ToolExposure,
+    /// The `tool_choice` of the finish rule (ADR 0091). The reply form profile sends `auto`.
+    pub tool_choice: storyos_core::ToolChoice,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
     /// The function outputs of a continuation RunStep, in item order: one for each resolved

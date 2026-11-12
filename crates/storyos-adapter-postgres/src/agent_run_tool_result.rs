@@ -37,19 +37,14 @@ pub(crate) async fn open_continuation(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (Some(attempt_id), Some(decision_id)) = (&run.attempt_id, &run.decision_id) else {
+    let (Some(attempt_id), Some(_)) = (&run.attempt_id, &run.decision_id) else {
         return Err(damaged("The function request Decision is missing"));
     };
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     crate::agent_run_continuation::bind_produced_continuation(
-        client,
-        claim,
-        decision_id,
-        attempt_id,
-        &payload,
-        &payload,
+        client, claim, attempt_id, &payload, &payload,
     )
     .await?;
     open_next_step(client, claim, run).await
@@ -194,8 +189,9 @@ async fn stored_tool_calls(
 }
 
 /// The function outputs of the selected `tool_result` items of `assembly`, in item order. The
-/// call of each output is the stored ToolCall that the item names. The outputs of the last
-/// Decision answer the prior response; the others belong to earlier RunSteps.
+/// call of each output is the stored ToolCall that the item names. The outputs of the Decision of
+/// the prior RunStep answer the prior response; the others belong to earlier RunSteps. A prior
+/// RunStep with a text and no function call has no Decision (ADR 0091).
 pub(crate) async fn tool_outputs(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -204,7 +200,24 @@ pub(crate) async fn tool_outputs(
     let Some(sources) = &assembly.operation_requirement.tool_results else {
         return Ok(Vec::new());
     };
-    let last_decision = sources.last().map(|source| source.decision_id.as_str());
+    let prior_decisions: Vec<String> = client
+        .query(
+            "SELECT attempt.decision_id::text FROM storyos.model_attempts AS attempt
+               JOIN storyos.agent_runs AS run USING (owner_user_id, project_id, run_id)
+              WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
+                AND attempt.run_id = $3::text::uuid AND attempt.decision_id IS NOT NULL
+                AND attempt.decision_position = run.active_decision_position - 1",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .iter()
+        .map(|row| row.get(/*idx*/ 0))
+        .collect();
     let selected = assembly
         .selected
         .iter()
@@ -254,7 +267,7 @@ pub(crate) async fn tool_outputs(
             name: row.get(/*idx*/ 1),
             arguments: storyos_core::canonical_json(&arguments),
             output: item.content.clone(),
-            origin: if Some(source.decision_id.as_str()) == last_decision {
+            origin: if prior_decisions.contains(&source.decision_id) {
                 ToolOutputOrigin::PriorResponse
             } else {
                 ToolOutputOrigin::EarlierStep

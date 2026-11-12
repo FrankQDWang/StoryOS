@@ -16,6 +16,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
+mod finish_rule;
 mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
@@ -140,6 +141,9 @@ pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
+};
+pub use finish_rule::{
+    FinishRuleOutcome, PriorStepCall, ToolChoice, apply_finish_rule, step_tool_choice,
 };
 pub use function_calling::{
     AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
@@ -292,8 +296,8 @@ pub use tool_exposure::{
     function_request_refusal_capability, requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
-    HOST_FAKE_TOOL_LOOP_REGISTRATION,
+    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE,
+    HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,

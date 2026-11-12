@@ -507,7 +507,7 @@ pub(crate) async fn settle_one_phase(
             return requeue_generation(client, claim).await;
         }
     }
-    if let Some(decision) = decision_id
+    if decision_id.is_some()
         && continuation_id.is_none()
         && payload
             .get("decision")
@@ -518,7 +518,6 @@ pub(crate) async fn settle_one_phase(
         crate::agent_run_continuation::bind_produced_continuation(
             client,
             claim,
-            decision,
             &attempt_id,
             &payload,
             &payload,

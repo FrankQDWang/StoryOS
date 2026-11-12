@@ -183,6 +183,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         selection_references: Vec::new(),
         previous_response_reference: None,
         tool_exposure: storyos_core::ToolExposure::empty(),
+        tool_choice: storyos_core::ToolChoice::Auto,
         successor_of: None,
         tool_outputs: Vec::new(),
     })

@@ -2,11 +2,11 @@
 
 use storyos_application::{
     CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
-    DispatchClaim, ModelUsage, Observation, RequestAttempt, RequestContextItem,
+    DispatchClaim, ModelResponse, ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
 use storyos_core::{
-    AgentDecisionOutcome, ResponseDisposition, ResponseFacts, response_disposition,
-    validate_agent_decision,
+    AgentDecisionOutcome, FinishRuleOutcome, ResponseDisposition, ResponseFacts, apply_finish_rule,
+    response_disposition, validate_agent_decision,
 };
 
 use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
@@ -92,6 +92,18 @@ pub(crate) async fn record_create(
         }
         validate_agent_decision(output, &declared, &citable, batch)
     };
+    let outcome = match apply_finish_rule(request.tool_choice, outcome, &response.items) {
+        FinishRuleOutcome::Settle(outcome) => outcome,
+        FinishRuleOutcome::NextRunStep => {
+            let result = CreateResult {
+                outcome: AgentDecisionOutcome::NoDecision,
+                producer_output: None,
+                settlement: CreateSettlement::NextRunStep,
+                ..response_result(dispatch, &response)
+            };
+            return persist_create_result(client, claim, run, result, retained).await;
+        }
+    };
     // Core decides the disposition of the response (ADR 0084).
     let settlement = match response_disposition(&ResponseFacts {
         probe,
@@ -105,19 +117,31 @@ pub(crate) async fn record_create(
         }
     };
     let result = CreateResult {
-        attempt_id: &dispatch.model_attempt_id,
-        items: &response.items,
         outcome,
         producer_output: response
             .output
             .as_ref()
             .and_then(|output| output.prose_changes.as_deref()),
+        settlement,
+        ..response_result(dispatch, &response)
+    };
+    persist_create_result(client, claim, run, result, retained).await
+}
+
+fn response_result<'a>(
+    dispatch: &'a DispatchClaim,
+    response: &'a ModelResponse,
+) -> CreateResult<'a> {
+    CreateResult {
+        attempt_id: &dispatch.model_attempt_id,
+        items: &response.items,
+        outcome: AgentDecisionOutcome::NoDecision,
+        producer_output: None,
         usage: response.usage,
         cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
-        settlement,
-    };
-    persist_create_result(client, claim, run, result, retained).await
+        settlement: CreateSettlement::Response,
+    }
 }
 
 fn no_response<'a>(
@@ -163,6 +187,7 @@ pub(crate) async fn create_request(
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
+    let tool_choice = crate::agent_run_finish_rule::tool_choice(client, claim, run).await?;
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
         None => {
@@ -186,6 +211,7 @@ pub(crate) async fn create_request(
         selection_references: input.selection_references,
         previous_response_reference,
         tool_exposure,
+        tool_choice,
         successor_of: None,
         tool_outputs,
     })

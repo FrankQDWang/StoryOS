@@ -7,11 +7,19 @@ use crate::{
     ModelCapabilityProfile, ModelRegistration,
 };
 
-/// The fake model mapping of the tool loop profile. Its script calls `finish` in the first
-/// RunStep and replies in the next one.
+/// The fake model mapping of the tool loop profile. Its script follows the finish rule.
 pub const HOST_FAKE_TOOL_LOOP_MAPPING_REVISION: &str = "storyos.host-fake.mapping.v2";
 
-const TOOL_LOOP_MAPPING_REVISIONS: &[&str] = &[HOST_FAKE_TOOL_LOOP_MAPPING_REVISION];
+/// The Agent Plan mapping of the tool loop profile: the compaction mapping with Host
+/// instructions that describe the Tools and the finish rule, strict functions, and the
+/// `tool_choice` of the finish rule. No Model Registration has it yet.
+pub const AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v5";
+
+const TOOL_LOOP_MAPPING_REVISIONS: &[&str] = &[
+    HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+];
 
 pub const HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.host-fake.capability.v2",
