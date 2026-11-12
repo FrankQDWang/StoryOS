@@ -1,5 +1,6 @@
-//! The trusted StoryOS ToolSpecs of the research tools (ADR 0034, ADR 0084). A ToolSpec does not
-//! name the service behind it; the Tool Registration binds the service.
+//! The trusted StoryOS ToolSpecs of the research tools (ADR 0034, ADR 0084) and of the Host Tools
+//! (ADR 0091). A ToolSpec does not name the service behind it; the Tool Registration binds the
+//! service.
 //!
 //! The callable contract is a typed intake, not a JSON Schema validator. A search takes one query
 //! and an optional result count. When the server of a Registration also requires a search goal,
@@ -23,6 +24,8 @@ const SEARCH_GOAL_PREFIX: &str = "Rank first the pages that answer this search: 
 pub enum ToolOperation {
     WebSearch,
     WebFetch,
+    /// The Host Tool with which the Agent says that the work of the Run is complete.
+    Finish,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -64,7 +67,8 @@ pub struct ToolSpec {
     pub operation: ToolOperation,
     /// The Destination Context Intake Contract: the only fields the destination receives.
     pub intake_contract: &'static [IntakeField],
-    pub envelope: ToolEffectEnvelope,
+    /// `None` for a Host Tool: it has no external effect.
+    pub envelope: Option<ToolEffectEnvelope>,
     /// The result is text content of at most this many bytes in total.
     pub result_text_max_bytes: usize,
 }
@@ -73,11 +77,11 @@ pub const WEB_SEARCH_TOOL_SPEC: ToolSpec = ToolSpec {
     revision: "storyos.tool.web-search.v1",
     operation: ToolOperation::WebSearch,
     intake_contract: &[IntakeField::Query, IntakeField::ResultCount],
-    envelope: ToolEffectEnvelope {
+    envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::OneSearch,
         external_write: ExternalWrite::None,
         outbound_disclosure: IntakeField::Query,
-    },
+    }),
     result_text_max_bytes: TOOL_RESULT_TEXT_MAX_BYTES,
 };
 
@@ -85,19 +89,32 @@ pub const WEB_FETCH_TOOL_SPEC: ToolSpec = ToolSpec {
     revision: "storyos.tool.web-fetch.v1",
     operation: ToolOperation::WebFetch,
     intake_contract: &[IntakeField::UrlList],
-    envelope: ToolEffectEnvelope {
+    envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::GivenUrls,
         external_write: ExternalWrite::None,
         outbound_disclosure: IntakeField::UrlList,
-    },
+    }),
     result_text_max_bytes: TOOL_RESULT_TEXT_MAX_BYTES,
+};
+
+/// The Host Tool `finish`: no arguments and an empty result (ADR 0091).
+pub const FINISH_TOOL_SPEC: ToolSpec = ToolSpec {
+    revision: "storyos.tool.finish.v1",
+    operation: ToolOperation::Finish,
+    intake_contract: &[],
+    envelope: None,
+    result_text_max_bytes: 0,
 };
 
 /// The ToolSpec of a pinned revision. `None` is a revision that this build does not know.
 pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
-    [&WEB_SEARCH_TOOL_SPEC, &WEB_FETCH_TOOL_SPEC]
-        .into_iter()
-        .find(|spec| spec.revision == revision)
+    [
+        &WEB_SEARCH_TOOL_SPEC,
+        &WEB_FETCH_TOOL_SPEC,
+        &FINISH_TOOL_SPEC,
+    ]
+    .into_iter()
+    .find(|spec| spec.revision == revision)
 }
 
 /// The validated intake of one ToolCall.
@@ -110,6 +127,7 @@ pub enum ToolIntake {
     WebFetch {
         urls: Vec<String>,
     },
+    Finish,
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -136,6 +154,10 @@ struct SearchArguments {
 struct FetchArguments {
     urls: Vec<String>,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NoArguments {}
 
 impl ToolSpec {
     /// Validates the complete arguments of one function call against the typed intake. A search
@@ -176,6 +198,10 @@ impl ToolSpec {
                     return Err(IntakeRefusal::Url);
                 }
                 Ok(ToolIntake::WebFetch { urls })
+            }
+            ToolOperation::Finish => {
+                NoArguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
+                Ok(ToolIntake::Finish)
             }
         }
     }
@@ -226,8 +252,10 @@ impl ServerArguments {
             (Self::Fetch { urls: urls_name }, ToolIntake::WebFetch { urls }) => {
                 arguments.insert((*urls_name).to_owned(), Value::from(urls.clone()));
             }
-            (Self::Search { .. }, ToolIntake::WebFetch { .. })
-            | (Self::Fetch { .. }, ToolIntake::WebSearch { .. }) => return None,
+            (Self::Search { .. }, ToolIntake::WebFetch { .. } | ToolIntake::Finish)
+            | (Self::Fetch { .. }, ToolIntake::WebSearch { .. } | ToolIntake::Finish) => {
+                return None;
+            }
         }
         Some(arguments)
     }

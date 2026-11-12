@@ -3,14 +3,15 @@
 //! the `active` Tool Registration of the current research binding of the Project, its
 //! `compatible` compatibility Decision, and the qualified function calling entry of the pinned Model Registration. The
 //! projection grants nothing, changes no Registration, and names no service: the model sees the
-//! operation of a ToolSpec, and the Step Snapshot pins the Registration revision behind it.
+//! operation of a ToolSpec, and the Step Snapshot pins the Registration revision behind it. A
+//! Model Registration of the tool loop profile also gets the Host Tools (ADR 0091).
 
 use serde_json::{Value, json};
 
 use crate::{
-    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
-    tool_registration,
+    AgentDecisionOutcome, CapabilityEvidence, HOST_TOOL_REGISTRATION, IntakeField,
+    NativeStreamItem, StreamItemRole, StreamItemState, ToolOperation, ToolRegistrationLifecycle,
+    ToolSpec, model_registration, tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -86,6 +87,7 @@ impl ToolOperation {
         match self {
             Self::WebSearch => "web_search",
             Self::WebFetch => "web_fetch",
+            Self::Finish => "finish",
         }
     }
 
@@ -96,6 +98,10 @@ impl ToolOperation {
                  needs facts that the supplied text does not give."
             }
             Self::WebFetch => "Reads the text of up to 5 web pages that you give by URL.",
+            Self::Finish => {
+                "Says that your work on the author request is complete. After its result, write \
+                 the final answer to the author."
+            }
         }
     }
 }
@@ -176,18 +182,19 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out.
+    /// second Tool of one function name stays out. The Host Tools follow when the Model
+    /// Registration has the tool loop profile.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
-        let qualified =
-            model_registration(facts.model_registration_revision).is_some_and(|registration| {
+        let Some(registration) =
+            model_registration(facts.model_registration_revision).filter(|registration| {
                 matches!(
                     registration.capability_profile.entries.function_calling,
                     CapabilityEvidence::Qualified { .. }
                 )
-            });
-        if !qualified {
+            })
+        else {
             return Self::empty();
-        }
+        };
         let mut tools: Vec<ExposedTool> = Vec::new();
         for bound in facts.bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active
@@ -210,6 +217,14 @@ impl ToolExposure {
                     spec: tool.spec,
                 });
             }
+        }
+        if registration.declares_host_tools() {
+            tools.extend(HOST_TOOL_REGISTRATION.tools.iter().map(|spec| ExposedTool {
+                name: spec.operation.function_name(),
+                registration_id: HOST_TOOL_REGISTRATION.id,
+                registration_revision: HOST_TOOL_REGISTRATION.revision,
+                spec,
+            }));
         }
         Self { tools }
     }

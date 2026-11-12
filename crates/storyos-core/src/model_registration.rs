@@ -924,6 +924,7 @@ pub const AGENT_PLAN_PINNED_VERSION_REGISTRATION: ModelRegistration = ModelRegis
 pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> {
     [
         &HOST_FAKE_REGISTRATION,
+        &crate::HOST_FAKE_TOOL_LOOP_REGISTRATION,
         &AGENT_PLAN_PENDING_REGISTRATION,
         &AGENT_PLAN_CREATE_REGISTRATION,
         &AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION,

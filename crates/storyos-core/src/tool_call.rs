@@ -93,6 +93,7 @@ impl ValidatedToolCall {
                 result_count,
             } => json!({ "query": query, "result_count": result_count }),
             ToolIntake::WebFetch { urls } => json!({ "urls": urls }),
+            ToolIntake::Finish => json!({}),
         }
     }
 

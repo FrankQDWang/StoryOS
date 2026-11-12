@@ -4119,6 +4119,8 @@ GRANT SELECT,INSERT,UPDATE ON TABLE storyos.model_attempts TO storyos_runtime;
 -- identifier, so a second delivery of the same observation creates no second row. The Tool Gateway
 -- claims each row one time: `attempt` holds the Admission Decision, the Wire Payload Projection
 -- without the key, the Destination Attempt, and the Outbound Disclosure Event. The result text is data.
+-- A ToolCall of the Host Tools (`host_tools`, ADR 0091) executes in StoryOS: it settles with no
+-- Destination Attempt and no Outbound Disclosure Event.
 
 CREATE TABLE storyos.tool_calls (
     owner_user_id uuid NOT NULL,
@@ -4156,7 +4158,7 @@ CREATE TABLE storyos.tool_calls (
     CONSTRAINT tool_calls_name_check CHECK (char_length(function_name) BETWEEN 1 AND 128 AND char_length(registration_id) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
     CONSTRAINT tool_calls_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text, 'refused'::text, 'awaiting_approval'::text]))),
     CONSTRAINT tool_calls_refusal_shape CHECK (((state = ANY (ARRAY['refused'::text, 'awaiting_approval'::text])) = (refusal IS NOT NULL)) AND (char_length(refusal) BETWEEN 1 AND 64)),
-    CONSTRAINT tool_calls_attempt_shape CHECK (((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= (attempt IS NOT NULL)) AND (attempt IS NULL OR jsonb_typeof(attempt) = 'object'::text)),
+    CONSTRAINT tool_calls_attempt_shape CHECK (((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= ((attempt IS NOT NULL) OR (registration_id = 'host_tools'::text AND state = 'settled'::text))) AND ((registration_id = 'host_tools'::text) <= (attempt IS NULL)) AND (attempt IS NULL OR jsonb_typeof(attempt) = 'object'::text)),
     CONSTRAINT tool_calls_outcome_shape CHECK (((effect_outcome IS NULL) = ((state = ANY (ARRAY['pending'::text, 'dispatched'::text])) OR (attempt IS NULL))) AND (effect_outcome IS NULL OR jsonb_typeof(effect_outcome) = 'object'::text)),
     CONSTRAINT tool_calls_result_shape CHECK (((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND (result_text IS NULL OR state = 'settled'::text) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (result_bytes BETWEEN 0 AND 262144)),
     CONSTRAINT tool_calls_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,

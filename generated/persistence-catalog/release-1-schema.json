@@ -7635,7 +7635,7 @@
       "constraints": {
         "tool_calls_attempt_call_key": "UNIQUE (owner_user_id, project_id, model_attempt_id, call_id)",
         "tool_calls_attempt_position_key": "UNIQUE (owner_user_id, project_id, model_attempt_id, call_position)",
-        "tool_calls_attempt_shape": "CHECK ((((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= (attempt IS NOT NULL)) AND ((attempt IS NULL) OR (jsonb_typeof(attempt) = 'object'::text))))",
+        "tool_calls_attempt_shape": "CHECK ((((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= ((attempt IS NOT NULL) OR ((registration_id = 'host_tools'::text) AND (state = 'settled'::text)))) AND ((registration_id = 'host_tools'::text) <= (attempt IS NULL)) AND ((attempt IS NULL) OR (jsonb_typeof(attempt) = 'object'::text))))",
         "tool_calls_call_id_check": "CHECK (((char_length(call_id) >= 1) AND (char_length(call_id) <= 256)))",
         "tool_calls_call_position_check": "CHECK ((call_position >= 0))",
         "tool_calls_caller_route_check": "CHECK ((caller_route = 'model'::text))",

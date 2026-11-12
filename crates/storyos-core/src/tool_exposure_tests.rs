@@ -6,9 +6,9 @@ use super::{
 };
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION, NativeStreamItem,
-    StreamItemRole, StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC,
-    WEB_SEARCH_TOOL_SPEC,
+    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, FINISH_TOOL_SPEC, HOST_FAKE_REGISTRATION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
+    StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
 fn bound(
@@ -100,6 +100,32 @@ fn each_other_binding_or_registration_exposes_nothing() {
         ),
         ToolExposure::empty()
     );
+}
+
+#[test]
+fn only_a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
+    let finish = ExposedTool {
+        name: "finish",
+        registration_id: HOST_TOOL_REGISTRATION.id,
+        registration_revision: HOST_TOOL_REGISTRATION.revision,
+        spec: &FINISH_TOOL_SPEC,
+    };
+    assert_eq!(
+        exposure(&[], HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
+        ToolExposure {
+            tools: vec![finish.clone()]
+        }
+    );
+    assert_eq!(
+        finish.declaration().parameters,
+        json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
+    );
+    for revision in [
+        HOST_FAKE_REGISTRATION.revision,
+        AGENT_PLAN_REGISTRATION.revision,
+    ] {
+        assert_eq!(exposure(&[], revision), ToolExposure::empty());
+    }
 }
 
 #[test]

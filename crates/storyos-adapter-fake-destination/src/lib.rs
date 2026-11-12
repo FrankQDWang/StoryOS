@@ -9,7 +9,9 @@ use storyos_application::{
     ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
     ResponseReference, StreamControl, WirePayloadProjection,
 };
-use storyos_core::{HOST_FAKE_MAPPING_REVISION, ModelAdapter, StreamItemState};
+use storyos_core::{
+    HOST_FAKE_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, ModelAdapter, StreamItemState,
+};
 
 const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
 
@@ -76,31 +78,46 @@ impl ModelProviderAdapter for FakeDestination {
         if create.purpose == CreatePurpose::CompactionSummary {
             return Ok(summary(create));
         }
-        let projection = match &create.passage_input {
-            Some(input) => {
-                let mut wire = input.clone();
-                wire["mapping_revision"] = serde_json::json!(HOST_FAKE_MAPPING_REVISION);
-                if let Some(reference) = &create.previous_response_reference {
-                    wire["previous_response_reference"] = serde_json::json!(reference);
-                }
-                let bytes = storyos_core::canonical_json(&wire);
-                projection(
-                    format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
-                    Some(bytes),
-                )
-            }
-            None => {
-                let mut wire = serde_json::json!({
-                    "author_message": create.author_message,
-                    "chapter_id": create.chapter_id,
-                    "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-                });
-                if let Some(reference) = &create.previous_response_reference {
-                    wire["previous_response_reference"] = serde_json::json!(reference);
-                }
-                projection(wire_digest(&wire), /*serialized_payload*/ None)
-            }
+        let tool_loop = create.route.mapping_revision == HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
+        let mapping_revision = if tool_loop {
+            HOST_FAKE_TOOL_LOOP_MAPPING_REVISION
+        } else {
+            HOST_FAKE_MAPPING_REVISION
         };
+        let mut wire = match &create.passage_input {
+            Some(input) => input.clone(),
+            None => serde_json::json!({
+                "author_message": create.author_message,
+                "chapter_id": create.chapter_id,
+            }),
+        };
+        wire["mapping_revision"] = serde_json::json!(mapping_revision);
+        if let Some(reference) = &create.previous_response_reference {
+            wire["previous_response_reference"] = serde_json::json!(reference);
+        }
+        if tool_loop {
+            wire["tools"] = create
+                .tool_exposure
+                .tools
+                .iter()
+                .map(|tool| tool.name)
+                .collect();
+            wire["tool_outputs"] = create
+                .tool_outputs
+                .iter()
+                .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
+                .collect();
+        }
+        let mut projection = if create.passage_input.is_some() || tool_loop {
+            let bytes = storyos_core::canonical_json(&wire);
+            projection(
+                format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
+                Some(bytes),
+            )
+        } else {
+            projection(wire_digest(&wire), /*serialized_payload*/ None)
+        };
+        projection.mapping_revision = mapping_revision.to_owned();
         let rejection = create
             .previous_response_reference
             .as_deref()

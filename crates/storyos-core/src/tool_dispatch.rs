@@ -68,17 +68,20 @@ pub struct ToolEffectRequest {
 }
 
 impl ToolEffectRequest {
-    pub fn derive(spec: &ToolSpec, intake: &ToolIntake) -> Self {
+    /// `None` for a ToolSpec with no external effect.
+    pub fn derive(spec: &ToolSpec, intake: &ToolIntake) -> Option<Self> {
+        let envelope = spec.envelope?;
         let disclosed = match intake {
             ToolIntake::WebSearch { query, .. } => vec![query.clone()],
             ToolIntake::WebFetch { urls } => urls.clone(),
+            ToolIntake::Finish => Vec::new(),
         };
-        Self {
-            external_read: spec.envelope.external_read,
-            external_write: spec.envelope.external_write,
-            outbound_disclosure: spec.envelope.outbound_disclosure,
+        Some(Self {
+            external_read: envelope.external_read,
+            external_write: envelope.external_write,
+            outbound_disclosure: envelope.outbound_disclosure,
             disclosed,
-        }
+        })
     }
 
     /// The evidence record of the request.
@@ -156,7 +159,7 @@ impl ToolCallPlan {
         Some(Self {
             registration,
             tool,
-            effect: ToolEffectRequest::derive(tool.spec, &intake),
+            effect: ToolEffectRequest::derive(tool.spec, &intake)?,
             server_arguments: tool.arguments.map(&intake)?,
             intake,
         })

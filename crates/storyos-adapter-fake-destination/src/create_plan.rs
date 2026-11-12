@@ -5,7 +5,7 @@ use storyos_core::DeclaredTargetKind;
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
     OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
-    STREAM_SECOND_TEXT, StreamItemRole, StreamItemState,
+    STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, ToolOperation,
 };
 
 use crate::prose_changes::{
@@ -22,6 +22,15 @@ pub(crate) struct FakeCreate {
 }
 
 pub(crate) fn plan_create(request: &CreateRequest) -> FakeCreate {
+    if request.tool_outputs.is_empty()
+        && request
+            .tool_exposure
+            .tools
+            .iter()
+            .any(|tool| tool.spec.operation == ToolOperation::Finish)
+    {
+        return finish_call();
+    }
     let mut planned = plan_message(&request.author_message, request.passage_resolution);
     apply_prose_changes(request, &mut planned);
     planned
@@ -75,6 +84,24 @@ fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResoluti
         },
         OutputPhase::FinalAnswer,
     )
+}
+
+/// The first RunStep of the tool loop profile: one `finish` call and no text.
+fn finish_call() -> FakeCreate {
+    FakeCreate {
+        items: vec![NativeStreamItem {
+            call_id: Some("call_finish".to_owned()),
+            arguments: Some("{}".to_owned()),
+            native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
+            name: Some("finish".to_owned()),
+            ..evidence_item(
+                StreamItemRole::Tool,
+                StreamItemState::Complete,
+                "host_fake_function_call",
+            )
+        }],
+        output: None,
+    }
 }
 
 fn resolved(resolution: OrdinaryPassageResolution) -> FakeCreate {

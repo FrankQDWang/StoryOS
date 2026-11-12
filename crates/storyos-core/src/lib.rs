@@ -19,6 +19,7 @@ mod deployment_destination;
 mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
+mod host_tool;
 mod manuscript_payload;
 mod model_output;
 mod model_registration;
@@ -32,6 +33,7 @@ mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
 mod tool_exposure;
+mod tool_loop_profile;
 mod tool_registration;
 mod tool_result;
 mod tool_result_context;
@@ -151,6 +153,7 @@ pub use host_fake_profile::{
     SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT,
     requested_execution_capability, stream_batch_plan,
 };
+pub use host_tool::{HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool, host_tool};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
@@ -288,6 +291,10 @@ pub use tool_exposure::{
     TOOL_REQUEST_INVALID_CAPABILITY, ToolCompatibilityDecision, ToolExposure,
     function_request_refusal_capability, requests_function, response_disposition,
 };
+pub use tool_loop_profile::{
+    HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION,
+};
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,
     ToolCallRefusal, ToolRegistration, ToolRegistrationKind, ToolRegistrationLifecycle,
@@ -299,7 +306,7 @@ pub use tool_result_context::{
     TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
 };
 pub use tool_spec::{
-    ExternalRead, ExternalWrite, IntakeField, IntakeRefusal, ServerArguments,
+    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal, ServerArguments,
     TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec,
     WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
