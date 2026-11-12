@@ -103,7 +103,8 @@ pub enum AgentDecisionOutcome {
 /// Select an Agent Decision only from a valid final answer and a valid batch; only a selected
 /// non-question without a ToolCall advances. An invalid batch makes no Decision. A valid batch
 /// with members is the Decision, and the ordinary continuation waits for its ToolCalls. A research
-/// synthesis is valid only when each of its citations names a source in `citable`.
+/// synthesis is valid only when each of its citations names a source in `citable`. A text with
+/// U+0000 makes no Decision.
 pub fn validate_agent_decision(
     output: Option<&ModelOutput>,
     declared_targets: &[crate::DeclaredLocation],
@@ -130,6 +131,9 @@ pub fn validate_agent_decision(
     let Some(output) = output else {
         return AgentDecisionOutcome::NoDecision;
     };
+    if holds_unstorable_text(output) {
+        return AgentDecisionOutcome::NoDecision;
+    }
     let kind = match &output.candidate {
         DecisionCandidate::Advisory { text } => AgentDecisionKind::Advisory { text: text.clone() },
         DecisionCandidate::ProseChange { text } => AgentDecisionKind::ProseChange {
@@ -154,6 +158,22 @@ pub fn validate_agent_decision(
         selected,
         advances_continuation,
     }
+}
+
+/// PostgreSQL refuses U+0000 in a `text` and a `jsonb` value, so a Decision text or a Proposal
+/// text with U+0000 cannot persist. A research synthesis refuses it with its own label.
+fn holds_unstorable_text(output: &ModelOutput) -> bool {
+    let candidate = match &output.candidate {
+        DecisionCandidate::Advisory { text } | DecisionCandidate::ProseChange { text } => text,
+        DecisionCandidate::Clarification { question } => question,
+        DecisionCandidate::ResearchSynthesis { .. } => "",
+    };
+    candidate.contains('\0')
+        || output
+            .prose_changes
+            .iter()
+            .flatten()
+            .any(|change| change.candidate_text.contains('\0') || change.explanation.contains('\0'))
 }
 
 #[cfg(test)]
