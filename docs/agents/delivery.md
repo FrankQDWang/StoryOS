@@ -134,7 +134,7 @@ Then it sends the [review prompt](review-prompt.md) and a request to one new rea
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
-- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run `make check` at the same time as a round, or after the round passes. The [merge gate](#merge-gate) still needs a line for the final head.
+- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier, `make check` or `make check-full`, at the same time as a round, or after the round passes. The [merge gate](#merge-gate) still needs a line for the final head.
 - After a passed round, a new round starts only after a change to the diff of the ticket. The command refuses a round when the tree did not change.
 - A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator. The coordinator accepts the merge with this evidence.
 

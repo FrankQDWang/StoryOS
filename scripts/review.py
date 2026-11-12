@@ -105,8 +105,9 @@ def evidence_line(body, head):
 
 
 def refuse_pending(body):
-    """Refuse a round while a line of the PR body has the word pending. Complete the required evidence first."""
-    if lines := [line.strip() for line in body.splitlines() if PENDING.search(line)]:
+    """Refuse a round while a line of the PR body has the word pending. Print the lines without control characters."""
+    lines = ["".join(c for c in line if c.isprintable()).strip() for line in body.splitlines() if PENDING.search(line)]
+    if lines:
         raise Refused("The PR body has required evidence that is pending. Complete each evidence record, remove the word "
                       "pending, then run the command again. The lines:\n" + "\n".join(f"  {line}" for line in lines))
 
@@ -321,8 +322,9 @@ def review(pr, wait):
     if all(result == "PASS" for result, _, _, _ in results.values()):
         print(f"Next: send the PR link and the verdict links to the coordinator session. {BASE_MERGE}")
     elif number < ROUNDS:
-        print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run make check at the same "
-              "time as the round or after the round passes. The merge gate needs its line for the final head.")
+        print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run make check, or "
+              "make check-full when the ticket requires it, at the same time as the round or after the round passes. "
+              "The merge gate needs its line for the final head.")
     else:
         print("Next: this was the last round. Send the open blocking findings to the coordinator session.")
 
