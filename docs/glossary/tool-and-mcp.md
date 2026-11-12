@@ -36,6 +36,10 @@ _Avoid_: Tool Registration, installed tool, trusted ToolSpec
 The host-owned, versioned record that binds a built-in implementation or exact Tool Discovery Record to its trusted StoryOS ToolSpec, implementation source, and adapter rules. Its lifecycle is active, quarantined, or retired; discovery and project enablement remain separate records.
 _Avoid_: Tool Discovery Record, Project Tool Enablement, Tool Exposure
 
+**Host Tool**:
+A Tool whose Tool Registration binds a built-in implementation that StoryOS executes in its own process. It has no external destination, so its ToolCall has no Destination Attempt and no Outbound Disclosure Event. Its ToolCall, its validation, and its result are the same records as those of each other Tool, and it gives the Agent no authority ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
+_Avoid_: Built-in command, Provider-hosted Tool, MCP tool, Agent Decision kind
+
 **Project Tool Enablement**:
 A project's explicit enabled or disabled selection of one exact active Tool Registration. It permits the Registration to be considered for Exposure but grants no Run capability or execution authority.
 _Avoid_: Tool Registration, Tool Exposure, Capability Grant
@@ -55,6 +59,10 @@ _Avoid_: Tool result, Artifact, Approval, model message
 **Tool Result Continuation**:
 The RunStep that a Run opens when each ToolCall of its durable function request Decision is resolved. Each resolved ToolCall is one Context Candidate of the source class `tool_result`, with the ToolCall identity as its Context Source Version and the trust `data_only`. The request sends one function output for each call with its original call identifier, and its text always comes from the stored ToolCall. A delivery never starts a Tool exchange ([ADR 0085](../adr/0085-reenter-each-settled-tool-result-through-context-assembly.md)).
 _Avoid_: Tool replay, second ToolCall, author message
+
+**Run Finish Request**:
+The ToolCall to the Host Tool `finish` with which the Agent says that the work of the AgentRun is complete. Its result is empty. Only after it does the model write the final answer of the Run, and a text with no earlier Run Finish Request does not end the Run ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
+_Avoid_: Terminal Tool, stop call, Run Cancellation, final answer
 
 **Tool Gateway**:
 The sole StoryOS-owned authorization and execution boundary for every StoryOS-dispatched ToolCall, regardless of whether its caller is a model, generated program, MCP App, or host component. It resolves the Tool Registration, enforces the caller's exact Project Scope, derives effects, enforces grants and Approval, invokes the trusted implementation, validates output, and records the outcome; provider-hosted execution cannot claim this StoryOS-controlled guarantee.
