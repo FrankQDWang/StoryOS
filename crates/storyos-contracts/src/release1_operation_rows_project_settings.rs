@@ -492,4 +492,8 @@ const SET_CURRENT_CHAPTER_RESPONSE: &[Patch] = &[
         ],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
+    Patch(
+        Edit::NullablePattern(U64_WIRE),
+        &["/$defs/DomainReceipt/properties/author_action_sequence"],
+    ),
 ];
