@@ -25,7 +25,7 @@ A separately identified Tool process or other processor operated inside the Stor
 _Avoid_: StoryOS Host internal work, trusted by deployment location, external provider, configured API
 
 **External Processing Destination**:
-A named model Provider endpoint, remote or independently controlled MCP server, hosted Tool, embedding service, telemetry system, support system, or other processor outside the StoryOS Controlled Processing Boundary. Every submission to it is an Outbound Disclosure regardless of first-party naming, transport route, apparent localhost address, or whether the StoryOS service itself is deployed locally or in the cloud.
+A named model Provider endpoint, remote or independently controlled MCP server, embedding service, telemetry system, support system, or other processor outside the StoryOS Controlled Processing Boundary. Every submission to it is an Outbound Disclosure regardless of first-party naming, transport route, apparent localhost address, or whether the StoryOS service itself is deployed locally or in the cloud.
 _Avoid_: Network request only, provider alias, localhost exemption
 
 **External Provider Accountability Boundary**:
@@ -69,7 +69,7 @@ The immutable fail-closed Host decision immediately before I/O, revalidating exa
 _Avoid_: Context Assembly Manifest, cached authorization, provider retry flag, post-send audit
 
 **Capability Grant**:
-A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a StoryOS ToolCall or Provider-hosted Operation; approval may narrow or extend a lower layer only within its parent boundary.
+A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a StoryOS ToolCall; approval may narrow or extend a lower layer only within its parent boundary.
 _Avoid_: Role, permission flag, discovered tool, model-visible tool
 
 **Approval**:

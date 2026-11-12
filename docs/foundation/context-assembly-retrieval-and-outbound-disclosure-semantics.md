@@ -10,7 +10,7 @@
 - Model routing boundary: [ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50)
 - Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Ordered assembly decision: [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md), with its inspection consequence revised by [ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)
-- Accepted inputs: [Model continuation](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md), [hosted operations](../adr/0034-bound-provider-hosted-tool-operations.md), and [Project Memory](../adr/0035-use-background-generated-project-memory.md)
+- Accepted inputs: [Model continuation](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md), [hosted operations](../adr/0034-bound-provider-hosted-tool-operations.md) as narrowed by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md), and [Project Memory](../adr/0035-use-background-generated-project-memory.md)
 - Research evidence: [Context Assembly, Retrieval, and Outbound Disclosure Source Audit](../research/context-assembly-retrieval-outbound-disclosure-source-audit.md)
 
 ## 1. Purpose and authority
@@ -19,8 +19,8 @@ This specification defines the logical contract by which StoryOS determines,
 discovers, qualifies, selects, projects, records, and discloses context for one
 operation. It governs each StoryOS-controlled submission to a model, Tool,
 MCP server, embedding service, telemetry sink, or other processing destination.
-ADR 0033 owns model continuation, ADR 0034 owns bounded Provider-hosted work,
-and ADR 0035 owns background Project Memory.
+ADR 0033 owns model continuation, ADR 0084 withdraws the Provider-hosted work
+that ADR 0034 bounded, and ADR 0035 owns background Project Memory.
 
 The contract exists to make a stable editor-integrated discovery-writing Agent
 useful without turning retrieval, prompt construction, provider sessions, or
@@ -69,11 +69,10 @@ that every Provider-internal step has a StoryOS gate record.
 If generating a Projection requires a model, Tool, MCP server, embedding
 service, or other processing destination, that generation is a separate
 operation that crosses all seven gates before StoryOS submits it. A received
-Tool, MCP, or hosted result crosses the contract before StoryOS supplies or
-references it in a later model request. A separately authorized Provider-hosted
-Operation may consume internal results before StoryOS receives them. Its
-complete admitted intake, Tool set, outward processing, and effect bounds use
-ADR 0034; do not invent a Host-controlled dispatch for each invisible step.
+Tool or MCP result crosses the contract before StoryOS supplies or references
+it in a later model request. StoryOS performs no Provider-hosted Operation
+(ADR 0084): a model request carries no Provider-side tool, so no Provider-side
+step consumes a result before StoryOS receives it.
 
 ### 2.1 Project ownership and isolation
 
@@ -669,15 +668,14 @@ authority.
 
 ### 9.1 Processing boundary classifications
 
-This table describes actual StoryOS-controlled submissions. A bounded hosted
-operation uses its owning submission evidence under section 9.6, not a separate
-Host Attempt for every Provider-internal destination or query.
+This table describes actual StoryOS-controlled submissions. StoryOS performs no
+Provider-hosted Operation (ADR 0084).
 
 | Class | Meaning | Evidence contract by execution stage |
 |---|---|---|
 | StoryOS Host Internal Processing | Core-owned resolution, eligibility, selection, and deterministic projection with no separate processor; it is not a gate-seven destination | Applicable Host records and ContextAssemblyManifest when assembly reaches gate six |
 | StoryOS Controlled Processing Destination | Separately registered processor inside the enforced StoryOS Controlled Processing Boundary | DestinationContextManifest and Destination Attempt |
-| External Processing Destination | Model Provider, embedding API, external MCP server, hosted Tool, telemetry or support system, or any independently controlled processor | DestinationContextManifest, OutboundDisclosureManifest, Destination Attempt, and persisted Wire Payload Projection before dispatch; Disclosure Event at the durable local dispatch claim before external I/O |
+| External Processing Destination | Model Provider, embedding API, external MCP server, telemetry or support system, or any independently controlled processor | DestinationContextManifest, OutboundDisclosureManifest, Destination Attempt, and persisted Wire Payload Projection before dispatch; Disclosure Event at the durable local dispatch claim before external I/O |
 
 Classification depends on exact Registration, operational control, enforced
 Project Isolation, implementation, and data path. It does not depend on
@@ -702,8 +700,6 @@ One immutable DestinationContextManifest binds:
 - one Purpose and the applicable owning intake contract: Model Capability
   Profile plus Model Attempt Request for a model, or Destination Context Intake
   Contract for a non-model destination;
-- when hosted work is enabled, the complete admitted operation and its explicit
-  intake, prior-state access, Tool set, and outward-processing bounds;
 - processing-boundary class;
 - minimum-necessary selected Projections;
 - applicable policy, Project Destination Grant, Capability Grant,
@@ -912,21 +908,15 @@ Research, Tool results, Project Instructions, credentials, or complete Run
 payloads. Default telemetry disclosure is limited to sanitized operational
 categories, identifiers, timings, and digests.
 
-Every non-model Tool, MCP server, embedding service, hosted Tool, and other
+Every non-model Tool, MCP server, embedding service, and other
 destination has an exact Destination Context Intake Contract. Only declared
 fields, source classes, Purposes, and bounded data categories may be supplied.
 Ambient Context is forbidden.
 
-Provider-hosted Tools do not inherit the Model Attempt's context, Capability,
-or disclosure grant. ADR 0034 binds their complete enabled set, explicit intake
-including intentionally referenced state, permitted processors and outward
-destinations, and enforceable bounds before the owning Model Attempt submits.
-When this is one physical submission, use that Model/Destination Attempt and
-its disclosure evidence; do not double-count it or invent internal dispatches.
-If the Provider cannot limit access to admitted intake and outward processing,
-the mode is ineligible. A prompt instruction alone is not enforcement.
-Internal queries, consumption, and transfers that StoryOS cannot observe stay
-unknown; returned events are Provider reports, not Host gate decisions.
+A model request carries no Provider-side tool (ADR 0084). Thus no
+Provider-hosted Tool receives the Model Attempt's context, Capability, or
+disclosure grant. Each research tool is a StoryOS ToolCall to a non-model
+destination under this section.
 
 A StoryOS Controlled Processing Destination cannot become an unrecorded egress
 proxy. If a controlled Tool, MCP adapter, or service needs to call a downstream
@@ -964,16 +954,12 @@ When a Tool or MCP result may enter a subsequent model step:
 4. selection and Bounded Projection operate on the qualified result;
 5. new manifests and Destination Attempt evidence are committed.
 
-For Provider-hosted work, these steps govern returned-result intake and later
-StoryOS submissions. They do not assert a Host check before internal Provider
-consumption. Preserve native item/call correlation, reported source identities,
-limits, and uncertainty. Validate the returned shape, size, and source binding.
-Only the selected complete Model Attempt whose entire Agent Decision validates
-and becomes durable can enter ordinary continuation. Incomplete, rejected,
-cancelled, unselected, or fenced output remains evidence only. A validated
-partial research deliverable retains its sources and unmet objective under
-ADR 0034. Provider-reported sources are not StoryOS-captured Research snapshots
-unless StoryOS actually captures and validates them through that domain path.
+StoryOS performs no Provider-hosted work (ADR 0084). Preserve native item/call
+correlation. Only the selected complete Model Attempt whose entire Agent
+Decision validates and becomes durable can enter ordinary continuation.
+Incomplete, rejected, cancelled, unselected, or fenced output remains evidence
+only. A validated partial research deliverable retains its sources and unmet
+objective.
 
 An MCP App remains a sandboxed view or controller over StoryOS-owned typed
 records. Its Host Context, update-model-context contribution, Tool result, and
@@ -1153,8 +1139,8 @@ This specification fixes semantics and hands off physical or wire realization:
 |---|---|---|
 | [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md) | tables, constraints, transactions, indexes, payload storage, migrations, backup, restore, export, and Credential Reference integration | manifest-before-egress durability, immutable history, exact Project Scope, cache invalidation, rebuildable indexes |
 | [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md), resolving [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | credible attack paths, structural mitigations, residual risks, verification evidence, and downstream security ownership | orthogonal trust axes, fail-closed eligibility, destination-specific grants, no ambient context |
-| [Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | DTOs, schemas, commands, event envelopes, compatibility, and errors | exact identities, current settings, known/opaque context evidence, hosted operation, attempts, and Project Scope; remove obsolete semantic controls |
-| [Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | fake destinations, crash/retry/replay and isolation tests | seven gates at Host-controlled boundaries, bounded hosted intake, ordinary steering, compaction transitions, and uncertainty; no semantic-correctness oracle |
+| [Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | DTOs, schemas, commands, event envelopes, compatibility, and errors | exact identities, current settings, known/opaque context evidence, attempts, and Project Scope; remove obsolete semantic controls |
+| [Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | fake destinations, crash/retry/replay and isolation tests | seven gates at Host-controlled boundaries, ordinary steering, compaction transitions, and uncertainty; no semantic-correctness oracle |
 | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Future observation surface outside MVP; no current design or implementation handoff | Existing Context and disclosure evidence keeps its independent runtime contract |
 | [AI-Independent Editor-First Release Baseline and Handoff](https://github.com/FrankQDWang/StoryOS/issues/62) | implementation slice and acceptance gate | zero-configuration manual editor, later external model and embedding APIs, Provider neutrality |
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | long-term retention, payload redaction, archival, export, and deletion | historical context truth, compaction lineage, manifest and disclosure evidence |
@@ -1244,11 +1230,8 @@ Downstream implementation and verification must cover at least:
     items keep their identities and applicable access/retention boundaries.
 25. A bounded Memory summary navigates to on-demand document reads. Memory
     updates and Notes do not rewrite history or become instruction authority.
-26. A hosted operation binds its complete intake and outward-processing bounds
-    before submission. Its actual submitted Attempt is counted once; invisible
-    internal queries remain unknown. Returned reports are not Host observations.
-27. Rejected, cancelled, incomplete, or fenced hosted output cannot advance
-    ordinary continuation; a complete validated partial result retains limits.
+26. Withdrawn: ADR 0084 removed the hosted operation that this case tested.
+27. Withdrawn: ADR 0084 removed the hosted output that this case tested.
 28. An incompatible delta/reference mapping uses admitted full input or a new
     transport continuation without changing conversation identity. Unknown
     native compaction capability cannot be inferred from Responses support.
@@ -1260,7 +1243,7 @@ every instruction, forgot a source, or produced an exact semantic summary.
 
 1. Every project-bearing fact binds one exact Project Scope.
 2. No gate is skipped, merged, inverted, or retroactively simulated for a
-   StoryOS-controlled submission; hosted internal steps use ADR 0034's boundary.
+   StoryOS-controlled submission.
 3. Purpose and destination permission exist before Candidate Discovery.
 4. Mandatory means considered, not automatically eligible or disclosed.
 5. Non-degradable context never disappears through ranking, budgeting,
@@ -1290,7 +1273,7 @@ every instruction, forgot a source, or produced an exact semantic summary.
 18. A ContextAssemblyManifest commits before any destination submission.
 19. A manifest proves StoryOS preparation, not submission or destination use.
 20. Each submitted operation has minimized input and authorized destination
-    bounds, including its permitted hosted processors and outward processing.
+    bounds.
 21. Every local outbound dispatch or redispatch has its own Disclosure Event
     and Destination Attempt evidence with explicit submission certainty;
     OutcomeUnknown is treated conservatively without being called confirmed
@@ -1299,8 +1282,8 @@ every instruction, forgot a source, or produced an exact semantic summary.
 23. Provider promises and retention labels never undo Outbound Disclosure.
 24. Tool and MCP execution trust never grants truth or Instruction Authority to
     returned content.
-25. Received Tool, MCP, and hosted results cross the contract before a later
-    StoryOS submission; invisible internal consumption is not Host admission.
+25. Received Tool and MCP results cross the contract before a later StoryOS
+    submission. No model request carries a Provider-side tool (ADR 0084).
 26. Author guidance never overrides source/retained-copy access, Capability,
     destination policy, or actual Memory settings.
 27. Inspect never rewrites history or presents provider-opaque inference as

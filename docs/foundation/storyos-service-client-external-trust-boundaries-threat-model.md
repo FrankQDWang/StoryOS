@@ -15,7 +15,7 @@
 - MCP App lifecycle: [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md)
 - Deployment and isolation boundary: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md) and [ADR 0022](../adr/0022-prefer-widely-validated-hosted-infrastructure.md)
 - Model continuation: [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md)
-- Hosted operations: [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md)
+- Hosted operations: [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md), withdrawn by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)
 - Generated Memory: [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
 
 # Overview
@@ -62,6 +62,12 @@ and limited inferences; they do not certify an account or selected model.
 Unknown scope or capability is not proof of a Provider vulnerability. It is
 insufficient evidence to enable a StoryOS path that requires that property.
 
+[ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md) withdrew the Provider-hosted Operation on 2026-11-03. A
+StoryOS model request carries no Provider-side tool, and a native response item
+of a type that the request did not ask for makes the Agent Decision invalid.
+Each research tool is a StoryOS ToolCall through the one Tool Gateway. The
+Provider evidence rows above stay as dated evidence for that decision.
+
 ## 2. Product and deployment outline
 
 StoryOS supports Dean Koontz-style Discovery Writing: the author develops the
@@ -79,9 +85,8 @@ recovery acceptance remain deferred to deployment preparation. [S10]
 
 Volcengine Agent Plan Responses is the selected first real-model path, subject
 to exact route, account, model, and capability validation. Continuation, cache,
-native compaction, retrieval, cancellation, and hosted Tools are separate
-capabilities. Codex CLI supplies the primary general Agent design reference,
-not runtime code or evidence of Volcengine support. [S7]
+native compaction, retrieval, and cancellation are separate capabilities.
+Codex CLI supplies the primary general Agent design reference, not runtime code or evidence of Volcengine support. [S7]
 
 Release 1 has one Protected Web Client: the exact controlled StoryOS Web
 application build named by its immutable asset set, accepted client-contract
@@ -123,9 +128,8 @@ The Foundation must preserve these security objectives:
    network, browser, process, cache, projection, and Provider state.
 4. **Minimum-necessary external processing.** Every StoryOS-controlled
    submission receives only admitted input or references after
-   manifest-before-egress. Hosted work has its complete input, Tool set,
-   outward processing, effects, and resource scope bounded before submission;
-   invisible internal steps are not claimed as separate Host-gated calls.
+   manifest-before-egress. No model request carries a Provider-side tool
+   (ADR 0084).
 5. **Secret confinement.** Only the narrow execution boundary resolves a
    Credential Reference. Secret values and value digests never enter ordinary
    records, Tool arguments or outputs, model context, MCP Apps, logs, backups,
@@ -155,7 +159,7 @@ The Foundation must preserve these security objectives:
 | Artifacts, Proposals, Receipts, and Provenance | exact identity, source lineage, integrity, lifecycle, and no implicit authority |
 | AgentRun, Subrun, Transcript, Mailbox, and recovery facts | durable ordering, idempotency, fencing, uncertainty, and replay correctness |
 | Project Scope and requester identity | no cross-User or cross-Project discovery, existence oracle, join, reuse, delivery, or disclosure |
-| Context and disclosure evidence | seven ordered gates at StoryOS submissions, known input/reference dependencies, bounded hosted scope, and manifest-before-egress |
+| Context and disclosure evidence | seven ordered gates at StoryOS submissions, known input/reference dependencies, and manifest-before-egress |
 | Generated Memory and publication | exact Project Scope and source/publication versions, bounded maintenance, no authority promotion, and no stale or partial publication |
 | Credential values and resolver authority | never model-, Client-, Tool-, App-, database-payload-, log-, backup-, or export-visible |
 | PostgreSQL schema, roles, constraints, and migration ledger | least privilege, forced RLS, same-scope references, checksum and compatibility integrity |
@@ -200,10 +204,9 @@ both deployments even though the local deployment bootstraps its one User
 without login UX.
 
 Provider-internal training, retention, logging, hidden cache, subprocessors,
-and model attention remain outside StoryOS durable truth. A hosted mode must
-have a validated way to constrain admitted intake, Tool set, outward processing,
-effects, and finite resource use; a prompt or service label alone is insufficient.
-Invisible internal events remain Provider-reported or unknown. Host checks prove
+and model attention remain outside StoryOS durable truth. StoryOS has no
+hosted mode (ADR 0084). Invisible internal events remain Provider-reported or
+unknown. Host checks prove
 admission and local handling, not that the Provider obeyed every bound. [S8]
 
 Ordinary creative corrections and non-use guidance remain Messages or Steering
@@ -232,7 +235,7 @@ the selected Release 1 boundary.
 | TB-4 Maintenance ↔ PostgreSQL | migrations, whole-service backup/restore, role/grant manifests | separate non-request credentials, isolated execution, checksum and restore validation |
 | TB-5 Server/worker ↔ Credential Resolver | opaque reference, ephemeral resolved value, availability | resolve only after admitted operation; value reaches only the exact transport boundary |
 | TB-6 Model/embedding destination | admitted input and prior references, wire projection, ephemeral credential, returned output | exact Scope and applicable conversation/destination bindings, current admission, manifest, Attempt, disclosure evidence, and no cross-scope reuse |
-| TB-6a Provider-hosted operation | explicit intake and intentionally referenced state, enabled Tool set, outward processing, returned reports | bound the whole operation before its owning Model Attempt submits; no Ambient Context, invented internal Host gates, or duplicate accounting |
+| TB-6a Provider-hosted operation | none | withdrawn by ADR 0084; a model request carries no Provider-side tool, so this boundary does not exist |
 | TB-7 Tool Gateway ↔ Tool/MCP server | declared inputs, effects, credentials, results, nested destinations | exact Registration and ToolSpec, non-escalating grant, Approval, effect evidence, contract-drift fence |
 | TB-8 MCP App iframe ↔ Host bridge | UI resource, instance negotiation, presentation signals, App Action Requests | cross-origin sandbox, exact instance/source/origin, schema and capability mediation, no auto-forward |
 | TB-9 Research fetcher ↔ network | generated or supplied URL/query, redirects, response bytes | public-network-only policy, no ambient credentials, bounded capture and exact provenance |
@@ -553,34 +556,22 @@ available to the model, App, generated program, or arguments. Every
 StoryOS-controlled nested external dispatch is a separate destination
 operation; no controlled adapter may be an unrecorded egress proxy.
 
-A Provider-hosted operation instead binds its complete enabled Tool set,
-Registrations, ToolSpecs, explicit intake, permitted processors and outward
-destinations, effect ceiling, current authority, required Approval, and finite
-bounds before the owning Model Attempt submits. A shared Provider or previous
-response reference gives a hosted Tool no Ambient Context. If the mode cannot
-restrict intake or outward processing, refuse it; use a separate bounded
-request only when it meets the same contract. Internal query values may be
-unknown. Do not invent Host ToolCalls or dispatches for them. [S8]
+StoryOS performs no Provider-hosted Operation (ADR 0084). A model request
+carries no Provider-side tool, so no hosted Tool can run under a Model Attempt.
 
-Tool Approval targets one exact StoryOS ToolCall or one exact hosted operation;
-neither approves the other. Destination Disclosure Approval grants no Tool
-execution. An operation covered by the current Run Grant needs no extra
-confirmation. Provider approval callbacks grant no author authority; a selected
-callback path needs validated correlation and current admission before use.
-The first hosted scope permits search, reading, and bounded temporary
-computation. External business writes, messages, publication, and direct StoryOS
-writes are excluded. Scratch files are not durable results; importing returned
-files is a separate validated Host operation. Business writes use separately
-authorized StoryOS ToolCalls, and creative changes retain Proposal/Acceptance.
+Tool Approval targets one exact StoryOS ToolCall. ADR 0084 withdrew the hosted
+operation target. Destination Disclosure Approval grants no Tool execution. An
+operation covered by the current Run Grant needs no extra confirmation.
+Provider approval callbacks grant no author authority. Business writes use
+separately authorized StoryOS ToolCalls, and creative changes retain
+Proposal/Acceptance.
 
 **Verifiable evidence.** Tests mutate each contract field and annotation,
 reuse names across servers, substitute token audience, attempt token
 passthrough, invoke a hidden or app-only Tool, request undeclared effects,
 redirect controlled nested egress, and return invalid/oversized results.
-Hosted fixtures vary enabled tools, input access, outward destinations, effects,
-Approval target, and enforceable bounds before submission. An unknown required
-bound refuses the mode. Reported violations fence later Host work; they do not
-retroactively undo internal work or become proof of per-step Host inspection.
+Reported violations fence later Host work; they do not retroactively undo
+earlier work.
 
 **Residual risk and owner.** An external service can misuse data that was
 legitimately disclosed within an exact grant; StoryOS records but cannot
@@ -621,8 +612,8 @@ No output can create an Author Command Admission, Approval, Acceptance,
 Credential Reference selection, or destination grant. Generated Memory and
 compaction retain source roles and known input evidence; neither becomes a new
 Host policy. General prompts guide model behavior but are not the enforcement
-boundary. A returned-result rejection cannot undo already admitted hosted work;
-its disclosure, effect, and uncertainty evidence must remain intact.
+boundary. A returned-result rejection cannot undo an earlier disclosure or
+effect; its disclosure, effect, and uncertainty evidence must remain intact.
 
 **Verifiable evidence.** A versioned adversarial corpus places equivalent
 instructions in every source class, encoding, nested summary, Tool field,
@@ -633,9 +624,7 @@ credentials, cause unapproved egress/effects, or bypass Proposal/Acceptance.
 **Residual risk and owner.** A model may still produce poor or misleading
 creative output from eligible malicious data; author inspection and evidence
 quality address that product risk. Each StoryOS-controlled effect remains
-Host-gated; hosted effects remain limited to the pre-admitted operation with
-Provider-internal compliance uncertainty. A later result check cannot prevent
-earlier internal consumption.
+Host-gated.
 Exact input/output discriminants belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 the injection matrix belongs to
@@ -672,13 +661,9 @@ address class, redirect chain, headers needed for provenance, content digest,
 and truncation/failure evidence. Network isolation should make internal
 destinations unreachable even if validation fails.
 
-These hop-level checks apply to a StoryOS-controlled fetcher. For hosted search
-or reading, ADR 0034 requires a validated way to bound intake, resources,
-outward destinations, and effects before submission. StoryOS cannot claim to
-observe or validate every internal DNS result or redirect. Unknown required
-network controls make that mode ineligible. Returned URLs remain untrusted;
-a later StoryOS fetch passes this full fetcher boundary. A Provider source
-report is not a captured Research Source Snapshot.
+These hop-level checks apply to a StoryOS-controlled fetcher. StoryOS performs
+no Provider-hosted search or reading (ADR 0084). Returned URLs remain
+untrusted; a later StoryOS fetch passes this full fetcher boundary.
 
 **Verifiable evidence.** Tests cover IPv4/IPv6 textual variants, localhost,
 private/link-local/metadata addresses, userinfo, mixed schemes, DNS rebinding,
@@ -696,10 +681,10 @@ SSRF and parser tests belong to
 the isolated minimal fetcher belongs to
 [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
-## 17. AP-09: Provider continuation or hosted disclosure escapes admission
+## 17. AP-09: Provider continuation or disclosure escapes admission
 
 **Source to sink.** A substituted prior-response ID, account, endpoint, model,
-Adapter, cache entry, implicit attachment, or hosted Tool exposes a different
+Adapter, cache entry, or implicit attachment exposes a different
 conversation or wider input than the new request admits. A forged, partial,
 rejected, or late result advances the active chain, or a small transport delta
 conceals intentionally referenced prior state. A Provider cache flag or service
@@ -734,14 +719,13 @@ a cache or summary cannot silently replace them. Use a delta/reference only
 under a mapping that represents the current request. Otherwise admit full input
 or a new transport continuation without changing conversation identity.
 
-Validate Responses transport, continuation, cache, compaction, hosted Tools,
-retrieval, and cancellation separately, including their supported combinations.
+Validate Responses transport, continuation, cache, compaction, retrieval, and
+cancellation separately, including their supported combinations.
 Agent Plan entitlement is not general Ark endpoint or exact model/account proof.
 Unknown required behavior blocks the route. Hidden SDK retries and
 Provider-controlled model fallback are ineligible; each physical resubmission
 has fresh admission and Attempt
-and disclosure evidence. One hosted submission uses its owning Model Attempt
-once; invisible internal steps are not separate Host submissions. [S7] [S8]
+and disclosure evidence. [S7]
 
 Preserve native item/call identities and result correlation. Only the selected
 complete output whose entire Agent Decision validates and becomes durable may
@@ -766,9 +750,7 @@ use binding, compatibility Decision, prior reference, and native call identity.
 They prove current admission, exact Host wire/reference association, immutable
 original bindings, no cross-conversation reuse, and refusal of unsupported
 combinations. Duplicate, reordered, forged, partial, rejected, and late output
-cannot settle another Attempt or advance a fenced chain. Hosted fixtures test
-whole-operation admission and single accounting, not simulated proof of unseen
-Provider steps. Real-route checks qualify only the behavior actually observed.
+cannot settle another Attempt or advance a fenced chain. Real-route checks qualify only the behavior actually observed.
 
 **Residual risk and owner.** StoryOS cannot prove Provider attention, retention,
 internal queries, enforcement, or legal disclosure. It can prove prepared input,
@@ -995,9 +977,9 @@ Model recovery distinguishes confirmed continuation unavailability from an
 unknown create outcome. Settled expiry may rebuild admitted context. For an
 unknown create, try permitted retrieval first. ADR 0033 allows at most one
 automatic successor only with the same request/route, fresh current admission,
-budget for both Attempts, and no unresolved Tool or hosted effect. Persist the
+budget for both Attempts, and no unresolved Tool effect. Persist the
 predecessor fence before that successor; restart cannot reset the allowance.
-Cancellation prohibits it. Read-only intent does not prove that a lost hosted
+Cancellation prohibits it. Read-only intent does not prove that a lost
 operation had no effect, cost, or disclosure. A local timeout or requested abort
 does not prove remote termination. Persist the Host cancellation fence before
 best-effort Provider abort. Revocation and observed bound violations fence new
@@ -1010,7 +992,7 @@ canonical effect, stable replay, preserved uncertainty, exactly one terminal
 Admission settlement, Draft preservation where required, and no cross-scope
 key collision. Model fixtures also distinguish expiry from unknown create,
 retain reservation and late evidence, enforce the one-successor limit across
-restart, and forbid it after cancellation or unresolved hosted work.
+restart, and forbid it after cancellation or an unresolved Tool effect.
 
 **Residual risk and owner.** Some destinations offer no authoritative lookup;
 uncertainty may remain permanently visible, and a lost human intention cannot
@@ -1174,7 +1156,7 @@ handoff. Recovery capacity and maintenance connections are reserved from
 ordinary work. Memory extraction, consolidation, publication, navigation, and
 reads have separate finite input/work bounds and cannot block ordinary writing.
 
-Hosted profiles identify the actual controls and finite worst-case reservation
+A route profile identifies the actual controls and finite worst-case reservation
 for cost, output, Tool use, time, and resources. A best-effort Tool counter is not
 a hard ceiling; a local timeout bounds Host waiting, not remote cost or execution.
 Refuse a route whose required bound is unknown or unenforceable. Settle one
@@ -1326,10 +1308,8 @@ through scope-keyed pools, queues, caches, storage, logs, and support evidence,
 with runtime and maintenance roles separated. Any destination lacking that
 complete controlled registration is external. Its StoryOS-controlled submission
 passes the seven gates, manifest-before-egress, Credential Resolver, and ordinary
-OutcomeUnknown handling. A Provider-hosted internal processor remains external
-and is bounded through the owning operation before submission, not reclassified
-as controlled or represented by an invented Host gate. Its unobserved transfers
-remain unknown. Shared infrastructure never aliases User, Project,
+OutcomeUnknown handling. StoryOS performs no Provider-hosted Operation
+(ADR 0084). Shared infrastructure never aliases User, Project,
 credential, cache, or idempotency identities.
 
 **Verifiable evidence.** Multi-User deployment fixtures vary hostname, region,
@@ -1338,8 +1318,7 @@ maintenance credential, TLS identity, telemetry route, and registration
 revision independently. Only exact controlled registrations retain the
 classification; every other path either preserves complete Project Isolation
 under its controlled contract or has prior external-disclosure admission at the
-actual Host boundary. Hosted fixtures refuse unbounded modes and preserve
-reported/unknown internal processing without certifying every internal hop.
+actual Host boundary.
 
 **Residual risk and owner.** A privileged cloud control-plane or platform
 administrator remains capable of violating its intended boundary and requires
@@ -1431,7 +1410,7 @@ not by generic control labels:
 | Tool, MCP, and App authority | untrusted schema/result/App bridge → Tool execution, context, credential, or author-state sink | AP-05–AP-07, AP-09–AP-10, AP-14, AP-18 | `DVG-04`, `DVG-05`, `DVG-08`, `DVG-11` |
 | controlled cloud | topology/account/provider inference or shared runtime state → cross-Project access or unmanifested egress | AP-01–AP-03, AP-08–AP-12, AP-16, AP-18, AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
 | Project isolation | client, runtime, DB, cache, cursor, archive, backup, destination, Memory, or recovery input → another User/Project | AP-01–AP-22 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-07`–`DVG-11` |
-| Provider continuation and hosted work | substituted reference/account, implicit Tool intake, or forged result → wider disclosure or active-chain advancement | AP-06, AP-08, AP-09, AP-14, AP-18, AP-21 | `DVG-04`–`DVG-08`, `DVG-11` |
+| Provider continuation | substituted reference/account, implicit Tool intake, or forged result → wider disclosure or active-chain advancement | AP-06, AP-08, AP-09, AP-14, AP-18, AP-21 | `DVG-04`–`DVG-08`, `DVG-11` |
 | ordinary steering, compaction, and real revocation | old source or generated summary → false erasure claim, forbidden reuse, or rewritten history | AP-07, AP-15, AP-16 | `DVG-04`, `DVG-07`–`DVG-09`, `DVG-11` |
 | generated Memory and maintenance | poisoned prior records or stale job → authority promotion, cross-scope recall, or partial publication | AP-07, AP-15, AP-22 | `DVG-04`–`DVG-07`, `DVG-09`, `DVG-11` |
 
@@ -1494,7 +1473,7 @@ Wayfinder owner:
 |---|---|---|
 | [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact protected-client, User, existing/prospective Project Scope, editor/writer, action, digest, nonce/idempotency, and lifetime binding; bounded claim ceiling; one append-only lifecycle and terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-20 |
 | [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | Local Edit Journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18, AP-20 |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets; continuation bindings, hosted Approval targets and report/unknown evidence; Memory notes/settings/publication | AP-01, AP-03–AP-10, AP-13–AP-22 |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets; continuation bindings, the Tool Approval target and report/unknown evidence; Memory notes/settings/publication | AP-01, AP-03–AP-10, AP-13–AP-22 |
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Admission/Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and known source references; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention; known Memory inputs, document revisions and actual copy restrictions | AP-04, AP-09–AP-12, AP-14–AP-18, AP-20–AP-22 |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin, XSS/DOM, asset/dependency, third-party-script, extension, stale-build/tab, controlled-cloud, bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; claim-ceiling checks; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-22 |
 | [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates exact Protected Web Client release identity, non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-22 |
@@ -1504,12 +1483,12 @@ receives AP-09, AP-15, AP-16, and AP-22: scoped immutable associations, current
 publication, rebuildable indexes, and conservative enforcement of covered-copy
 restrictions. It owns physical representation and any required migration.
 
-The protocol owner next maps continuation/reference identity, whole hosted
-operation/Approval targets, native result correlation, evidence classes, and
+The protocol owner next maps continuation/reference identity, the Tool Approval
+target, native result correlation, evidence classes, and
 Memory settings/notes/publication to versioned records. Storage and retention
 then align physical families, current reads, publication, exports, and real-copy
 restrictions. Proof and release must update their existing crosswalks for AP-22,
-ordinary steering, compaction, hosted opacity, and bounded model recovery.
+ordinary steering, compaction, and bounded model recovery.
 Deterministic proof observes Host gates and records, not model truth, attention,
 exact forgetting, or every internal Provider hop. Source drift or an unbounded
 selected mode returns to the original semantic owner before acceptance.
@@ -1560,6 +1539,8 @@ external capability evidence remains distinct from exact account acceptance.
 - **[S8]** [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md):
   complete hosted intake/Tool/outward/effect/resource bounds, Approval targets,
   single physical accounting, report/unknown evidence, and result/recovery limits.
+  [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md) withdrew its hosted parts and keeps the Tool Gateway and the
+  Tool Approval with one StoryOS ToolCall target.
 - **[S9]** [Memory contract](fiction-memory-and-research-provenance-semantics.md)
   and [ADR 0035](../adr/0035-use-background-generated-project-memory.md):
   bounded extraction/consolidation, publication, selective recall, ordinary

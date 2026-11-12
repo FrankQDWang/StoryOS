@@ -53,36 +53,35 @@ approved browser, language, deployment, and safety scope is unchanged.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S5-REQ-001 | The ordinary Agent conversation can perform bounded research through StoryOS ToolCalls and separately admitted Provider-hosted Operations. StoryOS dispatch uses the one Tool Gateway; hosted search, reading, and bounded temporary computation use ADR 0034 whole-operation admission. ToolSpec, Registration, Enablement, Exposure, Capability, and Approval stay distinct. | Tool/MCP owner and Context owner |
+| S5-REQ-001 | The ordinary Agent conversation can perform bounded research through StoryOS ToolCalls. StoryOS dispatch uses the one Tool Gateway. StoryOS performs no Provider-hosted Operation (ADR 0084). ToolSpec, Registration, Enablement, Exposure, Capability, and Approval stay distinct. | Tool/MCP owner and Context owner |
 | S5-REQ-002 | A third-party MCP server is an untrusted registered integration. Bind its exact contract and Project use, reject incompatible drift, mediate each effect, and keep credentials outside project records and output. | Tool/MCP owner and trust owner |
-| S5-REQ-003 | Preserve native function-call/result correlation and validate the complete model-requested business-tool batch before deriving StoryOS ToolCalls. Hosted items remain evidence of the separately admitted whole operation, not invented Host ToolCalls. Returned content passes Context Assembly before a later StoryOS-controlled submission; invisible Provider-internal steps do not claim Host gates. Results grant no instruction, permission, or authority. | Model Gateway and Context owners |
+| S5-REQ-003 | Preserve native function-call/result correlation and validate the complete model-requested business-tool batch before deriving StoryOS ToolCalls. A native item of a type that the request did not ask for makes the Agent Decision invalid (ADR 0084). Returned content passes Context Assembly before a later StoryOS-controlled submission. Results grant no instruction, permission, or authority. | Model Gateway and Context owners |
 | S5-REQ-004 | The author can inspect a research synthesis, its claims, exact sources, and supporting, conflicting, or limiting evidence. A missing or unavailable source remains visible as a gap, not an invented citation. | Research/Memory owner |
-| S5-REQ-005 | Tool and hosted-operation cancellation, interruption, unknown effects, and unknown usage stay durable and inspectable. Enforce registered intake, actual outward-processing bounds, and finite worst-case reservations before submission. Resume/reconciliation obey existing fences; a timeout proves neither remote stop nor retry permission. Incomplete, rejected, cancelled, or fenced hosted output cannot advance normal continuation. | AgentRun, Tool/MCP, and retention owners |
+| S5-REQ-005 | Tool cancellation, interruption, unknown effects, and unknown usage stay durable and inspectable. Enforce registered intake, actual outward-processing bounds, and finite worst-case reservations before submission. Resume/reconciliation obey existing fences; a timeout proves neither remote stop nor retry permission. Incomplete, rejected, cancelled, or fenced output cannot advance normal continuation. | AgentRun, Tool/MCP, and retention owners |
 | S5-REQ-006 | Research, Tool, and MCP results can supply bounded assistance or an editable Proposal. They cannot directly change prose, fiction facts, preferences, or manuscript structure. | Artifact, Core/Proposal, and Admission owners |
 
 **Author journey S5-JRN-001.** Ask a research question in the normal Agent
-panel. Use a real StoryOS Tool/MCP path and a qualified real Provider-hosted
-operation; inspect each operation's scope and any required Approval. Continue
+panel. Use a real StoryOS Tool/MCP path; inspect each operation's scope and
+any required Approval. Continue
 with the exact native function/result correlation. Inspect returned sources,
 reports, known gaps, and a validated partial result with its limitations. Use
 a result as discussion or a Proposal and reject one creative change. Interrupt
 an external operation, recover its exact disposition, then disable the
 integrations and continue manual writing.
 
-The hosted request admits its complete enabled Tool set before submission,
-even when the Provider ultimately uses none. Existing grants cover unchanged
-in-scope work without another prompt. Expanded authority uses the exact Tool
-Approval target; disclosure Approval remains distinct. No Ambient Context,
-unbounded remote cost, external business write, message, publication, or direct
-StoryOS write enters the hosted scope. A separate StoryOS ToolCall retains its
-own permitted effects and Approval. Unobserved internal steps stay unknown;
-one physical submission is not charged or disclosed twice. If Agent Plan
-cannot prove a required hosted boundary, Stage 5 remains blocked rather than
-claiming it from a fake, a prompt, or general Ark documentation.
+StoryOS performs no Provider-hosted Operation
+([ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)).
+A model request carries no Provider-side tool. Existing grants cover unchanged
+in-scope work without another prompt. Tool Approval keeps one target, the
+StoryOS ToolCall, and stays a contract for a later Stage that adds an effect
+outside the Project grant; disclosure Approval remains distinct. Each StoryOS
+ToolCall retains its own permitted effects. Stage 5 waived the hosted stories
+and the Approval stories of an exact operation
+([#363](https://github.com/FrankQDWang/StoryOS/issues/363)).
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S5-EVD-001 | Real Tool/MCP and exact hosted-mode qualification, registration, use, complete-set intake, bounds, grants, distinct Approval targets, and contract-drift evidence. Unauthorized or unbounded operations refuse before dispatch. |
+| S5-EVD-001 | Real Tool/MCP qualification, registration, use, intake, bounds, grants, and contract-drift evidence. Unauthorized or unbounded operations refuse before dispatch. |
 | S5-EVD-002 | Native function/result correlation, complete batch validation, research claims and exact available evidence, truthful gaps/partial results, and re-entry at StoryOS-controlled submissions. Provider reports remain distinct from Host observations and opaque internal work. |
 | S5-EVD-003 | Durable interruption, cancellation, unknown-effect/usage recovery, single accounting, selected-result continuation, Proposal-only creative change, and AI-independent regression evidence. |
 
@@ -291,17 +290,17 @@ proof owner maps these obligations to exact executable evidence.
 | [Validate Production Proposal Refusal, Conflict, and Recovery UX](https://github.com/FrankQDWang/StoryOS/issues/45) | Retained prototype evidence; S2 workspace and S3 production recovery. | `S2-REQ-009`; `S3-REQ-004`; `S3-REQ-008` |
 | [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46) | Canonical Core/Proposal owner; S1–S4 and later creative changes. | `S2-REQ-004`; `S3-REQ-004`; `S3-REQ-008` |
 | [Specify Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47) | Canonical AgentRun owner; S3 foundations and S9 complete modes. | `S3-REQ-003`; `S9-REQ-001`; `S9-REQ-005` |
-| [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48) | Canonical Tool/MCP and ADR 0034 hosted-operation owner; S5 and later callers. | `S5-REQ-001`; `S5-REQ-002`; `S5-REQ-003`; `S5-REQ-005` |
+| [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48) | Canonical Tool/MCP owner, with the Tool Gateway and Tool Approval of ADR 0034 as ADR 0084 narrows it; S5 and later callers. | `S5-REQ-001`; `S5-REQ-002`; `S5-REQ-003`; `S5-REQ-005` |
 | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) | Canonical Skill owner; S6. | `S6-REQ-001`; `S6-REQ-002`; `S6-REQ-003`; `S6-REQ-004` |
-| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway and ADR 0033 owner; S3 fake continuation/compaction, S4 Agent Plan, S5 functions/hosted work, S9 policy. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-001`; `S4-REQ-004`; `S5-REQ-003`; `S9-REQ-006` |
+| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway and ADR 0033 owner; S3 fake continuation/compaction, S4 Agent Plan, S5 functions, S9 policy. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-001`; `S4-REQ-004`; `S5-REQ-003`; `S9-REQ-006` |
 | [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | Canonical Memory and ADR 0035 owner; S3 conversation defaults, S5 research evidence, S7 background Memory. | `S3-REQ-003`; `S5-REQ-004`; `S7-REQ-002`; `S7-REQ-003`; `S7-REQ-005`; `S7-REQ-006` |
 | [Validate a Transcript-Embedded MCP Apps Host](https://github.com/FrankQDWang/StoryOS/issues/52) | Retained prototype evidence; S8 production Host. | `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
 | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53) | Canonical MCP App owner; S8. | `S8-REQ-001`; `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
-| [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | Canonical Context owner; S3 onward, with Host-controlled submissions distinct from opaque hosted steps and Memory distinct from active history. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-003`; `S5-REQ-003`; `S7-REQ-004`; `S7-REQ-006`; `S7-REQ-007` |
+| [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | Canonical Context owner; S3 onward, with Memory distinct from active history. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-003`; `S5-REQ-003`; `S7-REQ-004`; `S7-REQ-006`; `S7-REQ-007` |
 | [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55) | Approved visual/surface evidence; S2 production workspace, S8 Apps. | `S2-REQ-009`; `S8-REQ-001` |
-| [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | Canonical persistence owner; each new conversation, continuation, hosted-operation, and Memory family includes Scope, lifecycle, export/restore, and separate deployed-upgrade gates. | `REL-003`; `S2-REQ-005`; `S2-REQ-007`; `S3-REQ-003`; `S7-REQ-005`; `S7-REQ-007` |
-| [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | Trust invariant at each crossing, including bounded recovery, hosted opacity, and AP-22 Memory maintenance. | `REL-002`; `REL-003`; `S3-REQ-006`; `S4-REQ-004`; `S5-REQ-002`; `S7-REQ-005`; `S7-REQ-006`; `S8-REQ-002` |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | Canonical protocol and compatibility-matrix owner; S3 conversation/Run v2, S5 Approval targets, S7 Memory behavior and retired semantic controls. | `REL-003`; `S2-REQ-005`; `S3-REQ-003`; `S5-REQ-001`; `S7-REQ-006` |
+| [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | Canonical persistence owner; each new conversation, continuation, and Memory family includes Scope, lifecycle, export/restore, and separate deployed-upgrade gates. | `REL-003`; `S2-REQ-005`; `S2-REQ-007`; `S3-REQ-003`; `S7-REQ-005`; `S7-REQ-007` |
+| [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | Trust invariant at each crossing, including bounded recovery and AP-22 Memory maintenance. | `REL-002`; `REL-003`; `S3-REQ-006`; `S4-REQ-004`; `S5-REQ-002`; `S7-REQ-005`; `S7-REQ-006`; `S8-REQ-002` |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | Canonical protocol and compatibility-matrix owner; S3 conversation/Run v2, the later Tool Approval target, S7 Memory behavior and retired semantic controls. | `REL-003`; `S2-REQ-005`; `S3-REQ-003`; `S5-REQ-001`; `S7-REQ-006` |
 | [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59) | Architecture/governance invariant; all stages. | `REL-003`; `REL-006` |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | Proof owner; consume every current release requirement and stage. | `REL-005`; `REL-007`; `HND-006` |
 | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Deferred outside MVP; the Eval boundary owner retains only the future observation concept. | None; outside MVP. |
