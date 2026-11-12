@@ -25,7 +25,7 @@ The durable Active, Quarantined, or Retired global contract-eligibility state of
 _Avoid_: Provider health, credential availability, model version, mutable Registration
 
 **Model Capability Profile**:
-The immutable, versioned, provider-neutral semantic envelope for one Model Registration, distinguishing modalities, context and output bounds, Responses transport, typed streaming, stored continuation, implicit and explicit cache, function calling, hosted tools, structured output, context editing, native compaction, response retrieval, cancellation, generation controls, usage, and their supported combinations and native or Host-compiled mappings. Public claims and exact-model validation remain distinct evidence; an unknown required capability makes the route ineligible, while current account availability belongs to the scoped Model Operational Snapshot.
+The immutable, versioned, provider-neutral semantic envelope for one Model Registration, distinguishing modalities, context and output bounds, Responses transport, typed streaming, stored continuation, implicit and explicit cache, function calling, structured output, context editing, native compaction, response retrieval, cancellation, generation controls, usage, and their supported combinations and native or Host-compiled mappings. It has no hosted Tool entries ([ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)). Public claims and exact-model validation remain distinct evidence; an unknown required capability makes the route ineligible, while current account availability belongs to the scoped Model Operational Snapshot.
 _Avoid_: Provider model card, Model Operational Snapshot, benchmark score, availability state
 
 **Model Continuation Binding**:

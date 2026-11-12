@@ -5,7 +5,7 @@ This file is one design area of the [StoryOS glossary](../../GLOSSARY.md).
 ## Language
 
 **Outbound Disclosure**:
-The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to a named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Each StoryOS-controlled dispatch requires prior manifests and exact destination authority; bounded hosted outward processing uses the owning operation's admitted scope, with unobserved internal transfers remaining unknown rather than invented Host dispatch evidence.
+The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to a named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Each StoryOS-controlled dispatch requires prior manifests and exact destination authority. StoryOS performs no Provider-hosted Operation ([ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)).
 _Avoid_: External tool call, network access, upload
 
 **Context Processing Boundary**:
@@ -25,7 +25,7 @@ A separately identified Tool process or other processor operated inside the Stor
 _Avoid_: StoryOS Host internal work, trusted by deployment location, external provider, configured API
 
 **External Processing Destination**:
-A named model Provider endpoint, remote or independently controlled MCP server, hosted Tool, embedding service, telemetry system, support system, or other processor outside the StoryOS Controlled Processing Boundary. Every submission to it is an Outbound Disclosure regardless of first-party naming, transport route, apparent localhost address, or whether the StoryOS service itself is deployed locally or in the cloud.
+A named model Provider endpoint, remote or independently controlled MCP server, embedding service, telemetry system, support system, or other processor outside the StoryOS Controlled Processing Boundary. Every submission to it is an Outbound Disclosure regardless of first-party naming, transport route, apparent localhost address, or whether the StoryOS service itself is deployed locally or in the cloud.
 _Avoid_: Network request only, provider alias, localhost exemption
 
 **External Provider Accountability Boundary**:
@@ -33,7 +33,7 @@ StoryOS controls whether an external dispatch is admitted and records the exact 
 _Avoid_: Destination Data Handling Profile, ZDR as no disclosure, vendor compliance registry, provider promise as enforcement
 
 **Destination Context Manifest**:
-The immutable provider-neutral Operational Record describing the minimum-necessary input and referenced context for one admitted operation, with its Context Assembly Manifest, exact Scope, Purpose, destination identity/evidence, processing boundary, policy, and authorization requirements. It binds permitted hosted processing when applicable but proves neither internal Provider consumption nor actual submission; a later one-shot Approval binds the established Attempt without changing the Manifest.
+The immutable provider-neutral Operational Record describing the minimum-necessary input and referenced context for one admitted operation, with its Context Assembly Manifest, exact Scope, Purpose, destination identity/evidence, processing boundary, policy, and authorization requirements. It proves neither internal Provider consumption nor actual submission; a later one-shot Approval binds the established Attempt without changing the Manifest.
 _Avoid_: Context Assembly Manifest, provider request, Outbound Disclosure Event
 
 **Outbound Disclosure Manifest**:
@@ -69,7 +69,7 @@ The immutable fail-closed Host decision immediately before I/O, revalidating exa
 _Avoid_: Context Assembly Manifest, cached authorization, provider retry flag, post-send audit
 
 **Capability Grant**:
-A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a StoryOS ToolCall or Provider-hosted Operation; approval may narrow or extend a lower layer only within its parent boundary.
+A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a StoryOS ToolCall; approval may narrow or extend a lower layer only within its parent boundary.
 _Avoid_: Role, permission flag, discovered tool, model-visible tool
 
 **Approval**:

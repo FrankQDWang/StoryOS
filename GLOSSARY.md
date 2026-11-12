@@ -28,7 +28,7 @@ To find each entry that uses a term, use `grep -rn 'Project Scope' docs/glossary
 | [Outbound disclosure, destination, and approval](docs/glossary/disclosure-and-approval.md) | Processing boundaries, Outbound Disclosure, destination grants and attempts, Capability Grants, and Approval. |
 | [Deterministic verification](docs/glossary/deterministic-verification.md) | Deterministic verification boundaries, oracles, fault points, and evidence. |
 | [Model Gateway](docs/glossary/model-gateway.md) | Model Gateway, model registration, routing, attempts, and usage. |
-| [ToolSpec, Tool Gateway, and MCP](docs/glossary/tool-and-mcp.md) | StoryOS ToolSpec, provider-hosted tools, Tool registration and exposure, ToolCall, and Tool effects. |
+| [ToolSpec, Tool Gateway, and MCP](docs/glossary/tool-and-mcp.md) | StoryOS ToolSpec, the withdrawn provider-hosted terms, Tool registration and exposure, ToolCall, and Tool effects. |
 | [Artifact, provenance, and Artifact kinds](docs/glossary/artifact-and-provenance.md) | Artifact identity and revisions, provenance, research evidence, Artifact lifecycle, and Core Artifact kinds. |
 | [Proposal, Acceptance, undo, and Receipt](docs/glossary/proposal-and-acceptance.md) | Proposals, Acceptance, Author Action and undo, and Receipts. |
 | [MCP App](docs/glossary/mcp-app.md) | App UI Resources, App Views, App View Instances, and App actions. |
