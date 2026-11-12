@@ -36,14 +36,30 @@ pub fn host_tool(registration_revision: &str, spec_revision: &str) -> Option<&'s
         .flatten()
 }
 
-/// Executes one validated Host ToolCall. The result of `finish` is empty.
-pub fn execute_host_tool(intake: &ToolIntake) -> Option<ToolResultText> {
+/// The result of a `finish` call beside a refused call of the same response (ADR 0091 section 4).
+pub const FINISH_DOES_NOT_COUNT_RESULT: &str = "Another call of this response was refused, so this \
+finish call does not count and the work continues. Correct the refused call, and then call finish \
+again.";
+
+/// Executes one validated Host ToolCall. The result of `finish` is empty when no other call of
+/// its response was refused, and otherwise it says that the work continues.
+pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<ToolResultText> {
     match intake {
-        ToolIntake::Finish => Some(ToolResultText {
-            text: String::new(),
-            digest: format!("sha256:{}", crate::project_archive::hex_sha256(b"")),
-            bytes: 0,
-        }),
+        ToolIntake::Finish => {
+            let text = if refused_beside {
+                FINISH_DOES_NOT_COUNT_RESULT
+            } else {
+                ""
+            };
+            Some(ToolResultText {
+                text: text.to_owned(),
+                digest: format!(
+                    "sha256:{}",
+                    crate::project_archive::hex_sha256(text.as_bytes())
+                ),
+                bytes: text.len(),
+            })
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } => None,
     }
 }

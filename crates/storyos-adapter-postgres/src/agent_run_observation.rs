@@ -36,6 +36,9 @@ pub(crate) enum CreateSettlement<'a> {
     /// A text with no function call before a `finish` call that counted (ADR 0091): no Agent
     /// Decision, and the claimed Run continues to the next RunStep.
     NextRunStep,
+    /// A complete closing response with no text (ADR 0091): no Agent Decision, and the Run
+    /// completes. The response gets its continuation binding, so the next Run continues from it.
+    NoResult,
     NotSubmitted,
     Rejected(&'a str),
 }
@@ -144,6 +147,7 @@ pub(crate) async fn persist_create_result(
             | CreateSettlement::FunctionRequested
             | CreateSettlement::ToolCallsPending
             | CreateSettlement::NextRunStep
+            | CreateSettlement::NoResult
     ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
@@ -153,7 +157,7 @@ pub(crate) async fn persist_create_result(
     }
     let mut refusal = None;
     match result.settlement {
-        CreateSettlement::Response => {}
+        CreateSettlement::Response | CreateSettlement::NoResult => {}
         CreateSettlement::FunctionRequested => refusal = Some(research_refusal(&payload)),
         CreateSettlement::ToolCallsPending | CreateSettlement::NextRunStep => {}
         CreateSettlement::NotSubmitted => {
@@ -235,6 +239,16 @@ pub(crate) async fn persist_create_result(
             &payload,
         )
         .await;
+    }
+    if matches!(result.settlement, CreateSettlement::NoResult) {
+        crate::agent_run_continuation::bind_produced_continuation(
+            client,
+            claim,
+            result.attempt_id,
+            &payload,
+            &payload,
+        )
+        .await?;
     }
     let tool_calls = matches!(result.settlement, CreateSettlement::ToolCallsPending);
     update_run(

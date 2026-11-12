@@ -1,11 +1,12 @@
 //! The script of the tool loop profile (ADR 0091): the fake calls `finish` in each request with
-//! `tool_choice: "required"`, and it writes the final answer in the closing request. Three author
+//! `tool_choice: "required"`, and it writes the final answer in the closing request. Four author
 //! messages script the other cases of the finish rule:
 //!
 //! - A message that ends with `SCRIPT:text_before_finish` gets a text with no function call when
 //!   each function output of the request answers the prior response.
 //! - `SCRIPT:finish_twice` gets a second `finish` call in the first closing request.
 //! - `SCRIPT:empty_final_answer` gets a closing response with an empty text.
+//! - `SCRIPT:reply_form_answer` gets a closing text that maps to a reply form question.
 
 use storyos_application::{CreateRequest, ToolOutputOrigin};
 use storyos_core::{
@@ -29,6 +30,12 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         ToolChoice::None if message == "SCRIPT:finish_twice" && finished == 1 => {
             calls(request, finished)
         }
+        ToolChoice::None if message == "SCRIPT:reply_form_answer" => complete(
+            DecisionCandidate::Clarification {
+                question: "Which chapter do you mean?".to_owned(),
+            },
+            OutputPhase::FinalAnswer,
+        ),
         ToolChoice::None => complete(
             DecisionCandidate::Advisory {
                 text: match message {

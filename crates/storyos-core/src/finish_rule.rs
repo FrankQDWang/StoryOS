@@ -3,8 +3,8 @@
 //! the closing request after it has `tool_choice: "none"`.
 
 use crate::{
-    AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, ToolCallState, ToolOperation,
-    requests_function,
+    AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
+    ToolCallState, ToolOperation, requests_function,
 };
 
 /// The `tool_choice` of one decision request.
@@ -63,11 +63,15 @@ pub enum FinishRuleOutcome {
     /// A response with no function call before a `finish` call that counted: it makes no Agent
     /// Decision, and the Host opens the next RunStep with the same `tool_choice`.
     NextRunStep,
+    /// A complete closing response with no text: the Run completes with no result, and the
+    /// next Run of the Conversation continues from this response.
+    NoResult,
 }
 
 /// Applies the finish rule to the outcome of one terminal response of a request with
 /// `tool_choice`. A function request continues to its ToolCalls in each state. In the closing
-/// RunStep, the text is the final answer, and a final answer with no text gives no result.
+/// RunStep, the text of a complete response is the final answer as an Advisory, also when it has
+/// the shape of a reply form, and a final answer with no text gives no result.
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
     outcome: AgentDecisionOutcome,
@@ -81,18 +85,37 @@ pub fn apply_finish_rule(
         }
     ) || requests_function(items);
     match tool_choice {
-        ToolChoice::Required if !function_request => FinishRuleOutcome::NextRunStep,
-        ToolChoice::None => match outcome {
-            AgentDecisionOutcome::Decision {
-                kind: AgentDecisionKind::Advisory { ref text },
-                ..
-            } if text.trim().is_empty() => {
-                FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision)
-            }
-            outcome => FinishRuleOutcome::Settle(outcome),
-        },
-        ToolChoice::Auto | ToolChoice::Required => FinishRuleOutcome::Settle(outcome),
+        _ if function_request => FinishRuleOutcome::Settle(outcome),
+        ToolChoice::Required => FinishRuleOutcome::NextRunStep,
+        ToolChoice::None => closing_answer(items),
+        ToolChoice::Auto => FinishRuleOutcome::Settle(outcome),
     }
+}
+
+/// The final answer of a closing response with no function call: the text of its messages. A
+/// response with an incomplete item, a refusal, or a Tool item makes no Agent Decision.
+fn closing_answer(items: &[NativeStreamItem]) -> FinishRuleOutcome {
+    if items.iter().any(|item| {
+        item.state != StreamItemState::Complete
+            || item.refusal.is_some()
+            || item.role != StreamItemRole::Assistant
+    }) {
+        return FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision);
+    }
+    let text = items
+        .iter()
+        .filter_map(|item| item.text.as_deref())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    // PostgreSQL refuses U+0000 in `text` and `jsonb`.
+    if text.trim().is_empty() || text.contains('\0') {
+        return FinishRuleOutcome::NoResult;
+    }
+    FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
+        kind: AgentDecisionKind::Advisory { text },
+        selected: true,
+        advances_continuation: true,
+    })
 }
 
 #[cfg(test)]

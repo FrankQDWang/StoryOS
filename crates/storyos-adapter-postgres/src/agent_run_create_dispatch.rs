@@ -94,11 +94,13 @@ pub(crate) async fn record_create(
     };
     let outcome = match apply_finish_rule(request.tool_choice, outcome, &response.items) {
         FinishRuleOutcome::Settle(outcome) => outcome,
-        FinishRuleOutcome::NextRunStep => {
+        rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
+            let settlement = match rule {
+                FinishRuleOutcome::NextRunStep => CreateSettlement::NextRunStep,
+                _ => CreateSettlement::NoResult,
+            };
             let result = CreateResult {
-                outcome: AgentDecisionOutcome::NoDecision,
-                producer_output: None,
-                settlement: CreateSettlement::NextRunStep,
+                settlement,
                 ..response_result(dispatch, &response)
             };
             return persist_create_result(client, claim, run, result, retained).await;

@@ -6,7 +6,8 @@ use storyos_application::{
 };
 use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
 use storyos_core::{
-    ADVISORY_TEXT, DeploymentDestination, HOST_TOOL_REGISTRATION, RESEARCH_TOOL_OFFER,
+    ADVISORY_TEXT, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION,
+    RESEARCH_TOOL_OFFER,
 };
 use tokio_postgres::Client;
 
@@ -183,7 +184,8 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
                 call["function_name"],
                 call["state"],
                 call["refusal"],
-                call["attempt"]
+                call["attempt"],
+                call["result_text"]
             ])
         })
         .collect();
@@ -193,7 +195,8 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
         .iter()
         .map(|step| json!([step["decision"], step["tool_choice"], step["tool_results"]]))
         .collect();
-    // The refused call beside it makes the first `finish` call count for nothing.
+    // The refused call beside it makes the first `finish` call count for nothing, and its result
+    // says so.
     assert_eq!(
         (calls, steps, &facts["status"]),
         (
@@ -202,15 +205,22 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
                     "web_search",
                     "refused",
                     "destination_request_unsupported",
+                    null,
                     null
                 ]),
-                json!(["finish", "settled", null, null]),
-                json!(["finish", "settled", null, null]),
+                json!([
+                    "finish",
+                    "settled",
+                    null,
+                    null,
+                    FINISH_DOES_NOT_COUNT_RESULT
+                ]),
+                json!(["finish", "settled", null, null, ""]),
             ],
             vec![
                 json!(["tool_request", "required", []]),
-                json!(["tool_request", "required", ["rejected", "empty"]]),
-                json!(["advisory", "none", ["rejected", "empty", "empty"]]),
+                json!(["tool_request", "required", ["rejected", "ok"]]),
+                json!(["advisory", "none", ["rejected", "ok", "empty"]]),
             ],
             &json!("completed"),
         )

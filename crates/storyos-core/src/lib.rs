@@ -157,7 +157,10 @@ pub use host_fake_profile::{
     SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT,
     requested_execution_capability, stream_batch_plan,
 };
-pub use host_tool::{HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool, host_tool};
+pub use host_tool::{
+    FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
+    host_tool,
+};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,

@@ -43,15 +43,13 @@ async fn tool_loop_run(
     author_message: &str,
     research: Option<&'static ResearchToolOffer>,
     same_conversation: bool,
-) -> (ProjectScope, String, String) {
+) -> (ProjectScope, String, String, String) {
     let destination = DeploymentDestination::HostFakeToolLoop;
     let (scope, chapter_id, first) =
         queued_run_offering(store, prefixes[0], destination.clone(), research).await;
     complete(store, admin, &scope, &first).await;
     let conversation = match same_conversation {
-        true => ConversationSelection::Existing {
-            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
-        },
+        true => conversation_of(prefixes[0]),
         false => ConversationSelection::New,
     };
     let run_id = admit_run_in(
@@ -66,7 +64,14 @@ async fn tool_loop_run(
     )
     .await;
     complete(store, admin, &scope, &run_id).await;
-    (scope, first, run_id)
+    (scope, chapter_id, first, run_id)
+}
+
+/// The Conversation of the first Run of the Project of `prefix`.
+fn conversation_of(prefix: &str) -> ConversationSelection {
+    ConversationSelection::Existing {
+        conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
+    }
 }
 
 /// For each decision Model Attempt of the Run in RunStep order: the decision kind, the
@@ -130,9 +135,17 @@ async fn a_run_ends_only_with_the_text_of_the_closing_response_after_a_finish_ca
             json!([["tool_request", required], [null, none]]),
             Value::Null,
         ),
+        // A closing text with the shape of a reply form is also the final answer text.
+        (
+            ["1f9", "1fa"],
+            "SCRIPT:reply_form_answer",
+            None,
+            json!([["tool_request", required], ["advisory", none]]),
+            json!("Which chapter do you mean?"),
+        ),
     ];
     for (prefixes, message, research, expected_steps, expected_answer) in cases {
-        let (scope, _, run_id) =
+        let (scope, _, _, run_id) =
             tool_loop_run(&store, &admin, prefixes, message, research, false).await;
         let steps = steps(&admin, &run_id).await;
         let record = store
@@ -173,22 +186,38 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, first, next) =
-        tool_loop_run(&store, &admin, ["1f1", "1f2"], "Help again.", None, true).await;
-
-    let closing = steps(&admin, &first).await[1][2].clone();
-    assert!(closing.is_string());
-    assert_eq!(steps(&admin, &next).await[0][3], closing);
-    let answer = store
+    // The second Run ends with a final answer with no text, and the third Run follows it.
+    let message = "SCRIPT:empty_final_answer";
+    let (scope, chapter_id, first, second) =
+        tool_loop_run(&store, &admin, ["1f1", "1f2"], message, None, true).await;
+    let record = store
         .read_agent_run(&scope, &first, &AgentRunReadSelection::Current)
         .await
         .unwrap()
         .unwrap();
     assert!(matches!(
-        answer.decision,
+        record.decision,
         AgentRunDecisionInspect::Advisory {
             continuation_binding_id: Some(_),
             ..
         }
     ));
+    let third = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "1fb",
+        DeploymentDestination::HostFakeToolLoop,
+        "Help again.",
+        conversation_of("1f1"),
+        None,
+    )
+    .await;
+    complete(&store, &admin, &scope, &third).await;
+
+    for (run, next) in [(&first, &second), (&second, &third)] {
+        let closing = steps(&admin, run).await[1][2].clone();
+        assert!(closing.is_string());
+        assert_eq!(steps(&admin, next).await[0][3], closing);
+    }
 }
