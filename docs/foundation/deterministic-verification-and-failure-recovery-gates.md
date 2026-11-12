@@ -161,7 +161,7 @@ The following are the only gate-level result meanings used by this contract:
 | `passed` | The scheduled positive facts match the independent oracle and the safe bundle replays. | Satisfies that proof obligation. |
 | `expected_refusal` | The scheduled request is refused at the owner-defined boundary, with no unauthorized record, effect, disclosure, or oracle leak. | Satisfies a negative/refusal obligation only. |
 | `expected_outcome_unknown` | The dispatch boundary is crossed, the result is intentionally unknown, and the durable Attempt/fence/reconciliation facts match the oracle. | Satisfies the unknown-boundary obligation; it is not success and must not be silently upgraded. |
-| `expected_recovery_hold` | Recovery preserves uncertainty or a Draft/reconfirmation hold without claiming an unproven commit. | Satisfies a recovery-hold obligation only. |
+| `expected_recovery_hold` | Recovery preserves uncertainty or a reconfirmation hold with its browser-local text without claiming an unproven commit. | Satisfies a recovery-hold obligation only. |
 | `failed` | An expected fact is contradicted, an unauthorized effect occurs, or an oracle mismatch is found. | Blocks. |
 | `unverified` | The evidence is missing, incomplete, not classifiable, or cannot establish the expected fact. | Blocks. |
 | `advisory` | Useful observation outside the deterministic proof boundary, including real-destination evidence. | Never upgrades a mandatory gate. |
@@ -220,7 +220,7 @@ that source.
 | `OWN-GOV` | [Modular-Monolith and Repository Governance Boundaries](modular-monolith-and-repository-governance-boundaries.md), including source/generation ownership, repository/reference isolation, and final verification handoff. |
 | `OWN-AGENT` | [Specify Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47), the one general Project-scoped Agent Loop and AgentRun owner. This key does not create a task-specific runtime or add a new Agent contract. |
 | `OWN-MODEL` | [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50), the Model Gateway/Provider owner, including [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md) for typed output, continuation, active compaction, and bounded recovery. Provider internals and model-quality claims remain outside deterministic proof. |
-| `OWN-TOOL` | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), the ToolSpec/capability/approval owner, including [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) for separate whole-operation hosted admission. Tool execution is explicitly absent from Stages 3 and 4. |
+| `OWN-TOOL` | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), the ToolSpec/capability/approval owner, including [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) for the Tool Gateway and Tool Approval, as [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md) narrows it. Tool execution is explicitly absent from Stages 3 and 4. |
 | `OWN-MCP` | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), the MCP server trust owner. MCP execution is explicitly absent from Stages 3 and 4. |
 | `OWN-APP` | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53) and [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md), including resources, Instances, Prepared Receipts, actions, and safe replay. |
 | `OWN-SKILL` | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) and [GLOSSARY.md](../../GLOSSARY.md), including standard packages, exact snapshots, progressive loading, composition, and outcomes. |
@@ -368,7 +368,7 @@ least one point from this registry.
 | `CFP-MODEL-AFTER-DECISION-BEFORE-CONTINUATION` | The complete selected Decision is durable before its continuation is exposed. Crash/replay must recover the same selected Decision and binding without resampling or selecting a second result. |
 | `CFP-CONTEXT-BEFORE-INSTALL` | A compaction result is staged for a later request. Validate its exact inputs and current admission before installation; preserve prior Messages, Snapshots, manifests, Attempts, and required recovery bytes. |
 | `CFP-MODEL-AFTER-SUCCESSOR-FENCE` | The predecessor fence and spent one-successor allowance are durable before the additional Attempt. Crash/repeated recovery cannot reset the allowance; late predecessor output is evidence only. |
-| `CFP-HOSTED-BEFORE-ADMISSION` | Before final dispatch, validate the entire enabled hosted set, explicit intake, destinations, effect ceilings, exact Approval, enforced bounds, and worst-case reservation. A missing condition prevents submission. |
+| `CFP-HOSTED-BEFORE-ADMISSION` | Withdrawn by [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md). StoryOS performs no Provider-hosted Operation, and no case selects this fault point. |
 | `CFP-MEMORY-BEFORE-PUBLICATION` | Staged generated output precedes settlement under the Project publication guard. Recheck lease, expected generation, exact inputs, complete set, and current source/copy restrictions; failure exposes no partial set. |
 | `CFP-MEMORY-AFTER-PUBLICATION` | Publication/members/Heads/pointer, processed inputs/Notes, outcome, Activity, and invalidation have committed before acknowledgement. Replay returns that settlement without a second publication or lost pending Note. |
 | `CFP-MEMORY-BEFORE-BYTE-ACQUISITION` | Publication, byte-dependent work acquisition, and cleanup eligibility meet under the same guard. Either bytes remain protected for admitted work or the durable availability fence prevents new acquisition before physical cleanup. |
@@ -653,7 +653,7 @@ or a source-line fault hook.
   no prohibited new source read or StoryOS-controlled submission. Recorded
   history is not a fresh read of every source it mentions. Ordinary corrections
   remain ordered Messages; no semantic exclusion or precise-forgetting oracle
-  is permitted. Hosted internal consumption is outside the Host observation boundary.
+  is permitted.
 - **`DVG-05` destination mediation corpus.** Drive Contract-Faithful Fakes
   through registration, use binding, identity, compatibility, admission,
   adapter wire mapping, Credential generation, cancellation, repair/retry/
@@ -767,8 +767,8 @@ properties:
 6. **Manifest-before-egress:** no external bytes leave before current
    admission, context, destination, disclosure, wire, and dispatch evidence;
    returned external values re-enter Context Assembly before a later
-   StoryOS-controlled submission. Whole hosted-operation admission precedes
-   submission; invisible internal steps do not create invented Host gates.
+   StoryOS-controlled submission. No model request carries a Provider-side
+   tool (ADR 0084).
 7. **Provider opacity:** fake scripts, transport absence, cache hints, and
    opaque Provider state never become a claim of internal use, receipt,
    retention, semantic quality, or zero usage.

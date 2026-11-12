@@ -2075,7 +2075,9 @@ and Attempt boundary as model calls; projection rebuild grants no exception.
 ### 13.9 Responses, hosted operations, and inspection
 
 The Model, Tool, Context, and threat owners retain the semantics in ADRs 0033
-and 0034. Their protocol records compose the existing Model Invocation,
+and 0034, as
+[ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)
+narrows ADR 0034. Their protocol records compose the existing Model Invocation,
 Execution Attempt, ModelRouteUseEvidence, OperationAuthorityEvidence, and
 DestinationManifestBinding. No Provider DTO becomes a Core or browser API.
 
@@ -2119,37 +2121,28 @@ without it, the Query returns a bounded summary and references. Existing Snapsho
 pagination, current redaction, and non-oracular Scope checks apply.
 Provider identifiers are evidence, never public authorization or Core identity.
 
-`ProviderHostedOperation` is an Operational Record bound to one Model Attempt,
-with exact hosted Registration set, explicit intake and intentionally referenced
-state, permitted processors and destinations, effect ceiling, authority,
-Approval target when required, manifest references, finite resource bounds,
-and returned evidence. The entire enabled set is admitted before submission.
-It has no Ambient Context or inherited conversation grants. The initial effects
-are search, reading, and bounded temporary computation. Unknown required bounds
-make it ineligible. A best-effort Provider counter is not a hard bound.
-
-The owning Model Attempt is the single physical submission and accounting
-boundary. Do not invent internal Host ToolCalls, dispatches, DNS checks, or
-pre-consumption gates for invisible Provider steps. Keep Host observations,
-Provider reports, and unknown effects separate. A complete validated outer
-result may contain complete sub-results and an unmet research objective;
-an incomplete stream cannot become that result. Rejecting output does not undo
-earlier disclosure, cost, or hosted effects. StoryOS-controlled nested dispatch
-and later use of returned content still cross their own admission gates.
+ADR 0084 withdrew the Provider-hosted Operation. The protocol has no
+`ProviderHostedOperation` record and no whole-operation hosted admission. A
+StoryOS model request carries no Provider-side tool field. A native response
+item of a type that the request did not ask for makes the Agent Decision
+invalid through the ordinary validation path, and the item type stays as
+evidence. Each research tool is a StoryOS ToolCall through the one Tool
+Gateway, and its returned content crosses its own admission gates before a
+later use.
 
 The planned `decideApproval` route of
-[section 7.1.2](#712-planned-operations-of-later-stages) uses request/response v2 for a closed target:
-`tool_call { tool_call_id, request_digest }` or
-`provider_hosted_operation { operation_id, model_attempt_id, request_digest }`.
-Scope and authority evidence bind the complete target. Neither variant approves
-the other. The Approval query/Event projection preserves the target and exact
-request digest; the Approval Event schema advances to v2. This is a planned
-Stage 5 schema change, not a new handler or a completed Approval.
+[section 7.1.2](#712-planned-operations-of-later-stages) uses request/response v2 for one closed target:
+`tool_call { tool_call_id, request_digest }`. ADR 0084 withdrew the
+`provider_hosted_operation` target with the operation. Scope and authority
+evidence bind the complete target. The Approval query/Event projection
+preserves the target and exact request digest; the Approval Event schema
+advances to v2. This is a planned schema change of the later Stage that adds
+an effect outside the Project grant, not a new handler or a completed Approval.
 
 Host cancellation is durable before best-effort abort. Known non-submission,
 confirmed outcome, and OutcomeUnknown stay distinct. ADR 0033's one automatic
 successor requires the same request/route, current admission, budget for both
-Attempts, and no unresolved Tool or hosted effect. Its predecessor fence and
+Attempts, and no unresolved Tool effect. Its predecessor fence and
 spent allowance survive restart. Cancellation prohibits that successor.
 Late results may reconcile evidence and usage, not revive execution or advance
 continuation. Confirmed reference expiry uses the separate eligible-context
@@ -2158,8 +2151,8 @@ not create semantic exclusions or automatic continuation resets.
 
 Active compaction records exact known inputs/prior projections, producer and
 mapping, output or validated opaque reference, and loss/unknown facts for a
-later request. It does not rewrite history. Continuation, cache, hosted Tools,
-native compaction, retrieval, and cancellation remain separately qualified
+later request. It does not rewrite history. Continuation, cache, native
+compaction, retrieval, and cancellation remain separately qualified
 capabilities; Agent Plan entitlement is not proof of every Ark capability.
 
 ### 13.10 Conversation Memory protocol
@@ -3048,9 +3041,9 @@ All rows bind the same-release profile; additive does not permit mixed releases.
 | `storyos.command.create-agent-run.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking closed conversation selection and exact identity/settings binding; security-sensitive | Stage 3 |
 | `storyos.query.agent-run.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking evidence variants and exact Attempt filter; security-sensitive redaction | Stage 3; Stage 4 Provider proof |
 | `ModelContinuationBinding`, context evidence, active compaction records | Ledger; later owning Rust modules | planned projections through Agent Run v2; no independent public schema | new records; security-sensitive continuation, disclosure, cancellation, and recovery bindings | Stage 3; Stage 4 Provider proof |
-| `storyos.command.decide-approval.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking closed ToolCall/hosted target; security-sensitive | Stage 5 |
-| `storyos.event.approval-decision-recorded.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking target meaning; security-sensitive; Activity envelope v1 stays | Stage 5 |
-| `ProviderHostedOperation` and whole-operation admission/accounting | Ledger; later owning Rust modules | planned Run/Approval projections; no Provider DTO | new records; security-sensitive effect, resource, and authority boundary | Stage 5 |
+| `storyos.command.decide-approval.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking closed ToolCall target; security-sensitive | later Stage with an effect outside the Project grant (ADR 0084) |
+| `storyos.event.approval-decision-recorded.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking target meaning; security-sensitive; Activity envelope v1 stays | later Stage with an effect outside the Project grant (ADR 0084) |
+| `ProviderHostedOperation` and whole-operation admission/accounting | none | none | withdrawn by ADR 0084; no record, projection, or schema | none |
 | `updateContextControls`, `storyos.command.update-context-controls.{request,response}.v1`, `storyos.event.context-controls-updated.v1` → retired | Ledger and Rust challenge targets | current profile bindings; no legacy feature schema emitted | breaking removal without alias; old challenge target is refused now | Protocol now; Stage 7 removes legacy semantics |
 | none → `storyos.command.update-conversation-memory-settings.{request,response}.v1` | Ledger and Rust challenge targets; later Rust payload | current profile bindings; planned Wire set | additive route; security-sensitive author, revision, and atomic idle gate | Protocol binding now; Stage 7 behavior |
 | none → `storyos.query.conversation-memory.{request,response}.v1` | Ledger; later Rust | planned Wire set | additive Query; security-sensitive scoped inspection and source availability | Stage 7 |
@@ -3104,8 +3097,8 @@ An implementation conforms only if all of these remain true:
 10. Every physical retry, resend, fallback, or repair has a new Attempt; stale
     fences cannot settle or publish late work.
 11. Tool, MCP, App, Provider, research, import, and external contents remain
-    untrusted. Every StoryOS-controlled dispatch crosses all seven gates;
-    hosted work has whole-operation admission without invented internal gates.
+    untrusted. Every StoryOS-controlled dispatch crosses all seven gates, and
+    no model request carries a Provider-side tool (ADR 0084).
     Later Host-controlled use crosses fresh gates. Only Host/Core authority
     can change authoritative state.
 12. Commands and control inputs are closed; public outputs evolve additively

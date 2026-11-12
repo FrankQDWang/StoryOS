@@ -41,7 +41,7 @@ The StoryOS-owned interaction surface and exact view state from which an interac
 _Avoid_: Project identity, browser tab as authority, process-global current workspace, untrusted client selection, fabricated background UI state
 
 **Context Assembly**:
-The Host-owned seven-gate pipeline for each StoryOS-controlled destination submission: Operation Requirement Determination, Candidate Discovery, Source Eligibility Gate, Selection and Ranking, Bounded Projection, Context Assembly Manifest Commit, then Destination-specific Disclosure and Attempt. Received results cross it before later StoryOS submission; a bounded Provider-hosted Operation has prior admission for its whole scope without invented Host gates for invisible internal steps.
+The Host-owned seven-gate pipeline for each StoryOS-controlled destination submission: Operation Requirement Determination, Candidate Discovery, Source Eligibility Gate, Selection and Ranking, Bounded Projection, Context Assembly Manifest Commit, then Destination-specific Disclosure and Attempt. Received results cross it before later StoryOS submission. StoryOS performs no Provider-hosted Operation ([ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)).
 _Avoid_: Prompt construction, retrieval query, provider request builder, internal Provider trace
 
 **Purpose**:
@@ -229,7 +229,7 @@ The immutable provider-neutral Operational Record of StoryOS preparation, commit
 _Avoid_: ContextManifest, prompt dump, model-use proof, mutable request log
 
 **Destination-specific Disclosure and Attempt**:
-The seventh Context Assembly gate that minimizes and authorizes one StoryOS-controlled submission, binds its exact destination and any permitted hosted processing, and establishes its Destination Attempt evidence. Cache or continuation grants no authority; an external dispatch requires disclosure evidence, while invisible Provider-internal steps do not create invented Host Attempts.
+The seventh Context Assembly gate that minimizes and authorizes one StoryOS-controlled submission, binds its exact destination, and establishes its Destination Attempt evidence. Cache or continuation grants no authority; an external dispatch requires disclosure evidence, while invisible Provider-internal steps do not create invented Host Attempts.
 _Avoid_: Shared provider payload, cached authorization, prior Destination Attempt reuse
 
 **Settled Source Version**:

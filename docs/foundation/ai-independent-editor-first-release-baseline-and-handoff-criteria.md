@@ -85,7 +85,7 @@ linked contract continues to define what that capability means.
 | Retention Profiles and Decisions, compaction, archive, replay generations, deletion, and recovery visibility | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
 | Context Assembly, retrieval eligibility, projection, manifests, disclosure, and destination attempts | [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md) |
 | Responses continuation, typed output, capability combinations, and bounded recovery | [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md) |
-| Whole-operation hosted admission beside StoryOS ToolCalls | [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) |
+| One StoryOS ToolCall path and no Provider-hosted Operation | [ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md), which narrows [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) |
 | Background Memory, documents, Notes, source evidence, and independent conversation settings | [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md) and [ADR 0035](../adr/0035-use-background-generated-project-memory.md) |
 | Author-facing discovery-writing intent and Proposal request interpretation | [Plain-Language Discovery-Writing Assistance Semantics](plain-language-discovery-writing-assistance-semantics.md) |
 | AgentRun, Tool, MCP, Skill, Model Gateway, and external-destination meaning | The existing AgentRun, Tool/MCP, and Model Gateway contracts named by [the current product map](https://github.com/FrankQDWang/StoryOS/issues/1) |
@@ -179,13 +179,13 @@ disclosure. Ordinary writing needs no Memory setup or per-item confirmation.
 | --- | --- |
 | 3 | Real conversation, Host, Context, persistence, AgentRun, and Proposal boundaries with a Contract-Faithful Fake Destination; typed streams, incremental/full input, current target and instruction updates, active compaction, continuation, and recovery fences. |
 | 4 | One qualified Agent Plan Responses journey with native continuation, streaming, valid caching behavior, response retrieval, truthful use evidence, and the accepted expiry and unknown-create recovery policies. |
-| 5 | StoryOS ToolCalls and separately admitted Provider-hosted Operations; native function/result correlation, research evidence, exact Approval targets, enforced bounds, and uncertain effects. |
+| 5 | StoryOS ToolCalls through the one Tool Gateway, with no Provider-hosted Operation (ADR 0084); native function/result correlation, research evidence, enforced bounds, and uncertain effects. |
 | 7 | Background extraction and consolidation, complete Memory Publications, document/Note inspection, selective recall, independent settings, source restrictions, and Memory lifecycle/export/restore. |
 
 Each stage must qualify the resource and retention profiles needed by its new
 work before that work is enabled. Stage 3 uses controlled fake workloads;
-Stage 4 qualifies the real model path; Stage 5 qualifies each admitted Tool or
-hosted mode; Stage 7 qualifies Memory maintenance and generated-payload cleanup.
+Stage 4 qualifies the real model path; Stage 5 qualifies each admitted Tool;
+Stage 7 qualifies Memory maintenance and generated-payload cleanup.
 Numeric adoption stays with the [retention owner](run-event-mailbox-snapshot-retention-and-archival-semantics.md#24-quantitative-evidence-and-profile-adoption)
 and the applicable resource owner. This release sets no duration, capacity, or
 Provider guarantee. Unknown required bounds block the affected capability.
