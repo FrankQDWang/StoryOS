@@ -527,6 +527,7 @@ fn every_registered_operation_matches_its_generated_wire() {
     assert_activity_frame_documents(&generated);
     assert_takeover_documents(&generated);
     assert_research_tool_documents(&generated);
+    assert_project_setting_documents(&generated);
 }
 
 type GeneratedFiles = std::collections::BTreeMap<&'static str, Vec<u8>>;
@@ -698,6 +699,41 @@ fn assert_research_tool_documents(generated: &GeneratedFiles) {
         "/effect/revision",
         serde_json::json!("01")
     )));
+}
+
+fn assert_project_setting_documents(generated: &GeneratedFiles) {
+    for (file, operation_id) in [
+        ("update-project-response.schema.json", "updateProject"),
+        (
+            "update-project-assistance-response.schema.json",
+            "updateProjectAssistance",
+        ),
+    ] {
+        let response = generated_validator(generated, file);
+        let without_action = golden_wire(generated, operation_id);
+        let pointer = "/receipt/author_action_sequence";
+        assert_eq!(
+            without_action.pointer(pointer),
+            Some(&serde_json::Value::Null)
+        );
+        assert!(response.is_valid(&without_action), "{operation_id}");
+        assert!(
+            response.is_valid(&with_value(
+                &without_action,
+                pointer,
+                serde_json::json!("1")
+            )),
+            "{operation_id}"
+        );
+        assert!(
+            !response.is_valid(&with_value(
+                &without_action,
+                pointer,
+                serde_json::json!("01")
+            )),
+            "{operation_id}"
+        );
+    }
 }
 
 fn assert_takeover_documents(generated: &GeneratedFiles) {
