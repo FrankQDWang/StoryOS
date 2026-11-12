@@ -230,10 +230,14 @@ After validated storage proves that no Receipt exists, recovery must append
 - the complete direct-edit intent cannot be proven from the persisted Admission
   `command_payload`.
 
-Visible reconfirmation preserves the complete direct-edit intent as a Recovery
-Draft when applicable. The Web Editor Session owner defines journal,
-projection, Draft presentation, takeover, and local garbage collection; it
-cannot weaken these invocation rules.
+Visible reconfirmation keeps the complete unsent direct-edit text only in the
+browser Local Edit Journal, and the local recovery panel shows it. StoryOS
+creates no Recovery Draft, and the outcome carries no draft reference
+([ADR 0077](../adr/0077-remove-the-host-created-recovery-draft.md)). The old Admission stays terminal. A later
+author-confirmed edit is a new command with a new Admission. The Web Editor
+Session owner defines journal, projection, local recovery presentation,
+takeover, and local garbage collection; it cannot weaken these invocation
+rules.
 
 ## 6. Admission flow
 

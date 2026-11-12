@@ -161,7 +161,7 @@ The following are the only gate-level result meanings used by this contract:
 | `passed` | The scheduled positive facts match the independent oracle and the safe bundle replays. | Satisfies that proof obligation. |
 | `expected_refusal` | The scheduled request is refused at the owner-defined boundary, with no unauthorized record, effect, disclosure, or oracle leak. | Satisfies a negative/refusal obligation only. |
 | `expected_outcome_unknown` | The dispatch boundary is crossed, the result is intentionally unknown, and the durable Attempt/fence/reconciliation facts match the oracle. | Satisfies the unknown-boundary obligation; it is not success and must not be silently upgraded. |
-| `expected_recovery_hold` | Recovery preserves uncertainty or a Draft/reconfirmation hold without claiming an unproven commit. | Satisfies a recovery-hold obligation only. |
+| `expected_recovery_hold` | Recovery preserves uncertainty or a reconfirmation hold with its browser-local text without claiming an unproven commit. | Satisfies a recovery-hold obligation only. |
 | `failed` | An expected fact is contradicted, an unauthorized effect occurs, or an oracle mismatch is found. | Blocks. |
 | `unverified` | The evidence is missing, incomplete, not classifiable, or cannot establish the expected fact. | Blocks. |
 | `advisory` | Useful observation outside the deterministic proof boundary, including real-destination evidence. | Never upgrades a mandatory gate. |

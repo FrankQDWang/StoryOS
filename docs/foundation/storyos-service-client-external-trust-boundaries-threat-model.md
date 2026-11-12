@@ -989,7 +989,7 @@ Host work without promising remote rollback. [S7] [S8]
 edge plus acknowledgement-before/after-SSE permutations, tab reload, stale
 writer takeover, duplicated, reordered, and delayed deliveries proves one
 canonical effect, stable replay, preserved uncertainty, exactly one terminal
-Admission settlement, Draft preservation where required, and no cross-scope
+Admission settlement, browser-local text preservation, and no cross-scope
 key collision. Model fixtures also distinguish expiry from unknown create,
 retain reservation and late evidence, enforce the one-successor limit across
 restart, and forbid it after cancellation or an unresolved Tool effect.
@@ -1240,7 +1240,7 @@ acknowledgement can make both tabs attempt recovery and duplicate or overwrite
 the author's work.
 
 **Affected assets.** Author prose, writer ownership, command order, current
-Heads, Receipt convergence, Draft preservation, and truthful recovery.
+Heads, Receipt convergence, browser-local text preservation, and truthful recovery.
 
 **Accepted controls.** There is one current writer generation per Project.
 The Local Edit Journal and Pending Edit Projection preserve continuity but are
@@ -1472,7 +1472,7 @@ Wayfinder owner:
 | Downstream owner | Security obligations received from this model | Attack paths |
 |---|---|---|
 | [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact protected-client, User, existing/prospective Project Scope, editor/writer, action, digest, nonce/idempotency, and lifetime binding; bounded claim ceiling; one append-only lifecycle and terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-20 |
-| [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | Local Edit Journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18, AP-20 |
+| [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | Local Edit Journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; browser-local text preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18, AP-20 |
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets; continuation bindings, the Tool Approval target and report/unknown evidence; Memory notes/settings/publication | AP-01, AP-03–AP-10, AP-13–AP-22 |
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Admission/Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and known source references; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention; known Memory inputs, document revisions and actual copy restrictions | AP-04, AP-09–AP-12, AP-14–AP-18, AP-20–AP-22 |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin, XSS/DOM, asset/dependency, third-party-script, extension, stale-build/tab, controlled-cloud, bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; claim-ceiling checks; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-22 |

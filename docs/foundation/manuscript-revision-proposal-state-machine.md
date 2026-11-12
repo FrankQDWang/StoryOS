@@ -153,8 +153,8 @@ Revision. A Current Chapter change allocates no Commit.
 Each Project Scope separately has one `AuthorActionSequence`, beginning at 1. A
 successful author-owned Core Transition allocates one value even when it
 creates several Revisions, Receipts, or a Commit. Exact idempotent retry returns
-the existing value. Refused, conflicted, invalid, no-effect, recovery-Draft, and
-pure Agent-generation transitions allocate none. A successful author-authored
+the existing value. Refused, conflicted, invalid, no-effect, and pure
+Agent-generation transitions allocate none. A successful author-authored
 Proposal Revision is a successful author-owned Transition and allocates one
 Forward action even though it allocates no Authoritative Commit.
 
