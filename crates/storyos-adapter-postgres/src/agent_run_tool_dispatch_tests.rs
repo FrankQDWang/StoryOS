@@ -281,7 +281,7 @@ fn tool_manifest() -> Value {
                                     "disclosed": ["tide tables of 1890"]},
         },
         "authority": {"kept": true,
-                      "exact": ["enablement_revision", "evidence_revision",
+                      "exact": ["evidence_revision",
                                 "external_compatibility_decision", "grant_id",
                                 "processing_destination_identity",
                                 "project_model_use_binding_revision"]},
