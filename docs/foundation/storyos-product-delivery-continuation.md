@@ -89,21 +89,26 @@ and the Approval stories of an exact operation
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S6-REQ-001 | The author or Agent can select an eligible standard Skill without a task-mode menu. Resolve its source, installation scope, name conflicts, exact package snapshot, and explicit selection reason. Standard Skills work without mandatory StoryOS extensions. | Skill owner |
+| S6-REQ-001 | The author or Agent can select an eligible standard Skill without a task-mode menu. Resolve its source, exact package snapshot, and explicit selection reason. One source and one installation scope exist, and a Skill name is unique in one Project (ADR 0089). Standard Skills work without mandatory StoryOS extensions. | Skill owner |
 | S6-REQ-002 | Load instructions and resources progressively under the existing instruction precedence and Context rules. A package grants no permission, disclosure right, or authority. | Skill and Context owners |
-| S6-REQ-003 | Resolve declared Tool roles, optional extensions, scripts, and outcomes through the existing Gateway, execution, and budget boundaries. Missing or conflicting prerequisites produce the declared blocked or degraded outcome. | Skill, Tool/MCP, and AgentRun owners |
-| S6-REQ-004 | Inspect the effective Skill selection, composed instructions, conflicts, and outcome obligations. Creating, installing, updating, or revoking a package follows its explicit lifecycle and does not silently replace a snapshot bound to active work. | Skill owner |
+| S6-REQ-003 | Withdrawn for Stage 6 by ADR 0089. Tool roles, optional extensions, scripts, and outcomes stay deferred with the StoryOS Skill Extension and the Skill Script Execution. | Skill, Tool/MCP, and AgentRun owners |
+| S6-REQ-004 | The author sees the Skills that a turn used and the reason of the Agent, and reads each installed package. Creating, installing, replacing, or removing a package follows its explicit lifecycle and does not silently replace a snapshot bound to active work. The inspection of composed instructions, conflicts, and outcome obligations, and the Skill Revocation, stay deferred (ADR 0089). | Skill owner |
 
-**Author journey S6-JRN-001.** Select and run a standard instruction-only
-Skill; run an eligible Skill with a Tool role or script; inspect the exact
-package and outcome; exercise a conflict or missing prerequisite; revoke or
-update a package while preserving prior Run evidence; continue writing when
-the Skill is unavailable.
+**Author journey S6-JRN-001.** Install, select, and run a standard
+instruction-only Skill; let the Agent load a Skill and one of its resources;
+use two Skills in one turn; inspect the exact package and the usage record;
+ask the Agent to draft a Skill and install it; replace and remove a package
+while preserving prior Run evidence; continue writing when the Skill is
+unavailable.
+
+[ADR 0089](../adr/0089-deliver-standard-skill-packages-without-the-skill-extension-and-load-them-through-the-toolcall-path.md)
+withdrew the Tool-role and script step, the missing-prerequisite step, and the
+revocation step of the earlier journey.
 
 | ID | Mandatory evidence |
 | --- | --- |
 | S6-EVD-001 | Standard-package compatibility, exact selection/snapshot, progressive loading, composition, and instruction-authority evidence. |
-| S6-EVD-002 | Tool-role/script admission, outcome obligations, failure, revocation, active-run binding, and editor-regression evidence. |
+| S6-EVD-002 | Replacement and removal with a Run in progress, the refusal of an invalid or oversized package, active-run binding, and editor-regression evidence. ADR 0089 withdrew the Tool-role, script, outcome-obligation, and revocation evidence. |
 
 ## 4. Stage 7: Structured project continuity and Memory
 
