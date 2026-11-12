@@ -8,6 +8,7 @@ Evidence record of [Qualify `tool_choice` and Several Function Calls on the Mode
 - The plan was posted before the first request: [7 requests, cap 12](https://github.com/FrankQDWang/StoryOS/issues/1452#issuecomment-6823219493). R1 to R6 were sent. The loop stopped after R6, because R6 had no function call.
 - R2 showed that `tool_choice: "none"` does not prevent a function call. An amendment added 3 requests before they were sent, and kept the cap: [amendment 1](https://github.com/FrankQDWang/StoryOS/issues/1452#issuecomment-6823256868). It tests a request with no `tools` field.
 - Sent: R1 to R9, from 12:10:19 to 12:12:30 UTC. 9 requests in all. No retry, no repeat, and no anomaly: each status was HTTP 200, and the time and the usage were in the expected range.
+- The requests did not go through the Model Gateway, and a test process loaded the key. The author approved this as a one-time exception to ADR 0049 and ADR 0050 on 2026-11-12 ([ADR 0049 amendment](../adr/0049-admit-an-author-authorized-runtime-qualification.md#amendment-one-exception-for-the-tool_choice-probe-2026-11-12)). The tests that sent them are not in the repository. This record keeps the request bodies.
 
 ## Setup
 
@@ -15,10 +16,9 @@ Evidence record of [Qualify `tool_choice` and Several Function Calls on the Mode
 | --- | --- |
 | Endpoint | `https://ark.cn-beijing.volces.com/api/plan/v3/responses` |
 | Model | `doubao-seed-2-1-pro-260915`, the provider model of Registration `fa17` |
-| Path | The ignored tests `live_tool_choice_probe_of_the_agent_plan_route` (R1 to R6) and `live_no_tools_probe_of_the_agent_plan_route` (R7 to R9) in `crates/storyos-adapter-volcengine-responses/src/probe_tests.rs`. Each body goes through the `exchange` of the adapter: one POST, no retry, no redirect, and the response mapping of the product. |
-| Credential | The typed settings (`storyos_settings::load`, ADR 0050) with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`. No agent read the value, and no log has it. |
+| Path | Two local tests of the model adapter at `main` `68304b12`, not merged. Each body went directly to the `exchange` of the adapter: one POST, no retry, no redirect, and the response mapping of the product. No AgentRun, Model Attempt, or Outbound Disclosure Event records the requests. |
+| Credential | The settings loader (`storyos_settings::load`) in the test process, with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`. No agent read the value, and no file, log, or output has it. |
 | Request bounds | `agent_plan_request_v3`: 32,768 output tokens, 600 s |
-| Build | `main` `68304b12` with the probe tests of this record |
 
 Each request is not streamed and stores the response (`"stream": false`, `"store": true`). It sends a constant probe instruction that tells the finish rule, and no Project content. When it has tools, it declares three strict functions (`"strict": true`, `"additionalProperties": false`):
 
@@ -26,7 +26,98 @@ Each request is not streamed and stores the response (`"stream": false`, `"store
 - `storyos_probe_add` with the integers `a` and `b`. Its output is the sum, or the refusal `Refused: the argument b must be 2 or less. Correct the call.` when `b` is above 2.
 - `finish` with no parameters. Its output is empty text.
 
-A continuation sends `previous_response_id` and one `function_call_output` for each call of the prior response. In R4 to R6, the test follows the finish rule with enforcement in the request: `required` until a response has a `finish` call and no refused call, then `none`.
+A continuation sends `previous_response_id` and one `function_call_output` for each call of the prior response. In R4 to R6, the test follows the finish rule of ADR 0091 section 4: `required` until a response has a `finish` call and no refused call, then `none`.
+
+## Request bodies
+
+Each body is the canonical JSON of these members: sorted keys, no whitespace. The SHA-256 of each body is the digest in the table of requests.
+
+The members of each request:
+
+```json
+{
+  "model": "doubao-seed-2-1-pro-260915",
+  "instructions": "You answer a capability probe of StoryOS. Use the supplied tools as the request asks. When your work is complete, call finish. After the result of finish, write one short final answer.",
+  "max_output_tokens": 32768,
+  "stream": false,
+  "store": true
+}
+```
+
+A request with tools also has `tool_choice` and these `tools`:
+
+```json
+[
+  {
+    "type": "function",
+    "name": "storyos_probe_echo",
+    "description": "Returns the text that it receives.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "The text to return."
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "storyos_probe_add",
+    "description": "Returns the sum of two integers.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "type": "integer"
+        },
+        "b": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "finish",
+    "description": "Tells StoryOS that your work is complete.",
+    "strict": true,
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+]
+```
+
+The other members:
+
+| # | `tool_choice` | `previous_response_id` | `input` |
+| --- | --- | --- | --- |
+| R1 | `required` | none | one `user` message with one `input_text`: `Reply with the word hello. Do not call a tool.` |
+| R2 | `none` | none | one `user` message: `Call storyos_probe_echo with the text beta.` |
+| R3, R8 | `required` | none | one `user` message: `Call storyos_probe_echo with the text alpha, and call storyos_probe_add with a = 2 and b = 3. Make the two calls in this response.` |
+| R4 | `required` | R3 | `function_call_output` `call_rdwo9jj80hbeksuqp99b0oy0` with `""`, then `call_d7j57rkhhgvgm001wg4xjxsv` with the refusal text |
+| R5 | `required` | R4 | `function_call_output` `call_ac5qbxwq3x03cfa8n62wueay` with `"4"` |
+| R6 | `none` | R5 | `function_call_output` `call_gz48dcp7rsfsr4esz8sxq1pm` with `""` |
+| R7 | no `tools` | none | the `user` message of R2 |
+| R9 | no `tools` | R8 | `function_call_output` `call_snbrbzzp5zw5yodzdw8he7xm` with `""`, then `call_le1r53z7xp0cw69kba3e75hr` with the refusal text |
+
+A `user` message is `{"role": "user", "content": [{"type": "input_text", "text": <text>}]}`. A function output is `{"type": "function_call_output", "call_id": <ID>, "output": <text>}`. The refusal text is `Refused: the argument b must be 2 or less. Correct the call.`
 
 ## Requests
 
@@ -57,9 +148,12 @@ Usage of R1 to R9: 5,920 input and 1,003 output tokens.
 
 ## Effect on the finish rule
 
-- ADR 0091 section 4 permits enforcement in the request only when the route qualifies `tool_choice` for the two values: a request before the `finish` call requires a call, and the request after it permits none. The route does not qualify `none`. Thus the later tickets build the fallback of ADR 0091 section 4.
-- The route qualifies `required`. A change to ADR 0091 can let the requests before a `finish` call require a call. Then a text with no `finish` call cannot end a Run. Only the author can make that change.
-- No request form that this probe tested makes the closing RunStep permit no function call. A response of the closing RunStep, or of RunStep 24, can hold a function call. #1451 says that such a response holds no call. That statement needs a rule from the author before the ticket that builds the closing RunStep.
+The author approved this rule on 2026-11-12, and it amends ADR 0091 sections 4 and 5:
+
+- Each request before a `finish` call that counted has `tool_choice: "required"`. Thus a text with no `finish` call cannot end a Run.
+- The closing request after a `finish` call that counted has `tool_choice: "none"`, which the route does not enforce. A closing response with no function call gives the final answer. A closing response with a function call makes the `finish` call stop counting: each call gets its result, and the Run continues.
+- The request of RunStep 24 has `tool_choice: "none"`. The Host executes no function call of its response, and the text is the final answer.
+- The fallback with one Host sentence goes.
 
 ## What this evidence qualifies
 
