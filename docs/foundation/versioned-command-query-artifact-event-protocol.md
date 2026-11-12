@@ -1637,17 +1637,17 @@ classification, or intake/disclosure-boundary change requires a new Identity
 record before any new Grant or use binding.
 
 The separate use binding pins one already-established Identity and the exact
-current Identity evidence revision together with exact Project Scope-bound
-enablement, any Credential Reference binding, and non-widening bounds; it does
+current Identity evidence revision together with the exact Project Scope-bound
+use authorization, any Credential Reference binding, and non-widening bounds; it does
 not resolve or create the Identity, and a Credential Reference never occupies
 a global namespace.
 
 `project_use_authorization_revision` is a closed surface-specific reference,
-such as a Project Tool Enablement or Project Destination Grant, rather than a
+such as a Project Destination Grant, rather than a
 universal authority record. A credential-bearing variant repeats the complete
 Scope and must join both members to the outer binding; paired nullable
 credential fields are forbidden.
-Neither discovery, enablement, model-visible exposure, a handshake, a name, a
+Neither discovery, model-visible exposure, a handshake, a name, a
 semver range, nor Credential configuration grants invocation authority.
 
 The immutable construction order is global Registration/service surface,
@@ -1678,7 +1678,7 @@ mutates a record or creates an in-place cycle.
 Before each new use the Host verifies the exact active Registration revision,
 trusted contract digest, Adapter revision, exact use binding, subsequent
 external compatibility Decision, destination, effect ceiling, Credential
-Reference availability and binding generation, project enablement, caller
+Reference availability and binding generation, the Project Destination Grant, caller
 route, Capability, Approval when required, and limits. Every Decision, use, and
 Attempt repeats and validates both members of the Project Scope and pins the
 exact `ProjectExternalUseBindingRevision`; no global Registration, credential
@@ -2364,7 +2364,7 @@ Every compatibility decision used for project work is bound to the exact
 Project Scope and already-existing `ProjectExternalUseBindingRevision`. A
 global contract or Adapter compatibility observation may be reused only as
 non-authorizing input; it cannot carry a Credential Reference, actual
-endpoint/account or disclosure destination, satisfy project enablement, or
+endpoint/account or disclosure destination, satisfy a Project Destination Grant, or
 admit an Attempt without the scope-bound binding and its subsequent Decision.
 
 This rule resolves the parent-map fog item about Provider/MCP version
@@ -2715,7 +2715,7 @@ signed or integrity-protected archive. The negative corpus includes at least:
     mismatched final Admission Decision, crash before dispatch claim, crash
     after claim, and uncertain Provider outcome;
 15. Tool/MCP discovery drift, same-name replacement, unpinned schema, global
-    Credential Reference or compatibility cache, cross-Scope enablement/use,
+    Credential Reference or compatibility cache, cross-Scope grant/use,
     missing seven-gate manifest, widened effect, hidden SDK retry, result reuse
     without reassembly, and incompatible cancellation/error mapping; plus a
     Model Registration carrying Project, Credential, actual endpoint/account,

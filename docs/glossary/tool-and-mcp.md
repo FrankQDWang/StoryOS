@@ -33,19 +33,19 @@ An immutable observation of a third-party Tool contract and source identity befo
 _Avoid_: Tool Registration, installed tool, trusted ToolSpec
 
 **Tool Registration**:
-The host-owned, versioned record that binds a built-in implementation or exact Tool Discovery Record to its trusted StoryOS ToolSpec, implementation source, and adapter rules. Its lifecycle is active, quarantined, or retired; discovery and project enablement remain separate records.
+The host-owned, versioned record that binds a built-in implementation or exact Tool Discovery Record to its trusted StoryOS ToolSpec, implementation source, and adapter rules. Its lifecycle is active, quarantined, or retired; discovery and the Project Destination Grant remain separate records.
 _Avoid_: Tool Discovery Record, Project Tool Enablement, Tool Exposure
 
 **Project Tool Enablement**:
-A project's explicit enabled or disabled selection of one exact active Tool Registration. It permits the Registration to be considered for Exposure but grants no Run capability or execution authority.
-_Avoid_: Tool Registration, Tool Exposure, Capability Grant
+Withdrawn on 2026-11-12 by [ADR 0090](../adr/0090-make-web-research-available-in-each-project-without-an-enablement-switch.md). No Project selection enables or disables a Tool Registration. `createAgentRun` binds the offered research Registration of the deployment, and the Project Destination Grant `research_tool_v1` holds the use authorization.
+_Avoid_: research switch, Tool Registration, Tool Exposure, Capability Grant
 
 **Tool Contract Drift**:
 The condition in which a Tool Registration's pinned implementation identity, trusted model-visible callable contract, input or output contract, or trusted adapter mapping no longer matches the currently discovered implementation. Drift quarantines the Registration for new calls, clears derived Exposure, and requires a new StoryOS-controlled mapping; untrusted descriptive provenance alone does not cause Drift, and name equality never carries authority across versions.
 _Avoid_: Compatible runtime update, automatic permission inheritance, retryable tool error
 
 **Tool Exposure**:
-The disposable Project Scope-bound projection of an enabled Tool for one caller and RunStep, computed from two orthogonal inputs: the Host-allowed caller routes and the current caller's initially-visible, deferred, or hidden discovery state. Exposure also depends on provider compatibility and current policy, but neither grants execution authority nor changes the Tool Registration.
+The disposable Project Scope-bound projection of a bound Tool for one caller and RunStep, computed from two orthogonal inputs: the Host-allowed caller routes and the current caller's initially-visible, deferred, or hidden discovery state. Exposure also depends on provider compatibility and current policy, but neither grants execution authority nor changes the Tool Registration.
 _Avoid_: Tool Registration, project enablement, authorization
 
 **ToolCall**:
