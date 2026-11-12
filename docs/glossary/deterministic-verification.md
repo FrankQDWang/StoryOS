@@ -49,7 +49,7 @@ The controlled virtual monotonic clock and explicit interleaving schedule used b
 _Avoid_: Sleep-based test, scheduler race, accidental timeout, throughput benchmark as semantic gate
 
 **Check Evidence Line**:
-The one line that each check tier prints at the end of a local run. It gives the tier, the HEAD commit, the tree hash, the result, and the time. A pull request carries this line, and a reviewer compares its commit with the pull request head. Only the line of `make check` or `make check-full` is merge evidence ([ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
+The one line that each check tier prints at the end of a local run. It gives the tier, the HEAD commit, the tree hash, the result, and the time. A pull request carries this line, and the coordinator compares its commit with the pull request head before the merge. A review round does not need the line. Only the line of `make check` or `make check-full` is merge evidence ([ADR 0070](../adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
 _Avoid_: verification record, input fingerprint, cached result, admission receipt
 
 **Behavior Owner**:
