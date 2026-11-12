@@ -78,9 +78,13 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // The compaction mapping streams and continues like the streaming mapping.
-        let compacts =
-            route.mapping_revision == storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION;
+        // The compaction mapping streams and continues like the streaming mapping. The tool
+        // loop mapping is the compaction mapping with the finish rule.
+        let compacts = [
+            storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+        ]
+        .contains(&route.mapping_revision.as_str());
         let streams = compacts
             || route.mapping_revision == storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION;
         // Only a continuation mapping can send a prior response reference.
@@ -372,3 +376,7 @@ fn rejection_reason(status: u16, body: &[u8]) -> String {
 #[cfg(test)]
 #[path = "exchange_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tool_loop_wire_tests.rs"]
+mod tool_loop_wire_tests;

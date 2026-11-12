@@ -527,13 +527,12 @@ pub(crate) async fn finish_dispatched(
     // as the continuation of the successor response (ADR 0085, ADR 0088).
     if step == storyos_core::FunctionRequestStep::Continue {
         let (attempt_id, payload) = successor_payload(client, claim, marker).await?;
-        let decision_id = text(marker, "successor_decision_id").ok_or_else(|| {
+        text(marker, "successor_decision_id").ok_or_else(|| {
             unavailable(std::io::Error::other("The successor Decision is missing"))
         })?;
         crate::agent_run_continuation::bind_produced_continuation(
             client,
             claim,
-            decision_id,
             attempt_id,
             &payload,
             &row.payload,

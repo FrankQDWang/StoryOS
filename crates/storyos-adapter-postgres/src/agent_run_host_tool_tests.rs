@@ -6,7 +6,8 @@ use storyos_application::{
 };
 use storyos_contracts::{ToolCallInspect, ToolCallOutcomeInspect};
 use storyos_core::{
-    ADVISORY_TEXT, DeploymentDestination, HOST_TOOL_REGISTRATION, RESEARCH_TOOL_OFFER,
+    ADVISORY_TEXT, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION,
+    RESEARCH_TOOL_OFFER,
 };
 use tokio_postgres::Client;
 
@@ -17,9 +18,9 @@ use crate::agent_run_dispatch::tests::{
 /// The `tool_result` projection of an empty result (ADR 0085).
 const EMPTY_OUTPUT: &str = r#"<tool_result source="call_finish" state="empty">The tool answered with no entry.</tool_result>"#;
 
-/// The Run, each of its RunSteps in order with the declared function names, the sent function
-/// outputs, and the `tool_result` sources of the Operation Requirement, each ToolCall row without
-/// its identities, and each Activity Run Event.
+/// The Run, each of its RunSteps in order with the `tool_choice`, the declared function names,
+/// the sent function outputs, and the `tool_result` sources of the Operation Requirement, each
+/// ToolCall row without its identities, and each Activity Run Event.
 async fn run_facts(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
@@ -28,6 +29,8 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
                       'steps', (SELECT jsonb_agg(jsonb_build_object(
                           'position', attempt.decision_position,
                           'decision', attempt.payload #>> '{decision,kind}',
+                          'tool_choice', (attempt.payload #>> '{wire,serialized_payload}')::jsonb
+                                         ->> 'tool_choice',
                           'tools', (attempt.payload #>> '{wire,serialized_payload}')::jsonb
                                    -> 'tools',
                           'tool_outputs', (attempt.payload #>> '{wire,serialized_payload}')::jsonb
@@ -87,9 +90,10 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
         json!({
             "status": "completed", "position": 1,
             "steps": [
-                {"position": 0, "decision": "tool_request", "tools": ["finish"],
-                 "tool_outputs": [], "tool_results": []},
-                {"position": 1, "decision": "advisory", "tools": ["finish"],
+                {"position": 0, "decision": "tool_request", "tool_choice": "required",
+                 "tools": ["finish"], "tool_outputs": [], "tool_results": []},
+                {"position": 1, "decision": "advisory", "tool_choice": "none",
+                 "tools": ["finish"],
                  "tool_outputs": [{"call_id": "call_finish", "output": EMPTY_OUTPUT}],
                  "tool_results": ["empty"]},
             ],
@@ -180,23 +184,44 @@ async fn a_process_with_no_tool_adapter_executes_finish_and_refuses_the_research
                 call["function_name"],
                 call["state"],
                 call["refusal"],
-                call["attempt"]
+                call["attempt"],
+                call["result_text"]
             ])
         })
         .collect();
+    let steps: Vec<Value> = facts["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|step| json!([step["decision"], step["tool_choice"], step["tool_results"]]))
+        .collect();
+    // The refused call beside it makes the first `finish` call count for nothing, and its result
+    // says so.
     assert_eq!(
-        (calls, &facts["steps"][1]["tool_results"], &facts["status"]),
+        (calls, steps, &facts["status"]),
         (
             vec![
                 json!([
                     "web_search",
                     "refused",
                     "destination_request_unsupported",
+                    null,
                     null
                 ]),
-                json!(["finish", "settled", null, null]),
+                json!([
+                    "finish",
+                    "settled",
+                    null,
+                    null,
+                    FINISH_DOES_NOT_COUNT_RESULT
+                ]),
+                json!(["finish", "settled", null, null, ""]),
             ],
-            &json!(["rejected", "empty"]),
+            vec![
+                json!(["tool_request", "required", []]),
+                json!(["tool_request", "required", ["rejected", "ok"]]),
+                json!(["advisory", "none", ["rejected", "ok", "empty"]]),
+            ],
             &json!("completed"),
         )
     );

@@ -34,6 +34,8 @@ it.each([
       predecessor_fenced: false, allowance_consumed: false } }, NO_RESULT],
   ["a successor with no result", { status: "completed", original_result_retrieval: retrieval,
     unknown_create_successor: successor("dispatched") }, NO_RESULT],
+  // A closing response with no text gives the Run no result (ADR 0091).
+  ["a completed Run with no result", { status: "completed" }, NO_RESULT],
   ["a request after one with no result", { status: "refused",
     decision: { kind: "execution_refused", capability: "expiry_rebuild_unknown_create" } },
   "上一条请求还没有结果，请开始新对话。"],
