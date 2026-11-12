@@ -19,6 +19,8 @@ AXES = ("Standards", "Spec")
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a-f]{40})`)?", re.M)
 EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s")
+PENDING = re.compile(r"\bpending\b", re.I)
+NO_EVIDENCE = "none for this head. The merge gate owns this line, so its absence is not a finding"
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.
 CLOSES = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? #(\d+)", re.I)
 # The heading of the verdict links section, an optional blank line, and its own list lines. The text after them stays.
@@ -94,15 +96,19 @@ def rounds_of(pull):
 
 
 def evidence_line(body, head):
-    """The Check Evidence Line of the PR body that is merge evidence for the head."""
-    found = list(EVIDENCE.finditer(body))
-    for line in reversed(found):
+    """The Check Evidence Line of the PR body that is merge evidence for the head, or None. The merge gate owns the line."""
+    for line in reversed(list(EVIDENCE.finditer(body))):
         tier, commit, tree, result = line.groups()
         if commit == head and result == "PASS" and tree != "DIRTY" and tier in ("check", "check-full"):
             return line[0]
-    seen = ", ".join(f"tier={m[1]} commit={m[2][:12]} tree={m[3][:12]} result={m[4]}" for m in found) or "none"
-    raise Refused(f"No Check Evidence Line of make check or make check-full with result=PASS and a clean tree names the head "
-                  f"{head} (lines in the PR body: {seen}). Run make check on the head first, then put its line in the PR body.")
+    return None
+
+
+def refuse_pending(body):
+    """Refuse a round while a line of the PR body has the word pending. Complete the required evidence first."""
+    if lines := [line.strip() for line in body.splitlines() if PENDING.search(line)]:
+        raise Refused("The PR body has required evidence that is pending. Complete each evidence record, remove the word "
+                      "pending, then run the command again. The lines:\n" + "\n".join(f"  {line}" for line in lines))
 
 
 def wait_verify(head, seconds):
@@ -187,13 +193,13 @@ def inside_worktree(pid):
 
 
 def request(pr, number, pull, line, directory):
-    """Write the review request: the commits, the Check Evidence Line, the PR body, and the closed issues."""
+    """Write the review request: the commits, the Check Evidence Line when the body has one, the PR body, and the closed issues."""
     head, base = pull["headRefOid"], pull["baseRefOid"]
     parts = [f"# Review request: PR {pr}, round {number}\n",
              f"- Pull request: {pull['url']}",
              f"- Base: `{pull['baseRefName']}` at `{base}`",
              f"- Head: `{head}`",
-             f"- Check Evidence Line: `{line}`",
+             f"- Check Evidence Line: {f'`{line}`' if line else NO_EVIDENCE}",
              f"- Scoped diff: `git diff {base}...{head}`\n",
              f"# Pull request\n\n{pull['body']}"]
     for issue in sorted({i["number"] for i in pull["closingIssuesReferences"]} | {int(n) for n in CLOSES.findall(pull["body"])}):
@@ -281,6 +287,7 @@ def review(pr, wait):
         raise Refused(LAST_ROUND.format(pr=pr))
     # A round with only one verdict comment runs again on the two axes. The newer comment of an axis counts.
     print(f"Round {number} of {ROUNDS} for PR {pr}", flush=True)
+    refuse_pending(pull["body"])
     line = evidence_line(pull["body"], head)
     if git("rev-parse", "HEAD") != head or git("status", "--porcelain", "--untracked-files=all"):
         raise Refused(f"Check out the head {head} of PR {pr} in a clean working tree, then run the command again")
@@ -303,7 +310,7 @@ def review(pr, wait):
         post(pr, f"## {axis} review, round {number}: {result}\n\n"
                  f"Head `{head}`, tree `{tree}`.\n"
                  f"Reviewer: Codex plugin, new read-only thread `{value['thread']}`.\n"
-                 f"Check Evidence Line: `{line}`.\n\n"
+                 f"Check Evidence Line: {f'`{line}`' if line else NO_EVIDENCE}.\n\n"
                  f"### Blocking\n\n{listed(value['blocking'])}\n\n"
                  f"### Non-blocking\n\n{listed(value['non_blocking'])}\n\n"
                  f"### Evidence\n\n{listed(value['evidence'], numbered=False)}\n")
@@ -314,8 +321,8 @@ def review(pr, wait):
     if all(result == "PASS" for result, _, _, _ in results.values()):
         print(f"Next: send the PR link and the verdict links to the coordinator session. {BASE_MERGE}")
     elif number < ROUNDS:
-        print(f"Next: fix the blocking findings, commit, push, run make check, put its line in the PR body, "
-              f"and run make review PR={pr} again.")
+        print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run make check at the same "
+              "time as the round or after the round passes. The merge gate needs its line for the final head.")
     else:
         print("Next: this was the last round. Send the open blocking findings to the coordinator session.")
 
