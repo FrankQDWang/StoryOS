@@ -16,8 +16,8 @@ use crate::set_current_chapter_authority_tests::open_session;
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
 use super::project_session::{
-    TAKE_OVER_PROJECT_WRITER, take_over_project_writer,
-    take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    TAKE_OVER_PROJECT_WRITER, take_over_project_writer, take_over_project_writer_call,
+    update_project_assistance_call, update_project_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,

@@ -8,7 +8,7 @@ use storyos_application::{
     ResearchSourceReadStore, ToolCallRequest, ToolDestinationAdapter,
     complete_agent_run_with_tools,
 };
-use storyos_core::{DeploymentDestination, ToolEnablement, ToolObservation};
+use storyos_core::{DeploymentDestination, ToolObservation};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::oneshot;
 use tokio_postgres::Client;
@@ -16,8 +16,10 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
 use crate::agent_run_lease::tests::SteppedClock;
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, not_found, real_run};
-use crate::agent_run_tool_call::tests::{set_research_tool, text_and_call_stream};
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, not_found, research_run,
+};
+use crate::agent_run_tool_call::tests::text_and_call_stream;
 use crate::agent_run_tool_dispatch::tests::{
     POST, RESULT, SEARCH, attempt, client, exa_tools, interrupted_attempt, mcp_replies, point_mcp,
     reply, settled_event, tool_facts, tool_run,
@@ -367,7 +369,7 @@ async fn a_cancel_during_the_exchange_drops_it_locally_and_keeps_the_tool_call_u
     let (store, admin) = stores().await;
     let (mcp_base, received, release, mcp) =
         held_mcp(mcp_replies(exa_tools(|_| {}), None), search_result()).await;
-    let (scope, run_id) = tool_run(&store, &admin, "083", 0x083a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "083", &mcp_base).await;
     let cancel = cancel_call(&store, &scope, 0x083b, &run_id).await;
     let clock = SteppedClock::new();
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -419,7 +421,7 @@ async fn a_result_after_the_cancellation_fence_is_kept_as_evidence_only() {
         .await;
     let (store, admin) = stores().await;
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(search_result()))).await;
-    let (scope, run_id) = tool_run(&store, &admin, "084", 0x084a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "084", &mcp_base).await;
     let tools = CancelAfterExchange {
         store: &store,
         cancel: cancel_call(&store, &scope, 0x084b, &run_id).await,
@@ -634,7 +636,7 @@ async fn an_answer_with_no_result_after_the_fence_keeps_the_tool_call_unknown() 
     let failed = "HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     let (mcp_base, mcp) =
         destination(mcp_replies(exa_tools(|_| {}), Some(failed.to_owned()))).await;
-    let (scope, run_id) = tool_run(&store, &admin, "087", 0x087a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "087", &mcp_base).await;
     let tools = CancelAfterExchange {
         store: &store,
         cancel: cancel_call(&store, &scope, 0x087b, &run_id).await,

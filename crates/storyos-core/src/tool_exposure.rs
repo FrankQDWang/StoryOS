@@ -275,9 +275,7 @@ pub const TOOL_REQUEST_INVALID_CAPABILITY: &str = "tool_request_invalid";
 /// `label` of its `ToolCallBatchRefusal` on the Attempt evidence.
 pub fn function_request_refusal_capability(label: &str) -> &'static str {
     match label {
-        "tool_registration_unavailable" | "unknown_spec" => {
-            RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
-        }
+        "tool_registration_unavailable" | "unknown_spec" => RESEARCH_TOOL_UNAVAILABLE_CAPABILITY,
         _ => TOOL_REQUEST_INVALID_CAPABILITY,
     }
 }

@@ -5,13 +5,11 @@ use storyos_application::{
     complete_agent_run_with_tools, complete_archive_export, get_verified_export_archive,
     issue_project_command_challenge,
 };
-use storyos_core::ToolEnablement;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, destination, real_run};
-use crate::agent_run_tool_call::tests::set_research_tool;
+use crate::agent_run_retrieval::tests::{adapter, destination};
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
 use crate::agent_run_tool_exposure::tests::{advisory_stream, sse};
 use crate::command_sequence::tests::seed_project;
@@ -46,11 +44,10 @@ pub(crate) fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> Str
 
 /// Settles one Run whose first response requests `calls`. The fake MCP server answers the calls
 /// in order with `texts`, and the continuation gets an Advisory.
-async fn research_run(
+async fn settled_research_run(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     calls: &[(&str, &str, &str)],
     texts: &[&str],
 ) -> (ProjectScope, String) {
@@ -59,7 +56,8 @@ async fn research_run(
         advisory_stream(&format!("resp_{prefix}_2")),
     ])
     .await;
-    let (scope, run_id) = research_run(store, admin, prefix, &model_base).await;
+    let (scope, run_id) =
+        crate::agent_run_retrieval::tests::research_run(store, admin, prefix, &model_base).await;
     let replies = texts
         .iter()
         .flat_map(|text| {
@@ -235,11 +233,10 @@ async fn a_settled_search_captures_one_snapshot_per_entry_that_its_continuation_
         .await;
     let (store, admin) = stores().await;
     let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a1",
-        0x5a1a,
         &[("call_01", "web_search", search)],
         &[SEARCH_TEXT],
     )
@@ -310,11 +307,10 @@ async fn metadata_above_the_store_bounds_keeps_the_settlement_and_reads_as_absen
         "T".repeat(storyos_core::SOURCE_TITLE_MAX_CHARS + 1),
         "1".repeat(storyos_core::SOURCE_PUBLISHED_MAX_CHARS + 1),
     );
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a6",
-        0x5a6a,
         &[("call_01", "web_search", search)],
         &[&text],
     )
@@ -352,11 +348,10 @@ async fn a_fetch_records_a_failed_a_missing_and_an_empty_url_as_gaps_and_never_a
     let page = "# Tide table\nURL: https://example.org/a\n\nHigh water at 10.42.\n\n\
                 # Empty page\nURL: https://example.org/e\n\n\n\
                 Error fetching https://example.org/c: CRAWL_NOT_FOUND";
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a2",
-        0x5a2a,
         &[("call_01", "web_fetch", urls)],
         &[page],
     )
@@ -392,11 +387,10 @@ async fn a_page_read_above_the_result_bound_fails_with_one_gap_for_each_url_and_
         "# Tide table\nURL: https://example.org/a\n\n{}",
         "x".repeat(storyos_core::TOOL_RESULT_TEXT_MAX_BYTES)
     );
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a7",
-        0x5a7a,
         &[("call_01", "web_fetch", urls)],
         &[&page],
     )
@@ -436,11 +430,10 @@ async fn a_page_that_quotes_a_header_is_unattributed_and_the_call_stays_settled(
     let urls = r#"{"urls":["https://example.org/a"]}"#;
     let page = "# Page\nURL: https://example.org/a\n\nBefore.\n\n\
                 # Quoted\nURL: https://example.org/a\n\nAfter.";
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a8",
-        0x5a8a,
         &[("call_01", "web_fetch", urls)],
         &[page],
     )
@@ -475,11 +468,10 @@ async fn a_second_fetch_of_one_url_is_a_new_revision_and_no_snapshot_changes() {
         .await;
     let (store, admin) = stores().await;
     let url = r#"{"urls":["https://example.org/tides"]}"#;
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a3",
-        0x5a3a,
         &[("call_01", "web_fetch", url), ("call_02", "web_fetch", url)],
         &[
             "# Tide table\nURL: https://example.org/tides\n\nHigh water at 10.42.",
@@ -563,11 +555,10 @@ async fn a_read_in_another_project_scope_finds_no_run_and_no_snapshot() {
         .await;
     let (store, admin) = stores().await;
     let search = r#"{"query":"tide tables of 1890","result_count":null}"#;
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a4",
-        0x5a4a,
         &[("call_01", "web_search", search)],
         &[SEARCH_TEXT],
     )
@@ -593,11 +584,10 @@ async fn the_project_export_packs_the_sources_and_a_reload_reads_them_unchanged(
         .await;
     let (store, admin) = stores().await;
     let urls = r#"{"urls":["https://example.org/a","https://example.org/d"]}"#;
-    let (scope, run_id) = research_run(
+    let (scope, run_id) = settled_research_run(
         &store,
         &admin,
         "5a5",
-        0x5a5a,
         &[("call_01", "web_fetch", urls)],
         &["# Tide table\nURL: https://example.org/a\n\nHigh water at 10.42."],
     )

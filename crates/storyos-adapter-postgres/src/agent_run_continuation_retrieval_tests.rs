@@ -11,13 +11,14 @@ use storyos_application::{
     ModelStreamSink, NoContractFaults, Observation, OriginalResultRetrievalDisposition,
     PreDispatchRefusal, PreparedRequest, ProjectScope, complete_agent_run_with_tools,
 };
-use storyos_core::{ModelAdapter, ToolEnablement};
+use storyos_core::ModelAdapter;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, not_found, real_run};
-use crate::agent_run_tool_call::tests::set_research_tool;
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, not_found, research_run,
+};
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp, reply};
 use crate::command_sequence::tests::{CANCEL_AGENT_RUN, issued};
 use crate::research_artifact::tests::{Reply, computed, message_stream, tagged};
@@ -29,8 +30,6 @@ const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 enum Fault {
     /// An admin statement.
     Sql(String),
-    /// The author disables the research Tool with a fresh challenge of this suffix.
-    Disable(u16),
     /// The author cancels the Run with a fresh challenge of this suffix.
     Cancel(u16),
 }
@@ -87,9 +86,6 @@ impl ModelProviderAdapter for Hooks<'_> {
         match &self.fault {
             Some((at, Fault::Sql(statement))) if *at == count => {
                 self.admin.execute(statement.as_str(), &[]).await.unwrap();
-            }
-            Some((at, Fault::Disable(suffix))) if *at == count => {
-                set_research_tool(self.store, &self.scope, *suffix, ToolEnablement::Disabled).await;
             }
             Some((at, Fault::Cancel(suffix))) if *at == count => {
                 let input = CancelAgentRunInput {
@@ -283,10 +279,10 @@ async fn continuation_run(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     later: &[Later],
 ) -> (ProjectScope, String, tokio::task::JoinHandle<Vec<String>>) {
-    let (scope, run_id) = research_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
+    let (scope, run_id) =
+        research_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
     let continuation = format!("resp_{prefix}_2");
     let sources = Arc::new(Mutex::new(Vec::new()));
     let tagged_sources = Arc::clone(&sources);
@@ -410,8 +406,7 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
         let text = synthesis_text("The tides of 1890.", sources);
         stored_message(reference, &text, "completed")
     };
-    let (scope, run_id, served) =
-        continuation_run(&store, &admin, "d81", 0xd81a, &[synthesis]).await;
+    let (scope, run_id, served) = continuation_run(&store, &admin, "d81", &[synthesis]).await;
     // The Worker crashes after the continuation stream broke, before its record.
     let crashed = drain(
         &store,
@@ -551,7 +546,6 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
         &store,
         &admin,
         "a91",
-        0xa91a,
         &[|_, _| not_found(), successor, late],
     )
     .await;
@@ -733,12 +727,11 @@ async fn failed_condition(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     at: usize,
     fault: impl FnOnce(&str) -> Fault,
 ) -> (bool, Value, usize, Vec<String>) {
     let (scope, run_id, served) =
-        continuation_run(store, admin, prefix, suffix, &[|_, _| not_found()]).await;
+        continuation_run(store, admin, prefix, &[|_, _| not_found()]).await;
     let fault = Some((at, fault(&run_id)));
     let model = hooks(
         store, admin, &scope, &run_id, /*crash_after*/ None, fault,
@@ -768,7 +761,7 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
     let (store, admin) = stores().await;
     // The Host recorded that the budget does not cover both Attempts. A real route admits a Run
     // only with a known request bound, and the Retrieve needs it too, so the test writes the fact.
-    let budget = failed_condition(&store, &admin, "a92", 0xa92a, 3, |run_id| {
+    let budget = failed_condition(&store, &admin, "a92", 3, |run_id| {
         Fault::Sql(format!(
             "UPDATE storyos.model_attempts
                 SET payload = jsonb_set(payload,
@@ -778,12 +771,15 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
         ))
     })
     .await;
-    // The author disables the research Tool during the Retrieve: the Tool Exposure changes.
-    let exposure =
-        failed_condition(&store, &admin, "a93", 0xa93a, 3, |_| Fault::Disable(0xa93b)).await;
+    // A Tool Contract Drift quarantines the research revision during the Retrieve: the Tool
+    // Exposure changes.
+    let exposure = failed_condition(&store, &admin, "a93", 3, |_| {
+        Fault::Sql(crate::agent_run_tool_call::tests::quarantine_statement())
+    })
+    .await;
+    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
     // The author cancels the Run during the Retrieve.
-    let cancelled =
-        failed_condition(&store, &admin, "a94", 0xa94a, 3, |_| Fault::Cancel(0xa94b)).await;
+    let cancelled = failed_condition(&store, &admin, "a94", 3, |_| Fault::Cancel(0xa94b)).await;
 
     let marker = |disposition: &str, reason: Option<&str>, fenced: bool| {
         json!({"disposition": disposition, "pause_reason": reason, "allowance_consumed": fenced,
@@ -833,7 +829,6 @@ async fn an_interrupted_successor_of_a_continuation_waits_with_an_unknown_outcom
         &store,
         &admin,
         "a95",
-        0xa95a,
         &[|_, _| not_found(), broken, |_, _| not_found()],
     )
     .await;
@@ -927,7 +922,6 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
         &store,
         &admin,
         "a96",
-        0xa96a,
         &[|_, _| not_found(), search, |_, _| not_found(), synthesis],
     )
     .await;

@@ -265,12 +265,9 @@ pub(crate) async fn record(
             let outcome = if probe {
                 AgentDecisionOutcome::NoDecision
             } else {
-                let batch = crate::agent_run_tool_call::validate_batch(
-                    client,
-                    &row.payload,
-                    &response,
-                )
-                .await?;
+                let batch =
+                    crate::agent_run_tool_call::validate_batch(client, &row.payload, &response)
+                        .await?;
                 if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
                     payload["tool_call_batch"] = evidence;
                 }

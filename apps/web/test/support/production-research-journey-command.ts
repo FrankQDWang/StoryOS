@@ -100,9 +100,9 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     blockIds = (await getChapter({ ...options, chapterId: setup.chapterId })).chapter.current_revision.blocks
       .map((block) => block.manuscript_block_id);
 
-    // The author enables web research in the panel. The grant covers both operations, so no prompt follows.
-    await page.locator('[data-research-tool="disabled"] input[role="switch"]').click();
-    await page.locator('[data-research-tool="enabled"]').waitFor();
+    // Web research needs no switch: the panel shows no research control, and the first Run binds research for the
+    // Project (ADR 0090). The grant covers both operations, so no prompt follows.
+    await expect(page.locator("[data-research-tool]")).toHaveCount(0);
     const researchRun = await send(page, "1890 年利物浦的涨潮时间是几点？请查找来源。");
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
@@ -210,15 +210,14 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await page.reload();
     await expect(page.locator("[data-assistant-result]")).toHaveText(uncertain);
 
-    // The author disables web research. The next request exposes no Tool, and manual writing saves.
-    await page.locator('[data-research-tool="enabled"] input[role="switch"]').click();
-    await page.locator('[data-research-tool="disabled"]').waitFor();
+    // A plain request also exposes the two research functions. The model answers without a call, and manual writing
+    // saves.
     const plainRun = await send(page, "这一段怎么写得更安静？");
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
     assert.equal((await getAgentRun({ ...options, runId: plainRun })).decision.kind, "advisory");
     assert.equal(model.bodies.length, 7);
-    assert.equal("tools" in model.bodies[6]!, false);
+    assert.deepEqual((model.bodies[6]!.tools as { name: string }[]).map((tool) => tool.name), ["web_search", "web_fetch"]);
     assert.equal(mcp.calls().length, 3);
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
@@ -228,7 +227,7 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await saved.waitFor();
     assert.deepEqual(errors, []);
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, setProjectToolEnablement: 2, createAgentRun: 5,
+      createVolume: 1, createChapter: 1, applyAuthorEdit: 4, createAgentRun: 5,
       rejectProposalOperations: 1, cancelAgentRun: 1 }, authorActions: 7 });
   } finally {
     for (const close of started.reverse()) await close();

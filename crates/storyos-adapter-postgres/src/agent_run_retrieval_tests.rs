@@ -168,7 +168,7 @@ async fn agent_plan_run(
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
                 SET endpoint = $2
-              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &base],
         )
         .await

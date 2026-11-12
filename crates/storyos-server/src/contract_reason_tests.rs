@@ -11,12 +11,11 @@ use storyos_core::{
     ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
     ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
     ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
-    SetCurrentChapterRefusal, SetProjectToolEnablementNoEffect, SetProjectToolEnablementRefusal,
-    SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict, UpdateChapterNoEffect,
-    UpdateChapterRefusal, UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
-    UpdateProjectConflict, UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal, WithdrawProposalConflict, WithdrawProposalNoEffect,
-    WithdrawProposalRefusal,
+    SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
+    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
+    WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
 
 use storyos_core::{
@@ -163,20 +162,6 @@ fn every_project_setting_reason_maps_to_its_public_reason() {
         UpdateProjectAssistanceConflict::StaleAssistanceRevision,
         contracts::UpdateProjectAssistanceConflictReason::StaleAssistanceRevision,
     )]);
-    assert_maps(vec![(
-        SetProjectToolEnablementNoEffect::EnablementUnchanged,
-        contracts::SetProjectToolEnablementNoEffectReason::EnablementUnchanged,
-    )]);
-    assert_maps(vec![
-        (
-            SetProjectToolEnablementRefusal::RegistrationNotOffered,
-            contracts::SetProjectToolEnablementRefusalReason::RegistrationNotOffered,
-        ),
-        (
-            SetProjectToolEnablementRefusal::RegistrationUnavailable,
-            contracts::SetProjectToolEnablementRefusalReason::RegistrationUnavailable,
-        ),
-    ]);
 }
 
 #[test]

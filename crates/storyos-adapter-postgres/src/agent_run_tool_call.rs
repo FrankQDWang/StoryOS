@@ -6,8 +6,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
     CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolAttemptSettlement, ToolCallBatch,
-    ToolCallClass, ToolCallState, ToolRegistrationLifecycle, ValidatedToolCall,
-    tool_call_class,
+    ToolCallClass, ToolCallState, ToolRegistrationLifecycle, ValidatedToolCall, tool_call_class,
 };
 use uuid::Uuid;
 

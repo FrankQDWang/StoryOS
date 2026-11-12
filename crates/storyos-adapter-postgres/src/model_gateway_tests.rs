@@ -351,7 +351,10 @@ pub(crate) async fn admit_run(
 
 /// Admits one queued AgentRun of `conversation`, as `admit_run` does, in a deployment that also
 /// offers `research`.
-#[expect(clippy::too_many_arguments, reason = "each input of one createAgentRun is a test input")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each input of one createAgentRun is a test input"
+)]
 pub(crate) async fn admit_run_in(
     store: &PostgresProjectReader,
     scope: &ProjectScope,

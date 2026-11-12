@@ -1,10 +1,9 @@
 use serde_json::json;
 use storyos_application::{NoContractFaults, complete_agent_run};
 use storyos_core::{
-    CurrentToolAuthority, EXA_TOOL_REGISTRATION, BoundTool, ExposureFacts, ExposureSnapshot,
+    BoundTool, CurrentToolAuthority, EXA_TOOL_REGISTRATION, ExposureFacts, ExposureSnapshot,
     NativeStreamItem, RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState, ToolCallBatch,
-    ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
-    validate_tool_call_batch,
+    ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle, validate_tool_call_batch,
 };
 use tokio_postgres::Client;
 
@@ -357,7 +356,6 @@ async fn create_with_call(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     call_id: &str,
     arguments: &str,
 ) -> (
@@ -463,8 +461,8 @@ async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_i
     // The arguments text holds U+0000 itself, so it is not JSON text. It also holds an escaped
     // backslash, which the stored form doubles.
     let raw = "{\"query\":\"tide\\\\\u{0}tables\",\"result_count\":null}";
-    let in_query = create_with_call(&store, &admin, "f7e", 0xf7ea, "call_01", escaped).await;
-    let in_text = create_with_call(&store, &admin, "f7f", 0xf7fa, "call_01", raw).await;
+    let in_query = create_with_call(&store, &admin, "f7e", "call_01", escaped).await;
+    let in_text = create_with_call(&store, &admin, "f7f", "call_01", raw).await;
 
     assert_eq!(
         (in_query, in_text),
@@ -490,15 +488,7 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
         .await;
     let (store, admin) = stores().await;
     // The call identifier holds U+0000 itself. The arguments are valid.
-    let facts = create_with_call(
-        &store,
-        &admin,
-        "e31",
-        0xe31a,
-        "call_\u{0}01",
-        SEARCH_ARGUMENTS,
-    )
-    .await;
+    let facts = create_with_call(&store, &admin, "e31", "call_\u{0}01", SEARCH_ARGUMENTS).await;
 
     assert_eq!(
         facts,
@@ -511,7 +501,7 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
 
 /// The administration statement of a Tool Contract Drift that quarantines the pinned research
 /// revision while the model response is pending.
-fn quarantine_statement() -> String {
+pub(crate) fn quarantine_statement() -> String {
     format!(
         "UPDATE storyos.tool_registration_revisions
             SET lifecycle = 'quarantined', quarantined_at = clock_timestamp(),
@@ -523,7 +513,7 @@ fn quarantine_statement() -> String {
 
 /// Makes the shared research revision active again after a quarantine, so that later tests
 /// expose it.
-async fn reactivate_research_revision(admin: &Client) {
+pub(crate) async fn reactivate_research_revision(admin: &Client) {
     admin
         .execute(
             "UPDATE storyos.tool_registration_revisions
@@ -542,7 +532,6 @@ async fn revoked_create(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
 ) -> (serde_json::Value, Vec<serde_json::Value>, bool) {
     let (base, served) = destination(vec![text_and_call_stream(
         &format!("resp_{prefix}"),
@@ -581,7 +570,7 @@ async fn a_tool_authority_revoked_before_the_create_record_derives_no_decision()
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let quarantined = revoked_create(&store, &admin, "f7a", 0xf7aa).await;
+    let quarantined = revoked_create(&store, &admin, "f7a").await;
 
     assert_eq!(
         quarantined,
@@ -786,7 +775,6 @@ async fn successor_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     revocation: Option<String>,
 ) -> (
     serde_json::Value,
@@ -865,7 +853,7 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
         .await;
     let (store, admin) = stores().await;
     let (facts, rows, delivered_twice) =
-        successor_run(&store, &admin, "f78", 0xf78a, /*revocation*/ None).await;
+        successor_run(&store, &admin, "f78", /*revocation*/ None).await;
     let decision_id = facts["successor_decision_id"].clone();
 
     assert_eq!(
@@ -905,8 +893,7 @@ async fn a_tool_authority_revoked_before_the_successor_record_derives_no_decisio
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let quarantined =
-        successor_run(&store, &admin, "f7c", 0xf7ca, Some(quarantine_statement())).await;
+    let quarantined = successor_run(&store, &admin, "f7c", Some(quarantine_statement())).await;
 
     assert_eq!(
         quarantined,
