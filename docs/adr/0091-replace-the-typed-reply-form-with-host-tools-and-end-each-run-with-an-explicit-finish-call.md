@@ -18,7 +18,7 @@ Other facts:
 - Stage 6 adds more Tools that StoryOS itself executes. Each new Tool and each new test would be built on the two ways.
 - A response that holds a function call with no output cannot be the prior continuation binding of the next Run. ADR 0085 section 2 gives the reason: each native function call needs its output. The next Run then continues from an older response, and the model does not read that turn.
 - One Run has no limit on its RunSteps (ADR 0085, Consequences).
-- The recorded probe of the model route did not qualify `tool_choice`, parallel function calls, more than one function, or a failed function output ([probe record](../research/agent-plan-function-calling-probe-2026-11-03.md)).
+- The recorded probe of 2026-11-03 did not qualify `tool_choice`, parallel function calls, more than one function, or a failed function output ([probe record](../research/agent-plan-function-calling-probe-2026-11-03.md)). The probe of 2026-11-12 qualified `tool_choice: "required"`, three function declarations, two function calls in one response, and a function output that is empty or reports a refusal. It did not qualify `tool_choice: "none"` ([probe record](../research/agent-plan-tool-choice-probe-2026-11-12.md)).
 
 ## Decision
 
@@ -47,8 +47,10 @@ A refusal is a result. A call that fails its validation becomes a refused ToolCa
 The author decided this rule. The model ends its work with a call to `finish`. After the result of that call, the model writes the final answer, and the Run completes. A text with no earlier `finish` call does not end the Run.
 
 - A `finish` call can be in one response with other calls. It counts only when no other call of that response was refused. Otherwise its result says that the Run continues.
-- When the model route qualifies `tool_choice`, the Host enforces the rule in the request: a request before the finish call requires a function call, and the request after it permits none.
-- When the route does not qualify it, the Host continues the Run one time with one Host sentence that tells the rule. A second text with no `finish` call is the final answer.
+- The probe of 2026-11-12 qualified `tool_choice: "required"` and did not qualify `tool_choice: "none"` ([probe record](../research/agent-plan-tool-choice-probe-2026-11-12.md)). The author approved the rule of the next three bullets on 2026-11-12.
+- Each request before a `finish` call that counted has `tool_choice: "required"`. Thus a text with no `finish` call cannot end a Run.
+- The request after a `finish` call that counted is the closing request, and it has `tool_choice: "none"`. The route does not enforce this value.
+- If the closing response holds no function call, its text is the final answer, and the Run completes. If the closing response holds a function call, the `finish` call no longer counts, each call of that response gets its result as section 3 says, and the Run continues.
 
 ### 5. Limits
 
@@ -57,7 +59,7 @@ The author approved these numbers on 2026-11-12.
 | Item | Limit |
 | --- | --- |
 | `propose_edit` calls of one Run that the validation can refuse | 3. After the third refusal, the Host refuses each later call, and the result tells the model to end the Run and to tell the author. |
-| RunSteps of one Run | 24. The request of the last RunStep permits no function call, and the model writes the final answer from the results that it has. |
+| RunSteps of one Run | 24. The request of the last RunStep has `tool_choice: "none"`. The text of its response is the final answer. The Host executes no function call of that response. A response with no text completes the Run with no result. |
 
 ### 6. The author sees no change in a Run that succeeds
 
@@ -76,6 +78,7 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 - **A response with no function call ends the Run.** The coordinator recommended this for the first version, because it needs no extra request. The author rejected it: a sentence that the model writes between two calls must not end the Run by accident. The author accepted the cost of one more model request in each Run.
 - **A finish call that carries the final answer as its argument.** Rejected. It is again a call with no output, and the answer would stream as function arguments.
 - **A Tool that asks the author a question.** Rejected. The panel shows the question as text, and a Tool adds a request with no gain.
+- **A fallback for a route that does not enforce `tool_choice`: the Host continues the Run one time with one Host sentence that tells the rule, and a second text with no `finish` call is the final answer.** Rejected after the probe of 2026-11-12. The route enforces `tool_choice: "required"`, and that value gives the rule that the author asked for.
 
 ## Consequences
 
