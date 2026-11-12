@@ -61,7 +61,7 @@ The RunStep that a Run opens when each ToolCall of its durable function request 
 _Avoid_: Tool replay, second ToolCall, author message
 
 **Run Finish Request**:
-The ToolCall to the Host Tool `finish` with which the Agent says that the work of the AgentRun is complete. A request that counts has an empty result, and the model then writes the final answer of the Run. A request in one response with a refused call does not count, and its result says that the Run continues. A text with no earlier request that counts does not end the Run. The ADR gives the two exceptions: the RunStep limit of a Run, and a model route that cannot enforce the call ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
+The ToolCall to the Host Tool `finish` with which the Agent says that the work of the AgentRun is complete. A request that counts has an empty result, and the model then writes the final answer of the Run. A request in one response with a refused call does not count, and its result says that the Run continues. A request that counted stops counting when the response to the closing request after it holds a function call, and the Run continues. A text with no earlier request that counts does not end the Run. The ADR gives one exception: the RunStep limit of a Run ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
 _Avoid_: Terminal Tool, stop call, Run Cancellation, final answer
 
 **Tool Gateway**:

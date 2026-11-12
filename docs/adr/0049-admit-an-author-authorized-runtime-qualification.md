@@ -44,3 +44,12 @@ The author authorized live requests for S4-02 on 2026-10-10 ([authorization](htt
 - A function calling probe is a Create request of an AgentRun whose author message is the exact constant text of the probe. Only an authorized Decision on a pending entry selects it. The first probe sends that constant text and one function tool. The second probe sends the constant output of the earlier function call and the prior response reference. The earlier call must have the same Conversation, Registration, and destination. Without an earlier call, the adapter refuses the second probe before dispatch. A probe sends no Project content and no Provider-side tool. Its response makes no Agent Decision on any path, and a probe has no recovery. A rejection refuses the AgentRun. An unknown outcome keeps the Model Attempt uncertain and leaves the AgentRun waiting. The Model Attempt records the native Tool items.
 - Registration `018f0000-0000-7001-8000-00000000fa16` has the entry pending. The probe of 2026-11-03 qualifies it ([evidence](../research/agent-plan-function-calling-probe-2026-11-03.md)). The head Registration `018f0000-0000-7001-8000-00000000fa17` has the qualified entry, so the link authorizes no more probes.
 - No ordinary AgentRun gets a Tool from this amendment.
+
+## Amendment: one exception for the `tool_choice` probe (2026-11-12)
+
+The author approved this exception on 2026-11-12 through the coordinator of [#1451](https://github.com/FrankQDWang/StoryOS/issues/1451). It also covers [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md).
+
+- The 9 live requests of [#1452](https://github.com/FrankQDWang/StoryOS/issues/1452) on 2026-11-12 are the evidence of the `tool_choice` probe ([record](../research/agent-plan-tool-choice-probe-2026-11-12.md)).
+- They did not go through the Model Gateway. A test of the model adapter sent each body directly to the `exchange` of the adapter, so no AgentRun, no Model Attempt, and no Outbound Disclosure Event records them. A test process, and not the Worker, loaded the key through the settings loader.
+- These facts stay true: no key value is in a file, a log, or an output; the record keeps the request bodies; and the tests that sent the requests are not in the repository.
+- The exception permits no later request of this kind. Each later qualification request goes through the admitted path of this ADR.
