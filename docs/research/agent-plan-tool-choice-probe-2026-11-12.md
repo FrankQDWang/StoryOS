@@ -57,7 +57,8 @@ Usage of R1 to R9: 5,920 input and 1,003 output tokens.
 
 ## Effect on the finish rule
 
-- The requests before a `finish` call can enforce the rule with `tool_choice: "required"`. A text with no `finish` call then cannot end a Run, because each response has a call.
+- ADR 0091 section 4 permits enforcement in the request only when the route qualifies `tool_choice` for the two values: a request before the `finish` call requires a call, and the request after it permits none. The route does not qualify `none`. Thus the later tickets build the fallback of ADR 0091 section 4.
+- The route qualifies `required`. A change to ADR 0091 can let the requests before a `finish` call require a call. Then a text with no `finish` call cannot end a Run. Only the author can make that change.
 - No request form that this probe tested makes the closing RunStep permit no function call. A response of the closing RunStep, or of RunStep 24, can hold a function call. #1451 says that such a response holds no call. That statement needs a rule from the author before the ticket that builds the closing RunStep.
 
 ## What this evidence qualifies
