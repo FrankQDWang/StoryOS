@@ -295,14 +295,7 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
         stored("resp_e32", "in_progress"),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "e32", &base).await;
-    crate::agent_run_tool_call::tests::set_research_tool(
-        &store,
-        &scope,
-        0xe32a,
-        storyos_core::ToolEnablement::Enabled,
-    )
-    .await;
+    let (scope, run_id) = research_run(&store, &admin, "e32", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     // The author disables the research Tool after the successor request was prepared.
     let route = crate::agent_run_tool_exposure::tests::DisableBeforeClaim {

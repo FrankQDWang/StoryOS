@@ -123,8 +123,7 @@ pub(crate) async fn tool_run(
         advisory_stream(&format!("resp_{prefix}_2")),
     ])
     .await;
-    let (scope, run_id) = real_run(store, admin, prefix, &model_base).await;
-    set_research_tool(store, &scope, suffix, ToolEnablement::Enabled).await;
+    let (scope, run_id) = research_run(store, admin, prefix, &model_base).await;
     point_mcp(admin, &scope, mcp_base).await;
     (scope, run_id)
 }

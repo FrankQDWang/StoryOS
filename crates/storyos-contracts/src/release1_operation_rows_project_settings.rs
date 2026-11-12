@@ -6,7 +6,6 @@ use super::{
     Edit, Fixture, Headers, OperationRow, Patch, SCHEMA_ID, SchemaSource, SchemaSources, U64, UUID,
     raw_schema,
 };
-use crate::ProjectResearchTool;
 use crate::release1_operation_registry::RegisteredOperation;
 use crate::release1_project_activity::ProjectActivityKind;
 use crate::release1_project_assistance::{
@@ -136,7 +135,6 @@ pub(super) const GET_PROJECT_ASSISTANCE_ROW: OperationRow = OperationRow {
         ProjectModelDestination::decl,
         ModelRuntimeQualification::decl,
         ProjectAssistanceBinding::decl,
-        ProjectResearchTool::decl,
         GetProjectAssistanceResponse::decl,
     ],
     fixture: Fixture::Json(
@@ -157,7 +155,6 @@ pub(super) const GET_PROJECT_ASSISTANCE_ROW: OperationRow = OperationRow {
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "project_id": "018f0000-0000-7001-8000-000000000201"
       },
-      "research_tool": "disabled",
       "schema_id": "storyos.query.project-assistance.response.v1"
     }"#,
     ),

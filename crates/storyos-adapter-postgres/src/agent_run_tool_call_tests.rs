@@ -1,17 +1,16 @@
 use serde_json::json;
-use storyos_application::{NoContractFaults, SetProjectToolEnablementInput, complete_agent_run};
+use storyos_application::{NoContractFaults, complete_agent_run};
 use storyos_core::{
-    CurrentToolAuthority, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ExposureSnapshot,
+    CurrentToolAuthority, EXA_TOOL_REGISTRATION, BoundTool, ExposureFacts, ExposureSnapshot,
     NativeStreamItem, RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState, ToolCallBatch,
-    ToolCompatibilityDecision, ToolEnablement, ToolExposure, ToolRegistrationLifecycle,
+    ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
     validate_tool_call_batch,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, real_run};
+use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, research_run};
 use crate::agent_run_tool_exposure::tests::advisory_stream;
-use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://e.org/3","https://e.org/4","https://e.org/5","https://e.org/6"]}"#;
@@ -45,40 +44,6 @@ pub(crate) fn text_and_call_stream(
         reply.push_str(&format!("data: {event}\n\n"));
     }
     reply
-}
-
-/// Enables the research Tool of the Project, so that the next request exposes it.
-async fn enable_research_tool(
-    store: &crate::PostgresProjectReader,
-    scope: &storyos_application::ProjectScope,
-    suffix: u16,
-) {
-    set_research_tool(store, scope, suffix, ToolEnablement::Enabled).await;
-}
-
-/// Settles the `requested` enablement of the research Tool of the Project, as the author does.
-pub(crate) async fn set_research_tool(
-    store: &crate::PostgresProjectReader,
-    scope: &storyos_application::ProjectScope,
-    suffix: u16,
-    requested: ToolEnablement,
-) {
-    let call = issued(
-        store,
-        scope,
-        suffix,
-        &SET_PROJECT_TOOL_ENABLEMENT,
-        SetProjectToolEnablementInput {
-            registration_id: "web_research".to_owned(),
-            requested,
-            offer: Some(&RESEARCH_TOOL_OFFER),
-        },
-    )
-    .await;
-    store
-        .set_project_tool_enablement(&call.envelope, &call.input)
-        .await
-        .unwrap();
 }
 
 /// The ToolCall rows of the Run, without their row identity.
@@ -126,7 +91,7 @@ async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
 /// research Exposure.
 fn validated_search_call() -> storyos_core::ValidatedToolCall {
     let exposure = ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -152,7 +117,6 @@ fn validated_search_call() -> storyos_core::ValidatedToolCall {
         &[CurrentToolAuthority {
             registration_id: "web_research".to_owned(),
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
-            enabled: true,
             lifecycle: ToolRegistrationLifecycle::Active,
         }],
     ) {
@@ -180,8 +144,7 @@ async fn a_durable_function_request_decision_derives_one_tool_call_once() {
         advisory_stream("resp_f75b"),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "f75", &base).await;
-    enable_research_tool(&store, &scope, 0xf75a).await;
+    let (scope, run_id) = research_run(&store, &admin, "f75", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -302,8 +265,7 @@ async fn an_intake_violation_rejects_the_batch_and_keeps_the_attempt_as_evidence
         "completed",
     )])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "f76", &base).await;
-    enable_research_tool(&store, &scope, 0xf76a).await;
+    let (scope, run_id) = research_run(&store, &admin, "f76", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -353,8 +315,7 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
         "incomplete",
     )])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "f77", &base).await;
-    enable_research_tool(&store, &scope, 0xf77a).await;
+    let (scope, run_id) = research_run(&store, &admin, "f77", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -413,8 +374,7 @@ async fn create_with_call(
         "completed",
     )])
     .await;
-    let (scope, run_id) = real_run(store, admin, prefix, &base).await;
-    enable_research_tool(store, &scope, suffix).await;
+    let (scope, run_id) = research_run(store, admin, prefix, &base).await;
     let claim = claim_run(admin, scope, run_id.clone()).await;
     complete_agent_run(store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -549,39 +509,16 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
     );
 }
 
-/// A change of the current Tool authority that occurs while the model response is pending.
-#[derive(Clone, Copy)]
-enum Revocation {
-    /// The Tool Contract Drift of the pinned research revision quarantines it.
-    Quarantine,
-    /// The author disables the research Tool of the Project.
-    Disable,
-}
-
-impl Revocation {
-    /// The administration statement that makes the change in the Project of `run_id`.
-    fn statement(self, run_id: &str) -> String {
-        match self {
-            Self::Quarantine => format!(
-                "UPDATE storyos.tool_registration_revisions
-                    SET lifecycle = 'quarantined', quarantined_at = clock_timestamp(),
-                        quarantine_differences = '[{{\"kind\": \"tool_removed\", \"tool\": \"web_fetch_exa\"}}]'
-                  WHERE tool_registration_revision = '{}'",
-                EXA_TOOL_REGISTRATION.revision
-            ),
-            Self::Disable => format!(
-                "INSERT INTO storyos.project_tool_enablements
-                   SELECT enablement.owner_user_id, enablement.project_id,
-                          enablement.registration_id, enablement.enablement_revision + 1,
-                          'disabled', NULL, enablement.receipt_id
-                     FROM storyos.project_tool_enablements AS enablement
-                     JOIN storyos.agent_runs AS run
-                       ON (run.owner_user_id, run.project_id) =
-                          (enablement.owner_user_id, enablement.project_id)
-                    WHERE run.run_id = '{run_id}'"
-            ),
-        }
-    }
+/// The administration statement of a Tool Contract Drift that quarantines the pinned research
+/// revision while the model response is pending.
+fn quarantine_statement() -> String {
+    format!(
+        "UPDATE storyos.tool_registration_revisions
+            SET lifecycle = 'quarantined', quarantined_at = clock_timestamp(),
+                quarantine_differences = '[{{\"kind\": \"tool_removed\", \"tool\": \"web_fetch_exa\"}}]'
+          WHERE tool_registration_revision = '{}'",
+        EXA_TOOL_REGISTRATION.revision
+    )
 }
 
 /// Makes the shared research revision active again after a quarantine, so that later tests
@@ -598,15 +535,14 @@ async fn reactivate_research_revision(admin: &Client) {
         .unwrap();
 }
 
-/// Runs one real Create whose response requests a valid `web_search` call, and applies
-/// `revocation` between the exchange and the record. Returns the decision facts without the
+/// Runs one real Create whose response requests a valid `web_search` call, and quarantines the
+/// pinned research revision between the exchange and the record. Returns the decision facts without the
 /// Attempt identity, the ToolCall rows, and whether a pending ToolCall exists.
 async fn revoked_create(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
     suffix: u16,
-    revocation: Revocation,
 ) -> (serde_json::Value, Vec<serde_json::Value>, bool) {
     let (base, served) = destination(vec![text_and_call_stream(
         &format!("resp_{prefix}"),
@@ -616,12 +552,11 @@ async fn revoked_create(
         "completed",
     )])
     .await;
-    let (scope, run_id) = real_run(store, admin, prefix, &base).await;
-    enable_research_tool(store, &scope, suffix).await;
+    let (scope, run_id) = research_run(store, admin, prefix, &base).await;
     let claim = claim_run(admin, scope, run_id.clone()).await;
     let route = AfterExchange {
         admin,
-        statement: revocation.statement(&run_id),
+        statement: quarantine_statement(),
     };
     complete_agent_run(store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -646,9 +581,10 @@ async fn a_tool_authority_revoked_before_the_create_record_derives_no_decision()
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let quarantined = revoked_create(&store, &admin, "f7a", 0xf7aa, Revocation::Quarantine).await;
-    let disabled = revoked_create(&store, &admin, "f7b", 0xf7ba, Revocation::Disable).await;
-    let rejected = |refusal: &str| {
+    let quarantined = revoked_create(&store, &admin, "f7a", 0xf7aa).await;
+
+    assert_eq!(
+        quarantined,
         (
             json!({
                 "status": "refused",
@@ -656,19 +592,11 @@ async fn a_tool_authority_revoked_before_the_create_record_derives_no_decision()
                 "decision_id": null,
                 "dispatch_state": "settled",
                 "decision": null,
-                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+                "tool_call_batch": {"kind": "invalid", "refusal": "tool_registration_unavailable"},
                 "item_count": 2
             }),
             Vec::<serde_json::Value>::new(),
             false,
-        )
-    };
-
-    assert_eq!(
-        (quarantined, disabled),
-        (
-            rejected("tool_registration_unavailable"),
-            rejected("tool_not_enabled")
         )
     );
 }
@@ -859,21 +787,21 @@ async fn successor_run(
     admin: &Client,
     prefix: &str,
     suffix: u16,
-    revocation: Option<Revocation>,
+    revocation: Option<String>,
 ) -> (
     serde_json::Value,
     Vec<(serde_json::Value, serde_json::Value, serde_json::Value)>,
     Option<bool>,
 ) {
-    let (scope, _, run_id) = crate::agent_run_dispatch::tests::queued_run(
+    let (scope, _, run_id) = crate::agent_run_dispatch::tests::queued_run_offering(
         store,
         prefix,
         storyos_core::DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
+        Some(&RESEARCH_TOOL_OFFER),
     )
     .await;
-    enable_research_tool(store, &scope, suffix).await;
     let claim = claim_run(admin, scope, run_id.clone()).await;
     let route = DuplicateSuccessorDelivery {
         store,
@@ -881,7 +809,7 @@ async fn successor_run(
         claim: &claim,
         successor: std::sync::Mutex::new(None),
         delivered_twice: std::sync::Mutex::new(None),
-        revocation: revocation.map(|revocation| revocation.statement(&run_id)),
+        revocation,
     };
     complete_agent_run(store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -978,9 +906,10 @@ async fn a_tool_authority_revoked_before_the_successor_record_derives_no_decisio
         .await;
     let (store, admin) = stores().await;
     let quarantined =
-        successor_run(&store, &admin, "f7c", 0xf7ca, Some(Revocation::Quarantine)).await;
-    let disabled = successor_run(&store, &admin, "f7d", 0xf7da, Some(Revocation::Disable)).await;
-    let rejected = |refusal: &str| {
+        successor_run(&store, &admin, "f7c", 0xf7ca, Some(quarantine_statement())).await;
+
+    assert_eq!(
+        quarantined,
         (
             json!({
                 "status": "refused",
@@ -989,19 +918,11 @@ async fn a_tool_authority_revoked_before_the_successor_record_derives_no_decisio
                 "marker_decision_id": null,
                 "supplies_tool_call": false,
                 "decision": null,
-                "tool_call_batch": {"kind": "invalid", "refusal": refusal},
+                "tool_call_batch": {"kind": "invalid", "refusal": "tool_registration_unavailable"},
                 "roles": "decision,retrieval,successor,late_retrieval"
             }),
             Vec::new(),
             Some(true),
-        )
-    };
-
-    assert_eq!(
-        (quarantined, disabled),
-        (
-            rejected("tool_registration_unavailable"),
-            rejected("tool_not_enabled")
         )
     );
 }

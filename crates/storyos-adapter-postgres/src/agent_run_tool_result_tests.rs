@@ -150,7 +150,7 @@ async fn continue_run(
     after_exchange: &str,
 ) -> (crate::PostgresProjectReader, Client, Ran) {
     let (store, admin) = stores().await;
-    let (scope, run_id) = real_run(&store, &admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
+    let (scope, run_id) = research_run(&store, &admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
     let target_block_id: String = admin
         .query_one(
             "SELECT payload #>> '{operation_requirement,proposal_target_block_ids,0}'
@@ -173,12 +173,12 @@ async fn continue_run(
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &model_base],
         )
         .await
         .unwrap();
-    set_research_tool(&store, &scope, suffix, ToolEnablement::Enabled).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     let (results, edit) = match tool {
         ToolSide::Result(result) => (Some(vec![result]), false),

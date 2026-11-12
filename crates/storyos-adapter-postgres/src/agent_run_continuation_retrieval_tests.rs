@@ -286,7 +286,7 @@ async fn continuation_run(
     suffix: u16,
     later: &[Later],
 ) -> (ProjectScope, String, tokio::task::JoinHandle<Vec<String>>) {
-    let (scope, run_id) = real_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
+    let (scope, run_id) = research_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
     let continuation = format!("resp_{prefix}_2");
     let sources = Arc::new(Mutex::new(Vec::new()));
     let tagged_sources = Arc::clone(&sources);
@@ -312,12 +312,12 @@ async fn continuation_run(
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &model_base],
         )
         .await
         .unwrap();
-    set_research_tool(store, &scope, suffix, ToolEnablement::Enabled).await;
     let result = reply(
         /*id*/ 0,
         json!({"content": [{"type": "text", "text": SEARCH_TEXT}], "isError": false}),

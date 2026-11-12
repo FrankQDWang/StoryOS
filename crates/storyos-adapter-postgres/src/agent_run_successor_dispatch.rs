@@ -267,7 +267,6 @@ pub(crate) async fn record(
             } else {
                 let batch = crate::agent_run_tool_call::validate_batch(
                     client,
-                    claim,
                     &row.payload,
                     &response,
                 )

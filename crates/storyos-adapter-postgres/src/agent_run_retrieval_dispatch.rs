@@ -410,7 +410,6 @@ impl RetrievedResult {
         } else {
             let batch = crate::agent_run_tool_call::validate_batch(
                 client,
-                claim,
                 attempt_payload,
                 &response,
             )

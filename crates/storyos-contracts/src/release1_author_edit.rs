@@ -169,9 +169,6 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "updateProjectAssistance")]
     #[ts(rename = "updateProjectAssistance")]
     UpdateProjectAssistance,
-    #[serde(rename = "setProjectToolEnablement")]
-    #[ts(rename = "setProjectToolEnablement")]
-    SetProjectToolEnablement,
     #[serde(rename = "createAgentRun")]
     #[ts(rename = "createAgentRun")]
     CreateAgentRun,

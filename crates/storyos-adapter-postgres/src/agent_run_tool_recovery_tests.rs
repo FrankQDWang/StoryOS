@@ -258,8 +258,7 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
         advisory_stream("resp_081_3"),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "081", &model_base).await;
-    set_research_tool(&store, &scope, 0x081a, ToolEnablement::Enabled).await;
+    let (scope, run_id) = research_run(&store, &admin, "081", &model_base).await;
     // The first Run sends nothing; only the new ToolCall of the next message reaches the server.
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(search_result()))).await;
     point_mcp(&admin, &scope, &mcp_base).await;
@@ -303,6 +302,7 @@ async fn a_cancel_after_the_claim_sends_nothing_and_the_next_message_asks_with_a
         ConversationSelection::Existing {
             conversation_id: run.1,
         },
+        None,
     )
     .await;
     let claim = claim_run(&admin, scope.clone(), next_run.clone()).await;
@@ -490,8 +490,7 @@ async fn a_cancel_between_two_tool_calls_keeps_the_settled_one_and_refuses_the_p
         ),
     ];
     let (model_base, _model) = destination(vec![calls_stream("resp_085", &calls)]).await;
-    let (scope, run_id) = real_run(&store, &admin, "085", &model_base).await;
-    set_research_tool(&store, &scope, 0x085a, ToolEnablement::Enabled).await;
+    let (scope, run_id) = research_run(&store, &admin, "085", &model_base).await;
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(search_result()))).await;
     point_mcp(&admin, &scope, &mcp_base).await;
     let observer = FaultAt::new(
@@ -560,8 +559,7 @@ async fn a_takeover_after_the_claim_settles_unknown_at_the_next_claim_with_no_su
         not_found(),
     ])
     .await;
-    let (scope, run_id) = real_run(&store, &admin, "086", &model_base).await;
-    set_research_tool(&store, &scope, 0x086a, ToolEnablement::Enabled).await;
+    let (scope, run_id) = research_run(&store, &admin, "086", &model_base).await;
     let (mcp_base, mcp) = destination(Vec::new()).await;
     point_mcp(&admin, &scope, &mcp_base).await;
     let observer = FaultAt::new(

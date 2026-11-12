@@ -4,12 +4,12 @@ use storyos_application::{
     ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal,
     PreparedRequest, ResolvedCredential, complete_agent_run,
 };
-use storyos_core::{DeploymentDestination, ModelAdapter};
+use storyos_core::{DeploymentDestination, ModelAdapter, RESEARCH_TOOL_OFFER, ResearchToolOffer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::RuntimeClock;
-use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
+use crate::agent_run_dispatch::tests::{claim_run, queued_run_offering, stores};
 
 const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
 
@@ -126,25 +126,49 @@ pub(crate) fn not_found() -> String {
     )
 }
 
-/// Admits one Agent Plan AgentRun on the qualified head Registration and sends it to `base`.
+/// Admits one Agent Plan AgentRun on the qualified head Registration and sends it to `base`,
+/// in a deployment that offers no research destination.
 pub(crate) async fn real_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
     base: &str,
 ) -> (storyos_application::ProjectScope, String) {
-    let (scope, _, run_id) = queued_run(
+    agent_plan_run(store, admin, prefix, base, None).await
+}
+
+/// Admits one Agent Plan AgentRun as `real_run` does, in a deployment that also offers the
+/// research destination. The first Run of the Project binds it (ADR 0090).
+pub(crate) async fn research_run(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    base: &str,
+) -> (storyos_application::ProjectScope, String) {
+    agent_plan_run(store, admin, prefix, base, Some(&RESEARCH_TOOL_OFFER)).await
+}
+
+async fn agent_plan_run(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    base: &str,
+    research: Option<&'static ResearchToolOffer>,
+) -> (storyos_application::ProjectScope, String) {
+    let (scope, _, run_id) = queued_run_offering(
         store,
         prefix,
         DeploymentDestination::VolcengineAgentPlan {
             qualification_authorization: None,
         },
+        research,
     )
     .await;
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'
             &[&scope.project_id.as_ref(), &base],
         )
         .await

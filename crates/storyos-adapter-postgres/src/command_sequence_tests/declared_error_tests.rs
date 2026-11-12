@@ -16,7 +16,7 @@ use crate::set_current_chapter_authority_tests::open_session;
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
 use super::project_session::{
-    TAKE_OVER_PROJECT_WRITER, set_project_tool_enablement_call, take_over_project_writer,
+    TAKE_OVER_PROJECT_WRITER, take_over_project_writer,
     take_over_project_writer_call, update_project_assistance_call, update_project_call,
 };
 use super::proposal_decision::{
@@ -204,11 +204,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         .await,
         declared_errors(
             &store,
-            &set_project_tool_enablement_call(&store, /*base*/ 0xb570).await,
-        )
-        .await,
-        declared_errors(
-            &store,
             &take_over_project_writer_call(&store, /*base*/ 0x93a0).await,
         )
         .await,
@@ -308,11 +303,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         (CommandKind::SetCurrentChapter, None, "invalid_challenge"),
         (
             CommandKind::UpdateProjectAssistance,
-            None,
-            "invalid_challenge",
-        ),
-        (
-            CommandKind::SetProjectToolEnablement,
             None,
             "invalid_challenge",
         ),

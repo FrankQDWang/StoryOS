@@ -6,7 +6,7 @@ use storyos_application::{
     SetProjectToolEnablementInput, complete_agent_run,
 };
 use storyos_core::{
-    DeploymentDestination, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ModelAdapter,
+    DeploymentDestination, EXA_TOOL_REGISTRATION, BoundTool, ExposureFacts, ModelAdapter,
     RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolEnablement, ToolExposure,
     ToolRegistrationLifecycle,
 };
@@ -84,7 +84,7 @@ pub(crate) fn function_call_stream(reference: &str) -> String {
 /// The Exposure of the research Tool on the current Agent Plan Registration.
 fn research_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -177,6 +177,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
         ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006f716".to_owned(),
         },
+        None,
     )
     .await;
     let claim = claim_run(&admin, scope, second.clone()).await;
@@ -412,14 +413,7 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
         .await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![advisory_stream("resp_f79")]).await;
-    let (scope, run_id) = real_run(&store, &admin, "f79", &base).await;
-    crate::agent_run_tool_call::tests::set_research_tool(
-        &store,
-        &scope,
-        0xf79a,
-        ToolEnablement::Enabled,
-    )
-    .await;
+    let (scope, run_id) = research_run(&store, &admin, "f79", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     let route = DisableBeforeClaim {
         store: &store,

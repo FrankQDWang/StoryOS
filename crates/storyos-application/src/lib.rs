@@ -195,10 +195,7 @@ pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
-pub use project_settings::{
-    SetProjectToolEnablementInput, SetProjectToolEnablementSettlement, UpdateProjectInput,
-    UpdateProjectSettlement,
-};
+pub use project_settings::{UpdateProjectInput, UpdateProjectSettlement};
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
     ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,

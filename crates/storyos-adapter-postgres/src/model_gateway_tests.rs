@@ -15,7 +15,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
-    NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState,
+    NativeStreamItem, OutputPhase, ResearchToolOffer, StreamItemRole, StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -250,11 +250,21 @@ pub(crate) async fn claim_run(
 }
 
 /// Admits one queued AgentRun on a new chapter of a new Project with fake assistance, in a
-/// deployment that offers `destination`.
+/// deployment that offers `destination` and no research destination.
 pub(crate) async fn queued_run(
     store: &PostgresProjectReader,
     prefix: &str,
     destination: DeploymentDestination,
+) -> (ProjectScope, String, String) {
+    queued_run_offering(store, prefix, destination, None).await
+}
+
+/// Admits one queued AgentRun as `queued_run` does, in a deployment that also offers `research`.
+pub(crate) async fn queued_run_offering(
+    store: &PostgresProjectReader,
+    prefix: &str,
+    destination: DeploymentDestination,
+    research: Option<&'static ResearchToolOffer>,
 ) -> (ProjectScope, String, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = command_issue(
@@ -301,13 +311,15 @@ pub(crate) async fn queued_run(
         /*expected_tree_revision*/ 2,
     )
     .await;
-    let run_id = admit_run(
+    let run_id = admit_run_in(
         store,
         &scope,
         &chapter_id,
         prefix,
         destination,
         "Help with this passage.",
+        ConversationSelection::New,
+        research,
     )
     .await;
     (scope, chapter_id, run_id)
@@ -332,11 +344,14 @@ pub(crate) async fn admit_run(
         destination,
         author_message,
         conversation,
+        None,
     )
     .await
 }
 
-/// Admits one queued AgentRun of `conversation`, as `admit_run` does.
+/// Admits one queued AgentRun of `conversation`, as `admit_run` does, in a deployment that also
+/// offers `research`.
+#[expect(clippy::too_many_arguments, reason = "each input of one createAgentRun is a test input")]
 pub(crate) async fn admit_run_in(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
@@ -345,6 +360,7 @@ pub(crate) async fn admit_run_in(
     destination: DeploymentDestination,
     author_message: &str,
     conversation: ConversationSelection,
+    research: Option<&'static ResearchToolOffer>,
 ) -> String {
     let run = command_issue(
         scope,
@@ -368,6 +384,7 @@ pub(crate) async fn admit_run_in(
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
+            research,
         },
     );
     store

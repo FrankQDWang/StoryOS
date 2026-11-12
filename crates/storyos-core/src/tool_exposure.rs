@@ -1,7 +1,7 @@
-//! The Tool Exposure of one RunStep (ADR 0034, ADR 0084): the disposable projection of the
-//! enabled Tools that one Agent Plan request declares to the model. The Worker computes it from
-//! the enabled `active` Tool Registrations of the Project, their `compatible` compatibility
-//! Decisions, and the qualified function calling entry of the pinned Model Registration. The
+//! The Tool Exposure of one RunStep (ADR 0034, ADR 0084, ADR 0090): the disposable projection of
+//! the bound Tools that one Agent Plan request declares to the model. The Worker computes it from
+//! the `active` Tool Registration of the current research binding of the Project, its
+//! `compatible` compatibility Decision, and the qualified function calling entry of the pinned Model Registration. The
 //! projection grants nothing, changes no Registration, and names no service: the model sees the
 //! operation of a ToolSpec, and the Step Snapshot pins the Registration revision behind it.
 
@@ -16,7 +16,7 @@ use crate::{
 /// The native type of the function call item of the Agent Plan route.
 pub const FUNCTION_CALL_NATIVE_TYPE: &str = "function_call";
 
-/// The compatibility Decision of one Project Tool Enablement.
+/// The compatibility Decision of one research binding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolCompatibilityDecision {
     Compatible,
@@ -36,20 +36,21 @@ impl ToolCompatibilityDecision {
     }
 }
 
-/// One enabled Tool Registration of the Project, as the Worker reads it at the RunStep.
+/// The Tool Registration of the current research binding of the Project, as the Worker reads it
+/// at the RunStep.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EnabledTool {
-    /// The Registration revision that the enablement pinned.
+pub struct BoundTool {
+    /// The Registration revision that the use binding pins.
     pub registration_revision: String,
     pub lifecycle: ToolRegistrationLifecycle,
-    /// `None` when the enablement has no compatibility Decision of a known kind.
+    /// `None` when the Decision is not of a known kind.
     pub compatibility: Option<ToolCompatibilityDecision>,
 }
 
 /// The facts of one RunStep that the Exposure reads.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExposureFacts<'a> {
-    pub enabled: &'a [EnabledTool],
+    pub bound: &'a [BoundTool],
     /// The Model Registration revision that the AgentRun pinned.
     pub model_registration_revision: &'a str,
 }
@@ -172,10 +173,10 @@ impl ToolExposure {
         self.tools.is_empty()
     }
 
-    /// The Exposure of the facts. An enablement exposes its Tools only when the Registration
+    /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
-    /// Registration has qualified function calling. Each other enablement exposes nothing, and
-    /// a second Tool of one function name stays out.
+    /// Registration has qualified function calling. Each other binding exposes nothing, and a
+    /// second Tool of one function name stays out.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let qualified =
             model_registration(facts.model_registration_revision).is_some_and(|registration| {
@@ -188,13 +189,13 @@ impl ToolExposure {
             return Self::empty();
         }
         let mut tools: Vec<ExposedTool> = Vec::new();
-        for enabled in facts.enabled {
-            if enabled.lifecycle != ToolRegistrationLifecycle::Active
-                || enabled.compatibility != Some(ToolCompatibilityDecision::Compatible)
+        for bound in facts.bound {
+            if bound.lifecycle != ToolRegistrationLifecycle::Active
+                || bound.compatibility != Some(ToolCompatibilityDecision::Compatible)
             {
                 continue;
             }
-            let Some(registration) = tool_registration(&enabled.registration_revision) else {
+            let Some(registration) = tool_registration(&bound.registration_revision) else {
                 continue;
             };
             for tool in registration.tools {
@@ -261,9 +262,8 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
 }
 
 /// The refusal capability of a Run whose function request batch did not validate because no Tool
-/// can execute the request now (ADR 0084): the Project does not enable the pinned Registration
-/// now, its pinned revision does not admit a new ToolCall now, or this build does not have its
-/// pinned ToolSpec revision. The author sees one result sentence.
+/// can execute the request now (ADR 0084): its pinned revision does not admit a new ToolCall now,
+/// or this build does not have its pinned ToolSpec revision. The author sees one result sentence.
 pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
 
 /// The refusal capability of a Run whose function request batch did not validate for each other
@@ -275,7 +275,7 @@ pub const TOOL_REQUEST_INVALID_CAPABILITY: &str = "tool_request_invalid";
 /// `label` of its `ToolCallBatchRefusal` on the Attempt evidence.
 pub fn function_request_refusal_capability(label: &str) -> &'static str {
     match label {
-        "tool_not_enabled" | "tool_registration_unavailable" | "unknown_spec" => {
+        "tool_registration_unavailable" | "unknown_spec" => {
             RESEARCH_TOOL_UNAVAILABLE_CAPABILITY
         }
         _ => TOOL_REQUEST_INVALID_CAPABILITY,

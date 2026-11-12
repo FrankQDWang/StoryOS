@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::{
-    EnabledTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
+    BoundTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
     ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 use crate::{
@@ -11,20 +11,20 @@ use crate::{
     WEB_SEARCH_TOOL_SPEC,
 };
 
-fn enabled(
+fn bound(
     lifecycle: ToolRegistrationLifecycle,
     compatibility: Option<ToolCompatibilityDecision>,
-) -> EnabledTool {
-    EnabledTool {
+) -> BoundTool {
+    BoundTool {
         registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
         lifecycle,
         compatibility,
     }
 }
 
-fn exposure(enabled: &[EnabledTool], model_registration_revision: &str) -> ToolExposure {
+fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        enabled,
+        bound,
         model_registration_revision,
     })
 }
@@ -49,8 +49,8 @@ fn research_exposure() -> ToolExposure {
 }
 
 #[test]
-fn an_active_compatible_enablement_on_a_qualified_registration_exposes_its_tools() {
-    let active = [enabled(
+fn an_active_compatible_binding_on_a_qualified_registration_exposes_its_tools() {
+    let active = [bound(
         ToolRegistrationLifecycle::Active,
         Some(ToolCompatibilityDecision::Compatible),
     )];
@@ -61,24 +61,24 @@ fn an_active_compatible_enablement_on_a_qualified_registration_exposes_its_tools
 }
 
 #[test]
-fn each_other_enablement_or_registration_exposes_nothing() {
+fn each_other_binding_or_registration_exposes_nothing() {
     let compatible = Some(ToolCompatibilityDecision::Compatible);
-    let cases: [(&[EnabledTool], &str); 6] = [
+    let cases: [(&[BoundTool], &str); 6] = [
         (&[], AGENT_PLAN_REGISTRATION.revision),
         (
-            &[enabled(ToolRegistrationLifecycle::Quarantined, compatible)],
+            &[bound(ToolRegistrationLifecycle::Quarantined, compatible)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[enabled(ToolRegistrationLifecycle::Retired, compatible)],
+            &[bound(ToolRegistrationLifecycle::Retired, compatible)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[enabled(ToolRegistrationLifecycle::Active, None)],
+            &[bound(ToolRegistrationLifecycle::Active, None)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[EnabledTool {
+            &[BoundTool {
                 registration_revision: "018f0000-0000-7001-8000-0000000e0dead".to_owned(),
                 lifecycle: ToolRegistrationLifecycle::Active,
                 compatibility: compatible,
@@ -86,16 +86,16 @@ fn each_other_enablement_or_registration_exposes_nothing() {
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[enabled(ToolRegistrationLifecycle::Active, compatible)],
+            &[bound(ToolRegistrationLifecycle::Active, compatible)],
             HOST_FAKE_REGISTRATION.revision,
         ),
     ];
-    for (enabled, revision) in cases {
-        assert_eq!(exposure(enabled, revision), ToolExposure::empty());
+    for (bound, revision) in cases {
+        assert_eq!(exposure(bound, revision), ToolExposure::empty());
     }
     assert_eq!(
         exposure(
-            &[enabled(ToolRegistrationLifecycle::Active, compatible)],
+            &[bound(ToolRegistrationLifecycle::Active, compatible)],
             AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision
         ),
         ToolExposure::empty()

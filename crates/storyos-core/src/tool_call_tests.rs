@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     AgentDecisionKind, AgentDecisionOutcome, CitableSources, DecisionCandidate,
-    EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, IntakeRefusal, ModelOutput,
+    EXA_TOOL_REGISTRATION, BoundTool, ExposureFacts, IntakeRefusal, ModelOutput,
     NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
     ToolExposure, ToolIntake, ToolRegistrationLifecycle, validate_agent_decision,
 };
@@ -14,7 +14,7 @@ use crate::{
 /// The Snapshot of the research Exposure, as the Worker pins it at the dispatch claim.
 fn pinned() -> ExposureSnapshot {
     let exposure = ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -25,21 +25,17 @@ fn pinned() -> ExposureSnapshot {
 }
 
 /// The current authority of the pinned research Registration revision.
-fn authority(enabled: bool, lifecycle: ToolRegistrationLifecycle) -> CurrentToolAuthority {
+fn authority(lifecycle: ToolRegistrationLifecycle) -> CurrentToolAuthority {
     CurrentToolAuthority {
         registration_id: "web_research".to_owned(),
         registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
-        enabled,
         lifecycle,
     }
 }
 
-/// The Project enables the pinned Registration now, and its revision is active now.
+/// The pinned research revision is active now.
 fn current() -> [CurrentToolAuthority; 1] {
-    [authority(
-        /*enabled*/ true,
-        ToolRegistrationLifecycle::Active,
-    )]
+    [authority(ToolRegistrationLifecycle::Active)]
 }
 
 fn call(item_id: &str, call_id: &str, name: &str, arguments: &str) -> NativeStreamItem {
@@ -285,33 +281,11 @@ fn current_refusal(current: &[CurrentToolAuthority]) -> (ToolCallBatchRefusal, &
 }
 
 #[test]
-fn a_registration_that_the_project_does_not_enable_now_rejects_the_batch() {
+fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
     let other_revision = CurrentToolAuthority {
         registration_revision: "018f0000-0000-7001-8000-0000000e0f09".to_owned(),
-        ..authority(/*enabled*/ true, ToolRegistrationLifecycle::Active)
+        ..authority(ToolRegistrationLifecycle::Active)
     };
-    let not_enabled = (
-        ToolCallBatchRefusal::NotEnabled {
-            call_id: "call_01".to_owned(),
-        },
-        "tool_not_enabled",
-    );
-
-    assert_eq!(
-        [
-            current_refusal(&[authority(
-                /*enabled*/ false,
-                ToolRegistrationLifecycle::Active
-            )]),
-            current_refusal(&[]),
-            current_refusal(&[other_revision]),
-        ],
-        [not_enabled.clone(), not_enabled.clone(), not_enabled]
-    );
-}
-
-#[test]
-fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
     let unavailable = (
         ToolCallBatchRefusal::RegistrationUnavailable {
             call_id: "call_01".to_owned(),
@@ -321,16 +295,17 @@ fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
 
     assert_eq!(
         [
-            current_refusal(&[authority(
-                /*enabled*/ true,
-                ToolRegistrationLifecycle::Quarantined
-            )]),
-            current_refusal(&[authority(
-                /*enabled*/ true,
-                ToolRegistrationLifecycle::Retired
-            )]),
+            current_refusal(&[authority(ToolRegistrationLifecycle::Quarantined)]),
+            current_refusal(&[authority(ToolRegistrationLifecycle::Retired)]),
+            current_refusal(&[]),
+            current_refusal(&[other_revision]),
         ],
-        [unavailable.clone(), unavailable]
+        [
+            unavailable.clone(),
+            unavailable.clone(),
+            unavailable.clone(),
+            unavailable
+        ]
     );
 }
 
