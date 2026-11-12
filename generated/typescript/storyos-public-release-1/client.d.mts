@@ -61,9 +61,7 @@ export type ModelRuntimeQualification = "qualified" | "pending" | "qualification
 
 export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailability, revision: string, model_registration_revision: string, processing_destination_identity: string, processing_destination_identity_evidence_revision: string, project_model_use_binding_revision: string, external_compatibility_decision: string, destination: ProjectModelDestination, runtime_qualification: ModelRuntimeQualification, };
 
-export type ProjectResearchTool = "not_offered" | "disabled" | "enabled" | "quarantined";
-
-export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding | null, research_tool: ProjectResearchTool, };
+export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding | null, };
 
 export type UpdateProjectAssistanceInput = { availability: ProjectAssistanceAvailability, expected_assistance_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -76,18 +74,6 @@ export type UpdateProjectAssistanceConflictReason = "stale_assistance_revision";
 export type UpdateProjectAssistanceEffect = { "kind": "initialized", availability: ProjectAssistanceAvailability, revision: string, project_activity_position: string, } | { "kind": "authoritative_applied", availability: ProjectAssistanceAvailability, revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateProjectAssistanceNoEffectReason, } | { "kind": "conflicted", reason: UpdateProjectAssistanceConflictReason, };
 
 export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
-
-export type SetProjectToolEnablementInput = { registration_id: string, enabled: boolean, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type SetProjectToolEnablementRequest = { command_schema: string, set_project_tool_enablement_input: SetProjectToolEnablementInput, };
-
-export type SetProjectToolEnablementNoEffectReason = "enablement_unchanged";
-
-export type SetProjectToolEnablementRefusalReason = "registration_not_offered" | "registration_unavailable";
-
-export type SetProjectToolEnablementEffect = { "kind": "authoritative_applied", enabled: boolean, revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: SetProjectToolEnablementNoEffectReason, } | { "kind": "refused", reason: SetProjectToolEnablementRefusalReason, };
-
-export type SetProjectToolEnablementResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SetProjectToolEnablementEffect, };
 
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -217,7 +203,7 @@ export type AuthorEditProposalTarget = { proposal_id: string, operation_id: stri
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "setProjectToolEnablement" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "steerAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -712,8 +698,6 @@ export declare function updateProject(options: StoryOSQueryOptions & { projectId
 export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
 export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
-export declare function digestSetProjectToolEnablement(request: SetProjectToolEnablementRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function setProjectToolEnablement(options: StoryOSQueryOptions & { projectId: string; request: SetProjectToolEnablementRequest; idempotencyKey: string; antiForgery: string }): Promise<SetProjectToolEnablementResponse>;
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;

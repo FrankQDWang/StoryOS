@@ -23,7 +23,6 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
-mod project_tool_enablement;
 mod rebuild_expired_reference;
 mod research_destination;
 mod research_source;
@@ -203,12 +202,6 @@ pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
 };
-pub use project_tool_enablement::{
-    CurrentEnablement, EnablementBinding, PinnedEnablement, ProjectToolState,
-    SetProjectToolEnablement, SetProjectToolEnablementApplied, SetProjectToolEnablementNoEffect,
-    SetProjectToolEnablementRefusal, SetProjectToolEnablementResult, ToolEnablement,
-    set_project_tool_enablement,
-};
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
     CompleteReadyPartialProposalResult, ContinueProposalGeneration,
@@ -290,7 +283,7 @@ pub use tool_dispatch::{
     ToolObservation, ToolResultText, admit_tool_dispatch, function_request_step, settle_tool_call,
 };
 pub use tool_exposure::{
-    EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
+    BoundTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
     RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
     TOOL_REQUEST_INVALID_CAPABILITY, ToolCompatibilityDecision, ToolExposure,
     function_request_refusal_capability, requests_function, response_disposition,

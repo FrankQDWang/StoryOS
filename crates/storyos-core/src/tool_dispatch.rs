@@ -1,14 +1,13 @@
 //! The Tool Gateway decisions of one ToolCall dispatch (ADR 0034, ADR 0083, ADR 0084): the dispatch
 //! plan from the pinned Registration and ToolSpec, the Tool Effect Request, its intersection with
-//! the current grant and Project Tool Enablement at the claim, and the Tool Effect Outcome of one
+//! the current grant and research binding at the claim, and the Tool Effect Outcome of one
 //! observation. The result text is data: no instruction, permission, or authority comes from it.
 
 use serde_json::{Map, Value, json};
 
 use crate::{
     ContractDifference, ExternalRead, ExternalWrite, GrantScope, IntakeField, RegisteredTool,
-    ToolCompatibilityDecision, ToolEnablement, ToolIntake, ToolRegistration,
-    ToolRegistrationLifecycle, ToolSpec,
+    ToolCompatibilityDecision, ToolIntake, ToolRegistration, ToolRegistrationLifecycle, ToolSpec,
 };
 
 /// The state of one ToolCall row.
@@ -174,10 +173,9 @@ pub struct ToolDispatchFacts<'a> {
     /// Snapshot of its Model Attempt pinned: the Host gave the Run only those Tools.
     pub run_grant_names_tool: bool,
     pub lifecycle: ToolRegistrationLifecycle,
-    /// The latest enablement of the Registration, or `None` when the Project has none.
-    pub enablement: Option<ToolEnablement>,
     pub compatibility: Option<ToolCompatibilityDecision>,
-    /// Whether the use binding of the latest enablement pins the revision of the ToolCall.
+    /// Whether the use binding of the current research Decision pins the revision of the
+    /// ToolCall.
     pub binding_pins_revision: bool,
     pub credential_reference: Option<&'a str>,
     /// The recorded scope of the grant of the use binding.
@@ -189,7 +187,6 @@ pub struct ToolDispatchFacts<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolDispatchRefusal {
     DisclosureOutsideGrant,
-    ToolNotEnabled,
     RegistrationUnavailable,
     RegistrationIncompatible,
     CredentialUnbound,
@@ -201,7 +198,6 @@ impl ToolDispatchRefusal {
     pub fn code(self) -> &'static str {
         match self {
             Self::DisclosureOutsideGrant => "disclosure_outside_grant",
-            Self::ToolNotEnabled => "tool_not_enabled",
             Self::RegistrationUnavailable => "tool_registration_unavailable",
             Self::RegistrationIncompatible => "tool_registration_incompatible",
             Self::CredentialUnbound => "credential_unbound",
@@ -215,7 +211,6 @@ impl ToolDispatchRefusal {
         match self {
             Self::ToolApprovalRequired => ToolCallState::AwaitingApproval,
             Self::DisclosureOutsideGrant
-            | Self::ToolNotEnabled
             | Self::RegistrationUnavailable
             | Self::RegistrationIncompatible
             | Self::CredentialUnbound
@@ -225,14 +220,10 @@ impl ToolDispatchRefusal {
 }
 
 /// Admits the dispatch of one ToolCall at the final local dispatch boundary: the non-expanding
-/// intersection of the current Project Tool Enablement, the exact Project Scope, the Run
-/// Capability Grant, the Registration
-/// lifecycle, the compatibility Decision, the Credential Reference of the use binding, and the
+/// intersection of the exact Project Scope, the Run Capability Grant, the Registration
+/// lifecycle, the current research compatibility Decision, the Credential Reference of the use binding, and the
 /// grant scope with the Tool Effect Request (ADR 0034). A covered effect needs no confirmation.
 pub fn admit_tool_dispatch(facts: &ToolDispatchFacts<'_>) -> Result<(), ToolDispatchRefusal> {
-    if facts.enablement != Some(ToolEnablement::Enabled) {
-        return Err(ToolDispatchRefusal::ToolNotEnabled);
-    }
     if !facts.same_scope {
         return Err(ToolDispatchRefusal::DisclosureOutsideGrant);
     }

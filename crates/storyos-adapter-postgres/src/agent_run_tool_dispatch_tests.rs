@@ -4,12 +4,12 @@ use storyos_application::{
     CompleteAgentRunError, NoContractFaults, PreDispatchRefusal, PreparedRequest, ToolCallRequest,
     ToolDestinationAdapter, complete_agent_run_with_tools,
 };
-use storyos_core::{EXA_TOOL_REGISTRATION, ToolEnablement, ToolObservation};
+use storyos_core::{EXA_TOOL_REGISTRATION, ToolObservation};
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{TestCredential, adapter, destination, real_run};
-use crate::agent_run_tool_call::tests::{set_research_tool, text_and_call_stream};
+use crate::agent_run_retrieval::tests::{TestCredential, adapter, destination, research_run};
+use crate::agent_run_tool_call::tests::text_and_call_stream;
 use crate::agent_run_tool_exposure::tests::advisory_stream;
 
 pub(crate) const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -109,7 +109,6 @@ pub(crate) async fn tool_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     mcp_base: &str,
 ) -> (storyos_application::ProjectScope, String) {
     let (model_base, _model) = destination(vec![
@@ -123,8 +122,7 @@ pub(crate) async fn tool_run(
         advisory_stream(&format!("resp_{prefix}_2")),
     ])
     .await;
-    let (scope, run_id) = real_run(store, admin, prefix, &model_base).await;
-    set_research_tool(store, &scope, suffix, ToolEnablement::Enabled).await;
+    let (scope, run_id) = research_run(store, admin, prefix, &model_base).await;
     point_mcp(admin, &scope, mcp_base).await;
     (scope, run_id)
 }
@@ -283,7 +281,7 @@ fn tool_manifest() -> Value {
                                     "disclosed": ["tide tables of 1890"]},
         },
         "authority": {"kept": true,
-                      "exact": ["enablement_revision", "evidence_revision",
+                      "exact": ["evidence_revision",
                                 "external_compatibility_decision", "grant_id",
                                 "processing_destination_identity",
                                 "project_model_use_binding_revision"]},
@@ -306,7 +304,7 @@ async fn a_claimed_search_settles_with_its_result_text_and_one_run_event() {
         json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
     );
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dc1", 0xdc1a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dc1", &mcp_base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     let tools = Hooked {
         admin: &admin,
@@ -360,16 +358,7 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
                         AND binding.tool_registration_revision IS NOT NULL";
     let cases = [
         (
-            "dc2",
-            0xdc2a,
-            "UPDATE storyos.project_tool_enablements SET enablement = 'disabled',
-                    external_compatibility_decision = NULL WHERE project_id = '{project}'"
-                .to_owned(),
-            "tool_not_enabled",
-        ),
-        (
             "dc3",
-            0xdc3a,
             format!(
                 "UPDATE storyos.tool_registration_revisions SET lifecycle = 'retired',
                         quarantine_differences = '[{{\"kind\":\"tool_removed\",\"tool\":\"t\"}}]',
@@ -381,7 +370,6 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         ),
         (
             "dc4",
-            0xdc4a,
             format!(
                 "INSERT INTO storyos.tool_registration_revisions
                    (tool_registration_revision, registration_kind, server_url, server_name,
@@ -395,7 +383,6 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         ),
         (
             "dc5",
-            0xdc5a,
             format!(
                 "{binding} credential_source = 'none', credential_reference = NULL
                   WHERE {tool_binding}"
@@ -404,7 +391,6 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         ),
         (
             "dc6",
-            0xdc6a,
             format!(
                 "{binding} grant_id = (SELECT grant_id FROM storyos.project_destination_grants
                                        WHERE project_id = '{{project}}'
@@ -415,7 +401,6 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         ),
         (
             "dce",
-            0xdcea,
             // The Run Capability Grant narrows: the Exposure of the Step Snapshot names no Tool.
             "UPDATE storyos.model_attempts
                 SET payload = jsonb_set(payload, '{step_snapshot,tool_exposure,tools}', '[]')
@@ -425,10 +410,10 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         ),
     ];
     let mut observed = Vec::new();
-    for (prefix, suffix, statement, _) in &cases {
+    for (prefix, statement, _) in &cases {
         // The fake server listens for no message: a sent request finds no answer.
         let (mcp_base, mcp) = destination(Vec::new()).await;
-        let (scope, run_id) = tool_run(&store, &admin, prefix, *suffix, &mcp_base).await;
+        let (scope, run_id) = tool_run(&store, &admin, prefix, &mcp_base).await;
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         let tools = Hooked {
             admin: &admin,
@@ -472,7 +457,7 @@ async fn each_authority_change_before_the_claim_refuses_with_its_reason_and_send
         observed,
         cases
             .iter()
-            .map(|(_, _, _, code)| (
+            .map(|(_, _, code)| (
                 json!({"state": "refused", "refusal": code, "attempt": null,
                        "has_attempt_id": false, "effect_outcome": null, "result_text": null,
                        "result_digest": null, "result_bytes": null}),
@@ -502,7 +487,7 @@ async fn a_tool_call_that_a_crash_left_dispatched_settles_unknown_and_is_not_sen
         json!({"content": [{"type": "text", "text": RESULT}], "isError": false}),
     );
     let (mcp_base, mcp) = destination(mcp_replies(exa_tools(|_| {}), Some(call))).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dc7", 0xdc7a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dc7", &mcp_base).await;
     let crash = Hooked {
         admin: &admin,
         after_prepare: String::new(),
@@ -580,7 +565,7 @@ async fn tool_contract_drift_quarantines_the_revision_and_sends_no_call() {
         tools[0]["inputSchema"]["required"] = json!(["query", "objective", "numResults"]);
     });
     let (mcp_base, mcp) = destination(mcp_replies(drifted, None)).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dc8", 0xdc8a, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dc8", &mcp_base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     let tools = Hooked {
         admin: &admin,
@@ -653,8 +638,8 @@ async fn a_claim_in_another_project_scope_sends_nothing_and_changes_no_tool_call
     let (store, admin) = stores().await;
     // The fake server listens for no message: a sent request finds no answer.
     let (mcp_base, mcp) = destination(Vec::new()).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dc9", 0xdc9a, &mcp_base).await;
-    let (other_scope, other_run_id) = tool_run(&store, &admin, "dcb", 0xdcba, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dc9", &mcp_base).await;
+    let (other_scope, other_run_id) = tool_run(&store, &admin, "dcb", &mcp_base).await;
     // A lost lease after the preparation leaves the derived ToolCall `pending`.
     let lost_lease = Hooked {
         admin: &admin,
@@ -734,7 +719,7 @@ async fn a_protocol_revision_with_a_null_character_quarantines_and_settles() {
                "serverInfo": {"name": "exa-search-server", "version": "3.5.1"}}),
     );
     let (mcp_base, mcp) = destination(vec![initialize]).await;
-    let (scope, run_id) = tool_run(&store, &admin, "dcf", 0xdcfa, &mcp_base).await;
+    let (scope, run_id) = tool_run(&store, &admin, "dcf", &mcp_base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     let tools = Hooked {
         admin: &admin,

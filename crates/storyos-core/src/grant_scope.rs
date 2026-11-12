@@ -14,7 +14,7 @@ pub enum GrantScope {
     /// The second scope and the source class `tool_result`: the projected results of the
     /// resolved ToolCalls of the Run for its continuation RunStep (S5-05).
     ProjectWritingAssistanceV3,
-    /// The research destination of Project Tool Enablement (ADR 0083): the Purpose `research`,
+    /// The research destination that `createAgentRun` binds (ADR 0090): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
     ResearchToolV1,

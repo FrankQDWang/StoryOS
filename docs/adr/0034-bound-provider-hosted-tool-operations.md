@@ -51,7 +51,9 @@ operation can enable an excluded effect.
 ## Registration and exposure
 
 Keep the existing separation between Tool Discovery Record, Tool Registration,
-Project Tool Enablement, Tool Exposure, Capability Grant, and Approval.
+Project Destination Grant, Tool Exposure, Capability Grant, and Approval.
+[ADR 0090](0090-make-web-research-available-in-each-project-without-an-enablement-switch.md) removes Project Tool Enablement: the Host binds the offered
+research Registration in `createAgentRun`.
 Discovery and MCP annotations are untrusted observations. A Host-owned mapping
 pins each permitted hosted capability to an exact Registration and StoryOS
 ToolSpec. The ToolSpec owns its callable, intake, effect, execution, and result

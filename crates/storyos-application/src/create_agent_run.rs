@@ -25,6 +25,9 @@ pub struct CreateAgentRunInput {
     /// The destination of the deployment, from Host configuration. The Run binds it. `None`
     /// refuses a first use, and an exact retry still replays its acknowledgement.
     pub destination: Option<storyos_core::DeploymentDestination>,
+    /// The research destination of the deployment, from Host configuration. The Project gets
+    /// its current research records before the Run is admitted (ADR 0090). `None` offers none.
+    pub research: Option<&'static storyos_core::ResearchToolOffer>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

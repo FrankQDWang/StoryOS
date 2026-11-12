@@ -306,7 +306,6 @@ test("project assistance prepares the host fake binding without a run", async ()
     };
     const unbound = await getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
     assert.equal(unbound.assistance, null);
-    assert.equal(unbound.research_tool, "disabled");
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = id(`${ns}0a20`);
     const absentDigest = await digestUpdateProjectAssistance(absentRequest);

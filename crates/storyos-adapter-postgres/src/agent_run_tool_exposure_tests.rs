@@ -2,19 +2,18 @@ use serde_json::json;
 use storyos_adapter_volcengine_responses::AgentPlanExchange;
 use storyos_application::{
     ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
-    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    SetProjectToolEnablementInput, complete_agent_run,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, complete_agent_run,
 };
 use storyos_core::{
-    DeploymentDestination, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ModelAdapter,
-    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolEnablement, ToolExposure,
-    ToolRegistrationLifecycle,
+    BoundTool, DeploymentDestination, EXA_TOOL_REGISTRATION, ExposureFacts, ModelAdapter,
+    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run, recovery};
-use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, real_run, recovery, research_run,
+};
 
 const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
 const ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -84,7 +83,7 @@ pub(crate) fn function_call_stream(reference: &str) -> String {
 /// The Exposure of the research Tool on the current Agent Plan Registration.
 fn research_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -122,7 +121,7 @@ async fn attempt_facts(admin: &Client, run_id: &str) -> [Option<serde_json::Valu
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_settles_the_run() {
+async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settles_the_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -141,7 +140,8 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &base],
         )
         .await
@@ -150,23 +150,8 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    // The author enables the research Tool between the two requests of one Conversation.
-    let call = issued(
-        &store,
-        &scope,
-        0xf71a,
-        &SET_PROJECT_TOOL_ENABLEMENT,
-        SetProjectToolEnablementInput {
-            registration_id: "web_research".to_owned(),
-            requested: ToolEnablement::Enabled,
-            offer: Some(&RESEARCH_TOOL_OFFER),
-        },
-    )
-    .await;
-    store
-        .set_project_tool_enablement(&call.envelope, &call.input)
-        .await
-        .unwrap();
+    // The deployment starts to offer the research destination between the two requests of one
+    // Conversation, so the second createAgentRun binds it.
     let second = admit_run_in(
         &store,
         &scope,
@@ -177,6 +162,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
         ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006f716".to_owned(),
         },
+        Some(&RESEARCH_TOOL_OFFER),
     )
     .await;
     let claim = claim_run(&admin, scope, second.clone()).await;
@@ -349,19 +335,17 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
 }
 
 /// The real adapter. Before the claim of the first Create that is a successor when `successor`
-/// is set, and that is not a successor when it is not, the author disables the research Tool
-/// with the Command Challenge `suffix`. Each prepared Create keeps its Exposure Snapshot and the
-/// `tools` field of its body.
-pub(crate) struct DisableBeforeClaim<'a> {
-    pub store: &'a crate::PostgresProjectReader,
-    pub scope: &'a storyos_application::ProjectScope,
-    pub suffix: u16,
+/// is set, and that is not a successor when it is not, a Tool Contract Drift quarantines the
+/// research revision. Each prepared Create keeps its Exposure Snapshot and the `tools` field of
+/// its body.
+pub(crate) struct QuarantineBeforeClaim<'a> {
+    pub admin: &'a Client,
     pub successor: bool,
-    pub disabled: std::sync::atomic::AtomicBool,
+    pub quarantined: std::sync::atomic::AtomicBool,
     pub prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
 }
 
-impl ModelProviderAdapter for DisableBeforeClaim<'_> {
+impl ModelProviderAdapter for QuarantineBeforeClaim<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
     type Prepared = AgentPlanExchange;
 
@@ -380,16 +364,13 @@ impl ModelProviderAdapter for DisableBeforeClaim<'_> {
                 .push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
             if create.successor_of.is_some() == self.successor
                 && !self
-                    .disabled
+                    .quarantined
                     .swap(/*val*/ true, std::sync::atomic::Ordering::Relaxed)
             {
-                crate::agent_run_tool_call::tests::set_research_tool(
-                    self.store,
-                    self.scope,
-                    self.suffix,
-                    ToolEnablement::Disabled,
-                )
-                .await;
+                self.admin
+                    .batch_execute(&crate::agent_run_tool_call::tests::quarantine_statement())
+                    .await
+                    .unwrap();
             }
         }
         Ok(prepared)
@@ -412,26 +393,18 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
         .await;
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![advisory_stream("resp_f79")]).await;
-    let (scope, run_id) = real_run(&store, &admin, "f79", &base).await;
-    crate::agent_run_tool_call::tests::set_research_tool(
-        &store,
-        &scope,
-        0xf79a,
-        ToolEnablement::Enabled,
-    )
-    .await;
+    let (scope, run_id) = research_run(&store, &admin, "f79", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let route = DisableBeforeClaim {
-        store: &store,
-        scope: &scope,
-        suffix: 0xf79b,
+    let route = QuarantineBeforeClaim {
+        admin: &admin,
         successor: false,
-        disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
+        quarantined: std::sync::atomic::AtomicBool::new(/*v*/ false),
         prepared: std::sync::Mutex::new(Vec::new()),
     };
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
+    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
     let attempts: i64 = admin
         .query_one(
             "SELECT count(*) FROM storyos.model_attempts WHERE run_id = $1::text::uuid",

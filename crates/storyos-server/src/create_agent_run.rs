@@ -135,6 +135,11 @@ fn create_agent_run_input(
         run_id: Uuid::now_v7().to_string(),
         conversation_id,
         project_agent_id: Uuid::now_v7().to_string(),
+        // Each deployment with a model destination offers web research (ADR 0083, ADR 0090).
+        // The Server never reads its key.
+        research: destination
+            .as_ref()
+            .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
     })
 }

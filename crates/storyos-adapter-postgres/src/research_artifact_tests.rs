@@ -8,16 +8,15 @@ use storyos_application::{
     issue_project_command_challenge,
 };
 use storyos_contracts::ResearchArtifactInspect;
-use storyos_core::{
-    Citation, DeploymentDestination, ResearchClaim, ResearchSynthesis, ToolEnablement,
-};
+use storyos_core::{Citation, DeploymentDestination, ResearchClaim, ResearchSynthesis};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run, stored};
-use crate::agent_run_tool_call::tests::set_research_tool;
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, real_run, research_run, stored,
+};
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
 use crate::agent_run_tool_exposure::tests::sse;
 use crate::command_sequence::tests::{REJECT_PROPOSAL_OPERATIONS, issued, seed_project};
@@ -127,13 +126,13 @@ fn synthesis(reference: &str, status: &'static str, cite: Cite) -> Reply {
 /// block of the Run.
 async fn synthesis_run(
     prefix: &str,
-    suffix: u16,
     call: (&str, &str),
     text: &str,
     later: impl FnOnce(&str) -> Vec<Reply>,
 ) -> (PostgresProjectReader, Client, ProjectScope, String) {
     let (store, admin) = stores().await;
-    let (scope, run_id) = real_run(&store, &admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
+    let (scope, run_id) =
+        research_run(&store, &admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
     let block: String = admin
         .query_one(
             "SELECT payload #>> '{operation_requirement,proposal_target_block_ids,0}'
@@ -151,12 +150,12 @@ async fn synthesis_run(
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &model_base],
         )
         .await
         .unwrap();
-    set_research_tool(&store, &scope, suffix, ToolEnablement::Enabled).await;
     let result = reply(
         /*id*/ 0,
         json!({"content": [{"type": "text", "text": text}], "isError": false}),
@@ -295,7 +294,7 @@ async fn a_valid_synthesis_becomes_one_immutable_artifact_with_its_lineage_and_c
         .lock()
         .await;
     let (store, admin, scope, run_id) =
-        synthesis_run("c31", 0xc31a, ("web_search", SEARCH), SEARCH_TEXT, |_| {
+        synthesis_run("c31", ("web_search", SEARCH), SEARCH_TEXT, |_| {
             vec![synthesis("resp_c31_2", "completed", two_snapshot_claims)]
         })
         .await;
@@ -385,7 +384,7 @@ async fn a_synthesis_that_cites_only_gaps_is_a_partial_artifact() {
         .lock()
         .await;
     let (store, admin, scope, run_id) =
-        synthesis_run("c32", 0xc32a, ("web_fetch", FETCH), FAILED_PAGE, |_| {
+        synthesis_run("c32", ("web_fetch", FETCH), FAILED_PAGE, |_| {
             vec![synthesis("resp_c32_2", "completed", |_, gaps| {
                 vec![("No tide table is available.", gaps.to_vec())]
             })]
@@ -419,10 +418,9 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
         .lock()
         .await;
     let mut observed = Vec::new();
-    for (prefix, suffix, reply) in [
+    for (prefix, reply) in [
         (
             "c33",
-            0xc33a,
             synthesis("resp_c33_2", "completed", |sources, _| {
                 vec![
                     ("High water came at 10.42.", vec![sources[0].clone()]),
@@ -435,15 +433,11 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
         ),
         (
             "c34",
-            0xc34a,
             synthesis("resp_c34_2", "incomplete", two_snapshot_claims),
         ),
     ] {
         let (_store, admin, _scope, run_id) =
-            synthesis_run(prefix, suffix, ("web_search", SEARCH), SEARCH_TEXT, |_| {
-                vec![reply]
-            })
-            .await;
+            synthesis_run(prefix, ("web_search", SEARCH), SEARCH_TEXT, |_| vec![reply]).await;
         let row = admin
             .query_one(
                 "SELECT run.status, attempt.payload #>> '{decision,kind}',
@@ -495,12 +489,8 @@ struct Story {
 
 async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
     let reference = |suffix: &str| format!("resp_{prefix}{suffix}");
-    let (store, admin, scope, run_id) = synthesis_run(
-        prefix,
-        u16::from_str_radix(&format!("{prefix}a"), 16).unwrap(),
-        ("web_search", SEARCH),
-        SEARCH_TEXT,
-        |block| {
+    let (store, admin, scope, run_id) =
+        synthesis_run(prefix, ("web_search", SEARCH), SEARCH_TEXT, |block| {
             let change = json!({"kind": "prose_change", "summary": "Added the tides.",
                 "changes": [{"block_id": block, "candidate_text": "High water came at 10.42.",
                              "explanation": "The research gives the tides."}]})
@@ -525,9 +515,8 @@ async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
                 }));
             }
             replies
-        },
-    )
-    .await;
+        })
+        .await;
     let artifact_id = artifact_id(&store, &scope, &run_id).await;
     let run: tokio_postgres::Row = admin
         .query_one(
@@ -549,6 +538,7 @@ async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
         ConversationSelection::Existing {
             conversation_id: run.get(/*idx*/ 1),
         },
+        None,
     )
     .await;
     let claim = claim_run(&admin, scope.clone(), story_run.clone()).await;
@@ -690,7 +680,7 @@ async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged()
         .lock()
         .await;
     let (store, admin, scope, run_id) =
-        synthesis_run("c37", 0xc37a, ("web_search", SEARCH), SEARCH_TEXT, |_| {
+        synthesis_run("c37", ("web_search", SEARCH), SEARCH_TEXT, |_| {
             vec![synthesis("resp_c37_2", "completed", two_snapshot_claims)]
         })
         .await;

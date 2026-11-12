@@ -165,12 +165,12 @@ assert_stage4_model_facts_present() {
 }
 
 # Stage 5 research records: the ToolCalls, Source Snapshots, Source Gaps, Research Artifacts,
-# Project Tool Enablements, and Tool Registration revisions. Each line is a count and a digest of
-# the ordered complete rows.
+# compatibility Decisions (they include the research binding of ADR 0090), and Tool Registration
+# revisions. Each line is a count and a digest of the ordered complete rows.
 stage5_research_facts() {
   facts_container=$1
   for facts_table in tool_calls source_snapshots source_gaps research_artifacts \
-    project_tool_enablements tool_registration_revisions; do
+    external_contract_compatibility_decisions tool_registration_revisions; do
     docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
       "SELECT '$facts_table|' || count(*) || '|' ||
               md5(coalesce(string_agg(row_to_json(record)::text, ';'

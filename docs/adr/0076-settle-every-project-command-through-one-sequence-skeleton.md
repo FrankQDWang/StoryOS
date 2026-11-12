@@ -58,7 +58,7 @@ A profile fixes the scope sequences and the authority records of an applied outc
 | --- | --- | --- |
 | `Structural` | The guarded Project update, the Activity record with `tree_revision`, the Authoritative Commit, the Forward Author Action, the canonical Snapshot, and the rebind of the current writer base when the command asks for it | The six structure commands |
 | `ChapterSelection` | The guarded Project update, the Activity record with `base_snapshot_id`, a Forward Author Action without an Authoritative Commit, the canonical Snapshot, and the required rebind of the writer base of the Editor Session | `setCurrentChapter` |
-| `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `setProjectToolEnablement`, `takeOverProjectWriter`, and the four AgentRun commands |
+| `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `takeOverProjectWriter`, and the four AgentRun commands |
 | `ActionOnly` | One Forward Author Action | The seven Proposal decisions |
 | `AuthoritativeRevision` | The Revision with its payload, members, and Envelope, the guarded Head update, the Authoritative Commit, the Author Action, the `project_activity_events` row, the writer-base update, and the canonical Snapshot | `acceptProposal`, the applied Author Edit, and the prose and Acceptance compensations |
 
@@ -112,7 +112,7 @@ Each Forward command family has one compensation adapter in the module of its fo
 A Barrier stops Author Undo, and Author Undo never skips it. These product decisions of ADR 0044 stay in force:
 
 - A Proposal edit records its edited Operation and that candidate before the edit (migration 0085). The Compensation restores that candidate to that Operation.
-- `createProject`, `updateProject`, `archiveProject`, `updateProjectAssistance`, and `setProjectToolEnablement` write no Author Action and are outside Author Undo Order.
+- `createProject`, `updateProject`, `archiveProject`, and `updateProjectAssistance` write no Author Action and are outside Author Undo Order.
 - The `compensated` effect omits `authoritative_revision` and `authoritative_commit_id` when the Compensation writes no such record.
 
 ### Amendment of ADR 0075
