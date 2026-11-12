@@ -5,7 +5,7 @@ This file is one design area of the [StoryOS glossary](../../GLOSSARY.md).
 ## Language
 
 **Outbound Disclosure**:
-The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to a named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Each StoryOS-controlled dispatch requires prior manifests and exact destination authority; bounded hosted outward processing uses the owning operation's admitted scope, with unobserved internal transfers remaining unknown rather than invented Host dispatch evidence.
+The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to a named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Each StoryOS-controlled dispatch requires prior manifests and exact destination authority. StoryOS performs no Provider-hosted Operation ([ADR 0084](../adr/0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md)).
 _Avoid_: External tool call, network access, upload
 
 **Context Processing Boundary**:
@@ -33,7 +33,7 @@ StoryOS controls whether an external dispatch is admitted and records the exact 
 _Avoid_: Destination Data Handling Profile, ZDR as no disclosure, vendor compliance registry, provider promise as enforcement
 
 **Destination Context Manifest**:
-The immutable provider-neutral Operational Record describing the minimum-necessary input and referenced context for one admitted operation, with its Context Assembly Manifest, exact Scope, Purpose, destination identity/evidence, processing boundary, policy, and authorization requirements. It binds permitted hosted processing when applicable but proves neither internal Provider consumption nor actual submission; a later one-shot Approval binds the established Attempt without changing the Manifest.
+The immutable provider-neutral Operational Record describing the minimum-necessary input and referenced context for one admitted operation, with its Context Assembly Manifest, exact Scope, Purpose, destination identity/evidence, processing boundary, policy, and authorization requirements. It proves neither internal Provider consumption nor actual submission; a later one-shot Approval binds the established Attempt without changing the Manifest.
 _Avoid_: Context Assembly Manifest, provider request, Outbound Disclosure Event
 
 **Outbound Disclosure Manifest**:
