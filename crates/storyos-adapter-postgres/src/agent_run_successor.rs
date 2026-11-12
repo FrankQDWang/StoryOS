@@ -44,7 +44,7 @@ pub(crate) fn conditions(
         .map(|registration| registration.adapter)
     {
         Some(ModelAdapter::VolcengineAgentPlanResponses) => {
-            // A committed Tool item is a Tool or hosted-operation effect, and so is a ToolCall
+            // A committed Tool item is a Tool effect, and so is a ToolCall
             // whose effect no evidence settled (ADR 0033). The adapter maps each native item that
             // is not a message or a reasoning item to a Tool item.
             let effect = unresolved_tool_call
