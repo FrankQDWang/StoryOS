@@ -1,11 +1,12 @@
 use serde_json::{Value, json};
-use storyos_adapter_fake_destination::FakeDestination;
+use storyos_adapter_fake_destination::{FakeDestination, LIMIT_ANSWER};
 use storyos_application::{
     AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
     NoContractFaults, ProjectScope, complete_agent_run,
 };
 use storyos_core::{
-    ADVISORY_TEXT, AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer,
+    ADVISORY_TEXT, AgentRunStatus, CallValidationRefusal, DeploymentDestination,
+    FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, RESEARCH_TOOL_OFFER, ResearchToolOffer,
 };
 use tokio_postgres::Client;
 
@@ -219,5 +220,160 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
         let closing = steps(&admin, run).await[1][2].clone();
         assert!(closing.is_string());
         assert_eq!(steps(&admin, next).await[0][3], closing);
+    }
+}
+
+/// Each ToolCall of the Run in RunStep and item order: the RunStep, the function name, the
+/// state, the refusal, and the result text.
+async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {
+    admin
+        .query(
+            "SELECT jsonb_build_array(decision_position, function_name, state, refusal,
+                                      result_text)::text
+               FROM storyos.tool_calls WHERE run_id = $1::text::uuid
+              ORDER BY decision_position, call_position",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| serde_json::from_str(row.get(0)).unwrap())
+        .collect()
+}
+
+/// The function output of the call `call_id` that the request of RunStep 1 sent.
+async fn second_step_output(admin: &Client, run_id: &str, call_id: &str) -> Value {
+    admin
+        .query_one(
+            "SELECT (SELECT output -> 'output' FROM jsonb_array_elements(
+                       (payload #>> '{wire,serialized_payload}')::jsonb -> 'tool_outputs')
+                       AS output WHERE output ->> 'call_id' = $2)::text
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = 1",
+            &[&run_id, &call_id],
+        )
+        .await
+        .map(|row| serde_json::from_str(row.get(0)).unwrap())
+        .unwrap()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_refused_call_gives_its_reason_and_the_model_corrects_it_before_finish_counts() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let unexposed = CallValidationRefusal::Unexposed;
+    let malformed = CallValidationRefusal::Intake(IntakeRefusal::Malformed);
+    let query = CallValidationRefusal::Intake(IntakeRefusal::Query);
+    let cases = [
+        (["2d1", "2d2"], "look_up_notes", "{}", None, unexposed),
+        (["2d3", "2d4"], "finish", r#"{"now":true}"#, None, malformed),
+        (
+            ["2d5", "2d6"],
+            "web_search",
+            r#"{"query":""}"#,
+            Some(&RESEARCH_TOOL_OFFER),
+            query,
+        ),
+    ];
+    for (prefixes, name, arguments, research, refusal) in cases {
+        let message = format!("SCRIPT:refuse {name} {arguments}");
+        let (scope, _, _, run_id) =
+            tool_loop_run(&store, &admin, prefixes, &message, research, false).await;
+        let record = store
+            .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
+            .await
+            .unwrap()
+            .unwrap();
+        let refused_call = format!("call_{name}_refused");
+
+        // The refused call does not end the Run, and the `finish` call beside it does not
+        // count. The next RunStep is an ordinary RunStep, and its `finish` call counts.
+        assert_eq!(
+            (
+                calls(&admin, &run_id).await,
+                json!(
+                    steps(&admin, &run_id)
+                        .await
+                        .iter()
+                        .map(|step| json!([step[0], step[1]]))
+                        .collect::<Vec<_>>()
+                ),
+                second_step_output(&admin, &run_id, &refused_call).await,
+                record.status,
+                matches!(record.decision, AgentRunDecisionInspect::Advisory { ref text, .. }
+                    if text == ADVISORY_TEXT),
+            ),
+            (
+                vec![
+                    json!([0, name, "refused", refusal.label(), refusal.result_text()]),
+                    json!([0, "finish", "settled", null, FINISH_DOES_NOT_COUNT_RESULT]),
+                    json!([1, "finish", "settled", null, ""]),
+                ],
+                json!([
+                    ["tool_request", "required"],
+                    ["tool_request", "required"],
+                    ["advisory", "none"]
+                ]),
+                json!(format!(
+                    r#"<tool_result source="{refused_call}" state="rejected">{}</tool_result>"#,
+                    refusal.result_text()
+                )),
+                AgentRunStatus::Completed,
+                true,
+            ),
+            "{message}"
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_last_of_24_run_steps_gives_its_text_as_the_final_answer_and_executes_no_call() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let cases = [
+        (["2d7", "2d8"], "SCRIPT:never_finish", json!(LIMIT_ANSWER)),
+        (["2d9", "2da"], "SCRIPT:never_finish_quietly", Value::Null),
+    ];
+    for (prefixes, message, expected_answer) in cases {
+        let (scope, _, _, run_id) =
+            tool_loop_run(&store, &admin, prefixes, message, None, false).await;
+        let steps = steps(&admin, &run_id).await;
+        let record = store
+            .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
+            .await
+            .unwrap()
+            .unwrap();
+        let answer = match record.decision {
+            AgentRunDecisionInspect::Advisory { text, .. } => json!(text),
+            AgentRunDecisionInspect::Absent => Value::Null,
+            other => panic!("{message}: {other:?}"),
+        };
+        let calls = calls(&admin, &run_id).await;
+        let mut expected_choices = vec![json!("required"); 23];
+        expected_choices.push(json!("none"));
+
+        // The calls of RunStep 24 (position 23) have no ToolCall.
+        assert_eq!(
+            (
+                steps.iter().map(|step| step[1].clone()).collect::<Vec<_>>(),
+                (calls.len(), calls.last().map(|call| call[0].clone())),
+                record.status,
+                answer,
+            ),
+            (
+                expected_choices,
+                (46, Some(json!(22))),
+                AgentRunStatus::Completed,
+                expected_answer
+            ),
+            "{message}"
+        );
     }
 }

@@ -16,6 +16,7 @@ use crate::agent_run_tool_call::tests::{
 use crate::agent_run_tool_dispatch::tests::{
     Hooked, RESULT, SEARCH, exa_tools, mcp_replies, reply, tool_run,
 };
+use crate::agent_run_tool_exposure::tests::advisory_stream;
 
 /// The same research destination with another Credential Reference.
 static CHANGED_OFFER: ResearchToolOffer = ResearchToolOffer {
@@ -174,7 +175,7 @@ async fn a_later_run_writes_research_records_only_when_the_offer_changed() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_an_invalid_request() {
+async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_a_refused_call() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -183,13 +184,10 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_an_invalid_req
     let (first, _) = research_run(&store, &admin, "6e6", "http://127.0.0.1:9/api/plan/v3").await;
     park_queued_runs(&admin, &first).await;
     admin.batch_execute(&quarantine_statement()).await.unwrap();
-    let (base, served) = destination(vec![text_and_call_stream(
-        "resp_6e7",
-        "call_01",
-        "web_search",
-        SEARCH,
-        "completed",
-    )])
+    let (base, served) = destination(vec![
+        text_and_call_stream("resp_6e7", "call_01", "web_search", SEARCH, "completed"),
+        advisory_stream("resp_6e7b"),
+    ])
     .await;
     let (scope, run_id) = research_run(&store, &admin, "6e7", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
@@ -201,10 +199,13 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_an_invalid_req
         .query_one(
             "SELECT jsonb_build_object('settlement', run.settlement,
                       'batch', attempt.payload->'tool_call_batch',
-                      'snapshot', attempt.payload #> '{step_snapshot,tool_exposure}')::text
+                      'snapshot', attempt.payload #> '{step_snapshot,tool_exposure}',
+                      'refusal', (SELECT refusal FROM storyos.tool_calls
+                                   WHERE run_id = run.run_id))::text
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -221,11 +222,12 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_an_invalid_req
         (
             0,
             json!({
-                "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
-                "batch": {"kind": "invalid", "refusal": "unexposed_name"},
+                "settlement": null,
+                "batch": {"kind": "valid", "call_ids": ["call_01"]},
                 "snapshot": ToolExposure::empty().snapshot(),
+                "refusal": "unexposed_name",
             }),
-            1,
+            2,
         )
     );
 }

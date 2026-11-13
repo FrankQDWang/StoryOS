@@ -193,6 +193,7 @@ pub(crate) async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )

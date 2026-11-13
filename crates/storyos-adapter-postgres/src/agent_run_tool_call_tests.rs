@@ -1,9 +1,10 @@
 use serde_json::json;
 use storyos_application::{NoContractFaults, complete_agent_run};
 use storyos_core::{
-    BoundTool, CurrentToolAuthority, EXA_TOOL_REGISTRATION, ExposureFacts, ExposureSnapshot,
-    NativeStreamItem, RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState, ToolCallBatch,
-    ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle, validate_tool_call_batch,
+    BoundTool, CallValidationRefusal, CurrentToolAuthority, EXA_TOOL_REGISTRATION, ExposureFacts,
+    ExposureSnapshot, NativeStreamItem, RESEARCH_TOOL_OFFER, StreamItemRole, StreamItemState,
+    ToolCallBatch, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
+    validate_tool_call_batch,
 };
 use tokio_postgres::Client;
 
@@ -12,6 +13,9 @@ use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, res
 use crate::agent_run_tool_exposure::tests::advisory_stream;
 
 const SEARCH_ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
+/// The digest of the validated arguments of `SEARCH_ARGUMENTS`.
+const SEARCH_DIGEST: &str =
+    "sha256:012398a6d5fe487115a70022409a7dd2e27bfbcfdbb9930129b6d2ea5f84d9b2";
 const SIX_URLS: &str = r#"{"urls":["https://e.org/1","https://e.org/2","https://e.org/3","https://e.org/4","https://e.org/5","https://e.org/6"]}"#;
 
 /// A stream that reports `reference`, one complete message, and one complete function call with
@@ -88,7 +92,7 @@ async fn decision_facts(admin: &Client, run_id: &str) -> serde_json::Value {
 
 /// The one member of the batch of a complete `web_search` call, validated against the pinned
 /// research Exposure.
-fn validated_search_call() -> storyos_core::ValidatedToolCall {
+fn validated_search_call() -> storyos_core::RequestedToolCall {
     let exposure = ToolExposure::compute(&ExposureFacts {
         bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
@@ -230,7 +234,7 @@ async fn a_durable_function_request_decision_derives_one_tool_call_once() {
                 "tool_registration_revision": EXA_TOOL_REGISTRATION.revision,
                 "tool_spec_revision": "storyos.tool.web-search.v1",
                 "arguments": {"query": "tide tables of 1890", "result_count": null},
-                "argument_digest": call.argument_digest(),
+                "argument_digest": SEARCH_DIGEST,
                 "state": "refused",
                 "refusal": "destination_request_unsupported",
                 "destination_attempt_id": null,
@@ -249,52 +253,64 @@ async fn a_durable_function_request_decision_derives_one_tool_call_once() {
     );
 }
 
+/// The facts of `refused_call_facts` for a completed Run whose one ToolCall has `refusal`.
+fn refused_call(refusal: CallValidationRefusal, arguments: &str) -> serde_json::Value {
+    let state = [
+        "completed",
+        "tool_request",
+        "refused",
+        refusal.label(),
+        arguments,
+    ];
+    json!([state, refusal.result_text()])
+}
+
+/// The status of the Run and the kind of its first Decision, and the state, refusal, arguments,
+/// and result of its one ToolCall.
+fn refused_call_facts(facts: &serde_json::Value, rows: &[serde_json::Value]) -> serde_json::Value {
+    let row = &rows[0];
+    let state = [
+        &facts["status"],
+        &facts["decision"]["kind"],
+        &row["state"],
+        &row["refusal"],
+    ];
+    json!([
+        [state[0], state[1], state[2], state[3], &row["arguments"]],
+        row["result_text"]
+    ])
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_intake_violation_rejects_the_batch_and_keeps_the_attempt_as_evidence() {
+async fn an_intake_violation_is_a_refused_call_and_the_run_continues() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![text_and_call_stream(
-        "resp_f76",
-        "call_01",
-        "web_fetch",
-        SIX_URLS,
-        "completed",
-    )])
+    let (base, served) = destination(vec![
+        text_and_call_stream("resp_f76", "call_01", "web_fetch", SIX_URLS, "completed"),
+        advisory_stream("resp_f76b"),
+    ])
     .await;
     let (scope, run_id) = research_run(&store, &admin, "f76", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    let facts = decision_facts(&admin, &run_id).await;
-    let attempt_id = facts["model_attempt_id"].clone();
+    let refusal = CallValidationRefusal::Intake(storyos_core::IntakeRefusal::UrlCount);
 
     assert_eq!(
         (
-            facts,
-            tool_call_rows(&admin, &run_id).await,
-            crate::agent_run_tool_call::pending_tool_call_exists(&admin, &claim)
-                .await
-                .unwrap(),
+            refused_call_facts(
+                &decision_facts(&admin, &run_id).await,
+                &tool_call_rows(&admin, &run_id).await
+            ),
             served.await.unwrap(),
         ),
         (
-            json!({
-                "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
-                "model_attempt_id": attempt_id,
-                "decision_id": null,
-                "dispatch_state": "settled",
-                "decision": null,
-                "tool_call_batch": {"kind": "invalid", "refusal": "intake_url_count"},
-                "item_count": 2
-            }),
-            Vec::<serde_json::Value>::new(),
-            false,
-            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
+            refused_call(refusal, SIX_URLS),
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 2],
         )
     );
 }
@@ -349,29 +365,31 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
     );
 }
 
-/// Runs one real Create whose response requests `web_search` with `call_id` and `arguments`.
-/// Returns the decision facts without the Attempt identity, the ToolCall rows, whether a pending
-/// ToolCall exists, and the stored function call item.
+/// Runs one real Create whose response requests `web_search` with `call_id` and `arguments`, and
+/// then one advisory reply when the Run `continues`. Returns the decision facts without the Attempt identity, the
+/// ToolCall rows, whether a pending ToolCall exists, and the stored function call item.
 async fn create_with_call(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
     call_id: &str,
     arguments: &str,
+    continues: bool,
 ) -> (
     serde_json::Value,
     Vec<serde_json::Value>,
     bool,
     serde_json::Value,
 ) {
-    let (base, served) = destination(vec![text_and_call_stream(
+    let mut replies = vec![text_and_call_stream(
         &format!("resp_{prefix}"),
         call_id,
         "web_search",
         arguments,
         "completed",
-    )])
-    .await;
+    )];
+    replies.extend(continues.then(|| advisory_stream(&format!("resp_{prefix}b"))));
+    let (base, served) = destination(replies).await;
     let (scope, run_id) = research_run(store, admin, prefix, &base).await;
     let claim = claim_run(admin, scope, run_id.clone()).await;
     complete_agent_run(store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
@@ -383,7 +401,8 @@ async fn create_with_call(
     let item: Option<String> = admin
         .query_one(
             "SELECT (payload->'items'->1)::text FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = 0",
             &[&run_id],
         )
         .await
@@ -451,7 +470,7 @@ fn stored_call_item(call_id: &str, arguments: &str, escaped: &[&str]) -> serde_j
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_item() {
+async fn a_null_character_in_the_arguments_is_a_refused_call_and_keeps_the_raw_item() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -461,15 +480,39 @@ async fn a_null_character_in_the_arguments_rejects_the_batch_and_keeps_the_raw_i
     // The arguments text holds U+0000 itself, so it is not JSON text. It also holds an escaped
     // backslash, which the stored form doubles.
     let raw = "{\"query\":\"tide\\\\\u{0}tables\",\"result_count\":null}";
-    let in_query = create_with_call(&store, &admin, "f7e", "call_01", escaped).await;
-    let in_text = create_with_call(&store, &admin, "f7f", "call_01", raw).await;
+    let in_query = create_with_call(&store, &admin, "f7e", "call_01", escaped, true).await;
+    let in_text = create_with_call(&store, &admin, "f7f", "call_01", raw, true).await;
+    let (query, malformed) = (
+        CallValidationRefusal::Intake(storyos_core::IntakeRefusal::Query),
+        CallValidationRefusal::Malformed,
+    );
 
+    // The arguments of the refused ToolCall are the text as a JSON string.
     assert_eq!(
-        (in_query, in_text),
         (
-            rejected_create("intake_query", stored_call_item("call_01", escaped, &[])),
-            rejected_create(
-                "malformed_arguments",
+            (
+                refused_call_facts(&in_query.0, &in_query.1),
+                in_query.2,
+                in_query.3
+            ),
+            (
+                refused_call_facts(&in_text.0, &in_text.1),
+                in_text.2,
+                in_text.3
+            ),
+        ),
+        (
+            (
+                refused_call(query, escaped),
+                false,
+                stored_call_item("call_01", escaped, &[]),
+            ),
+            (
+                refused_call(
+                    malformed,
+                    "{\"query\":\"tide\\\\\u{fffd}tables\",\"result_count\":null}"
+                ),
+                false,
                 stored_call_item(
                     "call_01",
                     r#"{"query":"tide\\\\\u0000tables","result_count":null}"#,
@@ -488,7 +531,15 @@ async fn a_null_character_in_the_call_identifier_rejects_the_batch_and_keeps_the
         .await;
     let (store, admin) = stores().await;
     // The call identifier holds U+0000 itself. The arguments are valid.
-    let facts = create_with_call(&store, &admin, "e31", "call_\u{0}01", SEARCH_ARGUMENTS).await;
+    let facts = create_with_call(
+        &store,
+        &admin,
+        "e31",
+        "call_\u{0}01",
+        SEARCH_ARGUMENTS,
+        false,
+    )
+    .await;
 
     assert_eq!(
         facts,

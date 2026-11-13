@@ -489,7 +489,10 @@ pub(crate) fn encode_decision(
             "kind": "tool_request",
             "decision_id": decision_id,
             "selected": selected,
-            "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
+            "call_ids": calls
+                .iter()
+                .map(storyos_core::RequestedToolCall::call_id)
+                .collect::<Vec<_>>(),
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),

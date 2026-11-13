@@ -1,6 +1,6 @@
 //! The records of the finish rule of ADR 0091 section 4: the `tool_choice` of the active RunStep
-//! from the ToolCalls of the RunStep before it, and the next RunStep after a text that came
-//! before a `finish` call that counted.
+//! from its position and the ToolCalls of the RunStep before it, and the next RunStep after a
+//! text that came before a `finish` call that counted.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{PriorStepCall, ToolCallState, ToolChoice};
@@ -36,8 +36,13 @@ pub(crate) async fn tool_choice(
         .map_err(complete_database_error)?
         .iter()
         .map(|row| {
+            // A refused call with a name that the Run does not expose pins no ToolSpec.
+            let operation = match row.get::<_, Option<&str>>(/*idx*/ 0) {
+                Some(spec) => Some(storyos_core::tool_spec(spec)?.operation),
+                None => None,
+            };
             Some(PriorStepCall {
-                operation: storyos_core::tool_spec(row.get(/*idx*/ 0))?.operation,
+                operation,
                 state: ToolCallState::parse(row.get(/*idx*/ 1))?,
             })
         })
@@ -45,8 +50,19 @@ pub(crate) async fn tool_choice(
         .ok_or_else(|| damaged("The ToolCall is damaged"))?;
     Ok(storyos_core::step_tool_choice(
         /*declares_host_tools*/ true,
+        run_step_limit(run)?,
         &prior_step,
     ))
+}
+
+/// The RunStep limit of the active RunStep of `run`.
+pub(crate) fn run_step_limit(
+    run: &RunPhaseRow,
+) -> Result<storyos_core::RunStepLimit, CompleteAgentRunError> {
+    run.decision_position
+        .parse::<u64>()
+        .map(storyos_core::RunStepLimit::at)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next

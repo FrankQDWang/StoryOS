@@ -260,7 +260,7 @@ async fn retrieval_facts(admin: &Client, run_id: &str) -> (Option<String>, Optio
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal() {
+async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_continues() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -268,6 +268,7 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
     let (base, served) = destination(vec![
         broken_stream("resp_f73"),
         stored_function_call("resp_f73"),
+        advisory_stream("resp_f73b"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "f73", &base).await;
@@ -285,19 +286,16 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
         ),
         (
             [
-                Some("refused".to_owned()),
-                Some(
-                    r#"{"kind": "execution_refused", "capability": "tool_request_invalid"}"#
-                        .to_owned()
-                ),
+                Some("completed".to_owned()),
+                None,
                 None,
                 Some("settled".to_owned()),
                 None,
                 Some("true".to_owned()),
-                Some("decision:true,retrieval:true".to_owned()),
+                Some("decision:true,retrieval:true,decision:true".to_owned()),
             ],
             (
-                Some("complete_function_request".to_owned()),
+                Some("complete_selected".to_owned()),
                 Some("web_search".to_owned()),
             ),
             // The provisional item of the lost stream stays before the retrieved call.
@@ -329,6 +327,7 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f73 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
     );
