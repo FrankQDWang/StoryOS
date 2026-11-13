@@ -367,8 +367,13 @@ pub(crate) async fn settle_one_phase(
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
     if run.attempt_id.is_none()
-        && run.decision_position == "0"
-        && crate::agent_run_steering::advance(client, claim, lease_seconds).await?
+        && crate::agent_run_steering::advance_before_request(
+            client,
+            claim,
+            &run.decision_position,
+            lease_seconds,
+        )
+        .await?
     {
         return Ok(WorkPhase::Hold("steering"));
     }

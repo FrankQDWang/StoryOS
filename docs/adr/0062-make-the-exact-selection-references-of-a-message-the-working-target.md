@@ -60,3 +60,13 @@ Before this change, a request worked on the Current Chapter. When the author cli
 ## Amendment 2026-11-13: the Host Tool `propose_edit`
 
 In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the content of one prose change reply is the arguments of one `propose_edit` call ([#1456](https://github.com/FrankQDWang/StoryOS/issues/1456)). The Decision that holds the call is the Proposal source. The validation of the One Decision rule applies to one call. A call that it refuses is a refused ToolCall, and its result gives the reason. The reply form profile keeps the One Decision rule until the reply form goes.
+
+## Amendment 2026-11-13: steering at each RunStep position
+
+This clarifies the Steering rules for a Run of more than one RunStep in the tool loop profile ([#1459](https://github.com/FrankQDWang/StoryOS/issues/1459)). The rules for a Run of one RunStep do not change.
+
+- A steering input has the position of the RunStep that reads it: the position after the active RunStep, or after the input before it. That RunStep reads the records of the RunStep before it, also its Tool results.
+- When an input arrives before the active RunStep sends its request, the Run moves to the RunStep of that input, and the active RunStep sends no request. A RunStep that read an input does not do this, so each input gets its request.
+- A RunStep that reads an input is an ordinary RunStep. An earlier `finish` call no longer counts, and its request has `tool_choice: "required"` ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 4). An input counts no new RunSteps, so the limit of 24 holds. No RunStep opens after the last RunStep, so an input that arrives during the last RunStep stays unread.
+- Each RunStep moves the candidate references to the revision that the RunStep before it made, with or without an input.
+- After a call that opened a Proposal, the Host refuses each later `propose_edit` call of the Run. A steering input removes this refusal for the RunStep that reads it and for the RunSteps after it.

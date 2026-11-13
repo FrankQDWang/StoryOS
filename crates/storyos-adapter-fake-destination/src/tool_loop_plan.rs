@@ -37,19 +37,21 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     let message = request.author_message.as_str();
+    // A steering input adds a line, and the script of the Run message stays.
+    let run_script = message.lines().next().unwrap_or_default();
     let finished = request
         .tool_outputs
         .iter()
         .filter(|output| output.name == ToolOperation::Finish.function_name())
         .count();
     let never_finish = matches!(
-        message,
+        run_script,
         "SCRIPT:never_finish" | "SCRIPT:never_finish_quietly"
     );
     match request.tool_choice {
         ToolChoice::None if never_finish => {
             let mut planned = calls(request, finished);
-            if message == "SCRIPT:never_finish" {
+            if run_script == "SCRIPT:never_finish" {
                 planned.items.insert(
                     0,
                     assistant_item("1", StreamItemState::Complete, LIMIT_ANSWER),
@@ -94,9 +96,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
     }
 }
 
-/// A `finish` call and no text. The first request of a Run with an author message that holds
-/// `Search the web: <query>` also gets one `web_search` call first when the Run exposes it, and
-/// the first request of `SCRIPT:refuse` gets its scripted call first.
+/// A `finish` call and no text. A request with an author message that holds `Search the web:
+/// <query>` and no `web_search` output also gets one `web_search` call first when the Run
+/// exposes it, and the first request of `SCRIPT:refuse` gets its scripted call first.
 fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
     let call = |name: &str, suffix: String, arguments: String| NativeStreamItem {
         item_id: format!("fc_{name}{suffix}"),
@@ -110,13 +112,16 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
             "host_fake_function_call",
         )
     };
-    // The script can follow the compaction prefix.
+    // The script can follow the compaction prefix, or be the line of a steering input.
     let search = request
         .author_message
         .split_once("Search the web: ")
         .map(|(_, query)| query)
         .filter(|_| {
-            request.tool_outputs.is_empty()
+            !request
+                .tool_outputs
+                .iter()
+                .any(|output| output.name == ToolOperation::WebSearch.function_name())
                 && request
                     .tool_exposure
                     .tools
@@ -138,8 +143,8 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
         .and_then(|script| script.split_once(' '))
         .filter(|_| request.tool_outputs.is_empty())
         .map(|(name, arguments)| call(name, "_refused".to_owned(), arguments.to_owned()));
-    let unexposed = request
-        .author_message
+    let run_script = request.author_message.lines().next().unwrap_or_default();
+    let unexposed = run_script
         .starts_with("SCRIPT:never_finish")
         .then(|| call(UNEXPOSED_NAME, suffix.clone(), "{}".to_owned()));
     let (proposed, finish) =

@@ -17,6 +17,15 @@ pub(crate) async fn tool_choice(
     if !declares_host_tools(run) {
         return Ok(ToolChoice::Auto);
     }
+    // A RunStep that reads a steering input is an ordinary RunStep: no `finish` call before it
+    // counts.
+    if crate::agent_run_steering::reads_input(client, claim, &run.decision_position).await? {
+        return Ok(storyos_core::step_tool_choice(
+            /*declares_host_tools*/ true,
+            run_step_limit(run)?,
+            &[],
+        ));
+    }
     let prior_step = client
         .query(
             "SELECT tool_spec_revision, state FROM storyos.tool_calls

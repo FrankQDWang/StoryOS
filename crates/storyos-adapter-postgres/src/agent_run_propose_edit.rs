@@ -37,10 +37,27 @@ pub(crate) async fn screen(
     }) {
         return Ok(batch);
     }
+    // A steering input permits the next call, as a steering decision does (ADR 0091).
+    let active: String = client
+        .query_one(
+            "SELECT active_decision_position::text FROM storyos.agent_runs
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .get(/*idx*/ 0);
+    let steered = crate::agent_run_steering::last_read_position(client, claim, &active).await?;
     let row = client
         .query_one(
             "SELECT count(*) FILTER (WHERE call.state = 'refused'),
-                    COALESCE(bool_or(call.state = 'settled'), false)
+                    COALESCE(bool_or(call.state = 'settled'
+                                     AND call.decision_position >= $5::text::numeric), false)
                FROM storyos.tool_calls AS call
               WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
                 AND call.run_id = $3::text::uuid AND call.tool_spec_revision = $4",
@@ -49,6 +66,7 @@ pub(crate) async fn screen(
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &PROPOSE_EDIT_TOOL_SPEC.revision,
+                &steered,
             ],
         )
         .await
@@ -239,8 +257,8 @@ pub(crate) async fn public_decision(
 
 #[cfg(test)]
 #[path = "agent_run_propose_edit_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "agent_run_propose_edit_revise_tests.rs"]
-mod revise_tests;
+pub(crate) mod revise_tests;

@@ -19,7 +19,7 @@ use crate::command_sequence::tests::{
 };
 use crate::set_current_chapter_authority_tests::open_session_request;
 
-pub(super) const REVISE: &str = "Revise these passages in the narrator voice.";
+pub(crate) const REVISE: &str = "Revise these passages in the narrator voice.";
 
 pub(super) async fn complete(
     store: &PostgresProjectReader,
@@ -100,7 +100,7 @@ pub(super) async fn proposal_records(admin: &Client, run_id: &str) -> Value {
 
 /// Each `propose_edit` call of the Run in RunStep and item order: its RunStep, state, refusal,
 /// and result.
-pub(super) async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
+pub(crate) async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
             "SELECT jsonb_build_array(decision_position, state, refusal, result_text)::text
@@ -116,7 +116,7 @@ pub(super) async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Valu
         .collect()
 }
 
-pub(super) fn opened(position: u64) -> Value {
+pub(crate) fn opened(position: u64) -> Value {
     json!([position, "settled", null, PROPOSAL_WAITS_RESULT])
 }
 
