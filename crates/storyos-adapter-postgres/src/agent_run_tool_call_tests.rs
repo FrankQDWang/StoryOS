@@ -9,6 +9,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
+use crate::agent_run_finish_rule::tests::{finish_item, text_item};
 use crate::agent_run_retrieval::tests::{AfterExchange, adapter, destination, research_run};
 use crate::agent_run_tool_exposure::tests::advisory_stream;
 
@@ -49,13 +50,14 @@ pub(crate) fn text_and_call_stream(
     reply
 }
 
-/// The ToolCall rows of the Run, without their row identity.
+/// The ToolCall rows of the Run that are not Host Tool calls, without their row identity.
 async fn tool_call_rows(admin: &Client, run_id: &str) -> Vec<serde_json::Value> {
     admin
         .query(
             "SELECT (to_jsonb(call) - 'tool_call_id' - 'owner_user_id' - 'project_id')::text
                FROM storyos.tool_calls AS call
-              WHERE run_id = $1::text::uuid ORDER BY call_position",
+              WHERE run_id = $1::text::uuid AND registration_id IS DISTINCT FROM 'host_tools'
+              ORDER BY call_position",
             &[&run_id],
         )
         .await
@@ -659,6 +661,7 @@ enum DuplicatePlan {
     Unknown,
     FunctionCall,
     LateResult,
+    Finish,
     Advisory,
 }
 
@@ -712,9 +715,14 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
                 *self.successor.lock().unwrap() = Some(create.clone());
                 ("sha256:create", DuplicatePlan::FunctionCall)
             }
-            // The next RunStep sends the refused ToolCalls of the successor (ADR 0088).
+            // The next RunStep sends the refused ToolCalls of the successor (ADR 0088). The model
+            // then calls `finish`, and the closing request gets the final answer.
             DestinationRequest::Create(create) if !create.tool_outputs.is_empty() => {
-                ("sha256:continuation", DuplicatePlan::Advisory)
+                let plan = match create.tool_choice {
+                    storyos_core::ToolChoice::None => DuplicatePlan::Advisory,
+                    _ => DuplicatePlan::Finish,
+                };
+                ("sha256:continuation", plan)
             }
             DestinationRequest::Create(_) => ("sha256:create", DuplicatePlan::Unknown),
             DestinationRequest::Retrieve(retrieve)
@@ -783,16 +791,15 @@ impl storyos_application::ModelProviderAdapter for DuplicateSuccessorDelivery<'_
                     .await;
                 *self.delivered_twice.lock().unwrap() = Some(delivered.is_ok());
             }
+            DuplicatePlan::Finish => {
+                return Observation::Terminal(storyos_application::ModelResponse {
+                    items: vec![finish_item("call_finish")],
+                    ..Self::function_response()
+                });
+            }
             DuplicatePlan::Advisory => {
                 return Observation::Terminal(storyos_application::ModelResponse {
-                    output: Some(storyos_core::ModelOutput {
-                        phase: storyos_core::OutputPhase::FinalAnswer,
-                        candidate: storyos_core::DecisionCandidate::Advisory {
-                            text: "No source was read.".to_owned(),
-                        },
-                        prose_changes: None,
-                    }),
-                    items: Vec::new(),
+                    items: vec![text_item("No source was read.")],
                     ..Self::function_response()
                 });
             }
@@ -925,8 +932,9 @@ async fn a_repeated_successor_observation_keeps_the_decision_and_its_tool_calls(
                     "advances_continuation": false
                 },
                 "tool_call_batch": {"kind": "valid", "call_ids": ["call_01", "call_02"]},
-                // The refused ToolCalls continue at position 1, whose Advisory completes the Run.
-                "roles": "decision,retrieval,successor,late_retrieval,decision"
+                // The refused ToolCalls continue at position 1, whose `finish` call counts, and
+                // the closing request at position 2 completes the Run.
+                "roles": "decision,retrieval,successor,late_retrieval,decision,decision"
             }),
             vec![
                 (json!("call_01"), json!(0), decision_id.clone()),

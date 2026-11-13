@@ -287,7 +287,7 @@ async fn source(admin: &Client, run_id: &str, state: &str, kept: Option<u64>) ->
         .query_one(
             "SELECT tool_call_id::text, model_attempt_id::text, decision_id::text
                FROM storyos.tool_calls
-              WHERE run_id = $1::text::uuid AND registration_id <> 'host_tools'",
+              WHERE run_id = $1::text::uuid AND registration_id IS DISTINCT FROM 'host_tools'",
             &[&run_id],
         )
         .await
@@ -303,7 +303,7 @@ async fn ok_sources(admin: &Client, run_id: &str) -> Vec<Value> {
         .query(
             "SELECT tool_call_id::text, call_id, model_attempt_id::text, decision_id::text
                FROM storyos.tool_calls
-              WHERE run_id = $1::text::uuid AND registration_id <> 'host_tools'
+              WHERE run_id = $1::text::uuid AND registration_id IS DISTINCT FROM 'host_tools'
               ORDER BY decision_position, call_position",
             &[&run_id],
         )

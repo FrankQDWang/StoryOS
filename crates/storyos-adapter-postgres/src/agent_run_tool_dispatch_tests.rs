@@ -175,7 +175,7 @@ pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                           'effect_outcome', call.effect_outcome, 'result_text', call.result_text,
                           'result_digest', call.result_digest, 'result_bytes', call.result_bytes)
                         FROM storyos.tool_calls AS call
-                       WHERE call.run_id = run.run_id AND call.registration_id <> 'host_tools'),
+                       WHERE call.run_id = run.run_id AND call.registration_id IS DISTINCT FROM 'host_tools'),
                       'events', (SELECT jsonb_agg((event.payload - 'tool_call_id'
                                    - 'destination_attempt_id')
                                    || jsonb_build_object('kind', event.event_kind,
@@ -215,7 +215,7 @@ pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                         JOIN storyos.operation_requirements AS requirement
                           USING (owner_user_id, project_id, operation_requirement_id)
                         LEFT JOIN storyos.tool_calls AS call
-                          ON call.run_id = manifest.run_id AND call.registration_id <> 'host_tools'
+                          ON call.run_id = manifest.run_id AND call.registration_id IS DISTINCT FROM 'host_tools'
                        WHERE manifest.run_id = run.run_id AND manifest.manifest_role = 'tool_call'),
                       'holds_key', (SELECT bool_or(position($2 IN record::text) > 0)
                                       FROM (SELECT to_jsonb(call) AS record
