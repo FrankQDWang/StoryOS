@@ -421,7 +421,7 @@ test("a late predecessor updates evidence and usage only", async () => {
     assert.equal(after.decision.text, ADVISORY);
     // The late predecessor does not replace the decision of the first RunStep.
     const firstStep = await inspectFirstRunStep(started.baseUrl, prepared, created.effect.run_id);
-    assert.deepEqual([firstStep.decision.kind, firstStep.decision.kind === "absent" ? null : firstStep.decision.decision_id],
+    assert.deepEqual([firstStep.decision.kind, "decision_id" in firstStep.decision ? firstStep.decision.decision_id : null],
       ["tool_request", decisionId]);
     assert.equal(after.items.every((item) => item.call_id === null), true);
     assert.equal(found.predecessor_usage_kind, "reported");
