@@ -104,16 +104,20 @@ fn each_other_binding_or_registration_exposes_nothing() {
 
 #[test]
 fn only_a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
-    let finish = ExposedTool {
-        name: "finish",
+    let host = |name, spec| ExposedTool {
+        name,
         registration_id: HOST_TOOL_REGISTRATION.id,
         registration_revision: HOST_TOOL_REGISTRATION.revision,
-        spec: &FINISH_TOOL_SPEC,
+        spec,
     };
+    let finish = host("finish", &FINISH_TOOL_SPEC);
     assert_eq!(
         exposure(&[], HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
         ToolExposure {
-            tools: vec![finish.clone()]
+            tools: vec![
+                host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
+                finish.clone()
+            ]
         }
     );
     assert_eq!(

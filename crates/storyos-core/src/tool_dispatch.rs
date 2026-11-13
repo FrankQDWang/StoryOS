@@ -74,7 +74,7 @@ impl ToolEffectRequest {
         let disclosed = match intake {
             ToolIntake::WebSearch { query, .. } => vec![query.clone()],
             ToolIntake::WebFetch { urls } => urls.clone(),
-            ToolIntake::Finish => Vec::new(),
+            ToolIntake::Finish | ToolIntake::ProposeEdit(_) => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,

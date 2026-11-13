@@ -421,6 +421,8 @@ impl RetrievedResult {
             let batch =
                 crate::agent_run_tool_call::validate_batch(client, attempt_payload, &response)
                     .await?;
+            let batch =
+                crate::agent_run_propose_edit::screen(client, claim, declared, batch).await?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
             let output = response.output.as_ref();
             let citable = crate::research_artifact::decision_citable(client, claim, output).await?;

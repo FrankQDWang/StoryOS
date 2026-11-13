@@ -99,6 +99,7 @@ impl ValidatedToolCall {
             } => json!({ "query": query, "result_count": result_count }),
             ToolIntake::WebFetch { urls } => json!({ "urls": urls }),
             ToolIntake::Finish => json!({}),
+            ToolIntake::ProposeEdit(edit) => edit.arguments(),
         }
     }
 
@@ -173,6 +174,7 @@ pub enum CallValidationRefusal {
     /// The arguments text is not a JSON object.
     Malformed,
     Intake(IntakeRefusal),
+    ProposeEdit(crate::ProposeEditRefusal),
 }
 
 impl CallValidationRefusal {
@@ -186,6 +188,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::ResultCount) => "intake_result_count",
             Self::Intake(IntakeRefusal::UrlCount) => "intake_url_count",
             Self::Intake(IntakeRefusal::Url) => "intake_url",
+            Self::ProposeEdit(refusal) => refusal.label(),
         }
     }
 
@@ -206,6 +209,7 @@ impl CallValidationRefusal {
                 "one of its URLs is not an absolute http or https URL with a host and no user \
                  information"
             }
+            Self::ProposeEdit(refusal) => return refusal.result_text(),
         };
         format!(
             "The Host refused this call because {reason}, so no result is available, and this \

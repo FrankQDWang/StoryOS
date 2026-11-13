@@ -1,0 +1,233 @@
+//! The Host Tool `propose_edit` in the store (ADR 0091). The Decision transaction refuses each
+//! call that a limit or the prose change validation refuses. The Tool Gateway opens the Proposal
+//! of an accepted call with the code of the prose change reply, and keeps its record on the
+//! Model Attempt of the call. The read gives a Run that made a Proposal the public
+//! `prose_change` of that record.
+
+use storyos_application::{
+    AgentRunDecisionInspect, ClaimedAgentRun, CompleteAgentRunError, CreateAgentRunError,
+    DeclaredTarget, ProjectScope,
+};
+use storyos_core::{
+    DeclaredLocation, PROPOSAL_WAITS_RESULT, PROPOSE_EDIT_TOOL_SPEC, ProposeEditHistory,
+    ProposeEditRefusal, ProposedEdit, RequestedToolCall, ToolCallBatch, ToolCallState, ToolIntake,
+};
+
+use crate::agent_run_observation::{ProposalStream, open_selected_proposal};
+use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
+use crate::agent_run_work::complete_database_error;
+use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
+
+/// Refuses each `propose_edit` call of `batch` that the limits of the Run or the prose change
+/// validation against `declared` refuse.
+pub(crate) async fn screen(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    declared: &[DeclaredLocation],
+    batch: ToolCallBatch,
+) -> Result<ToolCallBatch, CompleteAgentRunError> {
+    let ToolCallBatch::Valid(calls) = &batch else {
+        return Ok(batch);
+    };
+    if !calls.iter().any(|call| {
+        matches!(call, RequestedToolCall::Validated(call)
+            if matches!(call.intake, ToolIntake::ProposeEdit(_)))
+    }) {
+        return Ok(batch);
+    }
+    // A steering input after an accepted call permits the next call.
+    let row = client
+        .query_one(
+            "SELECT count(*) FILTER (WHERE call.state = 'refused'),
+                    COALESCE(bool_or(call.state = 'settled' AND NOT EXISTS (
+                      SELECT 1 FROM storyos.project_activity_event_payloads AS input
+                       WHERE (input.owner_user_id, input.project_id) =
+                             (call.owner_user_id, call.project_id)
+                         AND input.event_kind = 'agent_run_steering_retained'
+                         AND input.payload ->> 'run_id' = call.run_id::text
+                         AND (input.payload ->> 'input_position')::numeric >
+                             call.decision_position)), false)
+               FROM storyos.tool_calls AS call
+              WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
+                AND call.run_id = $3::text::uuid AND call.tool_spec_revision = $4",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &PROPOSE_EDIT_TOOL_SPEC.revision,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    let history = ProposeEditHistory {
+        refused: usize::try_from(row.get::<_, i64>(/*idx*/ 0)).unwrap_or(usize::MAX),
+        proposal_open: row.get(/*idx*/ 1),
+    };
+    Ok(storyos_core::screen_proposed_edits(
+        batch, declared, history,
+    ))
+}
+
+/// Opens the Proposal of the pending `propose_edit` call `row` of the active RunStep and settles
+/// the call. The Proposal source is the Decision that holds the call. A call that opens no
+/// Proposal is refused.
+pub(crate) async fn execute(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    row: &ToolCallRow,
+    edit: &ProposedEdit,
+) -> Result<(), CompleteAgentRunError> {
+    let run = crate::agent_run_work::load_run_phase(client, claim).await?;
+    let (Some(attempt_id), Some(decision_id)) = (&run.attempt_id, &run.decision_id) else {
+        return Err(damaged("The Decision of the propose_edit call is missing"));
+    };
+    let declared: Vec<DeclaredLocation> =
+        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+            .await?
+            .iter()
+            .map(DeclaredTarget::location)
+            .collect();
+    let refusal = match edit.validate(&declared) {
+        Err(refusal) => Some(refusal),
+        Ok(candidates) => {
+            open(
+                client,
+                claim,
+                &run,
+                (attempt_id, decision_id),
+                edit,
+                &candidates,
+            )
+            .await?
+        }
+    };
+    let text = refusal.map_or_else(
+        || PROPOSAL_WAITS_RESULT.to_owned(),
+        ProposeEditRefusal::result_text,
+    );
+    let result = storyos_core::ToolResultText {
+        digest: format!("sha256:{}", storyos_core::hex_sha256(text.as_bytes())),
+        bytes: text.len(),
+        text,
+    };
+    let resolution = Resolution {
+        state: match refusal {
+            Some(_) => ToolCallState::Refused,
+            None => ToolCallState::Settled,
+        },
+        refusal: refusal.map(ProposeEditRefusal::label),
+        attempt: None,
+        outcome: None,
+        result: Some(&result),
+    };
+    resolve(client, claim, row, resolution).await
+}
+
+/// Opens the Proposal of the validated `candidates` and keeps its record on the Model Attempt
+/// `attempt.0` of the Decision `attempt.1`. `NotOpened` when no block opened.
+async fn open(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &crate::agent_run_work::RunPhaseRow,
+    (attempt_id, decision_id): (&str, &str),
+    edit: &ProposedEdit,
+    candidates: &[storyos_core::ProseChangeCandidate],
+) -> Result<Option<ProposeEditRefusal>, CompleteAgentRunError> {
+    let opening = open_selected_proposal(
+        client,
+        claim,
+        run,
+        decision_id,
+        &edit.summary,
+        Some(candidates),
+        ProposalStream::Excluded,
+    )
+    .await?
+    .opening;
+    let Some(proposal_id) = opening.proposal_id else {
+        return Ok(Some(ProposeEditRefusal::NotOpened));
+    };
+    let record = serde_json::json!({
+        "decision_id": decision_id,
+        "text": edit.summary,
+        "producer_input": storyos_core::canonical_json(&serde_json::json!(candidates)),
+        "proposal_id": proposal_id,
+        "locations": opening.locations,
+    });
+    client
+        .execute(
+            "UPDATE storyos.model_attempts
+                SET payload = jsonb_set(payload, '{proposed_edit}', $4::text::jsonb)
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND model_attempt_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &attempt_id,
+                &record.to_string(),
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(None)
+}
+
+/// Gives a Run that made a Proposal with `propose_edit` the public `prose_change` of its last
+/// such call in place of its final answer. A Run with ToolCalls in progress keeps its `decision`.
+pub(crate) async fn public_decision(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    decision: &mut AgentRunDecisionInspect,
+) -> Result<(), CreateAgentRunError> {
+    let continuation_binding_id = match decision {
+        AgentRunDecisionInspect::Absent => None,
+        AgentRunDecisionInspect::Advisory {
+            continuation_binding_id,
+            ..
+        }
+        | AgentRunDecisionInspect::Clarification {
+            continuation_binding_id,
+            ..
+        } => continuation_binding_id.clone(),
+        AgentRunDecisionInspect::ExecutionRefused { .. }
+        | AgentRunDecisionInspect::ProseChange { .. }
+        | AgentRunDecisionInspect::ToolRequest { .. }
+        | AgentRunDecisionInspect::ResearchSynthesis { .. } => return Ok(()),
+    };
+    let Some(row) = client
+        .query_opt(
+            "SELECT (payload -> 'proposed_edit')::text FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND payload ? 'proposed_edit'
+              ORDER BY decision_position DESC LIMIT 1",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?
+    else {
+        return Ok(());
+    };
+    let record: serde_json::Value =
+        serde_json::from_str(row.get(/*idx*/ 0)).map_err(agent_run_parse_error)?;
+    let text = |field: &str| record[field].as_str().unwrap_or_default().to_owned();
+    *decision = AgentRunDecisionInspect::ProseChange {
+        decision_id: text("decision_id"),
+        selected: true,
+        text: text("text"),
+        producer_input: text("producer_input"),
+        locations: serde_json::from_value(record["locations"].clone())
+            .map_err(agent_run_parse_error)?,
+        continuation_binding_id,
+        opened_proposal_id: Some(text("proposal_id")),
+    };
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "agent_run_propose_edit_tests.rs"]
+mod tests;

@@ -16,6 +16,9 @@ pub(crate) async fn execute(
     row: &ToolCallRow,
     spec: &ToolSpec,
 ) -> Result<(), CompleteAgentRunError> {
+    if let Ok(storyos_core::ToolIntake::ProposeEdit(edit)) = spec.intake(&row.arguments) {
+        return crate::agent_run_propose_edit::execute(client, claim, row, &edit).await;
+    }
     let refused_beside: bool = client
         .query_one(
             "SELECT EXISTS (SELECT 1 FROM storyos.tool_calls AS call
