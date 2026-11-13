@@ -122,7 +122,7 @@ pub enum ProposeEditRefusal {
     NulCharacter,
     /// An earlier `propose_edit` call of the same response.
     SecondInResponse,
-    /// The Run opened a Proposal, and no steering input came after that call.
+    /// The Run already opened a Proposal.
     AfterProposal,
     /// The validation refused `MAX_REFUSED_PROPOSE_EDIT_CALLS` calls of the Run.
     Limit,
@@ -207,7 +207,7 @@ impl ProposeEditRefusal {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProposeEditHistory {
     pub refused: usize,
-    /// A call opened a Proposal, and no steering input came after it.
+    /// A call of the Run opened a Proposal.
     pub proposal_open: bool,
 }
 

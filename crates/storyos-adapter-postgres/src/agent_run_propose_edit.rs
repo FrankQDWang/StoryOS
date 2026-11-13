@@ -35,18 +35,10 @@ pub(crate) async fn screen(
     }) {
         return Ok(batch);
     }
-    // A steering input after an accepted call permits the next call.
     let row = client
         .query_one(
             "SELECT count(*) FILTER (WHERE call.state = 'refused'),
-                    COALESCE(bool_or(call.state = 'settled' AND NOT EXISTS (
-                      SELECT 1 FROM storyos.project_activity_event_payloads AS input
-                       WHERE (input.owner_user_id, input.project_id) =
-                             (call.owner_user_id, call.project_id)
-                         AND input.event_kind = 'agent_run_steering_retained'
-                         AND input.payload ->> 'run_id' = call.run_id::text
-                         AND (input.payload ->> 'input_position')::numeric >
-                             call.decision_position)), false)
+                    COALESCE(bool_or(call.state = 'settled'), false)
                FROM storyos.tool_calls AS call
               WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
                 AND call.run_id = $3::text::uuid AND call.tool_spec_revision = $4",
