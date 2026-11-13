@@ -338,4 +338,4 @@ pub(crate) async fn inspect(
 
 #[cfg(test)]
 #[path = "agent_run_steering_tests.rs"]
-mod tests;
+pub(crate) mod tests;
