@@ -18,6 +18,8 @@ const FOREIGN_DESTINATION: &str = "018f0000-0000-7000-8000-00000000f022";
 const FOREIGN_MAPPING: &str = "storyos.host-fake.mapping.rejected";
 const EXPIRED_CONTINUATION: u8 = 5;
 const UNUSABLE_CONTINUATION: u8 = 6;
+/// The reference code of the response of a successor create in the tool loop profile.
+pub(crate) const SUCCESSOR_RESPONSE: u8 = 7;
 
 /// The later result that a fake reference encodes in its last group.
 #[derive(Clone, Copy)]
@@ -129,6 +131,15 @@ pub(crate) fn continuation_rejection(previous_reference: &str) -> Option<&'stati
         Some(UNUSABLE_CONTINUATION) => Some("continuation_unusable"),
         _ => None,
     }
+}
+
+/// Whether the prior response is a recovered result: the later result of a lost create, or the
+/// response of a successor create.
+pub(crate) fn follows_recovery(previous_reference: &str) -> bool {
+    matches!(
+        reference_code(previous_reference),
+        Some(1..=4 | SUCCESSOR_RESPONSE)
+    )
 }
 
 fn reference_code(reference: &str) -> Option<u8> {

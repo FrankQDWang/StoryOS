@@ -3,8 +3,9 @@
 //! with a `finish` call beside it: the revision of a referenced candidate with the growth scripts
 //! of the reply form fake, or else a change of each target. For a reply form prose change text
 //! with no changes, it proposes that text for the first target, with the text as the summary.
-//! The end of the message scripts the other cases, by the count of the `propose_edit` results of
-//! the request after its last counted `finish` output:
+//! With no script, the fake proposes when the request has no `propose_edit` result after its last
+//! counted `finish` output. The end of the message scripts the other cases, by the count of the
+//! `propose_edit` results of the request:
 //!
 //! - `SCRIPT:propose_two_candidates`: one call that revises each referenced candidate.
 //! - `SCRIPT:propose_refused_once`: the first call names a block that is not a target, alone,
@@ -53,15 +54,20 @@ pub(crate) fn calls(
     {
         return None;
     }
-    // A steering input continues a Run after a counted `finish` call, and the fake proposes again
-    // for it: only the results after the last counted `finish` output count.
+    let results = request
+        .tool_outputs
+        .iter()
+        .filter(|output| output.name == name)
+        .count();
+    // A steering input continues a Run after a counted `finish` call. With no script, the fake
+    // proposes again for it: only the results after the last counted `finish` output count.
     let counted_finish = |output: &&storyos_application::ToolOutput| {
         output.name == ToolOperation::Finish.function_name()
             && !output
                 .output
                 .contains(storyos_core::FINISH_DOES_NOT_COUNT_RESULT)
     };
-    let results = request
+    let step_results = request
         .tool_outputs
         .iter()
         .rev()
@@ -163,7 +169,7 @@ pub(crate) fn calls(
             ),
             _,
         ) => (Vec::new(), true),
-        (_, 0) => (vec![correct(0)], true),
-        (_, _) => (Vec::new(), true),
+        _ if step_results == 0 => (vec![correct(0)], true),
+        _ => (Vec::new(), true),
     })
 }
