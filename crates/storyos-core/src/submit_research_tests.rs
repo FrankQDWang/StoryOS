@@ -28,6 +28,10 @@ fn the_intake_takes_a_summary_and_claims_and_refuses_a_text_that_the_store_canno
             json!({"summary": "The tides.", "claims": [claim("O\u{0}ne.")]}),
             Err(IntakeRefusal::UnstorableText),
         ),
+        (
+            json!({"summary": "The tides.", "claims": [{"text": "One.", "citations": ["s\u{0}1"]}]}),
+            Err(IntakeRefusal::UnstorableText),
+        ),
     ];
     for (arguments, expected) in cases {
         assert_eq!(

@@ -8,27 +8,38 @@
 //! - `twice`: two calls and a `finish` call in one response.
 //! - `finish_first`: a `finish` call and one call, in that order.
 //! - `again`: one call, and in the next request a second call and a `finish` call.
+//! - `quiet`: as `once`, and the closing response has an empty text.
 //!
 //! Each later request gets the usual script of the tool loop profile.
 
 use storyos_application::CreateRequest;
-use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState, ToolChoice, ToolOperation};
+use storyos_core::{
+    DecisionCandidate, NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState, ToolChoice,
+    ToolOperation,
+};
 
-use crate::create_plan::{FakeCreate, evidence_item};
+use crate::create_plan::{FakeCreate, complete, evidence_item};
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 const FETCH: &str = r#"{"urls":["https://example.org/c","https://example.org/d"]}"#;
 
 /// The scripted response of `request`, or `None` when the usual script applies.
 pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
-    if request.tool_choice == ToolChoice::None {
-        return None;
-    }
     let script = request
         .author_message
         .strip_prefix("SCRIPT:submit_research ")?;
     let mut parts = script.splitn(3, ' ');
     let (variant, first, arguments) = (parts.next()?, parts.next()?, parts.next()?);
+    if request.tool_choice == ToolChoice::None {
+        return (variant == "quiet").then(|| {
+            complete(
+                DecisionCandidate::Advisory {
+                    text: String::new(),
+                },
+                OutputPhase::FinalAnswer,
+            )
+        });
+    }
     let output = |operation: ToolOperation| {
         request
             .tool_outputs

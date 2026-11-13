@@ -198,7 +198,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
         .await
         .unwrap();
     let text = |index| lineage.get::<_, String>(index);
-    let synthesis = ResearchSynthesis {
+    let expected = ResearchSynthesis {
         summary: "The tides of 1890.".to_owned(),
         claims: vec![ResearchClaim {
             text: "High water came at 10.42.".to_owned(),
@@ -234,6 +234,33 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
         .await
         .unwrap()
         .is_some();
+    // A closing response with no text gives no final answer, and the Artifact stays the result.
+    let quiet = project
+        .settle(
+            "872",
+            &script(
+                "quiet",
+                "web_search",
+                synthesis("The tides.", json!(["$SOURCE"])),
+            ),
+            SEARCH_TEXT,
+        )
+        .await;
+    let quiet_binding: Option<String> = project
+        .admin
+        .query_one(
+            "SELECT continuation_binding_id::text FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND decision_position = 2",
+            &[&quiet],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let quiet_shown = matches!(
+        project.decision(&quiet).await,
+        AgentRunDecisionInspect::ResearchSynthesis { continuation_binding_id, .. }
+            if continuation_binding_id.is_some() && continuation_binding_id == quiet_binding
+    );
 
     assert_eq!(
         (
@@ -241,6 +268,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             artifact,
             project.decision(&run_id).await,
             read,
+            quiet_shown,
         ),
         (
             completed(
@@ -256,7 +284,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
                 "run_id": run_id, "decision_position": 1,
                 "operation_requirement_id": text(0), "model_attempt_id": text(1),
                 "decision_id": text(2), "tool_call_ids": [text(3)],
-                "content": synthesis.content(), "content_digest": synthesis.content_digest(),
+                "content": expected.content(), "content_digest": expected.content_digest(),
             }),
             AgentRunDecisionInspect::ResearchSynthesis {
                 decision_id: text(2),
@@ -264,6 +292,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
                 research_artifact_id,
                 continuation_binding_id: Some(text(5)),
             },
+            true,
             true,
         )
     );

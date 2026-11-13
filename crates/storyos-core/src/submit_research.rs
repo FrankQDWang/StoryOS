@@ -73,12 +73,17 @@ struct ClaimArguments {
     citations: Vec<String>,
 }
 
-/// The typed intake. A summary or a claim text with U+0000 does not fit, because the ToolCall
-/// row keeps the arguments as `jsonb`.
+/// The typed intake. A summary, a claim text, or a citation with U+0000 does not fit, because
+/// the ToolCall row keeps the arguments as `jsonb`.
 pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     let Arguments { summary, claims } =
         Arguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
-    if summary.contains('\0') || claims.iter().any(|claim| claim.text.contains('\0')) {
+    let texts = std::iter::once(&summary).chain(
+        claims
+            .iter()
+            .flat_map(|claim| std::iter::once(&claim.text).chain(&claim.citations)),
+    );
+    if texts.into_iter().any(|text| text.contains('\0')) {
         return Err(IntakeRefusal::UnstorableText);
     }
     Ok(ToolIntake::SubmitResearch {
