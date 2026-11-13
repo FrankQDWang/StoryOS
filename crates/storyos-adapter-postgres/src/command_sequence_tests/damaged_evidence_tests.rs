@@ -16,9 +16,6 @@ use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
-};
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
@@ -183,18 +180,6 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7550).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7560).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
             &pause_agent_run_call(&store, &admin, /*base*/ 0xb240).await,
         )
         .await,
@@ -228,7 +213,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 17];
     expected.push(separated(ReceiptResult::NoEffect));
     expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
@@ -383,22 +368,8 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
             "result_payload - 'transition'",
         )
         .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9c50).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9c60).await,
-            "result_payload - 'transition'",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
 }
 
 #[tokio::test]

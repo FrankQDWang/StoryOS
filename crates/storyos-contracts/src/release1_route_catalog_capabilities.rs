@@ -135,8 +135,6 @@ const CAPABILITIES: &[Capability] = &[
             "replanProposal",
             "reopenWithdrawnProposal",
             "reopenRejectedOperations",
-            "completeReadyPartialProposal",
-            "continueProposalGeneration",
             "undoLatestAuthorAction",
         ],
         operation_actions: &[],

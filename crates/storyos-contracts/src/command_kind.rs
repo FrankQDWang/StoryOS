@@ -48,8 +48,6 @@ command_kinds! {
     ReplanProposal => "replanProposal",
     ReopenWithdrawnProposal => "reopenWithdrawnProposal",
     ReopenRejectedOperations => "reopenRejectedOperations",
-    CompleteReadyPartialProposal => "completeReadyPartialProposal",
-    ContinueProposalGeneration => "continueProposalGeneration",
     UndoLatestAuthorAction => "undoLatestAuthorAction",
     CreateAgentRun => "createAgentRun",
     SteerAgentRun => "steerAgentRun",

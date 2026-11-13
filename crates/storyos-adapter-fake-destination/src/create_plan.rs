@@ -4,8 +4,8 @@ use storyos_application::CreateRequest;
 use storyos_core::DeclaredTargetKind;
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
-    STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, ToolOperation,
+    OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT, StreamItemRole, StreamItemState,
+    ToolOperation,
 };
 
 use crate::prose_changes::{is_fake_candidate_revision_request, produce_fake_changes};
@@ -38,22 +38,6 @@ fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResoluti
     }
     if let Some(scripted) = scripted_plan(author_message) {
         return scripted;
-    }
-    if author_message.starts_with("Stream this passage:") {
-        return FakeCreate {
-            items: vec![
-                assistant_item("1", StreamItemState::Provisional, STREAM_FIRST_TEXT),
-                assistant_item("2", StreamItemState::Provisional, STREAM_SECOND_TEXT),
-                assistant_item("3", StreamItemState::Complete, PROSE_CHANGE_TEXT),
-            ],
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::ProseChange {
-                    text: PROSE_CHANGE_TEXT.to_owned(),
-                },
-                prose_changes: None,
-            }),
-        };
     }
     if author_message.starts_with("Revise this passage:")
         || author_message.starts_with("Revise these passages")

@@ -20,9 +20,6 @@ use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
-};
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     DELETE_VOLUME, SET_CURRENT_CHAPTER, create_chapter, create_chapter_call, create_volume_call,
@@ -162,18 +159,6 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7520).await,
-        )
-        .await,
-        in_progress_retry(
-            &store,
-            &admin,
             &pause_agent_run_call(&store, &admin, /*base*/ 0xb220).await,
         )
         .await,
@@ -202,7 +187,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 22]);
+    assert_eq!(observed, vec![(true, [0; 5]); 20]);
 }
 
 #[tokio::test]

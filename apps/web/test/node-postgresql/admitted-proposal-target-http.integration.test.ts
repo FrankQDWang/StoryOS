@@ -19,12 +19,10 @@ import type {
   CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
-import { BINDING, REPLY_FORM_FAKE_ENV, admitRun, challenged, drainLeftoverWork, id, inspectFirstRunStep, prepare, runWorker, serverForFile,
+import { BINDING, admitRun, challenged, drainLeftoverWork, id, inspectFirstRunStep, prepare, runWorker, serverForFile,
   settleOnce } from "../support/http-harness.ts";
 
 const started = serverForFile();
-// #1463 owns the streamed row: only the reply form profile of the fake streams Proposal generation.
-const replyForm = serverForFile(REPLY_FORM_FAKE_ENV);
 
 async function withProject(
   title: string,
@@ -47,7 +45,6 @@ async function admitQueued(
 // A refused `propose_edit` call returns its reason to the model, and the final answer is advisory (ADR 0091 section 6).
 test.each([
   ["Revise this passage: keep the voice.", "advisory", started],
-  ["Stream this passage: keep the voice.", "prose_change", replyForm],
   ["Revise these passages: keep the voice.", "advisory", started],
 ] as const)("an admitted H0 target cannot open a valid H1 Proposal: %s", async (message, kind, server) => {
   const initialText = "red fox";
@@ -113,7 +110,6 @@ test.each([
     const run = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });
     assert.equal(run.status, "completed");
     assert.equal(run.decision.kind, kind);
-    if (run.decision.kind === "prose_change") assert.deepEqual(run.decision.opened_proposal, { kind: "absent" });
     // The default read shows the closing RunStep. The first RunStep sent the admitted H0 text.
     const { context } = await inspectFirstRunStep(baseUrl, { projectId, fetchImpl }, runId);
     assert.equal(context.selected.find((source) => source.source_class === "working_target")?.content, initialText);

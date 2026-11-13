@@ -42,9 +42,6 @@ pub(super) enum RevisionMismatch {
 pub(super) enum BodyValidation {
     AfterRevisionCheck,
     BeforeRevisionCheck,
-    /// The session, the challenge headers, and the challenge secret are checked before the body
-    /// is parsed. The body fields are validated after the revision check.
-    AfterChallengeHeaders,
     /// The revision, the correlation identity, the challenge headers, and the challenge secret
     /// are examined before the body fields.
     AfterChallengeSecret,
@@ -133,14 +130,6 @@ project_command_request!(contracts::ReplanProposalRequest, nested replan_proposa
 project_command_request!(
     contracts::ReopenRejectedOperationsRequest,
     nested reopen_rejected_operations_input
-);
-project_command_request!(
-    contracts::CompleteReadyPartialProposalRequest,
-    nested complete_ready_partial_proposal_input
-);
-project_command_request!(
-    contracts::ContinueProposalGenerationRequest,
-    nested continue_proposal_generation_input
 );
 project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
 project_command_request!(contracts::CancelAgentRunRequest, nested cancel_agent_run_input);
@@ -297,15 +286,6 @@ pub(super) async fn read_body<R: DeserializeOwned>(
     let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await
         .map_err(|_| payload_too_large())?;
-    match route.body_validation {
-        BodyValidation::AfterRevisionCheck
-        | BodyValidation::BeforeRevisionCheck
-        | BodyValidation::AfterChallengeSecret => {}
-        BodyValidation::AfterChallengeHeaders => {
-            bound_session(state, &headers)?;
-            challenge_headers(state, &headers, &AntiForgery::Required)?;
-        }
-    }
     let body = serde_json::from_slice::<R>(&bytes).map_err(|_| invalid_request_shape())?;
     Ok(ProjectCommandBody {
         body,
@@ -400,7 +380,7 @@ pub(super) async fn admit_body<
         Ok::<I, ApiError>(input)
     };
     let input = match route.body_validation {
-        BodyValidation::AfterRevisionCheck | BodyValidation::AfterChallengeHeaders => {
+        BodyValidation::AfterRevisionCheck => {
             check_revision()?;
             validate_body(input)?
         }

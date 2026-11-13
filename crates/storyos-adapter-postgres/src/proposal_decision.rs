@@ -65,37 +65,22 @@ impl DecisionRecord<'_> {
     }
 }
 
-/// Whether applied records of a Proposal decision exist from before the capture of the preserved
-/// Proposal State Axes. A pre-capture record holds a value in each other field and no value in
-/// its `preserved_*` fields.
-#[derive(Clone, Copy)]
-pub(crate) enum PreCaptureRecords {
-    /// The decision came before the capture, so a pre-capture record gives a historical
-    /// acknowledgement.
-    Possible,
-    /// The decision came after the capture, so a record without its preserved values is damaged
-    /// evidence (ADR 0076, replay rule).
-    None,
-}
-
 /// Decodes the applied effect of one Proposal decision from its replayed Receipt and its effect
 /// record. The Receipt payload must hold the value `transition.1` in the field `transition.0`.
 ///
-/// When `pre_capture` is `Possible` and the record has the pre-capture form, the acknowledgement
-/// is historical. `effect` reads the fields of every other record, and reports a missing value
+/// A pre-capture record holds a value in each other field and no value in its `preserved_*`
+/// fields. Its acknowledgement is historical. `effect` reads the fields of every other record, and reports a missing value
 /// as damaged evidence.
 pub(crate) fn decode_decision<E>(
     replay: &CommandReplay,
     transition: (&str, &str),
-    pre_capture: PreCaptureRecords,
     effect: impl FnOnce(&DecisionRecord<'_>) -> Result<E, ReplayFault>,
 ) -> Result<E, ReplayFault> {
     let (key, value) = transition;
     replay.require_receipt_text(key, value)?;
     let fields = replay.effect().fields();
     let preserved = |column: &String| column.starts_with("preserved_");
-    if matches!(pre_capture, PreCaptureRecords::Possible)
-        && fields.keys().any(preserved)
+    if fields.keys().any(preserved)
         && fields
             .iter()
             .all(|(column, value)| preserved(column) == value.is_null())
