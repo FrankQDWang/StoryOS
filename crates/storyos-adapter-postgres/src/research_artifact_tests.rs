@@ -18,7 +18,7 @@ use crate::agent_run_retrieval::tests::{
     adapter, broken_stream, destination, real_run, research_run, stored,
 };
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
-use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream, sse};
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
 use crate::command_sequence::tests::{REJECT_PROPOSAL_OPERATIONS, issued, seed_project};
 use crate::project_archive_build::tests::{export_command, zip_store_files};
 use crate::research_source::tests::{SEARCH_TEXT, calls_stream, calls_stream_in};
@@ -74,20 +74,6 @@ pub(crate) async fn computed(
         lines
     });
     (base, served)
-}
-
-/// A stream that reports `reference` and ends with one message of `text` in `status`.
-pub(crate) fn message_stream(reference: &str, text: &str, status: &str) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": status, "content": [{"type": "output_text", "text": text}]});
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": message}),
-        json!({"type": format!("response.{status}"), "response": {
-            "id": reference, "status": status, "output": [message],
-            "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ])
 }
 
 /// The identities that the `tool_sources` tags of the function outputs of `body` name after
