@@ -4,7 +4,7 @@ status: accepted
 
 # Replace the Typed Reply Form With Host Tools and End Each Run With an Explicit Finish Call
 
-The author decided this on 2026-11-12 in conversation, before the Skill tickets of Stage 6 ([#364](https://github.com/FrankQDWang/StoryOS/issues/364)). This ADR changes how the model gives its result to StoryOS. It changes no rule about what a Proposal or a Research Artifact can hold, and it changes nothing that the author sees in a Run that succeeds.
+The author decided this on 2026-11-12 in conversation, before the Skill tickets of Stage 6 ([#364](https://github.com/FrankQDWang/StoryOS/issues/364)). This ADR changes how the model gives its result to StoryOS. It changes no rule about what a Proposal or a Research Artifact can hold, and it changes nothing that the author sees in a Run that succeeds. Section 6, as the author amended it on 2026-11-13, adds one change for the author: the panel shows each result of a Run.
 
 ## Context
 
@@ -63,10 +63,17 @@ The author approved these numbers on 2026-11-12.
 
 A steering input that only the last RunStep or no RunStep can read gets the `conflicted` answer of a Run that ended, and the Web Client sends it as the message of the next Run ([ADR 0062](0062-make-the-exact-selection-references-of-a-message-the-working-target.md), [#1480](https://github.com/FrankQDWang/StoryOS/issues/1480)).
 
-### 6. The author sees no change in a Run that succeeds
+### 6. The panel shows each result of a Run
 
-- The public `decision` of an AgentRun stays. The Host derives it from the records of the Run: a Proposal gives `prose_change` with its locations, a Research Artifact gives `research_synthesis`, and a Run with neither gives the final answer text.
-- The panel shows a Run that made a Proposal as it does today: the Host sentence and the change locations, and a click opens the Chapter. The final answer text of such a Run is not shown.
+The author amended this section on 2026-11-13 ([#1474](https://github.com/FrankQDWang/StoryOS/issues/1474)). Before the amendment, the Host derived one kind for the public `decision` of a Run, a Proposal first, and the panel did not show the other results of the Run.
+
+- The model decides what a Run gives. One Run can make a Proposal with `propose_edit`, record a Research Artifact with `submit_research`, and give a final answer text. The Host has no rule that selects one result kind.
+- The Run read of `getAgentRun` gives `results`: each result of the Run, in the order in which the model made it. A `proposal` result is the Proposal of one `propose_edit` call that settled, with its change locations. A `research_artifact` result is the Artifact of the `submit_research` call that settled. An `answer` result is the final answer text of a completed Run, and it is the last result. The order of the calls is the RunStep position, then the position of the call in its response. Each result is there only when the Run has it. A final answer with no text gives no result. No result replaces another.
+- A read of one Model Attempt (`model_attempt_id`) has no `results`. The results belong to the Run, and that read shows one RunStep: its `decision` is the Decision of that RunStep.
+- The public `decision` of the Run read stays for a client that reads one kind and for a Run in progress. The Host derives it from the same records as `results`: the last Proposal gives `prose_change` with its locations, else the Research Artifact gives `research_synthesis`, else it is the Decision of the active RunStep or the refusal of the Run. Thus `decision` names no result that `results` does not have. The panel reads `results` for each settled Run that the Host did not refuse.
+- The panel shows each result in that order, each with the display of its kind. A Proposal shows the Host sentence and the change locations, and a click opens the Chapter. A Research Artifact shows the research turn of [ADR 0087](0087-record-a-research-synthesis-as-one-immutable-research-artifact.md) section 7: the sources, the summary, the claims, the citation list, and "Use this in the story" in the current turn. The final answer text shows as it is. A Run with one result shows it as before.
+- A history turn of the Conversation shows the same results as the current turn. "Use this in the story" stays with the current turn, because it sends in the current Conversation.
+- The panel shows the sentence for a Run with no result only for a completed Run with no Proposal, no Research Artifact, and no text. A Run that the Host refused and a Run that waits for a Tool show as before. The author gets no new control.
 - A Run in which the model makes an invalid call no longer ends with a fixed sentence. The model corrects the call, or it tells the author in the final answer.
 
 ### 7. Order
