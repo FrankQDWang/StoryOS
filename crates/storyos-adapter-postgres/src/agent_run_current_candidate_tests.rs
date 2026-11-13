@@ -231,7 +231,7 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_candidate_that_is_no_longer_pending_keeps_the_refusal_of_the_run() {
+async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
