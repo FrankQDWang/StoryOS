@@ -35,7 +35,8 @@ it.each([
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN, status: "completed",
         decision: { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000c75", selected: true,
-          text, continuation: { kind: "absent" } } });
+          text, continuation: { kind: "absent" } },
+        results: [{ kind: "answer", decision_id: "018f0000-0000-7001-8000-000000000c75", text }] });
     }
     throw new Error(`Unexpected request ${path}`);
   };

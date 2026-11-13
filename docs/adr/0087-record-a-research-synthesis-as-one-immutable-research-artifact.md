@@ -51,7 +51,7 @@ In the tool loop profile, the Tool Gateway runs this validation when it executes
 
 A valid and selected synthesis writes one row of `storyos.research_artifacts` in the transaction of its Decision. The row has the content (the summary and the claims with typed citations), its `sha256` digest, and the lineage: the Run, the RunStep position, the Operation Requirement, the Model Attempt, the Decision, and the ToolCall identities of the RunStep. Foreign keys bind the Run, the Model Attempt, and the Operation Requirement. One Decision has at most one Artifact.
 
-In the tool loop profile, the transaction that settles a valid `submit_research` call writes the row. The Decision of the lineage is the Agent Decision that holds the call, and the Model Attempt is the Attempt that observed its response. One Run records at most one Artifact (ADR 0091 section 2). The public `decision` of the completed Run is `research_synthesis` with that Artifact, also when the closing response has no text, and its continuation binding is the one of the closing response.
+In the tool loop profile, the transaction that settles a valid `submit_research` call writes the row. The Decision of the lineage is the Agent Decision that holds the call, and the Model Attempt is the Attempt that observed its response. One Run records at most one Artifact (ADR 0091 section 2). The Run read gives the Artifact as one entry of `results`, at the position of its call among the results of the Run (ADR 0091 section 6). When the Run made no Proposal, the derived public `decision` of the completed Run is `research_synthesis` with that Artifact, also when the closing response has no text, and its continuation binding is the one of the closing response.
 
 - The row is immutable. The store has no update path and no delete path. The runtime role has only `SELECT` and `INSERT`. Row Level Security keeps each row in its exact Project Scope.
 - The table is in `PROJECT_EXPORT_TABLES` and in the archive builder (`canonical/research_artifacts.json`).
@@ -63,11 +63,11 @@ A synthesis whose claims cite only Gaps is valid. A summary that states that the
 
 ### 6. The query
 
-`getResearchArtifact` (`GET /api/v1/projects/{project_id}/research-artifacts/{research_artifact_id}`) is one row of the operation table. Its closed response has the lineage, the summary, the claims with citation numbers from 1, and the cited sources in the order of their first citation. Each cited source is the full Snapshot or Gap that `listResearchSources` shows. A request in another Project Scope finds no Artifact and gets `resource_unavailable`. `getAgentRun` shows the Decision with its `research_artifact_id`.
+`getResearchArtifact` (`GET /api/v1/projects/{project_id}/research-artifacts/{research_artifact_id}`) is one row of the operation table. Its closed response has the lineage, the summary, the claims with citation numbers from 1, and the cited sources in the order of their first citation. Each cited source is the full Snapshot or Gap that `listResearchSources` shows. A request in another Project Scope finds no Artifact and gets `resource_unavailable`. `getAgentRun` gives the `research_artifact_id` in the `research_artifact` entry of `results`, and in the derived `decision` when the Run made no Proposal (ADR 0091 section 6).
 
 ### 7. The panel
 
-The panel shows the summary, each claim with its citation numbers, and the numbered sources. A Snapshot shows its title, or its URL when it has no title, with the capture time. A Gap shows its URL, "无法获取", and its reason. The panel shows no identifier and no support, conflict, or quality classification, because the Host computes none.
+The panel shows the summary, each claim with its citation numbers, and the numbered sources, at the position of the Artifact among the results of the Run (ADR 0091 section 6). A Snapshot shows its title, or its URL when it has no title, with the capture time. A Gap shows its URL, "无法获取", and its reason. The panel shows no identifier and no support, conflict, or quality classification, because the Host computes none.
 
 ### 8. "Use this in the story"
 

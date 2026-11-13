@@ -1,5 +1,6 @@
 import type {
-  GetAgentRunResponse, ListResearchSourcesResponse, ResearchArtifactInspect, SourceGapInspect, SourceGapReason, ToolCallInspect,
+  AgentRunResultInspect, GetAgentRunResponse, ListResearchSourcesResponse, ProseChangeLocationInspect,
+  ResearchArtifactInspect, SourceGapInspect, SourceGapReason, ToolCallInspect,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 /** The sentence for a request whose result did not arrive. The author approved it (ADR 0057). */
@@ -76,6 +77,22 @@ export function researchSourceLines(
 
 /** The result sentence of a research synthesis. The claims and their sources follow it. */
 export const RESEARCH_SYNTHESIS_SENTENCE = "研究结果如下。每条结论后的编号对应下方的来源。";
+
+/** The result sentence of a Proposal: the count of its Chapters and of its changes, or a sentence with no count. */
+export function proposalSentence(locations: readonly ProseChangeLocationInspect[]): string {
+  return locations.length > 0
+    ? `这次修改涉及 ${new Set(locations.map(location => location.chapter_id)).size} 个章节、${locations.length} 处文字，具体建议在下方。`
+    : "本次修改建议已生成，可以在正文中查看。";
+}
+
+/**
+ * Each result of a settled Run in the order in which the model made them (ADR 0091 section 6). `undefined` for a
+ * Run in progress, a Run that the Host refused, and a Run with no result: the panel shows their decision.
+ */
+export function runResults(run: GetAgentRunResponse): readonly AgentRunResultInspect[] | undefined {
+  const results = run.results ?? [];
+  return settledRun(run) && run.decision.kind !== "execution_refused" && results.length > 0 ? results : undefined;
+}
 
 /** The message of the "Use this in the story" button: an ordinary request in the same conversation. */
 export const USE_RESEARCH_MESSAGE = "请根据上面的研究结果修改当前章节的正文。";

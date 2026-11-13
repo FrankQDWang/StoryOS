@@ -163,6 +163,7 @@ pub(super) async fn load_agent_run(
             payload.as_ref(),
             row.get::<_, Option<String>>(12),
         ),
+        results: None,
         model,
         active_compaction: crate::agent_run_compaction::load_active_compaction(
             client, scope, run_id,
@@ -208,6 +209,9 @@ pub(super) async fn load_agent_run(
             .to_owned();
     }
     if requested_attempt.is_none() {
+        record.results = Some(
+            crate::agent_run_results::load(client, scope, run_id, status, &record.decision).await?,
+        );
         crate::agent_run_propose_edit::public_decision(client, scope, run_id, &mut record.decision)
             .await?;
     }
