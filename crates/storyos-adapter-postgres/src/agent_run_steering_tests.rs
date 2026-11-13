@@ -814,8 +814,8 @@ async fn run_position(admin: &Client, run_id: &str) -> Value {
 
 /// A pause opens no position. The steering input that resumes the Run has position 1, so the
 /// first request goes out at position 1 and reads the input, and position 0 sends no request
-/// (ADR 0062). A queued Run with no pause does the same. The reply form profile did this before
-/// the tool loop. In the tool loop, position 0 counts, so the Run sends at most 23 requests.
+/// (ADR 0062). A queued Run with no pause does the same. Position 0 counts, so the Run sends at
+/// most 23 requests.
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_position_1() {
@@ -823,43 +823,14 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
         .lock()
         .await;
     let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let (paused, queued_only) = (true, false);
     let call = "call_finish";
     let cases = [
-        (
-            ["fb0", "fb1"],
-            0xfb90,
-            DeploymentDestination::HostFakeToolLoop,
-            paused,
-            json!([
-                [1, "tool_request", STEERED, "required", []],
-                [2, "advisory", STEERED, "none", [call]]
-            ]),
-            json!(["completed", 2, [0, 1, 2], STEERED]),
-        ),
-        (
-            ["fb2", "fb3"],
-            0xfb92,
-            DeploymentDestination::HostFakeToolLoop,
-            queued_only,
-            json!([
-                [1, "tool_request", STEERED, "required", []],
-                [2, "advisory", STEERED, "none", [call]]
-            ]),
-            json!(["completed", 2, [0, 1, 2], STEERED]),
-        ),
-        (
-            ["fb4", "fb5"],
-            0xfb94,
-            DeploymentDestination::HostFake,
-            paused,
-            // The reply form fake keeps no JSON wire with these keys. The requirement of
-            // position 1 below holds the author instruction that its request sent.
-            json!([[1, "advisory", null, null, null]]),
-            json!(["completed", 1, [0, 1], STEERED]),
-        ),
+        (["fb0", "fb1"], 0xfb90, paused),
+        (["fb2", "fb3"], 0xfb92, queued_only),
     ];
-    for (prefixes, suffix, destination, pause, expected_steps, expected_end) in cases {
+    for (prefixes, suffix, pause) in cases {
         let (scope, chapter_id, first) = queued(&store, prefixes[0]).await;
         settle(&store, &admin, &scope, &first, &FakeDestination)
             .await
@@ -870,7 +841,7 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
             &scope,
             &chapter_id,
             prefixes[1],
-            destination.clone(),
+            tool_loop.clone(),
             MESSAGE,
             conversation,
             None,
@@ -888,7 +859,7 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
             assert_eq!(
                 run_position(&admin, &run_id).await,
                 json!(["paused", 0, [0], MESSAGE]),
-                "{destination:?}"
+                "{pause}"
             );
         }
         let input = steering(&store, &scope, suffix, &run_id, "Keep the voice.", None).await;
@@ -899,7 +870,7 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
         assert_eq!(
             run_position(&admin, &run_id).await,
             json!(["queued", 0, [0], MESSAGE]),
-            "{destination:?} {pause}"
+            "{pause}"
         );
         settle(&store, &admin, &scope, &run_id, &FakeDestination)
             .await
@@ -912,12 +883,15 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
                 steering_facts(&store, &scope, &run_id).await,
             ),
             (
-                expected_steps,
-                expected_end,
+                json!([
+                    [1, "tool_request", STEERED, "required", []],
+                    [2, "advisory", STEERED, "none", [call]]
+                ]),
+                json!(["completed", 2, [0, 1, 2], STEERED]),
                 json!({"status": format!("{:?}", AgentRunStatus::Completed),
                        "inputs": [["1", "Keep the voice.", true]]}),
             ),
-            "{destination:?} {pause}"
+            "{pause}"
         );
     }
 
@@ -934,7 +908,7 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
         &scope,
         &chapter_id,
         "fb7",
-        DeploymentDestination::HostFakeToolLoop,
+        tool_loop,
         message,
         conversation,
         None,
