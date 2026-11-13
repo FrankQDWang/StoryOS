@@ -212,6 +212,10 @@ pub(super) async fn load_agent_run(
     crate::prose_change_location_read::hydrate_locations(client, scope, &mut record.decision)
         .await?;
     crate::agent_run_tool_call::hydrate_calls(client, scope, &mut record.decision).await?;
+    if requested_attempt.is_none() {
+        crate::research_artifact_decision::derive(client, scope, run_id, &mut record.decision)
+            .await?;
+    }
     Ok(Some(record))
 }
 

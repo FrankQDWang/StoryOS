@@ -26,6 +26,8 @@ pub enum ToolOperation {
     WebFetch,
     /// The Host Tool with which the Agent says that the work of the Run is complete.
     Finish,
+    /// The Host Tool with which the Agent gives one research synthesis (ADR 0091).
+    SubmitResearch,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -112,6 +114,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &WEB_SEARCH_TOOL_SPEC,
         &WEB_FETCH_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
+        &crate::SUBMIT_RESEARCH_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -128,6 +131,10 @@ pub enum ToolIntake {
         urls: Vec<String>,
     },
     Finish,
+    SubmitResearch {
+        summary: String,
+        claims: Vec<crate::ClaimCandidate>,
+    },
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -139,6 +146,8 @@ pub enum IntakeRefusal {
     ResultCount,
     UrlCount,
     Url,
+    /// A text of the arguments has U+0000, which the store cannot keep in a `jsonb` value.
+    UnstorableText,
 }
 
 #[derive(Deserialize)]
@@ -203,6 +212,7 @@ impl ToolSpec {
                 NoArguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
                 Ok(ToolIntake::Finish)
             }
+            ToolOperation::SubmitResearch => crate::submit_research::intake(arguments),
         }
     }
 }
@@ -252,8 +262,18 @@ impl ServerArguments {
             (Self::Fetch { urls: urls_name }, ToolIntake::WebFetch { urls }) => {
                 arguments.insert((*urls_name).to_owned(), Value::from(urls.clone()));
             }
-            (Self::Search { .. }, ToolIntake::WebFetch { .. } | ToolIntake::Finish)
-            | (Self::Fetch { .. }, ToolIntake::WebSearch { .. } | ToolIntake::Finish) => {
+            (
+                Self::Search { .. },
+                ToolIntake::WebFetch { .. }
+                | ToolIntake::Finish
+                | ToolIntake::SubmitResearch { .. },
+            )
+            | (
+                Self::Fetch { .. },
+                ToolIntake::WebSearch { .. }
+                | ToolIntake::Finish
+                | ToolIntake::SubmitResearch { .. },
+            ) => {
                 return None;
             }
         }

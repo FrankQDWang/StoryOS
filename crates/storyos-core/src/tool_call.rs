@@ -99,6 +99,9 @@ impl ValidatedToolCall {
             } => json!({ "query": query, "result_count": result_count }),
             ToolIntake::WebFetch { urls } => json!({ "urls": urls }),
             ToolIntake::Finish => json!({}),
+            ToolIntake::SubmitResearch { summary, claims } => {
+                crate::submit_research::arguments(summary, claims)
+            }
         }
     }
 
@@ -186,6 +189,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::ResultCount) => "intake_result_count",
             Self::Intake(IntakeRefusal::UrlCount) => "intake_url_count",
             Self::Intake(IntakeRefusal::Url) => "intake_url",
+            Self::Intake(IntakeRefusal::UnstorableText) => "unstorable_text",
         }
     }
 
@@ -205,6 +209,9 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::Url) => {
                 "one of its URLs is not an absolute http or https URL with a host and no user \
                  information"
+            }
+            Self::Intake(IntakeRefusal::UnstorableText) => {
+                "a text of its arguments has the character U+0000"
             }
         };
         format!(

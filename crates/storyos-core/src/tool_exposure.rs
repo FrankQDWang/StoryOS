@@ -88,6 +88,7 @@ impl ToolOperation {
             Self::WebSearch => "web_search",
             Self::WebFetch => "web_fetch",
             Self::Finish => "finish",
+            Self::SubmitResearch => "submit_research",
         }
     }
 
@@ -102,6 +103,7 @@ impl ToolOperation {
                 "Says that your work on the author request is complete. After its result, write \
                  the final answer to the author."
             }
+            Self::SubmitResearch => crate::submit_research::DESCRIPTION,
         }
     }
 }
@@ -138,21 +140,27 @@ impl IntakeField {
 
 impl ExposedTool {
     pub fn declaration(&self) -> FunctionDeclaration {
-        let mut properties = serde_json::Map::new();
-        let mut required = Vec::new();
-        for field in self.spec.intake_contract {
-            properties.insert(field.name().to_owned(), field.schema());
-            required.push(field.name());
-        }
+        let parameters = match self.spec.operation {
+            ToolOperation::SubmitResearch => crate::submit_research::parameters(),
+            ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => {
+                let mut properties = serde_json::Map::new();
+                let mut required = Vec::new();
+                for field in self.spec.intake_contract {
+                    properties.insert(field.name().to_owned(), field.schema());
+                    required.push(field.name());
+                }
+                json!({
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                    "additionalProperties": false,
+                })
+            }
+        };
         FunctionDeclaration {
             name: self.name,
             description: self.spec.operation.description(),
-            parameters: json!({
-                "type": "object",
-                "properties": properties,
-                "required": required,
-                "additionalProperties": false,
-            }),
+            parameters,
         }
     }
 

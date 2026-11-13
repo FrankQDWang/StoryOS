@@ -2,7 +2,10 @@
 //! StoryOS executes in its own process. A Host ToolCall has no Destination Attempt and no
 //! Outbound Disclosure Event, and it gives the Agent no authority.
 
-use crate::{FINISH_TOOL_SPEC, ToolIntake, ToolRegistrationKind, ToolResultText, ToolSpec};
+use crate::{
+    FINISH_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolRegistrationKind, ToolResultText,
+    ToolSpec,
+};
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
 #[derive(Debug, Eq, PartialEq)]
@@ -19,7 +22,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0101",
     kind: ToolRegistrationKind::Host,
     adapter_revision: "storyos.host-tool.v1",
-    tools: &[&FINISH_TOOL_SPEC],
+    tools: &[&SUBMIT_RESEARCH_TOOL_SPEC, &FINISH_TOOL_SPEC],
 };
 
 /// The Host Tool of the pinned revisions of a ToolCall. `None` is a ToolCall of another
@@ -41,25 +44,30 @@ pub const FINISH_DOES_NOT_COUNT_RESULT: &str = "Another call of this response wa
 finish call does not count and the work continues. Correct the refused call, and then call finish \
 again.";
 
-/// Executes one validated Host ToolCall. The result of `finish` is empty when no other call of
-/// its response was refused, and otherwise it says that the work continues.
+/// Executes one validated `finish` call. Its result is empty when no other call of its response
+/// was refused, and otherwise it says that the work continues. The store executes each other
+/// Host Tool.
 pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<ToolResultText> {
     match intake {
-        ToolIntake::Finish => {
-            let text = if refused_beside {
-                FINISH_DOES_NOT_COUNT_RESULT
-            } else {
-                ""
-            };
-            Some(ToolResultText {
-                text: text.to_owned(),
-                digest: format!(
-                    "sha256:{}",
-                    crate::project_archive::hex_sha256(text.as_bytes())
-                ),
-                bytes: text.len(),
-            })
-        }
-        ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } => None,
+        ToolIntake::Finish => Some(host_tool_result(if refused_beside {
+            FINISH_DOES_NOT_COUNT_RESULT
+        } else {
+            ""
+        })),
+        ToolIntake::WebSearch { .. }
+        | ToolIntake::WebFetch { .. }
+        | ToolIntake::SubmitResearch { .. } => None,
+    }
+}
+
+/// The result of a Host ToolCall with the text `text`.
+pub fn host_tool_result(text: &str) -> ToolResultText {
+    ToolResultText {
+        text: text.to_owned(),
+        digest: format!(
+            "sha256:{}",
+            crate::project_archive::hex_sha256(text.as_bytes())
+        ),
+        bytes: text.len(),
     }
 }
