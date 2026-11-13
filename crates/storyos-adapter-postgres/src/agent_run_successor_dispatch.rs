@@ -405,7 +405,8 @@ pub(crate) async fn record(
                     ("settled", None, None, true)
                 }
                 // A closing response with no text gets the continuation binding, so the next
-                // Run continues from it. The next RunStep binds a text before its own request.
+                // Run continues from it. A text before a counted `finish` call gets its binding
+                // when the next RunStep opens.
                 AgentDecisionOutcome::NoDecision if rule == Some(FinishRuleOutcome::NoResult) => {
                     let binding_id = Uuid::now_v7().to_string();
                     if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
