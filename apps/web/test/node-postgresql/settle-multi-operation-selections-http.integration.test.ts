@@ -46,7 +46,7 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, re
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
-import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
+import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, inspectRun, prepare, settleOnce,
 } from "../support/acceptance.ts";
 import { heldWorker, inspectFirstRunStep, postRun, problemCode, restartServer, runRequest, settleRun, startServer }
   from "../support/http-harness.ts";
@@ -497,12 +497,21 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
     ({ child, exited } = heldWorker({
       [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold }));
     let held = admitted;
-    await vi.waitUntil(async () => {
-      held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
-      return phase === "decision" ? held.decision.kind === "prose_change" : held.items.length > 0;
-    }, { timeout: 10_000, interval: 10 });
-    const frozen = await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`);
+    // Each Decision of the Run in RunStep order. The decision hold stops the Worker after the closing Decision.
+    const decisions = () => queryPostgres(`SELECT jsonb_agg(payload->'decision' ORDER BY decision_position)::text
+      FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid AND attempt_role='decision';`);
+    await vi.waitUntil(async () => phase === "decision"
+      ? (await decisions()).includes('"kind": "advisory"')
+      : (await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl })).items.length > 0,
+    { timeout: 10_000, interval: 10 });
+    // The Worker waits at the hold, so the Run does not change until the test removes the hold file.
+    held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+    if (phase === "decision") assert.equal(held.decision.kind, "prose_change");
+    const frozen = await decisions();
     const raw = held.items;
+    // The Run has more than one RunStep, so the test reads the held Model Attempt again after the restart.
+    if (held.model_attempt.kind !== "present") throw new Error("expected the held Model Attempt");
+    const heldAttempt = held.model_attempt.model_attempt_id;
     const readProposals = async () => Promise.all((JSON.parse(await queryPostgres(
       `SELECT coalesce(jsonb_agg(proposal_id::text ORDER BY proposal_id), '[]'::jsonb)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`
     )) as string[]).map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl,
@@ -561,9 +570,11 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
     if (child) { await exited; child = undefined; }
     await settleOnce();
     const after = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
-    assert.deepEqual(after.items, raw);
+    const historical = await inspectRun(started.baseUrl, { projectId, fetchImpl }, admitted.run_id, heldAttempt);
+    assert.deepEqual(historical.items, raw);
     if (priorProposals) assert.deepEqual(await readProposals(), priorProposals);
-    assert.deepEqual(after.model_attempt, terminal ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
+    assert.deepEqual(historical.model_attempt, terminal ? held.model_attempt
+      : { ...held.model_attempt, dispatch_state: "settled" });
     if (terminal) {
       assert.equal(after.status, phase);
       assert.deepEqual(after.decision, { kind: "absent" });
@@ -571,7 +582,7 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
       if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
       assert.equal(after.decision.locations?.length, candidateMode ? 1 : collection ? 3 : 2);
       if (phase === "decision") {
-        assert.equal(await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`), frozen);
+        assert.equal(await decisions(), frozen);
         assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
       }
     }
@@ -648,15 +659,15 @@ test.each(["chapter", "collection"])("a %s reply that changes only the last targ
   } finally { await stopRealServer(started.server); }
 });
 
-// Each `propose_edit` call that the Host refuses, with the refusal label of its ToolCall. An incomplete response gives
-// no ToolCall, and the Run completes with no result (ADR 0091).
+// Each `propose_edit` call that the Host refuses, with the refusal label of its ToolCall. An incomplete call item is
+// not a function request, so it gives no ToolCall, and the Run continues to the final answer (ADR 0091).
 test.each([
   ["duplicate_location", "advisory", "refused:repeated_block"],
   ["empty_locations", "advisory", "refused:no_change"],
   ["malformed_locations", "advisory", "refused:empty_explanation"],
   ["undeclared_location", "advisory", "refused:undeclared_block"],
   ["oversized_explanation", "advisory", "refused:oversized_text"],
-  ["incomplete", "absent", null],
+  ["incomplete", "advisory", null],
 ])("a %s reply opens no Proposal", async (script, decision, calls) => {
   const started = await startServer();
   try {
