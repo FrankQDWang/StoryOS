@@ -19,9 +19,14 @@ use crate::command_sequence::tests::{
 };
 use crate::set_current_chapter_authority_tests::open_session_request;
 
-const REVISE: &str = "Revise these passages in the narrator voice.";
+pub(super) const REVISE: &str = "Revise these passages in the narrator voice.";
 
-async fn complete(store: &PostgresProjectReader, admin: &Client, scope: &ProjectScope, run: &str) {
+pub(super) async fn complete(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    scope: &ProjectScope,
+    run: &str,
+) {
     let claim = claim_run(admin, scope.clone(), run.to_owned()).await;
     complete_agent_run(
         store,
@@ -63,7 +68,7 @@ async fn revise_run(
 
 /// The Proposal records of the Run with no identity: the Proposal, its Revisions, its
 /// Operations, and its Validation Receipts.
-async fn proposal_records(admin: &Client, run_id: &str) -> Value {
+pub(super) async fn proposal_records(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
             "SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -95,7 +100,7 @@ async fn proposal_records(admin: &Client, run_id: &str) -> Value {
 
 /// Each `propose_edit` call of the Run in RunStep and item order: its RunStep, state, refusal,
 /// and result.
-async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
+pub(super) async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
             "SELECT jsonb_build_array(decision_position, state, refusal, result_text)::text
@@ -111,7 +116,7 @@ async fn propose_edit_calls(admin: &Client, run_id: &str) -> Vec<Value> {
         .collect()
 }
 
-fn opened(position: u64) -> Value {
+pub(super) fn opened(position: u64) -> Value {
     json!([position, "settled", null, PROPOSAL_WAITS_RESULT])
 }
 

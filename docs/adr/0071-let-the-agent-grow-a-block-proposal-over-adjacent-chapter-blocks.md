@@ -50,3 +50,7 @@ The author can select text that starts in a pending Proposal candidate and conti
   - The editor shows each Operation of a grown Proposal at its block. On each part of an `atomic` Proposal, the `接受` and `拒绝` controls select all parts. The labels do not change, and the editor adds no control for a set of parts. The author selected this on 2026-10-23.
   - A withdrawal closes all of the grown Proposal in one step. The reservations of its Operations follow the present rule for a withdrawn Proposal.
   - Context Inspect shows the Joinable Blocks that the dispatched request of the decision marked, in the optional field `joinable_block_ids`. The Model Attempt records them when StoryOS dispatches the request.
+
+## Amendment 2026-11-13: the Host Tool `propose_edit`
+
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), one `propose_edit` call is one change set ([#1457](https://github.com/FrankQDWang/StoryOS/issues/1457)). A call that changes the referenced candidate and Joinable Blocks is a growth, and the reply validation of this ADR applies to the call. A call that it refuses is a refused ToolCall with the label `change_shape`, and no Proposal changes. The location outcomes and the Proposal records are the same as for the reply. The reply form profile keeps the reply rules until the reply form goes.
