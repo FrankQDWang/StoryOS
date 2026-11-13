@@ -213,9 +213,12 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       assert.equal(later.disposition, disposition);
       assert.equal(later.successor_settles_predecessor, false);
       if (disposition === "dispatched") {
-        assert.ok(run.model_attempt.kind === "present");
         assert.equal(run.status, "completed");
-        assert.equal(run.model_attempt.dispatch_state, "uncertain");
+        // The default read shows the closing RunStep. The lost create of the first RunStep stays uncertain (ADR 0091).
+        const predecessor = await getAgentRun({ baseUrl: server.baseUrl, projectId: setup.projectId, runId,
+          fetchImpl: setup.fetchImpl, modelAttemptId: later.predecessor_model_attempt_id });
+        assert.ok(predecessor.model_attempt.kind === "present");
+        assert.equal(predecessor.model_attempt.dispatch_state, "uncertain");
       } else assert.equal(later.pause_reason, "budget_insufficient");
       await page.reload();
       assert.deepEqual((await inspect(runId)).unknown_create_successor, later);
