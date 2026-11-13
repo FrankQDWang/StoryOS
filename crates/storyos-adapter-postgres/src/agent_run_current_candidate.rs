@@ -64,15 +64,20 @@ pub(crate) async fn follow_added(
     let mut admitted = Vec::with_capacity(added.len());
     for reference in added.iter() {
         // The text of the reference revision is known only as "the current text" when no later
-        // revision changed it.
-        let candidate_text = match reference.candidate_target() {
-            Some(target) if unchanged_since(client, claim, &target).await? => current
+        // revision changed it. A reference with no open current candidate stays as it is.
+        let matched = reference.candidate_target().and_then(|target| {
+            current
                 .iter()
                 .find(|candidate| {
                     candidate.target.proposal_id == target.proposal_id
                         && candidate.target.operation_id == target.operation_id
                 })
-                .map(|candidate| candidate.candidate_text.to_owned()),
+                .map(|candidate| (target, candidate.candidate_text))
+        });
+        let candidate_text = match matched {
+            Some((target, text)) if unchanged_since(client, claim, &target).await? => {
+                Some(text.to_owned())
+            }
             Some(_) | None => None,
         };
         admitted.push(AdmittedSelection {

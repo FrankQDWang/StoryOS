@@ -643,3 +643,74 @@ async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_cand
 
     assert_eq!(observed, expected);
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_steering_reference_to_an_unknown_candidate_keeps_the_refusal_of_the_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let mut observed = Vec::new();
+    let mut expected = Vec::new();
+    // First a Proposal that does not exist, then an Operation that its known Proposal does not have.
+    for (lead, run_prefix, suffix, field, unknown) in [
+        (
+            0xdf0,
+            "df2",
+            0xdfe0_u16,
+            "proposal_id",
+            "018f0000-0000-7001-8000-000000000df1",
+        ),
+        (
+            0xdf8,
+            "dfa",
+            0xdfe8,
+            "operation_id",
+            "018f0000-0000-7001-8000-000000000df9",
+        ),
+    ] {
+        let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
+        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let mut reference = json!(fixture.candidates(&admin).await.remove(0));
+        reference[field] = json!(unknown);
+        let reference: SelectionReference = serde_json::from_value(reference).unwrap();
+        let run_id = admit_referenced_run(
+            &store,
+            scope,
+            chapter_id,
+            run_prefix,
+            tool_loop.clone(),
+            "Help with this passage.",
+            Vec::new(),
+        )
+        .await;
+        let input = steering(
+            &store,
+            scope,
+            suffix,
+            &run_id,
+            REVISE,
+            Some(vec![reference]),
+        )
+        .await;
+        let author = AuthorAt::new(
+            &store,
+            Moment::DuringRequest(1),
+            AuthorAction::Steer(vec![input]),
+        );
+        settle(&store, &admin, scope, &run_id, &author)
+            .await
+            .unwrap();
+        observed.push(settled(&store, scope, &run_id).await);
+        expected.push((
+            "Refused".to_owned(),
+            AgentRunDecisionInspect::ExecutionRefused {
+                capability: "blocked_context".to_owned(),
+            },
+        ));
+    }
+
+    assert_eq!(observed, expected);
+}
