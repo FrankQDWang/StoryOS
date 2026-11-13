@@ -9,8 +9,9 @@ use storyos_application::{
     AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint,
     ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
-    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
-    RefusableCommandError, SteerAgentRunInput, complete_agent_run, complete_agent_run_with_tools,
+    NoContractFaults, Observation, PauseAgentRunInput, PreDispatchRefusal, PreparedRequest,
+    ProjectScope, RefusableCommandError, SteerAgentRunInput, complete_agent_run,
+    complete_agent_run_with_tools,
 };
 use storyos_core::{
     AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, SelectionReference,
@@ -27,7 +28,9 @@ use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
 use crate::agent_run_retrieval::tests::destination;
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp};
 use crate::agent_run_tool_recovery::tests::{Fault, FaultAt};
-use crate::command_sequence::tests::{CANCEL_AGENT_RUN, CommandCall, STEER_AGENT_RUN, issued};
+use crate::command_sequence::tests::{
+    CANCEL_AGENT_RUN, CommandCall, PAUSE_AGENT_RUN, STEER_AGENT_RUN, issued,
+};
 
 /// When the author acts, by the count of the Create requests of the Run from 1: before the
 /// request goes out, or while it is out.
@@ -780,4 +783,190 @@ async fn a_steering_input_that_only_the_last_run_step_can_read_is_conflicted() {
             "{request}"
         );
     }
+}
+
+/// The status and the active position of the Run, the positions of its Operation Requirements,
+/// and the author instruction of the requirement at the active position.
+async fn run_position(admin: &Client, run_id: &str) -> Value {
+    let row = admin
+        .query_one(
+            "SELECT jsonb_build_array(run.status, run.active_decision_position,
+                      (SELECT jsonb_agg(requirement.decision_position
+                                        ORDER BY requirement.decision_position)
+                         FROM storyos.operation_requirements AS requirement
+                        WHERE requirement.run_id = run.run_id
+                          AND requirement.requirement_role = 'primary'),
+                      (SELECT jsonb_path_query_first(requirement.payload, $2::text::jsonpath)
+                         FROM storyos.operation_requirements AS requirement
+                        WHERE requirement.run_id = run.run_id
+                          AND requirement.requirement_role = 'primary'
+                          AND requirement.decision_position = run.active_decision_position))::text
+               FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
+            &[
+                &run_id,
+                &r#"$.selected[*] ? (@.source_class == "author_instruction").content"#,
+            ],
+        )
+        .await
+        .unwrap();
+    serde_json::from_str(row.get(/*idx*/ 0)).unwrap()
+}
+
+/// A pause opens no position. The steering input that resumes the Run has position 1, so the
+/// first request goes out at position 1 and reads the input, and position 0 sends no request
+/// (ADR 0062). A queued Run with no pause does the same. The reply form profile did this before
+/// the tool loop. In the tool loop, position 0 counts, so the Run sends at most 23 requests.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_position_1() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (paused, queued_only) = (true, false);
+    let call = "call_finish";
+    let cases = [
+        (
+            ["fb0", "fb1"],
+            0xfb90,
+            DeploymentDestination::HostFakeToolLoop,
+            paused,
+            json!([
+                [1, "tool_request", STEERED, "required", []],
+                [2, "advisory", STEERED, "none", [call]]
+            ]),
+            json!(["completed", 2, [0, 1, 2], STEERED]),
+        ),
+        (
+            ["fb2", "fb3"],
+            0xfb92,
+            DeploymentDestination::HostFakeToolLoop,
+            queued_only,
+            json!([
+                [1, "tool_request", STEERED, "required", []],
+                [2, "advisory", STEERED, "none", [call]]
+            ]),
+            json!(["completed", 2, [0, 1, 2], STEERED]),
+        ),
+        (
+            ["fb4", "fb5"],
+            0xfb94,
+            DeploymentDestination::HostFake,
+            paused,
+            // The reply form fake keeps no JSON wire with these keys. The requirement of
+            // position 1 below holds the author instruction that its request sent.
+            json!([[1, "advisory", null, null, null]]),
+            json!(["completed", 1, [0, 1], STEERED]),
+        ),
+    ];
+    for (prefixes, suffix, destination, pause, expected_steps, expected_end) in cases {
+        let (scope, chapter_id, first) = queued(&store, prefixes[0]).await;
+        settle(&store, &admin, &scope, &first, &FakeDestination)
+            .await
+            .unwrap();
+        let conversation = ConversationSelection::New;
+        let run_id = admit_run_in(
+            &store,
+            &scope,
+            &chapter_id,
+            prefixes[1],
+            destination.clone(),
+            MESSAGE,
+            conversation,
+            None,
+        )
+        .await;
+        if pause {
+            let input = PauseAgentRunInput {
+                run_id: run_id.clone(),
+            };
+            let call = issued(&store, &scope, suffix + 1, &PAUSE_AGENT_RUN, input).await;
+            store
+                .pause_agent_run(&call.envelope, &call.input)
+                .await
+                .unwrap();
+            assert_eq!(
+                run_position(&admin, &run_id).await,
+                json!(["paused", 0, [0], MESSAGE]),
+                "{destination:?}"
+            );
+        }
+        let input = steering(&store, &scope, suffix, &run_id, "Keep the voice.", None).await;
+        store
+            .steer_agent_run(&input.envelope, &input.input)
+            .await
+            .unwrap();
+        assert_eq!(
+            run_position(&admin, &run_id).await,
+            json!(["queued", 0, [0], MESSAGE]),
+            "{destination:?} {pause}"
+        );
+        settle(&store, &admin, &scope, &run_id, &FakeDestination)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            (
+                step_requests(&admin, &run_id).await,
+                run_position(&admin, &run_id).await,
+                steering_facts(&store, &scope, &run_id).await,
+            ),
+            (
+                expected_steps,
+                expected_end,
+                json!({"status": format!("{:?}", AgentRunStatus::Completed),
+                       "inputs": [["1", "Keep the voice.", true]]}),
+            ),
+            "{destination:?} {pause}"
+        );
+    }
+
+    // A Run that never finishes: position 0 sent no request but counts, so the requests go out
+    // at positions 1 to 23, and the request at position 23 is the last.
+    let (scope, chapter_id, first) = queued(&store, "fb6").await;
+    settle(&store, &admin, &scope, &first, &FakeDestination)
+        .await
+        .unwrap();
+    let conversation = ConversationSelection::New;
+    let message = "SCRIPT:never_finish";
+    let run_id = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "fb7",
+        DeploymentDestination::HostFakeToolLoop,
+        message,
+        conversation,
+        None,
+    )
+    .await;
+    let input = PauseAgentRunInput {
+        run_id: run_id.clone(),
+    };
+    let call = issued(&store, &scope, 0xfb97, &PAUSE_AGENT_RUN, input).await;
+    store
+        .pause_agent_run(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    let input = steering(&store, &scope, 0xfb96, &run_id, "Keep the voice.", None).await;
+    store
+        .steer_agent_run(&input.envelope, &input.input)
+        .await
+        .unwrap();
+    settle(&store, &admin, &scope, &run_id, &FakeDestination)
+        .await
+        .unwrap();
+    let steps: Vec<Value> = step_requests(&admin, &run_id)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|step| json!([step[0], step[3]]))
+        .collect();
+    let mut expected: Vec<Value> = (1..23)
+        .map(|position| json!([position, "required"]))
+        .collect();
+    expected.push(json!([23, "none"]));
+
+    assert_eq!(steps, expected);
 }
