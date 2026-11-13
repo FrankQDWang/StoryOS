@@ -13,6 +13,9 @@ mod project_session;
 #[path = "command_sequence_tests/proposal_decision_tests.rs"]
 mod proposal_decision;
 
+#[path = "command_sequence_tests/proposal_state_replay_tests.rs"]
+mod proposal_state_replay;
+
 #[path = "command_sequence_tests/agent_run_tests.rs"]
 mod agent_run;
 

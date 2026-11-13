@@ -8,7 +8,7 @@
 - Research input: [Manuscript revision and Proposal state-machine source audit](../research/manuscript-revision-proposal-state-machine-source-audit.md)
 - Editor evidence: [Tiptap / ProseMirror durable Proposal mechanics](../research/tiptap-prosemirror-proposal-mechanics.md)
 
-> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the generation values `generating` and `ready_partial`, the pause of a Proposal Generation, the Editor Input Fence, the Proposal Pause Fence, `ContinueProposalGeneration`, and `CompleteReadyPartialProposal` are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for these items are historical: the generation values `generating` and `ready_partial`, the pause of a Proposal Generation, the two fences, `ContinueProposalGeneration`, and `CompleteReadyPartialProposal`. The two fences are the Editor Input Fence and the Proposal Pause Fence. A Proposal opens complete, and each Proposal Revision is `ready`.
 
 ## 1. Scope and authority
 
