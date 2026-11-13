@@ -61,6 +61,8 @@ The author approved these numbers on 2026-11-12.
 | `propose_edit` calls of one Run that the validation can refuse | 3. After the third refusal, the Host refuses each later call, and the result tells the model to end the Run and to tell the author. |
 | RunSteps of one Run | 24. The request of the last RunStep has `tool_choice: "none"`. The text of its response is the final answer. The Host executes no function call of that response. A response with no text completes the Run with no result. |
 
+A steering input that only the last RunStep or no RunStep can read gets the `conflicted` answer of a Run that ended, and the Web Client sends it as the message of the next Run ([ADR 0062](0062-make-the-exact-selection-references-of-a-message-the-working-target.md), [#1480](https://github.com/FrankQDWang/StoryOS/issues/1480)).
+
 ### 6. The author sees no change in a Run that succeeds
 
 - The public `decision` of an AgentRun stays. The Host derives it from the records of the Run: a Proposal gives `prose_change` with its locations, a Research Artifact gives `research_synthesis`, and a Run with neither gives the final answer text.

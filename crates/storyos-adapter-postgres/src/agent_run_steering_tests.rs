@@ -14,6 +14,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, SelectionReference,
+    SteerAgentRunConflict, SteerAgentRunNoEffect, TransitionOutcome,
 };
 use tokio_postgres::Client;
 
@@ -36,6 +37,15 @@ pub(crate) enum Moment {
     DuringRequest(usize),
 }
 
+/// The answer to one steering input.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum SteeringAnswer {
+    Retained,
+    /// The `conflicted` answer of a Run that ended.
+    Conflicted,
+    Refused(AgentRunControlRefusal),
+}
+
 pub(crate) enum AuthorAction {
     /// The steering inputs, in order.
     Steer(Vec<CommandCall<SteerAgentRunInput>>),
@@ -48,8 +58,7 @@ pub(crate) struct AuthorAt<'a> {
     pub moment: Moment,
     pub action: AuthorAction,
     creates: Mutex<usize>,
-    /// The refusal of each steering input, or `None` when the Run retained it.
-    refusals: Mutex<Vec<Option<AgentRunControlRefusal>>>,
+    answers: Mutex<Vec<SteeringAnswer>>,
 }
 
 impl<'a> AuthorAt<'a> {
@@ -63,7 +72,7 @@ impl<'a> AuthorAt<'a> {
             moment,
             action,
             creates: Mutex::new(/*value*/ 0),
-            refusals: Mutex::new(Vec::new()),
+            answers: Mutex::new(Vec::new()),
         }
     }
 
@@ -71,18 +80,27 @@ impl<'a> AuthorAt<'a> {
         match &self.action {
             AuthorAction::Steer(calls) => {
                 for call in calls {
-                    let refusal = match self
+                    let answer = match self
                         .store
                         .steer_agent_run(&call.envelope, &call.input)
                         .await
                     {
-                        Ok(_) => None,
+                        Ok(settlement) => match settlement.outcome {
+                            TransitionOutcome::NoEffect(
+                                SteerAgentRunNoEffect::SteeringRetained,
+                            ) => SteeringAnswer::Retained,
+                            TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun) => {
+                                SteeringAnswer::Conflicted
+                            }
+                            TransitionOutcome::Applied(applied) => match applied.effect {},
+                            TransitionOutcome::Refused(reason) => match reason {},
+                        },
                         Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
-                            Some(refusal)
+                            SteeringAnswer::Refused(refusal)
                         }
                         Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
                     };
-                    self.refusals.lock().unwrap().push(refusal);
+                    self.answers.lock().unwrap().push(answer);
                 }
             }
             AuthorAction::Cancel(call) => {
@@ -313,13 +331,13 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
             (
                 step_requests(&admin, &run_id).await,
                 steering_facts(&store, &scope, &run_id).await,
-                author.refusals.into_inner().unwrap(),
+                author.answers.into_inner().unwrap(),
             ),
             (
                 expected_steps,
                 json!({"status": format!("{:?}", AgentRunStatus::Completed),
                        "inputs": [[position, "Keep the voice.", true]]}),
-                vec![None],
+                vec![SteeringAnswer::Retained],
             ),
             "{moment:?}"
         );
@@ -407,11 +425,14 @@ async fn a_steering_input_of_a_later_run_step_joins_its_references_up_to_eight()
     assert_eq!(
         (
             step_references(&admin, &run_id).await,
-            author.refusals.into_inner().unwrap(),
+            author.answers.into_inner().unwrap(),
         ),
         (
             json!([[0, before], [1, before], [2, after], [3, after]]),
-            vec![None, Some(AgentRunControlRefusal::ReferenceLimit)],
+            vec![
+                SteeringAnswer::Retained,
+                SteeringAnswer::Refused(AgentRunControlRefusal::ReferenceLimit),
+            ],
         )
     );
 }
@@ -676,28 +697,38 @@ async fn a_cancel_fences_the_research_call_of_a_later_run_step_and_no_later_run_
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_steering_input_opens_no_new_count_of_run_steps() {
+async fn a_steering_input_that_only_the_last_run_step_can_read_is_conflicted() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     // While the request of RunStep 5 is out, RunStep 6 reads the input. While the request of
-    // the last RunStep is out, no RunStep reads it.
+    // the RunStep before the last or of the last RunStep is out, no ordinary RunStep can read
+    // it, so the Run retains nothing and the input becomes the message of the next Run.
     let cases = [
         (
             ["f48", "f49"],
             0xf670,
             5,
+            SteeringAnswer::Retained,
             json!([["5", "Keep the voice.", true]]),
+        ),
+        (
+            ["f4c", "f4d"],
+            0xf672,
+            23,
+            SteeringAnswer::Conflicted,
+            json!([]),
         ),
         (
             ["f4a", "f4b"],
             0xf671,
             24,
-            json!([["24", "Keep the voice.", false]]),
+            SteeringAnswer::Conflicted,
+            json!([]),
         ),
     ];
-    for (prefixes, suffix, request, inputs) in cases {
+    for (prefixes, suffix, request, answer, inputs) in cases {
         let tool_loop = DeploymentDestination::HostFakeToolLoop;
         let (scope, chapter_id, first) = queued(&store, prefixes[0]).await;
         settle(&store, &admin, &scope, &first, &FakeDestination)
@@ -736,10 +767,15 @@ async fn a_steering_input_opens_no_new_count_of_run_steps() {
         expected.push(json!("none"));
 
         assert_eq!(
-            (choices, steering_facts(&store, &scope, &run_id).await),
+            (
+                choices,
+                steering_facts(&store, &scope, &run_id).await,
+                author.answers.into_inner().unwrap(),
+            ),
             (
                 expected,
                 json!({"status": format!("{:?}", AgentRunStatus::Completed), "inputs": inputs}),
+                vec![answer],
             ),
             "{request}"
         );
