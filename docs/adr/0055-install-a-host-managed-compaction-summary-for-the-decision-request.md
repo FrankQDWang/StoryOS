@@ -37,3 +37,11 @@ S3-21 staged a compaction after the decision of a Run and installed it for a pla
 - The live qualification sent 3 requests with 1,616 input and 1,756 output tokens ([evidence record](../research/agent-plan-compaction-qualification-2026-10-12.md)).
 - The semantic preservation of a summary is unknown, and each compaction record says so.
 - Until [S4-06c3](https://github.com/FrankQDWang/StoryOS/issues/1116) adds the automatic threshold, only a request with the Host-fake compaction prefix compacts.
+
+## Amendment 2026-11-13: compaction at each RunStep position
+
+[#1460](https://github.com/FrankQDWang/StoryOS/issues/1460) adds this section. A Run of the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) has more than one RunStep, and the input of a later RunStep grows with each Tool result.
+
+- The Host decides the compaction before the decision request of each RunStep, not only before the first. The prior response of a later RunStep is the response of the RunStep before it.
+- One Run compacts at most once: at the first RunStep whose request compacts. The summary request, its Context Assembly, and the later request have the Decision position of that RunStep. Each RunStep after it continues the response of the later request.
+- A compaction summary is history that the response of the later request holds. Thus the input digest of ADR 0085 section 2 does not include the summary item, and the RunStep after the later request sends an incremental continuation, not a full input with no summary.
