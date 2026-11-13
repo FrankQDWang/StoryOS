@@ -58,6 +58,7 @@ pub(crate) enum AuthorAction {
     Accept(Box<CommandCall<storyos_application::AcceptProposalInput>>),
     Reject(Box<CommandCall<storyos_application::RejectProposalOperationsInput>>),
     Withdraw(Box<CommandCall<storyos_application::WithdrawProposalInput>>),
+    DeleteChapter(Box<CommandCall<storyos_application::DeleteChapterInput>>),
     /// Each action in order.
     Sequence(Vec<AuthorAction>),
 }
@@ -145,6 +146,11 @@ impl<'a> AuthorAt<'a> {
                 AuthorAction::Withdraw(call) => {
                     self.store
                         .withdraw_proposal(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::DeleteChapter(call) => {
+                    crate::command_sequence::tests::delete_chapter(self.store, call)
                         .await
                         .unwrap();
                 }

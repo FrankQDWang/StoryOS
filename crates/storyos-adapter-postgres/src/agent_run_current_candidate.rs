@@ -209,4 +209,4 @@ async fn current_rows(
 
 #[cfg(test)]
 #[path = "agent_run_current_candidate_tests.rs"]
-mod tests;
+pub(crate) mod tests;

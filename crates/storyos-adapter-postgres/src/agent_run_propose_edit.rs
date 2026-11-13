@@ -152,7 +152,8 @@ pub(crate) async fn execute(
 
 /// Opens the Proposal of the validated `candidates` and keeps its record on the Model Attempt
 /// `attempt.0` of the Decision `attempt.1`. `StaleCandidate` when the referenced candidate
-/// changed after the request read it, and `NotOpened` when no other block opened.
+/// changed after the request read it, `ChangedHead` when a target Chapter head changed after it,
+/// and `NotOpened` when no other block opened.
 async fn open(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -171,13 +172,17 @@ async fn open(
     )
     .await?;
     let Some(proposal_id) = opening.proposal_id else {
-        let stale = opening.locations.iter().flatten().any(|location| {
-            matches!(&location.outcome,
-                storyos_contracts::ProseChangeLocationOutcome::Refused { reason }
-                    if reason == "stale_candidate")
-        });
-        return Ok(Some(if stale {
+        let refused = |label: &str| {
+            opening.locations.iter().flatten().any(|location| {
+                matches!(&location.outcome,
+                    storyos_contracts::ProseChangeLocationOutcome::Refused { reason }
+                        if reason == label)
+            })
+        };
+        return Ok(Some(if refused("stale_candidate") {
             ProposeEditRefusal::StaleCandidate
+        } else if refused("changed_head") {
+            ProposeEditRefusal::ChangedHead
         } else {
             ProposeEditRefusal::NotOpened
         }));

@@ -24,7 +24,7 @@ Before this change, a request worked on the Current Chapter. When the author cli
 
   The subset rule of ADR 0061 applies. Text outside these targets is not changeable. A referenced block that a pending Proposal reserves is readable, but not changeable.
 - **Exact text.** The client sends no text. The Host reads the selected text from the base Revision or from the candidate revision. A reference is unavailable when:
-  - Its base is not the current head.
+  - Its base is not the current head. A RunStep after the first moves a Chapter text reference to the current head ([ADR 0085, amendment 2026-11-14](0085-reenter-each-settled-tool-result-through-context-assembly.md#amendment-2026-11-14-a-chapter-head-that-moves-during-the-run)).
   - Its candidate is not pending at the revision of the reference.
   - Its range is reversed or empty, passes the end of the text, or splits a surrogate pair.
 
