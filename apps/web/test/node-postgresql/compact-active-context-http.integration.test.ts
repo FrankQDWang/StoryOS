@@ -15,7 +15,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { USER_A, admitRun, attempt, drainLeftoverWork, id, inspectRun, prepare, rewriteChapter, selected, settleHeld,
+import { USER_A, admitRun, attempt, drainLeftoverWork, id, inspectFirstRunStep, inspectRun, prepare, rewriteChapter, selected, settleHeld,
   settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const ORDINARY = "Help with this passage.";
@@ -63,10 +63,6 @@ test("active context compaction summarizes the prior response, then installs or 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d210"), "Compact Novel", "d21");
-    // The default read shows the closing RunStep. The compaction comes before the request of the first RunStep.
-    const firstStep = async (runId: string) => inspectRun(started.baseUrl, prepared, runId, await queryPostgres(`
-      SELECT model_attempt_id::text FROM storyos.model_attempts
-       WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`));
     const first = await admitRun(started.baseUrl, prepared, id("d217"), COMPACT);
     await settleOnce();
     const firstInspect = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
@@ -117,8 +113,8 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.deepEqual(installedCompaction.preserved_item_ids, ["1"]);
     if (installedCompaction.installed.kind !== "present") throw new Error("expected install");
     // The default read shows the closing RunStep. The later request is the attempt of the first RunStep (ADR 0091).
-    const later = await inspectRun(started.baseUrl, prepared, happy.run.effect.run_id,
-      installedCompaction.installed.model_attempt_id);
+    const later = await inspectFirstRunStep(started.baseUrl, prepared, happy.run.effect.run_id);
+    assert.equal(installedCompaction.installed.model_attempt_id, decisionAttempt(later));
     assert.equal(installedCompaction.installed.model_invocation_id, attempt(later).model_invocation_id);
     assert.notEqual(installedCompaction.installed.model_attempt_id, installedCompaction.producer_model_attempt_id);
     assert.notEqual(installedCompaction.installed.run_step_id, installedCompaction.prior_run_step_id);
@@ -158,8 +154,8 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(changedCompaction.install_state, "refused");
     assert.equal(changedCompaction.refusal_reason, "changed_input");
     assert.equal(changedCompaction.installed.kind, "absent");
-    assert.equal(attempt(await firstStep(changed.run.effect.run_id)).input_mapping, "incremental");
-    assert.equal(selected(await firstStep(changed.run.effect.run_id), "author_instruction"), COMPACT);
+    assert.equal(attempt(await inspectFirstRunStep(started.baseUrl, prepared, changed.run.effect.run_id)).input_mapping, "incremental");
+    assert.equal(selected(await inspectFirstRunStep(started.baseUrl, prepared, changed.run.effect.run_id), "author_instruction"), COMPACT);
     assert.equal(await attemptRoles(prepared.projectId, changed.run.effect.run_id), "compaction,decision,decision");
     assert.equal(await sentAssembly(prepared.projectId, changed.run.effect.run_id), "decision,author_instruction");
 
@@ -177,7 +173,7 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(compaction(restrictedInspect).install_state, "refused");
     assert.equal(compaction(restrictedInspect).refusal_reason, "restricted_source");
     assert.equal(compaction(restrictedInspect).installed.kind, "absent");
-    assert.equal(attempt(await firstStep(restricted.run.effect.run_id)).input_mapping, "new_transport");
+    assert.equal(attempt(await inspectFirstRunStep(started.baseUrl, prepared, restricted.run.effect.run_id)).input_mapping, "new_transport");
 
     const exact = await heldCompaction("d215");
     await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
@@ -210,8 +206,8 @@ test("active context compaction summarizes the prior response, then installs or 
     const reclaimed = await inspectRun(started.baseUrl, prepared, stale.run.effect.run_id);
     assert.equal(reclaimed.status, "completed");
     assert.equal(compaction(reclaimed).install_state, "installed");
-    assert.equal(attempt(await firstStep(stale.run.effect.run_id)).input_mapping, "new_transport");
-    assert.equal(selected(await firstStep(stale.run.effect.run_id), "author_instruction"), COMPACT);
+    assert.equal(attempt(await inspectFirstRunStep(started.baseUrl, prepared, stale.run.effect.run_id)).input_mapping, "new_transport");
+    assert.equal(selected(await inspectFirstRunStep(started.baseUrl, prepared, stale.run.effect.run_id), "author_instruction"), COMPACT);
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     await stopRealServer(started.server);

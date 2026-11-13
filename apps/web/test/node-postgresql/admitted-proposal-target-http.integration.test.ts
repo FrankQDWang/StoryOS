@@ -19,7 +19,7 @@ import type {
   CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
-import { BINDING, REPLY_FORM_FAKE_ENV, admitRun, challenged, drainLeftoverWork, id, prepare, runWorker, serverForFile,
+import { BINDING, REPLY_FORM_FAKE_ENV, admitRun, challenged, drainLeftoverWork, id, inspectFirstRunStep, prepare, runWorker, serverForFile,
   settleOnce } from "../support/http-harness.ts";
 
 const started = serverForFile();
@@ -115,9 +115,7 @@ test.each([
     assert.equal(run.decision.kind, kind);
     if (run.decision.kind === "prose_change") assert.deepEqual(run.decision.opened_proposal, { kind: "absent" });
     // The default read shows the closing RunStep. The first RunStep sent the admitted H0 text.
-    const first = await queryPostgres(`SELECT model_attempt_id::text FROM storyos.model_attempts
-      WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`);
-    const { context } = await getAgentRun({ baseUrl, projectId, runId, fetchImpl, modelAttemptId: first });
+    const { context } = await inspectFirstRunStep(baseUrl, { projectId, fetchImpl }, runId);
     assert.equal(context.selected.find((source) => source.source_class === "working_target")?.content, initialText);
     assert.equal(context.selected.find((source) => source.source_class === "working_target")?.source_version, h0.chapter.current_revision.revision_id);
     assert.deepEqual(context.current_availability.working_target, {

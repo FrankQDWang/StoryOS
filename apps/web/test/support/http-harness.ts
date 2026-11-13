@@ -630,6 +630,15 @@ export async function waitFor<Value>(probe: () => Promise<Value>, match: (value:
   throw new Error(`the wait timed out; last value: ${JSON.stringify(last)}`);
 }
 
+/** Reads the first RunStep of one AgentRun. The default read shows the closing RunStep (ADR 0091), and the first
+ * RunStep holds the first request of the Run, its recovery, and its compaction. */
+export async function inspectFirstRunStep(baseUrl: string,
+  prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch }, runId: string) {
+  return inspectRun(baseUrl, prepared, runId, await queryStoryOSPostgres(`
+    SELECT model_attempt_id::text FROM storyos.model_attempts
+     WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`));
+}
+
 /** Waits until the AgentRun has an opened Proposal for which `match` holds, and returns that Proposal. */
 export async function waitForOpenedProposal(baseUrl: string,
   prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch }, runId: string,
