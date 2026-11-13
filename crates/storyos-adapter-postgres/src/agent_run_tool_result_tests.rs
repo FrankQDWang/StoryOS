@@ -21,6 +21,7 @@ use crate::agent_run_tool_exposure::tests::{
 };
 use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
 use crate::project_destination_binding::grant_scope_tests::current_grant;
+use crate::research_source::tests::calls_stream;
 use crate::set_current_chapter_authority_tests::open_session_request;
 
 const MODEL_POST: &str = "POST /api/plan/v3/responses HTTP/1.1";
@@ -97,28 +98,6 @@ struct Ran {
     target_block_id: String,
     model: Vec<String>,
     mcp: Vec<String>,
-}
-
-/// A stream that reports `reference` and ends with a `propose_edit` call of `change` and a
-/// `finish` call.
-fn propose_then_finish_stream(reference: &str, change: &Value) -> String {
-    let call = |id: &str, name: &str, arguments: String| {
-        json!({"id": format!("fc_{id}"), "type": "function_call", "status": "completed",
-               "call_id": format!("call_{id}"), "name": name, "arguments": arguments})
-    };
-    let calls = [
-        call("propose", "propose_edit", change.to_string()),
-        call("finish", "finish", "{}".to_owned()),
-    ];
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": calls[0]}),
-        json!({"type": "response.output_item.done", "output_index": 1, "item": calls[1]}),
-        json!({"type": "response.completed", "response": {
-            "id": reference, "status": "completed", "output": calls,
-            "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ])
 }
 
 fn text_result(text: &str, is_error: bool) -> ToolSide {
@@ -569,7 +548,13 @@ async fn a_prose_continuation_opens_a_proposal_with_its_tool_result_lineage() {
                 "changes": [{"block_id": block, "candidate_text": "Two high waters came each day.",
                              "explanation": "The search result gives the tides."}]});
             vec![
-                propose_then_finish_stream("resp_e55_2", &change),
+                calls_stream(
+                    "resp_e55_2",
+                    &[
+                        ("call_propose", "propose_edit", &change.to_string()),
+                        ("call_finish", "finish", "{}"),
+                    ],
+                ),
                 advisory_stream("resp_e55_3"),
             ]
         },
