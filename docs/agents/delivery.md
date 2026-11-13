@@ -4,7 +4,7 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 800 counted lines only when the lines above the limit are mechanical or generated.
+- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
 - **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 800 counted lines.
 - **Executor:** one session for each ticket, in its own worktree and branch. It implements the ticket, opens the ticket pull request, runs the checks and the review, and sends the final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. `make review` starts it. The reviewer is never the agent tool that implements the ticket. [Codex review](#codex-review) tells who runs `make review`.
