@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
+import { BINDING, REPLY_FORM_FAKE_ENV, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
   problemOf, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
@@ -18,6 +18,8 @@ import { queryStoryOSPostgres } from "../support/node-integration.ts";
 // schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path. A read that
 // is bound to the latest Project Snapshot also proves its expired-Snapshot answer.
 const server = serverForFile();
+// #1463 owns the rows of a streamed Proposal: only the reply form profile of the fake streams Proposal generation.
+const replyFormServer = serverForFile(REPLY_FORM_FAKE_ENV);
 afterAll(() => drainLeftoverWork());
 
 const CATALOG = (JSON.parse(readFileSync(new URL(
@@ -42,7 +44,7 @@ async function chapter(story: TestStory, index = 0) {
  * Proposal Generation. */
 async function proposed(title: string, options: { streamed?: true } = {}) {
   await drainLeftoverWork();
-  const story = await createStory(server, { title, assistance: true });
+  const story = await createStory(options.streamed === true ? replyFormServer : server, { title, assistance: true });
   const target = (await chapter(story)).current_revision.revision_id;
   const proposal = options.streamed === true ? await streamedProposal(story) : (await openProposal(story)).proposal;
   const session = await story.openEditorSession();

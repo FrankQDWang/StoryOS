@@ -24,7 +24,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, REPLY_FORM_FAKE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
+import { BINDING, PROSE, REPLY_FORM_FAKE_ENV, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
   inspectRun, issueChallenge, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 // The test Server offers the tool loop profile of the fake destination (ADR 0091).
@@ -300,7 +300,7 @@ test("Worker distinguishes prose-change, a question, and CFP holds", async () =>
 
 // #1463 owns this test: the typed output shapes exist only in the reply form profile.
 test("Worker selects no decision from an unselected or invalid typed output of the reply form", async () => {
-  const started = await startServer(REPLY_FORM_FAKE);
+  const started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e1a1"), "Typed Output Novel", "ed");
