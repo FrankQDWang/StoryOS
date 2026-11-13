@@ -214,6 +214,16 @@ pub(crate) fn evidence_item(
     }
 }
 
+/// The scripted outcome of a model response that each profile has: a stream state, a partial
+/// tool call, or a refusal. `SCRIPT:invalid` and `SCRIPT:unselected` are typed output shapes of
+/// the reply form only.
+pub(crate) fn response_outcome(author_message: &str) -> Option<FakeCreate> {
+    match author_message {
+        "SCRIPT:invalid" | "SCRIPT:unselected" => None,
+        _ => scripted_plan(author_message),
+    }
+}
+
 fn scripted_plan(author_message: &str) -> Option<FakeCreate> {
     let state = match author_message {
         "SCRIPT:partial" => StreamItemState::Provisional,
