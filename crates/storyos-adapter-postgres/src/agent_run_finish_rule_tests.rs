@@ -383,10 +383,11 @@ async fn the_last_of_24_run_steps_gives_its_text_as_the_final_answer_and_execute
 
 /// The fake destination with the `SCRIPT:never_finish` script for each create before the last
 /// RunStep. The recovery script of the author message loses the first create of the last
-/// RunStep. A text and a `finish` call answer the Retrieve of its reference when `retrieved`,
-/// and the successor create.
+/// RunStep. A `finish` call, with a text unless `quiet`, answers the Retrieve of its reference
+/// when `retrieved`, and the successor create.
 struct LoseLastCreate {
     retrieved: bool,
+    quiet: bool,
 }
 
 enum LastStepExchange {
@@ -456,7 +457,10 @@ impl ModelProviderAdapter for LoseLastCreate {
             };
             return Observation::Terminal(ModelResponse {
                 state: StreamItemState::Complete,
-                items: vec![text, call],
+                items: match self.quiet {
+                    true => vec![call],
+                    false => vec![text, call],
+                },
                 output: None,
                 usage: ModelUsage::Unknown,
                 cache_use: CacheUse::Unknown,
@@ -476,10 +480,12 @@ async fn a_recovered_response_of_the_last_run_step_executes_no_call() {
     let (store, admin) = stores().await;
     // The author message selects the recovery path. The adapter scripts each response.
     let cases = [
-        (["2db", "2dc"], "SCRIPT:retrieve-complete", true),
-        (["2dd", "2de"], "SCRIPT:successor-once", false),
+        (["2db", "2dc"], "SCRIPT:retrieve-complete", true, false),
+        (["2dd", "2de"], "SCRIPT:successor-once", false, false),
+        (["2df", "2e0"], "SCRIPT:retrieve-complete", true, true),
+        (["2e1", "2e2"], "SCRIPT:successor-once", false, true),
     ];
-    for (prefixes, message, retrieved) in cases {
+    for (prefixes, message, retrieved, quiet) in cases {
         let destination = DeploymentDestination::HostFakeToolLoop;
         let (scope, chapter_id, first) =
             queued_run_offering(&store, prefixes[0], destination.clone(), None).await;
@@ -498,7 +504,7 @@ async fn a_recovered_response_of_the_last_run_step_executes_no_call() {
         let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
         complete_agent_run(
             &store,
-            &LoseLastCreate { retrieved },
+            &LoseLastCreate { retrieved, quiet },
             &NoContractFaults,
             &RuntimeClock,
             &claim,
@@ -512,18 +518,32 @@ async fn a_recovered_response_of_the_last_run_step_executes_no_call() {
             .unwrap()
             .unwrap();
 
+        let answer = match record.decision {
+            AgentRunDecisionInspect::Advisory { text, .. } => json!(text),
+            AgentRunDecisionInspect::Absent => Value::Null,
+            other => panic!("{message}: {other:?}"),
+        };
+
         // The `finish` call of the recovered response of RunStep 24 has no ToolCall, and no
-        // RunStep 25 opens.
+        // RunStep 25 opens. A response with no text completes the Run with no result.
         assert_eq!(
             (
                 steps(&admin, &run_id).await.len(),
                 (calls.len(), calls.last().map(|call| call[0].clone())),
                 record.status,
-                matches!(record.decision, AgentRunDecisionInspect::Advisory { ref text, .. }
-                    if text == LIMIT_ANSWER),
+                answer,
             ),
-            (24, (46, Some(json!(22))), AgentRunStatus::Completed, true),
-            "{message}"
+            (
+                24,
+                (46, Some(json!(22))),
+                AgentRunStatus::Completed,
+                if quiet {
+                    Value::Null
+                } else {
+                    json!(LIMIT_ANSWER)
+                },
+            ),
+            "{message} {quiet}"
         );
     }
 }

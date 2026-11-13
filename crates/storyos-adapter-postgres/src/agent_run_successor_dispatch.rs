@@ -281,7 +281,8 @@ pub(crate) async fn record(
                 validate_agent_decision(output, &declared, &citable, batch)
             };
             let outcome =
-                crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?;
+                crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?
+                    .unwrap_or(AgentDecisionOutcome::NoDecision);
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,

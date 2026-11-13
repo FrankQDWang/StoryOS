@@ -70,16 +70,16 @@ fn declares_host_tools(run: &RunPhaseRow) -> bool {
 
 /// The outcome of a response that a recovery path settles in the active RunStep of `run`. In the
 /// last RunStep, the finish rule applies as for a created response (ADR 0091 section 5): the text
-/// is the final answer, and a response with no text gives no Decision. The function calls of the
-/// response leave the items, so the Host executes none.
+/// is the final answer, and `None` tells that a complete response with no text gives no result.
+/// The function calls of the response leave the items, so the Host executes none.
 pub(crate) fn recovered_outcome(
     run: &RunPhaseRow,
     response: &mut storyos_application::ModelResponse,
     outcome: storyos_core::AgentDecisionOutcome,
-) -> Result<storyos_core::AgentDecisionOutcome, CompleteAgentRunError> {
+) -> Result<Option<storyos_core::AgentDecisionOutcome>, CompleteAgentRunError> {
     let limit = run_step_limit(run)?;
     if limit.executes_calls(declares_host_tools(run)) {
-        return Ok(outcome);
+        return Ok(Some(outcome));
     }
     response
         .items
@@ -92,11 +92,9 @@ pub(crate) fn recovered_outcome(
             response.state,
             &response.items,
         ) {
-            storyos_core::FinishRuleOutcome::Settle(outcome) => outcome,
+            storyos_core::FinishRuleOutcome::Settle(outcome) => Some(outcome),
             storyos_core::FinishRuleOutcome::NextRunStep
-            | storyos_core::FinishRuleOutcome::NoResult => {
-                storyos_core::AgentDecisionOutcome::NoDecision
-            }
+            | storyos_core::FinishRuleOutcome::NoResult => None,
         },
     )
 }

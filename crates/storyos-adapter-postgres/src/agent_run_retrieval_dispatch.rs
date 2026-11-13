@@ -252,6 +252,10 @@ pub(crate) async fn record_original_result(
             sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
             (false, CreateSettlement::FunctionRequested)
         }
+        (AgentDecisionOutcome::NoDecision, false) if selected.no_result => {
+            sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
+            (false, CreateSettlement::NoResult)
+        }
         (AgentDecisionOutcome::Decision { .. }, true)
         | (AgentDecisionOutcome::NoDecision, false) => {
             return Err(unavailable(std::io::Error::other(
@@ -375,6 +379,9 @@ pub(crate) struct SelectedResult {
     /// The complete response asks for a function, and no ToolCall exists. The Host keeps it as
     /// evidence and settles the Run with the research refusal (ADR 0084).
     pub function_requested: bool,
+    /// The complete closing response of the last RunStep has no text: no Decision, and the Run
+    /// completes with no result (ADR 0091 section 5).
+    pub no_result: bool,
 }
 
 impl RetrievedResult {
@@ -422,7 +429,22 @@ impl RetrievedResult {
             validate_agent_decision(output, declared, &citable, batch)
         };
         let outcome = crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?;
+        let no_result = outcome.is_none();
+        let outcome = outcome.unwrap_or(AgentDecisionOutcome::NoDecision);
         Ok(match outcome {
+            AgentDecisionOutcome::NoDecision if no_result => Self {
+                kind: RetrievedOriginalResult::CompleteSelected,
+                items,
+                selected: Some(SelectedResult {
+                    response,
+                    outcome,
+                    function_requested: false,
+                    no_result,
+                }),
+                usage,
+                batch_evidence,
+                synthesis_refusal,
+            },
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
@@ -430,6 +452,7 @@ impl RetrievedResult {
                     response,
                     outcome,
                     function_requested: false,
+                    no_result,
                 }),
                 usage,
                 batch_evidence,
@@ -450,6 +473,7 @@ impl RetrievedResult {
                         response,
                         outcome: AgentDecisionOutcome::NoDecision,
                         function_requested: true,
+                        no_result,
                     }),
                     usage,
                     batch_evidence,
