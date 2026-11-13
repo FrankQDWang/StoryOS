@@ -12,13 +12,13 @@ use storyos_core::{
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_control::lock_agent_run;
+use crate::agent_run_control::{CONTROL_SETTLEMENTS, lock_agent_run};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, Admission, AppliedVariant, Classification, CommandResponse,
     CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand, ReceiptHeads,
     ReplayEffect, ZeroAuthority, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt,
-    settle_project_command, unavailable,
+    settle_project_command_after_contention, unavailable,
 };
 
 const ACTIVITY_KIND: &str = "agent_run_steering_retained";
@@ -32,7 +32,7 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &SteerAgentRunInput,
     ) -> Result<SteerAgentRunSettlement, SteerAgentRunError> {
-        settle_project_command(self, envelope, input).await
+        settle_project_command_after_contention(self, envelope, input, CONTROL_SETTLEMENTS).await
     }
 }
 

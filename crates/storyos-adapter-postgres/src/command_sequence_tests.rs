@@ -71,7 +71,7 @@ mod author_edit;
 mod secondary_operation;
 
 pub(crate) use acceptance::ACCEPT_PROPOSAL;
-pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN};
+pub(crate) use agent_run::{CANCEL_AGENT_RUN, CREATE_AGENT_RUN, PAUSE_AGENT_RUN};
 pub(crate) use project_session::{UPDATE_PROJECT, UPDATE_PROJECT_ASSISTANCE};
 pub(crate) use proposal_decision::{REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL};
 pub(crate) use steer_agent_run::STEER_AGENT_RUN;

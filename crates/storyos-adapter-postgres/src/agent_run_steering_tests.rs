@@ -514,7 +514,7 @@ async fn run_steps(admin: &Client, run_id: &str) -> Value {
 }
 
 /// The claim of a cancelled Run that has cancellation duties, as the Worker claims it.
-async fn claim_duties(
+pub(crate) async fn claim_duties(
     admin: &Client,
     scope: &ProjectScope,
     run_id: &str,
