@@ -317,9 +317,9 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
     let (store, admin) = stores().await;
     let mut states = Vec::new();
     for (prefixes, suffix, command) in [
-        (["b60", "b61"], 0xb6c0_u16, "accept"),
-        (["b62", "b63"], 0xb6d0, "reject"),
-        (["b64", "b65"], 0xb6e0, "withdraw"),
+        (["b60", "b61"], 0xb6f0_u16, "accept"),
+        (["b62", "b63"], 0xb6f2, "reject"),
+        (["b64", "b65"], 0xb6f4, "withdraw"),
     ] {
         let (scope, run_id) = revise_run(
             &store,
@@ -435,11 +435,16 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
     );
 }
 
-/// The fake destination for a Run with the author message `SCRIPT:successor-once`, which loses
-/// the first create. The successor create and each later create get the response of `REVISE`.
-struct ReviseInSuccessor;
+/// The fake destination with the response of `REVISE` and `script` for each create, except the
+/// first create with `lost` Tool outputs, which keeps the author message of the Run, and the
+/// first create with `refused` Tool outputs, which the destination refuses.
+struct ReviseScript {
+    lost: Option<usize>,
+    refused: Option<usize>,
+    script: &'static str,
+}
 
-impl ModelProviderAdapter for ReviseInSuccessor {
+impl ModelProviderAdapter for ReviseScript {
     const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
     type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
 
@@ -448,14 +453,21 @@ impl ModelProviderAdapter for ReviseInSuccessor {
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
         let mut prepared = FakeDestination.prepare(request).await?;
-        if let DestinationRequest::Create(create) = request
-            && (create.successor_of.is_some() || !create.tool_outputs.is_empty())
-        {
-            let revise = DestinationRequest::Create(CreateRequest {
-                author_message: REVISE.to_owned(),
-                ..create.clone()
-            });
-            prepared.prepared = FakeDestination.prepare(&revise).await?.prepared;
+        if let DestinationRequest::Create(create) = request {
+            let first = create
+                .successor_of
+                .is_none()
+                .then_some(create.tool_outputs.len());
+            if first.is_some() && first == self.refused {
+                return Err(PreDispatchRefusal::UnsupportedRequest);
+            }
+            if first.is_none() || first != self.lost {
+                let revise = DestinationRequest::Create(CreateRequest {
+                    author_message: format!("{REVISE}{}", self.script),
+                    ..create.clone()
+                });
+                prepared.prepared = FakeDestination.prepare(&revise).await?.prepared;
+            }
         }
         Ok(prepared)
     }
@@ -471,63 +483,111 @@ impl ModelProviderAdapter for ReviseInSuccessor {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_call_of_a_successor_attempt_opens_its_proposal_from_the_decision_of_that_attempt() {
+async fn a_successor_call_or_a_later_refusal_keeps_the_proposal_of_the_decision_of_the_call() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let destination = DeploymentDestination::HostFakeToolLoop;
-    let (scope, chapter_id, first) =
-        queued_run_offering(&store, "b66", destination.clone(), None).await;
-    complete(&store, &admin, &scope, &first).await;
-    let message = "SCRIPT:successor-once";
-    let new = ConversationSelection::New;
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "b67",
-        destination,
-        message,
-        new,
-        None,
-    )
-    .await;
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(
-        &store,
-        &ReviseInSuccessor,
-        &NoContractFaults,
-        &RuntimeClock,
-        &claim,
-    )
-    .await
-    .unwrap();
-    let source = admin
-        .query_one(
-            "SELECT count(*), bool_and(proposal.source_decision_id = call.decision_id),
-                    min(attempt.attempt_role)
-               FROM storyos.proposals AS proposal
-               JOIN storyos.tool_calls AS call ON call.run_id = proposal.source_run_id
-                AND call.function_name = 'propose_edit'
-               JOIN storyos.model_attempts AS attempt
-                 ON attempt.model_attempt_id = call.model_attempt_id
-                AND attempt.payload ? 'proposed_edit'
-              WHERE proposal.source_run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
+    let undeclared = json!([
+        0,
+        "refused",
+        "undeclared_block",
+        "The Host refused this call because it names a block that is not a target block of \
+         this request, so no Proposal opened."
+    ]);
+    let lost = "SCRIPT:successor-once";
+    // The successor of the first RunStep, the successor of a continuation RunStep, and a
+    // refusal of the destination after the call.
+    let cases = [
         (
-            propose_edit_calls(&admin, &run_id).await,
-            source.get::<_, i64>(/*idx*/ 0),
-            source.get::<_, bool>(/*idx*/ 1),
-            source.get::<_, String>(/*idx*/ 2),
+            ["b66", "b67"],
+            lost,
+            (Some(0), None, ""),
+            vec![opened(0)],
+            "successor",
+            None,
         ),
-        (vec![opened(0)], 1, true, "successor".to_owned())
-    );
+        (
+            ["b6b", "b6c"],
+            lost,
+            (Some(1), None, " SCRIPT:propose_refused_once"),
+            vec![undeclared, opened(1)],
+            "successor",
+            Some(true),
+        ),
+        (
+            ["b6d", "b6e"],
+            "Revise these passages in the narrator voice. SCRIPT:propose_again",
+            (None, Some(1), " SCRIPT:propose_again"),
+            vec![opened(0)],
+            "decision",
+            None,
+        ),
+    ];
+    for (prefixes, message, (lost, refused, script), expected, role, lineage) in cases {
+        let destination = DeploymentDestination::HostFakeToolLoop;
+        let (scope, chapter_id, first) =
+            queued_run_offering(&store, prefixes[0], destination.clone(), None).await;
+        complete(&store, &admin, &scope, &first).await;
+        let new = ConversationSelection::New;
+        let run_id = admit_run_in(
+            &store,
+            &scope,
+            &chapter_id,
+            prefixes[1],
+            destination,
+            message,
+            new,
+            None,
+        )
+        .await;
+        let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        let adapter = ReviseScript {
+            lost,
+            refused,
+            script,
+        };
+        complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
+            .await
+            .unwrap();
+        let source = admin
+            .query_one(
+                "SELECT proposal.source_decision_id = call.decision_id, attempt.attempt_role,
+                        proposal.source_lineage ->> 'model_attempt_id' = call.model_attempt_id::text
+                   FROM storyos.proposals AS proposal
+                   JOIN storyos.tool_calls AS call ON call.run_id = proposal.source_run_id
+                    AND call.function_name = 'propose_edit' AND call.state = 'settled'
+                   JOIN storyos.model_attempts AS attempt
+                     ON attempt.model_attempt_id = call.model_attempt_id
+                  WHERE proposal.source_run_id = $1::text::uuid",
+                &[&run_id],
+            )
+            .await
+            .unwrap();
+        let record = store
+            .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            (
+                propose_edit_calls(&admin, &run_id).await,
+                source.get::<_, bool>(/*idx*/ 0),
+                source.get::<_, String>(/*idx*/ 1),
+                source.get::<_, Option<bool>>(/*idx*/ 2),
+                matches!(
+                    record.decision,
+                    AgentRunDecisionInspect::ProseChange {
+                        locations: Some(_),
+                        ..
+                    }
+                ),
+            ),
+            (expected, true, role.to_owned(), lineage, true),
+            "{prefixes:?}"
+        );
+    }
 }
 
 #[tokio::test]

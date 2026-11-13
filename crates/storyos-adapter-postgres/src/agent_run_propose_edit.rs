@@ -182,7 +182,8 @@ async fn open(
 }
 
 /// Gives a Run that made a Proposal with `propose_edit` the public `prose_change` of its last
-/// such call in place of its final answer. A Run with ToolCalls in progress keeps its `decision`.
+/// such call in place of its final answer or of a later refusal. A Run with ToolCalls in
+/// progress keeps its `decision`.
 pub(crate) async fn public_decision(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -190,7 +191,7 @@ pub(crate) async fn public_decision(
     decision: &mut AgentRunDecisionInspect,
 ) -> Result<(), CreateAgentRunError> {
     let continuation_binding_id = match decision {
-        AgentRunDecisionInspect::Absent => None,
+        AgentRunDecisionInspect::Absent | AgentRunDecisionInspect::ExecutionRefused { .. } => None,
         AgentRunDecisionInspect::Advisory {
             continuation_binding_id,
             ..
@@ -199,8 +200,7 @@ pub(crate) async fn public_decision(
             continuation_binding_id,
             ..
         } => continuation_binding_id.clone(),
-        AgentRunDecisionInspect::ExecutionRefused { .. }
-        | AgentRunDecisionInspect::ProseChange { .. }
+        AgentRunDecisionInspect::ProseChange { .. }
         | AgentRunDecisionInspect::ToolRequest { .. }
         | AgentRunDecisionInspect::ResearchSynthesis { .. } => return Ok(()),
     };
