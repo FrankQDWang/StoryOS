@@ -58,6 +58,8 @@ pub(crate) enum AuthorAction {
     Accept(Box<CommandCall<storyos_application::AcceptProposalInput>>),
     Reject(Box<CommandCall<storyos_application::RejectProposalOperationsInput>>),
     Withdraw(Box<CommandCall<storyos_application::WithdrawProposalInput>>),
+    /// Each action in order.
+    Sequence(Vec<AuthorAction>),
 }
 
 /// The fake model of the tool loop profile, and the author who acts one time at `moment`.
@@ -85,60 +87,74 @@ impl<'a> AuthorAt<'a> {
     }
 
     async fn act(&self) {
-        match &self.action {
-            AuthorAction::Steer(calls) => {
-                for call in calls {
-                    let answer = match self
-                        .store
-                        .steer_agent_run(&call.envelope, &call.input)
-                        .await
-                    {
-                        Ok(settlement) => match settlement.outcome {
-                            TransitionOutcome::NoEffect(
-                                SteerAgentRunNoEffect::SteeringRetained,
-                            ) => SteeringAnswer::Retained,
-                            TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun) => {
-                                SteeringAnswer::Conflicted
+        self.act_on(&self.action).await;
+    }
+
+    fn act_on<'b>(
+        &'b self,
+        action: &'b AuthorAction,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'b>> {
+        Box::pin(async move {
+            match action {
+                AuthorAction::Steer(calls) => {
+                    for call in calls {
+                        let answer = match self
+                            .store
+                            .steer_agent_run(&call.envelope, &call.input)
+                            .await
+                        {
+                            Ok(settlement) => match settlement.outcome {
+                                TransitionOutcome::NoEffect(
+                                    SteerAgentRunNoEffect::SteeringRetained,
+                                ) => SteeringAnswer::Retained,
+                                TransitionOutcome::Conflicted(
+                                    SteerAgentRunConflict::TerminalRun,
+                                ) => SteeringAnswer::Conflicted,
+                                TransitionOutcome::Applied(applied) => match applied.effect {},
+                                TransitionOutcome::Refused(reason) => match reason {},
+                            },
+                            Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
+                                SteeringAnswer::Refused(refusal)
                             }
-                            TransitionOutcome::Applied(applied) => match applied.effect {},
-                            TransitionOutcome::Refused(reason) => match reason {},
-                        },
-                        Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
-                            SteeringAnswer::Refused(refusal)
-                        }
-                        Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
-                    };
-                    self.answers.lock().unwrap().push(answer);
+                            Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
+                        };
+                        self.answers.lock().unwrap().push(answer);
+                    }
+                }
+                AuthorAction::Cancel(call) => {
+                    self.store
+                        .cancel_agent_run(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Edit(command) => {
+                    self.store.apply_author_edit(command).await.unwrap();
+                }
+                AuthorAction::Accept(call) => {
+                    self.store
+                        .accept_proposal(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Reject(call) => {
+                    self.store
+                        .reject_proposal_operations(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Withdraw(call) => {
+                    self.store
+                        .withdraw_proposal(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Sequence(actions) => {
+                    for action in actions {
+                        self.act_on(action).await;
+                    }
                 }
             }
-            AuthorAction::Cancel(call) => {
-                self.store
-                    .cancel_agent_run(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-            AuthorAction::Edit(command) => {
-                self.store.apply_author_edit(command).await.unwrap();
-            }
-            AuthorAction::Accept(call) => {
-                self.store
-                    .accept_proposal(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-            AuthorAction::Reject(call) => {
-                self.store
-                    .reject_proposal_operations(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-            AuthorAction::Withdraw(call) => {
-                self.store
-                    .withdraw_proposal(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-        }
+        })
     }
 }
 

@@ -201,7 +201,49 @@ impl Fixture {
         )
     }
 
-    /// The Author Edit that puts `text` before the candidate text of `reference`. `sequence` is
+    /// Applies the Author Edit that puts `text` before the text of the first Chapter Block.
+    /// `sequence` is the local intent sequence of the Editor Session of the fixture, from 2.
+    pub(crate) async fn edit_chapter(
+        &self,
+        store: &PostgresProjectReader,
+        sequence: u64,
+        text: &str,
+    ) {
+        let prefix = format!("{:03x}", self.lead + 7);
+        let (editor_session_id, _) = self.writer();
+        let edit = NamedEdit {
+            editor_session_id: editor_session_id.as_ref(),
+            chapter_id: &self.chapter_id,
+            expected_revision_id: &self.head,
+            suffix: &format!("{prefix}{sequence}"),
+            local_intent_sequence: sequence,
+            text,
+            proposal_target: None,
+        };
+        let command = adjusted_edit_command(store, &self.scope, edit, |command| {
+            command.challenge_binding.challenge_rate_policy_revision =
+                storyos_application::ChallengeRateClass::AuthorEdit
+                    .policy_revision()
+                    .to_owned();
+            command.author_edit_units = vec![AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceBlockSelection {
+                    manuscript_block_id: self.blocks[0].clone(),
+                    from: 0,
+                    to: 0,
+                    text: text.to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                    from: 0,
+                    to: 0,
+                },
+            }];
+        })
+        .await;
+        store.apply_author_edit(&command).await.unwrap();
+    }
+
+    /// The Author Edit that makes `change` to the candidate text of `reference`. `sequence` is
     /// the local intent sequence of the Editor Session of the fixture, from 2.
     pub(crate) async fn candidate_edit(
         &self,
@@ -209,18 +251,25 @@ impl Fixture {
         admin: &Client,
         reference: &SelectionReference,
         sequence: u64,
-        text: &str,
+        change: CandidateChange<'_>,
     ) -> ApplyAuthorEditCommand {
         let target = reference.candidate_target().expect("candidate reference");
-        let manuscript_block_id = admin
+        let row = admin
             .query_one(
-                "SELECT manuscript_block_id::text FROM storyos.proposal_operations
+                "SELECT manuscript_block_id::text, candidate_text FROM storyos.proposal_operations
                   WHERE operation_id = $1::text::uuid",
                 &[&target.operation_id],
             )
             .await
-            .unwrap()
-            .get(/*idx*/ 0);
+            .unwrap();
+        let manuscript_block_id = row.get(/*idx*/ 0);
+        let (to, text) = match change {
+            CandidateChange::Prefix(text) => (0, text),
+            CandidateChange::RemoveAll => (
+                row.get::<_, &str>(/*idx*/ 1).encode_utf16().count() as u32,
+                "",
+            ),
+        };
         let prefix = format!("{:03x}", self.lead + 7);
         let (editor_session_id, _) = self.writer();
         let edit = NamedEdit {
@@ -242,9 +291,29 @@ impl Fixture {
                 storyos_application::ChallengeRateClass::AuthorEdit
                     .policy_revision()
                     .to_owned();
+            command.author_edit_units = vec![AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                    from: 0,
+                    to,
+                    text: text.to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                    from: 0,
+                    to,
+                },
+            }];
         })
         .await
     }
+}
+
+/// One Author Edit of a candidate text.
+pub(crate) enum CandidateChange<'a> {
+    /// Puts the text before the candidate text.
+    Prefix(&'a str),
+    /// Removes all of the candidate text.
+    RemoveAll,
 }
 
 /// The Blocks of the Authoritative Revision `revision_id` in order.

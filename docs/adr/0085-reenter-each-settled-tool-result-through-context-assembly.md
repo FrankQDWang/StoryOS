@@ -63,9 +63,10 @@ A Proposal that a `tool_result_continuation` RunStep opens records `source_linea
 
 The author decided this rule on 2026-11-13 ([#1483](https://github.com/FrankQDWang/StoryOS/issues/1483)). It applies to each RunStep after the first RunStep of a Run in the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md).
 
-- Before a RunStep assembles its context again, the candidate target and each candidate reference of the Run move to the current revision of their candidate when that candidate is still pending. For example, the author edited the candidate during the Run. The RunStep is not blocked for this cause, also when it is the closing RunStep.
+- Before a RunStep assembles its context again, the candidate target and each candidate reference of the Run move to the current revision of their candidate when that candidate is still pending. The candidate references of the steering input that the RunStep reads move in the same way. For example, the author edited the candidate during the Run. The RunStep is not blocked for this cause, also when it is the closing RunStep.
 - The RunStep sends the current candidate text. Its Context Assembly records and its Outbound Disclosure Event have the new revision, as they have each sent item.
 - A reference whose candidate text changed covers all of the current text. A reference to an unchanged candidate of the same Proposal keeps its range.
+- When the author removed all of the text of a pending candidate, its reference covers the empty text and is available. This is the one exception to the rule of ADR 0062 that an empty range is unavailable.
 - The Host refuses a `propose_edit` call on a candidate that changed after its request read it. The refusal is `stale_candidate`, and the result of the call gives this reason. The refusal counts in the limit of 3 refused calls of ADR 0091. The model can call again on the current revision in a later RunStep.
 - A Run that makes no accepted call after such a change completes with the final answer of the model.
 - These changes during the Run keep the rule before this amendment: the context of the next RunStep is blocked, and the Run is refused with `blocked_context`.

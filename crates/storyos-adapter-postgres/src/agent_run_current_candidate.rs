@@ -2,7 +2,10 @@
 //! changes such a candidate during the Run, the next RunStep reads its current revision (ADR 0085).
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{CurrentCandidate, CurrentPassageAssemblyRecord, ProposalCandidateTarget};
+use storyos_core::{
+    AdmittedSelection, CurrentCandidate, CurrentPassageAssemblyRecord, ProposalCandidateTarget,
+    SelectionReference,
+};
 
 use crate::agent_run_work::complete_database_error;
 
@@ -27,14 +30,78 @@ pub(crate) async fn follow(
                 .filter_map(|admitted| admitted.reference.candidate_target()),
         )
         .collect();
+    let rows = current_rows(client, claim, targets).await?;
+    let current = current_candidates(&rows);
+    if let Some(target) = requirement.candidate_target.as_mut()
+        && let Some(candidate) = current.iter().find(|candidate| {
+            candidate.target.proposal_id == target.proposal_id
+                && candidate.target.operation_id == target.operation_id
+        })
+    {
+        target.revision_id.clone_from(&candidate.target.revision_id);
+    }
+    storyos_core::follow_current_candidates(
+        requirement.selection_references.iter_mut().flatten(),
+        &current,
+    );
+    Ok(())
+}
+
+/// Moves each candidate reference of a steering input to the current revision of its candidate
+/// when that candidate is still pending. A moved reference covers all of the current text.
+pub(crate) async fn follow_added(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    added: &mut [SelectionReference],
+) -> Result<(), CompleteAgentRunError> {
+    let targets = added
+        .iter()
+        .filter_map(SelectionReference::candidate_target)
+        .collect();
+    let rows = current_rows(client, claim, targets).await?;
+    let mut admitted: Vec<AdmittedSelection> = added
+        .iter()
+        .map(|reference| AdmittedSelection {
+            reference: reference.clone(),
+            selected_text: None,
+            manuscript_block_ids: Vec::new(),
+            candidate_text: None,
+        })
+        .collect();
+    storyos_core::follow_current_candidates(&mut admitted, &current_candidates(&rows));
+    for (reference, followed) in added.iter_mut().zip(admitted) {
+        *reference = followed.reference;
+    }
+    Ok(())
+}
+
+fn current_candidates(rows: &[tokio_postgres::Row]) -> Vec<CurrentCandidate<'_>> {
+    rows.iter()
+        .map(|row| CurrentCandidate {
+            target: ProposalCandidateTarget {
+                proposal_id: row.get(/*idx*/ 0),
+                operation_id: row.get(/*idx*/ 1),
+                revision_id: row.get(/*idx*/ 2),
+            },
+            candidate_text: row.get(/*idx*/ 3),
+        })
+        .collect()
+}
+
+/// The head revision and the candidate text of each of `targets` that is still pending.
+async fn current_rows(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    targets: Vec<ProposalCandidateTarget>,
+) -> Result<Vec<tokio_postgres::Row>, CompleteAgentRunError> {
     if targets.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let (proposals, operations): (Vec<String>, Vec<String>) = targets
         .into_iter()
         .map(|target| (target.proposal_id, target.operation_id))
         .unzip();
-    let rows = client
+    client
         .query(
             "SELECT DISTINCT operation.proposal_id::text, operation.operation_id::text,
                     head.current_revision_id::text, operation.candidate_text
@@ -59,31 +126,7 @@ pub(crate) async fn follow(
             ],
         )
         .await
-        .map_err(complete_database_error)?;
-    let current: Vec<CurrentCandidate<'_>> = rows
-        .iter()
-        .map(|row| CurrentCandidate {
-            target: ProposalCandidateTarget {
-                proposal_id: row.get(/*idx*/ 0),
-                operation_id: row.get(/*idx*/ 1),
-                revision_id: row.get(/*idx*/ 2),
-            },
-            candidate_text: row.get(/*idx*/ 3),
-        })
-        .collect();
-    if let Some(target) = requirement.candidate_target.as_mut()
-        && let Some(candidate) = current.iter().find(|candidate| {
-            candidate.target.proposal_id == target.proposal_id
-                && candidate.target.operation_id == target.operation_id
-        })
-    {
-        target.revision_id.clone_from(&candidate.target.revision_id);
-    }
-    storyos_core::follow_current_candidates(
-        requirement.selection_references.iter_mut().flatten(),
-        &current,
-    );
-    Ok(())
+        .map_err(complete_database_error)
 }
 
 #[cfg(test)]

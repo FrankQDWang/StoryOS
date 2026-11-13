@@ -2,21 +2,25 @@
 //! (ADR 0085, ADR 0091), with the fake model of that profile.
 
 use serde_json::{Value, json};
+use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AcceptProposalInput, AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore,
-    ProjectScope, RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput,
-    WithdrawalNote,
+    ChapterId, DeleteChapterInput, ProjectScope, RejectProposalOperationsInput, RejectionNote,
+    WithdrawProposalInput, WithdrawalNote,
 };
 use storyos_core::{DeploymentDestination, SelectionReference};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{admit_referenced_run, stores};
-use crate::agent_run_propose_edit::revise_tests::Fixture;
+use crate::agent_run_propose_edit::revise_tests::{CandidateChange, Fixture};
 use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
-use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, settle, step_references};
+use crate::agent_run_steering::tests::{
+    AuthorAction, AuthorAt, Moment, settle, steering, step_references,
+};
 use crate::command_sequence::tests::{
-    ACCEPT_PROPOSAL, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, issued,
+    ACCEPT_PROPOSAL, DELETE_CHAPTER, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, delete_chapter,
+    issued, named_call,
 };
 
 const EDITED: &str = "Still, ";
@@ -99,7 +103,13 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
     )
     .await;
     let edit = fixture
-        .candidate_edit(&store, &admin, &reference, 2, EDITED)
+        .candidate_edit(
+            &store,
+            &admin,
+            &reference,
+            2,
+            CandidateChange::Prefix(EDITED),
+        )
         .await;
     let edited_text = format!("{EDITED}{before}");
     // The author edits the candidate while the first request is out.
@@ -191,7 +201,13 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
     )
     .await;
     let edit = fixture
-        .candidate_edit(&store, &admin, &reference, 2, EDITED)
+        .candidate_edit(
+            &store,
+            &admin,
+            &reference,
+            2,
+            CandidateChange::Prefix(EDITED),
+        )
         .await;
     let author = AuthorAt::new(
         &store,
@@ -340,5 +356,209 @@ async fn a_candidate_that_the_author_resolved_keeps_the_refusal_of_the_run() {
             expected("reject", &references[1]),
             expected("withdraw", &references[2]),
         ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_steering_reference_to_a_candidate_that_the_author_edited_moves_to_its_current_revision()
+{
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let fixture = Fixture::new(&store, &admin, 0x8e0, tool_loop.clone()).await;
+    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let reference = fixture.candidates(&admin).await.remove(0);
+    let run_id = admit_referenced_run(
+        &store,
+        scope,
+        chapter_id,
+        "8e2",
+        tool_loop,
+        "Help with this passage.",
+        Vec::new(),
+    )
+    .await;
+    let input = steering(
+        &store,
+        scope,
+        0x8ee0,
+        &run_id,
+        REVISE,
+        Some(vec![reference.clone()]),
+    )
+    .await;
+    let edit = fixture
+        .candidate_edit(
+            &store,
+            &admin,
+            &reference,
+            2,
+            CandidateChange::Prefix(EDITED),
+        )
+        .await;
+    // The steering input names the candidate, and then the author edits it.
+    let action = AuthorAction::Sequence(vec![
+        AuthorAction::Steer(vec![input]),
+        AuthorAction::Edit(Box::new(edit)),
+    ]);
+    let author = AuthorAt::new(&store, Moment::DuringRequest(1), action);
+    settle(&store, &admin, scope, &run_id, &author)
+        .await
+        .unwrap();
+    let edited: String = admin
+        .query_one(
+            "SELECT revision_id::text FROM storyos.proposal_revisions
+              WHERE candidate_text LIKE $1 AND proposal_id = $2::text::uuid",
+            &[
+                &format!("{EDITED}%"),
+                &reference.candidate_target().unwrap().proposal_id,
+            ],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let edited_text: String = admin
+        .query_one(
+            "SELECT candidate_text FROM storyos.proposal_revisions WHERE revision_id = $1::text::uuid",
+            &[&edited],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let (status, _) = settled(&store, scope, &run_id).await;
+    let steps = step_references(&admin, &run_id).await;
+
+    // The RunStep that reads the input reads the edited revision of its reference.
+    assert_eq!(
+        (
+            status,
+            steps[1].clone(),
+            sent_revision(&admin, &run_id, "1", &edited).await
+        ),
+        (
+            "Completed".to_owned(),
+            json!([1, [moved(&reference, &edited, &edited_text)]]),
+            json!([[edited_text], [edited_text]]),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let fixture = Fixture::new(&store, &admin, 0x8e8, tool_loop.clone()).await;
+    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let reference = fixture.candidates(&admin).await.remove(0);
+    let run_id = admit_referenced_run(
+        &store,
+        scope,
+        chapter_id,
+        "8ea",
+        tool_loop,
+        REVISE,
+        vec![reference.clone()],
+    )
+    .await;
+    let edit = fixture
+        .candidate_edit(&store, &admin, &reference, 2, CandidateChange::RemoveAll)
+        .await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Edit(Box::new(edit)),
+    );
+    settle(&store, &admin, scope, &run_id, &author)
+        .await
+        .unwrap();
+    let (emptied, emptied_text) = current(&admin, &reference).await;
+    let (status, decision) = settled(&store, scope, &run_id).await;
+    let AgentRunDecisionInspect::Advisory { text, .. } = decision else {
+        panic!("{decision:?}");
+    };
+
+    // The reference covers the empty candidate, and the closing RunStep answers.
+    assert_eq!(
+        (
+            status,
+            text,
+            emptied_text.clone(),
+            step_references(&admin, &run_id).await[2].clone(),
+            sent_revision(&admin, &run_id, "2", &emptied).await,
+        ),
+        (
+            "Completed".to_owned(),
+            FINAL_TEXT.to_owned(),
+            String::new(),
+            json!([2, [moved(&reference, &emptied, "")]]),
+            json!([[""], [""]]),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of_the_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let mut observed = Vec::new();
+    for (lead, run_prefix, change) in [(0x3d0, "3d2", "removed"), (0x3d8, "3da", "over_limit")] {
+        let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
+        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let reference = fixture.candidates(&admin).await.remove(0);
+        let run_id = admit_referenced_run(
+            &store,
+            scope,
+            chapter_id,
+            run_prefix,
+            tool_loop.clone(),
+            REVISE,
+            vec![reference],
+        )
+        .await;
+        // The Chapter changes after the admission of the Run, before its first request.
+        if change == "removed" {
+            let expected_tree_revision: i64 = admin
+                .query_one(
+                    "SELECT tree_revision FROM storyos.projects WHERE project_id = $1::text::uuid",
+                    &[&scope.project_id.as_ref()],
+                )
+                .await
+                .unwrap()
+                .get(/*idx*/ 0);
+            let input = DeleteChapterInput {
+                chapter_id: ChapterId::new(chapter_id.as_str()),
+                expected_tree_revision: expected_tree_revision as u64,
+            };
+            let call = named_call(&store, scope, "3de0", &DELETE_CHAPTER, input).await;
+            delete_chapter(&store, &call).await.unwrap();
+        } else {
+            fixture.edit_chapter(&store, 2, &"a".repeat(32_001)).await;
+        }
+        settle(&store, &admin, scope, &run_id, &FakeDestination)
+            .await
+            .unwrap();
+        observed.push((change, settled(&store, scope, &run_id).await));
+    }
+    let refused = (
+        "Refused".to_owned(),
+        AgentRunDecisionInspect::ExecutionRefused {
+            capability: "blocked_context".to_owned(),
+        },
+    );
+
+    assert_eq!(
+        observed,
+        vec![("removed", refused.clone()), ("over_limit", refused)]
     );
 }

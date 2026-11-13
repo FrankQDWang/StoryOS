@@ -63,9 +63,12 @@ pub(crate) async fn read_next(
         author_message.push_str(&message.get::<_, String>(0));
     }
     // The references of this input join the Run references (ADR 0062).
-    let added: Option<Vec<SelectionReference>> =
+    let mut added: Option<Vec<SelectionReference>> =
         serde_json::from_str(&row.get::<_, String>(/*idx*/ 2))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    if let Some(added) = added.as_mut() {
+        crate::agent_run_current_candidate::follow_added(client, claim, added).await?;
+    }
     let run_references = requirement
         .selection_references
         .as_ref()

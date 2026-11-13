@@ -303,9 +303,10 @@ pub fn select_chapter_text(
     (!text.is_empty()).then(|| (text, covered.iter().map(|(id, _)| id.clone()).collect()))
 }
 
-/// The exact non-empty text between two UTF-16 offsets of a candidate text.
+/// The exact non-empty text between two UTF-16 offsets of a candidate text. An empty candidate,
+/// for example after the author removed all of its text, has the empty selection (ADR 0085).
 pub fn select_candidate_text(text: &str, start: u32, end: u32) -> Option<String> {
-    utf16_range(text, start, end).filter(|selected| !selected.is_empty())
+    utf16_range(text, start, end).filter(|selected| !selected.is_empty() || text.is_empty())
 }
 
 /// A range that splits a surrogate pair or passes the end of the text has no text.
