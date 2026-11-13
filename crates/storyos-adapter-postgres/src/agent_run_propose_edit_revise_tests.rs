@@ -24,18 +24,18 @@ const SENTENCES: [&str; 4] = ["Rain fell.", "Wind rose.", "Night came.", "Dawn b
 /// Proposal on the last Block. `lead` gives the identities: `lead` for the Project, `lead + 1`
 /// for the Run that opened the Proposal, `lead + 2` to `lead + 6` for later Runs, and
 /// `lead + 7` for the Editor Session and the Author Edit.
-struct Fixture {
-    scope: ProjectScope,
-    chapter_id: String,
+pub(crate) struct Fixture {
+    pub(crate) scope: ProjectScope,
+    pub(crate) chapter_id: String,
     head: String,
     blocks: Vec<String>,
     destination: DeploymentDestination,
     lead: u16,
-    source_run: String,
+    pub(crate) source_run: String,
 }
 
 impl Fixture {
-    async fn new(
+    pub(crate) async fn new(
         store: &PostgresProjectReader,
         admin: &Client,
         lead: u16,
@@ -145,7 +145,7 @@ impl Fixture {
     }
 
     /// A reference to all of the text from Block `first` to Block `last`.
-    fn chapter_text(&self, first: usize, last: usize) -> SelectionReference {
+    pub(crate) fn chapter_text(&self, first: usize, last: usize) -> SelectionReference {
         SelectionReference::ChapterText {
             chapter_id: self.chapter_id.clone(),
             base_authoritative_revision_id: self.head.clone(),
@@ -161,7 +161,7 @@ impl Fixture {
     }
 
     /// A reference to all of the text of each pending candidate of the Proposal, in Block order.
-    async fn candidates(&self, admin: &Client) -> Vec<SelectionReference> {
+    pub(crate) async fn candidates(&self, admin: &Client) -> Vec<SelectionReference> {
         admin
             .query(
                 "SELECT proposal.proposal_id::text, operation.operation_id::text,
@@ -250,7 +250,8 @@ fn without_identities(value: &Value, seen: &mut Vec<String>) -> Value {
     }
 }
 
-/// The locations of the Run and the Proposal records of the fixture, with no identities.
+/// The status and the locations of the Run and the Proposal records of the fixture, with no
+/// identities.
 async fn outcome(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -258,8 +259,28 @@ async fn outcome(
     run_id: &str,
 ) -> Value {
     let mut seen = Vec::new();
+    // The panel opens the current revision of a location, or else the revision of its outcome.
+    // A later RunStep of the tool loop references the joined candidates, so their locations
+    // have a current revision. It is the revision of the outcome.
+    let mut locations = locations(store, &fixture.scope, run_id).await;
+    for location in locations.as_array_mut().unwrap() {
+        let opened = match &location["current"] {
+            Value::Null => location["outcome"]["revision_id"].clone(),
+            current => current["revision_id"].clone(),
+        };
+        location["current"] = opened;
+    }
+    let status = admin
+        .query_one(
+            "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(/*idx*/ 0);
     let records = json!([
-        locations(store, &fixture.scope, run_id).await,
+        status,
+        locations,
         proposal_records(admin, &fixture.source_run).await,
     ]);
     without_identities(&records, &mut seen)

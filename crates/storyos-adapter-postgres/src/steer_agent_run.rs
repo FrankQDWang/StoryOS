@@ -143,7 +143,8 @@ impl ZeroAuthority<Self> for SteerAgentRunInput {
         }
     }
 
-    /// Retains the input at the next input position and resumes a paused Run. The fence token
+    /// Retains the input at the position of the RunStep that reads it, after the active RunStep
+    /// and after each earlier input, and resumes a paused Run. The fence token
     /// does not change, so a Worker claim of the Run stays valid.
     async fn write_zero_authority_activity(
         &self,
@@ -155,7 +156,10 @@ impl ZeroAuthority<Self> for SteerAgentRunInput {
         let scope = &envelope.project_scope;
         let input_position = client
             .query_one(
-                "SELECT (COALESCE(max((payload->>'input_position')::numeric), 0) + 1)::text
+                "SELECT (GREATEST(COALESCE(max((payload->>'input_position')::numeric), 0),
+                                  (SELECT active_decision_position FROM storyos.agent_runs
+                                    WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                                      AND run_id = $3::text::uuid)) + 1)::text
                    FROM storyos.project_activity_event_payloads
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND event_kind = 'agent_run_steering_retained'

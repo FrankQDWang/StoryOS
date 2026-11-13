@@ -124,8 +124,13 @@ impl ModelDispatchStore for PostgresProjectReader {
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
                 || run.chapter_id != request.chapter_id
-                || (run.decision_position == "0"
-                    && crate::agent_run_steering::advance(client, claim, lease_seconds).await?)
+                || crate::agent_run_steering::advance_before_request(
+                    client,
+                    claim,
+                    &run.decision_position,
+                    lease_seconds,
+                )
+                .await?
             {
                 return Ok(None);
             }

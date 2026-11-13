@@ -55,7 +55,7 @@ async fn cancel_call(
     .await
 }
 
-enum Fault<'a> {
+pub(crate) enum Fault<'a> {
     /// The author cancels the Run.
     Cancel {
         store: &'a PostgresProjectReader,
@@ -67,7 +67,7 @@ enum Fault<'a> {
 
 /// The Contract Fault Point observer: it injects `fault` when the Tool Gateway reaches `point`
 /// for the `nth` time.
-struct FaultAt<'a> {
+pub(crate) struct FaultAt<'a> {
     point: ContractFaultPoint,
     nth: usize,
     fault: Fault<'a>,
@@ -75,7 +75,7 @@ struct FaultAt<'a> {
 }
 
 impl<'a> FaultAt<'a> {
-    fn new(point: ContractFaultPoint, nth: usize, fault: Fault<'a>) -> Self {
+    pub(crate) fn new(point: ContractFaultPoint, nth: usize, fault: Fault<'a>) -> Self {
         Self {
             point,
             nth,
