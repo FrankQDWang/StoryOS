@@ -94,7 +94,7 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
     }
 }
 
-/// A `finish` call and no text. The first request of a Run with the author message
+/// A `finish` call and no text. The first request of a Run with an author message that holds
 /// `Search the web: <query>` also gets one `web_search` call first when the Run exposes it, and
 /// the first request of `SCRIPT:refuse` gets its scripted call first.
 fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
@@ -110,9 +110,11 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
             "host_fake_function_call",
         )
     };
+    // The script can follow the compaction prefix.
     let search = request
         .author_message
-        .strip_prefix("Search the web: ")
+        .split_once("Search the web: ")
+        .map(|(_, query)| query)
         .filter(|_| {
             request.tool_outputs.is_empty()
                 && request

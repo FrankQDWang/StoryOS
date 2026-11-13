@@ -2,7 +2,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DestinationRequest,
-    DispatchClaim, ModelUsage, Observation, RequestAttempt, WirePayloadProjection,
+    DispatchClaim, ModelUsage, Observation, RequestAttempt, ToolOutput, WirePayloadProjection,
 };
 use storyos_core::{
     AssistanceAvailability, SummaryObservation, compaction_assembly_record, encode_assembly_record,
@@ -105,7 +105,9 @@ pub(crate) async fn prior_chain(
     }))
 }
 
-/// The summary request: no project content, and the response reference of the prior chain.
+/// The summary request: no project content, and the response reference of the prior chain. At a
+/// later RunStep, the outputs of the calls of the prior response go first, because each native
+/// function call needs its output (ADR 0085).
 pub(crate) async fn summary_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -113,6 +115,10 @@ pub(crate) async fn summary_request(
     attempt: RequestAttempt,
     previous_response_reference: Option<String>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
+    let tool_outputs = match &run.disclosure_request {
+        Some(assembly) => waiting_outputs(client, claim, assembly).await?,
+        None => Vec::new(),
+    };
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -128,8 +134,31 @@ pub(crate) async fn summary_request(
         tool_exposure: storyos_core::ToolExposure::empty(),
         tool_choice: storyos_core::ToolChoice::Auto,
         successor_of: None,
-        tool_outputs: Vec::new(),
+        tool_outputs,
     }))
+}
+
+/// The outputs of the calls of the prior response, which wait for the next request.
+async fn waiting_outputs(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
+    let mut outputs = crate::agent_run_tool_result::tool_outputs(client, claim, decision).await?;
+    outputs.retain(|output| output.origin == storyos_application::ToolOutputOrigin::PriorResponse);
+    Ok(outputs)
+}
+
+/// The Context Assembly of a summary request that sends `outputs`.
+fn summary_record(
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+    outputs: &[ToolOutput],
+) -> storyos_core::CurrentPassageAssemblyRecord {
+    let call_ids: Vec<&str> = outputs
+        .iter()
+        .map(|output| output.call_id.as_str())
+        .collect();
+    compaction_assembly_record(decision, &call_ids)
 }
 
 /// Commits the dispatch claim of the summary request: its Context Assembly, manifests, and Model
@@ -158,7 +187,7 @@ pub(crate) async fn commit_claim(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
-    let record = compaction_assembly_record(decision_record);
+    let record = summary_record(decision_record, &request.tool_outputs);
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
@@ -287,7 +316,8 @@ pub(crate) async fn commit_assembly(
         return Ok(());
     }
     let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
-    let mut manifest_payload = encode_assembly_record(&compaction_assembly_record(decision_record));
+    let outputs = waiting_outputs(client, claim, decision_record).await?;
+    let mut manifest_payload = encode_assembly_record(&summary_record(decision_record, &outputs));
     manifest_payload["operation_requirement"]["operation_requirement_id"] =
         serde_json::json!(requirement_id);
     manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
@@ -374,7 +404,10 @@ pub(crate) async fn admitted(
     Ok(admit(
         run,
         assistance.as_ref(),
-        &compaction_assembly_record(decision_record),
+        &summary_record(
+            decision_record,
+            &waiting_outputs(client, claim, decision_record).await?,
+        ),
     )
     .is_ok())
 }

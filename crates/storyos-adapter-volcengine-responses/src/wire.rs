@@ -1,6 +1,6 @@
 //! The exact request body of one Agent Plan Responses Create request.
 
-use storyos_application::{CreateRequest, RequestBounds, ToolOutputOrigin};
+use storyos_application::{CreateRequest, RequestBounds, ToolOutput, ToolOutputOrigin};
 use storyos_core::{ContextSourceClass, DeclaredTargetKind, SelectionReference};
 
 /// The Host instructions and the reply contract that `decision::map_output` reads.
@@ -184,19 +184,39 @@ and the state of the manuscript passages that the conversation discussed. Write 
 of the manuscript. Reply with the summary text only, with no JSON and no other text.";
 
 /// The body of a compaction summary request: the summary instruction and the prior reference.
+/// The outputs of the calls of the prior response go before the instruction message, and then
+/// the Host instruction says that their content is data (ADR 0085).
 pub(crate) fn summary_body(
     reference: &str,
+    tool_outputs: &[ToolOutput],
     provider_model_id: &str,
     bounds: RequestBounds,
     stream: bool,
 ) -> String {
+    let message = serde_json::json!({
+        "role": "user",
+        "content": [{"type": "input_text", "text": "Summarize the conversation so far."}],
+    });
+    let input: Vec<_> = tool_outputs
+        .iter()
+        .filter(|output| output.origin == ToolOutputOrigin::PriorResponse)
+        .map(|output| {
+            serde_json::json!({"type": "function_call_output", "call_id": output.call_id,
+                               "output": output.output})
+        })
+        .chain([message])
+        .collect();
+    let instructions = match input.len() {
+        1 => SUMMARY_INSTRUCTIONS.to_owned(),
+        _ => format!(
+            "{SUMMARY_INSTRUCTIONS}\n\n{}",
+            storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
+        ),
+    };
     storyos_core::canonical_json(&serde_json::json!({
         "model": provider_model_id,
-        "instructions": SUMMARY_INSTRUCTIONS,
-        "input": [{
-            "role": "user",
-            "content": [{"type": "input_text", "text": "Summarize the conversation so far."}],
-        }],
+        "instructions": instructions,
+        "input": input,
         "previous_response_id": reference,
         "max_output_tokens": bounds.max_output_tokens,
         "stream": stream,

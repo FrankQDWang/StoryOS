@@ -402,16 +402,39 @@ pub const AGENT_PLAN_COMPACTION_PRODUCER: &str = "agent_plan_summary";
 
 /// The Context Assembly of a summary request: the Purpose of active compaction and no selected
 /// project content. The request sends one Host instruction, and the continuation chain of the
-/// Conversation supplies the history.
+/// Conversation supplies the history. At a later RunStep, the request also sends the output of
+/// each call in `sent_call_ids`, so the record keeps the `tool_result` item and source of each of
+/// those calls (ADR 0085). The admission and the manifest then cover each sent result.
 pub fn compaction_assembly_record(
     decision: &crate::CurrentPassageAssemblyRecord,
+    sent_call_ids: &[&str],
 ) -> crate::CurrentPassageAssemblyRecord {
     let mut record = decision.clone();
     record.operation_requirement.purpose =
         crate::assemble_context::ContextPurpose::ActiveContextCompaction;
-    record.considered.clear();
-    record.selected.clear();
+    let sent: Vec<crate::ToolResultSource> = decision
+        .operation_requirement
+        .tool_results
+        .iter()
+        .flatten()
+        .filter(|source| sent_call_ids.contains(&source.call_id.as_str()))
+        .cloned()
+        .collect();
+    let versions: Vec<String> = sent
+        .iter()
+        .map(crate::ToolResultSource::source_version)
+        .collect();
+    let is_sent = |class: crate::ContextSourceClass, version: &String| {
+        class == crate::ContextSourceClass::ToolResult && versions.contains(version)
+    };
+    record
+        .considered
+        .retain(|item| is_sent(item.source_class, &item.source_version));
+    record
+        .selected
+        .retain(|item| is_sent(item.source_class, &item.source_version));
     record.rejected.clear();
+    record.operation_requirement.tool_results = (!sent.is_empty()).then_some(sent);
     record
 }
 

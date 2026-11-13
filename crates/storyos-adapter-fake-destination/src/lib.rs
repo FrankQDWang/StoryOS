@@ -186,11 +186,21 @@ impl ModelProviderAdapter for FakeDestination {
 
 /// The fixed Host-managed summary of the fake destination, as one complete assistant item.
 fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
-    let digest = wire_digest(&serde_json::json!({
+    let mut wire = serde_json::json!({
         "operation": "compaction_summary",
         "previous_response_reference": create.previous_response_reference,
         "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-    }));
+    });
+    // The outputs that answer the calls of the prior response, as the tool loop wire sends them.
+    let serialized_payload = (!create.tool_outputs.is_empty()).then(|| {
+        wire["tool_outputs"] = create
+            .tool_outputs
+            .iter()
+            .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
+            .collect();
+        storyos_core::canonical_json(&wire)
+    });
+    let digest = wire_digest(&wire);
     let item = create_plan::assistant_item(
         "summary",
         StreamItemState::Complete,
@@ -198,7 +208,7 @@ fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
     );
     let reference = recovery_plan::mint_reference(&digest, /*code*/ 0);
     PreparedRequest {
-        projection: projection(digest, /*serialized_payload*/ None),
+        projection: projection(digest, serialized_payload),
         prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items: vec![item],
