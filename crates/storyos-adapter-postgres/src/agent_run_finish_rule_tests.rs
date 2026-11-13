@@ -101,6 +101,25 @@ pub(crate) fn finish_item(call_id: &str) -> NativeStreamItem {
     }
 }
 
+/// One complete `propose_edit` call with `call_id` that proposes `changes`.
+pub(crate) fn propose_edit_item(
+    call_id: &str,
+    changes: &[storyos_core::ProseChangeCandidate],
+) -> NativeStreamItem {
+    let changes: Vec<Value> = changes
+        .iter()
+        .map(|change| {
+            json!({"block_id": change.manuscript_block_id,
+                   "candidate_text": change.candidate_text, "explanation": change.explanation})
+        })
+        .collect();
+    NativeStreamItem {
+        arguments: Some(json!({"summary": "Shorter.", "changes": changes}).to_string()),
+        name: Some("propose_edit".to_owned()),
+        ..finish_item(call_id)
+    }
+}
+
 /// The response that a model of the tool loop gives before its closing `response`: one
 /// `finish` call with the usage of `response`. Its reference is the reference of `response`
 /// with `_finish`.
