@@ -82,6 +82,9 @@ pub(crate) async fn record_create(
     } else {
         let batch =
             crate::agent_run_tool_call::validate_batch(client, &retained, &response).await?;
+        let batch =
+            crate::agent_run_propose_edit::screen(client, claim, &declared, &response, batch)
+                .await?;
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }

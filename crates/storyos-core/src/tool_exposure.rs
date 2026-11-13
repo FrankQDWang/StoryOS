@@ -88,6 +88,7 @@ impl ToolOperation {
             Self::WebSearch => "web_search",
             Self::WebFetch => "web_fetch",
             Self::Finish => "finish",
+            Self::ProposeEdit => "propose_edit",
             Self::SubmitResearch => "submit_research",
         }
     }
@@ -102,6 +103,11 @@ impl ToolOperation {
             Self::Finish => {
                 "Says that your work on the author request is complete. After its result, write \
                  the final answer to the author."
+            }
+            Self::ProposeEdit => {
+                "Proposes a change of the target blocks of the request. StoryOS validates the \
+                 change and opens a Proposal that waits for the decision of the author. Give the \
+                 complete new text of each changed block."
             }
             Self::SubmitResearch => crate::submit_research::DESCRIPTION,
         }
@@ -140,22 +146,21 @@ impl IntakeField {
 
 impl ExposedTool {
     pub fn declaration(&self) -> FunctionDeclaration {
+        let mut properties = serde_json::Map::new();
+        let mut required = Vec::new();
+        for field in self.spec.intake_contract {
+            properties.insert(field.name().to_owned(), field.schema());
+            required.push(field.name());
+        }
         let parameters = match self.spec.operation {
+            ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
             ToolOperation::SubmitResearch => crate::submit_research::parameters(),
-            ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => {
-                let mut properties = serde_json::Map::new();
-                let mut required = Vec::new();
-                for field in self.spec.intake_contract {
-                    properties.insert(field.name().to_owned(), field.schema());
-                    required.push(field.name());
-                }
-                json!({
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                    "additionalProperties": false,
-                })
-            }
+            ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": false,
+            }),
         };
         FunctionDeclaration {
             name: self.name,

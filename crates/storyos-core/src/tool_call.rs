@@ -99,6 +99,7 @@ impl ValidatedToolCall {
             } => json!({ "query": query, "result_count": result_count }),
             ToolIntake::WebFetch { urls } => json!({ "urls": urls }),
             ToolIntake::Finish => json!({}),
+            ToolIntake::ProposeEdit(edit) => edit.arguments(),
             ToolIntake::SubmitResearch { summary, claims } => {
                 crate::submit_research::arguments(summary, claims)
             }
@@ -176,6 +177,7 @@ pub enum CallValidationRefusal {
     /// The arguments text is not a JSON object.
     Malformed,
     Intake(IntakeRefusal),
+    ProposeEdit(crate::ProposeEditRefusal),
 }
 
 impl CallValidationRefusal {
@@ -190,6 +192,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::UrlCount) => "intake_url_count",
             Self::Intake(IntakeRefusal::Url) => "intake_url",
             Self::Intake(IntakeRefusal::UnstorableText) => "unstorable_text",
+            Self::ProposeEdit(refusal) => refusal.label(),
         }
     }
 
@@ -213,6 +216,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::UnstorableText) => {
                 "a text of its arguments has the character U+0000"
             }
+            Self::ProposeEdit(refusal) => return refusal.result_text(),
         };
         format!(
             "The Host refused this call because {reason}, so no result is available, and this \

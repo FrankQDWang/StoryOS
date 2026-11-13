@@ -99,6 +99,7 @@ mod agent_run_finish_rule;
 mod agent_run_host_tool;
 mod agent_run_lease;
 mod agent_run_observation;
+mod agent_run_propose_edit;
 mod agent_run_recovery;
 mod agent_run_retrieval;
 mod agent_run_retrieval_dispatch;

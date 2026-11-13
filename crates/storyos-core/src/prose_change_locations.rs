@@ -33,6 +33,24 @@ pub struct DeclaredLocation {
     pub kind: DeclaredTargetKind,
 }
 
+/// Why the validation of ADR 0061, ADR 0062, and ADR 0071 refuses a prose change result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProseChangeRefusal {
+    NoChange,
+    /// A change of a pending candidate is not the only change, or the other changes do not grow
+    /// its Proposal over one run of joinable blocks.
+    Shape,
+    /// The declared targets repeat a block or are more than the limit.
+    Targets,
+    RepeatedBlock,
+    /// The change names a block that is not a declared target, or not with its declared base.
+    UndeclaredBlock,
+    EmptyCandidate,
+    EmptyExplanation,
+    /// A candidate text or an explanation is above the token limit of one context item.
+    OversizedText,
+}
+
 /// Validate all of the result before any candidate can open (ADR 0061). Each change is for a
 /// different declared target with its declared base, and one or more changes are necessary.
 /// A change of a pending candidate is the only change of its result (ADR 0062). Or the result
@@ -41,6 +59,14 @@ pub fn prose_changes_match_targets(
     targets: &[DeclaredLocation],
     candidates: &[ProseChangeCandidate],
 ) -> bool {
+    prose_change_refusal(targets, candidates).is_none()
+}
+
+/// The first rule of `prose_changes_match_targets` that the result breaks.
+pub fn prose_change_refusal(
+    targets: &[DeclaredLocation],
+    candidates: &[ProseChangeCandidate],
+) -> Option<ProseChangeRefusal> {
     let declared: std::collections::BTreeMap<_, _> = targets
         .iter()
         .map(|target| ((&target.chapter_id, &target.block_id), target))
@@ -57,24 +83,43 @@ pub fn prose_changes_match_targets(
                 .map(|target| target.kind)
         })
         .collect();
-    !candidates.is_empty()
-        && candidate_changes_are_one_revision_or_growth(&changed_kinds)
-        && targets.len() <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1
-        && declared.len() == targets.len()
-        && actual.len() == candidates.len()
-        && candidates.iter().all(|candidate| {
-            declared
-                .get(&(&candidate.chapter_id, &candidate.manuscript_block_id))
-                .is_some_and(|target| {
-                    target.base_revision_id == candidate.base_authoritative_revision_id
-                })
-                && !candidate.candidate_text.is_empty()
-                && !candidate.explanation.trim().is_empty()
-                && crate::assemble_context::count_context_item_tokens(&candidate.candidate_text)
-                    <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT
-                && crate::assemble_context::count_context_item_tokens(&candidate.explanation)
-                    <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT
-        })
+    let within_limit = |text: &str| {
+        crate::assemble_context::count_context_item_tokens(text)
+            <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT
+    };
+    if candidates.is_empty() {
+        return Some(ProseChangeRefusal::NoChange);
+    }
+    if !candidate_changes_are_one_revision_or_growth(&changed_kinds) {
+        return Some(ProseChangeRefusal::Shape);
+    }
+    if targets.len() > crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1
+        || declared.len() != targets.len()
+    {
+        return Some(ProseChangeRefusal::Targets);
+    }
+    if actual.len() != candidates.len() {
+        return Some(ProseChangeRefusal::RepeatedBlock);
+    }
+    candidates.iter().find_map(|candidate| {
+        let declared_base = declared
+            .get(&(&candidate.chapter_id, &candidate.manuscript_block_id))
+            .is_some_and(|target| {
+                target.base_revision_id == candidate.base_authoritative_revision_id
+            });
+        if !declared_base {
+            Some(ProseChangeRefusal::UndeclaredBlock)
+        } else if candidate.candidate_text.is_empty() {
+            Some(ProseChangeRefusal::EmptyCandidate)
+        } else if candidate.explanation.trim().is_empty() {
+            Some(ProseChangeRefusal::EmptyExplanation)
+        } else if !within_limit(&candidate.candidate_text) || !within_limit(&candidate.explanation)
+        {
+            Some(ProseChangeRefusal::OversizedText)
+        } else {
+            None
+        }
+    })
 }
 
 /// With no candidate change, any shape is valid here. With one, each other change is a joinable

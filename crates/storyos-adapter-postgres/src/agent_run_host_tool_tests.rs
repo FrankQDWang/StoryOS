@@ -91,9 +91,9 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
             "status": "completed", "position": 1,
             "steps": [
                 {"position": 0, "decision": "tool_request", "tool_choice": "required",
-                 "tools": ["submit_research", "finish"], "tool_outputs": [], "tool_results": []},
+                 "tools": ["propose_edit", "submit_research", "finish"], "tool_outputs": [], "tool_results": []},
                 {"position": 1, "decision": "advisory", "tool_choice": "none",
-                 "tools": ["submit_research", "finish"],
+                 "tools": ["propose_edit", "submit_research", "finish"],
                  "tool_outputs": [{"call_id": "call_finish", "output": EMPTY_OUTPUT}],
                  "tool_results": ["empty"]},
             ],

@@ -1,6 +1,7 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
 mod create_plan;
+mod propose_edit_plan;
 mod prose_changes;
 mod recovery_plan;
 mod research_plan;

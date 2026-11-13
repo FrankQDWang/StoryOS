@@ -209,6 +209,10 @@ pub(super) async fn load_agent_run(
             .unwrap_or("unknown")
             .to_owned();
     }
+    if requested_attempt.is_none() {
+        crate::agent_run_propose_edit::public_decision(client, scope, run_id, &mut record.decision)
+            .await?;
+    }
     crate::prose_change_location_read::hydrate_locations(client, scope, &mut record.decision)
         .await?;
     crate::agent_run_tool_call::hydrate_calls(client, scope, &mut record.decision).await?;

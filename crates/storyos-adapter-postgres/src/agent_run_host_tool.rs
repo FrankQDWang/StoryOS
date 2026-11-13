@@ -20,9 +20,15 @@ pub(crate) async fn execute(
     let intake = spec
         .intake(&row.arguments)
         .map_err(|_| damaged("The Host ToolCall is damaged"))?;
-    if let ToolIntake::SubmitResearch { summary, claims } = &intake {
-        return crate::agent_run_submit_research::execute(client, claim, row, summary, claims)
-            .await;
+    match &intake {
+        ToolIntake::SubmitResearch { summary, claims } => {
+            return crate::agent_run_submit_research::execute(client, claim, row, summary, claims)
+                .await;
+        }
+        ToolIntake::ProposeEdit(edit) => {
+            return crate::agent_run_propose_edit::execute(client, claim, row, edit).await;
+        }
+        ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client
         .query_one(
