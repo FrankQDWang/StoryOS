@@ -1,6 +1,8 @@
 //! The `propose_edit` script of the tool loop profile (ADR 0091). For each request for which the
-//! reply form fake proposes changes, the fake proposes the same changes for the declared targets with a `finish` call beside it: the revision of a referenced candidate
-//! with the growth scripts of the reply form fake, or else a change of each target. The end of
+//! reply form fake proposes changes, the fake proposes the same changes for the declared targets.
+//! with a `finish` call beside it: the revision of a referenced candidate with the growth scripts
+//! of the reply form fake, or else a change of each target. For a reply form prose change text
+//! with no changes, it proposes that text for the first target. The end of
 //! the message scripts the other cases, by the count of the `propose_edit` results of the
 //! request:
 //!
@@ -18,7 +20,9 @@
 //!   then one such call, then one call with no arguments.
 
 use storyos_application::CreateRequest;
-use storyos_core::{DeclaredTargetKind, NativeStreamItem, ToolOperation};
+use storyos_core::{
+    DecisionCandidate, DeclaredTargetKind, NativeStreamItem, ProseChangeCandidate, ToolOperation,
+};
 
 use crate::prose_changes::{produce_fake_candidate_revision, produce_fake_changes};
 
@@ -30,7 +34,15 @@ pub(crate) fn calls(
 ) -> Option<(Vec<NativeStreamItem>, bool)> {
     let name = ToolOperation::ProposeEdit.function_name();
     let message = request.author_message.as_str();
-    if !crate::create_plan::reply_form_plan(request).1
+    let (reply_form, produce) = crate::create_plan::reply_form_plan(request);
+    // A prose change text with no changes opens the Proposal of the first target (Stage 1).
+    let single = match reply_form.output.map(|output| output.candidate) {
+        Some(DecisionCandidate::ProseChange { text }) if !produce => {
+            Some(request.declared_targets.first()?.location()).map(|target| (target, text))
+        }
+        _ => None,
+    };
+    if !(produce || single.is_some())
         || !request
             .tool_exposure
             .tools
@@ -58,6 +70,14 @@ pub(crate) fn calls(
                     )
                 })
                 .collect()
+        } else if let Some((target, text)) = &single {
+            vec![ProseChangeCandidate {
+                chapter_id: target.chapter_id.clone(),
+                manuscript_block_id: target.block_id.clone(),
+                base_authoritative_revision_id: target.base_revision_id.clone(),
+                candidate_text: text.clone(),
+                explanation: "Preserve the narrator voice in the first passage.".to_owned(),
+            }]
         } else {
             produce_fake_changes(request, script)
         };

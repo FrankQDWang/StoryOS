@@ -77,7 +77,11 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     })
 }
 
-fn function_call(operation: ToolOperation, suffix: &str, arguments: &str) -> NativeStreamItem {
+pub(crate) fn function_call(
+    operation: ToolOperation,
+    suffix: &str,
+    arguments: &str,
+) -> NativeStreamItem {
     let name = operation.function_name();
     NativeStreamItem {
         item_id: format!("fc_{name}{suffix}"),

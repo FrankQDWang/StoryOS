@@ -130,6 +130,8 @@ impl ModelProviderAdapter for FakeDestination {
             .and_then(recovery_plan::continuation_rejection);
         let unknown = match create.successor_of {
             Some(_) => None,
+            // In the tool loop profile, the scripts lose only the request of the first RunStep.
+            None if tool_loop && !create.tool_outputs.is_empty() => None,
             None => recovery_plan::unknown_create(
                 &create.author_message,
                 &projection.digest,
