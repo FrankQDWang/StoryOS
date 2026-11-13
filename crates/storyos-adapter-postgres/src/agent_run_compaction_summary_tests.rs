@@ -47,8 +47,8 @@ async fn compact_after_first_run(
     (scope, run_id)
 }
 
-/// The run status, the input mapping of the decision Attempt, the compaction Attempt count, and
-/// the compaction record of one AgentRun.
+/// The run status, the input mapping of the first decision Attempt, the compaction Attempt
+/// count, and the compaction record of one AgentRun.
 async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
     let row = admin
         .query_one(
@@ -59,6 +59,7 @@ async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
                LEFT JOIN storyos.active_context_compactions AS record
                  ON record.run_id = run.run_id
               WHERE run.run_id = $1::text::uuid",
@@ -168,7 +169,23 @@ fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
     ]
 }
 
-const ADVICE: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
+const ADVICE: &str = "Keep it.";
+
+/// The streamed events of one complete response with one `finish` call.
+fn finish_events(reference: &str) -> Vec<serde_json::Value> {
+    let call = serde_json::json!({"id": "fc_finish", "type": "function_call",
+        "status": "completed", "call_id": format!("call_finish_{reference}"), "name": "finish",
+        "arguments": "{}"});
+    vec![
+        serde_json::json!({"type": "response.created",
+                           "response": {"id": reference, "status": "in_progress"}}),
+        serde_json::json!({"type": "response.output_item.done", "output_index": 0,
+                           "item": call}),
+        serde_json::json!({"type": "response.completed", "response": {
+            "id": reference, "status": "completed", "output": [call],
+            "usage": {"input_tokens": 40, "output_tokens": 4}}}),
+    ]
+}
 
 /// The events of `streamed`, with the reported usage that the terminal event gives.
 fn with_usage(
@@ -183,14 +200,18 @@ fn with_usage(
     events
 }
 
-/// A first response whose reported usage puts the next turn above the threshold. The threshold
-/// is (1,048,576 - 32,768) x 80 percent = 812,646 tokens.
-fn near_threshold() -> Vec<serde_json::Value> {
-    with_usage(
-        streamed("resp_decision", ADVICE),
-        /*input*/ 812_500,
-        /*output*/ 200,
-    )
+/// The responses of a first Run: a `finish` call, and the closing response whose reported usage
+/// puts the next turn above the threshold. The threshold is (1,048,576 - 32,768) x 80 percent =
+/// 812,646 tokens.
+fn near_threshold() -> [Vec<serde_json::Value>; 2] {
+    [
+        finish_events("resp_finish"),
+        with_usage(
+            streamed("resp_decision", ADVICE),
+            /*input*/ 812_500,
+            /*output*/ 200,
+        ),
+    ]
 }
 
 /// Settles the first AgentRun of a new Conversation on a local scripted Agent Plan destination
@@ -254,11 +275,15 @@ async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request()
         &store,
         &admin,
         ["ec3", "ec4"],
-        vec![
-            near_threshold(),
-            streamed("resp_summary", summary),
-            streamed("resp_later", ADVICE),
-        ],
+        [
+            near_threshold().to_vec(),
+            vec![
+                streamed("resp_summary", summary),
+                finish_events("resp_later"),
+                streamed("resp_later_closing", ADVICE),
+            ],
+        ]
+        .concat(),
     )
     .await;
     let later = admin
@@ -278,6 +303,7 @@ async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request()
                FROM storyos.model_attempts AS summary
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = summary.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
                JOIN storyos.active_context_compactions AS record
                  ON record.run_id = summary.run_id
                JOIN storyos.context_assembly_manifests AS assembly
@@ -330,7 +356,15 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
         &store,
         &admin,
         ["ec5", "ec6"],
-        vec![near_threshold(), dropped, streamed("resp_next", ADVICE)],
+        [
+            near_threshold().to_vec(),
+            vec![
+                dropped,
+                finish_events("resp_next"),
+                streamed("resp_next_closing", ADVICE),
+            ],
+        ]
+        .concat(),
     )
     .await;
     let summary_attempt = admin
@@ -343,6 +377,7 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
                JOIN storyos.active_context_compactions AS record ON record.run_id = attempt.run_id
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = attempt.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
               WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'compaction'",
             &[&run_id],
         )
@@ -458,6 +493,7 @@ async fn compact_with_change(
                FROM storyos.active_context_compactions AS record
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = record.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
                JOIN storyos.context_assembly_manifests AS assembly
                  ON assembly.destination_context_manifest_id =
                     decision.destination_context_manifest_id
@@ -577,7 +613,7 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
         .lock()
         .await;
     let (store, admin) = stores().await;
-    // The first response reports 1,015,900 tokens. The window after the output bound is
+    // The closing response of the first Run reports 1,015,900 tokens. The window after the output bound is
     // 1,015,808 tokens. The summary stream drops, so no summary installs.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
     dropped.truncate(/*len*/ 3);
@@ -586,6 +622,7 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
         &admin,
         ["ecd", "ece"],
         vec![
+            finish_events("resp_finish"),
             with_usage(
                 streamed("resp_decision", ADVICE),
                 /*input*/ 1_015_800,
