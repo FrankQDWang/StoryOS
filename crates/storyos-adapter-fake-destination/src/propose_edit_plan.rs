@@ -1,8 +1,11 @@
 //! The `propose_edit` script of the tool loop profile (ADR 0091). For an author message that
 //! starts with `Revise these passages`, the fake proposes the changes of the reply form fake for
-//! the declared targets with a `finish` call beside it. The end of the message scripts the other
-//! cases, by the count of the `propose_edit` results of the request:
+//! the declared targets with a `finish` call beside it: the revision of a referenced candidate
+//! with the growth scripts of the reply form fake, or else a change of each target. The end of
+//! the message scripts the other cases, by the count of the `propose_edit` results of the
+//! request:
 //!
+//! - `SCRIPT:propose_two_candidates`: one call that revises each referenced candidate.
 //! - `SCRIPT:propose_refused_once`: the first call names a block that is not a target, alone,
 //!   and the next call is correct.
 //! - `SCRIPT:propose_always_refused`: five calls that name a block that is not a target, then
@@ -16,9 +19,9 @@
 //!   then one such call, then one call with no arguments.
 
 use storyos_application::CreateRequest;
-use storyos_core::{DeclaredLocation, NativeStreamItem, ToolOperation};
+use storyos_core::{DeclaredTargetKind, NativeStreamItem, ToolOperation};
 
-use crate::prose_changes::produce_fake_prose_changes;
+use crate::prose_changes::{produce_fake_candidate_revision, produce_fake_changes};
 
 /// The calls of one request, and whether a `finish` call follows them. `None` when the script
 /// does not apply.
@@ -42,13 +45,24 @@ pub(crate) fn calls(
         .iter()
         .filter(|output| output.name == name)
         .count();
-    let targets: Vec<DeclaredLocation> = request
-        .declared_targets
-        .iter()
-        .map(storyos_application::DeclaredTarget::location)
-        .collect();
     let proposal = |index: usize, script: &str| {
-        let changes: Vec<_> = produce_fake_prose_changes(&targets, script)
+        let changes = if script.ends_with("SCRIPT:propose_two_candidates") {
+            request
+                .declared_targets
+                .iter()
+                .filter(|target| target.kind == DeclaredTargetKind::PendingCandidate)
+                .flat_map(|target| {
+                    produce_fake_candidate_revision(
+                        &[target.location()],
+                        script,
+                        &target.block_text,
+                    )
+                })
+                .collect()
+        } else {
+            produce_fake_changes(request, script)
+        };
+        let changes: Vec<_> = changes
             .into_iter()
             .map(|change| {
                 serde_json::json!({

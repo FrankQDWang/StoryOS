@@ -50,7 +50,7 @@ impl Fixture {
         let base = session.base_snapshot.authoritative_revision_id;
         let first_block = blocks(admin, &base).await.remove(0);
         let mut splits = Vec::new();
-        let mut split_block = first_block;
+        let mut split_block = first_block.clone();
         for sentence in &SENTENCES[..3] {
             let new_block = uuid::Uuid::now_v7().to_string();
             splits.push(AuthorEditPrimitive::SplitBlock {
@@ -76,11 +76,14 @@ impl Fixture {
                     .policy_revision()
                     .to_owned();
             command.author_edit_units = vec![AuthorEditUnit {
-                normalized_primitives: std::iter::once(AuthorEditPrimitive::ReplaceSelection {
-                    from: 0,
-                    to: 0,
-                    text: SENTENCES.concat(),
-                })
+                normalized_primitives: std::iter::once(
+                    AuthorEditPrimitive::ReplaceBlockSelection {
+                        manuscript_block_id: first_block,
+                        from: 0,
+                        to: 0,
+                        text: SENTENCES.concat(),
+                    },
+                )
                 .chain(splits)
                 .collect(),
                 selection_snapshot: SelectionSnapshot {
@@ -101,10 +104,12 @@ impl Fixture {
             .await
             .unwrap()
             .get(/*idx*/ 0);
+        let blocks = blocks(admin, &head).await;
+        assert_eq!(blocks.len(), SENTENCES.len());
         let mut fixture = Self {
             scope,
             chapter_id,
-            blocks: blocks(admin, &head).await,
+            blocks,
             head,
             destination,
             lead,
@@ -275,9 +280,7 @@ async fn a_call_revises_the_candidate_or_grows_its_proposal_as_the_reply_form_do
     ];
     for (name, [reply_lead, tool_lead], message, joined) in cases {
         let mut outcomes = Vec::new();
-        let mut kinds = Value::Null;
-        let mut calls = Vec::new();
-        let mut proposal = Value::Null;
+        let mut runs = Vec::new();
         for (lead, destination) in [
             (reply_lead, DeploymentDestination::HostFake),
             (tool_lead, DeploymentDestination::HostFakeToolLoop),
@@ -289,26 +292,34 @@ async fn a_call_revises_the_candidate_or_grows_its_proposal_as_the_reply_form_do
             }
             let run_id = fixture.run(&store, &admin, 2, message, references).await;
             outcomes.push(outcome(&store, &admin, &fixture, &run_id).await);
-            let records = proposal_records(&admin, &fixture.source_run).await;
-            kinds = json!({
-                "outcomes": locations(&store, &fixture.scope, &run_id).await
-                    .as_array().unwrap().iter()
-                    .map(|location| location["outcome"]["kind"].clone())
-                    .collect::<Vec<_>>(),
-                "revisions": records[0]["revisions"].as_array().unwrap().len(),
-                "operations": records[0]["operations"].as_array().unwrap().len(),
-            });
-            proposal = records[0]["proposal"].clone();
-            calls = propose_edit_calls(&admin, &run_id).await;
+            runs.push((fixture, run_id));
         }
+        let (fixture, run_id) = &runs[1];
+        let records = proposal_records(&admin, &fixture.source_run).await;
+        let kinds: Vec<Value> = locations(&store, &fixture.scope, run_id)
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|location| location["outcome"]["kind"].clone())
+            .collect();
         let blocks = if joined { 3 } else { 1 };
         let bundle = if joined { "atomic" } else { "none" };
+
         assert_eq!(outcomes[0], outcomes[1], "{name}");
         assert_eq!(
-            (kinds, proposal, calls),
             (
-                json!({"outcomes": vec!["revised"; blocks], "revisions": 2, "operations": blocks}),
+                kinds,
+                records[0]["proposal"].clone(),
+                records[0]["revisions"].as_array().unwrap().len(),
+                records[0]["operations"].as_array().unwrap().len(),
+                propose_edit_calls(&admin, run_id).await,
+            ),
+            (
+                vec![json!("revised"); blocks],
                 json!(["block_edit", bundle]),
+                2,
+                blocks,
                 vec![opened(0)],
             ),
             "{name}"

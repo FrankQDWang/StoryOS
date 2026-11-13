@@ -1,6 +1,6 @@
 //! Derive one scripted Create result from the exact request, with no process memory.
 
-use storyos_application::{CreateRequest, DeclaredTarget};
+use storyos_application::CreateRequest;
 use storyos_core::DeclaredTargetKind;
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
@@ -8,10 +8,7 @@ use storyos_core::{
     STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, ToolOperation,
 };
 
-use crate::prose_changes::{
-    is_fake_candidate_revision_request, produce_fake_candidate_revision, produce_fake_growth,
-    produce_fake_prose_changes,
-};
+use crate::prose_changes::{is_fake_candidate_revision_request, produce_fake_changes};
 
 const CLARIFICATION_QUESTION: &str = "Which wording should stay in this sentence?";
 
@@ -134,28 +131,7 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
     if !produce {
         return;
     }
-    let changes = match candidate {
-        Some(candidate) => {
-            let mut changes = produce_fake_candidate_revision(
-                &[candidate.location()],
-                author_message,
-                &candidate.block_text,
-            );
-            changes.extend(produce_fake_growth(
-                &request.declared_targets,
-                author_message,
-            ));
-            changes
-        }
-        None => produce_fake_prose_changes(
-            &request
-                .declared_targets
-                .iter()
-                .map(DeclaredTarget::location)
-                .collect::<Vec<_>>(),
-            author_message,
-        ),
-    };
+    let changes = produce_fake_changes(request, author_message);
     if let Some(item) = planned.items.first_mut() {
         item.text = Some(storyos_core::canonical_json(&serde_json::json!(changes)));
         item.summary = Some("host_fake_native_prose_changes".to_owned());
