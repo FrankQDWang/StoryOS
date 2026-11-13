@@ -15,7 +15,8 @@ use crate::agent_run_retrieval::tests::{
     adapter, broken_stream, destination, real_run, recovery, research_run,
 };
 
-const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
+/// The final answer of a closing response.
+const ADVISORY: &str = "Keep it.";
 const ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 
 pub(crate) fn sse(events: &[serde_json::Value]) -> String {
@@ -28,7 +29,7 @@ pub(crate) fn sse(events: &[serde_json::Value]) -> String {
     reply
 }
 
-/// A stream that reports `reference` and ends with one complete Advisory.
+/// A stream that reports `reference` and ends with one complete final answer.
 pub(crate) fn advisory_stream(reference: &str) -> String {
     let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": ADVISORY}]});
@@ -40,6 +41,29 @@ pub(crate) fn advisory_stream(reference: &str) -> String {
             "id": reference, "status": "completed", "output": [message],
             "usage": {"input_tokens": 40, "output_tokens": 12}}}),
     ])
+}
+
+/// A stream that reports `reference` and ends with one complete `finish` call.
+pub(crate) fn finish_stream(reference: &str) -> String {
+    let call = json!({"id": "fc_finish", "type": "function_call", "status": "completed",
+        "call_id": format!("call_finish_{reference}"), "name": "finish", "arguments": "{}"});
+    sse(&[
+        json!({"type": "response.created",
+               "response": {"id": reference, "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+        json!({"type": "response.completed", "response": {
+            "id": reference, "status": "completed", "output": [call],
+            "usage": {"input_tokens": 40, "output_tokens": 4}}}),
+    ])
+}
+
+/// The two streams of a model that ends its Run: a `finish` call in `reference`, then the
+/// closing Advisory in `reference` with `_closing`.
+pub(crate) fn finish_then_advisory(reference: &str) -> [String; 2] {
+    [
+        finish_stream(reference),
+        advisory_stream(&format!("{reference}_closing")),
+    ]
 }
 
 /// One function call item with `arguments` and `status`.
@@ -80,7 +104,7 @@ pub(crate) fn function_call_stream(reference: &str) -> String {
     ])
 }
 
-/// The Exposure of the research Tool on the current Agent Plan Registration.
+/// The Exposure of the research Tool and the Host Tools on the current Agent Plan Registration.
 fn research_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound: &[BoundTool {
@@ -90,6 +114,31 @@ fn research_exposure() -> ToolExposure {
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
     })
+}
+
+/// The Exposure of the Host Tools alone on the current Agent Plan Registration.
+fn host_exposure() -> ToolExposure {
+    ToolExposure::compute(&ExposureFacts {
+        bound: &[],
+        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+    })
+}
+
+/// The `tools` field of a request body that declares `exposure`.
+fn declared(exposure: &ToolExposure) -> serde_json::Value {
+    json!(
+        exposure
+            .declarations()
+            .iter()
+            .map(|declaration| json!({
+                "type": "function",
+                "name": declaration.name,
+                "description": declaration.description,
+                "parameters": declaration.parameters,
+                "strict": true,
+            }))
+            .collect::<Vec<_>>()
+    )
 }
 
 /// The status and settlement of the Run, and the input mapping, prior binding, Step Snapshot,
@@ -126,13 +175,11 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![
-        advisory_stream("resp_t1"),
-        function_call_stream("resp_t2"),
-        // The continuation RunStep answers the refused ToolCall.
-        advisory_stream("resp_t3"),
-    ])
-    .await;
+    let mut replies = finish_then_advisory("resp_t1").to_vec();
+    replies.push(function_call_stream("resp_t2"));
+    // The continuation RunStep answers the refused ToolCall.
+    replies.extend(finish_then_advisory("resp_t3"));
+    let (base, served) = destination(replies).await;
     let plan = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: None,
     };
@@ -212,7 +259,7 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
             vec![
                 Some(json!("none")),
                 Some(serde_json::Value::Null),
-                Some(ToolExposure::empty().snapshot()),
+                Some(host_exposure().snapshot()),
             ],
             Some(json!("completed")),
             None,
@@ -220,7 +267,7 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
             Some(serde_json::Value::Null),
             Some(exposure.snapshot()),
             json!(declared),
-            json!("auto"),
+            json!("required"),
             None,
             Some(json!([{
                 "item_id": "fc_01",
@@ -235,11 +282,7 @@ async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settl
                 "native_type": "function_call",
                 "name": "web_search"
             }])),
-            vec![
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-            ],
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 5],
         )
     );
 }
@@ -265,12 +308,9 @@ async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![
-        broken_stream("resp_f73"),
-        stored_function_call("resp_f73"),
-        advisory_stream("resp_f73b"),
-    ])
-    .await;
+    let mut replies = vec![broken_stream("resp_f73"), stored_function_call("resp_f73")];
+    replies.extend(finish_then_advisory("resp_f73b"));
+    let (base, served) = destination(replies).await;
     let (scope, run_id) = real_run(&store, &admin, "f73", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
@@ -288,11 +328,11 @@ async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
             [
                 Some("completed".to_owned()),
                 None,
-                None,
+                Some("Keep it.".to_owned()),
                 Some("settled".to_owned()),
                 None,
                 Some("true".to_owned()),
-                Some("decision:true,retrieval:true,decision:true".to_owned()),
+                Some("decision:true,retrieval:true,decision:true,decision:true".to_owned()),
             ],
             (
                 Some("complete_selected".to_owned()),
@@ -327,6 +367,7 @@ async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f73 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
@@ -391,7 +432,7 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![advisory_stream("resp_f79")]).await;
+    let (base, served) = destination(finish_then_advisory("resp_f79").to_vec()).await;
     let (scope, run_id) = research_run(&store, &admin, "f79", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
     let route = QuarantineBeforeClaim {
@@ -428,27 +469,16 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
             vec![
                 (
                     research_exposure().snapshot(),
-                    Some(json!(
-                        research_exposure()
-                            .declarations()
-                            .iter()
-                            .map(|declaration| json!({
-                                "type": "function",
-                                "name": declaration.name,
-                                "description": declaration.description,
-                                "parameters": declaration.parameters,
-                                "strict": true,
-                            }))
-                            .collect::<Vec<_>>()
-                    )),
+                    Some(declared(&research_exposure()))
                 ),
-                (ToolExposure::empty().snapshot(), None),
+                (host_exposure().snapshot(), Some(declared(&host_exposure()))),
+                (host_exposure().snapshot(), Some(declared(&host_exposure()))),
             ],
-            1,
+            2,
             Some(json!("completed")),
-            Some(ToolExposure::empty().snapshot()),
-            None,
-            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
+            Some(host_exposure().snapshot()),
+            Some(declared(&host_exposure())),
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 2],
         )
     );
 }
