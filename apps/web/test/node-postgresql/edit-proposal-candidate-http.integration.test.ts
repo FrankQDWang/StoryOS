@@ -217,13 +217,16 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     if (stale.created.effect.kind !== "admitted") throw new Error("expected admitted stale request");
     const staleRun = await getAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       runId: stale.created.effect.run_id, fetchImpl: prepared.fetchImpl });
-    // The Host refuses the stale `propose_edit` call. The next RunStep assembles its context again, and the changed
-    // candidate revision blocks it (ADR 0085, ADR 0091).
-    assert.deepEqual([staleRun.status, staleRun.decision], ["refused", { kind: "execution_refused", capability: "blocked_context" }]);
+    // The Host refuses the stale `propose_edit` call, and its `finish` call does not count. The next RunSteps read the
+    // edited candidate, and the Run completes with the final answer (ADR 0085, ADR 0091).
+    if (staleRun.decision.kind !== "advisory") throw new Error("expected the final answer of the stale request");
+    assert.deepEqual([staleRun.status, staleRun.decision.text], ["completed",
+      "This passage is inspectable Host-fake advice. It is not Authoritative State."]);
     assert.equal(await queryPostgres(`SELECT string_agg(function_name || ':' || state || ':' || coalesce(refusal, ''), ' '
         ORDER BY decision_position, call_position)
       FROM storyos.tool_calls WHERE run_id = '${stale.created.effect.run_id}'::uuid;`),
-    "propose_edit:refused:not_opened finish:settled:");
+    "propose_edit:refused:stale_candidate finish:settled: finish:settled:");
+    assert.equal(candidateReference(staleRun.context).revision_id, edited.effect.proposal_revision_id);
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId,
       fetchImpl: prepared.fetchImpl })).proposal, revised.proposal);
     assert.equal(revised.proposal.proposal_id, opened.proposal.proposal_id);
