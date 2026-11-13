@@ -30,6 +30,7 @@ mod research_destination;
 mod research_source;
 mod research_synthesis;
 mod retrieve_original_result;
+mod submit_research;
 mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
@@ -160,7 +161,7 @@ pub use host_fake_profile::{
 };
 pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
-    host_tool,
+    host_tool, host_tool_result,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -276,6 +277,9 @@ pub use set_current_chapter::{
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
+};
+pub use submit_research::{
+    RESEARCH_RECORDED_RESULT, SUBMIT_RESEARCH_TOOL_SPEC, SubmitResearchRefusal,
 };
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,

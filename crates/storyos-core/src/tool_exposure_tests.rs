@@ -116,6 +116,7 @@ fn only_a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
         ToolExposure {
             tools: vec![
                 host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
+                host("submit_research", &crate::SUBMIT_RESEARCH_TOOL_SPEC),
                 finish.clone()
             ]
         }

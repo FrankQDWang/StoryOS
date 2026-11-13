@@ -7,7 +7,7 @@ use storyos_application::{
     PreparedRequest, ProjectScope, RejectProposalOperationsInput, RejectionNote,
     WithdrawProposalInput, WithdrawalNote, complete_agent_run,
 };
-use storyos_core::{DeploymentDestination, PROPOSAL_WAITS_RESULT};
+use storyos_core::{DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, PROPOSAL_WAITS_RESULT};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -592,37 +592,61 @@ async fn a_successor_call_or_a_later_refusal_keeps_the_proposal_of_the_decision_
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_finish_call_settles_after_the_propose_edit_call_of_its_response() {
+async fn a_finish_call_settles_after_the_other_host_calls_of_its_response() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
-    let script = " SCRIPT:propose_finish_first";
-    let (_, run_id) = revise_run(&store, &admin, ["b68", "b69"], tool_loop, script).await;
-    // The response has `finish` first, but `finish` settles last, so its result can count a
-    // refusal of the opening.
-    let settled = admin
-        .query(
-            "SELECT call.function_name, call.call_position
-               FROM storyos.agent_run_events AS event
-               JOIN storyos.tool_calls AS call
-                 ON call.tool_call_id = (event.payload ->> 'tool_call_id')::uuid
-              WHERE event.run_id = $1::text::uuid AND event.event_kind = 'tool_call_settled'
-              ORDER BY event.event_position",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        settled
+    let uncaptured = storyos_core::SubmitResearchRefusal::Synthesis(
+        storyos_core::SynthesisRefusal::UncapturedCitation,
+    )
+    .result()
+    .text;
+    // Each response has `finish` first, but `finish` settles last, so its result counts the
+    // refusal of a Host call of its response.
+    let cases = [
+        (
+            ["b68", "b69"],
+            " SCRIPT:propose_finish_first",
+            vec![
+                ("propose_edit", 1, PROPOSAL_WAITS_RESULT),
+                ("finish", 0, ""),
+            ],
+        ),
+        (
+            ["87a", "87b"],
+            " SCRIPT:propose_research_finish_first",
+            vec![
+                ("propose_edit", 1, PROPOSAL_WAITS_RESULT),
+                ("submit_research", 2, uncaptured.as_str()),
+                ("finish", 0, FINISH_DOES_NOT_COUNT_RESULT),
+            ],
+        ),
+    ];
+    for (prefixes, script, expected) in cases {
+        let (_, run_id) = revise_run(&store, &admin, prefixes, tool_loop.clone(), script).await;
+        let settled = admin
+            .query(
+                "SELECT call.function_name, call.call_position, call.result_text
+                   FROM storyos.agent_run_events AS event
+                   JOIN storyos.tool_calls AS call
+                     ON call.tool_call_id = (event.payload ->> 'tool_call_id')::uuid
+                  WHERE event.run_id = $1::text::uuid AND event.event_kind = 'tool_call_settled'
+                    AND call.decision_position = 0
+                  ORDER BY event.event_position",
+                &[&run_id],
+            )
+            .await
+            .unwrap();
+        let settled: Vec<(String, i32, String)> = settled
             .iter()
-            .map(|row| (
-                row.get::<_, String>(/*idx*/ 0),
-                row.get::<_, i32>(/*idx*/ 1)
-            ))
-            .collect::<Vec<_>>(),
-        [("propose_edit".to_owned(), 1), ("finish".to_owned(), 0)]
-    );
+            .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1), row.get(/*idx*/ 2)))
+            .collect();
+        let expected: Vec<(String, i32, String)> = expected
+            .into_iter()
+            .map(|(name, position, result)| (name.to_owned(), position, result.to_owned()))
+            .collect();
+        assert_eq!(settled, expected, "{script}");
+    }
 }

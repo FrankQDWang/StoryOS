@@ -4,6 +4,7 @@ mod create_plan;
 mod propose_edit_plan;
 mod prose_changes;
 mod recovery_plan;
+mod research_plan;
 mod tool_loop_plan;
 
 pub use tool_loop_plan::LIMIT_ANSWER;

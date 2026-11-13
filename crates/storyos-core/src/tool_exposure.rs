@@ -89,6 +89,7 @@ impl ToolOperation {
             Self::WebFetch => "web_fetch",
             Self::Finish => "finish",
             Self::ProposeEdit => "propose_edit",
+            Self::SubmitResearch => "submit_research",
         }
     }
 
@@ -108,6 +109,7 @@ impl ToolOperation {
                  change and opens a Proposal that waits for the decision of the author. Give the \
                  complete new text of each changed block."
             }
+            Self::SubmitResearch => crate::submit_research::DESCRIPTION,
         }
     }
 }
@@ -152,6 +154,7 @@ impl ExposedTool {
         }
         let parameters = match self.spec.operation {
             ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
+            ToolOperation::SubmitResearch => crate::submit_research::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,

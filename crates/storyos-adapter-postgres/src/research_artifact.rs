@@ -212,9 +212,14 @@ pub(crate) async fn proposal_lineage(
                  ON (prior.owner_user_id, prior.project_id) = (run.owner_user_id, run.project_id)
                 AND prior.continuation_binding_id::text =
                     attempt.payload #>> '{continuation,prior_continuation_binding_id}'
-               JOIN storyos.research_artifacts AS artifact
-                 ON (artifact.owner_user_id, artifact.project_id, artifact.model_attempt_id) =
-                    (prior.owner_user_id, prior.project_id, prior.model_attempt_id)
+               -- In the tool loop profile, the closing response of the Run continues the response
+               -- that recorded the Artifact (ADR 0091). A Run records at most one Artifact.
+               CROSS JOIN LATERAL (
+                 SELECT artifact.research_artifact_id FROM storyos.research_artifacts AS artifact
+                  WHERE (artifact.owner_user_id, artifact.project_id, artifact.run_id) =
+                        (prior.owner_user_id, prior.project_id, prior.run_id)
+                    AND artifact.decision_position <= prior.decision_position
+                  ORDER BY artifact.decision_position DESC LIMIT 1) AS artifact
               WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
             &[
