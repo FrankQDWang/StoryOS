@@ -58,7 +58,9 @@ impl ServerSettings {
         let authorization = self.model_qualification_authorization.clone();
         match (self.model_destination.as_deref(), &authorization) {
             (None, None) => Ok(None),
-            (Some("host_fake"), None) => Ok(Some(storyos_core::DeploymentDestination::HostFake)),
+            (Some("host_fake"), None) => {
+                Ok(Some(storyos_core::DeploymentDestination::HostFakeToolLoop))
+            }
             (Some("volcengine_agent_plan"), _)
                 if authorization.as_deref().is_none_or(|link| {
                     link.starts_with("https://") && (9..=500).contains(&link.len())
