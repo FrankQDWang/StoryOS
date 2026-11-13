@@ -21,12 +21,13 @@ use crate::research_source::tests::SEARCH_TEXT;
 
 const FAILED_PAGE: &str = "Error fetching https://example.org/c: CRAWL_NOT_FOUND";
 
-/// One Project of the tool loop profile with the research offer. Its first Run completed.
+/// One Project of the tool loop profile with the research offer. Its `first` Run completed.
 struct ResearchProject {
     store: PostgresProjectReader,
     admin: Client,
     scope: ProjectScope,
     chapter_id: String,
+    first: String,
 }
 
 async fn research_project(prefix: &str) -> ResearchProject {
@@ -38,7 +39,7 @@ async fn research_project(prefix: &str) -> ResearchProject {
         Some(&RESEARCH_TOOL_OFFER),
     )
     .await;
-    let claim = claim_run(&admin, scope.clone(), first).await;
+    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
     complete_agent_run(
         &store,
         &FakeDestination,
@@ -53,6 +54,7 @@ async fn research_project(prefix: &str) -> ResearchProject {
         admin,
         scope,
         chapter_id,
+        first,
     }
 }
 
@@ -262,48 +264,56 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             if continuation_binding_id.is_some() && continuation_binding_id == quiet_binding
     );
     // "Use this in the story": the next Run of the Conversation continues the closing response,
-    // and its Proposal names the Artifact (ADR 0087 section 8).
-    let conversation_id: String = project
-        .admin
-        .query_one(
-            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
+    // and its Proposal names the Artifact (ADR 0087 section 8). After a Run with no Artifact, the
+    // Proposal names no Artifact. Each Proposal needs free blocks, so that Run has its own Project.
+    let fresh = research_project("87d").await;
+    let mut story_lineages = Vec::new();
+    for (project, prefix, earlier) in [(&project, "873", &run_id), (&fresh, "87c", &fresh.first)] {
+        let conversation_id: String = project
+            .admin
+            .query_one(
+                "SELECT conversation_id::text FROM storyos.agent_runs
+                  WHERE run_id = $1::text::uuid",
+                &[earlier],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        let story = admit_run_in(
+            &project.store,
+            &project.scope,
+            &project.chapter_id,
+            prefix,
+            DeploymentDestination::HostFakeToolLoop,
+            "Revise these passages with the research.",
+            ConversationSelection::Existing { conversation_id },
+            None,
         )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let story = admit_run_in(
-        &project.store,
-        &project.scope,
-        &project.chapter_id,
-        "873",
-        DeploymentDestination::HostFakeToolLoop,
-        "Revise these passages with the research.",
-        ConversationSelection::Existing { conversation_id },
-        None,
-    )
-    .await;
-    let claim = claim_run(&project.admin, project.scope.clone(), story.clone()).await;
-    complete_agent_run(
-        &project.store,
-        &FakeDestination,
-        &NoContractFaults,
-        &RuntimeClock,
-        &claim,
-    )
-    .await
-    .unwrap();
-    let story_lineage = project
-        .admin
-        .query_one(
-            "SELECT source_lineage ->> 'kind', source_lineage ->> 'research_artifact_id'
-               FROM storyos.proposals WHERE source_run_id = $1::text::uuid",
-            &[&story],
+        .await;
+        let claim = claim_run(&project.admin, project.scope.clone(), story.clone()).await;
+        complete_agent_run(
+            &project.store,
+            &FakeDestination,
+            &NoContractFaults,
+            &RuntimeClock,
+            &claim,
         )
         .await
         .unwrap();
-    let story_lineage: (Option<String>, Option<String>) =
-        (story_lineage.get(/*idx*/ 0), story_lineage.get(/*idx*/ 1));
+        let lineage = project
+            .admin
+            .query_one(
+                "SELECT source_lineage ->> 'kind', source_lineage ->> 'research_artifact_id'
+                   FROM storyos.proposals WHERE source_run_id = $1::text::uuid",
+                &[&story],
+            )
+            .await
+            .unwrap();
+        story_lineages.push((
+            lineage.get::<_, Option<String>>(/*idx*/ 0),
+            lineage.get::<_, Option<String>>(/*idx*/ 1),
+        ));
+    }
     let story_artifact = Some(research_artifact_id.clone());
 
     assert_eq!(
@@ -313,7 +323,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             project.decision(&run_id).await,
             read,
             quiet_shown,
-            story_lineage,
+            story_lineages,
         ),
         (
             completed(
@@ -339,7 +349,10 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             },
             true,
             true,
-            (Some("research_artifact".to_owned()), story_artifact),
+            vec![
+                (Some("research_artifact".to_owned()), story_artifact),
+                (None, None)
+            ],
         )
     );
 }
