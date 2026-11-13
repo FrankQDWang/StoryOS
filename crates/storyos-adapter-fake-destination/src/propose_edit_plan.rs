@@ -9,6 +9,9 @@
 //!   only `finish`.
 //! - `SCRIPT:propose_twice`: two correct calls in one response.
 //! - `SCRIPT:propose_again`: a correct call alone, then a second correct call alone.
+//! - `SCRIPT:propose_finish_first`: a `finish` call before a correct call in one response.
+//! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
+//!   then one such call, then one call with no arguments.
 
 use storyos_application::CreateRequest;
 use storyos_core::{DeclaredLocation, NativeStreamItem, ToolOperation};
@@ -55,23 +58,40 @@ pub(crate) fn calls(
             .collect();
         let arguments =
             serde_json::json!({"summary": "Kept the narrator voice.", "changes": changes});
-        call(name, format!("_{results}_{index}"), arguments.to_string())
+        // The arguments text has line breaks, so a refused call shows that it keeps its text.
+        call(
+            name,
+            format!("_{results}_{index}"),
+            format!("{arguments:#}"),
+        )
     };
     let correct = |index| proposal(index, message);
-    let undeclared = || proposal(0, "SCRIPT:undeclared_location");
+    let undeclared = |index| proposal(index, "SCRIPT:undeclared_location");
     let script = message.rsplit_once("SCRIPT:").map(|(_, script)| script);
     Some(match (script, results) {
-        (Some("propose_refused_once"), 0) => (vec![undeclared()], false),
+        (Some("propose_refused_once"), 0) => (vec![undeclared(0)], false),
         (Some("propose_refused_once"), 1) => (vec![correct(0)], true),
-        (Some("propose_always_refused"), 0..5) => (vec![undeclared()], false),
+        (Some("propose_always_refused"), 0..5) => (vec![undeclared(0)], false),
         (Some("propose_twice"), 0) => (vec![correct(0), correct(1)], true),
         (Some("propose_again"), 0 | 1) => (vec![correct(0)], false),
+        (Some("propose_finish_first"), 0) => {
+            let finish = call("finish", format!("_{results}_9"), "{}".into());
+            (vec![finish, correct(0)], false)
+        }
+        (Some("propose_mixed"), 0) => (vec![undeclared(0), undeclared(1)], false),
+        (Some("propose_mixed"), 2) => (vec![undeclared(0)], false),
+        (Some("propose_mixed"), 3) => (
+            vec![call(name, format!("_{results}_0"), "{}".into())],
+            false,
+        ),
         (
             Some(
                 "propose_refused_once"
                 | "propose_always_refused"
                 | "propose_twice"
-                | "propose_again",
+                | "propose_again"
+                | "propose_mixed"
+                | "propose_finish_first",
             ),
             _,
         ) => (Vec::new(), true),

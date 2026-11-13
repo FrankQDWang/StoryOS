@@ -10,28 +10,30 @@ use storyos_application::{
 };
 use storyos_core::{
     DeclaredLocation, PROPOSAL_WAITS_RESULT, PROPOSE_EDIT_TOOL_SPEC, ProposeEditHistory,
-    ProposeEditRefusal, ProposedEdit, RequestedToolCall, ToolCallBatch, ToolCallState, ToolIntake,
+    ProposeEditRefusal, ProposedEdit, RequestedToolCall, ToolCallBatch, ToolCallState,
 };
 
 use crate::agent_run_observation::{ProposalStream, open_selected_proposal};
-use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
+use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 use crate::agent_run_work::complete_database_error;
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
 
-/// Refuses each `propose_edit` call of `batch` that the limits of the Run or the prose change
-/// validation against `declared` refuse.
+/// Refuses each `propose_edit` call of `batch` from `response` that the limits of the Run or the
+/// prose change validation against `declared` refuse.
 pub(crate) async fn screen(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     declared: &[DeclaredLocation],
+    response: &storyos_application::ModelResponse,
     batch: ToolCallBatch,
 ) -> Result<ToolCallBatch, CompleteAgentRunError> {
+    let name = storyos_core::ToolOperation::ProposeEdit.function_name();
     let ToolCallBatch::Valid(calls) = &batch else {
         return Ok(batch);
     };
-    if !calls.iter().any(|call| {
-        matches!(call, RequestedToolCall::Validated(call)
-            if matches!(call.intake, ToolIntake::ProposeEdit(_)))
+    if !calls.iter().any(|call| match call {
+        RequestedToolCall::Validated(call) => call.name == name,
+        RequestedToolCall::Refused(call) => call.name == name,
     }) {
         return Ok(batch);
     }
@@ -56,7 +58,10 @@ pub(crate) async fn screen(
         proposal_open: row.get(/*idx*/ 1),
     };
     Ok(storyos_core::screen_proposed_edits(
-        batch, declared, history,
+        batch,
+        &response.items,
+        declared,
+        history,
     ))
 }
 
@@ -70,9 +75,21 @@ pub(crate) async fn execute(
     edit: &ProposedEdit,
 ) -> Result<(), CompleteAgentRunError> {
     let run = crate::agent_run_work::load_run_phase(client, claim).await?;
-    let (Some(attempt_id), Some(decision_id)) = (&run.attempt_id, &run.decision_id) else {
-        return Err(damaged("The Decision of the propose_edit call is missing"));
-    };
+    // The Attempt of the call can be a successor of the Attempt of the RunStep.
+    let owner = client
+        .query_one(
+            "SELECT model_attempt_id::text, decision_id::text FROM storyos.tool_calls
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND tool_call_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &row.tool_call_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    let (attempt_id, decision_id): (String, String) = (owner.get(0), owner.get(1));
     let declared: Vec<DeclaredLocation> =
         crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
             .await?
@@ -86,7 +103,7 @@ pub(crate) async fn execute(
                 client,
                 claim,
                 &run,
-                (attempt_id, decision_id),
+                (&attempt_id, &decision_id),
                 edit,
                 &candidates,
             )

@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    CallValidationRefusal, DeclaredLocation, ProseChangeCandidate, ProseChangeRefusal,
-    RefusedToolCall, RequestedToolCall, SnapshotTool, ToolCallBatch, ToolIntake,
-    prose_change_refusal,
+    CallValidationRefusal, DeclaredLocation, NativeStreamItem, ProseChangeCandidate,
+    ProseChangeRefusal, RefusedToolCall, RequestedToolCall, SnapshotTool, ToolCallBatch,
+    ToolIntake, prose_change_refusal,
 };
 
 /// The validation can refuse this many `propose_edit` calls of one Run. The Host refuses each
@@ -212,58 +212,76 @@ pub struct ProposeEditHistory {
 }
 
 /// Refuses each `propose_edit` call of the batch that the limits or the prose change validation
-/// against `targets` refuse. The other members stay as they are.
+/// against `targets` refuse. Each refused call adds to the refusals of the Run in response order,
+/// and above the limit each call gets the refusal of the limit. A refused call keeps the
+/// arguments text of its item in `items`. The other members stay as they are.
 pub fn screen_proposed_edits(
     batch: ToolCallBatch,
+    items: &[NativeStreamItem],
     targets: &[DeclaredLocation],
     history: ProposeEditHistory,
 ) -> ToolCallBatch {
     let ToolCallBatch::Valid(calls) = batch else {
         return batch;
     };
-    let name = crate::ToolOperation::ProposeEdit.function_name();
     let mut refused = history.refused;
     let mut earlier = false;
     let calls = calls
         .into_iter()
-        .map(|call| match call {
-            RequestedToolCall::Refused(call) => {
-                if call.name == name {
-                    refused += 1;
+        .map(|call| {
+            let (refusal, tool, arguments_text) = match call {
+                RequestedToolCall::Refused(mut call)
+                    if call.tool.as_ref().is_some_and(|tool| {
+                        tool.spec_revision == crate::PROPOSE_EDIT_TOOL_SPEC.revision
+                    }) =>
+                {
                     earlier = true;
+                    if refused >= MAX_REFUSED_PROPOSE_EDIT_CALLS {
+                        call.refusal =
+                            CallValidationRefusal::ProposeEdit(ProposeEditRefusal::Limit);
+                    }
+                    refused += 1;
+                    return RequestedToolCall::Refused(call);
                 }
-                RequestedToolCall::Refused(call)
-            }
-            RequestedToolCall::Validated(validated) => {
-                let ToolIntake::ProposeEdit(edit) = &validated.intake else {
-                    return RequestedToolCall::Validated(validated);
-                };
-                let refusal = if refused >= MAX_REFUSED_PROPOSE_EDIT_CALLS {
-                    Some(ProposeEditRefusal::Limit)
-                } else if history.proposal_open {
-                    Some(ProposeEditRefusal::AfterProposal)
-                } else if earlier {
-                    Some(ProposeEditRefusal::SecondInResponse)
-                } else {
-                    edit.validate(targets).err().inspect(|_| refused += 1)
-                };
-                earlier = true;
-                let Some(refusal) = refusal else {
-                    return RequestedToolCall::Validated(validated);
-                };
-                RequestedToolCall::Refused(RefusedToolCall {
-                    arguments_text: crate::project_archive::canonical_json(&validated.arguments()),
-                    tool: Some(SnapshotTool {
-                        name: validated.name.clone(),
-                        registration_id: validated.registration_id,
-                        registration_revision: validated.registration_revision,
-                        spec_revision: validated.spec_revision,
-                    }),
-                    call_id: validated.call_id,
-                    name: validated.name,
-                    refusal: CallValidationRefusal::ProposeEdit(refusal),
-                })
-            }
+                RequestedToolCall::Validated(validated) => {
+                    let ToolIntake::ProposeEdit(edit) = &validated.intake else {
+                        return RequestedToolCall::Validated(validated);
+                    };
+                    let refusal = if refused >= MAX_REFUSED_PROPOSE_EDIT_CALLS {
+                        Some(ProposeEditRefusal::Limit)
+                    } else if history.proposal_open {
+                        Some(ProposeEditRefusal::AfterProposal)
+                    } else if earlier {
+                        Some(ProposeEditRefusal::SecondInResponse)
+                    } else {
+                        edit.validate(targets).err()
+                    };
+                    earlier = true;
+                    let Some(refusal) = refusal else {
+                        return RequestedToolCall::Validated(validated);
+                    };
+                    refused += 1;
+                    let arguments_text = items
+                        .iter()
+                        .find(|item| item.call_id.as_deref() == Some(&validated.call_id))
+                        .and_then(|item| item.arguments.clone())
+                        .unwrap_or_default();
+                    (refusal, validated, arguments_text)
+                }
+                other @ RequestedToolCall::Refused(_) => return other,
+            };
+            RequestedToolCall::Refused(RefusedToolCall {
+                arguments_text,
+                tool: Some(SnapshotTool {
+                    name: tool.name.clone(),
+                    registration_id: tool.registration_id,
+                    registration_revision: tool.registration_revision,
+                    spec_revision: tool.spec_revision,
+                }),
+                call_id: tool.call_id,
+                name: tool.name,
+                refusal: CallValidationRefusal::ProposeEdit(refusal),
+            })
         })
         .collect();
     ToolCallBatch::Valid(calls)

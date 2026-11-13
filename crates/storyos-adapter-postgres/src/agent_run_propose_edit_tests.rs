@@ -2,9 +2,10 @@ use serde_json::{Value, json};
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AcceptProposalInput, AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore,
-    ConversationSelection, EditorSessionStore, NoContractFaults, ProjectScope,
-    RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput, WithdrawalNote,
-    complete_agent_run,
+    ConversationSelection, CreateRequest, DestinationRequest, EditorSessionStore,
+    ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ProjectScope, RejectProposalOperationsInput, RejectionNote,
+    WithdrawProposalInput, WithdrawalNote, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, PROPOSAL_WAITS_RESULT};
 use tokio_postgres::Client;
@@ -231,6 +232,18 @@ async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_ea
             vec![opened(0), refused(1, "after_proposal", after)],
             1,
         ),
+        // Each refusal of one response counts, and the limit replaces the intake refusal.
+        (
+            ["6bc", "6bd"],
+            "mixed",
+            vec![
+                undeclared(0),
+                refused(0, "second_in_response", second),
+                undeclared(1),
+                limit(2),
+            ],
+            0,
+        ),
     ];
     let mut runs = Vec::new();
     for (prefixes, script, expected, proposals) in cases {
@@ -248,6 +261,15 @@ async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_ea
         );
         runs.push(run_id);
     }
+    // A refused call keeps the arguments text of the model.
+    let refused_text = admin
+        .query_one(
+            "SELECT arguments #>> '{}' FROM storyos.tool_calls
+              WHERE run_id = $1::text::uuid AND state = 'refused'",
+            &[&runs[0]],
+        )
+        .await
+        .unwrap();
     // The corrected call came after a Tool result, so its Proposal has the lineage of ADR 0085.
     let row = admin
         .query_one(
@@ -272,6 +294,7 @@ async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_ea
         (
             serde_json::from_str::<Value>(row.get::<_, &str>(/*idx*/ 0)).unwrap(),
             row.get::<_, bool>(/*idx*/ 4),
+            refused_text.get::<_, String>(/*idx*/ 0).contains('\n'),
         ),
         (
             json!({"kind": "tool_result_continuation", "run_id": runs[0],
@@ -279,6 +302,7 @@ async fn a_refused_call_gives_its_reason_and_the_limits_keep_one_proposal_for_ea
                    "operation_requirement_id": row.get::<_, String>(/*idx*/ 1),
                    "model_attempt_id": row.get::<_, String>(/*idx*/ 2),
                    "tool_call_ids": [row.get::<_, String>(/*idx*/ 3)]}),
+            true,
             true,
         )
     );
@@ -293,9 +317,9 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
     let (store, admin) = stores().await;
     let mut states = Vec::new();
     for (prefixes, suffix, command) in [
-        (["3a0", "3a1"], 0x3a06_u16, "accept"),
-        (["3a2", "3a3"], 0x3a26, "reject"),
-        (["3a4", "3a5"], 0x3a46, "withdraw"),
+        (["b60", "b61"], 0xb6c0_u16, "accept"),
+        (["b62", "b63"], 0xb6d0, "reject"),
+        (["b64", "b65"], 0xb6e0, "withdraw"),
     ] {
         let (scope, run_id) = revise_run(
             &store,
@@ -408,5 +432,137 @@ async fn the_author_accepts_rejects_and_withdraws_the_proposal_with_the_commands
             ("reject", true, json!(["rejected", "open"])),
             ("withdraw", true, json!(["pending", "withdrawn"])),
         ]
+    );
+}
+
+/// The fake destination for a Run with the author message `SCRIPT:successor-once`, which loses
+/// the first create. The successor create and each later create get the response of `REVISE`.
+struct ReviseInSuccessor;
+
+impl ModelProviderAdapter for ReviseInSuccessor {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
+    type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        let mut prepared = FakeDestination.prepare(request).await?;
+        if let DestinationRequest::Create(create) = request
+            && (create.successor_of.is_some() || !create.tool_outputs.is_empty())
+        {
+            let revise = DestinationRequest::Create(CreateRequest {
+                author_message: REVISE.to_owned(),
+                ..create.clone()
+            });
+            prepared.prepared = FakeDestination.prepare(&revise).await?.prepared;
+        }
+        Ok(prepared)
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        FakeDestination.exchange(prepared, sink).await
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_call_of_a_successor_attempt_opens_its_proposal_from_the_decision_of_that_attempt() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let destination = DeploymentDestination::HostFakeToolLoop;
+    let (scope, chapter_id, first) =
+        queued_run_offering(&store, "b66", destination.clone(), None).await;
+    complete(&store, &admin, &scope, &first).await;
+    let message = "SCRIPT:successor-once";
+    let new = ConversationSelection::New;
+    let run_id = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "b67",
+        destination,
+        message,
+        new,
+        None,
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(
+        &store,
+        &ReviseInSuccessor,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
+    let source = admin
+        .query_one(
+            "SELECT count(*), bool_and(proposal.source_decision_id = call.decision_id),
+                    min(attempt.attempt_role)
+               FROM storyos.proposals AS proposal
+               JOIN storyos.tool_calls AS call ON call.run_id = proposal.source_run_id
+                AND call.function_name = 'propose_edit'
+               JOIN storyos.model_attempts AS attempt
+                 ON attempt.model_attempt_id = call.model_attempt_id
+                AND attempt.payload ? 'proposed_edit'
+              WHERE proposal.source_run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            propose_edit_calls(&admin, &run_id).await,
+            source.get::<_, i64>(/*idx*/ 0),
+            source.get::<_, bool>(/*idx*/ 1),
+            source.get::<_, String>(/*idx*/ 2),
+        ),
+        (vec![opened(0)], 1, true, "successor".to_owned())
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_finish_call_settles_after_the_propose_edit_call_of_its_response() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let script = " SCRIPT:propose_finish_first";
+    let (_, run_id) = revise_run(&store, &admin, ["b68", "b69"], tool_loop, script).await;
+    // The response has `finish` first, but `finish` settles last, so its result can count a
+    // refusal of the opening.
+    let settled = admin
+        .query(
+            "SELECT call.function_name, call.call_position
+               FROM storyos.agent_run_events AS event
+               JOIN storyos.tool_calls AS call
+                 ON call.tool_call_id = (event.payload ->> 'tool_call_id')::uuid
+              WHERE event.run_id = $1::text::uuid AND event.event_kind = 'tool_call_settled'
+              ORDER BY event.event_position",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        settled
+            .iter()
+            .map(|row| (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, i32>(/*idx*/ 1)
+            ))
+            .collect::<Vec<_>>(),
+        [("propose_edit".to_owned(), 1), ("finish".to_owned(), 0)]
     );
 }
