@@ -48,7 +48,8 @@ import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
 } from "../support/acceptance.ts";
-import { heldWorker, postRun, problemCode, restartServer, runRequest, settleRun, startServer } from "../support/http-harness.ts";
+import { REPLY_FORM_FAKE_ENV, heldWorker, inspectFirstRunStep, postRun, problemCode, restartServer, runRequest, settleRun, startServer }
+  from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
 
@@ -238,20 +239,23 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
       chapter.current_revision.blocks.map((block) => ({ chapter_id: chapter.chapter_id,
         manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: chapter.current_revision.revision_id }))));
     assert.deepEqual(run.context.passage_targets, target.targets);
-    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    // The first RunStep sends the targets and proposes the changes (ADR 0091).
+    const step = await inspectFirstRunStep(started.baseUrl, { projectId, fetchImpl }, run.run_id);
+    const sent = step.evidence.find((evidence) => evidence.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
     const wire = JSON.parse(sent.content);
     assert.deepEqual(wire.targets, target.targets);
     assert.equal(wire.source_chapter_id, chapterId);
     assert.equal(sent.content.includes("Private foreign prose."), false);
-    assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
+    assert.deepEqual(wire.selected, step.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
     assert.equal(wire.selected.some((source: { content: string }) => source.content === "A lantern crossed the river."), true);
-    const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid;`));
+    const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts
+      WHERE run_id='${run.run_id}'::uuid AND decision_position = 0;`));
     assert.equal(retained.serialized_payload, sent.content);
     assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
-    // ADR 0051: the standing grant covers a cross-Chapter collection with no prompt.
-    assert.deepEqual(JSON.parse(await queryPostgres(`SELECT attempt.payload->'disclosure_grant'->'grant_scope'
-      FROM storyos.model_attempts AS attempt WHERE attempt.run_id='${run.run_id}'::uuid;`)), "project_writing_assistance_v3");
+    // ADR 0051: the standing grant covers a cross-Chapter collection with no prompt, at each RunStep.
+    assert.deepEqual(await queryPostgres(`SELECT string_agg(DISTINCT attempt.payload->'disclosure_grant'->>'grant_scope', ' ')
+      FROM storyos.model_attempts AS attempt WHERE attempt.run_id='${run.run_id}'::uuid;`), "project_writing_assistance_v3");
     const proposals = await Promise.all([...new Set(run.decision.locations!.map((location) => {
       if (location.outcome.kind !== "opened") throw new Error("expected eligible location");
       return location.outcome.proposal_id;
@@ -285,11 +289,13 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
       "A different boat reached the shore.", "Chapter A");
     const question = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       'Rewrite the first paragraph of chapter "Chapter A"', id(`${ns}81`));
-    if (question.decision.kind !== "clarification") throw new Error("expected native Clarification");
-    assert.deepEqual({ question: question.decision.question, continuation: question.decision.continuation,
+    // A question to the author is the final text of an advisory decision, and the closing RunStep keeps its
+    // continuation (ADR 0091 section 1).
+    if (question.decision.kind !== "advisory") throw new Error("expected the question as advice");
+    assert.deepEqual({ question: question.decision.text, continuation: question.decision.continuation.kind,
       targets: question.context.passage_targets, prose: question.context.selected.filter((source) => source.source_class === "working_target") },
-      { question: "Which unique Chapter and paragraph numbers should I revise?", continuation: { kind: "absent" }, targets: undefined, prose: [] });
-    const questionText = question.decision.question;
+      { question: "Which unique Chapter and paragraph numbers should I revise?", continuation: "present", targets: undefined, prose: [] });
+    const questionText = question.decision.text;
     assert.equal(question.items.some((item) => item.text === questionText), true);
     const conversation = { kind: "existing", conversation_id: question.conversation_id } as const;
     const first = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
@@ -299,9 +305,11 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
     const second = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       "Rewrite paragraph 2 of this chapter", id(`${ns}83`), undefined, true, undefined, conversation);
     assert.deepEqual(second.context.passage_targets, [{ ...target.targets[0], manuscript_block_ids: [target.targets[0]!.manuscript_block_ids[1]] }]);
-    if (second.model_attempt.kind !== "present") throw new Error("expected actual Attempt");
-    assert.deepEqual({ conversation: second.conversation_id, mapping: second.model_attempt.input_mapping,
-      prior: second.model_attempt.prior_continuation }, { conversation: question.conversation_id,
+    // The first RunStep of the Run continues from the decision of the prior Run (ADR 0091).
+    const secondStep = await inspectFirstRunStep(started.baseUrl, { projectId, fetchImpl }, second.run_id);
+    if (secondStep.model_attempt.kind !== "present") throw new Error("expected actual Attempt");
+    assert.deepEqual({ conversation: second.conversation_id, mapping: secondStep.model_attempt.input_mapping,
+      prior: secondStep.model_attempt.prior_continuation }, { conversation: question.conversation_id,
       mapping: "incremental", prior: first.decision.continuation });
     for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl,
       projectId, chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
@@ -396,13 +404,15 @@ test.each(["current", "stale", "empty", "reversed"])("a %s selection reference d
       assert.deepEqual(run.model_attempt, { kind: "absent" });
       return;
     }
-    assert.deepEqual(run.context.selection_references, references.map((reference, index) =>
+    // The first RunStep sends the references and proposes the changes (ADR 0091).
+    const step = await inspectFirstRunStep(started.baseUrl, setup, run.run_id);
+    assert.deepEqual(step.context.selection_references, references.map((reference, index) =>
       ({ reference, manuscript_block_ids: covered[index], availability: { kind: "current" } })));
-    assert.deepEqual(run.context.passage_targets, setup.target.targets);
+    assert.deepEqual(step.context.passage_targets, setup.target.targets);
     if (run.decision.kind !== "prose_change") throw new Error("expected reference Decision");
     assert.deepEqual(run.decision.locations!.map(({ manuscript_block_id, outcome }) => ({ manuscript_block_id, kind: outcome.kind })),
       covered.flat().map((manuscript_block_id) => ({ manuscript_block_id, kind: "opened" })));
-    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    const sent = step.evidence.find((evidence) => evidence.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
     assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),
       ["lo \nWo", "lantern"]);
@@ -461,7 +471,9 @@ test("guidance adds its distinct references to the Run up to eight references", 
 test.each(["collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
-  let started = await startServer();
+  // The test checks the typed output and the streamed Proposal of the reply form profile, so it uses the reply form
+  // fake. #1463 owns it.
+  let started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof heldWorker>["child"] | undefined;
   let exited: Promise<void> | undefined;
@@ -545,7 +557,7 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
       }
       const address = new URL(started.baseUrl);
       await stopRealServer(started.server);
-      started = await startServer({ bind: `${address.hostname}:${address.port}` });
+      started = await startServer({ bind: `${address.hostname}:${address.port}`, extraEnv: REPLY_FORM_FAKE_ENV });
     }
     unlinkSync(hold);
     if (child) { await exited; child = undefined; }
@@ -591,14 +603,16 @@ test.each(["undeclared_location"])("scalar requests do not enter the typed scrip
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise this passage SCRIPT:${script}`, id(`${ns}41`));
-    assert.ok(run.decision.kind === "clarification");
-    assert.equal(run.decision.question, "Which unique Chapter and paragraph numbers should I revise?");
+    // A question to the author is the final text of an advisory decision (ADR 0091 section 1).
+    assert.ok(run.decision.kind === "advisory");
+    assert.equal(run.decision.text, "Which unique Chapter and paragraph numbers should I revise?");
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${run.run_id}'::uuid;`), "0");
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
     const normal = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise this passage: SCRIPT:${script}`, id(`${ns}51`));
+    // A `propose_edit` call gives each change a location (ADR 0091).
     if (normal.decision.kind !== "prose_change") throw new Error("expected legacy prose");
-    assert.equal(normal.decision.locations, undefined);
+    assert.deepEqual(normal.decision.locations?.map((location) => location.candidate_text), [PROSE]);
     assert.equal((await getProposal({ baseUrl: started.baseUrl, projectId,
       proposalId: openedProposal(normal), fetchImpl })).proposal.candidate_text, PROSE);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
@@ -607,7 +621,8 @@ test.each(["undeclared_location"])("scalar requests do not enter the typed scrip
 
 test.each(["malformed_locations", "undeclared_location", "stale_location_base", "oversized_explanation", "incomplete", "unselected"])(
   "unusable typed output %s retains evidence without candidates", async (script) => {
-    const started = await startServer();
+    // The typed output shapes are of the reply form profile only. #1463 owns the test.
+    const started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
     try {
       await drainLeftoverWork();
       const ns = randomBytes(3).toString("hex");
@@ -669,7 +684,12 @@ test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Propos
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise these passages SCRIPT:${script}`, id(`${ns}41`));
-    assert.deepEqual(run.decision, { kind: "absent" });
+    // The Host refuses the `propose_edit` call and returns the reason to the model. The Run ends with the final text
+    // as advice (ADR 0091).
+    assert.equal(run.decision.kind, "advisory");
+    assert.equal(await queryPostgres(`SELECT string_agg(state || ':' || coalesce(refusal, ''), ' ') FROM storyos.tool_calls
+      WHERE run_id = '${run.run_id}'::uuid AND function_name = 'propose_edit';`),
+    script === "duplicate_location" ? "refused:repeated_block" : "refused:no_change");
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }
@@ -960,8 +980,11 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
         assert.deepEqual(records.find((row: { proposal_revision_id?: string; revision_id?: string }) =>
           (row.proposal_revision_id ?? row.revision_id) === opened.proposal.revision_id), expected);
       }
-      const archivedAttempts = JSON.parse(new TextDecoder().decode(files.get("canonical/model_attempts.json")));
-      const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`));
+      // The Run has a Model Attempt for each RunStep, so the comparison sets one order (ADR 0091).
+      const byAttempt = (left: { model_attempt_id: string }, right: { model_attempt_id: string }) =>
+        left.model_attempt_id.localeCompare(right.model_attempt_id);
+      const archivedAttempts = JSON.parse(new TextDecoder().decode(files.get("canonical/model_attempts.json"))).sort(byAttempt);
+      const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`)).sort(byAttempt);
       assert.deepEqual(archivedAttempts, storedAttempts);
       // The archive keeps each Acceptance Receipt row. The second Acceptance replaced its Block on the first head.
       const archivedAcceptances = JSON.parse(new TextDecoder().decode(files.get("canonical/acceptance_receipts.json")))
@@ -974,9 +997,11 @@ test(`partial Acceptance preserves ${history} evidence and replaces the remainin
       const firstHead = firstAccepted.effect.authoritative_revision.revision_id;
       assert.ok(archivedAcceptances.some((row: { applied_authoritative_revision_id: string; target_resolution: string }) =>
         row.applied_authoritative_revision_id === firstHead && row.target_resolution === "block_replacement"));
-      const originalOutput = archivedAttempts.find((attempt: { run_id: string }) => attempt.run_id === queried.run_id).payload;
-      assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), collection ? [null, null, null] : [null, null]);
-      assert.deepEqual(originalOutput.decision.locations, queried.decision.kind === "prose_change"
+      // The first RunStep keeps the locations of its `propose_edit` call (ADR 0091).
+      const originalOutput = archivedAttempts.find((attempt: { run_id: string; decision_position: number }) =>
+        attempt.run_id === queried.run_id && Number(attempt.decision_position) === 0).payload;
+      assert.deepEqual(originalOutput.proposed_edit.locations.map((location: { current: unknown }) => location.current), collection ? [null, null, null] : [null, null]);
+      assert.deepEqual(originalOutput.proposed_edit.locations, queried.decision.kind === "prose_change"
         ? queried.decision.locations?.map((location) => ({ ...location, current: null })) : undefined);
       if (collection) {
         assert.equal(originalOutput.wire.digest, `sha256:${createHash("sha256").update(originalOutput.wire.serialized_payload).digest("hex")}`);
@@ -1166,9 +1191,11 @@ test("a candidate reference sends its exact range and a stale candidate referenc
       coordinate_profile: "storyos.editor.utf16-code-unit.v1", start_offset: 2, end_offset: 9 };
     const revised = await admit(`${ns}51`);
     const after = (await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal;
-    assert.deepEqual(revised.context.selection_references, [{ reference, manuscript_block_ids: [operation.manuscript_block_id],
+    // The first RunStep sends the reference and revises the candidate (ADR 0091).
+    const step = await inspectFirstRunStep(started.baseUrl, { projectId, fetchImpl }, revised.run_id);
+    assert.deepEqual(step.context.selection_references, [{ reference, manuscript_block_ids: [operation.manuscript_block_id],
       availability: { kind: "superseded", current_revision_id: after.revision_id } }]);
-    const sent = revised.evidence.find((evidence) => evidence.kind === "sent_content");
+    const sent = step.evidence.find((evidence) => evidence.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
     assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) =>
       selected_text), [operation.candidate_text.slice(2, 9)]);

@@ -124,12 +124,22 @@ impl ModelProviderAdapter for FakeDestination {
             projection(wire_digest(&wire), /*serialized_payload*/ None)
         };
         projection.mapping_revision = mapping_revision.to_owned();
+        // In the tool loop profile, a continuation rejection applies only to the first RunStep of
+        // a Run, and a RunStep that continues from a recovered response is not lost again.
+        let later_step = tool_loop && !create.tool_outputs.is_empty();
         let rejection = create
             .previous_response_reference
             .as_deref()
+            .filter(|_| !later_step)
             .and_then(recovery_plan::continuation_rejection);
+        let after_recovery = tool_loop
+            && create
+                .previous_response_reference
+                .as_deref()
+                .is_some_and(recovery_plan::follows_recovery);
         let unknown = match create.successor_of {
             Some(_) => None,
+            None if after_recovery => None,
             None => recovery_plan::unknown_create(
                 &create.author_message,
                 &projection.digest,
@@ -145,7 +155,10 @@ impl ModelProviderAdapter for FakeDestination {
                 create_plan::plan_create(create),
                 recovery_plan::mint_reference(
                     &projection.digest,
-                    recovery_plan::continuation_code(&create.author_message),
+                    match create.successor_of {
+                        Some(_) if tool_loop => recovery_plan::SUCCESSOR_RESPONSE,
+                        _ => recovery_plan::continuation_code(&create.author_message),
+                    },
                 ),
             ),
         };

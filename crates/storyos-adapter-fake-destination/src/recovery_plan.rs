@@ -5,8 +5,9 @@ use storyos_application::{
     ResponseReference, RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, ModelOutput, OutputPhase, RetrievalBounds, StreamItemState,
-    UnknownCreateScript, unknown_create_script,
+    ADVISORY_TEXT, DecisionCandidate, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, ModelOutput,
+    OutputPhase, RetrievalBounds, StreamItemState, ToolOperation, UnknownCreateScript,
+    unknown_create_script,
 };
 
 use crate::create_plan::assistant_item;
@@ -17,6 +18,8 @@ const FOREIGN_DESTINATION: &str = "018f0000-0000-7000-8000-00000000f022";
 const FOREIGN_MAPPING: &str = "storyos.host-fake.mapping.rejected";
 const EXPIRED_CONTINUATION: u8 = 5;
 const UNUSABLE_CONTINUATION: u8 = 6;
+/// The reference code of the response of a successor create in the tool loop profile.
+pub(crate) const SUCCESSOR_RESPONSE: u8 = 7;
 
 /// The later result that a fake reference encodes in its last group.
 #[derive(Clone, Copy)]
@@ -130,6 +133,15 @@ pub(crate) fn continuation_rejection(previous_reference: &str) -> Option<&'stati
     }
 }
 
+/// Whether the prior response is a recovered result: the later result of a lost create, or the
+/// response of a successor create.
+pub(crate) fn follows_recovery(previous_reference: &str) -> bool {
+    matches!(
+        reference_code(previous_reference),
+        Some(1..=4 | SUCCESSOR_RESPONSE)
+    )
+}
+
 fn reference_code(reference: &str) -> Option<u8> {
     reference
         .rsplit('-')
@@ -141,15 +153,18 @@ fn reference_code(reference: &str) -> Option<u8> {
 /// Derives the retrieved result from the reference alone.
 pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
     let code = reference_code(&request.response_reference);
+    // The original request of the tool loop profile has `tool_choice: "required"`, so its
+    // result is the `finish` call of the first RunStep.
+    let tool_loop = request.route.mapping_revision == HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
     let complete = |usage| {
         Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
-            items: vec![assistant_item(
-                "1",
-                StreamItemState::Complete,
-                ADVISORY_TEXT,
-            )],
-            output: Some(ModelOutput {
+            items: vec![if tool_loop {
+                crate::research_plan::function_call(ToolOperation::Finish, "", "{}")
+            } else {
+                assistant_item("1", StreamItemState::Complete, ADVISORY_TEXT)
+            }],
+            output: (!tool_loop).then(|| ModelOutput {
                 phase: OutputPhase::FinalAnswer,
                 candidate: DecisionCandidate::Advisory {
                     text: ADVISORY_TEXT.to_owned(),

@@ -19,10 +19,11 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, freshNamespace, id, postRun, prepare, serverForFile,
+import { BINDING, PROSE, REPLY_FORM_FAKE_ENV, USER_A, challenged, drainLeftoverWork, freshNamespace, id, postRun, prepare, serverForFile,
   settleOnce, streamRequest, waitForOpenedProposal } from "../support/http-harness.ts";
 
-const started = serverForFile();
+// #1463 owns this file: only the reply form profile of the fake streams Proposal generation.
+const started = serverForFile(REPLY_FORM_FAKE_ENV);
 
 const FIRST = "Guard";
 const SECOND = "Guard the narrator";

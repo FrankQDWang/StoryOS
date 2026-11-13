@@ -31,8 +31,8 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectRun, issueChallenge,
-  postRun, prepare, problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
+import { BINDING, USER_A, UUID_V7, admitProse, challenged, drainLeftoverWork, id, inspectFirstRunStep, inspectRun,
+  issueChallenge, postRun, prepare, problemCode, runRequest, settleHeld, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 function pauseRequest(correlationId: string): PauseAgentRunRequest {
   return {
@@ -326,8 +326,10 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     unlinkSync(dispatchHold);
     await Promise.all([staleWorker, recoverer]);
     assert.equal(recovered.status, "completed");
-    if (recovered.model_attempt.kind !== "present") throw new Error("expected recovered attempt");
-    assert.equal(recovered.model_attempt.model_attempt_id, attemptId);
+    // The recovery settles the held Attempt of the first RunStep. The default read shows the closing RunStep.
+    const recoveredFirst = await inspectFirstRunStep(started.baseUrl, prepared, recoverRun.effect.run_id);
+    if (recoveredFirst.model_attempt.kind !== "present") throw new Error("expected recovered attempt");
+    assert.equal(recoveredFirst.model_attempt.model_attempt_id, attemptId);
     assert.equal(recovered.decision.kind, "advisory");
 
     const blocked = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c251"));
@@ -362,10 +364,10 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     writeFileSync(decisionHold, "hold");
     const decisionWorker = settleHeld({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     workers.push(decisionWorker);
-    const beforeCancelProposal = await waitFor(
-      () => inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id),
-      (current) => current.decision.kind === "prose_change" && current.decision.opened_proposal.kind === "present",
-    );
+    // The first RunStep opens the Proposal. The Worker holds after the decision of the closing RunStep (ADR 0091).
+    await waitFor(() => queryPostgres(`SELECT payload #>> '{decision,kind}' FROM storyos.model_attempts
+      WHERE run_id = '${proposalRun.effect.run_id}'::uuid AND decision_position = 1;`), (kind) => kind === "advisory");
+    const beforeCancelProposal = await inspectRun(started.baseUrl, prepared, proposalRun.effect.run_id);
     if (beforeCancelProposal.decision.kind !== "prose_change") throw new Error("expected prose");
     if (beforeCancelProposal.decision.opened_proposal.kind !== "present") throw new Error("expected proposal");
     const proposalId = beforeCancelProposal.decision.opened_proposal.proposal_id;

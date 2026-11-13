@@ -51,6 +51,10 @@ export function startServer(options: ServerOptions = {}): Promise<StoryOSServer>
     sessions: options.sessions ?? SESSIONS });
 }
 
+/** The test Server setting that offers the reply form profile of the fake destination. Only the tests of the
+ * streamed Proposal generation and of the typed output shapes of the reply form set it. #1463 owns them. */
+export const REPLY_FORM_FAKE_ENV: Readonly<Record<string, string>> = { STORYOS_TEST_REPLY_FORM_FAKE: "1" };
+
 /** Stops the Server process and starts a new one on the same address. */
 export async function restartServer(started: StoryOSServer, options: Omit<ServerOptions, "bind"> = {}): Promise<StoryOSServer> {
   const url = new URL(started.baseUrl);
@@ -624,6 +628,15 @@ export async function waitFor<Value>(probe: () => Promise<Value>, match: (value:
     await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 25));
   }
   throw new Error(`the wait timed out; last value: ${JSON.stringify(last)}`);
+}
+
+/** Reads the first RunStep of one AgentRun. The default read shows the closing RunStep (ADR 0091), and the first
+ * RunStep holds the first request of the Run, its recovery, and its compaction. */
+export async function inspectFirstRunStep(baseUrl: string,
+  prepared: { readonly projectId: string; readonly fetchImpl: typeof fetch }, runId: string) {
+  return inspectRun(baseUrl, prepared, runId, await queryStoryOSPostgres(`
+    SELECT model_attempt_id::text FROM storyos.model_attempts
+     WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`));
 }
 
 /** Waits until the AgentRun has an opened Proposal for which `match` holds, and returns that Proposal. */

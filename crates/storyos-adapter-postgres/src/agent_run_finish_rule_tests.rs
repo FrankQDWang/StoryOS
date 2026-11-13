@@ -291,6 +291,53 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
     }
 }
 
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_rebuilt_run_records_its_reference_recovery_once_across_run_steps() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The destination lost the closing reference of the second Run.
+    let message = "Help with this passage. SCRIPT:reference-expires";
+    let (scope, chapter_id, _, _) =
+        tool_loop_run(&store, &admin, ["8f1", "8f2"], message, None, true).await;
+    let third = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "8f3",
+        DeploymentDestination::HostFakeToolLoop,
+        "I changed my mind: keep the voice.",
+        conversation_of("8f1"),
+        None,
+    )
+    .await;
+    complete(&store, &admin, &scope, &third).await;
+
+    // The rebuild opens the first RunStep. The closing RunStep continues from that RunStep.
+    let record = store
+        .read_agent_run(&scope, &third, &AgentRunReadSelection::Current)
+        .await
+        .unwrap()
+        .unwrap();
+    let recoveries: Vec<String> = admin
+        .query(
+            "SELECT disposition FROM storyos.context_reference_recoveries
+              WHERE successor_run_id = $1::text::uuid",
+            &[&third],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(
+        (record.status, recoveries, steps(&admin, &third).await.len()),
+        (AgentRunStatus::Completed, vec!["rebuilt".to_owned()], 2)
+    );
+}
+
 /// Each ToolCall of the Run in RunStep and item order: the RunStep, the function name, the
 /// state, the refusal, and the result text.
 pub(crate) async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {

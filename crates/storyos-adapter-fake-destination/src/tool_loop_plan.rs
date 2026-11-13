@@ -14,6 +14,9 @@
 //!   `finish` call counts. Its request with `tool_choice: "none"` gets a text and a `finish`
 //!   call, and `SCRIPT:never_finish_quietly` gets only the `finish` call.
 //! - `SCRIPT:submit_research ...` gets the research script of `research_plan`.
+//! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
+//!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
+//!   the reply form profile in the first request.
 
 use storyos_application::{CreateRequest, ToolOutputOrigin};
 use storyos_core::{
@@ -37,6 +40,11 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     let message = request.author_message.as_str();
+    if request.tool_outputs.is_empty()
+        && let Some(planned) = crate::create_plan::response_outcome(message)
+    {
+        return planned;
+    }
     // A steering input adds a line, and the script of the Run message stays.
     let run_script = message.lines().next().unwrap_or_default();
     let finished = request
@@ -72,7 +80,7 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
             DecisionCandidate::Advisory {
                 text: match message {
                     "SCRIPT:empty_final_answer" => String::new(),
-                    _ => ADVISORY_TEXT.to_owned(),
+                    _ => final_answer(request),
                 },
             },
             OutputPhase::FinalAnswer,
@@ -93,6 +101,18 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
             )
         }
         ToolChoice::Auto | ToolChoice::Required => calls(request, finished),
+    }
+}
+
+/// The question of the reply form fake for `request`, or else the advice text: a question to the
+/// author is a final answer text (ADR 0091).
+fn final_answer(request: &CreateRequest) -> String {
+    match crate::create_plan::reply_form_plan(request).0.output {
+        Some(storyos_core::ModelOutput {
+            candidate: DecisionCandidate::Clarification { question },
+            ..
+        }) => question,
+        _ => ADVISORY_TEXT.to_owned(),
     }
 }
 

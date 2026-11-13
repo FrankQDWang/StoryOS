@@ -1,9 +1,11 @@
-//! The `propose_edit` script of the tool loop profile (ADR 0091). For an author message that
-//! starts with `Revise these passages`, the fake proposes the changes of the reply form fake for
-//! the declared targets with a `finish` call beside it: the revision of a referenced candidate
-//! with the growth scripts of the reply form fake, or else a change of each target. The end of
-//! the message scripts the other cases, by the count of the `propose_edit` results of the
-//! request:
+//! The `propose_edit` script of the tool loop profile (ADR 0091). For each request for which the
+//! reply form fake proposes changes, the fake proposes the same changes for the declared targets
+//! with a `finish` call beside it: the revision of a referenced candidate with the growth scripts
+//! of the reply form fake, or else a change of each target. For a reply form prose change text
+//! with no changes, it proposes that text for the first target, with the text as the summary.
+//! With no script, the fake proposes when the request has no `propose_edit` result after its last
+//! counted `finish` output. The end of the message scripts the other cases, by the count of the
+//! `propose_edit` results of the request:
 //!
 //! - `SCRIPT:propose_two_candidates`: one call that revises each referenced candidate.
 //! - `SCRIPT:propose_refused_once`: the first call names a block that is not a target, alone,
@@ -17,9 +19,13 @@
 //!   call that cites no captured source after the correct call.
 //! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
 //!   then one such call, then one call with no arguments.
+//! - `SCRIPT:incomplete`: one correct call with the incomplete stream state of the reply form
+//!   response.
 
 use storyos_application::CreateRequest;
-use storyos_core::{DeclaredTargetKind, NativeStreamItem, ToolOperation};
+use storyos_core::{
+    DecisionCandidate, DeclaredTargetKind, NativeStreamItem, ProseChangeCandidate, ToolOperation,
+};
 
 use crate::prose_changes::{produce_fake_candidate_revision, produce_fake_changes};
 
@@ -31,7 +37,15 @@ pub(crate) fn calls(
 ) -> Option<(Vec<NativeStreamItem>, bool)> {
     let name = ToolOperation::ProposeEdit.function_name();
     let message = request.author_message.as_str();
-    if !message.starts_with("Revise these passages")
+    let (reply_form, produce) = crate::create_plan::reply_form_plan(request);
+    // A prose change text with no changes opens the Proposal of the first target (Stage 1).
+    let single = match reply_form.output.map(|output| output.candidate) {
+        Some(DecisionCandidate::ProseChange { text }) if !produce => {
+            Some(request.declared_targets.first()?.location()).map(|target| (target, text))
+        }
+        _ => None,
+    };
+    if !(produce || single.is_some())
         || !request
             .tool_exposure
             .tools
@@ -43,6 +57,21 @@ pub(crate) fn calls(
     let results = request
         .tool_outputs
         .iter()
+        .filter(|output| output.name == name)
+        .count();
+    // A steering input continues a Run after a counted `finish` call. With no script, the fake
+    // proposes again for it: only the results after the last counted `finish` output count.
+    let counted_finish = |output: &&storyos_application::ToolOutput| {
+        output.name == ToolOperation::Finish.function_name()
+            && !output
+                .output
+                .contains(storyos_core::FINISH_DOES_NOT_COUNT_RESULT)
+    };
+    let step_results = request
+        .tool_outputs
+        .iter()
+        .rev()
+        .take_while(|output| !counted_finish(output))
         .filter(|output| output.name == name)
         .count();
     let proposal = |index: usize, script: &str| {
@@ -59,6 +88,14 @@ pub(crate) fn calls(
                     )
                 })
                 .collect()
+        } else if let Some((target, text)) = &single {
+            vec![ProseChangeCandidate {
+                chapter_id: target.chapter_id.clone(),
+                manuscript_block_id: target.block_id.clone(),
+                base_authoritative_revision_id: target.base_revision_id.clone(),
+                candidate_text: text.clone(),
+                explanation: "Preserve the narrator voice in the first passage.".to_owned(),
+            }]
         } else {
             produce_fake_changes(request, script)
         };
@@ -72,8 +109,10 @@ pub(crate) fn calls(
                 })
             })
             .collect();
-        let arguments =
-            serde_json::json!({"summary": "Kept the narrator voice.", "changes": changes});
+        let summary = single
+            .as_ref()
+            .map_or("Kept the narrator voice.", |(_, text)| text.as_str());
+        let arguments = serde_json::json!({"summary": summary, "changes": changes});
         // The arguments text has line breaks, so a refused call shows that it keeps its text.
         call(
             name,
@@ -107,6 +146,11 @@ pub(crate) fn calls(
             );
             (vec![finish, correct(0), research], false)
         }
+        (Some("incomplete"), 0) => {
+            let mut incomplete = correct(0);
+            incomplete.state = storyos_core::StreamItemState::Incomplete;
+            (vec![incomplete], false)
+        }
         (Some("propose_mixed"), 0) => (vec![undeclared(0), undeclared(1)], false),
         (Some("propose_mixed"), 2) => (vec![undeclared(0)], false),
         (Some("propose_mixed"), 3) => (
@@ -125,7 +169,7 @@ pub(crate) fn calls(
             ),
             _,
         ) => (Vec::new(), true),
-        (_, 0) => (vec![correct(0)], true),
-        (_, _) => (Vec::new(), true),
+        _ if step_results == 0 => (vec![correct(0)], true),
+        _ => (Vec::new(), true),
     })
 }

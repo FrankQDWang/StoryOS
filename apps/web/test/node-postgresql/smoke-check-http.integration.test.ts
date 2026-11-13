@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
+import { BINDING, REPLY_FORM_FAKE_ENV, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
   problemOf, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
@@ -18,6 +18,8 @@ import { queryStoryOSPostgres } from "../support/node-integration.ts";
 // schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path. A read that
 // is bound to the latest Project Snapshot also proves its expired-Snapshot answer.
 const server = serverForFile();
+// #1463 owns the rows of a streamed Proposal: only the reply form profile of the fake streams Proposal generation.
+const replyFormServer = serverForFile(REPLY_FORM_FAKE_ENV);
 afterAll(() => drainLeftoverWork());
 
 const CATALOG = (JSON.parse(readFileSync(new URL(
@@ -42,7 +44,7 @@ async function chapter(story: TestStory, index = 0) {
  * Proposal Generation. */
 async function proposed(title: string, options: { streamed?: true } = {}) {
   await drainLeftoverWork();
-  const story = await createStory(server, { title, assistance: true });
+  const story = await createStory(options.streamed === true ? replyFormServer : server, { title, assistance: true });
   const target = (await chapter(story)).current_revision.revision_id;
   const proposal = options.streamed === true ? await streamedProposal(story) : (await openProposal(story)).proposal;
   const session = await story.openEditorSession();
@@ -140,7 +142,8 @@ async function buildReadFixture() {
     ...await researchSource(proposal.source.run_id) };
 }
 
-/** One Source Snapshot of a refused ToolCall of the Run, and one Research Artifact that cites it. This file has no
+/** One Source Snapshot of a refused ToolCall of the Run, and one Research Artifact that cites it. The ToolCall takes the
+ * next position after the Host Tool calls of the Attempt. This file has no
  * research Tool server, so the rows write the records that a settled research ToolCall and a synthesis write; the
  * store tests prove the capture and the synthesis. */
 async function researchSource(runId: string): Promise<{ sourceSnapshotId: string; researchArtifactId: string }> {
@@ -153,7 +156,9 @@ async function researchSource(runId: string): Promise<{ sourceSnapshotId: string
         model_attempt_id, decision_id, call_id, call_position, caller_route, function_name, registration_id,
         tool_registration_revision, tool_spec_revision, arguments, argument_digest, state, refusal)
       SELECT owner_user_id, project_id, gen_random_uuid(), run_id, decision_position, model_attempt_id,
-             gen_random_uuid(), 'call_01', 0, 'model', 'web_fetch', 'web_research', gen_random_uuid(),
+             gen_random_uuid(), 'call_01', (SELECT count(*) FROM storyos.tool_calls AS earlier
+               WHERE earlier.model_attempt_id = attempt.model_attempt_id), 'model', 'web_fetch', 'web_research',
+             gen_random_uuid(),
              'storyos.tool.web-fetch.v1', '{}'::jsonb, 'sha256:' || repeat('0', 64), 'refused', 'tool_not_enabled'
         FROM attempt
       RETURNING owner_user_id, project_id, run_id, tool_call_id),

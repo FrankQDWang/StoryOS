@@ -18,7 +18,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, id, inspectRun, prepare, settleHeld, settleOnce,
+import { BINDING, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectFirstRunStep, inspectRun, prepare, settleHeld, settleOnce,
   startServer, waitFor } from "../support/http-harness.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -60,7 +60,10 @@ test("a retained complete result settles once and a repeat keeps that identity",
     assert.equal(first.model_attempt.dispatch_state, "settled");
     assert.equal(found.disposition, "settled");
     assert.equal(found.keep_reason, undefined);
-    assert.equal(found.original_model_attempt_id, first.model_attempt.model_attempt_id);
+    // The lost create and its retrieval belong to the first RunStep. The default read shows the closing RunStep.
+    const firstStep = await inspectFirstRunStep(started.baseUrl, prepared, created.effect.run_id);
+    assert.equal(found.original_model_attempt_id, attempt(firstStep).model_attempt_id);
+    assert.equal(attempt(firstStep).dispatch_state, "settled");
     assert.match(found.response_reference_id ?? "", /^[0-9a-f-]{36}$/);
     assert.match(found.retrieval_attempt_id ?? "", /^[0-9a-f-]{36}$/);
     assert.notEqual(found.retrieval_attempt_id, found.original_model_attempt_id);
@@ -68,18 +71,21 @@ test("a retained complete result settles once and a repeat keeps that identity",
     assert.equal(found.resumes_stream, false);
     assert.equal(found.proves_create_idempotency, false);
     assert.equal(found.supplies_decision, true);
-    assert.equal(found.supplies_tool_call, false);
-    assert.equal(found.advances_continuation, true);
+    // The retrieved result is the `finish` call of the first RunStep, so it supplies a ToolCall. A tool request
+    // does not advance the continuation; the response of the closing RunStep does (ADR 0091).
+    assert.equal(found.supplies_tool_call, true);
+    assert.equal(found.advances_continuation, false);
     assert.equal(found.reservation_released, true);
     assert.equal(found.usage_kind, "unknown");
     assert.equal(first.items.every((item) => item.call_id === null), true);
-    assert.equal(await attemptCounts(prepared.projectId, created.effect.run_id), "1 1");
+    // The closing RunStep adds one decision Attempt (ADR 0091).
+    assert.equal(await attemptCounts(prepared.projectId, created.effect.run_id), "2 1");
     assert.equal(await queryPostgres(`
       SELECT payload->'wire'->>'author_message'
         FROM storyos.model_attempts
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.effect.run_id}'::uuid
-         AND attempt_role = 'decision';
+         AND attempt_role = 'decision' AND decision_position = 0;
     `), "SCRIPT:retrieve-complete");
     assert.equal(await queryPostgres(`
       SELECT (payload->>'operation') || ' ' || (payload->>'repeats_original_create')
@@ -113,7 +119,7 @@ test("a retained complete result settles once and a repeat keeps that identity",
     assert.equal(retrieval(repeated).retrieval_attempt_id, found.retrieval_attempt_id);
     if (repeated.decision.kind !== "advisory") throw new Error("expected advisory");
     assert.equal(repeated.decision.decision_id, first.decision.decision_id);
-    assert.equal(await attemptCounts(prepared.projectId, created.effect.run_id), "1 1");
+    assert.equal(await attemptCounts(prepared.projectId, created.effect.run_id), "2 1");
     const foreignFetch = browserFetch(started.baseUrl, "session-b");
     await assert.rejects(
       () => getAgentRun({
@@ -255,13 +261,14 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
        WHERE project_id = '${prepared.projectId}'::uuid
          AND model_attempt_id = '${originalAttemptId}'::uuid;
     `), "SCRIPT:retrieve-complete none");
+    // The retrieved result of the first RunStep is its `finish` call (ADR 0091).
     assert.equal(await queryPostgres(`
-      SELECT payload->'items'->0->>'text'
+      SELECT payload->'items'->0->>'name'
         FROM storyos.model_attempts
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.effect.run_id}'::uuid
          AND attempt_role = 'retrieval';
-    `), ADVISORY);
+    `), "finish");
     const repeatRequest: CancelAgentRunRequest = {
       command_schema: "storyos.command.cancel-agent-run.request.v1",
       cancel_agent_run_input: { ...BINDING, correlation_id: id("a341") },

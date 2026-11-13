@@ -19,19 +19,22 @@ import type {
   CreateEditorSessionRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
-import { BINDING, admitRun, challenged, drainLeftoverWork, id, prepare, runWorker, serverForFile,
+import { BINDING, REPLY_FORM_FAKE_ENV, admitRun, challenged, drainLeftoverWork, id, inspectFirstRunStep, prepare, runWorker, serverForFile,
   settleOnce } from "../support/http-harness.ts";
 
 const started = serverForFile();
+// #1463 owns the streamed row: only the reply form profile of the fake streams Proposal generation.
+const replyForm = serverForFile(REPLY_FORM_FAKE_ENV);
 
 async function withProject(
   title: string,
   exercise: (project: Awaited<ReturnType<typeof prepare>> & { baseUrl: string; ns: string }) => Promise<void>,
+  server = started,
 ) {
   await drainLeftoverWork();
   const ns = randomBytes(3).toString("hex");
-  const prepared = await prepare(started.baseUrl, id(`${ns}01`), title, ns);
-  await exercise({ ...prepared, baseUrl: started.baseUrl, ns });
+  const prepared = await prepare(server.baseUrl, id(`${ns}01`), title, ns);
+  await exercise({ ...prepared, baseUrl: server.baseUrl, ns });
 }
 
 async function admitQueued(
@@ -41,11 +44,13 @@ async function admitQueued(
   return (await admitRun(baseUrl, { projectId, fetchImpl, chapterId }, key, message)).effect.run_id;
 }
 
+// A refused `propose_edit` call returns its reason to the model, and the final answer is advisory (ADR 0091 section 6).
 test.each([
-  ["Revise this passage: keep the voice.", "red fox"],
-  ["Stream this passage: keep the voice.", "red fox"],
-  ["Revise these passages: keep the voice.", "red fox"],
-])("an admitted H0 target cannot open a valid H1 Proposal: %s", async (message, initialText) => {
+  ["Revise this passage: keep the voice.", "advisory", started],
+  ["Stream this passage: keep the voice.", "prose_change", replyForm],
+  ["Revise these passages: keep the voice.", "advisory", started],
+] as const)("an admitted H0 target cannot open a valid H1 Proposal: %s", async (message, kind, server) => {
+  const initialText = "red fox";
   await withProject("Admitted Target Novel", async ({ baseUrl, ns, fetchImpl, projectId, chapterId }) => {
     let editorSession: Awaited<ReturnType<typeof createEditorSession>> | undefined;
     let latestRevisionId: string | undefined;
@@ -107,17 +112,18 @@ test.each([
     await settleOnce();
     const run = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });
     assert.equal(run.status, "completed");
-    assert.equal(run.decision.kind, "prose_change");
-    if (run.decision.kind !== "prose_change") throw new Error("expected prose decision");
-    assert.deepEqual(run.decision.opened_proposal, { kind: "absent" });
-    assert.equal(run.context.selected.find((source) => source.source_class === "working_target")?.content, initialText);
-    assert.equal(run.context.selected.find((source) => source.source_class === "working_target")?.source_version, h0.chapter.current_revision.revision_id);
-    assert.deepEqual(run.context.current_availability.working_target, {
+    assert.equal(run.decision.kind, kind);
+    if (run.decision.kind === "prose_change") assert.deepEqual(run.decision.opened_proposal, { kind: "absent" });
+    // The default read shows the closing RunStep. The first RunStep sent the admitted H0 text.
+    const { context } = await inspectFirstRunStep(baseUrl, { projectId, fetchImpl }, runId);
+    assert.equal(context.selected.find((source) => source.source_class === "working_target")?.content, initialText);
+    assert.equal(context.selected.find((source) => source.source_class === "working_target")?.source_version, h0.chapter.current_revision.revision_id);
+    assert.deepEqual(context.current_availability.working_target, {
       kind: "superseded", current_revision_id: h1.chapter.current_revision.revision_id,
     });
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals
       WHERE project_id = '${projectId}'::uuid AND source_run_id = '${run.run_id}'::uuid;`), "0");
-  });
+  }, server);
 });
 
 test("a removed admitted Chapter cannot open a Proposal from retained historical blocks", async () => {
@@ -139,9 +145,14 @@ test("a removed admitted Chapter cannot open a Proposal from retained historical
     assert.equal(deleted.effect.kind, "authoritative_applied");
     await settleOnce();
     const run = await getAgentRun({ baseUrl, projectId, runId, fetchImpl });
-    assert.equal(run.decision.kind, "prose_change");
-    if (run.decision.kind !== "prose_change") throw new Error("expected prose decision");
-    assert.deepEqual(run.decision.opened_proposal, { kind: "absent" });
+    // The Host refuses the `propose_edit` call. The closing RunStep assembles its context again, and the removed
+    // Chapter blocks it (ADR 0085, ADR 0091).
+    assert.deepEqual([run.status, run.decision], ["refused", { kind: "execution_refused", capability: "blocked_context" }]);
+    assert.equal(await queryPostgres(`SELECT string_agg(call.function_name || ':' || call.state, ' ' ORDER BY call.call_position)
+      FROM storyos.tool_calls AS call JOIN storyos.model_attempts AS attempt USING (owner_user_id, project_id, model_attempt_id)
+      WHERE attempt.run_id = '${runId}'::uuid;`), "propose_edit:refused finish:settled");
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals
+      WHERE project_id = '${projectId}'::uuid AND source_run_id = '${runId}'::uuid;`), "0");
   });
 });
 
@@ -153,13 +164,10 @@ test("a later reservation cannot become an admitted Run's Proposal", async () =>
     await settleOnce();
     const first = await getAgentRun({ baseUrl: baseUrl, projectId, runId: firstId, fetchImpl });
     const second = await getAgentRun({ baseUrl: baseUrl, projectId, runId: secondId, fetchImpl });
-    assert.equal(first.decision.kind, "prose_change");
-    assert.equal(second.decision.kind, "prose_change");
-    if (first.decision.kind !== "prose_change" || second.decision.kind !== "prose_change") {
-      throw new Error("expected prose decisions");
-    }
+    if (first.decision.kind !== "prose_change") throw new Error("expected prose decision");
     assert.equal(first.decision.opened_proposal.kind, "present");
-    assert.deepEqual(second.decision.opened_proposal, { kind: "absent" });
+    // The reservation refuses the `propose_edit` call of the second Run, and its final answer is advisory (ADR 0091).
+    assert.equal(second.decision.kind, "advisory");
   });
 });
 
