@@ -90,13 +90,17 @@ pub(crate) async fn record_create(
         }
         validate_agent_decision(batch)
     };
-    let outcome = match apply_finish_rule(
-        request.tool_choice,
-        crate::agent_run_finish_rule::run_step_limit(run)?,
-        outcome,
-        response.state,
-        &response.items,
-    ) {
+    let rule = match probe {
+        true => FinishRuleOutcome::Settle(outcome),
+        false => apply_finish_rule(
+            request.tool_choice,
+            crate::agent_run_finish_rule::run_step_limit(run)?,
+            outcome,
+            response.state,
+            &response.items,
+        ),
+    };
+    let outcome = match rule {
         FinishRuleOutcome::Settle(outcome) => outcome,
         rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
             let settlement = match rule {
@@ -187,7 +191,12 @@ pub(crate) async fn create_request(
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
-    let tool_choice = crate::agent_run_finish_rule::tool_choice(client, claim, run).await?;
+    // A Tool qualification probe settles after its one response, so the finish rule does not
+    // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
+    let tool_choice = match probe {
+        Some(_) => storyos_core::ToolChoice::None,
+        None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+    };
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
         None => {
