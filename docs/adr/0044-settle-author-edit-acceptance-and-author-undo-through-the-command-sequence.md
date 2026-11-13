@@ -40,7 +40,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
   2. **Settle the admitted command.** It reads the Project row without a lock and locks the command facts. It checks again that the Admission is not expired and that its writer generation is current. It classifies through Core, writes the Domain Receipt and the profile records, settles the Admission, and settles the fence.
 - `applyAuthorEdit` runs step 1 and then step 2 in one request. The outcome query runs step 2 for an Admission that has no settlement, or settles it as `RequiresReconfirmation` when the recovery rules require that. The recovery rules of the [Author Command Admission contract](../foundation/author-command-admission.md#5-first-invocation-and-recovery-rules) do not change.
 - An Admission that is committed and has no terminal settlement is `pending`. When the outcome query cannot yet settle a `pending` Admission, it reports `outcome_unknown`. The Admission row makes this condition durable. The sequence writes no `outcome_unknown` row.
-- The transaction that pauses Proposal generation before an Author Edit stays before step 1. It is not part of the sequence.
+- The transaction that pauses Proposal generation before an Author Edit stays before step 1. It is not part of the sequence. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes this transaction.
 - The `outcome_unknown` observation store and its tests are removed. The table `author_command_admission_outcome_unknown_observations` stays, with no writer. Removing the table needs a separate decision with a migration.
 
 ### Acceptance refusal before Admission
@@ -70,7 +70,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 | `reopenRejectedOperations` | Compensation. It appends a Proposal Revision equal to the Revision before the reopen, and it puts each reopened operation back to `rejected` and `resolved`. The Proposal head can be a Compensation of a later action ([ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). |
 | `reopenWithdrawnProposal` | Compensation. It appends a Proposal Revision equal to the Revision before the reopen, and it withdraws the Proposal again. The Proposal head can be a Compensation of a later action ([ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md)). |
 | `rejectProposalOperations` | Barrier. |
-| `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. |
+| `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes these two commands. |
 | `undoLatestAuthorAction`, `reversal_required` | Barrier. |
 
 - Each existing compensation keeps the binding checks and the outcomes of its family. A moved binding gives the same Barrier, conflict, unavailable, or reversal-required outcome as on `main`. The three new compensations first made a Forward action a Barrier when the Proposal head moved after it. [ADR 0068](0068-prove-the-target-of-a-proposal-author-undo-through-the-compensation-lineage-of-the-proposal-head.md) replaces this rule. A Proposal head that later Proposal Compensations wrote does not make a Barrier.
@@ -165,7 +165,7 @@ Each ticket that moves a command records here every observable difference from `
 
 ### `applyAuthorEdit`
 
-- `applyAuthorEdit` runs the transaction that pauses Proposal generation, then the admit step, and then the settle step. Its profile `AuthorEditProfile` selects the `AuthoritativeRevision` records for `authoritative_applied` and the `ActionOnly` records for `proposal_revised`. An applied edit of an Inline Proposal also appends its Proposal Revision. Each outcome that supersedes the source Refused Edit Draft writes its close event after the Receipt.
+- `applyAuthorEdit` runs the transaction that pauses Proposal generation, then the admit step, and then the settle step. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes the pause transaction, so `applyAuthorEdit` runs the admit step and then the settle step. Its profile `AuthorEditProfile` selects the `AuthoritativeRevision` records for `authoritative_applied` and the `ActionOnly` records for `proposal_revised`. An applied edit of an Inline Proposal also appends its Proposal Revision. Each outcome that supersedes the source Refused Edit Draft writes its close event after the Receipt.
 - The zero-authority outcomes write the rows and payloads of `main`. `refused_to_draft` writes the Refused Edit Draft and records no reason. The response record is `NoResponse`, as on `main`.
 - The outcome query keeps its code. It completes an open Admission through the settle step, and it replays a settled Admission through the sequence.
 - The hand-written settlement transaction and replay query (`author_edit_settlement.rs`, `author_edit_replay.rs`), the application Store trait, and the binding self-check are removed. The Server builds the command and calls the adapter.

@@ -13,7 +13,7 @@ The immutable Project Scope-bound lifecycle determination that applies one Reten
 _Avoid_: Background cleanup log, mutable expiry column, profile update
 
 **Operational Record**:
-A durable record of execution, context, authorization, usage, validation, or a state transition, including Author Command Admission evidence, Pre-Admission Refusal Records, Editor Input Fences, Author Actions, typed Receipts, AgentRuns, ToolCalls, Approvals, Artifact Lifecycle Events, and Run Events. It can reference or produce Artifacts but has no Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
+A durable record of execution, context, authorization, usage, validation, or a state transition, including Author Command Admission evidence, Pre-Admission Refusal Records, Author Actions, typed Receipts, AgentRuns, ToolCalls, Approvals, Artifact Lifecycle Events, and Run Events. It can reference or produce Artifacts but has no Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
 _Avoid_: Artifact, temporary log
 
 **AgentRun**:

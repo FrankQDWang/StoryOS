@@ -7,7 +7,6 @@ use super::{
 fn next_batch() -> AppendProposalGenerationBatch {
     AppendProposalGenerationBatch {
         scope_matches: true,
-        generation_state: "generating".to_owned(),
         last_applied_stream_seq: 1,
         stream_seq: 2,
         expected_previous_stream_seq: 1,
@@ -40,21 +39,13 @@ fn returns_the_existing_outcome_for_an_exact_duplicate() {
 }
 
 #[test]
-fn waits_for_a_gap_and_refuses_a_late_or_closed_generation() {
+fn waits_for_a_gap_and_refuses_a_stale_head() {
     let mut gap = next_batch();
     gap.stream_seq = 3;
     gap.expected_previous_stream_seq = 1;
     assert_eq!(
         append_proposal_generation_batch(&gap),
         AppendProposalGenerationBatchResult::Wait
-    );
-    let mut fenced = next_batch();
-    fenced.generation_state = "ready_partial".to_owned();
-    assert_eq!(
-        append_proposal_generation_batch(&fenced),
-        AppendProposalGenerationBatchResult::Refused {
-            reason: AppendProposalGenerationBatchRefusal::GenerationClosed,
-        }
     );
     let mut stale = next_batch();
     stale.current_proposal_revision_id = "rev-9".to_owned();

@@ -12,14 +12,14 @@ import * as client from "../../../../generated/typescript/storyos-public-release
 import type { CreateEditorSessionResponse, DigestValue, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, issueChallenge, postRun,
-  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, settleRun, streamRequest } from "./acceptance.ts";
+  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, settleRun } from "./acceptance.ts";
 import { zipStoreFiles } from "./archive.ts";
 import { createEmptyProject, queryStoryOSPostgres, requireStoryOSProtocolError, sessionFetch, startStoryOSServer,
   stopStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 import type { StoryOSServer } from "./node-integration.ts";
 
 export { BINDING, PROSE, USER_A, admitProse, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, issueChallenge, postRun,
-  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, settleRun, streamRequest };
+  prepare, produced, rewriteChapter, runRequest, runWorker, selected, settleOnce, settleRun };
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 /** The path of one binary of the release package. */

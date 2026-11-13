@@ -83,7 +83,6 @@ pub(crate) async fn apply(
         if !matches!(
             append_proposal_generation_batch(&AppendProposalGenerationBatch {
                 scope_matches: true,
-                generation_state: "generating".to_owned(),
                 last_applied_stream_seq: 0,
                 stream_seq: 1,
                 expected_previous_stream_seq: 0,
@@ -121,15 +120,10 @@ pub(crate) async fn apply(
                     proposal_id: target.proposal_id.clone(),
                     generation_id: generation_id.clone(),
                     revision_id: target.revision_id.clone(),
-                    candidate_text: loaded.text,
-                    last_seq: 0,
-                    generation_state: "generating".to_owned(),
-                    existing_fence: false,
                     base_revision_id: loaded.base_revision_id,
                 },
                 1,
                 &candidate.candidate_text,
-                /*complete*/ true,
                 Some(&target.operation_id),
             )
             .await?;
@@ -142,7 +136,7 @@ pub(crate) async fn apply(
                 operation_id: target.operation_id.clone(),
                 revision_id,
                 prior_revision_id: target.revision_id.clone(),
-                validation_receipt_id: validation_id.expect("complete validation"),
+                validation_receipt_id: validation_id,
             }
         }
     } else {

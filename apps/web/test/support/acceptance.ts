@@ -154,11 +154,6 @@ export async function prepare(baseUrl: string, createKey: string, title: string,
   return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
 }
 
-/** A new streamed AgentRun on the Current Chapter. */
-export function streamRequest(chapterId: string, correlationId: string): CreateAgentRunRequest {
-  return runRequest(chapterId, correlationId, "Stream this passage: keep the voice.");
-}
-
 /** Sends one createAgentRun command through its Command Challenge. */
 export async function postRun(baseUrl: string, fetchImpl: typeof fetch, projectId: string, key: string,
   request: CreateAgentRunRequest) {

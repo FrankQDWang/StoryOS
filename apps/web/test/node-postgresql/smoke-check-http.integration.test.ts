@@ -1,13 +1,12 @@
 // Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterAll, test } from "vitest";
 
 import * as client from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { bootProtectedWebClient } from "../../src/boot.ts";
-import { BINDING, REPLY_FORM_FAKE_ENV, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
+import { BINDING, USER_A, addVolume, createProject, createStory, drainLeftoverWork, freshNamespace, id, openProposal,
   problemOf, serverForFile, settleOnce,
 } from "../support/http-harness.ts";
 import type { CommandInput, ProjectCommandId, TestProject, TestStory } from "../support/http-harness.ts";
@@ -18,8 +17,6 @@ import { queryStoryOSPostgres } from "../support/node-integration.ts";
 // schema. A row expects a declared refusal only when a Profile Probe or a kept file proves the success path. A read that
 // is bound to the latest Project Snapshot also proves its expired-Snapshot answer.
 const server = serverForFile();
-// #1463 owns the rows of a streamed Proposal: only the reply form profile of the fake streams Proposal generation.
-const replyFormServer = serverForFile(REPLY_FORM_FAKE_ENV);
 afterAll(() => drainLeftoverWork());
 
 const CATALOG = (JSON.parse(readFileSync(new URL(
@@ -31,42 +28,22 @@ const NONCE = /^[0-9a-f]{64}$/;
 
 // Fixtures
 
-function digest(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
-}
-
 async function chapter(story: TestStory, index = 0) {
   return (await client.getChapter({ baseUrl: story.baseUrl, projectId: story.projectId,
     chapterId: story.chapterIds[index] ?? "", fetchImpl: story.fetchImpl })).chapter;
 }
 
-/** A Project with an open Proposal on its first Chapter and a writer Editor Session. A streamed Proposal has a
- * Proposal Generation. */
-async function proposed(title: string, options: { streamed?: true } = {}) {
+/** A Project with an open Proposal on its first Chapter and a writer Editor Session. */
+async function proposed(title: string) {
   await drainLeftoverWork();
-  const story = await createStory(options.streamed === true ? replyFormServer : server, { title, assistance: true });
+  const story = await createStory(server, { title, assistance: true });
   const target = (await chapter(story)).current_revision.revision_id;
-  const proposal = options.streamed === true ? await streamedProposal(story) : (await openProposal(story)).proposal;
+  const proposal = (await openProposal(story)).proposal;
   const session = await story.openEditorSession();
   return { story, target, proposal, editorSessionId: session.editor_session.editor_session_id };
 }
 
 type Proposed = Awaited<ReturnType<typeof proposed>>;
-
-async function streamedProposal(story: TestStory) {
-  const input = agentRun(story);
-  input.request.create_agent_run_input.author_message = { text: "Stream this passage: keep the voice." };
-  const run = await story.send("createAgentRun", input);
-  if (run.response.effect.kind !== "admitted") throw new Error("expected an admitted AgentRun");
-  await drainLeftoverWork();
-  const settled = await client.getAgentRun({ ...scope(story), fetchImpl: story.fetchImpl,
-    runId: run.response.effect.run_id });
-  if (settled.decision.kind !== "prose_change" || settled.decision.opened_proposal.kind !== "present") {
-    throw new Error("expected an opened Proposal");
-  }
-  return (await client.getProposal({ ...scope(story), fetchImpl: story.fetchImpl,
-    proposalId: settled.decision.opened_proposal.proposal_id })).proposal;
-}
 
 function rejection({ story, target, proposal, editorSessionId }: Proposed): CommandInput<"rejectProposalOperations"> {
   return { request: {
@@ -211,11 +188,6 @@ function readableExport(story: TestProject): CommandInput<"exportHumanReadableMa
   } };
 }
 
-/** The current Proposal Generation. No public response gives its ID, so the row reads it. */
-async function generationId(proposalId: string): Promise<string> {
-  return queryStoryOSPostgres(`SELECT generation_id::text FROM storyos.proposal_generation_heads
-    WHERE proposal_id = '${proposalId}'::uuid;`);
-}
 
 // Rows
 
@@ -425,34 +397,6 @@ const COMMANDS: CommandRows = {
     expected: { effect: { kind: "resolved", undo_disposition: "forward", prior_resolution: "rejected",
       resulting_resolution: "pending", resulting_validation: "pending", preserved_generation: "ready",
       preserved_closure: "open" } },  },
-  completeReadyPartialProposal: {
-    arrange: async () => {
-      const { story, target, proposal, editorSessionId } = await proposed("Smoke Complete Novel", { streamed: true });
-      return { project: story, input: { request: {
-        command_schema: "storyos.command.complete-ready-partial-proposal.request.v1",
-        complete_ready_partial_proposal_input: { proposal_revision_id: proposal.revision_id,
-          generation_id: await generationId(proposal.proposal_id),
-          expected_candidate_digest: digest(proposal.candidate_text), last_applied_stream_seq: "1",
-          expected_target_revisions: [target], editor_session_id: editorSessionId, ...story.binding() },
-      }, path: { proposalId: proposal.proposal_id } } };
-    },
-    expected: { effect: { kind: "refused", reason: "not_ready_partial" } },
-  },
-  continueProposalGeneration: {
-    arrange: async () => {
-      const { story, target, proposal, editorSessionId } = await proposed("Smoke Continue Novel", { streamed: true });
-      return { project: story, input: { request: {
-        command_schema: "storyos.command.continue-proposal-generation.request.v1",
-        continue_proposal_generation_input: { proposal_revision_id: proposal.revision_id,
-          prior_generation_id: await generationId(proposal.proposal_id), expected_generation_state: "ready",
-          expected_candidate_digest: digest(proposal.candidate_text),
-          selected_pending_operation_ids: [proposal.operation_id], expected_target_revisions: [target],
-          editor_session_id: editorSessionId, ...story.binding() },
-      }, path: { proposalId: proposal.proposal_id } } };
-    },
-    expected: { effect: { kind: "started", undo_disposition: "forward", prior_generation_state: "ready",
-      resulting_generation_state: "generating", preserved_validation: "valid", preserved_closure: "open",
-      preserved_operation_resolution: "pending" } },  },
   undoLatestAuthorAction: {
     arrange: async () => {
       const project = await createStory(server, { title: "Smoke Undo Novel" });

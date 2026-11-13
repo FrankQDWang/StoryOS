@@ -12,6 +12,8 @@
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 - Verification: [Deterministic Verification and Failure-Recovery Gates](deterministic-verification-and-failure-recovery-gates.md)
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the projections of `ContinueProposalGeneration` and `CompleteReadyPartialProposal` are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Purpose, authority, and owner boundary
 
 This specification is the sole owner of Web Editor Session identity and
