@@ -562,3 +562,84 @@ async fn a_removed_chapter_or_a_chapter_over_the_item_limit_keeps_the_refusal_of
         vec![("removed", refused.clone()), ("over_limit", refused)]
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_steering_reference_keeps_its_range_when_the_author_edits_another_candidate_of_its_proposal()
+ {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let grow = format!("{REVISE} SCRIPT:grow_proposal");
+    let mut observed = Vec::new();
+    let mut expected = Vec::new();
+    // The steering input names one candidate of a grown Proposal, and the author edits another:
+    // first a joined candidate and the candidate of the Proposal block, then the reverse.
+    for (lead, run_prefix, suffix, referenced, edited) in [
+        (0xbf0, "bf3", 0xbfe0_u16, 0, 2),
+        (0xbf8, "bfb", 0xbfe8, 2, 0),
+    ] {
+        let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
+        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let mut references = fixture.candidates(&admin).await;
+        references.insert(0, fixture.chapter_text(1, 2));
+        fixture.run(&store, &admin, 2, &grow, references).await;
+        let candidates = fixture.candidates(&admin).await;
+        let mut part = json!(candidates[referenced]);
+        part["end_offset"] = json!(3);
+        let part: SelectionReference = serde_json::from_value(part).unwrap();
+        let run_id = admit_referenced_run(
+            &store,
+            scope,
+            chapter_id,
+            run_prefix,
+            tool_loop.clone(),
+            "Help with this passage.",
+            Vec::new(),
+        )
+        .await;
+        let input = steering(
+            &store,
+            scope,
+            suffix,
+            &run_id,
+            REVISE,
+            Some(vec![part.clone()]),
+        )
+        .await;
+        let edit = fixture
+            .candidate_edit(
+                &store,
+                &admin,
+                &candidates[edited],
+                2,
+                CandidateChange::Prefix(EDITED),
+            )
+            .await;
+        let action = AuthorAction::Sequence(vec![
+            AuthorAction::Steer(vec![input]),
+            AuthorAction::Edit(Box::new(edit)),
+        ]);
+        let author = AuthorAt::new(&store, Moment::DuringRequest(1), action);
+        settle(&store, &admin, scope, &run_id, &author)
+            .await
+            .unwrap();
+        let edited_revision: String = admin
+            .query_one(
+                "SELECT revision_id::text FROM storyos.proposal_revisions
+                  WHERE edited_operation_id = $1::text::uuid",
+                &[&candidates[edited].candidate_target().unwrap().operation_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        let mut moved = json!(part);
+        moved["revision_id"] = json!(edited_revision);
+        observed.push(step_references(&admin, &run_id).await[1].clone());
+        expected.push(json!([1, [moved]]));
+    }
+
+    assert_eq!(observed, expected);
+}

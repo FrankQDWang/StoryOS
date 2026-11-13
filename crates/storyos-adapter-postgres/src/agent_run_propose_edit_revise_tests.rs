@@ -121,7 +121,7 @@ impl Fixture {
     }
 
     /// Admits and completes one Run with `references` in a new Conversation.
-    async fn run(
+    pub(crate) async fn run(
         &self,
         store: &PostgresProjectReader,
         admin: &Client,

@@ -48,31 +48,104 @@ pub(crate) async fn follow(
 }
 
 /// Moves each candidate reference of a steering input to the current revision of its candidate
-/// when that candidate is still pending. A moved reference covers all of the current text.
+/// when that candidate is still pending. A moved reference covers all of the current text when
+/// the candidate text changed after the revision of the reference.
 pub(crate) async fn follow_added(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     added: &mut [SelectionReference],
 ) -> Result<(), CompleteAgentRunError> {
-    let targets = added
+    let targets: Vec<ProposalCandidateTarget> = added
         .iter()
         .filter_map(SelectionReference::candidate_target)
         .collect();
     let rows = current_rows(client, claim, targets).await?;
-    let mut admitted: Vec<AdmittedSelection> = added
-        .iter()
-        .map(|reference| AdmittedSelection {
+    let current = current_candidates(&rows);
+    let mut admitted = Vec::with_capacity(added.len());
+    for reference in added.iter() {
+        // The text of the reference revision is known only as "the current text" when no later
+        // revision changed it.
+        let candidate_text = match reference.candidate_target() {
+            Some(target) if unchanged_since(client, claim, &target).await? => current
+                .iter()
+                .find(|candidate| {
+                    candidate.target.proposal_id == target.proposal_id
+                        && candidate.target.operation_id == target.operation_id
+                })
+                .map(|candidate| candidate.candidate_text.to_owned()),
+            Some(_) | None => None,
+        };
+        admitted.push(AdmittedSelection {
             reference: reference.clone(),
             selected_text: None,
             manuscript_block_ids: Vec::new(),
-            candidate_text: None,
-        })
-        .collect();
-    storyos_core::follow_current_candidates(&mut admitted, &current_candidates(&rows));
+            candidate_text,
+        });
+    }
+    storyos_core::follow_current_candidates(&mut admitted, &current);
     for (reference, followed) in added.iter_mut().zip(admitted) {
         *reference = followed.reference;
     }
     Ok(())
+}
+
+/// Whether no revision after the revision of `target` changed the text of its Operation. The
+/// revision row holds the text of the Operation of the Proposal block, and an Author Edit records
+/// the Operation that it changed. Another revision with the same Proposal block text can have
+/// changed another Operation, so it counts as a change.
+async fn unchanged_since(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    target: &ProposalCandidateTarget,
+) -> Result<bool, CompleteAgentRunError> {
+    client
+        .query_one(
+            "WITH RECURSIVE chain AS (
+               SELECT revision.revision_id, revision.parent_revision_id,
+                      revision.edited_operation_id, revision.candidate_text
+                 FROM storyos.proposal_heads AS head
+                 JOIN storyos.proposal_revisions AS revision
+                   ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
+                       revision.revision_id)
+                    = (head.owner_user_id, head.project_id, head.proposal_id, head.current_revision_id)
+                WHERE head.owner_user_id = $1::text::uuid AND head.project_id = $2::text::uuid
+                  AND head.proposal_id = $3::text::uuid
+               UNION ALL
+               SELECT parent.revision_id, parent.parent_revision_id,
+                      parent.edited_operation_id, parent.candidate_text
+                 FROM chain
+                 JOIN storyos.proposal_revisions AS parent
+                   ON parent.owner_user_id = $1::text::uuid AND parent.project_id = $2::text::uuid
+                  AND parent.proposal_id = $3::text::uuid
+                  AND parent.revision_id = chain.parent_revision_id
+                WHERE chain.revision_id <> $5::text::uuid)
+             SELECT CASE WHEN proposal.manuscript_block_id = operation.manuscript_block_id
+                    THEN (SELECT candidate_text FROM chain WHERE revision_id = $5::text::uuid)
+                         IS NOT DISTINCT FROM operation.candidate_text
+                    ELSE EXISTS (SELECT 1 FROM chain WHERE revision_id = $5::text::uuid)
+                         AND NOT EXISTS (
+                           SELECT 1 FROM chain AS child
+                             JOIN chain AS parent ON parent.revision_id = child.parent_revision_id
+                            WHERE child.edited_operation_id = operation.operation_id
+                               OR (child.edited_operation_id IS NULL
+                                   AND child.candidate_text = parent.candidate_text))
+                    END
+               FROM storyos.proposals AS proposal
+               JOIN storyos.proposal_operations AS operation
+                 USING (owner_user_id, project_id, proposal_id)
+              WHERE proposal.owner_user_id = $1::text::uuid AND proposal.project_id = $2::text::uuid
+                AND proposal.proposal_id = $3::text::uuid AND operation.operation_id = $4::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &target.proposal_id,
+                &target.operation_id,
+                &target.revision_id,
+            ],
+        )
+        .await
+        .map(|row| row.get(/*idx*/ 0))
+        .map_err(complete_database_error)
 }
 
 fn current_candidates(rows: &[tokio_postgres::Row]) -> Vec<CurrentCandidate<'_>> {
