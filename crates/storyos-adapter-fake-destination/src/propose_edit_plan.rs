@@ -1,6 +1,5 @@
-//! The `propose_edit` script of the tool loop profile (ADR 0091). For an author message that
-//! starts with `Revise these passages`, the fake proposes the changes of the reply form fake for
-//! the declared targets with a `finish` call beside it: the revision of a referenced candidate
+//! The `propose_edit` script of the tool loop profile (ADR 0091). For each request for which the
+//! reply form fake proposes changes, the fake proposes the same changes for the declared targets with a `finish` call beside it: the revision of a referenced candidate
 //! with the growth scripts of the reply form fake, or else a change of each target. The end of
 //! the message scripts the other cases, by the count of the `propose_edit` results of the
 //! request:
@@ -31,7 +30,7 @@ pub(crate) fn calls(
 ) -> Option<(Vec<NativeStreamItem>, bool)> {
     let name = ToolOperation::ProposeEdit.function_name();
     let message = request.author_message.as_str();
-    if !message.starts_with("Revise these passages")
+    if !crate::create_plan::reply_form_plan(request).1
         || !request
             .tool_exposure
             .tools

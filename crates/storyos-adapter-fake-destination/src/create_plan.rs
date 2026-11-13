@@ -27,8 +27,8 @@ pub(crate) fn plan_create(request: &CreateRequest) -> FakeCreate {
     {
         return crate::tool_loop_plan::plan(request);
     }
-    let mut planned = plan_message(&request.author_message, request.passage_resolution);
-    apply_prose_changes(request, &mut planned);
+    let (mut planned, produce) = reply_form_plan(request);
+    apply_prose_changes(request, &mut planned, produce);
     planned
 }
 
@@ -99,14 +99,16 @@ fn resolved(resolution: OrdinaryPassageResolution) -> FakeCreate {
     }
 }
 
-fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
+/// The reply form plan of `request` with no prose changes, and whether its reply proposes them.
+/// The tool loop fake calls `propose_edit` for the same requests.
+pub(crate) fn reply_form_plan(request: &CreateRequest) -> (FakeCreate, bool) {
     let author_message = request.author_message.as_str();
+    let mut planned = plan_message(author_message, request.passage_resolution);
     let candidate = request
         .declared_targets
         .iter()
-        // The last referenced candidate, so that a test can revise a later Operation.
-        .rfind(|target| target.kind == DeclaredTargetKind::PendingCandidate);
-    if candidate.is_some()
+        .any(|target| target.kind == DeclaredTargetKind::PendingCandidate);
+    if candidate
         && is_fake_candidate_revision_request(author_message)
         && let Some(output) = planned.output.as_mut()
         && let DecisionCandidate::Advisory { text } = &output.candidate
@@ -117,17 +119,21 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
         .output
         .as_ref()
         .is_some_and(|output| matches!(output.candidate, DecisionCandidate::ProseChange { .. }));
-    let produce = match candidate {
-        Some(_) => prose_change,
-        None => {
-            author_message.starts_with("Revise these passages")
-                || (request
-                    .declared_targets
-                    .first()
-                    .is_some_and(|target| target.collection)
-                    && prose_change)
-        }
+    let produce = if candidate {
+        prose_change
+    } else {
+        author_message.starts_with("Revise these passages")
+            || (request
+                .declared_targets
+                .first()
+                .is_some_and(|target| target.collection)
+                && prose_change)
     };
+    (planned, produce)
+}
+
+fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate, produce: bool) {
+    let author_message = request.author_message.as_str();
     if !produce {
         return;
     }
