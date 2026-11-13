@@ -61,9 +61,11 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     const first = await inspect(firstId);
     assert.equal(first.status, "completed");
     assert.equal(first.context.sufficiency.kind, "complete");
+    // The audit query reads the closing RunStep, which also selects the result of the `finish` call (ADR 0091).
     assert.deepEqual(first.context.selected.filter((input) => input.source_class !== "host_control")
       .map((input) => [input.source_class, input.content]),
-    [["author_instruction", message], ["working_target", original]]);
+    [["author_instruction", message], ["working_target", original],
+      ["tool_result", '<tool_result source="call_finish" state="empty">The tool answered with no entry.</tool_result>']]);
     assert.ok(first.evidence.some((item) => item.kind === "provider_opaque"));
     assert.equal(first.run_id, firstId);
     assert.equal(first.project_scope.project_id, setup.projectId);
