@@ -5,10 +5,11 @@ use super::{
     ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 use crate::{
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, FINISH_TOOL_SPEC, HOST_FAKE_REGISTRATION,
-    HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_FUNCTION_CALLING_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, AgentDecisionKind, AgentDecisionOutcome, EXA_TOOL_REGISTRATION,
+    FINISH_TOOL_SPEC, HOST_FAKE_REGISTRATION, HOST_FAKE_TOOL_LOOP_REGISTRATION,
+    HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole, StreamItemState,
+    ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
 fn bound(
@@ -55,7 +56,7 @@ fn an_active_compatible_binding_on_a_qualified_registration_exposes_its_tools() 
         Some(ToolCompatibilityDecision::Compatible),
     )];
     assert_eq!(
-        exposure(&active, AGENT_PLAN_REGISTRATION.revision),
+        exposure(&active, AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision),
         research_exposure()
     );
 }
@@ -64,18 +65,18 @@ fn an_active_compatible_binding_on_a_qualified_registration_exposes_its_tools() 
 fn each_other_binding_or_registration_exposes_nothing() {
     let compatible = Some(ToolCompatibilityDecision::Compatible);
     let cases: [(&[BoundTool], &str); 6] = [
-        (&[], AGENT_PLAN_REGISTRATION.revision),
+        (&[], AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision),
         (
             &[bound(ToolRegistrationLifecycle::Quarantined, compatible)],
-            AGENT_PLAN_REGISTRATION.revision,
+            AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
         ),
         (
             &[bound(ToolRegistrationLifecycle::Retired, compatible)],
-            AGENT_PLAN_REGISTRATION.revision,
+            AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
         ),
         (
             &[bound(ToolRegistrationLifecycle::Active, None)],
-            AGENT_PLAN_REGISTRATION.revision,
+            AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
         ),
         (
             &[BoundTool {
@@ -83,7 +84,7 @@ fn each_other_binding_or_registration_exposes_nothing() {
                 lifecycle: ToolRegistrationLifecycle::Active,
                 compatibility: compatible,
             }],
-            AGENT_PLAN_REGISTRATION.revision,
+            AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
         ),
         (
             &[bound(ToolRegistrationLifecycle::Active, compatible)],
@@ -111,23 +112,28 @@ fn only_a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
         spec,
     };
     let finish = host("finish", &FINISH_TOOL_SPEC);
-    assert_eq!(
-        exposure(&[], HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
-        ToolExposure {
-            tools: vec![
-                host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
-                host("submit_research", &crate::SUBMIT_RESEARCH_TOOL_SPEC),
-                finish.clone()
-            ]
-        }
-    );
+    for revision in [
+        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+        AGENT_PLAN_REGISTRATION.revision,
+    ] {
+        assert_eq!(
+            exposure(&[], revision),
+            ToolExposure {
+                tools: vec![
+                    host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
+                    host("submit_research", &crate::SUBMIT_RESEARCH_TOOL_SPEC),
+                    finish.clone()
+                ]
+            }
+        );
+    }
     assert_eq!(
         finish.declaration().parameters,
         json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
     );
     for revision in [
         HOST_FAKE_REGISTRATION.revision,
-        AGENT_PLAN_REGISTRATION.revision,
+        AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
     ] {
         assert_eq!(exposure(&[], revision), ToolExposure::empty());
     }

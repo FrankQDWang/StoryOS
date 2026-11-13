@@ -6,33 +6,18 @@ use storyos_application::{
     ReportedBinding, ResponseReference, WirePayloadProjection, complete_agent_run,
 };
 use storyos_core::{
-    AGENT_PLAN_REGISTRATION, DecisionCandidate, DeploymentDestination, ModelAdapter, ModelOutput,
-    NativeStreamItem, OutputPhase, ProseChangeCandidate, RetrievalBounds, StreamItemRole,
-    StreamItemState,
+    AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter, NativeStreamItem,
+    ProseChangeCandidate, RetrievalBounds,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
+use crate::agent_run_finish_rule::tests::{finish_item, propose_edit_item, text_item};
 use crate::agent_run_retrieval::tests::{
     AfterExchange, adapter, broken_stream, destination, real_run, research_run, stored,
 };
-use crate::agent_run_tool_exposure::tests::{advisory_stream, function_call_stream};
-
-/// A stream that reports `reference` and ends with a complete Advisory.
-fn completed_stream(reference: &str) -> String {
-    let message = r#"{"id":"msg_01","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"}]}"#;
-    let events = [
-        format!(
-            r#"{{"type":"response.created","response":{{"id":"{reference}","status":"in_progress","output":[]}}}}"#
-        ),
-        format!(r#"{{"type":"response.output_item.done","output_index":0,"item":{message}}}"#),
-        format!(
-            r#"{{"type":"response.completed","response":{{"id":"{reference}","status":"completed","output":[{message}],"usage":{{"input_tokens":40,"output_tokens":12}}}}}}"#
-        ),
-    ];
-    sse(&events)
-}
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream, function_call_stream};
 
 /// A stream that reports `reference` and a function call item, and then ends.
 fn tool_stream(reference: &str) -> String {
@@ -92,8 +77,9 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
     let (base, served) = destination(vec![
         broken_stream("resp_c46"),
         stored("resp_c46", "in_progress"),
-        completed_stream("resp_c46s"),
+        finish_stream("resp_c46s"),
         stored("resp_c46", "completed"),
+        advisory_stream("resp_c46c"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "c46", &base).await;
@@ -109,7 +95,8 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
                    FROM storyos.model_attempts AS decision
                    JOIN storyos.model_attempts AS successor
                      ON successor.run_id = decision.run_id AND successor.attempt_role = 'successor'
-                  WHERE decision.run_id = $1::text::uuid AND decision.attempt_role = 'decision'",
+                  WHERE decision.run_id = $1::text::uuid AND decision.attempt_role = 'decision'
+                    AND decision.decision_position = 0",
                 &[&run_id],
             )
             .await
@@ -131,8 +118,8 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
                 None,
                 Some("true,true".to_owned()),
                 Some("true,reported".to_owned()),
-                Some("Keep it.".to_owned()),
-                Some("decision,retrieval,successor,late_retrieval".to_owned()),
+                None,
+                Some("decision,retrieval,successor,late_retrieval,decision".to_owned()),
             ],
             true,
             vec![
@@ -140,6 +127,7 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
                 "GET /api/plan/v3/responses/resp_c46 HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_c46 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
     );
@@ -157,7 +145,8 @@ async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
         stored("resp_f74", "in_progress"),
         function_call_stream("resp_f74s"),
         stored("resp_f74", "in_progress"),
-        advisory_stream("resp_f74c"),
+        finish_stream("resp_f74c"),
+        advisory_stream("resp_f74d"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "f74", &base).await;
@@ -190,7 +179,7 @@ async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
                 Some("true,true".to_owned()),
                 Some("false,unknown".to_owned()),
                 None,
-                Some("decision,retrieval,successor,late_retrieval,decision".to_owned()),
+                Some("decision,retrieval,successor,late_retrieval,decision,decision".to_owned()),
             ],
             Some("web_search".to_owned()),
             vec![
@@ -198,6 +187,7 @@ async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_con
                 "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
@@ -347,41 +337,38 @@ async fn an_exposure_change_before_the_successor_claim_pauses_the_successor_befo
     );
 }
 
-/// An Agent Plan route whose Create outcome is unknown and whose stored response is a complete
-/// prose change of each declared target. It records the declared targets of the Retrieve.
+/// An Agent Plan route whose first Create outcome is unknown and whose stored response is a
+/// `propose_edit` call of each declared target beside a `finish` call. A later Create gets the
+/// closing text. It records the declared targets of the Retrieve.
 struct StoredProseChange {
     declared: Mutex<Vec<String>>,
 }
 
 impl ModelProviderAdapter for StoredProseChange {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = Option<Vec<ProseChangeCandidate>>;
+    type Prepared = Option<Vec<NativeStreamItem>>;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
         let prepared = match request {
-            DestinationRequest::Create(_) => None,
+            DestinationRequest::Create(_) if self.declared.lock().unwrap().is_empty() => None,
+            DestinationRequest::Create(create) => Some(match create.tool_choice {
+                storyos_core::ToolChoice::None => vec![text_item("Shorter.")],
+                _ => vec![finish_item("call_finish_2")],
+            }),
             DestinationRequest::Retrieve(retrieve) => {
                 *self.declared.lock().unwrap() = retrieve
                     .declared_targets
                     .iter()
                     .map(|target| target.block_id.clone())
                     .collect();
-                Some(
-                    retrieve
-                        .declared_targets
-                        .iter()
-                        .map(|target| ProseChangeCandidate {
-                            chapter_id: target.chapter_id.clone(),
-                            base_authoritative_revision_id: target.base_revision_id.clone(),
-                            manuscript_block_id: target.block_id.clone(),
-                            candidate_text: "Rain hit the roof.".to_owned(),
-                            explanation: "Shorter.".to_owned(),
-                        })
-                        .collect(),
-                )
+                let changes = prose_changes(&retrieve.declared_targets, /*block*/ None);
+                Some(vec![
+                    propose_edit_item("call_c49", &changes),
+                    finish_item("call_finish"),
+                ])
             }
             DestinationRequest::Abort(_) => return Err(PreDispatchRefusal::UnsupportedRequest),
         };
@@ -402,51 +389,61 @@ impl ModelProviderAdapter for StoredProseChange {
         prepared: Self::Prepared,
         _sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let Some(changes) = prepared else {
+        let Some(items) = prepared else {
             return Observation::OutcomeUnknown {
-                response_reference: Some(ResponseReference {
-                    reference_id: "resp_c49".to_owned(),
-                    retrieval: ReferenceRetrieval::Supported {
-                        bounds: RetrievalBounds::DeclaredReadOnly,
-                    },
-                    reported_binding: ReportedBinding {
-                        owner_user_id: None,
-                        conversation_id: None,
-                        destination_identity: None,
-                        mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
-                    },
-                }),
+                response_reference: Some(stored_reference("resp_c49")),
             };
         };
-        Observation::Terminal(ModelResponse {
-            state: storyos_core::StreamItemState::Complete,
-            items: vec![NativeStreamItem {
-                item_id: "msg_01".to_owned(),
-                role: StreamItemRole::Assistant,
-                state: StreamItemState::Complete,
-                text: Some("Shorter.".to_owned()),
-                summary: None,
-                call_id: None,
-                arguments: None,
-                refusal: None,
-                native_type: None,
-                name: None,
-            }],
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::ProseChange {
-                    text: "Shorter.".to_owned(),
-                },
-                prose_changes: Some(changes),
-            }),
-            usage: ModelUsage::Reported {
-                input_tokens: 40,
-                output_tokens: 12,
-            },
-            cache_use: CacheUse::Unknown,
-            response_reference: Some("resp_c49".to_owned()),
-        })
+        complete(items, "resp_c49")
     }
+}
+
+/// A reference of the route that a Retrieve can read.
+fn stored_reference(reference: &str) -> ResponseReference {
+    ResponseReference {
+        reference_id: reference.to_owned(),
+        retrieval: ReferenceRetrieval::Supported {
+            bounds: RetrievalBounds::DeclaredReadOnly,
+        },
+        reported_binding: ReportedBinding {
+            owner_user_id: None,
+            conversation_id: None,
+            destination_identity: None,
+            mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
+        },
+    }
+}
+
+/// A complete response of `items` with the reference `reference`.
+fn complete(items: Vec<NativeStreamItem>, reference: &str) -> Observation {
+    Observation::Terminal(ModelResponse {
+        state: storyos_core::StreamItemState::Complete,
+        items,
+        output: None,
+        usage: ModelUsage::Reported {
+            input_tokens: 40,
+            output_tokens: 12,
+        },
+        cache_use: CacheUse::Unknown,
+        response_reference: Some(reference.to_owned()),
+    })
+}
+
+/// A change of each of `targets`, of `block` when it is set.
+fn prose_changes(
+    targets: &[storyos_application::DeclaredTarget],
+    block: Option<&str>,
+) -> Vec<ProseChangeCandidate> {
+    targets
+        .iter()
+        .map(|target| ProseChangeCandidate {
+            chapter_id: target.chapter_id.clone(),
+            base_authoritative_revision_id: target.base_revision_id.clone(),
+            manuscript_block_id: block.unwrap_or(&target.block_id).to_owned(),
+            candidate_text: "Rain hit the roof.".to_owned(),
+            explanation: "Shorter.".to_owned(),
+        })
+        .collect()
 }
 
 #[tokio::test]
@@ -474,7 +471,10 @@ async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_success
     let row = admin
         .query_one(
             "SELECT run.status, decision.payload->'decision'->>'kind',
-                    decision.payload->'decision'->'opened_proposal'->>'kind',
+                    (SELECT string_agg(
+                              (proposal.source_decision_id = decision.decision_id)::text, ',')
+                       FROM storyos.proposals AS proposal
+                      WHERE proposal.source_run_id = run.run_id),
                     decision.payload->'original_result_retrieval'->>'disposition',
                     decision.payload->'reservation'->>'released',
                     decision.continuation_binding_id IS NOT NULL,
@@ -484,6 +484,7 @@ async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_success
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -504,66 +505,66 @@ async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_success
         (
             false,
             "completed".to_owned(),
-            Some("prose_change".to_owned()),
-            Some("present".to_owned()),
+            Some("tool_request".to_owned()),
+            Some("true".to_owned()),
             Some("settled".to_owned()),
             Some("true".to_owned()),
             true,
-            Some("decision,retrieval".to_owned()),
+            Some("decision,retrieval,decision".to_owned()),
         )
     );
 }
 
 /// An Agent Plan route whose first Create outcome stays unknown. The successor Create returns a
-/// prose change of `successor_block`, or of each declared target when it is `None`. The late
-/// Retrieve of the predecessor returns a complete prose change of each declared target.
+/// `propose_edit` call of `successor_block`, or of each declared target when it is `None`, beside
+/// a `finish` call. The late Retrieve of the predecessor returns a `propose_edit` call of each
+/// declared target. A later Create gets a `finish` call, or the closing text in a closing
+/// request.
 struct SuccessorProseChange {
     successor_block: Option<&'static str>,
-}
-
-enum SuccessorPlan {
-    Unknown,
-    Changes(Vec<ProseChangeCandidate>),
+    created: std::sync::atomic::AtomicBool,
 }
 
 impl ModelProviderAdapter for SuccessorProseChange {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = SuccessorPlan;
+    type Prepared = Option<Vec<NativeStreamItem>>;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
-        let changes = |targets: &[storyos_application::DeclaredTarget], block: Option<&str>| {
-            targets
-                .iter()
-                .map(|target| ProseChangeCandidate {
-                    chapter_id: target.chapter_id.clone(),
-                    base_authoritative_revision_id: target.base_revision_id.clone(),
-                    manuscript_block_id: block.unwrap_or(&target.block_id).to_owned(),
-                    candidate_text: "Rain hit the roof.".to_owned(),
-                    explanation: "Shorter.".to_owned(),
-                })
-                .collect()
+        let proposed = |targets, block| {
+            Some(vec![
+                propose_edit_item("call_1d", &prose_changes(targets, block)),
+                finish_item("call_finish"),
+            ])
         };
         let (digest, prepared) = match request {
             DestinationRequest::Create(create) if create.successor_of.is_some() => (
                 "sha256:create",
-                SuccessorPlan::Changes(changes(&create.declared_targets, self.successor_block)),
+                proposed(&create.declared_targets, self.successor_block),
             ),
-            DestinationRequest::Create(_) => ("sha256:create", SuccessorPlan::Unknown),
+            DestinationRequest::Create(_)
+                if !self.created.swap(true, std::sync::atomic::Ordering::SeqCst) =>
+            {
+                ("sha256:create", None)
+            }
+            DestinationRequest::Create(create) => (
+                "sha256:create",
+                Some(match create.tool_choice {
+                    storyos_core::ToolChoice::None => vec![text_item("Shorter.")],
+                    _ => vec![finish_item("call_finish_2")],
+                }),
+            ),
             DestinationRequest::Retrieve(retrieve)
                 if retrieve.purpose == storyos_application::RetrievePurpose::LateResult =>
             {
                 (
                     "sha256:retrieve",
-                    SuccessorPlan::Changes(changes(
-                        &retrieve.declared_targets,
-                        /*block*/ None,
-                    )),
+                    proposed(&retrieve.declared_targets, /*block*/ None),
                 )
             }
-            DestinationRequest::Retrieve(_) => ("sha256:retrieve", SuccessorPlan::Unknown),
+            DestinationRequest::Retrieve(_) => ("sha256:retrieve", None),
             DestinationRequest::Abort(_) => return Err(PreDispatchRefusal::UnsupportedRequest),
         };
         Ok(PreparedRequest {
@@ -583,50 +584,12 @@ impl ModelProviderAdapter for SuccessorProseChange {
         prepared: Self::Prepared,
         _sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let SuccessorPlan::Changes(changes) = prepared else {
+        let Some(items) = prepared else {
             return Observation::OutcomeUnknown {
-                response_reference: Some(ResponseReference {
-                    reference_id: "resp_1d".to_owned(),
-                    retrieval: ReferenceRetrieval::Supported {
-                        bounds: RetrievalBounds::DeclaredReadOnly,
-                    },
-                    reported_binding: ReportedBinding {
-                        owner_user_id: None,
-                        conversation_id: None,
-                        destination_identity: None,
-                        mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
-                    },
-                }),
+                response_reference: Some(stored_reference("resp_1d")),
             };
         };
-        Observation::Terminal(ModelResponse {
-            state: storyos_core::StreamItemState::Complete,
-            items: vec![NativeStreamItem {
-                item_id: "msg_01".to_owned(),
-                role: StreamItemRole::Assistant,
-                state: StreamItemState::Complete,
-                text: Some("Shorter.".to_owned()),
-                summary: None,
-                call_id: None,
-                arguments: None,
-                refusal: None,
-                native_type: None,
-                name: None,
-            }],
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::ProseChange {
-                    text: "Shorter.".to_owned(),
-                },
-                prose_changes: Some(changes),
-            }),
-            usage: ModelUsage::Reported {
-                input_tokens: 40,
-                output_tokens: 12,
-            },
-            cache_use: CacheUse::Unknown,
-            response_reference: Some("resp_1d".to_owned()),
-        })
+        complete(items, "resp_1d")
     }
 }
 
@@ -635,7 +598,7 @@ impl ModelProviderAdapter for SuccessorProseChange {
 async fn successor_proposal_facts(
     route: &SuccessorProseChange,
     prefix: &str,
-) -> [Option<String>; 6] {
+) -> [Option<String>; 5] {
     let (store, admin) = stores().await;
     let (scope, _, run_id) = queued_run(
         &store,
@@ -652,7 +615,6 @@ async fn successor_proposal_facts(
     let row = admin
         .query_one(
             "SELECT run.status, successor.payload->'decision'->>'kind',
-                    successor.payload->'decision'->'opened_proposal'->>'kind',
                     (SELECT string_agg(
                               (proposal.source_decision_id = successor.decision_id)::text, ',')
                        FROM storyos.proposals AS proposal
@@ -664,6 +626,7 @@ async fn successor_proposal_facts(
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
                JOIN storyos.model_attempts AS successor
                  ON successor.run_id = run.run_id AND successor.attempt_role = 'successor'
               WHERE run.run_id = $1::text::uuid",
@@ -671,7 +634,7 @@ async fn successor_proposal_facts(
         )
         .await
         .unwrap();
-    [0, 1, 2, 3, 4, 5].map(|index| row.get(index))
+    [0, 1, 2, 3, 4].map(|index| row.get(index))
 }
 
 #[tokio::test]
@@ -682,17 +645,17 @@ async fn a_successor_prose_change_opens_one_proposal_and_a_late_result_opens_non
         .await;
     let route = SuccessorProseChange {
         successor_block: None,
+        created: Default::default(),
     };
 
     assert_eq!(
         successor_proposal_facts(&route, "1d1").await,
         [
             Some("completed".to_owned()),
-            Some("prose_change".to_owned()),
-            Some("present".to_owned()),
+            Some("tool_request".to_owned()),
             Some("true".to_owned()),
             Some("true".to_owned()),
-            Some("decision,retrieval,successor,late_retrieval".to_owned()),
+            Some("decision,retrieval,successor,late_retrieval,decision".to_owned()),
         ]
     );
 }
@@ -705,17 +668,18 @@ async fn a_successor_prose_change_of_an_undeclared_target_opens_no_proposal() {
         .await;
     let route = SuccessorProseChange {
         successor_block: Some("018f0000-0000-7000-8000-0000000001d2"),
+        created: Default::default(),
     };
 
     assert_eq!(
         successor_proposal_facts(&route, "1d2").await,
+        // The refused call keeps the `finish` call from counting, so the Run continues.
         [
             Some("completed".to_owned()),
-            None,
-            None,
+            Some("tool_request".to_owned()),
             None,
             Some("true".to_owned()),
-            Some("decision,retrieval,successor,late_retrieval".to_owned()),
+            Some("decision,retrieval,successor,late_retrieval,decision,decision".to_owned()),
         ]
     );
 }

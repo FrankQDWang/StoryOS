@@ -66,7 +66,7 @@ pub(super) async fn update_project_assistance_call(
     let input = UpdateProjectAssistanceInput {
         availability: AssistanceAvailability::Available,
         expected_revision: 0,
-        destination: Some(storyos_core::DeploymentDestination::HostFake),
+        destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
     };
     issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
 }

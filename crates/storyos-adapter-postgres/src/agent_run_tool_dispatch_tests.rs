@@ -10,7 +10,7 @@ use tokio_postgres::Client;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
 use crate::agent_run_retrieval::tests::{TestCredential, adapter, destination, research_run};
 use crate::agent_run_tool_call::tests::text_and_call_stream;
-use crate::agent_run_tool_exposure::tests::advisory_stream;
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
 
 pub(crate) const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 pub(crate) const RESULT: &str = "Tide tables of 1890 list two high waters each day.";
@@ -119,7 +119,8 @@ pub(crate) async fn tool_run(
             SEARCH,
             "completed",
         ),
-        advisory_stream(&format!("resp_{prefix}_2")),
+        finish_stream(&format!("resp_{prefix}_2")),
+        advisory_stream(&format!("resp_{prefix}_3")),
     ])
     .await;
     let (scope, run_id) = research_run(store, admin, prefix, &model_base).await;
@@ -143,7 +144,8 @@ pub(crate) async fn point_mcp(
         .unwrap();
 }
 
-/// The Run, its one ToolCall without volatile identities, and its Activity Run Events.
+/// The Run, its one research ToolCall without volatile identities, and the Activity Run Events
+/// that are not of a Host Tool call.
 pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
     let row = admin
         .query_one(
@@ -172,14 +174,21 @@ pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                           'has_attempt_id', call.destination_attempt_id IS NOT NULL,
                           'effect_outcome', call.effect_outcome, 'result_text', call.result_text,
                           'result_digest', call.result_digest, 'result_bytes', call.result_bytes)
-                        FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id),
+                        FROM storyos.tool_calls AS call
+                       WHERE call.run_id = run.run_id AND call.registration_id IS DISTINCT FROM 'host_tools'),
                       'events', (SELECT jsonb_agg((event.payload - 'tool_call_id'
                                    - 'destination_attempt_id')
                                    || jsonb_build_object('kind', event.event_kind,
                                                          'position', event.event_position)
                                    ORDER BY event.event_position)
                                    FROM storyos.agent_run_events AS event
-                                  WHERE event.run_id = run.run_id),
+                                  WHERE event.run_id = run.run_id
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM storyos.tool_calls AS host
+                                         WHERE host.run_id = run.run_id
+                                           AND host.registration_id = 'host_tools'
+                                           AND host.tool_call_id::text
+                                               = event.payload ->> 'tool_call_id')),
                       'manifests', (SELECT jsonb_agg(jsonb_build_object(
                           'requirement', requirement.payload - 'tool_call_id',
                           'position', manifest.decision_position,
@@ -205,7 +214,8 @@ pub(crate) async fn tool_facts(admin: &Client, run_id: &str) -> Value {
                         FROM storyos.context_assembly_manifests AS manifest
                         JOIN storyos.operation_requirements AS requirement
                           USING (owner_user_id, project_id, operation_requirement_id)
-                        LEFT JOIN storyos.tool_calls AS call ON call.run_id = manifest.run_id
+                        LEFT JOIN storyos.tool_calls AS call
+                          ON call.run_id = manifest.run_id AND call.registration_id IS DISTINCT FROM 'host_tools'
                        WHERE manifest.run_id = run.run_id AND manifest.manifest_role = 'tool_call'),
                       'holds_key', (SELECT bool_or(position($2 IN record::text) > 0)
                                       FROM (SELECT to_jsonb(call) AS record

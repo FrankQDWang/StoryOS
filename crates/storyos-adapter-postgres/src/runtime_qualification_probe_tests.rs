@@ -68,7 +68,7 @@ async fn move_call(admin: &Client, call: &str, registration: &str, binding_of: O
 }
 
 /// The status of one AgentRun and the decision, probe, call, and qualification facts of its
-/// decision Attempt.
+/// first decision Attempt.
 async fn probe_evidence(admin: &Client, run_id: &str) -> [Option<String>; 5] {
     let row = admin
         .query_one(
@@ -79,6 +79,7 @@ async fn probe_evidence(admin: &Client, run_id: &str) -> [Option<String>; 5] {
                FROM storyos.agent_runs AS run
                LEFT JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -246,7 +247,12 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         ToolProbe::FunctionCall.instruction(),
     )
     .await;
-    let ordinary_adapter = response("resp_b4d", Vec::new());
+    let ordinary_adapter = response(
+        "resp_b4d",
+        vec![crate::agent_run_finish_rule::tests::text_item(
+            "storyos-probe",
+        )],
+    );
     settle(&store, &admin, &scope, &ordinary, &ordinary_adapter).await;
 
     let sent = |adapter: ScriptedAgentPlan| {
@@ -282,7 +288,10 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
                 }),
                 text("resp_b4b")
             )],
-            vec![(CreatePurpose::Decision, None)],
+            vec![
+                (CreatePurpose::Decision, None),
+                (CreatePurpose::Decision, text("resp_b4d_finish"))
+            ],
             [
                 text("completed"),
                 None,

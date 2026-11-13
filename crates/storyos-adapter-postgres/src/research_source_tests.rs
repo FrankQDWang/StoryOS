@@ -23,6 +23,15 @@ The port log.";
 
 /// One response that requests each `(call_id, name, arguments)` call in order.
 pub(crate) fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> String {
+    calls_stream_in(reference, calls, "completed")
+}
+
+/// As `calls_stream`, with the terminal event and the response in `status`.
+pub(crate) fn calls_stream_in(
+    reference: &str,
+    calls: &[(&str, &str, &str)],
+    status: &str,
+) -> String {
     let items: Vec<Value> = calls
         .iter()
         .enumerate()
@@ -36,8 +45,8 @@ pub(crate) fn calls_stream(reference: &str, calls: &[(&str, &str, &str)]) -> Str
     events.extend(items.iter().enumerate().map(|(index, item)| {
         json!({"type": "response.output_item.done", "output_index": index, "item": item})
     }));
-    events.push(json!({"type": "response.completed", "response": {
-        "id": reference, "status": "completed", "output": items,
+    events.push(json!({"type": format!("response.{status}"), "response": {
+        "id": reference, "status": status, "output": items,
         "usage": {"input_tokens": 90, "output_tokens": 30}}}));
     sse(&events)
 }

@@ -58,7 +58,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         run_id: Uuid::now_v7().to_string(),
         conversation_id: Uuid::now_v7().to_string(),
         project_agent_id: Uuid::now_v7().to_string(),
-        destination: Some(storyos_core::DeploymentDestination::HostFake),
+        destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
     }
 }
@@ -81,7 +81,7 @@ pub(super) async fn create_agent_run_call(
     let assistance = UpdateProjectAssistanceInput {
         availability: AssistanceAvailability::Available,
         expected_revision: 0,
-        destination: Some(storyos_core::DeploymentDestination::HostFake),
+        destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
     };
     let call = issued(
         store,

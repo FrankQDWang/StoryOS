@@ -69,3 +69,7 @@ A changed Tool Exposure digest starts a new transport continuation in the same C
 ## Amendment 2026-11-12: the tool loop mapping
 
 [#1454](https://github.com/FrankQDWang/StoryOS/issues/1454) adds the mapping `storyos.volcengine-agent-plan.responses.create.v5` for the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md). It is the mapping `v4` with other Host instructions: they describe the Tools and the finish rule, and they hold no reply form. Each exposed Tool is a strict function, and `tool_choice` is `required` before a `finish` call that counted and `none` in the closing request. No Model Registration has the mapping `v5` yet, so the head Registration keeps the mapping `v4`.
+
+## Amendment 2026-11-13: the head Registration takes the tool loop mapping
+
+[#1461](https://github.com/FrankQDWang/StoryOS/issues/1461) gives the mapping `v5` to the new head Registration `018f0000-0000-7001-8000-00000000fa19`. It is Registration `018f0000-0000-7001-8000-00000000fa17` with the mapping `v5`, and it keeps the profile and the requirement of `fa17`. Thus the exception of the amendment of 2026-11-05 ends for the head Registration. An AgentRun that pinned `fa17` refuses with Registration drift. A binding with `fa17` does not offer the deployment destination, so the next `createAgentRun` writes new binding records (ADR 0048), and the next AgentRun of the Conversation uses a new transport continuation.

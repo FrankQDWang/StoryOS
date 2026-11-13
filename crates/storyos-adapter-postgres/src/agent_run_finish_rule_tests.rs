@@ -71,6 +71,71 @@ pub(crate) async fn tool_loop_run(
     (scope, chapter_id, first, run_id)
 }
 
+/// One complete assistant message of `text`.
+pub(crate) fn text_item(text: &str) -> NativeStreamItem {
+    NativeStreamItem {
+        item_id: "msg_01".to_owned(),
+        role: StreamItemRole::Assistant,
+        state: StreamItemState::Complete,
+        text: Some(text.to_owned()),
+        summary: None,
+        call_id: None,
+        arguments: None,
+        refusal: None,
+        native_type: None,
+        name: None,
+    }
+}
+
+/// One complete `finish` call with `call_id`.
+pub(crate) fn finish_item(call_id: &str) -> NativeStreamItem {
+    NativeStreamItem {
+        item_id: format!("fc_{call_id}"),
+        role: StreamItemRole::Tool,
+        text: None,
+        call_id: Some(call_id.to_owned()),
+        arguments: Some("{}".to_owned()),
+        native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
+        name: Some("finish".to_owned()),
+        ..text_item("")
+    }
+}
+
+/// One complete `propose_edit` call with `call_id` that proposes `changes`.
+pub(crate) fn propose_edit_item(
+    call_id: &str,
+    changes: &[storyos_core::ProseChangeCandidate],
+) -> NativeStreamItem {
+    let changes: Vec<Value> = changes
+        .iter()
+        .map(|change| {
+            json!({"block_id": change.manuscript_block_id,
+                   "candidate_text": change.candidate_text, "explanation": change.explanation})
+        })
+        .collect();
+    NativeStreamItem {
+        arguments: Some(json!({"summary": "Shorter.", "changes": changes}).to_string()),
+        name: Some("propose_edit".to_owned()),
+        ..finish_item(call_id)
+    }
+}
+
+/// The response that a model of the tool loop gives before its closing `response`: one
+/// `finish` call with the usage of `response`. Its reference is the reference of `response`
+/// with `_finish`.
+pub(crate) fn finish_before(response: &ModelResponse) -> ModelResponse {
+    ModelResponse {
+        state: StreamItemState::Complete,
+        items: vec![finish_item("call_finish")],
+        output: None,
+        response_reference: response
+            .response_reference
+            .as_ref()
+            .map(|reference| format!("{reference}_finish")),
+        ..response.clone()
+    }
+}
+
 /// The Conversation of the first Run of the Project of `prefix`.
 fn conversation_of(prefix: &str) -> ConversationSelection {
     ConversationSelection::Existing {

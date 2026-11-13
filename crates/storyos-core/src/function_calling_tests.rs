@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
-    DeploymentDestination, HOST_FAKE_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, DeploymentDestination, HOST_FAKE_REGISTRATION,
 };
 
 const AUTHORIZATION: &str = "https://github.com/FrankQDWang/StoryOS/issues/696";

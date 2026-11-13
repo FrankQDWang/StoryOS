@@ -79,7 +79,7 @@ fn run_command(
             run_id: format!("018f0000-0000-7001-8000-00000004{ids_suffix}"),
             conversation_id: conversation_id.to_owned(),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
-            destination: Some(storyos_core::DeploymentDestination::HostFake),
+            destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
             research: None,
         },
     )
@@ -167,7 +167,7 @@ async fn prepare_project(
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            destination: Some(storyos_core::DeploymentDestination::HostFake),
+            destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         },
     );
     store

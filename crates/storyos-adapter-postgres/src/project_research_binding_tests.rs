@@ -3,7 +3,7 @@ use storyos_application::{
     ConversationSelection, NoContractFaults, ProjectScope, complete_agent_run,
     complete_agent_run_with_tools,
 };
-use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer, ToolExposure};
+use storyos_core::{DeploymentDestination, RESEARCH_TOOL_OFFER, ResearchToolOffer};
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{
@@ -16,7 +16,7 @@ use crate::agent_run_tool_call::tests::{
 use crate::agent_run_tool_dispatch::tests::{
     Hooked, RESULT, SEARCH, exa_tools, mcp_replies, reply, tool_run,
 };
-use crate::agent_run_tool_exposure::tests::advisory_stream;
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream, host_exposure};
 
 /// The same research destination with another Credential Reference.
 static CHANGED_OFFER: ResearchToolOffer = ResearchToolOffer {
@@ -102,7 +102,8 @@ async fn the_first_run_of_a_project_binds_research_and_its_tool_call_dispatches(
     .unwrap();
     let state: String = admin
         .query_one(
-            "SELECT state FROM storyos.tool_calls WHERE run_id = $1::text::uuid",
+            "SELECT state FROM storyos.tool_calls
+              WHERE run_id = $1::text::uuid AND call_id = 'call_01'",
             &[&run_id],
         )
         .await
@@ -129,7 +130,13 @@ async fn the_first_run_of_a_project_binds_research_and_its_tool_call_dispatches(
                 .to_vec(),
                 1,
             ),
-            json!(["web_search", "web_fetch"]),
+            json!([
+                "web_search",
+                "web_fetch",
+                "propose_edit",
+                "submit_research",
+                "finish"
+            ]),
             "settled".to_owned(),
             4,
         )
@@ -186,7 +193,8 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_a_refused_call
     admin.batch_execute(&quarantine_statement()).await.unwrap();
     let (base, served) = destination(vec![
         text_and_call_stream("resp_6e7", "call_01", "web_search", SEARCH, "completed"),
-        advisory_stream("resp_6e7b"),
+        finish_stream("resp_6e7b"),
+        advisory_stream("resp_6e7c"),
     ])
     .await;
     let (scope, run_id) = research_run(&store, &admin, "6e7", &base).await;
@@ -201,7 +209,7 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_a_refused_call
                       'batch', attempt.payload->'tool_call_batch',
                       'snapshot', attempt.payload #> '{step_snapshot,tool_exposure}',
                       'refusal', (SELECT refusal FROM storyos.tool_calls
-                                   WHERE run_id = run.run_id))::text
+                                   WHERE run_id = run.run_id AND call_id = 'call_01'))::text
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
@@ -224,10 +232,11 @@ async fn a_quarantined_offer_binds_nothing_and_a_research_call_is_a_refused_call
             json!({
                 "settlement": null,
                 "batch": {"kind": "valid", "call_ids": ["call_01"]},
-                "snapshot": ToolExposure::empty().snapshot(),
+                // Only the Host Tools stay exposed.
+                "snapshot": host_exposure().snapshot(),
                 "refusal": "unexposed_name",
             }),
-            2,
+            3,
         )
     );
 }

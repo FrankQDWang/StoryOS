@@ -46,7 +46,7 @@ impl GatewayClock for RuntimeClock {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct ExchangeProbe {
     claimed_attempts: i64,
     run_locked: bool,
@@ -99,7 +99,8 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
     ) -> Observation {
         match self.probe {
             Probe::Refuse => unreachable!("a refused request has no exchange"),
-            Probe::StreamTwoBatches => {
+            // The probe streams the first RunStep. The fake answers the later RunSteps.
+            Probe::StreamTwoBatches if self.streamed.lock().unwrap().is_none() => {
                 let item = |item_id: &str, state, text: &str| NativeStreamItem {
                     item_id: item_id.to_owned(),
                     role: StreamItemRole::Assistant,
@@ -126,7 +127,8 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     .admin
                     .query_one(
                         "SELECT payload->>'items' FROM storyos.model_attempts
-                          WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+                          WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                            AND decision_position = 0",
                         &[&self.run_id],
                     )
                     .await
@@ -188,6 +190,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     .await
                     .unwrap();
             }
+            Probe::StreamTwoBatches => {}
             Probe::TakeOverBeforeExchange => {
                 self.admin
                     .execute(
@@ -219,7 +222,8 @@ async fn claimed_run(
     admin: &Client,
     prefix: &str,
 ) -> ClaimedAgentRun {
-    let (scope, _, run_id) = queued_run(store, prefix, DeploymentDestination::HostFake).await;
+    let (scope, _, run_id) =
+        queued_run(store, prefix, DeploymentDestination::HostFakeToolLoop).await;
     claim_run(admin, scope, run_id).await
 }
 
@@ -288,7 +292,7 @@ pub(crate) async fn queued_run_offering(
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            destination: Some(DeploymentDestination::HostFake),
+            destination: Some(DeploymentDestination::HostFakeToolLoop),
         },
     );
     store
@@ -460,9 +464,11 @@ pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchE
                        FROM storyos.context_assembly_manifests AS assembly
                       WHERE assembly.run_id = run.run_id),
                     (SELECT attempt.payload->>'items' FROM storyos.model_attempts AS attempt
-                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'),
+                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                        AND attempt.decision_position = 0),
                     (SELECT attempt.decision_id::text FROM storyos.model_attempts AS attempt
-                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision')
+                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                        AND attempt.decision_position = 0)
                FROM storyos.agent_runs AS run
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
@@ -557,14 +563,19 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
         ),
         (
             Some(CompleteAgentRun::Settled),
-            vec![ExchangeProbe {
-                claimed_attempts: 1,
-                run_locked: false,
-            }],
+            // The `finish` RunStep and the closing RunStep each claim and commit one Attempt.
             vec![
+                ExchangeProbe {
+                    claimed_attempts: 1,
+                    run_locked: false,
+                };
+                2
+            ],
+            [
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted
-            ],
+            ]
+            .repeat(2),
         )
     );
     let evidence = dispatch_evidence(&admin, &claim.run_id).await;
@@ -575,7 +586,7 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
             evidence.disclosure_events,
             evidence.decision_id.is_some()
         ),
-        ("completed", 1, 1, true)
+        ("completed", 2, 2, true)
     );
 }
 
@@ -738,7 +749,8 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
     let persisted: String = admin
         .query_one(
             "SELECT payload->>'items' FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = 0",
             &[&claim.run_id],
         )
         .await
@@ -764,12 +776,17 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
             points.0.into_inner().unwrap(),
         ),
         (
-            Some(CompleteAgentRun::AlreadySettled),
+            // The text of the first RunStep gives the next RunStep, whose `finish` call counts.
+            Some(CompleteAgentRun::Settled),
             Some(kept.clone()),
             Some(kept),
             vec![
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,
             ],
         )

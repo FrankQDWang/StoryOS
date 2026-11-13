@@ -204,7 +204,8 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
     assert_eq!(counted(&request) - counted(&framing), estimate);
 }
 
-/// The Exposure of the research Tool Registration on the current Agent Plan Registration.
+/// The Exposure of the research Tool Registration on the Agent Plan Registration of the reply
+/// form, which declares no Host Tool.
 pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
     storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
         bound: &[storyos_core::BoundTool {
@@ -212,7 +213,8 @@ pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
             lifecycle: storyos_core::ToolRegistrationLifecycle::Active,
             compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        model_registration_revision: storyos_core::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION
+            .revision,
     })
 }
 
