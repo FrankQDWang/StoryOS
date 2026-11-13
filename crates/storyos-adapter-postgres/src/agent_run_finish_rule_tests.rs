@@ -19,7 +19,7 @@ use crate::agent_run_dispatch::tests::{
 };
 
 /// Claims and completes the queued Run `run_id` in a process with no Tool adapter.
-async fn complete(
+pub(super) async fn complete(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -228,7 +228,7 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
 
 /// Each ToolCall of the Run in RunStep and item order: the RunStep, the function name, the
 /// state, the refusal, and the result text.
-async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {
+pub(super) async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
             "SELECT jsonb_build_array(decision_position, function_name, state, refusal,
