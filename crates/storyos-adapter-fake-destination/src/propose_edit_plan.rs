@@ -4,7 +4,7 @@
 //! of the reply form fake, or else a change of each target. For a reply form prose change text
 //! with no changes, it proposes that text for the first target, with the text as the summary.
 //! The end of the message scripts the other cases, by the count of the `propose_edit` results of
-//! the request:
+//! the request after its last counted `finish` output:
 //!
 //! - `SCRIPT:propose_two_candidates`: one call that revises each referenced candidate.
 //! - `SCRIPT:propose_refused_once`: the first call names a block that is not a target, alone,
@@ -18,6 +18,8 @@
 //!   call that cites no captured source after the correct call.
 //! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
 //!   then one such call, then one call with no arguments.
+//! - `SCRIPT:incomplete`: one correct call with the incomplete stream state of the reply form
+//!   response.
 
 use storyos_application::CreateRequest;
 use storyos_core::{
@@ -51,9 +53,19 @@ pub(crate) fn calls(
     {
         return None;
     }
+    // A steering input continues a Run after a counted `finish` call, and the fake proposes again
+    // for it: only the results after the last counted `finish` output count.
+    let counted_finish = |output: &&storyos_application::ToolOutput| {
+        output.name == ToolOperation::Finish.function_name()
+            && !output
+                .output
+                .contains(storyos_core::FINISH_DOES_NOT_COUNT_RESULT)
+    };
     let results = request
         .tool_outputs
         .iter()
+        .rev()
+        .take_while(|output| !counted_finish(output))
         .filter(|output| output.name == name)
         .count();
     let proposal = |index: usize, script: &str| {
@@ -127,6 +139,11 @@ pub(crate) fn calls(
                 research.to_string(),
             );
             (vec![finish, correct(0), research], false)
+        }
+        (Some("incomplete"), 0) => {
+            let mut incomplete = correct(0);
+            incomplete.state = storyos_core::StreamItemState::Incomplete;
+            (vec![incomplete], false)
         }
         (Some("propose_mixed"), 0) => (vec![undeclared(0), undeclared(1)], false),
         (Some("propose_mixed"), 2) => (vec![undeclared(0)], false),
