@@ -112,7 +112,7 @@ pub(crate) async fn open_after_text(
 
 #[cfg(test)]
 #[path = "agent_run_finish_rule_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "agent_run_finish_rule_recovery_tests.rs"]

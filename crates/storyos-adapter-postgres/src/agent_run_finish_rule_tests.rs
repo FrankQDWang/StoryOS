@@ -19,7 +19,7 @@ use crate::agent_run_dispatch::tests::{
 };
 
 /// Claims and completes the queued Run `run_id` in a process with no Tool adapter.
-pub(super) async fn complete(
+pub(crate) async fn complete(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,
@@ -40,7 +40,7 @@ pub(super) async fn complete(
 /// Completes the first Run of a new Project of the tool loop profile, then completes one Run with
 /// `author_message` in a new Conversation or in the Conversation of the first Run. `prefixes`
 /// give the identities of the two Runs.
-async fn tool_loop_run(
+pub(crate) async fn tool_loop_run(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
@@ -81,7 +81,7 @@ fn conversation_of(prefix: &str) -> ConversationSelection {
 /// For each decision Model Attempt of the Run in RunStep order: the decision kind, the
 /// `tool_choice` of its request, its response reference, and the prior response reference that
 /// its request sent.
-async fn steps(admin: &Client, run_id: &str) -> Vec<Value> {
+pub(crate) async fn steps(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
             "SELECT jsonb_build_array(payload #>> '{decision,kind}', wire ->> 'tool_choice',
@@ -228,7 +228,7 @@ async fn the_next_run_of_the_conversation_continues_from_the_closing_response() 
 
 /// Each ToolCall of the Run in RunStep and item order: the RunStep, the function name, the
 /// state, the refusal, and the result text.
-pub(super) async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {
+pub(crate) async fn calls(admin: &Client, run_id: &str) -> Vec<Value> {
     admin
         .query(
             "SELECT jsonb_build_array(decision_position, function_name, state, refusal,

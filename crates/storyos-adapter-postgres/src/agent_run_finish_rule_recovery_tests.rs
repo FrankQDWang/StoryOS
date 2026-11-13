@@ -239,7 +239,7 @@ async fn a_recovered_response_gives_the_agent_decision_of_a_direct_response_at_e
             ADVISORY_TEXT,
         ),
     ];
-    let prefixes = (0x3b0..).step_by(2).map(|lead: u32| format!("{lead:03x}"));
+    let prefixes = (0x630..).step_by(2).map(|lead: u32| format!("{lead:03x}"));
     let paths = [
         ("SCRIPT:retrieve-complete", true),
         ("SCRIPT:successor-once", false),

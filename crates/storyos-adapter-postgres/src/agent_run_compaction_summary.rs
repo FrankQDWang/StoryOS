@@ -232,11 +232,11 @@ pub(crate) async fn commit_claim(
                (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
                 outbound_disclosure_event_id, destination_context_manifest_id,
                 outbound_disclosure_manifest_id, wire_payload_projection_id, model_invocation_id,
-                conversation_id, dispatch_state, payload, attempt_role)
+                conversation_id, dispatch_state, payload, attempt_role, decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'compaction')",
+                     $12::text::jsonb, 'compaction', $13::text::numeric)",
             &[
                 scope[0],
                 scope[1],
@@ -250,6 +250,7 @@ pub(crate) async fn commit_claim(
                 &Uuid::now_v7().to_string(),
                 &run.conversation_id,
                 &payload.to_string(),
+                &run.decision_position,
             ],
         )
         .await
@@ -294,9 +295,9 @@ pub(crate) async fn commit_assembly(
         .execute(
             "INSERT INTO storyos.operation_requirements
                (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
-                receipt_id, payload, requirement_role)
+                receipt_id, payload, requirement_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'compaction'
+                    receipt_id, $6::text::jsonb, 'compaction', decision_position
                FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND operation_requirement_id = $3::text::uuid",
@@ -317,9 +318,10 @@ pub(crate) async fn commit_assembly(
         .execute(
             "INSERT INTO storyos.context_assembly_manifests
                (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role)
+                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role,
+                decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::jsonb, receipt_id, 'compaction'
+                    sufficiency, $6::text::jsonb, receipt_id, 'compaction', decision_position
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND context_assembly_manifest_id = $3::text::uuid",
