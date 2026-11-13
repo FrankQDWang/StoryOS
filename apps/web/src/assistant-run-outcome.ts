@@ -18,9 +18,6 @@ export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开
  * Tool now, or its Registration is not available now (#1426). */
 export const RESEARCH_TOOL_UNAVAILABLE_SENTENCE = "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。";
 
-/** The sentence for a research request of the model that StoryOS could not accept (#1426). */
-export const TOOL_REQUEST_INVALID_SENTENCE = "模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。";
-
 /** The line of a research call that did not give a result (ADR 0040). */
 export const TOOL_CALL_FAILED_SENTENCE = "有一次联网检索没有完成。";
 
@@ -94,19 +91,6 @@ export function researchArtifactLines(artifact: ResearchArtifactInspect): { clai
       ? `[${index + 1}] ${citation.snapshot.title ?? citation.snapshot.locator}（获取于 ${time.format(new Date(citation.snapshot.captured_at))}）`
       : `[${index + 1}] ${gapLine(citation.gap)}`),
   };
-}
-
-/** The sentence for a model reply that looks like a structured reply but does not validate (#1145). */
-export const MALFORMED_REPLY_SENTENCE = "模型这次的回复格式不正确，正文没有改动。你可以重试，或继续手动写作。";
-
-/**
- * An Advisory text that is a malformed structured reply. The function removes a Markdown code
- * fence, also a fence without its end. Then the text starts as an object with a `kind` key. A
- * valid reply does not arrive here as an Advisory text. The text can be invalid or incomplete JSON.
- */
-export function malformedStructuredReply(text: string): boolean {
-  const reply = text.trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
-  return reply.startsWith("{") && reply.includes('"kind"');
 }
 
 /**

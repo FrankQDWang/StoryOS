@@ -7,7 +7,9 @@ use storyos_application::{
     PreparedRequest, ProjectScope, RejectProposalOperationsInput, RejectionNote,
     WithdrawProposalInput, WithdrawalNote, complete_agent_run,
 };
-use storyos_core::{DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, PROPOSAL_WAITS_RESULT};
+use storyos_core::{
+    DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, PROPOSAL_WAITS_RESULT, PROSE_CHANGE_TEXT,
+};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -169,7 +171,13 @@ async fn a_valid_call_opens_one_proposal_and_the_run_shows_it() {
             (text, opened_proposal_id, outcomes),
         ),
         (
-            json!("TEMP"),
+            // One open Proposal with one valid pending Operation of the change.
+            json!([{
+                "proposal": ["block_edit", "none"],
+                "revisions": [["ready", "valid", "open", PROSE_CHANGE_TEXT]],
+                "operations": [["pending", "unresolved", PROSE_CHANGE_TEXT, 0]],
+                "receipts": [["valid", PROSE_CHANGE_TEXT, "unresolved"]],
+            }]),
             [true, true],
             vec![opened(0)],
             (

@@ -85,7 +85,7 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 ## Consequences
 
 - Each Run has two or more model requests. A Run that only answers a question had one.
-- The parser of the reply form, the answer that an unparsed text becomes, the malformed reply sentence of the panel, and the refusal `tool_request_invalid` go.
+- The parser of the reply form, the answer that an unparsed text becomes, the malformed reply sentence of the panel, and the refusal `tool_request_invalid` go. They went in #1463.
 - These sentences are superseded when the tickets land: the bullet "One Decision" of ADR 0062, the sentences of ADR 0071 that one reply is one Agent Decision and that the reply contract keeps its shape, the reply form of ADR 0087 section 1 and the repair sentence of its section 3, the last sentence of ADR 0085 section 5, and the batch rule of the glossary entry Model Tool Request. The validation rules of these ADRs stay, and they apply to one call.
 - Steering, compaction, and the recovery of an unknown Attempt work today only at the first RunStep position or have a bounded rule for a continuation ([ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md)). Each Run now has more than one RunStep, so the tickets must make these paths correct at each position.
 - The fake model adapter emits function calls, and each test that it drives goes through the ToolCall path.

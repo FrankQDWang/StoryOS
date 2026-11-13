@@ -51,10 +51,6 @@ export function startServer(options: ServerOptions = {}): Promise<StoryOSServer>
     sessions: options.sessions ?? SESSIONS });
 }
 
-/** The test Server setting that offers the reply form profile of the fake destination. Only the tests of the
- * streamed Proposal generation and of the typed output shapes of the reply form set it. #1463 owns them. */
-export const REPLY_FORM_FAKE_ENV: Readonly<Record<string, string>> = { STORYOS_TEST_REPLY_FORM_FAKE: "1" };
-
 /** Stops the Server process and starts a new one on the same address. */
 export async function restartServer(started: StoryOSServer, options: Omit<ServerOptions, "bind"> = {}): Promise<StoryOSServer> {
   const url = new URL(started.baseUrl);

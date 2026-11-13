@@ -350,9 +350,11 @@ async fn an_incomplete_response_with_a_complete_function_call_derives_no_tool_ca
             served.await.unwrap(),
         ),
         (
+            // A structural fault gives no ToolCall and no refusal: the Run completes with the
+            // results that it already made (ADR 0091 section 3).
             json!({
-                "status": "refused",
-                "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
+                "status": "completed",
+                "settlement": null,
                 "model_attempt_id": attempt_id,
                 "decision_id": null,
                 "dispatch_state": "settled",
@@ -423,6 +425,7 @@ async fn create_with_call(
 }
 
 /// The facts of a Create whose batch `refusal` rejected it, with the stored function call `item`.
+/// The Run completes with no result and no refusal (ADR 0091 section 3).
 fn rejected_create(
     refusal: &str,
     item: serde_json::Value,
@@ -434,8 +437,8 @@ fn rejected_create(
 ) {
     (
         json!({
-            "status": "refused",
-            "settlement": {"kind": "execution_refused", "capability": "tool_request_invalid"},
+            "status": "completed",
+            "settlement": null,
             "decision_id": null,
             "dispatch_state": "settled",
             "decision": null,
