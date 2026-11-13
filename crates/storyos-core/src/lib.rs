@@ -46,10 +46,8 @@ pub use ordinary_passage_request::{
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
 mod open_block_proposal;
-mod pause_proposal_generation;
 mod project_archive;
 mod project_export;
-mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
@@ -156,8 +154,7 @@ pub use function_calling::{
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, PROSE_CHANGE_TEXT,
-    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT,
-    requested_execution_capability, stream_batch_plan,
+    SECOND_PROSE_CHANGE_TEXT, requested_execution_capability,
 };
 pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
@@ -198,10 +195,6 @@ pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
 };
-pub use pause_proposal_generation::{
-    PauseProposalGeneration, PauseProposalGenerationRefusal, PauseProposalGenerationResult,
-    pause_proposal_generation,
-};
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
@@ -213,12 +206,6 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
-};
-pub use proposal_generation_decision::{
-    CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
-    CompleteReadyPartialProposalResult, ContinueProposalGeneration,
-    ContinueProposalGenerationRefusal, ContinueProposalGenerationResult,
-    ProposalGenerationConflict, complete_ready_partial_proposal, continue_proposal_generation,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,

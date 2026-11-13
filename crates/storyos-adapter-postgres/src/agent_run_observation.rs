@@ -3,13 +3,11 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, ProseChangeCandidate,
-    StreamItemRole, StreamItemState, stream_batch_plan,
+    StreamItemRole, StreamItemState,
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{
-    RunPhaseRow, WorkPhase, complete_database_error, requeue_generation, update_run,
-};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error, update_run};
 use crate::open_block_proposal::ProseOpening;
 
 /// The validated result of one Create exchange for the active decision Model Attempt.
@@ -62,8 +60,7 @@ pub(crate) async fn persist_create_result(
             (*selected && *advances_continuation).then_some("decision"),
         ),
     };
-    let (opened_proposal, locations, stream_hold) = match (decision_id.as_deref(), &result.outcome)
-    {
+    let (opened_proposal, locations) = match (decision_id.as_deref(), &result.outcome) {
         (
             Some(decision_id),
             AgentDecisionOutcome::Decision {
@@ -76,23 +73,12 @@ pub(crate) async fn persist_create_result(
                 ..
             },
         ) => {
-            let opened = open_selected_proposal(
-                client,
-                claim,
-                run,
-                decision_id,
-                text,
-                produced.as_deref(),
-                ProposalStream::Permitted,
-            )
-            .await?;
-            (
-                opened.opening.proposal_id,
-                opened.opening.locations,
-                opened.stream_hold,
-            )
+            let opened =
+                open_selected_proposal(client, claim, run, decision_id, text, produced.as_deref())
+                    .await?;
+            (opened.proposal_id, opened.locations)
         }
-        _ => (None, None, false),
+        _ => (None, None),
     };
     let research_artifact = match (decision_id.as_deref(), &result.outcome) {
         (
@@ -264,9 +250,6 @@ pub(crate) async fn persist_create_result(
         /*clear_lease*/ hold.is_none() && !tool_calls,
     )
     .await?;
-    if stream_hold {
-        return requeue_generation(client, claim).await;
-    }
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None if tool_calls => WorkPhase::ToolCalls,
@@ -288,19 +271,6 @@ pub(crate) fn research_refusal(attempt_payload: &serde_json::Value) -> serde_jso
     })
 }
 
-/// Whether a selected prose change may open a streamed Proposal that holds the Run.
-pub(crate) enum ProposalStream {
-    Permitted,
-    /// A successor settles its Run at once, so all of its Proposal opens in one step.
-    Excluded,
-}
-
-/// The Proposal of one selected prose change, and whether its streamed generation holds the Run.
-pub(crate) struct OpenedProposal {
-    pub opening: ProseOpening,
-    pub stream_hold: bool,
-}
-
 /// Opens the Proposal of one selected prose change of the Run.
 pub(crate) async fn open_selected_proposal(
     client: &tokio_postgres::Client,
@@ -309,11 +279,8 @@ pub(crate) async fn open_selected_proposal(
     decision_id: &str,
     text: &str,
     produced: Option<&[ProseChangeCandidate]>,
-    stream: ProposalStream,
-) -> Result<OpenedProposal, CompleteAgentRunError> {
-    let author_message = run.author_message.as_str();
-    let chapter_id = run.chapter_id.as_str();
-    let opening = if let Some((record, target)) =
+) -> Result<ProseOpening, CompleteAgentRunError> {
+    if let Some((record, target)) =
         crate::candidate_revision_target::admitted(client, claim, produced).await?
     {
         crate::revise_candidate_generation::apply(
@@ -323,42 +290,19 @@ pub(crate) async fn open_selected_proposal(
             &target,
             produced.unwrap_or_default(),
         )
-        .await?
-    } else if produced.is_none()
-        && matches!(stream, ProposalStream::Permitted)
-        && stream_batch_plan(author_message).is_some()
-    {
-        let (proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
-            client,
-            claim,
-            chapter_id,
-            decision_id,
-            author_message,
-        )
-        .await?;
-        return Ok(OpenedProposal {
-            opening: ProseOpening {
-                proposal_id,
-                locations: None,
-            },
-            stream_hold: matches!(work, crate::stream_proposal_generation::StreamWork::Hold),
-        });
+        .await
     } else {
         crate::open_block_proposal::open_selected_prose_change(
             client,
             claim,
-            chapter_id,
+            &run.chapter_id,
             decision_id,
             text,
-            author_message,
+            &run.author_message,
             produced,
         )
-        .await?
-    };
-    Ok(OpenedProposal {
-        opening,
-        stream_hold: false,
-    })
+        .await
+    }
 }
 
 /// Keeps the committed stream items in order. An item with a known item ID replaces that item.

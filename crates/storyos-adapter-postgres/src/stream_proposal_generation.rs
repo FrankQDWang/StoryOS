@@ -1,247 +1,15 @@
-use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ProjectScope};
-use storyos_core::{
-    AppendProposalGenerationBatch, AppendProposalGenerationBatchResult, OpenBlockProposal,
-    append_proposal_generation_batch, hex_sha256, open_block_proposal, stream_batch_plan,
-};
+//! Writes one complete Proposal generation batch of a candidate revision (ADR 0062, ADR 0071).
+
+use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
+use storyos_core::hex_sha256;
 use tokio_postgres::Client;
 use uuid::Uuid;
-
-use super::admitted_proposal_target::{AdmittedTarget, load_admitted_targets, load_current_target};
-
-pub(crate) enum StreamWork {
-    Hold,
-    Continue,
-}
 
 pub(crate) struct LoadedGeneration {
     pub(crate) proposal_id: String,
     pub(crate) generation_id: String,
     pub(crate) revision_id: String,
-    pub(crate) candidate_text: String,
-    pub(crate) last_seq: u64,
-    pub(crate) generation_state: String,
-    pub(crate) existing_fence: bool,
     pub(crate) base_revision_id: String,
-}
-
-pub(crate) async fn apply_streamed_proposal(
-    client: &Client,
-    claim: &ClaimedAgentRun,
-    chapter_id: &str,
-    decision_id: &str,
-    author_message: &str,
-) -> Result<(Option<String>, StreamWork), CompleteAgentRunError> {
-    let Some(batches) = stream_batch_plan(author_message) else {
-        return Ok((None, StreamWork::Continue));
-    };
-    let loaded = match load_generation(client, claim, decision_id).await? {
-        Some(current) => current,
-        None => {
-            let Some(first) = load_admitted_targets(client, claim, chapter_id)
-                .await?
-                .into_iter()
-                .next()
-            else {
-                return Ok((None, StreamWork::Continue));
-            };
-            let Some(opened) =
-                open_generating(client, claim, chapter_id, decision_id, &first).await?
-            else {
-                return Ok((None, StreamWork::Continue));
-            };
-            opened
-        }
-    };
-    if loaded.generation_state != "generating" || loaded.existing_fence {
-        return Ok((Some(loaded.proposal_id), StreamWork::Continue));
-    }
-    let Some((stream_seq, text)) = batches
-        .iter()
-        .copied()
-        .find(|(seq, _)| *seq > loaded.last_seq)
-    else {
-        return Ok((Some(loaded.proposal_id), StreamWork::Continue));
-    };
-    let existing = existing_batch_digest(
-        client,
-        &claim.project_scope,
-        &loaded.generation_id,
-        stream_seq,
-    )
-    .await?;
-    match append_proposal_generation_batch(&AppendProposalGenerationBatch {
-        scope_matches: true,
-        generation_state: loaded.generation_state.clone(),
-        last_applied_stream_seq: loaded.last_seq,
-        stream_seq,
-        expected_previous_stream_seq: loaded.last_seq,
-        expected_proposal_revision_id: loaded.revision_id.clone(),
-        current_proposal_revision_id: loaded.revision_id.clone(),
-        expected_candidate_digest: digest(&loaded.candidate_text),
-        current_candidate_digest: digest(&loaded.candidate_text),
-        batch_digest: digest(text),
-        existing_batch_digest: existing,
-        reservation_owns_target: true,
-    }) {
-        AppendProposalGenerationBatchResult::Applied => {
-            persist_batch(
-                client,
-                claim,
-                &loaded,
-                stream_seq,
-                text,
-                !batches.iter().any(|(seq, _)| *seq > stream_seq),
-                /*operation_id*/ None,
-            )
-            .await?;
-        }
-        AppendProposalGenerationBatchResult::Duplicate => {
-            remember_duplicate_seq(client, claim, &loaded.generation_id, stream_seq).await?;
-        }
-        AppendProposalGenerationBatchResult::Wait
-        | AppendProposalGenerationBatchResult::Refused { .. }
-        | AppendProposalGenerationBatchResult::Conflicted { .. } => {
-            return Ok((Some(loaded.proposal_id), StreamWork::Continue));
-        }
-    }
-    Ok((
-        Some(loaded.proposal_id),
-        if batches.iter().any(|(seq, _)| *seq > stream_seq) {
-            StreamWork::Hold
-        } else {
-            StreamWork::Continue
-        },
-    ))
-}
-
-async fn open_generating(
-    client: &Client,
-    claim: &ClaimedAgentRun,
-    chapter_id: &str,
-    decision_id: &str,
-    first: &AdmittedTarget,
-) -> Result<Option<LoadedGeneration>, CompleteAgentRunError> {
-    let current = load_current_target(client, claim, chapter_id, &first.block_id).await?;
-    if open_block_proposal(&OpenBlockProposal {
-        scope_matches: true,
-        target_block_present: current.revision_id.is_some(),
-        expected_base_revision_id: first.revision_id.clone(),
-        current_base_revision_id: current.revision_id,
-        conflicting_reservation: current.reserved,
-    })
-    .validation_receipt_result()
-    .is_none()
-    {
-        return Ok(None);
-    }
-    let owner = claim.project_scope.owner_user_id.as_ref();
-    let project = claim.project_scope.project_id.as_ref();
-    let proposal_id = Uuid::now_v7().to_string();
-    let revision_id = Uuid::now_v7().to_string();
-    let generation_id = Uuid::now_v7().to_string();
-    let lineage = crate::agent_run_tool_result::proposal_source_lineage(client, claim)
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposals
-               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
-                source_run_id, source_decision_id, bundle_policy, source_lineage)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'block_edit',
-                     $4::text::uuid, $5::text::uuid, $6::text::uuid, $7::text::uuid, 'none',
-                     $8::text::jsonb)",
-            &[
-                &owner,
-                &project,
-                &proposal_id,
-                &chapter_id,
-                &first.block_id,
-                &claim.run_id,
-                &decision_id,
-                &lineage,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposal_revisions
-               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
-                closure, candidate_text, base_authoritative_revision_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'generating',
-                     'pending', 'open', '', $5::text::uuid)",
-            &[
-                &owner,
-                &project,
-                &proposal_id,
-                &revision_id,
-                &first.revision_id,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposal_heads
-               (owner_user_id, project_id, proposal_id, current_revision_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
-            &[&owner, &project, &proposal_id, &revision_id],
-        )
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposal_operations
-               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
-                resolution, reservation_state, candidate_text, predecessor_operation_ids)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'pending', 'unresolved', '', '{}'::uuid[])",
-            &[
-                &owner,
-                &project,
-                &proposal_id,
-                &Uuid::now_v7().to_string(),
-                &first.block_id,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposal_generations
-               (owner_user_id, project_id, generation_id, proposal_id,
-                last_applied_stream_seq, run_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     0, $5::text::uuid)",
-            &[
-                &owner,
-                &project,
-                &generation_id,
-                &proposal_id,
-                &claim.run_id,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    client
-        .execute(
-            "INSERT INTO storyos.proposal_generation_heads
-               (owner_user_id, project_id, proposal_id, generation_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
-            &[&owner, &project, &proposal_id, &generation_id],
-        )
-        .await
-        .map_err(stream_err)?;
-    Ok(Some(LoadedGeneration {
-        proposal_id,
-        generation_id,
-        revision_id,
-        candidate_text: String::new(),
-        last_seq: 0,
-        generation_state: "generating".to_owned(),
-        existing_fence: false,
-        base_revision_id: first.revision_id.clone(),
-    }))
 }
 
 pub(crate) async fn persist_batch(
@@ -250,18 +18,12 @@ pub(crate) async fn persist_batch(
     loaded: &LoadedGeneration,
     stream_seq: u64,
     text: &str,
-    complete: bool,
     operation_id: Option<&str>,
-) -> Result<(String, Option<String>), CompleteAgentRunError> {
+) -> Result<(String, String), CompleteAgentRunError> {
     let owner = claim.project_scope.owner_user_id.as_ref();
     let project = claim.project_scope.project_id.as_ref();
     let revision_id = Uuid::now_v7().to_string();
     let seq = i64::try_from(stream_seq).map_err(|error| unavailable(error.to_string()))?;
-    let (generation, validation) = if complete {
-        ("ready", "valid")
-    } else {
-        ("generating", "pending")
-    };
     let summary = client.query_one(
         "SELECT proposal.manuscript_block_id::text,
                 CASE WHEN $4::text IS NULL OR operation.operation_id=$4::text::uuid
@@ -280,8 +42,6 @@ pub(crate) async fn persist_batch(
         project,
         &loaded.proposal_id,
         &revision_id,
-        generation,
-        validation,
         summary_text,
         &loaded.revision_id,
         Some(&loaded.base_revision_id),
@@ -328,42 +88,38 @@ pub(crate) async fn persist_batch(
         )
         .await
         .map_err(stream_err)?;
-    let validation_id = complete.then(|| Uuid::now_v7().to_string());
-    if let Some(validation_id) = validation_id.as_deref() {
-        client
-            .execute(
-                "INSERT INTO storyos.validation_receipts
-                   (owner_user_id, project_id, validation_receipt_id, proposal_id,
-                    proposal_revision_id, result, base_authoritative_revision_id,
-                    manuscript_block_id, candidate_text, reservation_state)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                         $5::text::uuid, 'valid', $6::text::uuid, $7::text::uuid, $8, 'unresolved')",
-                &[
-                    &owner,
-                    &project,
-                    &validation_id,
-                    &loaded.proposal_id,
-                    &revision_id,
-                    &loaded.base_revision_id,
-                    &summary.get::<_, &str>(0),
-                    &summary_text,
-                ],
-            )
-            .await
-            .map_err(stream_err)?;
-    }
+    let validation_id = Uuid::now_v7().to_string();
+    client
+        .execute(
+            "INSERT INTO storyos.validation_receipts
+               (owner_user_id, project_id, validation_receipt_id, proposal_id,
+                proposal_revision_id, result, base_authoritative_revision_id,
+                manuscript_block_id, candidate_text, reservation_state)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, 'valid', $6::text::uuid, $7::text::uuid, $8, 'unresolved')",
+            &[
+                &owner,
+                &project,
+                &validation_id,
+                &loaded.proposal_id,
+                &revision_id,
+                &loaded.base_revision_id,
+                &summary.get::<_, &str>(0),
+                &summary_text,
+            ],
+        )
+        .await
+        .map_err(stream_err)?;
     Ok((revision_id, validation_id))
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn append_revision(
+async fn append_revision(
     client: &Client,
     owner: &str,
     project: &str,
     proposal_id: &str,
     revision_id: &str,
-    generation: &str,
-    validation: &str,
     candidate_text: &str,
     parent_revision_id: &str,
     base_revision_id: Option<&str>,
@@ -373,19 +129,17 @@ pub(crate) async fn append_revision(
             "INSERT INTO storyos.proposal_revisions
                (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
                 closure, candidate_text, base_authoritative_revision_id, parent_revision_id)
-             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5, $6,
-                    'open', $7, COALESCE($8::text::uuid, base_authoritative_revision_id),
-                    $9::text::uuid
+             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'ready',
+                    'valid', 'open', $5, COALESCE($6::text::uuid, base_authoritative_revision_id),
+                    $7::text::uuid
                FROM storyos.proposal_revisions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND revision_id = $9::text::uuid",
+                AND proposal_id = $3::text::uuid AND revision_id = $7::text::uuid",
             &[
                 &owner,
                 &project,
                 &proposal_id,
                 &revision_id,
-                &generation,
-                &validation,
                 &candidate_text,
                 &base_revision_id,
                 &parent_revision_id,
@@ -394,7 +148,7 @@ pub(crate) async fn append_revision(
         .await
         .map_err(stream_err)?;
     if inserted != 1 {
-        return Err(unavailable("Streamed Proposal revision was not appended"));
+        return Err(unavailable("Proposal revision was not appended"));
     }
     let updated = client
         .execute(
@@ -413,131 +167,12 @@ pub(crate) async fn append_revision(
         .await
         .map_err(stream_err)?;
     if updated != 1 {
-        return Err(unavailable("Streamed Proposal head did not advance"));
+        return Err(unavailable("Proposal head did not advance"));
     }
     Ok(())
 }
 
-async fn load_generation(
-    client: &Client,
-    claim: &ClaimedAgentRun,
-    decision_id: &str,
-) -> Result<Option<LoadedGeneration>, CompleteAgentRunError> {
-    let row = client
-        .query_opt(
-            "SELECT proposal.proposal_id::text, generation.generation_id::text,
-                    generation.last_applied_stream_seq, head.current_revision_id::text,
-                    revision.candidate_text, revision.generation,
-                    fence.editor_input_fence_id IS NOT NULL,
-                    revision.base_authoritative_revision_id::text
-               FROM storyos.proposals AS proposal
-               JOIN storyos.proposal_generation_heads AS generation_head
-                 ON (generation_head.owner_user_id, generation_head.project_id,
-                     generation_head.proposal_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
-               JOIN storyos.proposal_generations AS generation
-                 ON (generation.owner_user_id, generation.project_id, generation.generation_id) =
-                    (generation_head.owner_user_id, generation_head.project_id,
-                     generation_head.generation_id)
-               JOIN storyos.proposal_heads AS head
-                 ON (head.owner_user_id, head.project_id, head.proposal_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id) =
-                    (head.owner_user_id, head.project_id, head.proposal_id,
-                     head.current_revision_id)
-               LEFT JOIN storyos.editor_input_fences AS fence
-                 ON (fence.owner_user_id, fence.project_id, fence.generation_id) =
-                    (generation.owner_user_id, generation.project_id, generation.generation_id)
-              WHERE proposal.owner_user_id = $1::text::uuid
-                AND proposal.project_id = $2::text::uuid
-                AND (
-                  proposal.source_decision_id = $4::text::uuid
-                  OR EXISTS (SELECT 1 FROM storyos.proposal_generation_transitions AS transition
-                    JOIN storyos.agent_runs AS run USING (owner_user_id, project_id)
-                    WHERE (transition.owner_user_id, transition.project_id, transition.resulting_generation_id, transition.resulting_run_id) =
-                          (generation.owner_user_id, generation.project_id, generation.generation_id, $3::text::uuid)
-                      AND run.run_id=transition.resulting_run_id AND run.active_decision_position=0)
-                )
-              ORDER BY (generation.run_id = $3::text::uuid) DESC, generation.generation_id
-              LIMIT 1",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &decision_id,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    Ok(match row {
-        Some(row) => Some(LoadedGeneration {
-            proposal_id: row.get(0),
-            generation_id: row.get(1),
-            last_seq: u64::try_from(row.get::<_, i64>(2))
-                .map_err(|error| unavailable(error.to_string()))?,
-            revision_id: row.get(3),
-            candidate_text: row.get(4),
-            generation_state: row.get(5),
-            existing_fence: row.get(6),
-            base_revision_id: row.get(7),
-        }),
-        None => None,
-    })
-}
-
-async fn remember_duplicate_seq(
-    client: &Client,
-    claim: &ClaimedAgentRun,
-    generation_id: &str,
-    stream_seq: u64,
-) -> Result<(), CompleteAgentRunError> {
-    let seq = i64::try_from(stream_seq).map_err(|error| unavailable(error.to_string()))?;
-    client
-        .execute(
-            "UPDATE storyos.proposal_generations
-                SET last_applied_stream_seq = $4
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND generation_id = $3::text::uuid AND last_applied_stream_seq < $4",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &generation_id,
-                &seq,
-            ],
-        )
-        .await
-        .map_err(stream_err)?;
-    Ok(())
-}
-
-async fn existing_batch_digest(
-    client: &Client,
-    scope: &ProjectScope,
-    generation_id: &str,
-    stream_seq: u64,
-) -> Result<Option<String>, CompleteAgentRunError> {
-    let seq = i64::try_from(stream_seq).map_err(|error| unavailable(error.to_string()))?;
-    Ok(client
-        .query_opt(
-            "SELECT batch_digest
-               FROM storyos.proposal_stream_events
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND generation_id = $3::text::uuid AND stream_seq = $4",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &generation_id,
-                &seq,
-            ],
-        )
-        .await
-        .map_err(stream_err)?
-        .map(|row| row.get(0)))
-}
-
-pub(crate) fn digest(text: &str) -> String {
+fn digest(text: &str) -> String {
     hex_sha256(text.as_bytes())
 }
 

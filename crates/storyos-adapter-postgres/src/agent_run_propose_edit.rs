@@ -13,7 +13,7 @@ use storyos_core::{
     ProposeEditRefusal, ProposedEdit, RequestedToolCall, ToolCallBatch, ToolCallState,
 };
 
-use crate::agent_run_observation::{ProposalStream, open_selected_proposal};
+use crate::agent_run_observation::open_selected_proposal;
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, resolve};
 use crate::agent_run_work::complete_database_error;
 use crate::create_agent_run::{agent_run_database_error, agent_run_parse_error};
@@ -167,10 +167,8 @@ async fn open(
         decision_id,
         &edit.summary,
         Some(candidates),
-        ProposalStream::Excluded,
     )
-    .await?
-    .opening;
+    .await?;
     let Some(proposal_id) = opening.proposal_id else {
         return Ok(Some(ProposeEditRefusal::NotOpened));
     };

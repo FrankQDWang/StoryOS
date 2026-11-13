@@ -18,10 +18,7 @@ use storyos_core::{
     WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
 
-use storyos_core::{
-    CompleteReadyPartialProposalRefusal, ContinueProposalGenerationRefusal,
-    ProposalGenerationConflict, UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable,
-};
+use storyos_core::{UndoLatestAuthorActionConflict, UndoLatestAuthorActionUnavailable};
 
 use super::contract_reason;
 
@@ -358,66 +355,6 @@ fn every_withdrawal_reason_maps_to_its_public_reason() {
         (
             WithdrawProposalNoEffect::ClosureNotOpen,
             contracts::WithdrawProposalNoEffectReason::ClosureNotOpen,
-        ),
-    ]);
-}
-
-#[test]
-fn every_proposal_generation_decision_reason_maps_to_its_public_reason() {
-    assert_maps(vec![(
-        ProposalGenerationConflict::ChangedHead,
-        contracts::ProposalGenerationConflictReason::ChangedHead,
-    )]);
-    assert_maps(vec![
-        (
-            CompleteReadyPartialProposalRefusal::StaleProposalRevision,
-            contracts::CompleteReadyPartialProposalRefusalReason::StaleProposalRevision,
-        ),
-        (
-            CompleteReadyPartialProposalRefusal::NotEligible,
-            contracts::CompleteReadyPartialProposalRefusalReason::NotEligible,
-        ),
-        (
-            CompleteReadyPartialProposalRefusal::NotReadyPartial,
-            contracts::CompleteReadyPartialProposalRefusalReason::NotReadyPartial,
-        ),
-        (
-            CompleteReadyPartialProposalRefusal::StaleGeneration,
-            contracts::CompleteReadyPartialProposalRefusalReason::StaleGeneration,
-        ),
-        (
-            CompleteReadyPartialProposalRefusal::StaleCandidate,
-            contracts::CompleteReadyPartialProposalRefusalReason::StaleCandidate,
-        ),
-    ]);
-    assert_maps(vec![
-        (
-            ContinueProposalGenerationRefusal::StaleProposalRevision,
-            contracts::ContinueProposalGenerationRefusalReason::StaleProposalRevision,
-        ),
-        (
-            ContinueProposalGenerationRefusal::NotEligible,
-            contracts::ContinueProposalGenerationRefusalReason::NotEligible,
-        ),
-        (
-            ContinueProposalGenerationRefusal::NotContinuable,
-            contracts::ContinueProposalGenerationRefusalReason::NotContinuable,
-        ),
-        (
-            ContinueProposalGenerationRefusal::StaleGeneration,
-            contracts::ContinueProposalGenerationRefusalReason::StaleGeneration,
-        ),
-        (
-            ContinueProposalGenerationRefusal::StaleCandidate,
-            contracts::ContinueProposalGenerationRefusalReason::StaleCandidate,
-        ),
-        (
-            ContinueProposalGenerationRefusal::OperationNotPending,
-            contracts::ContinueProposalGenerationRefusalReason::OperationNotPending,
-        ),
-        (
-            ContinueProposalGenerationRefusal::DuplicateIdentities,
-            contracts::ContinueProposalGenerationRefusalReason::DuplicateIdentities,
         ),
     ]);
 }

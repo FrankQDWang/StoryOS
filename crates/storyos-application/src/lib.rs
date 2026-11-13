@@ -69,7 +69,6 @@ mod project_command;
 mod project_export;
 mod project_export_work;
 mod project_settings;
-mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
@@ -196,11 +195,6 @@ pub use project_export_work::{
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
 pub use project_settings::{UpdateProjectInput, UpdateProjectSettlement};
-pub use proposal_generation_decision::{
-    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
-    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
-    ProposalGenerationCompleted, ProposalGenerationStarted,
-};
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError,
     ExportHumanReadableManuscriptInput, GetHumanReadableManuscriptExport,

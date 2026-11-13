@@ -159,8 +159,6 @@ pub(crate) enum ForwardCommand {
     ReopenRejectedOperations,
     ReopenWithdrawnProposal,
     RejectProposalOperations,
-    CompleteReadyPartialProposal,
-    ContinueProposalGeneration,
     /// The Forward Author Action of an Undo Acceptance that requires a Reversal Proposal.
     UndoReversalRequired,
 }
@@ -217,8 +215,6 @@ impl ForwardCommand {
             CommandKind::ReopenRejectedOperations => Self::ReopenRejectedOperations,
             CommandKind::ReopenWithdrawnProposal => Self::ReopenWithdrawnProposal,
             CommandKind::RejectProposalOperations => Self::RejectProposalOperations,
-            CommandKind::CompleteReadyPartialProposal => Self::CompleteReadyPartialProposal,
-            CommandKind::ContinueProposalGeneration => Self::ContinueProposalGeneration,
             CommandKind::UndoLatestAuthorAction => Self::UndoReversalRequired,
             CommandKind::CreateProject
             | CommandKind::UpdateProject
@@ -251,8 +247,6 @@ impl ForwardCommand {
             Self::ReopenRejectedOperations => CommandKind::ReopenRejectedOperations,
             Self::ReopenWithdrawnProposal => CommandKind::ReopenWithdrawnProposal,
             Self::RejectProposalOperations => CommandKind::RejectProposalOperations,
-            Self::CompleteReadyPartialProposal => CommandKind::CompleteReadyPartialProposal,
-            Self::ContinueProposalGeneration => CommandKind::ContinueProposalGeneration,
             Self::UndoReversalRequired => CommandKind::UndoLatestAuthorAction,
         }
     }
@@ -271,8 +265,6 @@ impl ForwardCommand {
             | Self::ReopenWithdrawnProposal => "proposal_revised",
             Self::WithdrawProposal => "proposal_closure_changed",
             Self::RejectProposalOperations => "proposal_operations_resolved",
-            Self::CompleteReadyPartialProposal => "proposal_generation_completed",
-            Self::ContinueProposalGeneration => "proposal_generation_started",
         }
     }
 
@@ -287,10 +279,7 @@ impl ForwardCommand {
             Self::Structure(command) => UndoDisposition::Structure(command),
             Self::SetCurrentChapter => UndoDisposition::CurrentChapter,
             Self::WithdrawProposal => UndoDisposition::AuthorWithdrawal,
-            Self::RejectProposalOperations
-            | Self::CompleteReadyPartialProposal
-            | Self::ContinueProposalGeneration
-            | Self::UndoReversalRequired => UndoDisposition::Barrier,
+            Self::RejectProposalOperations | Self::UndoReversalRequired => UndoDisposition::Barrier,
         }
     }
 }

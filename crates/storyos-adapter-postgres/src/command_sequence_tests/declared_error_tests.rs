@@ -23,9 +23,6 @@ use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
-};
 use super::rollback::{Failing, FailurePoint, UnchallengedKind, WrappedSpec};
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
@@ -240,16 +237,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         .await,
         declared_errors(
             &store,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9410).await,
-        )
-        .await,
-        declared_errors(
-            &store,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9420).await,
-        )
-        .await,
-        declared_errors(
-            &store,
             &pause_agent_run_call(&store, &admin, /*base*/ 0x9430).await,
         )
         .await,
@@ -329,16 +316,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             "invalid_challenge",
         ),
         (CommandKind::WithdrawProposal, None, "invalid_challenge"),
-        (
-            CommandKind::CompleteReadyPartialProposal,
-            None,
-            "invalid_challenge",
-        ),
-        (
-            CommandKind::ContinueProposalGeneration,
-            None,
-            "invalid_challenge",
-        ),
         (CommandKind::PauseAgentRun, None, "invalid_challenge"),
         (CommandKind::CancelAgentRun, None, "invalid_challenge"),
         (

@@ -44,7 +44,6 @@ mod passage_targets;
 mod pause_agent_run;
 mod project_command_challenge;
 mod project_export;
-mod proposal_generation_decision;
 mod public_origin;
 mod readable_export;
 mod reject_proposal_operations;
@@ -108,7 +107,6 @@ use manuscript_tree::get_manuscript_tree;
 use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
 use project_export::{export_project_archive, get_export_operation_query};
-use proposal_generation_decision::{complete_ready_partial_proposal, continue_proposal_generation};
 use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
 };
@@ -392,20 +390,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::ACCEPT_PROPOSAL_METHOD),
                 accept_proposal,
-            ),
-        )
-        .route(
-            contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
-            routing::on(
-                method_filter(contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD),
-                complete_ready_partial_proposal,
-            ),
-        )
-        .route(
-            contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
-            routing::on(
-                method_filter(contracts::CONTINUE_PROPOSAL_GENERATION_METHOD),
-                continue_proposal_generation,
             ),
         )
         .route(

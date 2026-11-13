@@ -18,12 +18,10 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
 } from "../support/node-integration.ts";
-import { BINDING, REPLY_FORM_FAKE_ENV, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectFirstRunStep,
+import { BINDING, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectFirstRunStep,
   inspectRun, prepare, produced, rewriteChapter, selected, settleOnce, serverForFile } from "../support/http-harness.ts";
 
 const started = serverForFile();
-// #1463 owns the streamed test: only the reply form profile of the fake streams Proposal generation.
-const replyForm = serverForFile(REPLY_FORM_FAKE_ENV);
 
 const FIRST = "Help with this passage.";
 const CORRECTION = "I changed my mind: keep the voice.";
@@ -121,31 +119,6 @@ test("author messages are limited by characters, not UTF-8 bytes", async () => {
   await retain(started.baseUrl, prepared, runId, created.conversation_id, within, id("d950"), "1");
   await settleOnce();
   assert.equal(selected(await inspectRun(started.baseUrl, prepared, runId), "author_instruction"), `${within}\n${within}`);
-});
-
-test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
-  await drainLeftoverWork();
-  const prepared = await prepare(replyForm.baseUrl, id("d511"), "Stream Guidance", "d52");
-  const created = await admitRun(replyForm.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
-  await settleOnce();
-  const original = await inspectRun(replyForm.baseUrl, prepared, created.effect.run_id);
-  if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
-  const proposalId = original.decision.opened_proposal.proposal_id;
-  const options = { baseUrl: replyForm.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
-  await retain(replyForm.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
-  await drainLeftoverWork();
-  const current = await getAgentRun(options);
-  const historical = await getAgentRun({ ...options, modelAttemptId: attempt(original).model_attempt_id });
-  assert.equal(current.status, "completed");
-  assert.equal(current.decision.kind, "prose_change");
-  if (current.decision.kind !== "prose_change") throw new Error("expected new prose Decision");
-  assert.notEqual(current.decision.decision_id, original.decision.decision_id);
-  assert.deepEqual(current.decision.opened_proposal, { kind: "absent" });
-  assert.equal(attempt(historical).model_attempt_id, attempt(original).model_attempt_id);
-  assert.equal(selected(historical, "author_instruction"), "Stream this passage: keep the voice.");
-  const proposal = await getProposal({ ...options, proposalId });
-  assert.deepEqual(proposal.proposal.source, { kind: "agent_run_decision", run_id: created.effect.run_id,
-    decision_id: original.decision.decision_id });
 });
 
 test("continuation consumes an eligible prior binding and keeps current input inspectable", async () => {

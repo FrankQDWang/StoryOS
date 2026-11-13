@@ -12,7 +12,6 @@ use storyos_core::{
 use uuid::Uuid;
 
 use crate::agent_run_create_dispatch::PriorContext;
-use crate::agent_run_observation::ProposalStream;
 use crate::agent_run_successor::{
     DecisionRow, SuccessorWork, flag, load_decision, seal, text, unavailable,
     write_decision_payload,
@@ -317,10 +316,8 @@ pub(crate) async fn record(
                                 &decision_id,
                                 text,
                                 locations.as_deref(),
-                                ProposalStream::Excluded,
                             )
                             .await?
-                            .opening
                         }
                         AgentDecisionKind::Advisory { .. }
                         | AgentDecisionKind::Clarification { .. }

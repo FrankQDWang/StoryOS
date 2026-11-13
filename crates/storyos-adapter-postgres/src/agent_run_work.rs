@@ -5,7 +5,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
-    CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification, stream_batch_plan,
+    CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification,
 };
 
 use crate::agent_run_compaction::CompactionAdvance;
@@ -445,8 +445,6 @@ pub(crate) async fn settle_one_phase(
     let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let RunPhaseRow {
-        author_message,
-        chapter_id,
         destination_manifest_id: destination_manifest,
         decision_id,
         continuation_id,
@@ -495,22 +493,6 @@ pub(crate) async fn settle_one_phase(
         == Some("tool_request")
     {
         return crate::agent_run_tool_dispatch::advance(client, claim, &run).await;
-    }
-    if payload.pointer("/decision/locations").is_none()
-        && stream_batch_plan(author_message).is_some()
-        && let Some(decision) = decision_id.as_deref()
-    {
-        let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
-            client,
-            claim,
-            chapter_id,
-            decision,
-            author_message,
-        )
-        .await?;
-        if matches!(work, crate::stream_proposal_generation::StreamWork::Hold) {
-            return requeue_generation(client, claim).await;
-        }
     }
     if decision_id.is_some()
         && continuation_id.is_none()
@@ -580,17 +562,6 @@ pub(crate) async fn update_run(
         .await
         .map_err(complete_database_error)?;
     Ok(())
-}
-
-pub(crate) async fn requeue_generation(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    update_run(
-        client, claim, "queued", /*settlement*/ None, /*clear_lease*/ true,
-    )
-    .await?;
-    Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
 pub(crate) async fn hold_if_requested(kind: &str) {

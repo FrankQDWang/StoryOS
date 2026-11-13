@@ -471,8 +471,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
 test.each(["collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
-  // The test checks the typed output and the streamed Proposal of the reply form profile, so it uses the reply form
-  // fake. #1463 owns it.
+  // The test checks the typed output of the reply form profile, so it uses the reply form fake. #1463 owns it.
   let started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof heldWorker>["child"] | undefined;
@@ -485,7 +484,7 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
     if (!collection) await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     let admitted = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      collection ? "Stream this passage:" : "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false, collection?.target);
+      "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false, collection?.target);
     const candidateMode = scenario.startsWith("candidate_");
     if (candidateMode) {
       await settleOnce();
