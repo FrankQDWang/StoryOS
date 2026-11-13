@@ -385,7 +385,14 @@ async fn a_settled_result_reenters_as_one_output_with_its_call_id_and_the_run_co
     )
     .await;
     let source = source(&admin, &ran.run_id, "ok", None).await;
-    let closing = closing_step(&admin, &ran.run_id, 2, "resp_e51_2", &[source.clone()]).await;
+    let closing = closing_step(
+        &admin,
+        &ran.run_id,
+        2,
+        "resp_e51_2",
+        std::slice::from_ref(&source),
+    )
+    .await;
 
     assert_eq!(
         (run_facts(&admin, &ran.run_id).await, ran.model, ran.mcp),
@@ -431,7 +438,7 @@ async fn a_refused_or_failed_call_reenters_with_its_outcome_sentence() {
         &refused.run_id,
         2,
         "resp_e52_2",
-        &[refused_source.clone()],
+        std::slice::from_ref(&refused_source),
     )
     .await;
     let failed_closing = closing_step(
@@ -439,7 +446,7 @@ async fn a_refused_or_failed_call_reenters_with_its_outcome_sentence() {
         &failed.run_id,
         2,
         "resp_e53_2",
-        &[failed_source.clone()],
+        std::slice::from_ref(&failed_source),
     )
     .await;
 
@@ -490,7 +497,14 @@ async fn an_imperative_result_stays_data_and_writes_no_chapter_and_no_proposal()
     )
     .await;
     let source = source(&admin, &ran.run_id, "ok", None).await;
-    let closing = closing_step(&admin, &ran.run_id, 2, "resp_e54_2", &[source.clone()]).await;
+    let closing = closing_step(
+        &admin,
+        &ran.run_id,
+        2,
+        "resp_e54_2",
+        std::slice::from_ref(&source),
+    )
+    .await;
     let writes = admin
         .query_one(
             "SELECT (SELECT count(*) FROM storyos.proposals WHERE source_run_id = run.run_id),
@@ -817,7 +831,14 @@ async fn a_result_above_the_item_limit_reenters_with_a_prefix_and_an_explicit_ma
         .bounded_text("call_01", CONTEXT_ITEM_TOKEN_LIMIT);
     let kept = bounded.kept_result_tokens;
     let source = source(&admin, &ran.run_id, "ok", kept).await;
-    let closing = closing_step(&admin, &ran.run_id, 2, "resp_e59_2", &[source.clone()]).await;
+    let closing = closing_step(
+        &admin,
+        &ran.run_id,
+        2,
+        "resp_e59_2",
+        std::slice::from_ref(&source),
+    )
+    .await;
 
     assert_eq!(
         (
@@ -863,7 +884,14 @@ async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() 
     )
     .await;
     let source = source(&admin, &ran.run_id, "ok", None).await;
-    let closing = closing_step(&admin, &ran.run_id, 2, "resp_e5b_2", &[source.clone()]).await;
+    let closing = closing_step(
+        &admin,
+        &ran.run_id,
+        2,
+        "resp_e5b_2",
+        std::slice::from_ref(&source),
+    )
+    .await;
     let mut rebuilt = continuation_step(
         "e5b",
         "tool_request",
@@ -938,7 +966,14 @@ async fn a_target_reservation_during_the_tool_exchange_sends_the_full_current_in
     )
     .await;
     let source = source(&admin, &ran.run_id, "ok", None).await;
-    let closing = closing_step(&admin, &ran.run_id, 2, "resp_e5c_2", &[source.clone()]).await;
+    let closing = closing_step(
+        &admin,
+        &ran.run_id,
+        2,
+        "resp_e5c_2",
+        std::slice::from_ref(&source),
+    )
+    .await;
     let mut rebuilt = continuation_step(
         "e5c",
         "tool_request",
