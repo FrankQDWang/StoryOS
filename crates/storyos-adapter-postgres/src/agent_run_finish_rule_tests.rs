@@ -1,12 +1,15 @@
 use serde_json::{Value, json};
 use storyos_adapter_fake_destination::{FakeDestination, LIMIT_ANSWER};
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ConversationSelection,
-    NoContractFaults, ProjectScope, complete_agent_run,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, CacheUse,
+    ConversationSelection, CreateRequest, DestinationRequest, ModelProviderAdapter, ModelResponse,
+    ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ProjectScope, complete_agent_run,
 };
 use storyos_core::{
     ADVISORY_TEXT, AgentRunStatus, CallValidationRefusal, DeploymentDestination,
-    FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, RESEARCH_TOOL_OFFER, ResearchToolOffer,
+    FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, NativeStreamItem, RESEARCH_TOOL_OFFER,
+    ResearchToolOffer, StreamItemRole, StreamItemState, ToolChoice,
 };
 use tokio_postgres::Client;
 
@@ -373,6 +376,153 @@ async fn the_last_of_24_run_steps_gives_its_text_as_the_final_answer_and_execute
                 AgentRunStatus::Completed,
                 expected_answer
             ),
+            "{message}"
+        );
+    }
+}
+
+/// The fake destination with the `SCRIPT:never_finish` script for each create before the last
+/// RunStep. The recovery script of the author message loses the first create of the last
+/// RunStep. A text and a `finish` call answer the Retrieve of its reference when `retrieved`,
+/// and the successor create.
+struct LoseLastCreate {
+    retrieved: bool,
+}
+
+enum LastStepExchange {
+    Fake(<FakeDestination as ModelProviderAdapter>::Prepared),
+    Scripted,
+}
+
+impl ModelProviderAdapter for LoseLastCreate {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
+    type Prepared = LastStepExchange;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        let request = match request {
+            DestinationRequest::Create(create) if create.tool_choice != ToolChoice::None => {
+                DestinationRequest::Create(CreateRequest {
+                    author_message: "SCRIPT:never_finish".to_owned(),
+                    ..create.clone()
+                })
+            }
+            other => other.clone(),
+        };
+        let prepared = FakeDestination.prepare(&request).await?;
+        let scripted = match &request {
+            DestinationRequest::Retrieve(_) => self.retrieved,
+            DestinationRequest::Create(create) => create.successor_of.is_some(),
+            DestinationRequest::Abort(_) => false,
+        };
+        Ok(PreparedRequest {
+            prepared: match scripted {
+                true => LastStepExchange::Scripted,
+                false => LastStepExchange::Fake(prepared.prepared),
+            },
+            projection: prepared.projection,
+        })
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        let LastStepExchange::Fake(prepared) = prepared else {
+            let text = NativeStreamItem {
+                item_id: "msg_01".to_owned(),
+                role: StreamItemRole::Assistant,
+                state: StreamItemState::Complete,
+                text: Some(LIMIT_ANSWER.to_owned()),
+                summary: None,
+                call_id: None,
+                arguments: None,
+                refusal: None,
+                native_type: None,
+                name: None,
+            };
+            let call = NativeStreamItem {
+                item_id: "fc_01".to_owned(),
+                role: StreamItemRole::Tool,
+                text: None,
+                call_id: Some("call_finish_lost".to_owned()),
+                arguments: Some("{}".to_owned()),
+                native_type: Some(storyos_core::FUNCTION_CALL_NATIVE_TYPE.to_owned()),
+                name: Some("finish".to_owned()),
+                ..text.clone()
+            };
+            return Observation::Terminal(ModelResponse {
+                state: StreamItemState::Complete,
+                items: vec![text, call],
+                output: None,
+                usage: ModelUsage::Unknown,
+                cache_use: CacheUse::Unknown,
+                response_reference: None,
+            });
+        };
+        FakeDestination.exchange(prepared, sink).await
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_recovered_response_of_the_last_run_step_executes_no_call() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The author message selects the recovery path. The adapter scripts each response.
+    let cases = [
+        (["2db", "2dc"], "SCRIPT:retrieve-complete", true),
+        (["2dd", "2de"], "SCRIPT:successor-once", false),
+    ];
+    for (prefixes, message, retrieved) in cases {
+        let destination = DeploymentDestination::HostFakeToolLoop;
+        let (scope, chapter_id, first) =
+            queued_run_offering(&store, prefixes[0], destination.clone(), None).await;
+        complete(&store, &admin, &scope, &first).await;
+        let run_id = admit_run_in(
+            &store,
+            &scope,
+            &chapter_id,
+            prefixes[1],
+            destination,
+            message,
+            ConversationSelection::New,
+            None,
+        )
+        .await;
+        let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+        complete_agent_run(
+            &store,
+            &LoseLastCreate { retrieved },
+            &NoContractFaults,
+            &RuntimeClock,
+            &claim,
+        )
+        .await
+        .unwrap();
+        let calls = calls(&admin, &run_id).await;
+        let record = store
+            .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // The `finish` call of the recovered response of RunStep 24 has no ToolCall, and no
+        // RunStep 25 opens.
+        assert_eq!(
+            (
+                steps(&admin, &run_id).await.len(),
+                (calls.len(), calls.last().map(|call| call[0].clone())),
+                record.status,
+                matches!(record.decision, AgentRunDecisionInspect::Advisory { ref text, .. }
+                    if text == LIMIT_ANSWER),
+            ),
+            (24, (46, Some(json!(22))), AgentRunStatus::Completed, true),
             "{message}"
         );
     }

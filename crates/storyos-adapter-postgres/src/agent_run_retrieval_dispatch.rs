@@ -401,7 +401,6 @@ impl RetrievedResult {
             });
         };
         let items = encode_items(&response.items);
-        crate::agent_run_finish_rule::drop_last_step_calls(run, &mut response.items)?;
         let complete = response
             .items
             .iter()
@@ -422,6 +421,7 @@ impl RetrievedResult {
                 .map(|refusal| refusal.to_string());
             validate_agent_decision(output, declared, &citable, batch)
         };
+        let outcome = crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?;
         Ok(match outcome {
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,

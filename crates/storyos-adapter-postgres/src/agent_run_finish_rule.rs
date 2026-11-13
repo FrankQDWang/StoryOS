@@ -68,16 +68,37 @@ fn declares_host_tools(run: &RunPhaseRow) -> bool {
         .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
 }
 
-/// Leaves out the function calls of a response that a recovery path settles in the last RunStep
-/// of `run`, as the finish rule does for a created response (ADR 0091 section 5).
-pub(crate) fn drop_last_step_calls(
+/// The outcome of a response that a recovery path settles in the active RunStep of `run`. In the
+/// last RunStep, the finish rule applies as for a created response (ADR 0091 section 5): the text
+/// is the final answer, and a response with no text gives no Decision. The function calls of the
+/// response leave the items, so the Host executes none.
+pub(crate) fn recovered_outcome(
     run: &RunPhaseRow,
-    items: &mut Vec<storyos_core::NativeStreamItem>,
-) -> Result<(), CompleteAgentRunError> {
-    if !run_step_limit(run)?.executes_calls(declares_host_tools(run)) {
-        items.retain(|item| item.role != storyos_core::StreamItemRole::Tool);
+    response: &mut storyos_application::ModelResponse,
+    outcome: storyos_core::AgentDecisionOutcome,
+) -> Result<storyos_core::AgentDecisionOutcome, CompleteAgentRunError> {
+    let limit = run_step_limit(run)?;
+    if limit.executes_calls(declares_host_tools(run)) {
+        return Ok(outcome);
     }
-    Ok(())
+    response
+        .items
+        .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
+    Ok(
+        match storyos_core::apply_finish_rule(
+            ToolChoice::None,
+            limit,
+            outcome,
+            response.state,
+            &response.items,
+        ) {
+            storyos_core::FinishRuleOutcome::Settle(outcome) => outcome,
+            storyos_core::FinishRuleOutcome::NextRunStep
+            | storyos_core::FinishRuleOutcome::NoResult => {
+                storyos_core::AgentDecisionOutcome::NoDecision
+            }
+        },
+    )
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next

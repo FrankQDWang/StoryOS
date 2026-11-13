@@ -253,7 +253,6 @@ pub(crate) async fn record(
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);
             }
-            crate::agent_run_finish_rule::drop_last_step_calls(run, &mut response.items)?;
             let declared: Vec<_> = request
                 .declared_targets
                 .iter()
@@ -281,6 +280,8 @@ pub(crate) async fn record(
                 }
                 validate_agent_decision(output, &declared, &citable, batch)
             };
+            let outcome =
+                crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?;
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,
