@@ -151,7 +151,8 @@ pub(crate) async fn execute(
 }
 
 /// Opens the Proposal of the validated `candidates` and keeps its record on the Model Attempt
-/// `attempt.0` of the Decision `attempt.1`. `NotOpened` when no block opened.
+/// `attempt.0` of the Decision `attempt.1`. `StaleCandidate` when the referenced candidate
+/// changed after the request read it, and `NotOpened` when no other block opened.
 async fn open(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -170,7 +171,16 @@ async fn open(
     )
     .await?;
     let Some(proposal_id) = opening.proposal_id else {
-        return Ok(Some(ProposeEditRefusal::NotOpened));
+        let stale = opening.locations.iter().flatten().any(|location| {
+            matches!(&location.outcome,
+                storyos_contracts::ProseChangeLocationOutcome::Refused { reason }
+                    if reason == "stale_candidate")
+        });
+        return Ok(Some(if stale {
+            ProposeEditRefusal::StaleCandidate
+        } else {
+            ProposeEditRefusal::NotOpened
+        }));
     };
     let record = serde_json::json!({
         "decision_id": decision_id,

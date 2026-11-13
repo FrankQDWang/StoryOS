@@ -128,6 +128,9 @@ pub enum ProposeEditRefusal {
     Limit,
     /// A target block changed or a Proposal holds it, so the opening opened no Proposal.
     NotOpened,
+    /// The referenced candidate changed after the request read it. The next RunStep reads the
+    /// current candidate when it is still pending (ADR 0085).
+    StaleCandidate,
 }
 
 impl ProposeEditRefusal {
@@ -176,6 +179,10 @@ impl ProposeEditRefusal {
                 "not_opened",
                 "a target block changed or another Proposal holds it",
             ),
+            Self::StaleCandidate => (
+                "stale_candidate",
+                "the candidate changed after this request read it",
+            ),
         }
     }
 
@@ -195,7 +202,8 @@ impl ProposeEditRefusal {
             | Self::NulCharacter
             | Self::SecondInResponse
             | Self::AfterProposal
-            | Self::NotOpened => format!(
+            | Self::NotOpened
+            | Self::StaleCandidate => format!(
                 "The Host refused this call because {}, so no Proposal opened.",
                 self.parts().1
             ),

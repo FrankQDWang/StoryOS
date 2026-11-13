@@ -655,9 +655,10 @@ pub use propose_edit::{
 };
 mod selection_reference;
 pub use selection_reference::{
-    AdmittedSelection, GrownCandidate, SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint,
-    advance_candidate_references, assemble_selection_references, merge_steering_references,
-    reference_joined_candidates, select_candidate_text, select_chapter_text,
+    AdmittedSelection, CurrentCandidate, GrownCandidate, SELECTION_REFERENCE_LIMIT,
+    SelectionReference, TextPoint, advance_candidate_references, assemble_selection_references,
+    follow_current_candidates, merge_steering_references, reference_joined_candidates,
+    select_candidate_text, select_chapter_text,
 };
 
 mod assemble_candidate_context;

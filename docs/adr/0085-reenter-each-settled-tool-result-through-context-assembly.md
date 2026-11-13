@@ -62,3 +62,19 @@ In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-ho
 - The Context Source Version of a `tool_result` candidate is a ToolCall identity. S5-06 ([#402](https://github.com/FrankQDWang/StoryOS/issues/402)) can change it to a Source Snapshot identity and keep the projection of section 2.
 - The continuation opens no limit of its own on more function requests. A continuation Decision that requests a Tool again starts the same cycle at the next position, inside the ordinary Run bounds.
 - The successor path of ADR 0033 and the steering path still copy the records of position 0. A continuation RunStep that needs a successor Attempt or a steering input is not covered here.
+
+## Amendment 2026-11-14: a candidate that the author changes during the Run
+
+The author decided this rule on 2026-11-13 ([#1483](https://github.com/FrankQDWang/StoryOS/issues/1483)). It applies to each RunStep after the first RunStep of a Run in the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md).
+
+- Before a RunStep assembles its context again, the candidate target and each candidate reference of the Run move to the current revision of their candidate when that candidate is still pending. The candidate references of the steering input that the RunStep reads move in the same way. For example, the author edited the candidate during the Run. The RunStep is not blocked for this cause, also when it is the closing RunStep.
+- The RunStep sends the current candidate text. Its Context Assembly records and its Outbound Disclosure Event have the new revision, as they have each sent item.
+- A reference whose candidate text changed covers all of the current text. A reference to an unchanged candidate of the same Proposal keeps its range.
+- When the author removed all of the text of a pending candidate, its reference covers the empty text and is available. This is the one exception to the rule of ADR 0062 that an empty range is unavailable.
+- The Host refuses a `propose_edit` call on a candidate that changed after its request read it. The refusal is `stale_candidate`, and the result of the call gives this reason. The refusal counts in the limit of 3 refused calls of ADR 0091. The model can call again on the current revision in a later RunStep.
+- A Run that makes no accepted call after such a change completes with the final answer of the model.
+- These changes during the Run keep the rule before this amendment: the context of the next RunStep is blocked, and the Run is refused with `blocked_context`.
+  - The Chapter is removed.
+  - The Chapter goes over the item limit.
+  - The candidate is no longer pending: the author accepted, rejected, or withdrew it.
+- This amendment does not change the rule for a Chapter text reference whose base changes during the Run.
