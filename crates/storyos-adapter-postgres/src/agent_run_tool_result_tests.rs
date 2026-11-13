@@ -16,9 +16,7 @@ use crate::agent_run_tool_call::tests::text_and_call_stream;
 use crate::agent_run_tool_dispatch::tests::{
     Hooked, POST, RESULT, SEARCH, client, exa_tools, mcp_replies, point_mcp, reply,
 };
-use crate::agent_run_tool_exposure::tests::{
-    advisory_stream, finish_stream, finish_then_advisory, sse,
-};
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream, finish_then_advisory};
 use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
 use crate::project_destination_binding::grant_scope_tests::current_grant;
 use crate::research_source::tests::calls_stream;
