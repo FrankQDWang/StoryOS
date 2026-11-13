@@ -681,50 +681,67 @@ async fn a_steering_input_opens_no_new_count_of_run_steps() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let tool_loop = DeploymentDestination::HostFakeToolLoop;
-    let (scope, chapter_id, first) = queued(&store, "f48").await;
-    settle(&store, &admin, &scope, &first, &FakeDestination)
-        .await
-        .unwrap();
-    let conversation = ConversationSelection::New;
-    let message = "SCRIPT:never_finish";
-    let run_id = admit_run_in(
-        &store,
-        &scope,
-        &chapter_id,
-        "f49",
-        tool_loop,
-        message,
-        conversation,
-        None,
-    )
-    .await;
-    let input = steering(&store, &scope, 0xf670, &run_id, "Keep the voice.", None).await;
-    // While the request of RunStep 5 is out, so RunStep 6 reads the input.
-    let author = AuthorAt::new(
-        &store,
-        Moment::DuringRequest(5),
-        AuthorAction::Steer(vec![input]),
-    );
-    settle(&store, &admin, &scope, &run_id, &author)
-        .await
-        .unwrap();
-    let choices: Vec<Value> = step_requests(&admin, &run_id)
-        .await
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|step| step[3].clone())
-        .collect();
-    let mut expected = vec![json!("required"); 23];
-    expected.push(json!("none"));
-
-    assert_eq!(
-        (choices, steering_facts(&store, &scope, &run_id).await),
+    // While the request of RunStep 5 is out, RunStep 6 reads the input. While the request of
+    // the last RunStep is out, no RunStep reads it.
+    let cases = [
         (
-            expected,
-            json!({"status": format!("{:?}", AgentRunStatus::Completed),
-                   "inputs": [["5", "Keep the voice.", true]]}),
+            ["f48", "f49"],
+            0xf670,
+            5,
+            json!([["5", "Keep the voice.", true]]),
+        ),
+        (
+            ["f4a", "f4b"],
+            0xf671,
+            24,
+            json!([["24", "Keep the voice.", false]]),
+        ),
+    ];
+    for (prefixes, suffix, request, inputs) in cases {
+        let tool_loop = DeploymentDestination::HostFakeToolLoop;
+        let (scope, chapter_id, first) = queued(&store, prefixes[0]).await;
+        settle(&store, &admin, &scope, &first, &FakeDestination)
+            .await
+            .unwrap();
+        let conversation = ConversationSelection::New;
+        let message = "SCRIPT:never_finish";
+        let run_id = admit_run_in(
+            &store,
+            &scope,
+            &chapter_id,
+            prefixes[1],
+            tool_loop,
+            message,
+            conversation,
+            None,
         )
-    );
+        .await;
+        let input = steering(&store, &scope, suffix, &run_id, "Keep the voice.", None).await;
+        let author = AuthorAt::new(
+            &store,
+            Moment::DuringRequest(request),
+            AuthorAction::Steer(vec![input]),
+        );
+        settle(&store, &admin, &scope, &run_id, &author)
+            .await
+            .unwrap();
+        let choices: Vec<Value> = step_requests(&admin, &run_id)
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| step[3].clone())
+            .collect();
+        let mut expected = vec![json!("required"); 23];
+        expected.push(json!("none"));
+
+        assert_eq!(
+            (choices, steering_facts(&store, &scope, &run_id).await),
+            (
+                expected,
+                json!({"status": format!("{:?}", AgentRunStatus::Completed), "inputs": inputs}),
+            ),
+            "{request}"
+        );
+    }
 }

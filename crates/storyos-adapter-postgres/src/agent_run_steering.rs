@@ -220,7 +220,8 @@ pub(crate) async fn advance_before_request(
 }
 
 /// Opens the RunStep that reads the next steering input after the active RunStep, with the
-/// Tool results of the Run, and claims the Run again.
+/// Tool results of the Run, and claims the Run again. In the tool loop, no RunStep opens after
+/// the last RunStep of the limit, so its input stays unread (ADR 0091 section 5).
 pub(crate) async fn advance(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -228,7 +229,7 @@ pub(crate) async fn advance(
 ) -> Result<bool, CompleteAgentRunError> {
     let Some(row) = client.query_opt(
         "SELECT run.chapter_id::text, run.active_decision_position::text,
-                COALESCE(requirement.payload, 'null'::jsonb)::text
+                COALESCE(requirement.payload, 'null'::jsonb)::text, run.model_registration_revision::text
            FROM storyos.agent_runs AS run
            LEFT JOIN storyos.operation_requirements AS requirement
              ON (requirement.owner_user_id,requirement.project_id,requirement.run_id)=
@@ -239,6 +240,15 @@ pub(crate) async fn advance(
         &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &claim.fence_token],
     ).await.map_err(complete_database_error)? else { return Ok(false); };
     let active: String = row.get(/*idx*/ 1);
+    let tool_loop = storyos_core::model_registration(row.get(/*idx*/ 3))
+        .is_some_and(storyos_core::ModelRegistration::declares_host_tools);
+    let limit = active
+        .parse::<u64>()
+        .map(storyos_core::RunStepLimit::at)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    if tool_loop && limit == storyos_core::RunStepLimit::Last {
+        return Ok(false);
+    }
     let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(/*idx*/ 2))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let mut retained = storyos_core::decode_assembly_record(&payload).ok_or_else(|| {
