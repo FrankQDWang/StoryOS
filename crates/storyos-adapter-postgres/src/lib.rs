@@ -158,7 +158,6 @@ mod project_export_work;
 mod project_research_binding;
 mod proposal_decision;
 mod proposal_decision_compensation;
-mod prose_change_decision;
 mod prose_change_location_read;
 mod provider_evidence;
 mod readable_export;

@@ -220,8 +220,7 @@ async fn next_input(
     let scope = &envelope.project_scope;
     let row = client
         .query_one(
-            "SELECT run.model_registration_revision::text,
-                    (GREATEST(COALESCE((SELECT max((input.payload->>'input_position')::numeric)
+            "SELECT (GREATEST(COALESCE((SELECT max((input.payload->>'input_position')::numeric)
                                           FROM storyos.project_activity_event_payloads AS input
                                          WHERE (input.owner_user_id, input.project_id)
                                                = (run.owner_user_id, run.project_id)
@@ -239,13 +238,11 @@ async fn next_input(
         )
         .await
         .map_err(unavailable)?;
-    let tool_loop = storyos_core::model_registration(row.get(/*idx*/ 0))
-        .is_some_and(storyos_core::ModelRegistration::declares_host_tools);
     let position = row
-        .get::<_, String>(/*idx*/ 1)
+        .get::<_, String>(/*idx*/ 0)
         .parse::<u64>()
         .map_err(unavailable)?;
-    Ok((position, SteeringReader::at(tool_loop, position)))
+    Ok((position, SteeringReader::at(position)))
 }
 
 /// The references of the Run at its active decision, then the references of each retained input

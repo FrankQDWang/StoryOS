@@ -221,10 +221,6 @@ pub(crate) async fn public_decision(
         AgentRunDecisionInspect::Advisory {
             continuation_binding_id,
             ..
-        }
-        | AgentRunDecisionInspect::Clarification {
-            continuation_binding_id,
-            ..
         } => continuation_binding_id.clone(),
         AgentRunDecisionInspect::ProseChange { .. }
         | AgentRunDecisionInspect::ToolRequest { .. }

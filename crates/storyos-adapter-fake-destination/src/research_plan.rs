@@ -1,4 +1,4 @@
-//! The research script of the tool loop profile. An author message
+//! The research script of the fake model. An author message
 //! `SCRIPT:submit_research <variant> <first tool> <arguments>` gets one call of `<first tool>`
 //! (`web_search` or `web_fetch`) in the first request. The request that carries its output gets
 //! `submit_research` calls with the `<arguments>` text, in which `$SOURCE` and `$GAP` become the
@@ -10,13 +10,10 @@
 //! - `again`: one call, and in the next request a second call and a `finish` call.
 //! - `quiet`: as `once`, and the closing response has an empty text.
 //!
-//! Each later request gets the usual script of the tool loop profile.
+//! Each later request gets the usual script of the fake model.
 
 use storyos_application::CreateRequest;
-use storyos_core::{
-    DecisionCandidate, NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState, ToolChoice,
-    ToolOperation,
-};
+use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState, ToolChoice, ToolOperation};
 
 use crate::create_plan::{FakeCreate, complete, evidence_item};
 
@@ -31,14 +28,7 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     let mut parts = script.splitn(3, ' ');
     let (variant, first, arguments) = (parts.next()?, parts.next()?, parts.next()?);
     if request.tool_choice == ToolChoice::None {
-        return (variant == "quiet").then(|| {
-            complete(
-                DecisionCandidate::Advisory {
-                    text: String::new(),
-                },
-                OutputPhase::FinalAnswer,
-            )
-        });
+        return (variant == "quiet").then(|| complete(""));
     }
     let output = |operation: ToolOperation| {
         request
@@ -71,10 +61,7 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
     } else {
         return None;
     };
-    Some(FakeCreate {
-        items,
-        output: None,
-    })
+    Some(FakeCreate { items })
 }
 
 pub(crate) fn function_call(

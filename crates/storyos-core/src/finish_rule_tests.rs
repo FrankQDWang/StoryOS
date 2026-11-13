@@ -36,23 +36,11 @@ fn only_a_settled_finish_call_with_no_refused_call_beside_it_closes_the_run() {
     ];
     for (prior_step, expected) in cases {
         assert_eq!(
-            step_tool_choice(
-                /*declares_host_tools*/ true,
-                RunStepLimit::Open,
-                &prior_step
-            ),
+            step_tool_choice(RunStepLimit::Open, &prior_step),
             expected,
             "{prior_step:?}"
         );
     }
-    assert_eq!(
-        step_tool_choice(
-            /*declares_host_tools*/ false,
-            RunStepLimit::Last,
-            &[finish]
-        ),
-        ToolChoice::Auto
-    );
 }
 
 #[test]
@@ -100,22 +88,13 @@ fn each_run_step_at_or_after_the_limit_is_the_last_and_sends_none() {
     assert_eq!(
         (
             [22, 23, 24].map(RunStepLimit::at),
-            [
-                (true, RunStepLimit::Last),
-                (false, RunStepLimit::Last),
-                (true, RunStepLimit::Open)
-            ]
-            .map(|(host_tools, limit)| limit.executes_calls(host_tools)),
-            step_tool_choice(/*declares_host_tools*/ true, RunStepLimit::Last, &[]),
-            step_tool_choice(
-                /*declares_host_tools*/ true,
-                RunStepLimit::Last,
-                &[finish]
-            ),
+            [RunStepLimit::Last, RunStepLimit::Open].map(RunStepLimit::executes_calls),
+            step_tool_choice(RunStepLimit::Last, &[]),
+            step_tool_choice(RunStepLimit::Last, &[finish]),
         ),
         (
             [RunStepLimit::Open, RunStepLimit::Last, RunStepLimit::Last],
-            [false, true, true],
+            [false, true],
             ToolChoice::None,
             ToolChoice::None,
         )

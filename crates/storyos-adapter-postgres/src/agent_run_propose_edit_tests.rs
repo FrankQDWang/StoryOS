@@ -7,7 +7,9 @@ use storyos_application::{
     PreparedRequest, ProjectScope, RejectProposalOperationsInput, RejectionNote,
     WithdrawProposalInput, WithdrawalNote, complete_agent_run,
 };
-use storyos_core::{DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, PROPOSAL_WAITS_RESULT};
+use storyos_core::{
+    DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, PROPOSAL_WAITS_RESULT, PROSE_CHANGE_TEXT,
+};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -122,13 +124,11 @@ pub(crate) fn opened(position: u64) -> Value {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_valid_call_opens_the_proposal_of_the_prose_change_reply_and_the_run_shows_it() {
+async fn a_valid_call_opens_one_proposal_and_the_run_shows_it() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let reply_form = DeploymentDestination::HostFake;
-    let (_, reply_run) = revise_run(&store, &admin, ["6b0", "6b1"], reply_form, "").await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let (scope, run_id) = revise_run(&store, &admin, ["6b2", "6b3"], tool_loop, "").await;
     let source = admin
@@ -171,7 +171,13 @@ async fn a_valid_call_opens_the_proposal_of_the_prose_change_reply_and_the_run_s
             (text, opened_proposal_id, outcomes),
         ),
         (
-            proposal_records(&admin, &reply_run).await,
+            // One open Proposal with one valid pending Operation of the change.
+            json!([{
+                "proposal": ["block_edit", "none"],
+                "revisions": [["ready", "valid", "open", PROSE_CHANGE_TEXT]],
+                "operations": [["pending", "unresolved", PROSE_CHANGE_TEXT, 0]],
+                "receipts": [["valid", PROSE_CHANGE_TEXT, "unresolved"]],
+            }]),
             [true, true],
             vec![opened(0)],
             (

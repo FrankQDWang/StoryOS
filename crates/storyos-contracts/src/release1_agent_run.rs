@@ -463,13 +463,6 @@ pub enum OptionalDecisionInspect {
         authoritative: bool,
         opened_proposal: OptionalOpenedProposalInspect,
     },
-    Clarification {
-        decision_id: String,
-        selected: bool,
-        question: String,
-        required_reply: String,
-        continuation: OptionalContinuationInspect,
-    },
     /// A function request Decision: one entry for each ToolCall in item order (ADR 0040).
     ToolRequest {
         decision_id: String,

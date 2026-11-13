@@ -31,6 +31,8 @@ Before this change, a request worked on the Current Chapter. When the author cli
   An unavailable reference blocks the Context Assembly with `working_target_revision_unavailable`. StoryOS then sends nothing.
 - **Model input.** The request sends each reference with its exact range and its exact text. The Host instructions tell the model the rule. A change replaces all of a block. The text outside the references stays unchanged unless the author request tells otherwise. StoryOS adds no mechanical check of the text outside a reference. The author examines the Proposal and decides.
 - **One Decision.** The reply contract does not change. One reply gives one Agent Decision. The Decision is prose changes of Chapter blocks, or a revision of exactly one referenced candidate, or an answer. A reply that changes a candidate and also another target is not valid, and the current validation refuses it. StoryOS adds no interim behavior and no sentence for a request that asks to change both kinds.
+
+  > Superseded on 2026-11-14 by [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) ([#1463](https://github.com/FrankQDWang/StoryOS/issues/1463)): the reply form is gone. One `propose_edit` call is one change set, and the validation of this bullet applies to one call. A Run can make more than one call.
 - **Candidate revision.** A change of a referenced candidate goes through the current candidate revision path, and its location outcome is `revised`. When steering continues the same Run, the reference moves to the new revision and covers all of the new candidate text.
 - **Steering.** A steering input can also add 1 to 8 references, in the optional field `selection_references` of `steer-agent-run.request.v1`. The field is additive, so a request with no references keeps its schema and its digest.
   - The new references join the references of the Run in their order. A reference that the Run already has does not join again.
@@ -59,7 +61,7 @@ Before this change, a request worked on the Current Chapter. When the author cli
 
 ## Amendment 2026-11-13: the Host Tool `propose_edit`
 
-In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the content of one prose change reply is the arguments of one `propose_edit` call ([#1456](https://github.com/FrankQDWang/StoryOS/issues/1456)). The Decision that holds the call is the Proposal source. The validation of the One Decision rule applies to one call. A call that it refuses is a refused ToolCall, and its result gives the reason. The reply form profile keeps the One Decision rule until the reply form goes.
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the content of one prose change reply is the arguments of one `propose_edit` call ([#1456](https://github.com/FrankQDWang/StoryOS/issues/1456)). The Decision that holds the call is the Proposal source. The validation of the One Decision rule applies to one call. A call that it refuses is a refused ToolCall, and its result gives the reason. The reply form went in #1463.
 
 ## Amendment 2026-11-13: steering at each RunStep position
 

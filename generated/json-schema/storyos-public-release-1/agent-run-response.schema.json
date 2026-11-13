@@ -1214,40 +1214,6 @@
         },
         {
           "additionalProperties": false,
-          "properties": {
-            "continuation": {
-              "$ref": "#/$defs/OptionalContinuationInspect"
-            },
-            "decision_id": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "kind": {
-              "const": "clarification",
-              "type": "string"
-            },
-            "question": {
-              "type": "string"
-            },
-            "required_reply": {
-              "type": "string"
-            },
-            "selected": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "kind",
-            "decision_id",
-            "selected",
-            "question",
-            "required_reply",
-            "continuation"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
           "description": "A function request Decision: one entry for each ToolCall in item order (ADR 0040).",
           "properties": {
             "calls": {

@@ -88,20 +88,19 @@ pub(crate) async fn record_create(
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }
-        let output = response.output.as_ref();
-        let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
-        if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable) {
-            retained["synthesis_refusal"] = refusal;
-        }
-        validate_agent_decision(output, &declared, &citable, batch)
+        validate_agent_decision(batch)
     };
-    let outcome = match apply_finish_rule(
-        request.tool_choice,
-        crate::agent_run_finish_rule::run_step_limit(run)?,
-        outcome,
-        response.state,
-        &response.items,
-    ) {
+    let rule = match probe {
+        true => FinishRuleOutcome::Settle(outcome),
+        false => apply_finish_rule(
+            request.tool_choice,
+            crate::agent_run_finish_rule::run_step_limit(run)?,
+            outcome,
+            response.state,
+            &response.items,
+        ),
+    };
+    let outcome = match rule {
         FinishRuleOutcome::Settle(outcome) => outcome,
         rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
             let settlement = match rule {
@@ -129,10 +128,6 @@ pub(crate) async fn record_create(
     };
     let result = CreateResult {
         outcome,
-        producer_output: response
-            .output
-            .as_ref()
-            .and_then(|output| output.prose_changes.as_deref()),
         settlement,
         ..response_result(dispatch, &response)
     };
@@ -147,7 +142,6 @@ fn response_result<'a>(
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
         outcome: AgentDecisionOutcome::NoDecision,
-        producer_output: None,
         usage: response.usage,
         cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
@@ -163,7 +157,6 @@ fn no_response<'a>(
         attempt_id: &dispatch.model_attempt_id,
         items: &[],
         outcome: AgentDecisionOutcome::NoDecision,
-        producer_output: None,
         usage: ModelUsage::Unknown,
         cache_use: CacheUse::Unknown,
         response_reference: None,
@@ -198,7 +191,12 @@ pub(crate) async fn create_request(
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
     let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
-    let tool_choice = crate::agent_run_finish_rule::tool_choice(client, claim, run).await?;
+    // A Tool qualification probe settles after its one response, so the finish rule does not
+    // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
+    let tool_choice = match probe {
+        Some(_) => storyos_core::ToolChoice::None,
+        None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+    };
     let previous_response_reference = match &probe {
         Some(probe) => probe.previous_response_reference.clone(),
         None => {

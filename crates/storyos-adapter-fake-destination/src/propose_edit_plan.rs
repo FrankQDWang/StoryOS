@@ -1,8 +1,8 @@
-//! The `propose_edit` script of the tool loop profile (ADR 0091). For each request for which the
-//! reply form fake proposes changes, the fake proposes the same changes for the declared targets
-//! with a `finish` call beside it: the revision of a referenced candidate with the growth scripts
-//! of the reply form fake, or else a change of each target. For a reply form prose change text
-//! with no changes, it proposes that text for the first target, with the text as the summary.
+//! The `propose_edit` script of the fake model (ADR 0091). For each request with a prose change
+//! intent, the fake proposes changes for the declared targets with a `finish` call beside it: the
+//! revision of a referenced candidate with the growth scripts, or else a change of each target.
+//! For a prose change intent with no scripted changes, it proposes the summary text for the first
+//! target, with the text as the summary.
 //! With no script, the fake proposes when the request has no `propose_edit` result after its last
 //! counted `finish` output. The end of the message scripts the other cases, by the count of the
 //! `propose_edit` results of the request:
@@ -19,13 +19,12 @@
 //!   call that cites no captured source after the correct call.
 //! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
 //!   then one such call, then one call with no arguments.
-//! - `SCRIPT:incomplete`: one correct call with the incomplete stream state of the reply form
-//!   response.
+//! - `SCRIPT:incomplete`: one correct call with the incomplete stream state.
 
 use storyos_application::CreateRequest;
-use storyos_core::{
-    DecisionCandidate, DeclaredTargetKind, NativeStreamItem, ProseChangeCandidate, ToolOperation,
-};
+use storyos_core::{DeclaredTargetKind, NativeStreamItem, ProseChangeCandidate, ToolOperation};
+
+use crate::create_plan::Intent;
 
 use crate::prose_changes::{produce_fake_candidate_revision, produce_fake_changes};
 
@@ -37,10 +36,10 @@ pub(crate) fn calls(
 ) -> Option<(Vec<NativeStreamItem>, bool)> {
     let name = ToolOperation::ProposeEdit.function_name();
     let message = request.author_message.as_str();
-    let (reply_form, produce) = crate::create_plan::reply_form_plan(request);
+    let (intent, produce) = crate::create_plan::intent(request);
     // A prose change text with no changes opens the Proposal of the first target (Stage 1).
-    let single = match reply_form.output.map(|output| output.candidate) {
-        Some(DecisionCandidate::ProseChange { text }) if !produce => {
+    let single = match intent {
+        Intent::ProseChange(text) if !produce => {
             Some(request.declared_targets.first()?.location()).map(|target| (target, text))
         }
         _ => None,

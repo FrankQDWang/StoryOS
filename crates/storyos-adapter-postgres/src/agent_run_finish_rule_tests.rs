@@ -127,7 +127,6 @@ pub(crate) fn finish_before(response: &ModelResponse) -> ModelResponse {
     ModelResponse {
         state: StreamItemState::Complete,
         items: vec![finish_item("call_finish")],
-        output: None,
         response_reference: response
             .response_reference
             .as_ref()
@@ -203,14 +202,6 @@ async fn a_run_ends_only_with_the_text_of_the_closing_response_after_a_finish_ca
             None,
             json!([["tool_request", required], [null, none]]),
             Value::Null,
-        ),
-        // A closing text with the shape of a reply form is also the final answer text.
-        (
-            ["1f9", "1fa"],
-            "SCRIPT:reply_form_answer",
-            None,
-            json!([["tool_request", required], ["advisory", none]]),
-            json!("Which chapter do you mean?"),
         ),
     ];
     for (prefixes, message, research, expected_steps, expected_answer) in cases {
@@ -573,7 +564,6 @@ impl ModelProviderAdapter for LoseLastCreate {
                     true => vec![call],
                     false => vec![text, call],
                 },
-                output: None,
                 usage: ModelUsage::Unknown,
                 cache_use: CacheUse::Unknown,
                 response_reference: None,

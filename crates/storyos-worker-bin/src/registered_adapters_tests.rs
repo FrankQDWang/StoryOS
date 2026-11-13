@@ -36,9 +36,14 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         route: RequestRoute {
             adapter,
             provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-            mapping_revision: storyos_core::AGENT_PLAN_REGISTRATION
-                .mapping_revision
-                .to_owned(),
+            // Each adapter accepts only its tool loop mapping (ADR 0091).
+            mapping_revision: match adapter {
+                ModelAdapter::HostFake => storyos_core::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+                ModelAdapter::VolcengineAgentPlanResponses => {
+                    storyos_core::AGENT_PLAN_REGISTRATION.mapping_revision
+                }
+            }
+            .to_owned(),
             endpoint: Some(storyos_core::AGENT_PLAN_ENDPOINT.to_owned()),
             credential_reference: reference.map(|value| CredentialReference(value.to_owned())),
             bounds: Some(RequestBounds {
@@ -55,7 +60,7 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         selection_references: Vec::new(),
         previous_response_reference: None,
         tool_exposure: storyos_core::ToolExposure::empty(),
-        tool_choice: storyos_core::ToolChoice::Auto,
+        tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
     })

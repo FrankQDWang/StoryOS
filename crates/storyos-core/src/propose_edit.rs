@@ -294,3 +294,7 @@ pub fn screen_proposed_edits(
         .collect();
     ToolCallBatch::Valid(calls)
 }
+
+#[cfg(test)]
+#[path = "propose_edit_tests.rs"]
+mod tests;

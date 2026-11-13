@@ -5,8 +5,7 @@ use storyos_application::{
     ResponseReference, RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, ModelOutput,
-    OutputPhase, RetrievalBounds, StreamItemState, ToolOperation, UnknownCreateScript,
+    ADVISORY_TEXT, RetrievalBounds, StreamItemState, ToolOperation, UnknownCreateScript,
     unknown_create_script,
 };
 
@@ -153,24 +152,16 @@ fn reference_code(reference: &str) -> Option<u8> {
 /// Derives the retrieved result from the reference alone.
 pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
     let code = reference_code(&request.response_reference);
-    // The original request of the tool loop profile has `tool_choice: "required"`, so its
-    // result is the `finish` call of the first RunStep.
-    let tool_loop = request.route.mapping_revision == HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
+    // The original request has `tool_choice: "required"`, so its result is the `finish` call of
+    // the first RunStep.
     let complete = |usage| {
         Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
-            items: vec![if tool_loop {
-                crate::research_plan::function_call(ToolOperation::Finish, "", "{}")
-            } else {
-                assistant_item("1", StreamItemState::Complete, ADVISORY_TEXT)
-            }],
-            output: (!tool_loop).then(|| ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::Advisory {
-                    text: ADVISORY_TEXT.to_owned(),
-                },
-                prose_changes: None,
-            }),
+            items: vec![crate::research_plan::function_call(
+                ToolOperation::Finish,
+                "",
+                "{}",
+            )],
             usage,
             cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),
@@ -192,7 +183,6 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
                 StreamItemState::Incomplete,
                 ADVISORY_TEXT,
             )],
-            output: None,
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),

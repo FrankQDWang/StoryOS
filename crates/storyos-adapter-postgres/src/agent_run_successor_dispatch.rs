@@ -17,7 +17,6 @@ use crate::agent_run_successor::{
     write_decision_payload,
 };
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, update_run};
-use crate::open_block_proposal::ProseOpening;
 
 /// The one successor Create of the fenced predecessor. It repeats the same request, or
 /// re-observes the successor Attempt that a lost claim committed.
@@ -275,14 +274,7 @@ pub(crate) async fn record(
                 if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
                     payload["tool_call_batch"] = evidence;
                 }
-                let output = response.output.as_ref();
-                let citable =
-                    crate::research_artifact::decision_citable(client, claim, output).await?;
-                if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable)
-                {
-                    payload["synthesis_refusal"] = refusal;
-                }
-                validate_agent_decision(output, &declared, &citable, batch)
+                validate_agent_decision(batch)
             };
             let (outcome, rule) = match crate::agent_run_finish_rule::recovered_outcome(
                 client,
@@ -307,43 +299,6 @@ pub(crate) async fn record(
                 } => {
                     let decision_id = Uuid::now_v7().to_string();
                     let binding_id = advances_continuation.then(|| Uuid::now_v7().to_string());
-                    let opening = match &kind {
-                        AgentDecisionKind::ProseChange { text, locations } => {
-                            crate::agent_run_observation::open_selected_proposal(
-                                client,
-                                claim,
-                                run,
-                                &decision_id,
-                                text,
-                                locations.as_deref(),
-                            )
-                            .await?
-                        }
-                        AgentDecisionKind::Advisory { .. }
-                        | AgentDecisionKind::Clarification { .. }
-                        | AgentDecisionKind::ToolRequest { .. }
-                        | AgentDecisionKind::ResearchSynthesis(_) => ProseOpening {
-                            proposal_id: None,
-                            locations: None,
-                        },
-                    };
-                    let research_artifact = match &kind {
-                        AgentDecisionKind::ResearchSynthesis(synthesis) => Some(
-                            crate::research_artifact::record(
-                                client,
-                                claim,
-                                run,
-                                &dispatch.model_attempt_id,
-                                &decision_id,
-                                synthesis,
-                            )
-                            .await?,
-                        ),
-                        AgentDecisionKind::Advisory { .. }
-                        | AgentDecisionKind::ProseChange { .. }
-                        | AgentDecisionKind::Clarification { .. }
-                        | AgentDecisionKind::ToolRequest { .. } => None,
-                    };
                     let tool_calls_pending = match &kind {
                         AgentDecisionKind::ToolRequest { calls } => {
                             crate::agent_run_tool_call::insert_tool_calls(
@@ -360,26 +315,13 @@ pub(crate) async fn record(
                             .await?;
                             true
                         }
-                        AgentDecisionKind::Advisory { .. }
-                        | AgentDecisionKind::ProseChange { .. }
-                        | AgentDecisionKind::Clarification { .. }
-                        | AgentDecisionKind::ResearchSynthesis(_) => false,
+                        AgentDecisionKind::Advisory { .. } => false,
                     };
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
                         &decision_id,
                         /*selected*/ true,
                         advances_continuation,
-                        opening.proposal_id.as_deref(),
-                        research_artifact.as_deref(),
-                    );
-                    crate::prose_change_decision::encode(
-                        &mut payload,
-                        response
-                            .output
-                            .as_ref()
-                            .and_then(|output| output.prose_changes.as_deref()),
-                        opening.locations.as_deref(),
                     );
                     if let (Some(binding_id), Some(wire)) = (
                         &binding_id,
@@ -395,7 +337,7 @@ pub(crate) async fn record(
                     ("settled", Some(decision_id), binding_id, tool_calls_pending)
                 }
                 // A successor that asks for a function keeps its items as evidence, and the Run
-                // settles with the research refusal once the late check is done (ADR 0084).
+                // settles once the late check is done (ADR 0084, ADR 0091).
                 AgentDecisionOutcome::NoDecision
                     if response_disposition(&ResponseFacts {
                         probe,
@@ -594,7 +536,7 @@ pub(crate) async fn finish_dispatched(
     let refusal = if step == storyos_core::FunctionRequestStep::Refuse {
         // The recorded successor Attempt keeps the batch evidence of its refusal.
         let (_, payload) = successor_payload(client, claim, marker).await?;
-        Some(crate::agent_run_observation::research_refusal(&payload))
+        crate::agent_run_observation::function_request_refusal(&payload)
     } else {
         None
     };

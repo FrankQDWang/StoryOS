@@ -118,7 +118,6 @@ impl ModelProviderAdapter for LoseOneCreate {
             return Observation::Terminal(ModelResponse {
                 state: StreamItemState::Complete,
                 items: self.recovered.clone(),
-                output: None,
                 usage: ModelUsage::Unknown,
                 cache_use: CacheUse::Unknown,
                 response_reference: None,

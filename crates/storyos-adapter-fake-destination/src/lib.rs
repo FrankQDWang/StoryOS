@@ -58,7 +58,6 @@ impl ModelProviderAdapter for FakeDestination {
                         ModelResponse {
                             state: storyos_core::StreamItemState::Complete,
                             items: Vec::new(),
-                            output: None,
                             usage: ModelUsage::Unknown,
                             cache_use: CacheUse::Unknown,
                             response_reference: abort.response_reference.clone(),
@@ -83,12 +82,11 @@ impl ModelProviderAdapter for FakeDestination {
         if create.purpose == CreatePurpose::CompactionSummary {
             return Ok(summary(create));
         }
-        let tool_loop = create.route.mapping_revision == HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
-        let mapping_revision = if tool_loop {
-            HOST_FAKE_TOOL_LOOP_MAPPING_REVISION
-        } else {
-            HOST_FAKE_MAPPING_REVISION
-        };
+        // A decision request of the earlier mapping held the reply form (ADR 0091).
+        if create.route.mapping_revision != HOST_FAKE_TOOL_LOOP_MAPPING_REVISION {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
+        let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
         let mut wire = match &create.passage_input {
             Some(input) => input.clone(),
             None => serde_json::json!({
@@ -100,43 +98,36 @@ impl ModelProviderAdapter for FakeDestination {
         if let Some(reference) = &create.previous_response_reference {
             wire["previous_response_reference"] = serde_json::json!(reference);
         }
-        if tool_loop {
-            wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
-            wire["tools"] = create
-                .tool_exposure
-                .tools
-                .iter()
-                .map(|tool| tool.name)
-                .collect();
-            wire["tool_outputs"] = create
-                .tool_outputs
-                .iter()
-                .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
-                .collect();
-        }
-        let mut projection = if create.passage_input.is_some() || tool_loop {
-            let bytes = storyos_core::canonical_json(&wire);
-            projection(
-                format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
-                Some(bytes),
-            )
-        } else {
-            projection(wire_digest(&wire), /*serialized_payload*/ None)
-        };
+        wire["tool_choice"] = serde_json::json!(create.tool_choice.as_str());
+        wire["tools"] = create
+            .tool_exposure
+            .tools
+            .iter()
+            .map(|tool| tool.name)
+            .collect();
+        wire["tool_outputs"] = create
+            .tool_outputs
+            .iter()
+            .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
+            .collect();
+        let bytes = storyos_core::canonical_json(&wire);
+        let mut projection = projection(
+            format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
+            Some(bytes),
+        );
         projection.mapping_revision = mapping_revision.to_owned();
-        // In the tool loop profile, a continuation rejection applies only to the first RunStep of
-        // a Run, and a RunStep that continues from a recovered response is not lost again.
-        let later_step = tool_loop && !create.tool_outputs.is_empty();
+        // A continuation rejection applies only to the first RunStep of a Run, and a RunStep that
+        // continues from a recovered response is not lost again.
+        let later_step = !create.tool_outputs.is_empty();
         let rejection = create
             .previous_response_reference
             .as_deref()
             .filter(|_| !later_step)
             .and_then(recovery_plan::continuation_rejection);
-        let after_recovery = tool_loop
-            && create
-                .previous_response_reference
-                .as_deref()
-                .is_some_and(recovery_plan::follows_recovery);
+        let after_recovery = create
+            .previous_response_reference
+            .as_deref()
+            .is_some_and(recovery_plan::follows_recovery);
         let unknown = match create.successor_of {
             Some(_) => None,
             None if after_recovery => None,
@@ -152,12 +143,12 @@ impl ModelProviderAdapter for FakeDestination {
             }),
             (None, Some(reference)) => FakePlan::UnknownCreate(reference),
             (None, None) => FakePlan::Create(
-                create_plan::plan_create(create),
+                tool_loop_plan::plan(create),
                 recovery_plan::mint_reference(
                     &projection.digest,
                     match create.successor_of {
-                        Some(_) if tool_loop => recovery_plan::SUCCESSOR_RESPONSE,
-                        _ => recovery_plan::continuation_code(&create.author_message),
+                        Some(_) => recovery_plan::SUCCESSOR_RESPONSE,
+                        None => recovery_plan::continuation_code(&create.author_message),
                     },
                 ),
             ),
@@ -189,7 +180,6 @@ impl ModelProviderAdapter for FakeDestination {
         Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items: planned.items,
-            output: planned.output,
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(reference),
@@ -225,7 +215,6 @@ fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
         prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items: vec![item],
-            output: None,
             usage: ModelUsage::Unknown,
             cache_use: CacheUse::Unknown,
             response_reference: Some(reference),

@@ -15,10 +15,10 @@ import {
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
 import {
-  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
+  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, NO_RESULT_SENTENCE,
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_SYNTHESIS_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE,
-  USE_RESEARCH_MESSAGE, malformedStructuredReply, settledRun, toolCallLines,
-  stoppedWithoutResult, TOOL_REQUEST_INVALID_SENTENCE,
+  USE_RESEARCH_MESSAGE, settledRun, toolCallLines,
+  stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
@@ -166,13 +166,11 @@ function resultText(run: GetAgentRunResponse): string | undefined {
   if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
     case "advisory":
-      return malformedStructuredReply(run.decision.text) ? MALFORMED_REPLY_SENTENCE : run.decision.text;
+      return run.decision.text;
     case "prose_change":
       return (run.decision.locations?.length ?? 0) > 0
         ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
         : "本次修改建议已生成，可以在正文中查看。";
-    case "clarification":
-      return run.decision.question;
     case "tool_request":
       return toolCallLines(run.decision.calls);
     case "research_synthesis":
@@ -191,8 +189,6 @@ function resultText(run: GetAgentRunResponse): string | undefined {
           return PREVIOUS_REQUEST_UNRESOLVED_SENTENCE;
         case "research_tool_unavailable":
           return RESEARCH_TOOL_UNAVAILABLE_SENTENCE;
-        case "tool_request_invalid":
-          return TOOL_REQUEST_INVALID_SENTENCE;
         default:
           return "本次请求未能执行。";
       }

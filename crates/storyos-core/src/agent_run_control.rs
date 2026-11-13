@@ -116,16 +116,14 @@ pub fn classify_cancel_agent_run(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SteeringReader {
     OrdinaryRunStep,
-    /// Only the last RunStep of the tool loop limit, which can reply with text only, or no
-    /// RunStep. The input becomes the message of the next Run.
+    /// Only the last RunStep of the limit, which can reply with text only, or no RunStep. The input becomes the message of the next Run.
     NoOrdinaryRunStep,
 }
 
 impl SteeringReader {
-    /// The reader of an input at `input_position` of a Run whose mapping declares Host Tools or
-    /// not.
-    pub fn at(declares_host_tools: bool, input_position: u64) -> Self {
-        if declares_host_tools && RunStepLimit::at(input_position) == RunStepLimit::Last {
+    /// The reader of an input at `input_position` of a Run.
+    pub fn at(input_position: u64) -> Self {
+        if RunStepLimit::at(input_position) == RunStepLimit::Last {
             Self::NoOrdinaryRunStep
         } else {
             Self::OrdinaryRunStep

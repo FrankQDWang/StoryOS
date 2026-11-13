@@ -8,8 +8,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
-    DecisionCandidate, DeploymentDestination, DestinationKind, ModelAdapter, ModelOutput,
-    OutputPhase, RuntimeQualification, ToolChoice,
+    DeploymentDestination, DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
 };
 use tokio_postgres::Client;
 
@@ -245,13 +244,6 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
         state: storyos_core::StreamItemState::Complete,
         items: vec![text_item("Keep the second sentence.")],
-        output: Some(ModelOutput {
-            phase: OutputPhase::FinalAnswer,
-            candidate: DecisionCandidate::Advisory {
-                text: "Keep the second sentence.".to_owned(),
-            },
-            prose_changes: None,
-        }),
         usage: ModelUsage::Reported {
             input_tokens: 412,
             output_tokens: 133,
@@ -556,13 +548,6 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
         Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items: Vec::new(),
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::Advisory {
-                    text: "Too late.".to_owned(),
-                },
-                prose_changes: None,
-            }),
             usage: ModelUsage::Reported {
                 input_tokens: 300,
                 output_tokens: 20,
@@ -685,13 +670,6 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
         state: storyos_core::StreamItemState::Complete,
         items: vec![text_item("Keep the second sentence.")],
-        output: Some(ModelOutput {
-            phase: OutputPhase::FinalAnswer,
-            candidate: DecisionCandidate::Advisory {
-                text: "Keep it.".to_owned(),
-            },
-            prose_changes: None,
-        }),
         usage: ModelUsage::Unknown,
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),

@@ -1,22 +1,22 @@
 //! Map one complete Responses object to the typed Model Gateway observation.
 
 use serde_json::Value;
-use storyos_application::{CacheUse, DeclaredTarget, ModelResponse, ModelUsage, Observation};
+use storyos_application::{CacheUse, ModelResponse, ModelUsage, Observation};
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 
 /// The observation of a successful HTTP response body. A body that is not a Responses object
 /// is an unknown outcome, because the destination can have processed the request.
-pub(crate) fn observe(body: &[u8], targets: &[DeclaredTarget]) -> Observation {
+pub(crate) fn observe(body: &[u8]) -> Observation {
     let Ok(response) = serde_json::from_slice::<Value>(body) else {
         return Observation::OutcomeUnknown {
             response_reference: None,
         };
     };
-    observe_value(&response, targets)
+    observe_value(&response)
 }
 
 /// The observation of one Responses object, from a body or from a terminal stream event.
-pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Observation {
+pub(crate) fn observe_value(response: &Value) -> Observation {
     let Some(status) = response_state(response) else {
         return Observation::OutcomeUnknown {
             response_reference: None,
@@ -30,14 +30,9 @@ pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Obs
         .enumerate()
         .map(|(index, item)| native_item(index, item, status))
         .collect();
-    let output = (status == StreamItemState::Complete)
-        .then(|| final_text(&items))
-        .flatten()
-        .map(|text| crate::decision::map_output(&text, targets));
     Observation::Terminal(ModelResponse {
         state: status,
         items,
-        output,
         usage: usage(response),
         cache_use: cache_use(response),
         response_reference: response
@@ -118,21 +113,6 @@ fn item_state(item: &Value, response_state: StreamItemState) -> StreamItemState 
         Some(_) => StreamItemState::Unknown,
         None => response_state,
     }
-}
-
-/// The text of the one complete assistant message, when the response has no refusal, no
-/// function call, and no other incomplete item.
-fn final_text(items: &[NativeStreamItem]) -> Option<String> {
-    if items.iter().any(|item| {
-        item.state != StreamItemState::Complete
-            || item.refusal.is_some()
-            || item.role != StreamItemRole::Assistant
-    }) {
-        return None;
-    }
-    let mut messages = items.iter().filter_map(|item| item.text.clone());
-    let text = messages.next()?;
-    messages.next().is_none().then_some(text)
 }
 
 /// Reported only when the destination reports both counts. Absent usage is unknown, never zero.

@@ -13,7 +13,7 @@ A stable, independently resolvable domain change within a Proposal; dynamically 
 _Avoid_: Diff hunk, visual change marker
 
 **Proposal Growth**:
-One Agent Decision that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)). Steering on the same Run then changes the Chapter reference of each joined block into a reference to its new candidate.
+One `propose_edit` call that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md), [ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). Steering on the same Run then changes the Chapter reference of each joined block into a reference to its new candidate.
 _Avoid_: Proposal merge, Proposal extension, second Proposal for one passage
 
 **Joinable Block**:

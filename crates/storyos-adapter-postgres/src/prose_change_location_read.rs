@@ -47,8 +47,7 @@ pub(crate) async fn hydrate_locations(
                   JOIN storyos.model_attempts AS attempt USING (owner_user_id,project_id,run_id)
                   JOIN storyos.operation_requirements AS requirement USING (owner_user_id,project_id,run_id)
                   WHERE generation.proposal_id=proposal.proposal_id AND attempt.decision_id=$5::text::uuid
-                    AND event.revision_id=COALESCE(attempt.payload #>> '{decision,locations,0,outcome,revision_id}',
-                      attempt.payload #>> '{proposed_edit,locations,0,outcome,revision_id}')::uuid
+                    AND event.revision_id=(attempt.payload #>> '{proposed_edit,locations,0,outcome,revision_id}')::uuid
                     AND (requirement.payload #>> '{operation_requirement,candidate_target,operation_id}'=operation.operation_id::text
                       OR jsonb_path_exists(requirement.payload,
                         '$.operation_requirement.selection_references[*].reference ? (@.operation_id == $id)',
@@ -63,14 +62,4 @@ pub(crate) async fn hydrate_locations(
         });
     }
     Ok(())
-}
-
-pub(crate) fn decode_locations(
-    payload: Option<&serde_json::Value>,
-) -> Result<Option<Vec<storyos_contracts::ProseChangeLocationInspect>>, CreateAgentRunError> {
-    payload
-        .and_then(|payload| payload.pointer("/decision/locations"))
-        .map(|value| serde_json::from_value(value.clone()))
-        .transpose()
-        .map_err(super::create_agent_run::agent_run_parse_error)
 }

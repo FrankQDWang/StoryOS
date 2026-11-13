@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{AGENT_PLAN_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
+use crate::{AGENT_PLAN_REGISTRATION, ModelRegistration};
 
 pub const AGENT_PLAN_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/plan/v3";
 pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
@@ -16,7 +16,6 @@ pub const AGENT_PLAN_ELIGIBILITY_EVIDENCE: &str =
 /// deployment offers the Contract-Faithful Fake Destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeploymentDestination {
-    HostFake,
     /// The Contract-Faithful Fake Destination with the tool loop profile (ADR 0091).
     HostFakeToolLoop,
     /// The operator-quota credential is `AGENT_PLAN_CREDENTIAL_REFERENCE`, never its value.
@@ -151,14 +150,13 @@ impl BudgetBounds {
 impl DeploymentDestination {
     pub fn kind(&self) -> DestinationKind {
         match self {
-            Self::HostFake | Self::HostFakeToolLoop => DestinationKind::HostFake,
+            Self::HostFakeToolLoop => DestinationKind::HostFake,
             Self::VolcengineAgentPlan { .. } => DestinationKind::VolcengineAgentPlan,
         }
     }
 
     pub fn registration(&self) -> &'static ModelRegistration {
         match self {
-            Self::HostFake => &HOST_FAKE_REGISTRATION,
             Self::HostFakeToolLoop => &crate::HOST_FAKE_TOOL_LOOP_REGISTRATION,
             Self::VolcengineAgentPlan { .. } => &AGENT_PLAN_REGISTRATION,
         }
@@ -176,7 +174,7 @@ impl DeploymentDestination {
                 RuntimeQualification::QualificationAuthorized
             }
             _ if registration.qualified() => RuntimeQualification::Qualified,
-            Self::HostFake | Self::HostFakeToolLoop | Self::VolcengineAgentPlan { .. } => {
+            Self::HostFakeToolLoop | Self::VolcengineAgentPlan { .. } => {
                 RuntimeQualification::Pending
             }
         }
@@ -192,20 +190,20 @@ impl DeploymentDestination {
             } if self.runtime_qualification() == RuntimeQualification::QualificationAuthorized => {
                 Some(authorization)
             }
-            Self::HostFake | Self::HostFakeToolLoop | Self::VolcengineAgentPlan { .. } => None,
+            Self::HostFakeToolLoop | Self::VolcengineAgentPlan { .. } => None,
         }
     }
 
     pub fn credential_reference(&self) -> Option<&'static str> {
         match self {
-            Self::HostFake | Self::HostFakeToolLoop => None,
+            Self::HostFakeToolLoop => None,
             Self::VolcengineAgentPlan { .. } => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
         }
     }
 
     pub fn budget_bounds(&self) -> BudgetBounds {
         match self {
-            Self::HostFake | Self::HostFakeToolLoop => BudgetBounds::NotRequired,
+            Self::HostFakeToolLoop => BudgetBounds::NotRequired,
             Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV4,
         }
     }

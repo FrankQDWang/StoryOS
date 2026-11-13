@@ -648,9 +648,9 @@ test.each(["What would make this sharper?", "Which wording should I keep?",
     await settleOnce();
     const run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
     assert.notEqual(run.decision.kind, "prose_change");
-    if (run.decision.kind === "advisory" || run.decision.kind === "clarification") assert.deepEqual(run.items, [{
+    if (run.decision.kind === "advisory") assert.deepEqual(run.items, [{
       item_id: "1", role: "assistant", state: "complete", phase: "complete",
-      text: run.decision.kind === "advisory" ? run.decision.text : run.decision.question,
+      text: run.decision.text,
       summary: "host_fake_native_text", call_id: null, arguments: null, refusal: null }]);
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);

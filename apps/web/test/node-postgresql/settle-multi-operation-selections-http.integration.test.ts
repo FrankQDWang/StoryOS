@@ -46,9 +46,9 @@ import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, re
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { canonicalValue } from "../../src/canonical-value.ts";
 import { zipStoreFiles } from "../support/archive.ts";
-import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
+import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, inspectRun, prepare, settleOnce,
 } from "../support/acceptance.ts";
-import { REPLY_FORM_FAKE_ENV, heldWorker, inspectFirstRunStep, postRun, problemCode, restartServer, runRequest, settleRun, startServer }
+import { heldWorker, inspectFirstRunStep, postRun, problemCode, restartServer, runRequest, settleRun, startServer }
   from "../support/http-harness.ts";
 
 import { admitCandidateRevision, candidateReference } from "../support/candidate-revision.ts";
@@ -471,8 +471,7 @@ test("guidance adds its distinct references to the Run up to eight references", 
 test.each(["collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
   const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
-  // The test checks the typed output of the reply form profile, so it uses the reply form fake. #1463 owns it.
-  let started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
+  let started = await startServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof heldWorker>["child"] | undefined;
   let exited: Promise<void> | undefined;
@@ -498,12 +497,21 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
     ({ child, exited } = heldWorker({
       [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold }));
     let held = admitted;
-    await vi.waitUntil(async () => {
-      held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
-      return phase === "decision" ? held.decision.kind === "prose_change" : held.items.length > 0;
-    }, { timeout: 10_000, interval: 10 });
-    const frozen = await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`);
+    // Each Decision of the Run in RunStep order. The decision hold stops the Worker after the closing Decision.
+    const decisions = () => queryPostgres(`SELECT jsonb_agg(payload->'decision' ORDER BY decision_position)::text
+      FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid AND attempt_role='decision';`);
+    await vi.waitUntil(async () => phase === "decision"
+      ? (await decisions()).includes('"kind": "advisory"')
+      : (await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl })).items.length > 0,
+    { timeout: 10_000, interval: 10 });
+    // The Worker waits at the hold, so the Run does not change until the test removes the hold file.
+    held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+    if (phase === "decision") assert.equal(held.decision.kind, "prose_change");
+    const frozen = await decisions();
     const raw = held.items;
+    // The Run has more than one RunStep, so the test reads the held Model Attempt again after the restart.
+    if (held.model_attempt.kind !== "present") throw new Error("expected the held Model Attempt");
+    const heldAttempt = held.model_attempt.model_attempt_id;
     const readProposals = async () => Promise.all((JSON.parse(await queryPostgres(
       `SELECT coalesce(jsonb_agg(proposal_id::text ORDER BY proposal_id), '[]'::jsonb)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`
     )) as string[]).map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl,
@@ -556,15 +564,17 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
       }
       const address = new URL(started.baseUrl);
       await stopRealServer(started.server);
-      started = await startServer({ bind: `${address.hostname}:${address.port}`, extraEnv: REPLY_FORM_FAKE_ENV });
+      started = await startServer({ bind: `${address.hostname}:${address.port}` });
     }
     unlinkSync(hold);
     if (child) { await exited; child = undefined; }
     await settleOnce();
     const after = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
-    assert.deepEqual(after.items, raw);
+    const historical = await inspectRun(started.baseUrl, { projectId, fetchImpl }, admitted.run_id, heldAttempt);
+    assert.deepEqual(historical.items, raw);
     if (priorProposals) assert.deepEqual(await readProposals(), priorProposals);
-    assert.deepEqual(after.model_attempt, terminal ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
+    assert.deepEqual(historical.model_attempt, terminal ? held.model_attempt
+      : { ...held.model_attempt, dispatch_state: "settled" });
     if (terminal) {
       assert.equal(after.status, phase);
       assert.deepEqual(after.decision, { kind: "absent" });
@@ -572,7 +582,7 @@ test.each(["collection_stream", "collection_decision", "collection_cancelled", "
       if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
       assert.equal(after.decision.locations?.length, candidateMode ? 1 : collection ? 3 : 2);
       if (phase === "decision") {
-        assert.equal(await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`), frozen);
+        assert.equal(await decisions(), frozen);
         assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
       }
     }
@@ -618,30 +628,6 @@ test.each(["undeclared_location"])("scalar requests do not enter the typed scrip
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["malformed_locations", "undeclared_location", "stale_location_base", "oversized_explanation", "incomplete", "unselected"])(
-  "unusable typed output %s retains evidence without candidates", async (script) => {
-    // The typed output shapes are of the reply form profile only. #1463 owns the test.
-    const started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
-    try {
-      await drainLeftoverWork();
-      const ns = randomBytes(3).toString("hex");
-      const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Rejected list", `${ns}2`);
-      await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
-      const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
-      const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-        `Revise these passages SCRIPT:${script}`, id(`${ns}41`));
-      assert.deepEqual(run.decision, { kind: "absent" });
-      const output = JSON.parse(run.items[0]!.text!);
-      assert.equal(output.length, 2);
-      assert.equal(output[1].candidate_text, SECOND_PROSE);
-      assert.equal(run.items[0]!.state, script === "incomplete" ? "incomplete" : "complete");
-      assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
-      assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
-      const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl });
-      assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
-    } finally { await stopRealServer(started.server); }
-  });
-
 // ADR 0061: a reply can change a subset of the declared target blocks.
 test.each(["chapter", "collection"])("a %s reply that changes only the last target opens a Proposal for that block only", async (scope) => {
   const started = await startServer();
@@ -673,7 +659,16 @@ test.each(["chapter", "collection"])("a %s reply that changes only the last targ
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Proposal", async (script) => {
+// Each `propose_edit` call that the Host refuses, with the refusal label of its ToolCall. An incomplete call item is
+// not a function request, so it gives no ToolCall, and the Run continues to the final answer (ADR 0091).
+test.each([
+  ["duplicate_location", "advisory", "refused:repeated_block"],
+  ["empty_locations", "advisory", "refused:no_change"],
+  ["malformed_locations", "advisory", "refused:empty_explanation"],
+  ["undeclared_location", "advisory", "refused:undeclared_block"],
+  ["oversized_explanation", "advisory", "refused:oversized_text"],
+  ["incomplete", "advisory", null],
+])("a %s reply opens no Proposal", async (script, decision, calls) => {
   const started = await startServer();
   try {
     await drainLeftoverWork();
@@ -685,10 +680,9 @@ test.each(["duplicate_location", "empty_locations"])("a %s reply opens no Propos
       `Revise these passages SCRIPT:${script}`, id(`${ns}41`));
     // The Host refuses the `propose_edit` call and returns the reason to the model. The Run ends with the final text
     // as advice (ADR 0091).
-    assert.equal(run.decision.kind, "advisory");
+    assert.equal(run.decision.kind, decision);
     assert.equal(await queryPostgres(`SELECT string_agg(state || ':' || coalesce(refusal, ''), ' ') FROM storyos.tool_calls
-      WHERE run_id = '${run.run_id}'::uuid AND function_name = 'propose_edit';`),
-    script === "duplicate_location" ? "refused:repeated_block" : "refused:no_change");
+      WHERE run_id = '${run.run_id}'::uuid AND function_name = 'propose_edit';`), calls ?? "");
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }

@@ -37,8 +37,6 @@ fn produce_fake_prose_changes(
             first.explanation.clear();
         } else if author_message.ends_with("SCRIPT:undeclared_location") {
             first.manuscript_block_id = first.chapter_id.clone();
-        } else if author_message.ends_with("SCRIPT:stale_location_base") {
-            first.base_authoritative_revision_id = first.manuscript_block_id.clone();
         } else if author_message.ends_with("SCRIPT:oversized_explanation") {
             first.explanation = "a".repeat(CONTEXT_ITEM_TOKEN_LIMIT as usize + 1);
         }

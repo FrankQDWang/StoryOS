@@ -19,7 +19,7 @@ pub const SUBMIT_RESEARCH_TOOL_SPEC: ToolSpec = ToolSpec {
     result_text_max_bytes: 1024,
 };
 
-/// The description of the Tool. It holds the cite rules that the reply form of ADR 0087 gave.
+/// The description of the Tool. It holds the cite rules of ADR 0087.
 pub(crate) const DESCRIPTION: &str = "Records the result of web research for the author: a \
 summary and the claims, each with its citations. A tool_sources tag after a tool_result lists the \
 id of each source and each gap of that result. A gap is a requested page that is not available. \

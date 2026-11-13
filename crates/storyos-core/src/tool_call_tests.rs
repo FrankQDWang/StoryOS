@@ -6,10 +6,9 @@ use super::{
     validate_tool_call_batch,
 };
 use crate::{
-    AgentDecisionKind, AgentDecisionOutcome, BoundTool, CitableSources, DecisionCandidate,
-    EXA_TOOL_REGISTRATION, ExposureFacts, IntakeRefusal, ModelOutput, NativeStreamItem,
-    OutputPhase, StreamItemRole, StreamItemState, ToolCompatibilityDecision, ToolExposure,
-    ToolIntake, ToolRegistrationLifecycle, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, BoundTool, EXA_TOOL_REGISTRATION, ExposureFacts,
+    IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
+    ToolExposure, ToolIntake, ToolRegistrationLifecycle, validate_agent_decision,
 };
 
 /// The Snapshot of the research Exposure, as the Worker pins it at the dispatch claim.
@@ -20,7 +19,7 @@ fn pinned() -> ExposureSnapshot {
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: crate::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
+        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }
@@ -330,42 +329,25 @@ fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
 
 #[test]
 fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
-    let advisory = ModelOutput {
-        phase: OutputPhase::FinalAnswer,
-        candidate: DecisionCandidate::Advisory {
-            text: "Looking it up.".to_owned(),
-        },
-        prose_changes: None,
-    };
     let valid = ToolCallBatch::Valid(vec![RequestedToolCall::Validated(search_call("call_01"))]);
     let invalid = ToolCallBatch::Invalid(ToolCallBatchRefusal::InvalidName {
         item_id: "fc_01".to_owned(),
     });
-    let tool_request = AgentDecisionOutcome::Decision {
-        kind: AgentDecisionKind::ToolRequest {
-            calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
-        },
-        selected: true,
-        advances_continuation: false,
-    };
 
     assert_eq!(
         [
-            validate_agent_decision(None, &[], &CitableSources::default(), valid.clone()),
-            validate_agent_decision(Some(&advisory), &[], &CitableSources::default(), valid),
-            validate_agent_decision(
-                Some(&advisory),
-                &[],
-                &CitableSources::default(),
-                invalid.clone()
-            ),
-            validate_agent_decision(None, &[], &CitableSources::default(), invalid),
-            validate_agent_decision(None, &[], &CitableSources::default(), ToolCallBatch::none()),
+            validate_agent_decision(valid),
+            validate_agent_decision(invalid),
+            validate_agent_decision(ToolCallBatch::none()),
         ],
         [
-            tool_request.clone(),
-            tool_request,
-            AgentDecisionOutcome::NoDecision,
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::ToolRequest {
+                    calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
+                },
+                selected: true,
+                advances_continuation: false,
+            },
             AgentDecisionOutcome::NoDecision,
             AgentDecisionOutcome::NoDecision,
         ]
@@ -384,7 +366,7 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
             ExposureSnapshot::decode(Some(&damaged)),
         ),
         (
-            2,
+            5,
             Some(ExposureSnapshot::empty()),
             Some(ExposureSnapshot::empty()),
             None

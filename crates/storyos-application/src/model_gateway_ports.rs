@@ -7,8 +7,8 @@ use secrecy::{ExposeSecret, SecretString};
 
 pub use storyos_core::RequestBounds;
 use storyos_core::{
-    ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    RetrievalBounds, StreamItemState, ToolExposure,
+    ContextSourceClass, ModelAdapter, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
+    StreamItemState, ToolExposure,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -127,7 +127,7 @@ pub struct CreateRequest {
     /// The Tool Exposure of this RunStep. The adapter declares each exposed Tool as one function
     /// and sends no Tool for an empty Exposure (ADR 0084).
     pub tool_exposure: ToolExposure,
-    /// The `tool_choice` of the finish rule (ADR 0091). The reply form profile sends `auto`.
+    /// The `tool_choice` of the finish rule (ADR 0091).
     pub tool_choice: storyos_core::ToolChoice,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
@@ -435,7 +435,6 @@ pub struct ModelResponse {
     /// `Cancelled`. An item keeps its own state.
     pub state: StreamItemState,
     pub items: Vec<NativeStreamItem>,
-    pub output: Option<ModelOutput>,
     pub usage: ModelUsage,
     pub cache_use: CacheUse,
     pub response_reference: Option<String>,

@@ -10,8 +10,7 @@ use storyos_application::{
     RetrieveRequest, StreamControl,
 };
 use storyos_core::{
-    ContextSourceClass, DecisionCandidate, ModelAdapter, ModelOutput, NativeStreamItem,
-    OutputPhase, ProseChangeCandidate, StreamItemRole, StreamItemState,
+    ContextSourceClass, ModelAdapter, NativeStreamItem, StreamItemRole, StreamItemState,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -147,7 +146,7 @@ pub(crate) fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
         endpoint: Some(endpoint.to_owned()),
         credential_reference: Some(CredentialReference(
             storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
@@ -183,7 +182,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         selection_references: Vec::new(),
         previous_response_reference: None,
         tool_exposure: storyos_core::ToolExposure::empty(),
-        tool_choice: storyos_core::ToolChoice::Auto,
+        tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
     })
@@ -234,24 +233,16 @@ pub(crate) fn message(text: &str) -> serde_json::Value {
            "content": [{"type": "output_text", "text": text}]})
 }
 
-pub(crate) fn final_answer(
-    candidate: DecisionCandidate,
-    changes: Option<Vec<ProseChangeCandidate>>,
-) -> ModelOutput {
-    ModelOutput {
-        phase: OutputPhase::FinalAnswer,
-        candidate,
-        prose_changes: changes,
-    }
-}
-
 #[tokio::test]
 async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_projection() {
     let reply = json!({"id": "resp_01", "status": "completed", "output": [
         {"id": "rs_01", "type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan."}]},
-        message(r#"{"kind":"advisory","text":"Keep the second sentence."}"#),
+        message("Keep the second sentence."),
     ], "usage": {"input_tokens": 412, "output_tokens": 133, "total_tokens": 545}});
-    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    let (base, served) = destination(Reply::Events(vec![
+        json!({"type": "response.completed", "response": reply}),
+    ]))
+    .await;
     let (observation, events, projection) = exchange_at(&base).await;
     let (line, authorization, body) = served.await.unwrap();
     let items = vec![
@@ -264,7 +255,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
             )
         },
         NativeStreamItem {
-            text: Some(r#"{"kind":"advisory","text":"Keep the second sentence."}"#.to_owned()),
+            text: Some("Keep the second sentence.".to_owned()),
             ..item(
                 "msg_01",
                 StreamItemRole::Assistant,
@@ -280,13 +271,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
         (
             Observation::Terminal(ModelResponse {
                 state: storyos_core::StreamItemState::Complete,
-                items: items.clone(),
-                output: Some(final_answer(
-                    DecisionCandidate::Advisory {
-                        text: "Keep the second sentence.".to_owned()
-                    },
-                    None
-                )),
+                items,
                 usage: ModelUsage::Reported {
                     input_tokens: 412,
                     output_tokens: 133,
@@ -294,7 +279,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                 cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
             }),
-            items,
+            Vec::new(),
             "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             Some(format!("Bearer {CREDENTIAL_CANARY}")),
             Some(body.clone()),
@@ -305,7 +290,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                      hard.\n\nTarget blocks:\n[block_id: {BLOCK}]\nThe rain fell hard on the old roof."
                 )}]}],
                 "max_output_tokens": 8192,
-                "stream": false,
+                "stream": true,
                 "store": true,
             }),
         )
@@ -317,10 +302,13 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
 #[tokio::test]
 async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_and_target() {
     let reply = json!({"id": "resp_02", "status": "completed", "output": [
-        message(r#"{"kind":"advisory","text":"Keep it."}"#),
+        message("Keep it."),
     ], "usage": {"input_tokens": 1900, "output_tokens": 40,
                  "input_tokens_details": {"cached_tokens": 1024}}});
-    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    let (base, served) = destination(Reply::Events(vec![
+        json!({"type": "response.completed", "response": reply}),
+    ]))
+    .await;
     let adapter = AgentPlanResponses {
         resolver: CanaryResolver::default(),
     };
@@ -333,11 +321,12 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
             ..request
         })
     };
-    let create_mapping = RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+    // A decision request of an earlier mapping held the reply form.
+    let earlier_mapping = RequestRoute {
+        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
         ..route(&base)
     };
-    let refused = adapter.prepare(&continued(create_mapping)).await.err();
+    let refused = adapter.prepare(&continued(earlier_mapping)).await.err();
     let prepared = adapter
         .prepare(&continued(route(&base)))
         .await
@@ -359,7 +348,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
             projection.mapping_revision,
             projection.cache_setting,
             sent["previous_response_id"].clone(),
-            sent["instructions"] == json!(crate::wire::HOST_INSTRUCTIONS),
+            sent["instructions"] == json!(crate::wire::TOOL_LOOP_INSTRUCTIONS),
             sent["input"][0]["content"][0]["text"]
                 .as_str()
                 .is_some_and(|text| text.ends_with("The rain fell hard on the old roof.")),
@@ -368,7 +357,7 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
         ),
         (
             Some(PreDispatchRefusal::UnsupportedRequest),
-            storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
             Some(CacheSetting::DestinationDefault),
             json!("resp_01"),
             true,
@@ -446,7 +435,7 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             ..request
         })
     };
-    let compaction = storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION;
+    let compaction = storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION;
     let refused = [
         adapter
             .prepare(&summary(compaction, /*reference*/ None))
@@ -488,107 +477,11 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
 }
 
 #[test]
-fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() {
-    let advisory = |text: &str| {
-        final_answer(
-            DecisionCandidate::Advisory {
-                text: text.to_owned(),
-            },
-            /*changes*/ None,
-        )
-    };
-    let change = |block: &str, chapter: &str, base: &str| ProseChangeCandidate {
-        chapter_id: chapter.to_owned(),
-        manuscript_block_id: block.to_owned(),
-        base_authoritative_revision_id: base.to_owned(),
-        candidate_text: "Rain hammered the roof.".to_owned(),
-        explanation: "A stronger verb.".to_owned(),
-    };
-    let prose = |block: &str| {
-        format!(
-            r#"{{"kind":"prose_change","summary":"Shorter.","changes":[{{"block_id":"{block}","candidate_text":"Rain hammered the roof.","explanation":"A stronger verb."}}]}}"#
-        )
-    };
-    // The shape of the S4-03 live reply: one change has a duplicated "block_id": key.
-    let duplicated_key = prose(BLOCK).replace(r#""block_id":"#, r#""block_id":"block_id":"#);
-    let map = |text: &str| super::decision::map_output(text, &[target()]);
-    let shorter = DecisionCandidate::ProseChange {
-        text: "Shorter.".to_owned(),
-    };
-
-    assert_eq!(
-        [
-            map(&prose(BLOCK)),
-            map(&prose("undeclared")),
-            map("```json\n{\"kind\":\"clarification\",\"question\":\"Which scene?\"}\n```"),
-            map("Keep the second sentence."),
-            map(r#"{"kind":"prose_change","summary":"Shorter."}"#),
-            map(&duplicated_key),
-            super::decision::map_output(&prose(BLOCK), &[]),
-        ],
-        [
-            final_answer(
-                shorter.clone(),
-                Some(vec![change(
-                    BLOCK,
-                    &target().chapter_id,
-                    &target().base_revision_id
-                )])
-            ),
-            final_answer(shorter, Some(vec![change("undeclared", "", "")])),
-            final_answer(
-                DecisionCandidate::Clarification {
-                    question: "Which scene?".to_owned()
-                },
-                None
-            ),
-            advisory("Keep the second sentence."),
-            advisory(r#"{"kind":"prose_change","summary":"Shorter."}"#),
-            advisory(&duplicated_key),
-            advisory(&prose(BLOCK)),
-        ]
-    );
-}
-
-#[test]
-fn a_synthesis_reply_maps_to_its_ordered_claims_and_a_malformed_one_to_an_advisory() {
-    let map = |text: &str| super::decision::map_output(text, &[]);
-    let reply = r#"{"kind":"research_synthesis","summary":"High water was at 10.42.","claims":[{"text":"High water was at 10.42.","citations":["s1","g1"]},{"text":"The port log is not available.","citations":["g1"]}]}"#;
-    let claim = |text: &str, citations: &[&str]| storyos_core::ClaimCandidate {
-        text: text.to_owned(),
-        citations: citations.iter().map(|id| (*id).to_owned()).collect(),
-    };
-    let malformed = r#"{"kind":"research_synthesis","summary":"Tides.","claims":[{"text":"High water.","citations":[7]}]}"#;
-
-    assert_eq!(
-        [map(reply), map(malformed)],
-        [
-            final_answer(
-                DecisionCandidate::ResearchSynthesis {
-                    summary: "High water was at 10.42.".to_owned(),
-                    claims: vec![
-                        claim("High water was at 10.42.", &["s1", "g1"]),
-                        claim("The port log is not available.", &["g1"]),
-                    ],
-                },
-                None
-            ),
-            final_answer(
-                DecisionCandidate::Advisory {
-                    text: malformed.to_owned()
-                },
-                None
-            ),
-        ]
-    );
-}
-
-#[test]
-fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
+fn a_refusal_a_function_call_and_an_incomplete_message_keep_their_native_items() {
     let observe = |status: &str, output: serde_json::Value| {
         let body = json!({"id": "resp_01", "status": status, "output": [output]});
-        match super::response::observe(body.to_string().as_bytes(), &[target()]) {
-            Observation::Terminal(response) => (response.items, response.output),
+        match super::response::observe(body.to_string().as_bytes()) {
+            Observation::Terminal(response) => response.items,
             other => panic!("not a terminal response: {other:?}"),
         }
     };
@@ -607,29 +500,20 @@ fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
             observe("incomplete", partial),
         ],
         [
-            (
-                vec![NativeStreamItem {
-                    refusal: Some("No.".to_owned()),
-                    ..item("msg_01", assistant, complete)
-                }],
-                None
-            ),
-            (
-                vec![NativeStreamItem {
-                    call_id: Some("call_01".to_owned()),
-                    arguments: Some("{\"q\"".to_owned()),
-                    native_type: Some("function_call".to_owned()),
-                    ..item("fc_01", StreamItemRole::Tool, complete)
-                }],
-                None
-            ),
-            (
-                vec![NativeStreamItem {
-                    text: Some("{\"kind\"".to_owned()),
-                    ..item("msg_01", assistant, StreamItemState::Incomplete)
-                }],
-                None
-            ),
+            vec![NativeStreamItem {
+                refusal: Some("No.".to_owned()),
+                ..item("msg_01", assistant, complete)
+            }],
+            vec![NativeStreamItem {
+                call_id: Some("call_01".to_owned()),
+                arguments: Some("{\"q\"".to_owned()),
+                native_type: Some("function_call".to_owned()),
+                ..item("fc_01", StreamItemRole::Tool, complete)
+            }],
+            vec![NativeStreamItem {
+                text: Some("{\"kind\"".to_owned()),
+                ..item("msg_01", assistant, StreamItemState::Incomplete)
+            }],
         ]
     );
 }
@@ -710,17 +594,14 @@ async fn retrieved(reply: Reply) -> (Observation, Received, Option<String>) {
 }
 
 #[tokio::test]
-async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared_targets() {
-    let change = format!(
-        r#"{{"kind":"prose_change","summary":"Shorter.","changes":[{{"block_id":"{BLOCK}","candidate_text":"Rain hit the roof.","explanation":"Shorter."}}]}}"#
-    );
+async fn a_retrieve_reads_the_stored_response_once_and_maps_its_native_items() {
+    let change = "Rain hit the roof.".to_owned();
     let stored = |status: &str| {
         json!({"id": "resp_01", "status": status, "output": [message(&change)],
                "usage": {"input_tokens": 40, "output_tokens": 12}})
         .to_string()
     };
     let (complete, received, wire) = retrieved(Reply::Http(200, stored("completed"))).await;
-    let target = target();
     let closed = {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         format!("http://{}/api/plan/v3", listener.local_addr().unwrap())
@@ -764,18 +645,6 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
                         StreamItemState::Complete,
                     )
                 }],
-                output: Some(final_answer(
-                    DecisionCandidate::ProseChange {
-                        text: "Shorter.".to_owned()
-                    },
-                    Some(vec![ProseChangeCandidate {
-                        chapter_id: target.chapter_id,
-                        base_authoritative_revision_id: target.base_revision_id,
-                        manuscript_block_id: BLOCK.to_owned(),
-                        candidate_text: "Rain hit the roof.".to_owned(),
-                        explanation: "Shorter.".to_owned(),
-                    }])
-                )),
                 usage: ModelUsage::Reported {
                     input_tokens: 40,
                     output_tokens: 12,

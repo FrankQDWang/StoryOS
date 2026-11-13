@@ -445,8 +445,8 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
                 closing("resp_c33_4"),
             ],
         ),
-        // An incomplete response with calls is an invalid tool request, and the Host executes
-        // none of its calls.
+        // An incomplete response with calls is an invalid tool request. The Host executes none of
+        // its calls, and the Run completes with no result and no refusal (ADR 0091 section 3).
         (
             "c34",
             vec![synthesis("resp_c34_2", "incomplete", two_snapshot_claims)],
@@ -487,13 +487,7 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
                 None,
                 0
             ),
-            (
-                "refused".to_owned(),
-                None,
-                None,
-                Some("tool_request_invalid".to_owned()),
-                0
-            ),
+            ("completed".to_owned(), None, None, None, 0),
         ]
     );
 }

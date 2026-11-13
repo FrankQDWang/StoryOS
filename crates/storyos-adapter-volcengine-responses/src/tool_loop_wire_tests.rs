@@ -3,9 +3,7 @@ use storyos_application::{
     CreateRequest, DestinationRequest, ModelProviderAdapter, RequestAttempt, RequestRoute,
     ToolOutput, ToolOutputOrigin,
 };
-use storyos_core::{
-    ExposedTool, FINISH_TOOL_SPEC, HOST_TOOL_REGISTRATION, ToolChoice, ToolExposure,
-};
+use storyos_core::ToolChoice;
 
 use crate::AgentPlanResponses;
 use crate::tests::{CanaryResolver, create, route};
@@ -33,14 +31,7 @@ async fn the_tool_loop_mapping_sends_the_finish_rule_and_the_tool_choice_of_each
     let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
         unreachable!("create() makes a Create request")
     };
-    let mut tools = crate::wire::tests::research_exposure().tools;
-    tools.push(ExposedTool {
-        name: "finish",
-        registration_id: HOST_TOOL_REGISTRATION.id,
-        registration_revision: HOST_TOOL_REGISTRATION.revision,
-        spec: &FINISH_TOOL_SPEC,
-    });
-    let exposure = ToolExposure { tools };
+    let exposure = crate::wire::tests::research_exposure();
     let first = CreateRequest {
         tool_exposure: exposure.clone(),
         tool_choice: ToolChoice::Required,
@@ -94,5 +85,5 @@ async fn the_tool_loop_mapping_sends_the_finish_rule_and_the_tool_choice_of_each
             &json!([{"type": "function_call_output", "call_id": "call_finish", "output": output}]),
         )
     );
-    assert_eq!(declared.len(), 3);
+    assert_eq!(declared.len(), 5);
 }

@@ -255,13 +255,6 @@ pub enum AgentRunDecisionInspect {
         continuation_binding_id: Option<String>,
         opened_proposal_id: Option<String>,
     },
-    Clarification {
-        decision_id: String,
-        selected: bool,
-        question: String,
-        required_reply: String,
-        continuation_binding_id: Option<String>,
-    },
     ToolRequest {
         decision_id: String,
         calls: Vec<storyos_contracts::ToolCallInspect>,

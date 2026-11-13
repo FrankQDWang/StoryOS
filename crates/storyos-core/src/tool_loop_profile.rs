@@ -1,6 +1,6 @@
-//! The tool loop profile of ADR 0091: a Model Registration whose request mapping declares the Host
-//! Tools. The reply form profile of the other Registrations declares none. The two profiles exist
-//! together until the reply form goes.
+//! The tool loop profile of ADR 0091: the Model Registrations whose request mapping declares the
+//! Host Tools. The adapters send a decision request only with these mappings. The earlier
+//! Registrations stay only as the identities of recorded Attempts.
 
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_REGISTRATION, CapabilityEntries, CapabilityEvidence,
@@ -16,11 +16,6 @@ pub const HOST_FAKE_TOOL_LOOP_MAPPING_REVISION: &str = "storyos.host-fake.mappin
 /// `tool_choice` of the finish rule.
 pub const AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v5";
-
-const TOOL_LOOP_MAPPING_REVISIONS: &[&str] = &[
-    HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
-    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
-];
 
 pub const HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.host-fake.capability.v2",
@@ -48,10 +43,3 @@ pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
     mapping_revision: AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
     ..AGENT_PLAN_FUNCTION_CALLING_REGISTRATION
 };
-
-impl ModelRegistration {
-    /// Whether the request mapping declares the Host Tools.
-    pub fn declares_host_tools(&self) -> bool {
-        TOOL_LOOP_MAPPING_REVISIONS.contains(&self.mapping_revision)
-    }
-}

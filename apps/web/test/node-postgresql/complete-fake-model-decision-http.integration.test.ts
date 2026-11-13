@@ -24,7 +24,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, PROSE, REPLY_FORM_FAKE_ENV, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
+import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
   inspectRun, issueChallenge, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 // The test Server offers the tool loop profile of the fake destination (ADR 0091).
@@ -294,27 +294,6 @@ test("Worker distinguishes prose-change, a question, and CFP holds", async () =>
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (existsSync(streamHold)) unlinkSync(streamHold);
     if (existsSync(decisionHold)) unlinkSync(decisionHold);
-    await stopRealServer(started.server);
-  }
-});
-
-// #1463 owns this test: the typed output shapes exist only in the reply form profile.
-test("Worker selects no decision from an unselected or invalid typed output of the reply form", async () => {
-  const started = await startServer({ extraEnv: REPLY_FORM_FAKE_ENV });
-  try {
-    await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e1a1"), "Typed Output Novel", "ed");
-    for (const [key, text] of [["ed11", "SCRIPT:unselected"], ["ed12", "SCRIPT:invalid"]] as const) {
-      const scripted = await admitRun(started.baseUrl, prepared, id(key), text);
-      await settleOnce();
-      const inspect = await inspectRun(started.baseUrl, prepared, scripted.effect.run_id);
-      assert.equal(inspect.status, "completed");
-      assert.equal(inspect.decision.kind, "absent");
-      assert.equal(inspect.items[0]?.state, "complete");
-      assert.equal(inspect.items[0]?.phase, "complete");
-      assert.equal(inspect.items[0]?.role, "assistant");
-    }
-  } finally {
     await stopRealServer(started.server);
   }
 });
