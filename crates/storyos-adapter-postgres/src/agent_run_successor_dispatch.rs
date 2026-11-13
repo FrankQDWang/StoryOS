@@ -243,7 +243,7 @@ pub(crate) async fn record(
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
     let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
-        Observation::Terminal(response) => {
+        Observation::Terminal(mut response) => {
             payload["items"] =
                 crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
             payload["usage"] = crate::agent_run_observation::encode_usage(response.usage);
@@ -253,6 +253,7 @@ pub(crate) async fn record(
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);
             }
+            crate::agent_run_finish_rule::drop_last_step_calls(run, &mut response.items)?;
             let declared: Vec<_> = request
                 .declared_targets
                 .iter()

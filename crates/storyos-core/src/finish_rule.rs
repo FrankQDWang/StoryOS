@@ -51,6 +51,13 @@ impl RunStepLimit {
             Self::Open
         }
     }
+
+    /// Whether the Host executes the function calls of a response of this RunStep. It executes
+    /// none in the last RunStep of a mapping that declares Host Tools, also when a recovery path
+    /// settles the response.
+    pub fn executes_calls(self, declares_host_tools: bool) -> bool {
+        !declares_host_tools || self == Self::Open
+    }
 }
 
 /// One ToolCall of the RunStep before the active RunStep.

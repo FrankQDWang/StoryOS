@@ -150,6 +150,7 @@ pub(crate) async fn record_original_result(
         claim,
         observation,
         &declared,
+        run,
         crate::agent_run_tool_probe::is_probe(&payload),
         &payload,
     )
@@ -308,6 +309,7 @@ pub(crate) async fn record_late_result(
         claim,
         observation,
         &declared,
+        run,
         crate::agent_run_tool_probe::is_probe(&row.payload),
         &row.payload,
     )
@@ -384,10 +386,11 @@ impl RetrievedResult {
         claim: &ClaimedAgentRun,
         observation: Observation,
         declared: &[storyos_core::DeclaredLocation],
+        run: &RunPhaseRow,
         probe: bool,
         attempt_payload: &serde_json::Value,
     ) -> Result<Self, CompleteAgentRunError> {
-        let Observation::Terminal(response) = observation else {
+        let Observation::Terminal(mut response) = observation else {
             return Ok(Self {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
@@ -398,6 +401,7 @@ impl RetrievedResult {
             });
         };
         let items = encode_items(&response.items);
+        crate::agent_run_finish_rule::drop_last_step_calls(run, &mut response.items)?;
         let complete = response
             .items
             .iter()

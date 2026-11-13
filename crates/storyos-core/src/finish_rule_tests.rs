@@ -100,6 +100,12 @@ fn each_run_step_at_or_after_the_limit_is_the_last_and_sends_none() {
     assert_eq!(
         (
             [22, 23, 24].map(RunStepLimit::at),
+            [
+                (true, RunStepLimit::Last),
+                (false, RunStepLimit::Last),
+                (true, RunStepLimit::Open)
+            ]
+            .map(|(host_tools, limit)| limit.executes_calls(host_tools)),
             step_tool_choice(/*declares_host_tools*/ true, RunStepLimit::Last, &[]),
             step_tool_choice(
                 /*declares_host_tools*/ true,
@@ -109,6 +115,7 @@ fn each_run_step_at_or_after_the_limit_is_the_last_and_sends_none() {
         ),
         (
             [RunStepLimit::Open, RunStepLimit::Last, RunStepLimit::Last],
+            [false, true, true],
             ToolChoice::None,
             ToolChoice::None,
         )

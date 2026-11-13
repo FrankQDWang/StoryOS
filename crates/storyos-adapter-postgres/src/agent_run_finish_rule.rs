@@ -14,9 +14,7 @@ pub(crate) async fn tool_choice(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolChoice, CompleteAgentRunError> {
-    if !storyos_core::model_registration(&run.model_registration_revision)
-        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
-    {
+    if !declares_host_tools(run) {
         return Ok(ToolChoice::Auto);
     }
     let prior_step = client
@@ -63,6 +61,23 @@ pub(crate) fn run_step_limit(
         .parse::<u64>()
         .map(storyos_core::RunStepLimit::at)
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
+}
+
+fn declares_host_tools(run: &RunPhaseRow) -> bool {
+    storyos_core::model_registration(&run.model_registration_revision)
+        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
+}
+
+/// Leaves out the function calls of a response that a recovery path settles in the last RunStep
+/// of `run`, as the finish rule does for a created response (ADR 0091 section 5).
+pub(crate) fn drop_last_step_calls(
+    run: &RunPhaseRow,
+    items: &mut Vec<storyos_core::NativeStreamItem>,
+) -> Result<(), CompleteAgentRunError> {
+    if !run_step_limit(run)?.executes_calls(declares_host_tools(run)) {
+        items.retain(|item| item.role != storyos_core::StreamItemRole::Tool);
+    }
+    Ok(())
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next
