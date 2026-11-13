@@ -18,10 +18,12 @@ import {
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectRun, prepare, produced,
-  rewriteChapter, selected, settleOnce, serverForFile } from "../support/http-harness.ts";
+import { BINDING, REPLY_FORM_FAKE_ENV, USER_A, admitRun, attempt, challenged, drainLeftoverWork, id, inspectFirstRunStep,
+  inspectRun, prepare, produced, rewriteChapter, selected, settleOnce, serverForFile } from "../support/http-harness.ts";
 
 const started = serverForFile();
+// #1463 owns the streamed test: only the reply form profile of the fake streams Proposal generation.
+const replyForm = serverForFile(REPLY_FORM_FAKE_ENV);
 
 const FIRST = "Help with this passage.";
 const CORRECTION = "I changed my mind: keep the voice.";
@@ -82,7 +84,9 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
   // response to compact.
   assert.equal(queried.active_compaction.kind, "absent");
   assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
-  assert.deepEqual(queried.evidence.find((item) => item.kind === "sent_content"), {
+  // The tool loop fake records its whole wire request as the sent content (ADR 0091).
+  const sent = queried.evidence.find((item) => item.kind === "sent_content");
+  assert.deepEqual(sent && { ...sent, content: (JSON.parse(sent.content) as { author_message: string }).author_message }, {
     kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,
     availability: "current", content: [original, ...corrections].join("\n"),
   });
@@ -121,14 +125,14 @@ test("author messages are limited by characters, not UTF-8 bytes", async () => {
 
 test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
   await drainLeftoverWork();
-  const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
-  const created = await admitRun(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
+  const prepared = await prepare(replyForm.baseUrl, id("d511"), "Stream Guidance", "d52");
+  const created = await admitRun(replyForm.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
   await settleOnce();
-  const original = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
+  const original = await inspectRun(replyForm.baseUrl, prepared, created.effect.run_id);
   if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
   const proposalId = original.decision.opened_proposal.proposal_id;
-  const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
-  await retain(started.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
+  const options = { baseUrl: replyForm.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
+  await retain(replyForm.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
   await drainLeftoverWork();
   const current = await getAgentRun(options);
   const historical = await getAgentRun({ ...options, modelAttemptId: attempt(original).model_attempt_id });
@@ -147,12 +151,14 @@ test("guidance after a visible stream keeps the Proposal bound to its original D
 test("continuation consumes an eligible prior binding and keeps current input inspectable", async () => {
   await drainLeftoverWork();
   const prepared = await prepare(started.baseUrl, id("c411"), "Continue Novel", "c42");
+  // The continuation of a Run belongs to its first RunStep. The default read shows the closing RunStep (ADR 0091).
+  const step = (runId: string) => inspectFirstRunStep(started.baseUrl, prepared, runId);
   const first = await admit(started.baseUrl, prepared, id("c431"), FIRST);
   const firstInspect = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
   const firstBinding = produced(firstInspect);
   assert.equal(firstInspect.status, "completed");
-  assert.equal(attempt(firstInspect).input_mapping, "none");
-  assert.equal(attempt(firstInspect).prior_continuation.kind, "absent");
+  assert.equal(attempt(await step(first.effect.run_id)).input_mapping, "none");
+  assert.equal(attempt(await step(first.effect.run_id)).prior_continuation.kind, "absent");
   assert.equal(selected(firstInspect, "author_instruction"), FIRST);
   assert.equal(selected(firstInspect, "working_target"), "");
   await rewriteChapter(prepared.projectId, prepared.chapterId, `'${EDITED}'`);
@@ -163,30 +169,30 @@ test("continuation consumes an eligible prior binding and keeps current input in
   const secondInspect = await inspectRun(started.baseUrl, prepared, second.effect.run_id);
   assert.equal(second.conversation_id, first.conversation_id);
   assert.equal(second.effect.project_agent_id, first.effect.project_agent_id);
-  assert.equal(attempt(secondInspect).input_mapping, "incremental");
-  assert.deepEqual(attempt(secondInspect).prior_continuation, {
+  assert.equal(attempt(await step(second.effect.run_id)).input_mapping, "incremental");
+  assert.deepEqual(attempt(await step(second.effect.run_id)).prior_continuation, {
     kind: "present",
     continuation_binding_id: firstBinding,
   });
-  assert.equal(attempt(secondInspect).admission.adapter_mapping, "storyos.host-fake.mapping.v1");
+  assert.equal(attempt(await step(second.effect.run_id)).admission.adapter_mapping, "storyos.host-fake.mapping.v2");
   assert.equal(selected(secondInspect, "author_instruction"), CORRECTION);
   assert.equal(selected(secondInspect, "working_target"), EDITED);
-  assert.equal(secondInspect.evidence.some((item) => item.kind === "stored_reference" && item.reference_id === firstBinding), true);
+  assert.equal((await step(second.effect.run_id)).evidence.some((item) => item.kind === "stored_reference" && item.reference_id === firstBinding), true);
   const afterEdit = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
   assert.equal(selected(afterEdit, "author_instruction"), FIRST);
   assert.equal(selected(afterEdit, "working_target"), "");
   const other = await admit(started.baseUrl, prepared, id("c435"), FIRST);
   assert.notEqual(other.conversation_id, first.conversation_id);
   assert.equal(other.effect.project_agent_id, first.effect.project_agent_id);
-  assert.equal(attempt(await inspectRun(started.baseUrl, prepared, other.effect.run_id)).input_mapping, "none");
+  assert.equal(attempt(await step(other.effect.run_id)).input_mapping, "none");
   const full = await admit(started.baseUrl, prepared, id("c437"), FULL, {
     kind: "existing",
     conversation_id: first.conversation_id,
   });
   const fullInspect = await inspectRun(started.baseUrl, prepared, full.effect.run_id);
-  assert.equal(attempt(fullInspect).input_mapping, "full");
-  assert.equal(attempt(fullInspect).prior_continuation.kind, "absent");
-  assert.deepEqual(attempt(fullInspect).known_prior_continuation, {
+  assert.equal(attempt(await step(full.effect.run_id)).input_mapping, "full");
+  assert.equal(attempt(await step(full.effect.run_id)).prior_continuation.kind, "absent");
+  assert.deepEqual(attempt(await step(full.effect.run_id)).known_prior_continuation, {
     kind: "present",
     continuation_binding_id: produced(secondInspect),
   });
@@ -201,8 +207,8 @@ test("continuation consumes an eligible prior binding and keeps current input in
     conversation_id: first.conversation_id,
   });
   const staleInspect = await inspectRun(started.baseUrl, prepared, stale.effect.run_id);
-  assert.equal(attempt(staleInspect).input_mapping, "new_transport");
-  assert.equal(attempt(staleInspect).prior_continuation.kind, "absent");
+  assert.equal(attempt(await step(stale.effect.run_id)).input_mapping, "new_transport");
+  assert.equal(attempt(await step(stale.effect.run_id)).prior_continuation.kind, "absent");
   await queryPostgres(`
     UPDATE storyos.model_attempts
        SET payload = jsonb_set(payload, '{produced_binding,covered_copy_restricted}', 'true')
@@ -213,7 +219,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
     kind: "existing",
     conversation_id: first.conversation_id,
   });
-  assert.equal(attempt(await inspectRun(started.baseUrl, prepared, restricted.effect.run_id)).input_mapping, "new_transport");
+  assert.equal(attempt(await step(restricted.effect.run_id)).input_mapping, "new_transport");
   await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
   const blocked = await admit(started.baseUrl, prepared, id("c43d"), CORRECTION, {
     kind: "existing",
