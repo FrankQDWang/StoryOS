@@ -5,7 +5,7 @@ use storyos_application::{
     ModelUsage, Observation, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, OriginalResultKeepReason,
+    AgentDecisionKind, AgentDecisionOutcome, FinishRuleOutcome, OriginalResultKeepReason,
     OriginalResultRetrievalDecision, ResponseDisposition, ResponseFacts, RetrievedOriginalResult,
     StreamItemState, response_disposition, validate_agent_decision,
 };
@@ -225,8 +225,11 @@ pub(crate) async fn record_original_result(
     if let Some(evidence) = retrieved.batch_evidence.take() {
         sealed["tool_call_batch"] = evidence;
     }
-    let (advances_continuation, settlement) = match (&selected.outcome, selected.function_requested)
-    {
+    let (advances_continuation, settlement) = match (
+        &selected.outcome,
+        selected.function_requested,
+        selected.rule,
+    ) {
         // The retrieved Decision is a validated function request: the original Attempt supplies
         // the Decision and its ToolCalls, and the Run refuses until execution exists.
         (
@@ -235,6 +238,7 @@ pub(crate) async fn record_original_result(
                 ..
             },
             false,
+            _,
         ) => {
             sealed["original_result_retrieval"]["supplies_tool_call"] = serde_json::json!(true);
             (false, CreateSettlement::ToolCallsPending)
@@ -245,19 +249,20 @@ pub(crate) async fn record_original_result(
                 ..
             },
             false,
+            _,
         ) => (*advances_continuation, CreateSettlement::Response),
         // The retrieved response asks for a function: the original Attempt keeps it as
         // evidence, supplies no decision, and settles the Run with the refusal (ADR 0084).
-        (AgentDecisionOutcome::NoDecision, true) => {
+        (AgentDecisionOutcome::NoDecision, true, _) => {
             sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
             (false, CreateSettlement::FunctionRequested)
         }
-        (AgentDecisionOutcome::NoDecision, false) if selected.no_result => {
+        (AgentDecisionOutcome::NoDecision, false, Some(rule)) => {
             sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
-            (false, CreateSettlement::NoResult)
+            (false, rule)
         }
-        (AgentDecisionOutcome::Decision { .. }, true)
-        | (AgentDecisionOutcome::NoDecision, false) => {
+        (AgentDecisionOutcome::Decision { .. }, true, _)
+        | (AgentDecisionOutcome::NoDecision, false, None) => {
             return Err(unavailable(std::io::Error::other(
                 "A selected original result has no Agent Decision",
             )));
@@ -379,9 +384,9 @@ pub(crate) struct SelectedResult {
     /// The complete response asks for a function, and no ToolCall exists. The Host keeps it as
     /// evidence and settles the Run with the research refusal (ADR 0084).
     pub function_requested: bool,
-    /// The complete closing response of the last RunStep has no text: no Decision, and the Run
-    /// completes with no result (ADR 0091 section 5).
-    pub no_result: bool,
+    /// The finish rule settles the complete response with no Agent Decision: it opens the next
+    /// RunStep, or it completes the Run with no result (ADR 0091).
+    pub rule: Option<CreateSettlement<'static>>,
 }
 
 impl RetrievedResult {
@@ -431,18 +436,34 @@ impl RetrievedResult {
                 .map(|refusal| refusal.to_string());
             validate_agent_decision(output, declared, &citable, batch)
         };
-        let outcome = crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?;
-        let no_result = outcome.is_none();
-        let outcome = outcome.unwrap_or(AgentDecisionOutcome::NoDecision);
+        let (outcome, rule) = match crate::agent_run_finish_rule::recovered_outcome(
+            client,
+            claim,
+            run,
+            &mut response,
+            outcome,
+        )
+        .await?
+        {
+            FinishRuleOutcome::Settle(outcome) => (outcome, None),
+            FinishRuleOutcome::NextRunStep => (
+                AgentDecisionOutcome::NoDecision,
+                Some(CreateSettlement::NextRunStep),
+            ),
+            FinishRuleOutcome::NoResult => (
+                AgentDecisionOutcome::NoDecision,
+                Some(CreateSettlement::NoResult),
+            ),
+        };
         Ok(match outcome {
-            AgentDecisionOutcome::NoDecision if no_result => Self {
+            AgentDecisionOutcome::NoDecision if complete && rule.is_some() => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items,
                 selected: Some(SelectedResult {
                     response,
                     outcome,
                     function_requested: false,
-                    no_result,
+                    rule,
                 }),
                 usage,
                 batch_evidence,
@@ -455,7 +476,7 @@ impl RetrievedResult {
                     response,
                     outcome,
                     function_requested: false,
-                    no_result,
+                    rule,
                 }),
                 usage,
                 batch_evidence,
@@ -476,7 +497,7 @@ impl RetrievedResult {
                         response,
                         outcome: AgentDecisionOutcome::NoDecision,
                         function_requested: true,
-                        no_result,
+                        rule,
                     }),
                     usage,
                     batch_evidence,

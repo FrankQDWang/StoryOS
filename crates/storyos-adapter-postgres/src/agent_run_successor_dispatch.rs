@@ -6,7 +6,7 @@ use storyos_application::{
     WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, ResponseDisposition, ResponseFacts,
+    AgentDecisionKind, AgentDecisionOutcome, FinishRuleOutcome, ResponseDisposition, ResponseFacts,
     SuccessorPauseReason, response_disposition, validate_agent_decision,
 };
 use uuid::Uuid;
@@ -242,6 +242,7 @@ pub(crate) async fn record(
     }
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
+    let mut opens_next_run_step = false;
     let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
         Observation::Terminal(mut response) => {
             payload["items"] =
@@ -284,9 +285,21 @@ pub(crate) async fn record(
                 }
                 validate_agent_decision(output, &declared, &citable, batch)
             };
-            let outcome =
-                crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?
-                    .unwrap_or(AgentDecisionOutcome::NoDecision);
+            let (outcome, rule) = match crate::agent_run_finish_rule::recovered_outcome(
+                client,
+                claim,
+                run,
+                &mut response,
+                outcome,
+            )
+            .await?
+            {
+                FinishRuleOutcome::Settle(outcome) => (outcome, None),
+                rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
+                    (AgentDecisionOutcome::NoDecision, Some(rule))
+                }
+            };
+            opens_next_run_step = rule == Some(FinishRuleOutcome::NextRunStep);
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,
@@ -395,6 +408,21 @@ pub(crate) async fn record(
                 {
                     ("settled", None, None, true)
                 }
+                // A closing response with no text gets the continuation binding, so the next
+                // Run continues from it. A text before a counted `finish` call gets its binding
+                // when the next RunStep opens.
+                AgentDecisionOutcome::NoDecision if rule == Some(FinishRuleOutcome::NoResult) => {
+                    let binding_id = Uuid::now_v7().to_string();
+                    if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
+                        payload["produced_binding"] =
+                            crate::agent_run_continuation::encode_produced_binding(
+                                &binding_id,
+                                &dispatch.model_attempt_id,
+                                &wire.admission,
+                            );
+                    }
+                    ("settled", None, Some(binding_id), false)
+                }
                 AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
                     ("settled", None, None, false)
                 }
@@ -454,6 +482,7 @@ pub(crate) async fn record(
     marker["successor_manifest_id"] = serde_json::json!(manifest_id);
     marker["successor_decision_id"] = serde_json::json!(decision_id);
     marker["successor_requests_function"] = serde_json::json!(function_requested);
+    marker["successor_opens_next_run_step"] = serde_json::json!(opens_next_run_step);
     marker["successor_outcome_unknown"] = serde_json::json!(dispatch_state == "uncertain");
     seal(
         &mut marker,
@@ -530,13 +559,17 @@ pub(crate) async fn finish_dispatched(
     if step == storyos_core::FunctionRequestStep::ToolGateway {
         return Ok(SuccessorWork::ToolCalls);
     }
-    // The ToolCalls of the successor Decision are resolved: the next RunStep sends their results
-    // as the continuation of the successor response (ADR 0085, ADR 0088).
-    if step == storyos_core::FunctionRequestStep::Continue {
+    // The ToolCalls of the successor Decision are resolved, or the successor response is a text
+    // before a `finish` call that counted: the next RunStep continues the successor response
+    // (ADR 0085, ADR 0088, ADR 0091).
+    let opens_next_run_step = flag(marker, "successor_opens_next_run_step");
+    if step == storyos_core::FunctionRequestStep::Continue || opens_next_run_step {
         let (attempt_id, payload) = successor_payload(client, claim, marker).await?;
-        text(marker, "successor_decision_id").ok_or_else(|| {
-            unavailable(std::io::Error::other("The successor Decision is missing"))
-        })?;
+        if !opens_next_run_step {
+            text(marker, "successor_decision_id").ok_or_else(|| {
+                unavailable(std::io::Error::other("The successor Decision is missing"))
+            })?;
+        }
         crate::agent_run_continuation::bind_produced_continuation(
             client,
             claim,
