@@ -278,6 +278,16 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
         "agent_plan_request_v4".to_owned(),
     );
     assert_eq!(rebound, vec![head.clone(), head]);
+    // The HTTP phases drain the queued Runs of the shared database, so the test parks its Runs.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE project_id = $1::text::uuid AND status = 'queued'",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
 }
 
 const AUTHORITY_PAUSE: &str =
