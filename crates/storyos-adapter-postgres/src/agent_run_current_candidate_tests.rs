@@ -2,15 +2,26 @@
 //! (ADR 0085, ADR 0091), with the fake model of that profile.
 
 use serde_json::{Value, json};
+use storyos_application::{
+    AcceptProposalInput, AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore,
+    ProjectScope, RejectProposalOperationsInput, RejectionNote, WithdrawProposalInput,
+    WithdrawalNote,
+};
 use storyos_core::{DeploymentDestination, SelectionReference};
 use tokio_postgres::Client;
 
+use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{admit_referenced_run, stores};
 use crate::agent_run_propose_edit::revise_tests::Fixture;
 use crate::agent_run_propose_edit::tests::{REVISE, opened, propose_edit_calls};
 use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, settle, step_references};
+use crate::command_sequence::tests::{
+    ACCEPT_PROPOSAL, REJECT_PROPOSAL_OPERATIONS, WITHDRAW_PROPOSAL, issued,
+};
 
 const EDITED: &str = "Still, ";
+const FINAL_TEXT: &str =
+    "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 
 /// The revision of the head of the Proposal of `reference`, and its candidate text.
 async fn current(admin: &Client, reference: &SelectionReference) -> (String, String) {
@@ -141,5 +152,193 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
             json!([[edited_text], [edited_text]]),
             json!("completed"),
         )
+    );
+}
+
+/// The status and the public decision of the Run.
+async fn settled(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> (String, AgentRunDecisionInspect) {
+    let record = store
+        .read_agent_run(scope, run_id, &AgentRunReadSelection::Current)
+        .await
+        .unwrap()
+        .unwrap();
+    (format!("{:?}", record.status), record.decision)
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_final_text() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let fixture = Fixture::new(&store, &admin, 0x6f8, tool_loop.clone()).await;
+    let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+    let reference = fixture.candidates(&admin).await.remove(0);
+    let run_id = admit_referenced_run(
+        &store,
+        scope,
+        chapter_id,
+        "6fa",
+        tool_loop,
+        REVISE,
+        vec![reference.clone()],
+    )
+    .await;
+    let edit = fixture
+        .candidate_edit(&store, &admin, &reference, 2, EDITED)
+        .await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Edit(Box::new(edit)),
+    );
+    settle(&store, &admin, scope, &run_id, &author)
+        .await
+        .unwrap();
+    let (edited, edited_text) = current(&admin, &reference).await;
+    let (status, decision) = settled(&store, scope, &run_id).await;
+    let AgentRunDecisionInspect::Advisory { text, .. } = decision else {
+        panic!("{decision:?}");
+    };
+
+    // The call of the first RunStep is refused and its `finish` call does not count. The next
+    // RunStep calls only `finish`, and the closing RunStep reads the edited text and answers.
+    assert_eq!(
+        (
+            status,
+            text,
+            step_references(&admin, &run_id).await,
+            sent_revision(&admin, &run_id, "2", &edited).await,
+        ),
+        (
+            "Completed".to_owned(),
+            FINAL_TEXT.to_owned(),
+            json!([
+                [0, [reference]],
+                [1, [moved(&reference, &edited, &edited_text)]],
+                [2, [moved(&reference, &edited, &edited_text)]]
+            ]),
+            json!([[edited_text], [edited_text]]),
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_candidate_that_is_no_longer_pending_keeps_the_refusal_of_the_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let mut observed = Vec::new();
+    for (lead, run_prefix, suffix, decision) in [
+        (0x3f0, "3f2", 0x3fe0_u16, "accept"),
+        (0x3f8, "3fa", 0x3fe2, "reject"),
+        (0x6d0, "6d2", 0x6de0, "withdraw"),
+    ] {
+        let fixture = Fixture::new(&store, &admin, lead, tool_loop.clone()).await;
+        let (scope, chapter_id) = (&fixture.scope, &fixture.chapter_id);
+        let reference = fixture.candidates(&admin).await.remove(0);
+        let target = reference.candidate_target().unwrap();
+        let run_id = admit_referenced_run(
+            &store,
+            scope,
+            chapter_id,
+            run_prefix,
+            tool_loop.clone(),
+            REVISE,
+            vec![reference.clone()],
+        )
+        .await;
+        let (editor_session_id, head) = fixture.writer();
+        let receipt: String = admin
+            .query_one(
+                "SELECT validation_receipt_id::text FROM storyos.validation_receipts
+                  WHERE proposal_revision_id = $1::text::uuid",
+                &[&target.revision_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        let operations = vec![target.operation_id.clone()];
+        let action = match decision {
+            "accept" => {
+                let input = AcceptProposalInput {
+                    editor_session_id,
+                    proposal_id: target.proposal_id,
+                    proposal_revision_id: target.revision_id,
+                    validation_receipt_id: receipt,
+                    selected_operation_ids: operations,
+                    expected_authoritative_revision_id: head.to_owned(),
+                };
+                let call = issued(&store, scope, suffix, &ACCEPT_PROPOSAL, input).await;
+                AuthorAction::Accept(Box::new(call))
+            }
+            "reject" => {
+                let input = RejectProposalOperationsInput {
+                    editor_session_id,
+                    proposal_id: target.proposal_id,
+                    proposal_revision_id: target.revision_id,
+                    selected_pending_operation_ids: operations,
+                    expected_authoritative_revision_id: head.to_owned(),
+                    rejection_note: RejectionNote::Omitted,
+                };
+                let call = issued(&store, scope, suffix, &REJECT_PROPOSAL_OPERATIONS, input).await;
+                AuthorAction::Reject(Box::new(call))
+            }
+            _ => {
+                let input = WithdrawProposalInput {
+                    editor_session_id,
+                    proposal_id: target.proposal_id,
+                    proposal_revision_id: target.revision_id,
+                    expected_authoritative_revision_id: head.to_owned(),
+                    withdrawal_note: WithdrawalNote::Omitted,
+                };
+                let call = issued(&store, scope, suffix, &WITHDRAW_PROPOSAL, input).await;
+                AuthorAction::Withdraw(Box::new(call))
+            }
+        };
+        let author = AuthorAt::new(&store, Moment::DuringRequest(1), action);
+        settle(&store, &admin, scope, &run_id, &author)
+            .await
+            .unwrap();
+        observed.push((
+            decision,
+            settled(&store, scope, &run_id).await,
+            step_references(&admin, &run_id).await,
+        ));
+    }
+    let expected = |decision, reference: &Value| {
+        (
+            decision,
+            (
+                "Refused".to_owned(),
+                AgentRunDecisionInspect::ExecutionRefused {
+                    capability: "blocked_context".to_owned(),
+                },
+            ),
+            json!([[0, [reference]], [1, [reference]]]),
+        )
+    };
+    let references: Vec<Value> = observed
+        .iter()
+        .map(|(_, _, steps)| steps[0][1][0].clone())
+        .collect();
+
+    // The references stay at their revision, and the next RunStep is blocked as before.
+    assert_eq!(
+        observed,
+        vec![
+            expected("accept", &references[0]),
+            expected("reject", &references[1]),
+            expected("withdraw", &references[2]),
+        ]
     );
 }

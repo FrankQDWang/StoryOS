@@ -19,8 +19,8 @@ pub(crate) struct NextInput {
 
 /// Reads the steering input of the RunStep after `active_position`, if any. First, the candidate
 /// references and the candidate target of the requirement of `retained` move to each candidate
-/// that the active RunStep revised, so that the next RunStep reads the new revision (ADR 0062,
-/// ADR 0071, ADR 0091).
+/// that the active RunStep revised, and then to the current revision of each pending candidate,
+/// so that the next RunStep reads the current text (ADR 0062, ADR 0071, ADR 0085, ADR 0091).
 pub(crate) async fn read_next(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -28,6 +28,7 @@ pub(crate) async fn read_next(
     retained: &mut CurrentPassageAssemblyRecord,
 ) -> Result<Option<NextInput>, CompleteAgentRunError> {
     move_revised_candidates(client, claim, active_position, retained).await?;
+    crate::agent_run_current_candidate::follow(client, claim, retained).await?;
     let Some(row) = client
         .query_opt(
             "SELECT input.receipt_id::text, input.payload->>'input_position',

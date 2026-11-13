@@ -8,10 +8,9 @@ use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint,
-    ConversationSelection, DestinationRequest, EditorSessionStore, ModelProviderAdapter,
-    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    ProjectScope, RefusableCommandError, SteerAgentRunInput, complete_agent_run,
-    complete_agent_run_with_tools,
+    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    RefusableCommandError, SteerAgentRunInput, complete_agent_run, complete_agent_run_with_tools,
 };
 use storyos_core::{
     AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, SelectionReference,
@@ -53,6 +52,9 @@ pub(crate) enum AuthorAction {
     Cancel(Box<CommandCall<CancelAgentRunInput>>),
     /// An Author Edit of a pending candidate.
     Edit(Box<storyos_application::ApplyAuthorEditCommand>),
+    Accept(Box<CommandCall<storyos_application::AcceptProposalInput>>),
+    Reject(Box<CommandCall<storyos_application::RejectProposalOperationsInput>>),
+    Withdraw(Box<CommandCall<storyos_application::WithdrawProposalInput>>),
 }
 
 /// The fake model of the tool loop profile, and the author who acts one time at `moment`.
@@ -114,6 +116,24 @@ impl<'a> AuthorAt<'a> {
             }
             AuthorAction::Edit(command) => {
                 self.store.apply_author_edit(command).await.unwrap();
+            }
+            AuthorAction::Accept(call) => {
+                self.store
+                    .accept_proposal(&call.envelope, &call.input)
+                    .await
+                    .unwrap();
+            }
+            AuthorAction::Reject(call) => {
+                self.store
+                    .reject_proposal_operations(&call.envelope, &call.input)
+                    .await
+                    .unwrap();
+            }
+            AuthorAction::Withdraw(call) => {
+                self.store
+                    .withdraw_proposal(&call.envelope, &call.input)
+                    .await
+                    .unwrap();
             }
         }
     }

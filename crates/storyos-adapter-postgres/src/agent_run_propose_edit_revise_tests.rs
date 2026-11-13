@@ -191,6 +191,16 @@ impl Fixture {
             .collect()
     }
 
+    /// The Editor Session of the fixture, and the Chapter head that its commands expect.
+    pub(crate) fn writer(&self) -> (storyos_application::EditorSessionId, &str) {
+        let prefix = format!("{:03x}", self.lead + 7);
+        let editor_session_id = format!("018f0000-0000-7001-8000-00000001{prefix}0");
+        (
+            storyos_application::EditorSessionId::new(editor_session_id),
+            &self.head,
+        )
+    }
+
     /// The Author Edit that puts `text` before the candidate text of `reference`. `sequence` is
     /// the local intent sequence of the Editor Session of the fixture, from 2.
     pub(crate) async fn candidate_edit(
@@ -212,9 +222,9 @@ impl Fixture {
             .unwrap()
             .get(/*idx*/ 0);
         let prefix = format!("{:03x}", self.lead + 7);
-        let editor_session_id = format!("018f0000-0000-7001-8000-00000001{prefix}0");
+        let (editor_session_id, _) = self.writer();
         let edit = NamedEdit {
-            editor_session_id: &editor_session_id,
+            editor_session_id: editor_session_id.as_ref(),
             chapter_id: &self.chapter_id,
             expected_revision_id: &self.head,
             suffix: &format!("{prefix}{sequence}"),

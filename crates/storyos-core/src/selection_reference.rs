@@ -114,6 +114,44 @@ pub fn advance_candidate_references<'a>(
     }
 }
 
+/// The current revision of one pending candidate, and all of its text.
+pub struct CurrentCandidate<'a> {
+    pub target: super::ProposalCandidateTarget,
+    pub candidate_text: &'a str,
+}
+
+/// Move each candidate reference to the current revision of its candidate in `current` (ADR
+/// 0085). A reference whose candidate text changed covers all of the current text. The other
+/// references keep their ranges.
+pub fn follow_current_candidates<'a>(
+    references: impl IntoIterator<Item = &'a mut AdmittedSelection>,
+    current: &[CurrentCandidate<'_>],
+) {
+    for admitted in references {
+        if let SelectionReference::ProposalCandidateText {
+            proposal_id,
+            operation_id,
+            revision_id,
+            start_offset,
+            end_offset,
+            ..
+        } = &mut admitted.reference
+            && let Some(candidate) = current.iter().find(|candidate| {
+                candidate.target.proposal_id == *proposal_id
+                    && candidate.target.operation_id == *operation_id
+            })
+            && candidate.target.revision_id != *revision_id
+        {
+            revision_id.clone_from(&candidate.target.revision_id);
+            if admitted.candidate_text.as_deref() != Some(candidate.candidate_text) {
+                *start_offset = 0;
+                *end_offset = u32::try_from(candidate.candidate_text.encode_utf16().count())
+                    .unwrap_or(u32::MAX);
+            }
+        }
+    }
+}
+
 /// One pending candidate that a Proposal Growth revised or added, at its new Revision.
 pub struct GrownCandidate<'a> {
     pub chapter_id: &'a str,
