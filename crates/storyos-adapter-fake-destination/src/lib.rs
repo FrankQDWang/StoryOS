@@ -5,6 +5,8 @@ mod prose_changes;
 mod recovery_plan;
 mod tool_loop_plan;
 
+pub use tool_loop_plan::LIMIT_ANSWER;
+
 use storyos_application::{
     CacheUse, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,
     ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
@@ -126,7 +128,11 @@ impl ModelProviderAdapter for FakeDestination {
             .and_then(recovery_plan::continuation_rejection);
         let unknown = match create.successor_of {
             Some(_) => None,
-            None => recovery_plan::unknown_create(&create.author_message, &projection.digest),
+            None => recovery_plan::unknown_create(
+                &create.author_message,
+                &projection.digest,
+                mapping_revision,
+            ),
         };
         let plan = match (rejection, unknown) {
             (Some(reason), _) => FakePlan::Observed(Observation::Rejected {

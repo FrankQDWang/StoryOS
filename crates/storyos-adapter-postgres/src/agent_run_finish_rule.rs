@@ -1,6 +1,6 @@
 //! The records of the finish rule of ADR 0091 section 4: the `tool_choice` of the active RunStep
-//! from the ToolCalls of the RunStep before it, and the next RunStep after a text that came
-//! before a `finish` call that counted.
+//! from its position and the ToolCalls of the RunStep before it, and the next RunStep after a
+//! text that came before a `finish` call that counted.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{PriorStepCall, ToolCallState, ToolChoice};
@@ -14,9 +14,7 @@ pub(crate) async fn tool_choice(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolChoice, CompleteAgentRunError> {
-    if !storyos_core::model_registration(&run.model_registration_revision)
-        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
-    {
+    if !declares_host_tools(run) {
         return Ok(ToolChoice::Auto);
     }
     let prior_step = client
@@ -36,8 +34,13 @@ pub(crate) async fn tool_choice(
         .map_err(complete_database_error)?
         .iter()
         .map(|row| {
+            // A refused call with a name that the Run does not expose pins no ToolSpec.
+            let operation = match row.get::<_, Option<&str>>(/*idx*/ 0) {
+                Some(spec) => Some(storyos_core::tool_spec(spec)?.operation),
+                None => None,
+            };
             Some(PriorStepCall {
-                operation: storyos_core::tool_spec(row.get(/*idx*/ 0))?.operation,
+                operation,
                 state: ToolCallState::parse(row.get(/*idx*/ 1))?,
             })
         })
@@ -45,8 +48,55 @@ pub(crate) async fn tool_choice(
         .ok_or_else(|| damaged("The ToolCall is damaged"))?;
     Ok(storyos_core::step_tool_choice(
         /*declares_host_tools*/ true,
+        run_step_limit(run)?,
         &prior_step,
     ))
+}
+
+/// The RunStep limit of the active RunStep of `run`.
+pub(crate) fn run_step_limit(
+    run: &RunPhaseRow,
+) -> Result<storyos_core::RunStepLimit, CompleteAgentRunError> {
+    run.decision_position
+        .parse::<u64>()
+        .map(storyos_core::RunStepLimit::at)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
+}
+
+fn declares_host_tools(run: &RunPhaseRow) -> bool {
+    storyos_core::model_registration(&run.model_registration_revision)
+        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
+}
+
+/// The outcome of a response that a recovery path settles in the active RunStep of `run`. In the
+/// last RunStep, the finish rule applies as for a created response (ADR 0091 section 5): the text
+/// is the final answer, and `None` tells that a complete response with no text gives no result.
+/// The function calls of the response leave the items, so the Host executes none.
+pub(crate) fn recovered_outcome(
+    run: &RunPhaseRow,
+    response: &mut storyos_application::ModelResponse,
+    outcome: storyos_core::AgentDecisionOutcome,
+) -> Result<Option<storyos_core::AgentDecisionOutcome>, CompleteAgentRunError> {
+    let limit = run_step_limit(run)?;
+    if limit.executes_calls(declares_host_tools(run)) {
+        return Ok(Some(outcome));
+    }
+    response
+        .items
+        .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
+    Ok(
+        match storyos_core::apply_finish_rule(
+            ToolChoice::None,
+            limit,
+            outcome,
+            response.state,
+            &response.items,
+        ) {
+            storyos_core::FinishRuleOutcome::Settle(outcome) => Some(outcome),
+            storyos_core::FinishRuleOutcome::NextRunStep
+            | storyos_core::FinishRuleOutcome::NoResult => None,
+        },
+    )
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next

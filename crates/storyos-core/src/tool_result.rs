@@ -18,8 +18,9 @@ pub enum ToolResultProjection<'a> {
     Empty,
     /// The exchange settled as a native error or a rejection, or its outcome is not known.
     Unavailable(Unavailability),
-    /// The Host refused the ToolCall before dispatch.
-    Rejected,
+    /// The Host refused the ToolCall before dispatch, with the stored reason of a call that
+    /// failed its validation (ADR 0091 section 3).
+    Rejected(Option<&'a str>),
 }
 
 /// Why a dispatched ToolCall has no result.
@@ -49,7 +50,7 @@ impl<'a> ToolResultProjection<'a> {
             }),
             ToolCallState::Failed => Some(Self::Unavailable(Unavailability::Failed)),
             ToolCallState::Unknown => Some(Self::Unavailable(Unavailability::Unknown)),
-            ToolCallState::Refused | ToolCallState::AwaitingApproval => Some(Self::Rejected),
+            ToolCallState::Refused | ToolCallState::AwaitingApproval => Some(Self::Rejected(text)),
             ToolCallState::Pending | ToolCallState::Dispatched => None,
         }
     }
@@ -60,7 +61,7 @@ impl<'a> ToolResultProjection<'a> {
             Self::Ok(_) => "ok",
             Self::Empty => "empty",
             Self::Unavailable(_) => "unavailable",
-            Self::Rejected => "rejected",
+            Self::Rejected(_) => "rejected",
         }
     }
 
@@ -78,8 +79,9 @@ impl<'a> ToolResultProjection<'a> {
                  an empty result."
                     .to_owned()
             }
-            Self::Rejected => "The Host refused this call before it was sent, so no result is \
-                               available, and this is not an empty result."
+            Self::Rejected(Some(reason)) => escape(reason),
+            Self::Rejected(None) => "The Host refused this call before it was sent, so no result \
+                                     is available, and this is not an empty result."
                 .to_owned(),
         };
         self.wrap(call_id, &body)

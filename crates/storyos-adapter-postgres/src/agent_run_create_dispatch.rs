@@ -94,6 +94,7 @@ pub(crate) async fn record_create(
     };
     let outcome = match apply_finish_rule(
         request.tool_choice,
+        crate::agent_run_finish_rule::run_step_limit(run)?,
         outcome,
         response.state,
         &response.items,

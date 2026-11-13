@@ -1,11 +1,16 @@
-use super::{FinishRuleOutcome, PriorStepCall, ToolChoice, apply_finish_rule, step_tool_choice};
+use super::{
+    FinishRuleOutcome, PriorStepCall, RunStepLimit, ToolChoice, apply_finish_rule, step_tool_choice,
+};
 use crate::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
     ToolCallState, ToolOperation,
 };
 
 fn call(operation: ToolOperation, state: ToolCallState) -> PriorStepCall {
-    PriorStepCall { operation, state }
+    PriorStepCall {
+        operation: Some(operation),
+        state,
+    }
 }
 
 #[test]
@@ -31,13 +36,21 @@ fn only_a_settled_finish_call_with_no_refused_call_beside_it_closes_the_run() {
     ];
     for (prior_step, expected) in cases {
         assert_eq!(
-            step_tool_choice(/*declares_host_tools*/ true, &prior_step),
+            step_tool_choice(
+                /*declares_host_tools*/ true,
+                RunStepLimit::Open,
+                &prior_step
+            ),
             expected,
             "{prior_step:?}"
         );
     }
     assert_eq!(
-        step_tool_choice(/*declares_host_tools*/ false, &[finish]),
+        step_tool_choice(
+            /*declares_host_tools*/ false,
+            RunStepLimit::Last,
+            &[finish]
+        ),
         ToolChoice::Auto
     );
 }
@@ -59,6 +72,7 @@ fn only_a_complete_closing_response_gives_its_text_as_the_final_answer() {
     let closing = |state| {
         apply_finish_rule(
             ToolChoice::None,
+            RunStepLimit::Open,
             AgentDecisionOutcome::NoDecision,
             state,
             std::slice::from_ref(&text),
@@ -77,5 +91,33 @@ fn only_a_complete_closing_response_gives_its_text_as_the_final_answer() {
     assert_eq!(
         closing(StreamItemState::Incomplete),
         FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision)
+    );
+}
+
+#[test]
+fn each_run_step_at_or_after_the_limit_is_the_last_and_sends_none() {
+    let finish = call(ToolOperation::Finish, ToolCallState::Settled);
+    assert_eq!(
+        (
+            [22, 23, 24].map(RunStepLimit::at),
+            [
+                (true, RunStepLimit::Last),
+                (false, RunStepLimit::Last),
+                (true, RunStepLimit::Open)
+            ]
+            .map(|(host_tools, limit)| limit.executes_calls(host_tools)),
+            step_tool_choice(/*declares_host_tools*/ true, RunStepLimit::Last, &[]),
+            step_tool_choice(
+                /*declares_host_tools*/ true,
+                RunStepLimit::Last,
+                &[finish]
+            ),
+        ),
+        (
+            [RunStepLimit::Open, RunStepLimit::Last, RunStepLimit::Last],
+            [false, true, true],
+            ToolChoice::None,
+            ToolChoice::None,
+        )
     );
 }

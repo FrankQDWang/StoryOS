@@ -1,7 +1,8 @@
 use serde_json::json;
 
 use super::{
-    CurrentToolAuthority, ExposureSnapshot, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
+    CallValidationRefusal, CurrentToolAuthority, ExposureSnapshot, RefusedToolCall,
+    RequestedToolCall, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
     validate_tool_call_batch,
 };
 use crate::{
@@ -123,7 +124,10 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
             search_call("call_01").argument_digest(),
         ),
         (
-            ToolCallBatch::Valid(vec![search_call("call_01"), fetch]),
+            ToolCallBatch::Valid(vec![
+                RequestedToolCall::Validated(search_call("call_01")),
+                RequestedToolCall::Validated(fetch),
+            ]),
             ToolCallBatch::none(),
             ToolCallBatch::none(),
             json!({"query": "tide tables of 1890", "result_count": null}),
@@ -134,7 +138,7 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 }
 
 #[test]
-fn one_invalid_member_rejects_the_whole_batch() {
+fn a_member_that_cannot_have_an_output_rejects_the_whole_batch() {
     let valid = call("fc_01", "call_01", "web_search", SEARCH);
     let refusal_in = |state, items: &[NativeStreamItem]| match validate_tool_call_batch(
         state,
@@ -146,10 +150,6 @@ fn one_invalid_member_rejects_the_whole_batch() {
         ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
     };
     let refusal = |items: &[NativeStreamItem]| refusal_in(StreamItemState::Complete, items);
-    let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
-    let six_urls =
-        json!({"urls": (0..6).map(|n| format!("https://example.org/{n}")).collect::<Vec<_>>()});
-    let unexposed = ExposureSnapshot::decode(Some(&ToolExposure::empty().snapshot())).unwrap();
     let hosted = NativeStreamItem {
         native_type: Some("web_search_call".to_owned()),
         ..call("ws_01", "call_09", "web_search", SEARCH)
@@ -162,6 +162,10 @@ fn one_invalid_member_rejects_the_whole_batch() {
         call_id: None,
         ..call("fc_04", "call_04", "web_search", SEARCH)
     };
+    let no_name = NativeStreamItem {
+        name: None,
+        ..call("fc_10", "call_10", "web_search", SEARCH)
+    };
     let long_call_id = "c".repeat(257);
     let cut_message = NativeStreamItem {
         state: StreamItemState::Incomplete,
@@ -170,17 +174,6 @@ fn one_invalid_member_rejects_the_whole_batch() {
 
     assert_eq!(
         [
-            refusal(&[valid.clone(), call("fc_02", "call_02", "edit", "{}")]),
-            refusal(&[call("fc_02", "call_02", "web_search", r#"{"query":"#)]),
-            refusal(&[call("fc_02", "call_02", "web_search", "[]")]),
-            refusal(&[call("fc_02", "call_02", "web_search", &long_query)]),
-            refusal(&[call("fc_02", "call_02", "web_fetch", &six_urls.to_string())]),
-            refusal(&[call(
-                "fc_02",
-                "call_02",
-                "web_fetch",
-                r#"{"urls":["ftp://example.org/a"]}"#
-            )]),
             refusal(&[valid.clone(), call("fc_02", "call_01", "web_fetch", FETCH)]),
             refusal(&[valid.clone(), hosted]),
             refusal(&[provisional]),
@@ -190,44 +183,16 @@ fn one_invalid_member_rejects_the_whole_batch() {
             refusal(&[call("fc_07", "call\u{0}07", "web_search", SEARCH)]),
             refusal(&[call("fc_08", "call\n08", "web_search", SEARCH)]),
             refusal(&[call("fc_09", "call\u{9f}09", "web_search", SEARCH)]),
+            refusal(&[no_name]),
+            refusal(&[call("fc_11", "call_11", &"n".repeat(129), SEARCH)]),
             refusal_in(StreamItemState::Incomplete, std::slice::from_ref(&valid)),
             refusal_in(
                 StreamItemState::Cancelled,
                 &[message("Looking"), valid.clone()]
             ),
-            refusal(&[cut_message, valid.clone()]),
-            match validate_tool_call_batch(
-                StreamItemState::Complete,
-                &[valid],
-                &unexposed,
-                &current(),
-            ) {
-                ToolCallBatch::Invalid(refusal) => refusal,
-                ToolCallBatch::Valid(_) => panic!("exposed"),
-            },
+            refusal(&[cut_message, valid]),
         ],
         [
-            ToolCallBatchRefusal::Unexposed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Malformed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Malformed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::Query
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::UrlCount
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::Url
-            },
             ToolCallBatchRefusal::DuplicateCallId {
                 call_id: "call_01".to_owned()
             },
@@ -255,14 +220,68 @@ fn one_invalid_member_rejects_the_whole_batch() {
             ToolCallBatchRefusal::InvalidCallId {
                 item_id: "fc_09".to_owned()
             },
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::Unexposed {
-                call_id: "call_01".to_owned()
+            ToolCallBatchRefusal::InvalidName {
+                item_id: "fc_10".to_owned()
             },
+            ToolCallBatchRefusal::InvalidName {
+                item_id: "fc_11".to_owned()
+            },
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
         ]
     );
+}
+
+#[test]
+fn a_member_that_fails_its_own_validation_is_refused_and_the_others_continue() {
+    let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
+    let six_urls =
+        json!({"urls": (0..6).map(|n| format!("https://example.org/{n}")).collect::<Vec<_>>()});
+    let (malformed, intake) = (
+        CallValidationRefusal::Malformed,
+        CallValidationRefusal::Intake,
+    );
+    let cases = [
+        ("edit", "{}", CallValidationRefusal::Unexposed),
+        ("web_search", r#"{"query":"#, malformed),
+        ("web_search", "[]", malformed),
+        ("web_search", "{\"query\":\"tide\u{0}\"}", malformed),
+        ("web_search", &long_query, intake(IntakeRefusal::Query)),
+        (
+            "web_fetch",
+            &six_urls.to_string(),
+            intake(IntakeRefusal::UrlCount),
+        ),
+        (
+            "web_fetch",
+            r#"{"urls":["ftp://example.org/a"]}"#,
+            intake(IntakeRefusal::Url),
+        ),
+    ];
+    for (name, arguments, refusal) in cases {
+        let items = [
+            call("fc_01", "call_01", name, arguments),
+            call("fc_02", "call_02", "web_search", SEARCH),
+        ];
+        let refused = RefusedToolCall {
+            call_id: "call_01".to_owned(),
+            name: name.to_owned(),
+            tool: pinned().tools.into_iter().find(|tool| tool.name == name),
+            arguments_text: arguments.to_owned(),
+            refusal,
+        };
+
+        assert_eq!(
+            validate_tool_call_batch(StreamItemState::Complete, &items, &pinned(), &current()),
+            ToolCallBatch::Valid(vec![
+                RequestedToolCall::Refused(refused.clone()),
+                RequestedToolCall::Validated(search_call("call_02")),
+            ]),
+            "{name} {arguments}"
+        );
+        assert!(!refused.arguments().to_string().contains("\\u0000"));
+    }
 }
 
 /// The refusal of a complete, exposed, intake-valid batch under the `current` authority.
@@ -318,13 +337,13 @@ fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
         },
         prose_changes: None,
     };
-    let valid = ToolCallBatch::Valid(vec![search_call("call_01")]);
-    let invalid = ToolCallBatch::Invalid(ToolCallBatchRefusal::Unexposed {
-        call_id: "call_01".to_owned(),
+    let valid = ToolCallBatch::Valid(vec![RequestedToolCall::Validated(search_call("call_01"))]);
+    let invalid = ToolCallBatch::Invalid(ToolCallBatchRefusal::InvalidName {
+        item_id: "fc_01".to_owned(),
     });
     let tool_request = AgentDecisionOutcome::Decision {
         kind: AgentDecisionKind::ToolRequest {
-            calls: vec![search_call("call_01")],
+            calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
         },
         selected: true,
         advances_continuation: false,

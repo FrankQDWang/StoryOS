@@ -243,7 +243,7 @@ pub(crate) async fn record(
     let mut payload: serde_json::Value =
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
     let (dispatch_state, decision_id, binding_id, function_requested) = match observation {
-        Observation::Terminal(response) => {
+        Observation::Terminal(mut response) => {
             payload["items"] =
                 crate::agent_run_observation::merge_items(payload["items"].take(), &response.items);
             payload["usage"] = crate::agent_run_observation::encode_usage(response.usage);
@@ -280,6 +280,9 @@ pub(crate) async fn record(
                 }
                 validate_agent_decision(output, &declared, &citable, batch)
             };
+            let outcome =
+                crate::agent_run_finish_rule::recovered_outcome(run, &mut response, outcome)?
+                    .unwrap_or(AgentDecisionOutcome::NoDecision);
             match outcome {
                 AgentDecisionOutcome::Decision {
                     kind,

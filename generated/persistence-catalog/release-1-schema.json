@@ -7588,7 +7588,7 @@
         },
         "registration_id": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         },
         "result_bytes": {
@@ -7623,12 +7623,12 @@
         },
         "tool_registration_revision": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "uuid"
         },
         "tool_spec_revision": {
           "default": null,
-          "nullable": false,
+          "nullable": true,
           "type": "text"
         }
       },
@@ -7645,9 +7645,10 @@
         "tool_calls_outcome_shape": "CHECK ((((effect_outcome IS NULL) = ((state = ANY (ARRAY['pending'::text, 'dispatched'::text])) OR (attempt IS NULL))) AND ((effect_outcome IS NULL) OR (jsonb_typeof(effect_outcome) = 'object'::text))))",
         "tool_calls_owner_user_id_project_id_model_attempt_id_fkey": "FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL",
         "tool_calls_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "tool_calls_pin_shape": "CHECK ((((registration_id IS NULL) = (tool_registration_revision IS NULL)) AND ((registration_id IS NULL) = (tool_spec_revision IS NULL)) AND ((registration_id IS NULL) <= (state = 'refused'::text))))",
         "tool_calls_pkey": "PRIMARY KEY (owner_user_id, project_id, tool_call_id)",
         "tool_calls_refusal_shape": "CHECK ((((state = ANY (ARRAY['refused'::text, 'awaiting_approval'::text])) = (refusal IS NOT NULL)) AND ((char_length(refusal) >= 1) AND (char_length(refusal) <= 64))))",
-        "tool_calls_result_shape": "CHECK ((((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND ((result_text IS NULL) OR (state = 'settled'::text)) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((result_bytes >= 0) AND (result_bytes <= 262144))))",
+        "tool_calls_result_shape": "CHECK ((((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND ((result_text IS NULL) OR (state = ANY (ARRAY['settled'::text, 'refused'::text]))) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND ((result_bytes >= 0) AND (result_bytes <= 262144))))",
         "tool_calls_state_check": "CHECK ((state = ANY (ARRAY['pending'::text, 'dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text, 'refused'::text, 'awaiting_approval'::text])))"
       },
       "indexes": {

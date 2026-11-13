@@ -5,8 +5,8 @@ use storyos_application::{
     ResponseReference, RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, HOST_FAKE_MAPPING_REVISION, ModelOutput, OutputPhase,
-    RetrievalBounds, StreamItemState, UnknownCreateScript, unknown_create_script,
+    ADVISORY_TEXT, DecisionCandidate, ModelOutput, OutputPhase, RetrievalBounds, StreamItemState,
+    UnknownCreateScript, unknown_create_script,
 };
 
 use crate::create_plan::assistant_item;
@@ -27,16 +27,18 @@ enum ReferenceResult {
     LateComplete = 4,
 }
 
-/// `Some` when the create is a scripted recovery subject: the reference it reports, if any.
+/// `Some` when the create is a scripted recovery subject: the reference it reports, if any. The
+/// reference reports the `mapping_revision` of the create.
 pub(crate) fn unknown_create(
     author_message: &str,
     wire_digest: &str,
+    mapping_revision: &str,
 ) -> Option<Option<ResponseReference>> {
     let mut binding = ReportedBinding {
         owner_user_id: None,
         conversation_id: None,
         destination_identity: None,
-        mapping_revision: HOST_FAKE_MAPPING_REVISION.to_owned(),
+        mapping_revision: mapping_revision.to_owned(),
     };
     let supported = ReferenceRetrieval::Supported {
         bounds: RetrievalBounds::DeclaredReadOnly,

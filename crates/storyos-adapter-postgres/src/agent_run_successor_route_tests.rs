@@ -17,7 +17,7 @@ use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_retrieval::tests::{
     AfterExchange, adapter, broken_stream, destination, real_run, research_run, stored,
 };
-use crate::agent_run_tool_exposure::tests::function_call_stream;
+use crate::agent_run_tool_exposure::tests::{advisory_stream, function_call_stream};
 
 /// A stream that reports `reference` and ends with a complete Advisory.
 fn completed_stream(reference: &str) -> String {
@@ -70,7 +70,8 @@ async fn successor_facts(admin: &Client, run_id: &str) -> [Option<String>; 8] {
                       WHERE attempt.run_id = run.run_id)
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
-                 ON decision.run_id = run.run_id AND decision.attempt_role = 'decision',
+                 ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0,
                     LATERAL (SELECT decision.payload->'unknown_create_successor' AS marker) AS facts
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
@@ -146,7 +147,7 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_successor_function_request_settles_the_run_with_the_research_refusal() {
+async fn a_successor_call_of_an_unexposed_name_is_a_refused_call_and_the_run_continues() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -156,6 +157,7 @@ async fn a_successor_function_request_settles_the_run_with_the_research_refusal(
         stored("resp_f74", "in_progress"),
         function_call_stream("resp_f74s"),
         stored("resp_f74", "in_progress"),
+        advisory_stream("resp_f74c"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "f74", &base).await;
@@ -181,17 +183,14 @@ async fn a_successor_function_request_settles_the_run_with_the_research_refusal(
         ),
         (
             [
-                Some("refused".to_owned()),
-                Some(
-                    r#"{"kind": "execution_refused", "capability": "tool_request_invalid"}"#
-                        .to_owned()
-                ),
+                Some("completed".to_owned()),
+                None,
                 Some("dispatched".to_owned()),
                 None,
                 Some("true,true".to_owned()),
                 Some("false,unknown".to_owned()),
                 None,
-                Some("decision,retrieval,successor,late_retrieval".to_owned()),
+                Some("decision,retrieval,successor,late_retrieval,decision".to_owned()),
             ],
             Some("web_search".to_owned()),
             vec![
@@ -199,6 +198,7 @@ async fn a_successor_function_request_settles_the_run_with_the_research_refusal(
                 "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f74 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
     );

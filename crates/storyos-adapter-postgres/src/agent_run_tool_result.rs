@@ -265,7 +265,11 @@ pub(crate) async fn tool_outputs(
         outputs.push(ToolOutput {
             call_id: source.call_id.clone(),
             name: row.get(/*idx*/ 1),
-            arguments: storyos_core::canonical_json(&arguments),
+            // A call that failed its validation keeps its arguments text as a JSON string.
+            arguments: match arguments {
+                serde_json::Value::String(text) => text,
+                arguments => storyos_core::canonical_json(&arguments),
+            },
             output: item.content.clone(),
             origin: if prior_decisions.contains(&source.decision_id) {
                 ToolOutputOrigin::PriorResponse

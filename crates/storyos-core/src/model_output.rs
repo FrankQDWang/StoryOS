@@ -81,10 +81,10 @@ pub enum AgentDecisionKind {
     Clarification {
         question: String,
     },
-    /// The complete validated function request batch. Any text of the response is provisional
-    /// assistant output, and the ToolCalls are the next work (ADR 0084).
+    /// The complete validated function request batch, with its refused calls. Any text of the
+    /// response is provisional assistant output, and the ToolCalls are the next work (ADR 0084).
     ToolRequest {
-        calls: Vec<crate::ValidatedToolCall>,
+        calls: Vec<crate::RequestedToolCall>,
     },
     /// A research synthesis whose citations each name a source that this AgentRun captured.
     ResearchSynthesis(crate::ResearchSynthesis),

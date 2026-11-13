@@ -1,6 +1,7 @@
 //! The finish rule of ADR 0091 section 4: a Run of the tool loop profile ends only after a
 //! `finish` call that counted. Each request before such a call has `tool_choice: "required"`, and
-//! the closing request after it has `tool_choice: "none"`.
+//! the closing request after it has `tool_choice: "none"`. The RunStep limit of section 5 ends a
+//! Run at its last RunStep.
 
 use crate::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
@@ -28,22 +29,62 @@ impl ToolChoice {
     }
 }
 
+/// The most RunSteps of one Run of the tool loop profile (ADR 0091 section 5).
+pub const MAX_RUN_STEPS: u64 = 24;
+
+/// The place of the active RunStep against `MAX_RUN_STEPS`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RunStepLimit {
+    Open,
+    /// The request has `tool_choice: "none"`, the text of its response is the final answer, and
+    /// the Host executes no function call of that response.
+    Last,
+}
+
+impl RunStepLimit {
+    /// The limit of the RunStep at `decision_position`, from 0. A steering input opens no new
+    /// count, so each RunStep at or after the limit is the last.
+    pub fn at(decision_position: u64) -> Self {
+        if decision_position.saturating_add(1) >= MAX_RUN_STEPS {
+            Self::Last
+        } else {
+            Self::Open
+        }
+    }
+
+    /// Whether the Host executes the function calls of a response of this RunStep. It executes
+    /// none in the last RunStep of a mapping that declares Host Tools, also when a recovery path
+    /// settles the response.
+    pub fn executes_calls(self, declares_host_tools: bool) -> bool {
+        !declares_host_tools || self == Self::Open
+    }
+}
+
 /// One ToolCall of the RunStep before the active RunStep.
 #[derive(Clone, Copy, Debug)]
 pub struct PriorStepCall {
-    pub operation: ToolOperation,
+    /// `None` for a refused call whose name the Run does not expose.
+    pub operation: Option<ToolOperation>,
     pub state: ToolCallState,
 }
 
 /// The `tool_choice` of the request of the active RunStep. A mapping that declares no Host Tool
-/// sends `auto`. A `finish` call of the prior RunStep counts when it settled and no other call of
-/// that response was refused: then the request is the closing request.
-pub fn step_tool_choice(declares_host_tools: bool, prior_step: &[PriorStepCall]) -> ToolChoice {
+/// sends `auto`. The last RunStep sends `none`. A `finish` call of the prior RunStep counts when
+/// it settled and no other call of that response was refused: then the request is the closing
+/// request.
+pub fn step_tool_choice(
+    declares_host_tools: bool,
+    limit: RunStepLimit,
+    prior_step: &[PriorStepCall],
+) -> ToolChoice {
     if !declares_host_tools {
         return ToolChoice::Auto;
     }
+    if limit == RunStepLimit::Last {
+        return ToolChoice::None;
+    }
     let finished = prior_step.iter().any(|call| {
-        call.operation == ToolOperation::Finish && call.state == ToolCallState::Settled
+        call.operation == Some(ToolOperation::Finish) && call.state == ToolCallState::Settled
     });
     let refused = prior_step
         .iter()
@@ -69,11 +110,13 @@ pub enum FinishRuleOutcome {
 }
 
 /// Applies the finish rule to the outcome of one terminal response in `response_state` of a
-/// request with `tool_choice`. A function request continues to its ToolCalls in each state. In
-/// the closing RunStep, the text of a complete response is the final answer as an Advisory, also
-/// when it has the shape of a reply form, and a final answer with no text gives no result.
+/// request with `tool_choice`. A function request continues to its ToolCalls in each state
+/// before the last RunStep. In the closing RunStep, the text of a complete response is the final
+/// answer as an Advisory, also when it has the shape of a reply form, and a final answer with no
+/// text gives no result. In the last RunStep, the function calls of the response are ignored.
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
+    limit: RunStepLimit,
     outcome: AgentDecisionOutcome,
     response_state: StreamItemState,
     items: &[NativeStreamItem],
@@ -85,11 +128,19 @@ pub fn apply_finish_rule(
             ..
         }
     ) || requests_function(items);
-    match tool_choice {
+    match (tool_choice, limit) {
+        (ToolChoice::None, RunStepLimit::Last) => {
+            let answer: Vec<_> = items
+                .iter()
+                .filter(|item| item.role != StreamItemRole::Tool)
+                .cloned()
+                .collect();
+            closing_answer(response_state, &answer)
+        }
         _ if function_request => FinishRuleOutcome::Settle(outcome),
-        ToolChoice::Required => FinishRuleOutcome::NextRunStep,
-        ToolChoice::None => closing_answer(response_state, items),
-        ToolChoice::Auto => FinishRuleOutcome::Settle(outcome),
+        (ToolChoice::Required, _) => FinishRuleOutcome::NextRunStep,
+        (ToolChoice::None, RunStepLimit::Open) => closing_answer(response_state, items),
+        (ToolChoice::Auto, _) => FinishRuleOutcome::Settle(outcome),
     }
 }
 
