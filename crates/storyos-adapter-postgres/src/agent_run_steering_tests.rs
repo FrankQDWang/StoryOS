@@ -8,9 +8,10 @@ use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AgentRunControlRefusal, AgentRunReadSelection, AgentRunReadStore, CancelAgentRunInput,
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultPoint,
-    ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
-    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
-    RefusableCommandError, SteerAgentRunInput, complete_agent_run, complete_agent_run_with_tools,
+    ConversationSelection, DestinationRequest, EditorSessionStore, ModelProviderAdapter,
+    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ProjectScope, RefusableCommandError, SteerAgentRunInput, complete_agent_run,
+    complete_agent_run_with_tools,
 };
 use storyos_core::{
     AgentRunStatus, DeploymentDestination, RESEARCH_TOOL_OFFER, SelectionReference,
@@ -50,6 +51,8 @@ pub(crate) enum AuthorAction {
     /// The steering inputs, in order.
     Steer(Vec<CommandCall<SteerAgentRunInput>>),
     Cancel(Box<CommandCall<CancelAgentRunInput>>),
+    /// An Author Edit of a pending candidate.
+    Edit(Box<storyos_application::ApplyAuthorEditCommand>),
 }
 
 /// The fake model of the tool loop profile, and the author who acts one time at `moment`.
@@ -108,6 +111,9 @@ impl<'a> AuthorAt<'a> {
                     .cancel_agent_run(&call.envelope, &call.input)
                     .await
                     .unwrap();
+            }
+            AuthorAction::Edit(command) => {
+                self.store.apply_author_edit(command).await.unwrap();
             }
         }
     }
@@ -345,7 +351,7 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
 }
 
 /// The references of the Operation Requirement of each RunStep of the Run, by position.
-async fn step_references(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn step_references(admin: &Client, run_id: &str) -> Value {
     let rows = admin
         .query(
             "SELECT jsonb_build_array(decision_position, jsonb_path_query_array(payload,
@@ -510,7 +516,7 @@ async fn after_a_steering_input_the_next_propose_edit_call_revises_the_moved_can
 
 /// Each requirement position of the Run, and each decision Model Attempt as its position and
 /// decision kind.
-async fn run_steps(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn run_steps(admin: &Client, run_id: &str) -> Value {
     admin
         .query_one(
             "SELECT jsonb_build_object(

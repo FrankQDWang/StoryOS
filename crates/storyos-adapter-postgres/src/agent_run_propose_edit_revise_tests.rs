@@ -3,8 +3,8 @@
 
 use serde_json::{Value, json};
 use storyos_application::{
-    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, EditorSessionStore,
-    ProjectScope,
+    AgentRunDecisionInspect, AgentRunReadSelection, AgentRunReadStore, ApplyAuthorEditCommand,
+    AuthorEditProposalTarget, EditorSessionStore, ProjectScope,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, DeploymentDestination, SelectionReference,
@@ -189,6 +189,51 @@ impl Fixture {
                 end_offset: row.get::<_, &str>(/*idx*/ 3).encode_utf16().count() as u32,
             })
             .collect()
+    }
+
+    /// The Author Edit that puts `text` before the candidate text of `reference`. `sequence` is
+    /// the local intent sequence of the Editor Session of the fixture, from 2.
+    pub(crate) async fn candidate_edit(
+        &self,
+        store: &PostgresProjectReader,
+        admin: &Client,
+        reference: &SelectionReference,
+        sequence: u64,
+        text: &str,
+    ) -> ApplyAuthorEditCommand {
+        let target = reference.candidate_target().expect("candidate reference");
+        let manuscript_block_id = admin
+            .query_one(
+                "SELECT manuscript_block_id::text FROM storyos.proposal_operations
+                  WHERE operation_id = $1::text::uuid",
+                &[&target.operation_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        let prefix = format!("{:03x}", self.lead + 7);
+        let editor_session_id = format!("018f0000-0000-7001-8000-00000001{prefix}0");
+        let edit = NamedEdit {
+            editor_session_id: &editor_session_id,
+            chapter_id: &self.chapter_id,
+            expected_revision_id: &self.head,
+            suffix: &format!("{prefix}{sequence}"),
+            local_intent_sequence: sequence,
+            text,
+            proposal_target: Some(AuthorEditProposalTarget {
+                proposal_id: target.proposal_id,
+                operation_id: target.operation_id,
+                revision_id: target.revision_id,
+                manuscript_block_id,
+            }),
+        };
+        adjusted_edit_command(store, &self.scope, edit, |command| {
+            command.challenge_binding.challenge_rate_policy_revision =
+                storyos_application::ChallengeRateClass::AuthorEdit
+                    .policy_revision()
+                    .to_owned();
+        })
+        .await
     }
 }
 
