@@ -261,6 +261,50 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
         AgentRunDecisionInspect::ResearchSynthesis { continuation_binding_id, .. }
             if continuation_binding_id.is_some() && continuation_binding_id == quiet_binding
     );
+    // "Use this in the story": the next Run of the Conversation continues the closing response,
+    // and its Proposal names the Artifact (ADR 0087 section 8).
+    let conversation_id: String = project
+        .admin
+        .query_one(
+            "SELECT conversation_id::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let story = admit_run_in(
+        &project.store,
+        &project.scope,
+        &project.chapter_id,
+        "873",
+        DeploymentDestination::HostFakeToolLoop,
+        "Revise these passages with the research.",
+        ConversationSelection::Existing { conversation_id },
+        None,
+    )
+    .await;
+    let claim = claim_run(&project.admin, project.scope.clone(), story.clone()).await;
+    complete_agent_run(
+        &project.store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
+    let story_lineage = project
+        .admin
+        .query_one(
+            "SELECT source_lineage ->> 'kind', source_lineage ->> 'research_artifact_id'
+               FROM storyos.proposals WHERE source_run_id = $1::text::uuid",
+            &[&story],
+        )
+        .await
+        .unwrap();
+    let story_lineage: (Option<String>, Option<String>) =
+        (story_lineage.get(/*idx*/ 0), story_lineage.get(/*idx*/ 1));
+    let story_artifact = Some(research_artifact_id.clone());
 
     assert_eq!(
         (
@@ -269,6 +313,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             project.decision(&run_id).await,
             read,
             quiet_shown,
+            story_lineage,
         ),
         (
             completed(
@@ -294,6 +339,7 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
             },
             true,
             true,
+            (Some("research_artifact".to_owned()), story_artifact),
         )
     );
 }
