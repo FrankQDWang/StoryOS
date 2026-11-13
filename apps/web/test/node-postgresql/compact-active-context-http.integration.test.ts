@@ -42,7 +42,7 @@ async function attemptRoles(projectId: string, runId: string) {
 }
 
 // The role and the first selected source class of the Context Assembly Manifest that the
-// decision request of one AgentRun disclosed.
+// decision request of the first RunStep of one AgentRun disclosed.
 async function sentAssembly(projectId: string, runId: string) {
   return queryPostgres(`
     SELECT assembly.manifest_role || ',' || (assembly.payload->'selected'->0->>'source_class')
@@ -51,7 +51,9 @@ async function sentAssembly(projectId: string, runId: string) {
         ON assembly.destination_context_manifest_id = attempt.destination_context_manifest_id
      WHERE attempt.project_id = '${projectId}'::uuid
        AND attempt.run_id = '${runId}'::uuid
-       AND attempt.attempt_role = 'decision';
+       AND attempt.attempt_role = 'decision'
+     ORDER BY attempt.decision_position
+     LIMIT 1;
   `);
 }
 
@@ -61,12 +63,17 @@ test("active context compaction summarizes the prior response, then installs or 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d210"), "Compact Novel", "d21");
+    // The default read shows the closing RunStep. The compaction comes before the request of the first RunStep.
+    const firstStep = async (runId: string) => inspectRun(started.baseUrl, prepared, runId, await queryPostgres(`
+      SELECT model_attempt_id::text FROM storyos.model_attempts
+       WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`));
     const first = await admitRun(started.baseUrl, prepared, id("d217"), COMPACT);
     await settleOnce();
     const firstInspect = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(firstInspect.status, "completed");
-    assert.equal(firstInspect.active_compaction.kind, "absent");
-    assert.equal(await attemptRoles(prepared.projectId, first.effect.run_id), "decision");
+    // The first RunStep has no prior response. The closing RunStep has one, so it compacts (ADR 0055, ADR 0091).
+    assert.equal(compaction(firstInspect).install_state, "installed");
+    assert.equal(await attemptRoles(prepared.projectId, first.effect.run_id), "compaction,decision,decision");
     const conversation = { kind: "existing" as const, conversation_id: first.conversation_id };
     const ordinary = await admitRun(started.baseUrl, prepared, id("d211"), ORDINARY, conversation);
     await settleOnce();
@@ -75,7 +82,7 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(ordinaryInspect.active_compaction.kind, "absent");
     assert.equal(attempt(ordinaryInspect).input_mapping, "incremental");
 
-    // Compact, and hold after the summary stages.
+    // Compact, and hold after the summary stages. Each Run has a first and a closing RunStep (ADR 0091).
     async function heldCompaction(key: string) {
       writeFileSync(hold, "hold");
       const run = await admitRun(started.baseUrl, prepared, id(key), COMPACT, conversation);
@@ -105,23 +112,26 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(installedCompaction.output_text, OUTPUT);
     assert.equal(installedCompaction.usage.kind, "unknown");
     assert.deepEqual(installedCompaction.loss_facts, ["semantic_preservation_unknown"]);
-    assert.equal(installedCompaction.admission.adapter_mapping, "storyos.host-fake.mapping.v1");
+    // The admission names the mapping of the tool loop Registration (ADR 0091).
+    assert.equal(installedCompaction.admission.adapter_mapping, "storyos.host-fake.mapping.v2");
     assert.deepEqual(installedCompaction.preserved_item_ids, ["1"]);
     if (installedCompaction.installed.kind !== "present") throw new Error("expected install");
-    assert.equal(installedCompaction.installed.model_attempt_id, decisionAttempt(installed));
-    assert.equal(installedCompaction.installed.model_invocation_id, attempt(installed).model_invocation_id);
+    // The default read shows the closing RunStep. The later request is the attempt of the first RunStep (ADR 0091).
+    const later = await inspectRun(started.baseUrl, prepared, happy.run.effect.run_id,
+      installedCompaction.installed.model_attempt_id);
+    assert.equal(installedCompaction.installed.model_invocation_id, attempt(later).model_invocation_id);
     assert.notEqual(installedCompaction.installed.model_attempt_id, installedCompaction.producer_model_attempt_id);
     assert.notEqual(installedCompaction.installed.run_step_id, installedCompaction.prior_run_step_id);
     assert.notEqual(installedCompaction.installed.model_invocation_id, installedCompaction.producer_invocation_id);
-    assert.equal(attempt(installed).input_mapping, "new_transport");
-    assert.equal(attempt(installed).prior_continuation.kind, "absent");
-    assert.equal(selected(installed, "author_instruction"), COMPACT);
-    assert.equal(selected(installed, "working_target"), "");
-    assert.equal(selected(installed, "conversation_summary"), undefined);
+    assert.equal(attempt(later).input_mapping, "new_transport");
+    assert.equal(attempt(later).prior_continuation.kind, "absent");
+    assert.equal(selected(later, "author_instruction"), COMPACT);
+    assert.equal(selected(later, "working_target"), "");
+    assert.equal(selected(later, "conversation_summary"), undefined);
     assert.equal(installed.decision.kind, "advisory");
     assert.equal(installed.items[0]?.text, ADVICE);
     assert.equal(installed.memory_settings_revision, happy.staged.memory_settings_revision);
-    assert.equal(await attemptRoles(prepared.projectId, happy.run.effect.run_id), "compaction,decision");
+    assert.equal(await attemptRoles(prepared.projectId, happy.run.effect.run_id), "compaction,decision,decision");
     assert.equal(await sentAssembly(prepared.projectId, happy.run.effect.run_id), "later_request,conversation_summary");
     await assert.rejects(
       () => inspectRun(started.baseUrl, prepared, happy.run.effect.run_id, installedCompaction.producer_model_attempt_id),
@@ -148,9 +158,9 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(changedCompaction.install_state, "refused");
     assert.equal(changedCompaction.refusal_reason, "changed_input");
     assert.equal(changedCompaction.installed.kind, "absent");
-    assert.equal(attempt(changedInspect).input_mapping, "incremental");
-    assert.equal(selected(changedInspect, "author_instruction"), COMPACT);
-    assert.equal(await attemptRoles(prepared.projectId, changed.run.effect.run_id), "compaction,decision");
+    assert.equal(attempt(await firstStep(changed.run.effect.run_id)).input_mapping, "incremental");
+    assert.equal(selected(await firstStep(changed.run.effect.run_id), "author_instruction"), COMPACT);
+    assert.equal(await attemptRoles(prepared.projectId, changed.run.effect.run_id), "compaction,decision,decision");
     assert.equal(await sentAssembly(prepared.projectId, changed.run.effect.run_id), "decision,author_instruction");
 
     const restricted = await heldCompaction("d214");
@@ -167,14 +177,16 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(compaction(restrictedInspect).install_state, "refused");
     assert.equal(compaction(restrictedInspect).refusal_reason, "restricted_source");
     assert.equal(compaction(restrictedInspect).installed.kind, "absent");
-    assert.equal(attempt(restrictedInspect).input_mapping, "new_transport");
+    assert.equal(attempt(await firstStep(restricted.run.effect.run_id)).input_mapping, "new_transport");
 
     const exact = await heldCompaction("d215");
     await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
     unlinkSync(hold);
     await exact.worker;
     const exactInspect = await inspectRun(started.baseUrl, prepared, exact.run.effect.run_id);
-    assert.equal(exactInspect.status, "completed");
+    // The closing RunStep assembles its context again, and the long Chapter blocks it (ADR 0085, ADR 0091).
+    assert.deepEqual([exactInspect.status, exactInspect.decision],
+      ["refused", { kind: "execution_refused", capability: "blocked_context" }]);
     assert.equal(compaction(exactInspect).install_state, "refused");
     assert.equal(compaction(exactInspect).refusal_reason, "exact_required_unsatisfied");
     assert.equal(compaction(exactInspect).installed.kind, "absent");
@@ -198,8 +210,8 @@ test("active context compaction summarizes the prior response, then installs or 
     const reclaimed = await inspectRun(started.baseUrl, prepared, stale.run.effect.run_id);
     assert.equal(reclaimed.status, "completed");
     assert.equal(compaction(reclaimed).install_state, "installed");
-    assert.equal(attempt(reclaimed).input_mapping, "new_transport");
-    assert.equal(selected(reclaimed, "author_instruction"), COMPACT);
+    assert.equal(attempt(await firstStep(stale.run.effect.run_id)).input_mapping, "new_transport");
+    assert.equal(selected(await firstStep(stale.run.effect.run_id), "author_instruction"), COMPACT);
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     await stopRealServer(started.server);
