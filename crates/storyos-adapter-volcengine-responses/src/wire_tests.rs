@@ -318,6 +318,14 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
         ))
         .unwrap()
     };
+    let summary: serde_json::Value = serde_json::from_str(&summary_body(
+        "resp-1",
+        &full.tool_outputs,
+        "model-1",
+        bounds,
+        /*stream*/ true,
+    ))
+    .unwrap();
     let call = |call_id: &str| {
         serde_json::json!({"type": "function_call", "call_id": call_id,
                            "name": "web_search_exa", "arguments": r#"{"query":"harbour"}"#})
@@ -333,6 +341,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
             body(&incremental)["previous_response_id"].clone(),
             body(&full)["input"].clone(),
             body(&full)["instructions"].clone(),
+            summary["input"].clone(),
         ),
         (
             serde_json::json!([result("call-2")]),
@@ -351,6 +360,12 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
                  lists the id of each source and each gap of that result. A gap is a requested \
                  page that is not available.{SYNTHESIS_INSTRUCTIONS}"
             )),
+            // A summary request at a later RunStep answers the calls of the prior response.
+            serde_json::json!([
+                result("call-2"),
+                {"role": "user", "content": [{"type": "input_text",
+                    "text": "Summarize the conversation so far."}]},
+            ]),
         )
     );
 }

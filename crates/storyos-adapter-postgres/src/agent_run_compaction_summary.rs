@@ -105,7 +105,9 @@ pub(crate) async fn prior_chain(
     }))
 }
 
-/// The summary request: no project content, and the response reference of the prior chain.
+/// The summary request: no project content, and the response reference of the prior chain. At a
+/// later RunStep, the outputs of the calls of the prior response go first, because each native
+/// function call needs its output (ADR 0085).
 pub(crate) async fn summary_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -113,6 +115,14 @@ pub(crate) async fn summary_request(
     attempt: RequestAttempt,
     previous_response_reference: Option<String>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
+    let mut tool_outputs = match &run.disclosure_request {
+        Some(assembly) => {
+            crate::agent_run_tool_result::tool_outputs(client, claim, assembly).await?
+        }
+        None => Vec::new(),
+    };
+    tool_outputs
+        .retain(|output| output.origin == storyos_application::ToolOutputOrigin::PriorResponse);
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -128,7 +138,7 @@ pub(crate) async fn summary_request(
         tool_exposure: storyos_core::ToolExposure::empty(),
         tool_choice: storyos_core::ToolChoice::Auto,
         successor_of: None,
-        tool_outputs: Vec::new(),
+        tool_outputs,
     }))
 }
 
