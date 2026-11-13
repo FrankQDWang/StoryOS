@@ -117,7 +117,7 @@ fn research_exposure() -> ToolExposure {
 }
 
 /// The Exposure of the Host Tools alone on the current Agent Plan Registration.
-fn host_exposure() -> ToolExposure {
+pub(crate) fn host_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
         bound: &[],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
