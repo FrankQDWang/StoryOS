@@ -82,7 +82,7 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
         &store,
         &admin,
         ["ec1", "ec2"],
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         &storyos_adapter_fake_destination::FakeDestination,
         "SET session_replication_role = replica;
          UPDATE storyos.project_destination_grants
@@ -95,7 +95,9 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
     assert_eq!(
         compaction_facts(&admin, &run_id).await,
         [
-            Some("completed".to_owned()),
+            // The closing request sends the output of the `finish` call, a `tool_result` source
+            // that the first scope does not name, so the Run refuses after its decision.
+            Some("refused".to_owned()),
             Some("incremental".to_owned()),
             Some("0".to_owned()),
             None,
@@ -449,7 +451,7 @@ async fn compact_with_change(
 ) -> [Option<String>; 4] {
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) =
-        queued_run(&store, prefixes[0], DeploymentDestination::HostFake).await;
+        queued_run(&store, prefixes[0], DeploymentDestination::HostFakeToolLoop).await;
     let claim = claim_run(&admin, scope.clone(), first.clone()).await;
     complete_agent_run(
         &store,
@@ -465,7 +467,7 @@ async fn compact_with_change(
         &scope,
         &chapter_id,
         prefixes[1],
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         ACTIVE_COMPACTION_REQUEST_PREFIX,
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),

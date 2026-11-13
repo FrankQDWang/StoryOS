@@ -48,7 +48,8 @@ async fn a_stream_commit_keeps_the_attempt_payload_outside_its_items_and_referen
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, run_id) = queued_run(&store, "9a0", DeploymentDestination::HostFake).await;
+    let (scope, _, run_id) =
+        queued_run(&store, "9a0", DeploymentDestination::HostFakeToolLoop).await;
     let claim = claim_run(&admin, scope, run_id).await;
     let dispatch = dispatched(&store, &claim).await;
     let reference = ResponseReference {

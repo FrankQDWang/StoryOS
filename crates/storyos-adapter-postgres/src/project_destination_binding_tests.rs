@@ -93,7 +93,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, fake_run) =
-        queued_run(&store, "e7a", DeploymentDestination::HostFake).await;
+        queued_run(&store, "e7a", DeploymentDestination::HostFakeToolLoop).await;
     let fake_binding = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -344,13 +344,14 @@ async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispat
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "e7c", DeploymentDestination::HostFake).await;
+    let (scope, chapter_id, _) =
+        queued_run(&store, "e7c", DeploymentDestination::HostFakeToolLoop).await;
     let run_id = admit_run(
         &store,
         &scope,
         &chapter_id,
         "e7d",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "SCRIPT:successor-once",
     )
     .await;
@@ -429,13 +430,14 @@ async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spe
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "f5a", DeploymentDestination::HostFake).await;
+    let (scope, chapter_id, _) =
+        queued_run(&store, "f5a", DeploymentDestination::HostFakeToolLoop).await;
     let run_id = admit_run(
         &store,
         &scope,
         &chapter_id,
         "f5b",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "SCRIPT:successor-once",
     )
     .await;

@@ -250,7 +250,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         let input = UpdateProjectAssistanceInput {
             availability,
             expected_revision,
-            destination: Some(storyos_core::DeploymentDestination::HostFake),
+            destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         };
         let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_ASSISTANCE, input).await;
         let outcome = replayed_outcome(
