@@ -43,7 +43,7 @@ A new Project Destination Grant records the current scope `project_writing_assis
 
 ### 5. The lineage of a Proposal
 
-A Proposal that a `tool_result_continuation` RunStep opens records `source_lineage` on its source: the Run, the RunStep position and its Operation Requirement, the Model Attempt, and the ToolCall identities. The lineage names the Run of the Proposal source. A Proposal of another RunStep has no lineage. The continuation Decision can be an Advisory, a clarification, or a prose change.
+A Proposal that a `tool_result_continuation` RunStep opens records `source_lineage` on its source: the Run, the RunStep position and its Operation Requirement, the Model Attempt, and the ToolCall identities. The lineage names the Run of the Proposal source. A Proposal of another RunStep has no lineage. The continuation Decision can be an Advisory, a clarification, or a prose change. In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), a `propose_edit` call of the RunStep opens the Proposal, and the lineage names that RunStep.
 
 ## Considered options
 

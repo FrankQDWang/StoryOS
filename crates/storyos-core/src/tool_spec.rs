@@ -26,6 +26,8 @@ pub enum ToolOperation {
     WebFetch,
     /// The Host Tool with which the Agent says that the work of the Run is complete.
     Finish,
+    /// The Host Tool with which the Agent proposes a change of Chapter blocks.
+    ProposeEdit,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -106,12 +108,22 @@ pub const FINISH_TOOL_SPEC: ToolSpec = ToolSpec {
     result_text_max_bytes: 0,
 };
 
+/// The Host Tool `propose_edit`: the content of one prose change reply (ADR 0091).
+pub const PROPOSE_EDIT_TOOL_SPEC: ToolSpec = ToolSpec {
+    revision: "storyos.tool.propose-edit.v1",
+    operation: ToolOperation::ProposeEdit,
+    intake_contract: &[],
+    envelope: None,
+    result_text_max_bytes: 512,
+};
+
 /// The ToolSpec of a pinned revision. `None` is a revision that this build does not know.
 pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
     [
         &WEB_SEARCH_TOOL_SPEC,
         &WEB_FETCH_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
+        &PROPOSE_EDIT_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -128,6 +140,7 @@ pub enum ToolIntake {
         urls: Vec<String>,
     },
     Finish,
+    ProposeEdit(crate::ProposedEdit),
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -203,6 +216,9 @@ impl ToolSpec {
                 NoArguments::deserialize(arguments).map_err(|_| IntakeRefusal::Malformed)?;
                 Ok(ToolIntake::Finish)
             }
+            ToolOperation::ProposeEdit => crate::ProposedEdit::deserialize(arguments)
+                .map(ToolIntake::ProposeEdit)
+                .map_err(|_| IntakeRefusal::Malformed),
         }
     }
 }
@@ -252,8 +268,14 @@ impl ServerArguments {
             (Self::Fetch { urls: urls_name }, ToolIntake::WebFetch { urls }) => {
                 arguments.insert((*urls_name).to_owned(), Value::from(urls.clone()));
             }
-            (Self::Search { .. }, ToolIntake::WebFetch { .. } | ToolIntake::Finish)
-            | (Self::Fetch { .. }, ToolIntake::WebSearch { .. } | ToolIntake::Finish) => {
+            (
+                Self::Search { .. },
+                ToolIntake::WebFetch { .. } | ToolIntake::Finish | ToolIntake::ProposeEdit(_),
+            )
+            | (
+                Self::Fetch { .. },
+                ToolIntake::WebSearch { .. } | ToolIntake::Finish | ToolIntake::ProposeEdit(_),
+            ) => {
                 return None;
             }
         }
