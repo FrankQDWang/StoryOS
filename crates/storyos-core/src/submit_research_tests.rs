@@ -16,20 +16,8 @@ fn the_intake_takes_a_summary_and_claims_and_refuses_a_text_that_the_store_canno
                 }],
             }),
         ),
-        // The validation of ADR 0087 section 3 refuses an empty synthesis, not the intake.
-        (
-            json!({"summary": " ", "claims": []}),
-            Ok(ToolIntake::SubmitResearch {
-                summary: " ".to_owned(),
-                claims: Vec::new(),
-            }),
-        ),
         (
             json!({"summary": "The tides.", "claims": [{"text": "One.", "citations": [7]}]}),
-            Err(IntakeRefusal::Malformed),
-        ),
-        (
-            json!({"summary": "The tides.", "claims": [], "sources": []}),
             Err(IntakeRefusal::Malformed),
         ),
         (

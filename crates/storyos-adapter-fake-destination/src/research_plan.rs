@@ -6,6 +6,7 @@
 //!
 //! - `once`: one call and a `finish` call.
 //! - `twice`: two calls and a `finish` call in one response.
+//! - `finish_first`: a `finish` call and one call, in that order.
 //! - `again`: one call, and in the next request a second call and a `finish` call.
 //!
 //! Each later request gets the usual script of the tool loop profile.
@@ -50,6 +51,7 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
             .replace("$GAP", &first_tagged(request, "<gap id=\""));
         match variant {
             "twice" => vec![submit("", &arguments), submit("_2", &arguments), finish],
+            "finish_first" => vec![finish, submit("", &arguments)],
             "again" => vec![submit("", &arguments)],
             _ => vec![submit("", &arguments), finish],
         }

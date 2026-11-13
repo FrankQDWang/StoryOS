@@ -110,10 +110,15 @@ fn only_a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
         registration_revision: HOST_TOOL_REGISTRATION.revision,
         spec: &FINISH_TOOL_SPEC,
     };
+    let submit_research = ExposedTool {
+        name: "submit_research",
+        spec: &crate::SUBMIT_RESEARCH_TOOL_SPEC,
+        ..finish.clone()
+    };
     assert_eq!(
         exposure(&[], HOST_FAKE_TOOL_LOOP_REGISTRATION.revision),
         ToolExposure {
-            tools: vec![finish.clone()]
+            tools: vec![submit_research, finish.clone()]
         }
     );
     assert_eq!(

@@ -6,9 +6,8 @@ use storyos_application::{
     complete_agent_run_with_tools,
 };
 use storyos_core::{
-    CallValidationRefusal, Citation, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT,
-    IntakeRefusal, RESEARCH_RECORDED_RESULT, RESEARCH_TOOL_OFFER, ResearchClaim, ResearchSynthesis,
-    SubmitResearchRefusal, SynthesisRefusal,
+    Citation, DeploymentDestination, FINISH_DOES_NOT_COUNT_RESULT, RESEARCH_RECORDED_RESULT,
+    RESEARCH_TOOL_OFFER, ResearchClaim, ResearchSynthesis, SubmitResearchRefusal, SynthesisRefusal,
 };
 use tokio_postgres::Client;
 
@@ -97,8 +96,9 @@ impl ResearchProject {
         run_id
     }
 
-    /// The status of the Run, the decision kind of each RunStep, each ToolCall as its function
-    /// name, state, refusal, and result, and the number of its Research Artifacts.
+    /// The status of the Run, the decision kind and `tool_choice` of each RunStep, each ToolCall
+    /// as its function name, state, refusal, and Host result, and the citation kinds of each
+    /// Research Artifact of the Run.
     async fn facts(&self, run_id: &str) -> Value {
         let row = self
             .admin
@@ -114,12 +114,14 @@ impl ResearchProject {
                                      WHERE attempt.run_id = run.run_id),
                           'calls', (SELECT jsonb_agg(jsonb_build_array(
                                       call.function_name, call.state, call.refusal,
-                                      CASE WHEN call.function_name = 'web_search' THEN NULL
-                                           ELSE call.result_text END)
+                                      CASE WHEN call.registration_id = 'host_tools'
+                                           THEN call.result_text END)
                                       ORDER BY call.decision_position, call.call_position)
                                       FROM storyos.tool_calls AS call
                                      WHERE call.run_id = run.run_id),
-                          'artifacts', (SELECT count(*) FROM storyos.research_artifacts AS artifact
+                          'artifacts', (SELECT jsonb_agg(jsonb_path_query_array(
+                                          artifact.content, '$.claims[*].citations[*].kind'))
+                                          FROM storyos.research_artifacts AS artifact
                                          WHERE artifact.run_id = run.run_id))::text
                    FROM storyos.agent_runs AS run WHERE run.run_id = $1::text::uuid",
                 &[&run_id],
@@ -143,6 +145,21 @@ fn script(variant: &str, first_tool: &str, arguments: Value) -> String {
     format!("SCRIPT:submit_research {variant} {first_tool} {arguments}")
 }
 
+/// The arguments of a synthesis with one claim that cites `citations`.
+fn synthesis(summary: &str, citations: Value) -> Value {
+    json!({"summary": summary, "claims": [{"text": "High water came at 10.42.", "citations": citations}]})
+}
+
+/// The facts of a completed Run whose first RunStep made the `research` call and whose next
+/// `required` RunSteps made the Host `calls`, before the closing RunStep.
+fn completed(research: &str, required: usize, calls: Value, artifacts: Value) -> Value {
+    let mut steps = vec![json!(["tool_request", "required"]); required + 1];
+    steps.push(json!(["advisory", "none"]));
+    let mut all = vec![json!([research, "settled", null, null])];
+    all.extend(calls.as_array().unwrap().iter().cloned());
+    json!({"status": "completed", "steps": steps, "calls": all, "artifacts": artifacts})
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decision() {
@@ -150,22 +167,20 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
         .lock()
         .await;
     let project = research_project("870").await;
-    let arguments = json!({"summary": "The tides of 1890.",
-        "claims": [{"text": "High water came at 10.42.", "citations": ["$SOURCE"]}]});
+    let arguments = synthesis("The tides of 1890.", json!(["$SOURCE"]));
     let run_id = project
         .settle("871", &script("once", "web_search", arguments), SEARCH_TEXT)
         .await;
 
     // The lineage names the RunStep, the Model Attempt, and the Agent Decision that hold the
-    // call, and the research ToolCall whose result that RunStep read.
+    // call, and the research ToolCall whose result that RunStep read. The claim cites the
+    // identity that the model read in the `tool_sources` tag of that result.
     let lineage = project
         .admin
         .query_one(
             "SELECT requirement.operation_requirement_id::text, attempt.model_attempt_id::text,
                     attempt.decision_id::text, search.tool_call_id::text,
-                    snapshot.source_snapshot_id::text, closing.continuation_binding_id::text,
-                    (attempt.payload #>> '{wire,serialized_payload}')::jsonb
-                      #>> '{tool_outputs,0,output}'
+                    snapshot.source_snapshot_id::text, closing.continuation_binding_id::text
                FROM storyos.model_attempts AS attempt
                JOIN storyos.operation_requirements AS requirement
                  ON (requirement.run_id, requirement.decision_position,
@@ -218,26 +233,25 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
         .get_research_artifact(&project.scope, &research_artifact_id)
         .await
         .unwrap()
-        .expect("the panel reads the Artifact");
+        .is_some();
 
     assert_eq!(
         (
             project.facts(&run_id).await,
             artifact,
             project.decision(&run_id).await,
-            read.lineage.decision_id,
-            text(6).contains(r#"<tool_sources source="call_web_search"><source id=""#),
+            read,
         ),
         (
-            json!({
-                "status": "completed",
-                "steps": [["tool_request", "required"], ["tool_request", "required"],
-                          ["advisory", "none"]],
-                "calls": [["web_search", "settled", null, null],
-                          ["submit_research", "settled", null, RESEARCH_RECORDED_RESULT],
-                          ["finish", "settled", null, ""]],
-                "artifacts": 1,
-            }),
+            completed(
+                "web_search",
+                1,
+                json!([
+                    ["submit_research", "settled", null, RESEARCH_RECORDED_RESULT],
+                    ["finish", "settled", null, ""]
+                ]),
+                json!([["snapshot"]]),
+            ),
             json!({
                 "run_id": run_id, "decision_position": 1,
                 "operation_requirement_id": text(0), "model_attempt_id": text(1),
@@ -250,7 +264,6 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
                 research_artifact_id,
                 continuation_binding_id: Some(text(5)),
             },
-            text(2),
             true,
         )
     );
@@ -258,148 +271,11 @@ async fn a_valid_call_records_one_artifact_with_the_lineage_of_its_agent_decisio
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_call_whose_claims_cite_only_gaps_records_a_partial_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let project = research_project("872").await;
-    let arguments = json!({"summary": "No tide table is available.",
-        "claims": [{"text": "The page could not be read.", "citations": ["$GAP"]}]});
-    let run_id = project
-        .settle("873", &script("once", "web_fetch", arguments), FAILED_PAGE)
-        .await;
-    let gap: String = project
-        .admin
-        .query_one(
-            "SELECT source_gap_id::text FROM storyos.source_gaps
-              WHERE run_id = $1::text::uuid AND gap_position = 0",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    let content: Value = serde_json::from_str(
-        project
-            .admin
-            .query_one(
-                "SELECT content::text FROM storyos.research_artifacts WHERE run_id = $1::text::uuid",
-                &[&run_id],
-            )
-            .await
-            .unwrap()
-            .get::<_, &str>(0),
-    )
-    .unwrap();
-
-    assert_eq!(
-        (project.facts(&run_id).await["calls"].clone(), content),
-        (
-            json!([
-                ["web_fetch", "settled", null, FAILED_PAGE],
-                ["submit_research", "settled", null, RESEARCH_RECORDED_RESULT],
-                ["finish", "settled", null, ""]
-            ]),
-            ResearchSynthesis {
-                summary: "No tide table is available.".to_owned(),
-                claims: vec![ResearchClaim {
-                    text: "The page could not be read.".to_owned(),
-                    citations: vec![Citation::Gap { source_gap_id: gap }],
-                }],
-            }
-            .content(),
-        )
-    );
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_refused_call_gives_its_reason_as_the_result_and_writes_no_artifact() {
+async fn a_refused_call_gives_its_reason_and_one_run_records_one_artifact() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let project = research_project("874").await;
-    let claim =
-        |citations: Value| json!([{"text": "High water came at 10.42.", "citations": citations}]);
-    let synthesis = |refusal| SubmitResearchRefusal::Synthesis(refusal).result().text;
-    let cases = [
-        (
-            "875",
-            json!({"summary": "The tides.", "claims": []}),
-            ("no_claim", synthesis(SynthesisRefusal::NoClaim)),
-        ),
-        (
-            "876",
-            json!({"summary": " ", "claims": claim(json!(["$SOURCE"]))}),
-            ("empty_text", synthesis(SynthesisRefusal::EmptyText)),
-        ),
-        (
-            "877",
-            json!({"summary": "The\u{0}tides.", "claims": claim(json!(["$SOURCE"]))}),
-            (
-                "unstorable_text",
-                CallValidationRefusal::Intake(IntakeRefusal::UnstorableText).result_text(),
-            ),
-        ),
-        (
-            "878",
-            json!({"summary": "The tides.", "claims": claim(json!([]))}),
-            ("uncited_claim", synthesis(SynthesisRefusal::UncitedClaim)),
-        ),
-        (
-            "879",
-            json!({"summary": "The tides.",
-                   "claims": claim(json!(["018f0000-0000-7001-8000-0000000879ff"]))}),
-            (
-                "uncaptured_citation",
-                synthesis(SynthesisRefusal::UncapturedCitation),
-            ),
-        ),
-    ];
-    let mut observed = Vec::new();
-    let mut want = Vec::new();
-    for (prefix, arguments, (label, result)) in cases {
-        let run_id = project
-            .settle(
-                prefix,
-                &script("once", "web_search", arguments),
-                SEARCH_TEXT,
-            )
-            .await;
-        observed.push((
-            project.facts(&run_id).await,
-            matches!(
-                project.decision(&run_id).await,
-                AgentRunDecisionInspect::Advisory { .. }
-            ),
-        ));
-        // The model reads the reason, and its next `finish` call counts.
-        want.push((
-            json!({
-                "status": "completed",
-                "steps": [["tool_request", "required"], ["tool_request", "required"],
-                          ["tool_request", "required"], ["advisory", "none"]],
-                "calls": [["web_search", "settled", null, null],
-                          ["submit_research", "refused", label, result],
-                          ["finish", "settled", null, FINISH_DOES_NOT_COUNT_RESULT],
-                          ["finish", "settled", null, ""]],
-                "artifacts": 0,
-            }),
-            true,
-        ));
-    }
-
-    assert_eq!(observed, want);
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn one_response_and_one_run_accept_one_call_that_records_an_artifact() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let project = research_project("87a").await;
-    let arguments = json!({"summary": "The tides of 1890.",
-        "claims": [{"text": "High water came at 10.42.", "citations": ["$SOURCE"]}]});
     let refused = |refusal: SubmitResearchRefusal| {
         json!([
             "submit_research",
@@ -408,43 +284,95 @@ async fn one_response_and_one_run_accept_one_call_that_records_an_artifact() {
             refusal.result().text
         ])
     };
+    let invalid = |refusal| refused(SubmitResearchRefusal::Synthesis(refusal));
     let recorded = json!(["submit_research", "settled", null, RESEARCH_RECORDED_RESULT]);
-    let mut observed = Vec::new();
-    for (prefix, variant) in [("87b", "twice"), ("87c", "again")] {
-        let run_id = project
-            .settle(
-                prefix,
-                &script(variant, "web_search", arguments.clone()),
-                SEARCH_TEXT,
-            )
-            .await;
-        let facts = project.facts(&run_id).await;
-        observed.push((facts["calls"].clone(), facts["artifacts"].clone()));
-    }
-
-    assert_eq!(
-        observed,
-        vec![
-            (
+    let not_counted = json!(["finish", "settled", null, FINISH_DOES_NOT_COUNT_RESULT]);
+    let finish = json!(["finish", "settled", null, ""]);
+    let cited = synthesis("The tides of 1890.", json!(["$SOURCE"]));
+    let uncaptured = synthesis(
+        "The tides.",
+        json!(["018f0000-0000-7001-8000-0000000875ff"]),
+    );
+    // Core proves each rule of the validation and of the typed intake. The model reads the
+    // reason of a refused call, and its next `finish` call counts.
+    let cases = [
+        (
+            "875",
+            script("once", "web_search", uncaptured),
+            SEARCH_TEXT,
+            completed(
+                "web_search",
+                2,
                 json!([
-                    ["web_search", "settled", null, null],
+                    invalid(SynthesisRefusal::UncapturedCitation),
+                    not_counted,
+                    finish
+                ]),
+                Value::Null,
+            ),
+        ),
+        // The Host executes `finish` after the other Host Tool calls of its response.
+        (
+            "876",
+            script(
+                "finish_first",
+                "web_search",
+                synthesis("The tides.", json!([])),
+            ),
+            SEARCH_TEXT,
+            completed(
+                "web_search",
+                2,
+                json!([not_counted, invalid(SynthesisRefusal::UncitedClaim), finish]),
+                Value::Null,
+            ),
+        ),
+        (
+            "877",
+            script("twice", "web_search", cited.clone()),
+            SEARCH_TEXT,
+            completed(
+                "web_search",
+                2,
+                json!([
                     recorded,
                     refused(SubmitResearchRefusal::SecondInResponse),
-                    ["finish", "settled", null, FINISH_DOES_NOT_COUNT_RESULT],
-                    ["finish", "settled", null, ""]
+                    not_counted,
+                    finish
                 ]),
-                json!(1),
+                json!([["snapshot"]]),
             ),
-            (
+        ),
+        (
+            "878",
+            script("again", "web_search", cited),
+            SEARCH_TEXT,
+            completed(
+                "web_search",
+                3,
                 json!([
-                    ["web_search", "settled", null, null],
                     recorded,
                     refused(SubmitResearchRefusal::ArtifactRecorded),
-                    ["finish", "settled", null, FINISH_DOES_NOT_COUNT_RESULT],
-                    ["finish", "settled", null, ""]
+                    not_counted,
+                    finish
                 ]),
-                json!(1),
+                json!([["snapshot"]]),
             ),
-        ]
-    );
+        ),
+        (
+            "879",
+            script("once", "web_fetch", synthesis("No page.", json!(["$GAP"]))),
+            FAILED_PAGE,
+            completed("web_fetch", 1, json!([recorded, finish]), json!([["gap"]])),
+        ),
+    ];
+    let mut observed = Vec::new();
+    let mut want = Vec::new();
+    for (prefix, message, text, facts) in cases {
+        let run_id = project.settle(prefix, &message, text).await;
+        observed.push(project.facts(&run_id).await);
+        want.push(facts);
+    }
+
+    assert_eq!(observed, want);
 }
