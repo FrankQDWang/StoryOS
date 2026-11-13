@@ -6,8 +6,8 @@ use storyos_application::{
     SteerAgentRunError, SteerAgentRunInput, SteerAgentRunSettlement, SteeringRetained,
 };
 use storyos_core::{
-    CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect, TransitionOutcome,
-    classify_steer_agent_run,
+    CONTEXT_ITEM_TOKEN_LIMIT, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
+    TransitionOutcome, classify_steer_agent_run,
 };
 use tokio_postgres::Client;
 
@@ -65,7 +65,8 @@ impl ProjectCommand for SteerAgentRunInput {
                 AgentRunControlRefusal::MissingRun,
             ));
         }
-        let outcome = classify_steer_agent_run(run.lifecycle);
+        let (_, reader) = next_input(client, envelope, &self.run_id).await?;
+        let outcome = classify_steer_agent_run(run.lifecycle, reader);
         if let TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) = outcome {
             let retained = client
                 .query_one(
@@ -154,27 +155,7 @@ impl ZeroAuthority<Self> for SteerAgentRunInput {
         _activity: &ActivitySequences,
     ) -> Result<ZeroAuthorityWrite<SteeringRetained>, ProjectCommandError> {
         let scope = &envelope.project_scope;
-        let input_position = client
-            .query_one(
-                "SELECT (GREATEST(COALESCE(max((payload->>'input_position')::numeric), 0),
-                                  (SELECT active_decision_position FROM storyos.agent_runs
-                                    WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                                      AND run_id = $3::text::uuid)) + 1)::text
-                   FROM storyos.project_activity_event_payloads
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND event_kind = 'agent_run_steering_retained'
-                    AND payload->>'run_id' = $3",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &self.run_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?
-            .get::<_, String>(/*idx*/ 0)
-            .parse::<u64>()
-            .map_err(unavailable)?;
+        let (input_position, _) = next_input(client, envelope, &self.run_id).await?;
         client
             .execute(
                 "UPDATE storyos.agent_runs SET status = 'queued', wakeup_pending = true
@@ -227,6 +208,44 @@ impl ZeroAuthority<Self> for SteerAgentRunInput {
             TransitionOutcome::Refused(reason) => match reason {},
         }
     }
+}
+
+/// The position of the next steering input of the Run, after the active RunStep and after each
+/// earlier input, and the RunStep that would read it.
+async fn next_input(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    run_id: &str,
+) -> Result<(u64, SteeringReader), ProjectCommandError> {
+    let scope = &envelope.project_scope;
+    let row = client
+        .query_one(
+            "SELECT run.model_registration_revision::text,
+                    (GREATEST(COALESCE((SELECT max((input.payload->>'input_position')::numeric)
+                                          FROM storyos.project_activity_event_payloads AS input
+                                         WHERE (input.owner_user_id, input.project_id)
+                                               = (run.owner_user_id, run.project_id)
+                                           AND input.event_kind = 'agent_run_steering_retained'
+                                           AND input.payload->>'run_id' = run.run_id::text), 0),
+                              run.active_decision_position) + 1)::text
+               FROM storyos.agent_runs AS run
+              WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
+                AND run.run_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    let tool_loop = storyos_core::model_registration(row.get(/*idx*/ 0))
+        .is_some_and(storyos_core::ModelRegistration::declares_host_tools);
+    let position = row
+        .get::<_, String>(/*idx*/ 1)
+        .parse::<u64>()
+        .map_err(unavailable)?;
+    Ok((position, SteeringReader::at(tool_loop, position)))
 }
 
 /// The references of the Run at its active decision, then the references of each retained input
