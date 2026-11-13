@@ -88,6 +88,7 @@ impl ToolOperation {
             Self::WebSearch => "web_search",
             Self::WebFetch => "web_fetch",
             Self::Finish => "finish",
+            Self::ProposeEdit => "propose_edit",
         }
     }
 
@@ -101,6 +102,11 @@ impl ToolOperation {
             Self::Finish => {
                 "Says that your work on the author request is complete. After its result, write \
                  the final answer to the author."
+            }
+            Self::ProposeEdit => {
+                "Proposes a change of the target blocks of the request. StoryOS validates the \
+                 change and opens a Proposal that waits for the decision of the author. Give the \
+                 complete new text of each changed block."
             }
         }
     }
@@ -144,15 +150,19 @@ impl ExposedTool {
             properties.insert(field.name().to_owned(), field.schema());
             required.push(field.name());
         }
-        FunctionDeclaration {
-            name: self.name,
-            description: self.spec.operation.description(),
-            parameters: json!({
+        let parameters = match self.spec.operation {
+            ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
+            ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
                 "required": required,
                 "additionalProperties": false,
             }),
+        };
+        FunctionDeclaration {
+            name: self.name,
+            description: self.spec.operation.description(),
+            parameters,
         }
     }
 

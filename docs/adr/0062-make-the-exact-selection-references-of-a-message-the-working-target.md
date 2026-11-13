@@ -56,3 +56,7 @@ Before this change, a request worked on the Current Chapter. When the author cli
 - Six pull requests deliver the change. The first adds the Chapter text references. The second adds the candidate references and removes the public `proposal_candidate` kind. The third adds the references of a steering input. The fourth, the fifth, and the sixth change the web client.
 - The activity payload of a retained steering input can have the key `selection_references` (migration 0093).
 - [ADR 0071](0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md) amends the One Decision rule and its rejected option. One reply can revise a referenced candidate and grow its Proposal over Joinable Blocks.
+
+## Amendment 2026-11-13: the Host Tool `propose_edit`
+
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the content of one prose change reply is the arguments of one `propose_edit` call ([#1456](https://github.com/FrankQDWang/StoryOS/issues/1456)). The Decision that holds the call is the Proposal source. The validation of the One Decision rule applies to one call. A call that it refuses is a refused ToolCall, and its result gives the reason. The reply form profile keeps the One Decision rule until the reply form goes.

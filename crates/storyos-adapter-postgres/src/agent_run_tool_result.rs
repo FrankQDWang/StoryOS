@@ -368,11 +368,15 @@ pub(crate) async fn proposal_source_lineage(
                      requirement.decision_position) =
                     (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
                 AND requirement.requirement_role = 'primary'
-               JOIN storyos.model_attempts AS attempt
-                 ON (attempt.owner_user_id, attempt.project_id, attempt.run_id,
-                     attempt.decision_position) =
-                    (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
-                AND attempt.attempt_role = 'decision'
+               -- A successor Attempt holds the Decision of the RunStep when it exists.
+               CROSS JOIN LATERAL (
+                 SELECT attempt.model_attempt_id FROM storyos.model_attempts AS attempt
+                  WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id,
+                         attempt.decision_position) =
+                        (run.owner_user_id, run.project_id, run.run_id,
+                         run.active_decision_position)
+                    AND attempt.attempt_role IN ('decision', 'successor')
+                  ORDER BY attempt.attempt_role = 'successor' DESC LIMIT 1) AS attempt
               WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
                 AND requirement.payload #> '{operation_requirement,tool_results}' IS NOT NULL",

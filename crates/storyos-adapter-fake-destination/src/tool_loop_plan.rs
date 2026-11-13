@@ -138,12 +138,15 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
         .author_message
         .starts_with("SCRIPT:never_finish")
         .then(|| call(UNEXPOSED_NAME, suffix.clone(), "{}".to_owned()));
+    let (proposed, finish) =
+        crate::propose_edit_plan::calls(request, &call).unwrap_or((Vec::new(), true));
     FakeCreate {
         items: search
             .into_iter()
             .chain(refused)
+            .chain(proposed)
             .chain(unexposed)
-            .chain([call("finish", suffix, "{}".to_owned())])
+            .chain(finish.then(|| call("finish", suffix, "{}".to_owned())))
             .collect(),
         output: None,
     }

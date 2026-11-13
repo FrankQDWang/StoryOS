@@ -315,9 +315,9 @@ pub use tool_result_context::{
     TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
 };
 pub use tool_spec::{
-    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal, ServerArguments,
-    TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec,
-    WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
+    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
+    PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,
+    ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
@@ -654,7 +654,13 @@ mod undo_latest_author_action_tests;
 
 mod prose_change_locations;
 pub use prose_change_locations::{
-    DeclaredLocation, DeclaredTargetKind, ProseChangeCandidate, prose_changes_match_targets,
+    DeclaredLocation, DeclaredTargetKind, ProseChangeCandidate, ProseChangeRefusal,
+    prose_change_refusal, prose_changes_match_targets,
+};
+mod propose_edit;
+pub use propose_edit::{
+    BlockChange, MAX_REFUSED_PROPOSE_EDIT_CALLS, PROPOSAL_WAITS_RESULT, ProposeEditHistory,
+    ProposeEditRefusal, ProposedEdit, propose_edit_parameters, screen_proposed_edits,
 };
 mod selection_reference;
 pub use selection_reference::{

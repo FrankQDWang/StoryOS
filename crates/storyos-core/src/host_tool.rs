@@ -2,7 +2,10 @@
 //! StoryOS executes in its own process. A Host ToolCall has no Destination Attempt and no
 //! Outbound Disclosure Event, and it gives the Agent no authority.
 
-use crate::{FINISH_TOOL_SPEC, ToolIntake, ToolRegistrationKind, ToolResultText, ToolSpec};
+use crate::{
+    FINISH_TOOL_SPEC, PROPOSE_EDIT_TOOL_SPEC, ToolIntake, ToolRegistrationKind, ToolResultText,
+    ToolSpec,
+};
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
 #[derive(Debug, Eq, PartialEq)]
@@ -19,7 +22,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0101",
     kind: ToolRegistrationKind::Host,
     adapter_revision: "storyos.host-tool.v1",
-    tools: &[&FINISH_TOOL_SPEC],
+    tools: &[&PROPOSE_EDIT_TOOL_SPEC, &FINISH_TOOL_SPEC],
 };
 
 /// The Host Tool of the pinned revisions of a ToolCall. `None` is a ToolCall of another
@@ -60,6 +63,9 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
                 bytes: text.len(),
             })
         }
-        ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } => None,
+        // The store executes `propose_edit`, because it opens a Proposal.
+        ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::ProposeEdit(_) => {
+            None
+        }
     }
 }
