@@ -123,9 +123,8 @@ test("Worker keeps two non-overlapping Block Proposals and refuses a reserved cu
   const first = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f151"));
   const firstId = assertOpenedProposal(first);
   const overlap = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f153"));
-  assert.equal(overlap.decision.kind, "prose_change");
-  if (overlap.decision.kind !== "prose_change") throw new Error("expected prose");
-  assert.deepEqual(overlap.decision.opened_proposal, { kind: "absent" });
+  // The reservation refuses the `propose_edit` call, and the final answer is advisory (ADR 0091 section 6).
+  assert.equal(overlap.decision.kind, "advisory");
   const secondBlockId = id("f155");
   await queryPostgres(`
     WITH first AS (
