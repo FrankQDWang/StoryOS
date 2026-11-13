@@ -96,7 +96,8 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
         compaction_facts(&admin, &run_id).await,
         [
             // The closing request sends the output of the `finish` call, a `tool_result` source
-            // that the first scope does not name, so the Run refuses after its decision.
+            // that the first scope does not name, so the Run refuses after its decision. A
+            // binding on the tool loop head always records a grant with the third scope.
             Some("refused".to_owned()),
             Some("incremental".to_owned()),
             Some("0".to_owned()),
@@ -104,6 +105,18 @@ async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuati
             None,
             None,
         ]
+    );
+    let settlement: Option<String> = admin
+        .query_one(
+            "SELECT settlement::text FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        settlement.as_deref(),
+        Some(r#"{"kind": "execution_refused", "capability": "disclosure_outside_grant"}"#)
     );
 }
 
