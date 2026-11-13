@@ -13,6 +13,7 @@
 //! - `SCRIPT:never_finish` gets a call of an unexposed name beside each `finish` call, so no
 //!   `finish` call counts. Its request with `tool_choice: "none"` gets a text and a `finish`
 //!   call, and `SCRIPT:never_finish_quietly` gets only the `finish` call.
+//! - `SCRIPT:submit_research ...` gets the research script of `research_plan`.
 
 use storyos_application::{CreateRequest, ToolOutputOrigin};
 use storyos_core::{
@@ -32,6 +33,9 @@ pub const LIMIT_ANSWER: &str = "I stop here at the step limit.";
 const UNEXPOSED_NAME: &str = "look_up_notes";
 
 pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
+    if let Some(planned) = crate::research_plan::plan(request) {
+        return planned;
+    }
     let message = request.author_message.as_str();
     let finished = request
         .tool_outputs

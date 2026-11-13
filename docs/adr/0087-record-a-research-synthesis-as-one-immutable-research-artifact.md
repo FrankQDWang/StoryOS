@@ -20,6 +20,8 @@ The Agent Decision has the variant `research_synthesis`. It has a summary and an
 {"kind":"research_synthesis","summary":"…","claims":[{"text":"…","citations":["<id>"]}]}
 ```
 
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the model gives the same summary and claims as the arguments of the Host Tool `submit_research`, and the description of that Tool holds the cite rules of section 2. The reply form goes with the reply form profile.
+
 ### 2. How the model learns the citable identities
 
 The function output of each resolved ToolCall has one data-only `tool_sources` tag after its `tool_result` boundary. The tag lists each Snapshot of the result in result order, then each Gap in request order. Each entry has its identity and locator, and a Gap entry has its reason. The Host escapes each value, so no locator closes the tag. The token bound of a ToolResult ([ADR 0052](0052-set-the-context-item-limit-from-the-measured-model-input.md)) cuts only the result text, never the tag, so each identity stays whole. When the complete tag and the minimum boundary are above the item limit, the Context Assembly rejects the item as `over_item_token_limit` and blocks the continuation with `exact_required_over_limit`, because a cut identity cannot be cited. The Host instructions of a continuation request add the reply form above and the cite rules. A first RunStep has no ToolResult. A synthesis there cites nothing that the Run captured, so the validation refuses it.
@@ -39,9 +41,13 @@ The function output of each resolved ToolCall has one data-only `tool_sources` t
 
 An invalid synthesis gets the existing repair rule of the typed-output mapping: the RunStep has no Decision, and the Run completes with no result. The Model Attempt that observed the response keeps the reason as `synthesis_refusal`: the decision attempt of a create or a successor, or the retrieval attempt of a Retrieve. A synthesis that reaches a successor or a Retrieve is on the first RunStep, which has no captured source, so its reason is `uncaptured_citation`. A reply that is not valid JSON, or that has a citation that is not a string, stays an Advisory, and the panel shows the malformed reply sentence (#1145).
 
+In the tool loop profile, the Tool Gateway runs this validation when it executes a `submit_research` call, against the sources that the Run captured before the response of the call. A refusal makes the call a refused ToolCall, and its result gives the reason, so the model can correct the call (ADR 0091 section 3). A summary, a claim text, or a citation with U+0000 does not fit the typed intake of the Tool, so the Host refuses that call before this validation, with the reason `unstorable_text`.
+
 ### 4. The Research Artifact
 
 A valid and selected synthesis writes one row of `storyos.research_artifacts` in the transaction of its Decision. The row has the content (the summary and the claims with typed citations), its `sha256` digest, and the lineage: the Run, the RunStep position, the Operation Requirement, the Model Attempt, the Decision, and the ToolCall identities of the RunStep. Foreign keys bind the Run, the Model Attempt, and the Operation Requirement. One Decision has at most one Artifact.
+
+In the tool loop profile, the transaction that settles a valid `submit_research` call writes the row. The Decision of the lineage is the Agent Decision that holds the call, and the Model Attempt is the Attempt that observed its response. One Run records at most one Artifact (ADR 0091 section 2). The public `decision` of the completed Run is `research_synthesis` with that Artifact, also when the closing response has no text, and its continuation binding is the one of the closing response.
 
 - The row is immutable. The store has no update path and no delete path. The runtime role has only `SELECT` and `INSERT`. Row Level Security keeps each row in its exact Project Scope.
 - The table is in `PROJECT_EXPORT_TABLES` and in the archive builder (`canonical/research_artifacts.json`).
@@ -61,7 +67,7 @@ The panel shows the summary, each claim with its citation numbers, and the numbe
 
 ### 8. "Use this in the story"
 
-The button sends the ordinary `createAgentRun` request of S5-05 in the same Project Conversation, with a fixed author message and no selection reference. The model reads the synthesis through the prior response of the continuation binding. When the next Decision opens a prose Proposal, `proposals.source_lineage` has the kind `research_artifact`. It names the RunStep of that Proposal, the Model Attempt that produced it (the successor of an unknown create, or else the decision attempt), and the Artifact whose response the request continued. A request with a full input reads no earlier response, so its Proposal names no Artifact. A rejection of the Proposal changes no Artifact and no source.
+The button sends the ordinary `createAgentRun` request of S5-05 in the same Project Conversation, with a fixed author message and no selection reference. The model reads the synthesis through the prior response of the continuation binding. When the next Decision opens a prose Proposal, `proposals.source_lineage` has the kind `research_artifact`. It names the RunStep of that Proposal, the Model Attempt that produced it (the successor of an unknown create, or else the decision attempt), and the Artifact whose response the request continued. In the tool loop profile, the closing response of the Run continues the response that recorded the Artifact, so the closing response also gives that Artifact. A request with a full input reads no earlier response, so its Proposal names no Artifact. A rejection of the Proposal changes no Artifact and no source.
 
 ## Considered options
 

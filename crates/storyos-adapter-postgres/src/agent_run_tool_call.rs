@@ -276,7 +276,9 @@ pub(crate) fn call_inspect(
         }
         storyos_core::ToolIntake::WebFetch { urls } => ToolCallInspect::PageRead { urls, outcome },
         // The public list holds only research calls.
-        storyos_core::ToolIntake::Finish | storyos_core::ToolIntake::ProposeEdit(_) => {
+        storyos_core::ToolIntake::Finish
+        | storyos_core::ToolIntake::ProposeEdit(_)
+        | storyos_core::ToolIntake::SubmitResearch { .. } => {
             return Err(damaged());
         }
     })

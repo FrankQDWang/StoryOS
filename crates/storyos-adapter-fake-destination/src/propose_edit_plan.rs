@@ -10,6 +10,8 @@
 //! - `SCRIPT:propose_twice`: two correct calls in one response.
 //! - `SCRIPT:propose_again`: a correct call alone, then a second correct call alone.
 //! - `SCRIPT:propose_finish_first`: a `finish` call before a correct call in one response.
+//! - `SCRIPT:propose_research_finish_first`: as `propose_finish_first`, and a `submit_research`
+//!   call that cites no captured source after the correct call.
 //! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
 //!   then one such call, then one call with no arguments.
 
@@ -78,6 +80,19 @@ pub(crate) fn calls(
             let finish = call("finish", format!("_{results}_9"), "{}".into());
             (vec![finish, correct(0)], false)
         }
+        (Some("propose_research_finish_first"), 0) => {
+            let finish = call("finish", format!("_{results}_9"), "{}".into());
+            let research = serde_json::json!({
+                "summary": "The tides.",
+                "claims": [{"text": "Two high waters.", "citations": ["uncaptured"]}],
+            });
+            let research = call(
+                ToolOperation::SubmitResearch.function_name(),
+                format!("_{results}_8"),
+                research.to_string(),
+            );
+            (vec![finish, correct(0), research], false)
+        }
         (Some("propose_mixed"), 0) => (vec![undeclared(0), undeclared(1)], false),
         (Some("propose_mixed"), 2) => (vec![undeclared(0)], false),
         (Some("propose_mixed"), 3) => (
@@ -91,7 +106,8 @@ pub(crate) fn calls(
                 | "propose_twice"
                 | "propose_again"
                 | "propose_mixed"
-                | "propose_finish_first",
+                | "propose_finish_first"
+                | "propose_research_finish_first",
             ),
             _,
         ) => (Vec::new(), true),

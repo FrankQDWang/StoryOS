@@ -3,21 +3,32 @@
 //! Assembly, no Destination Attempt, no Outbound Disclosure Event, and no source capture.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{ToolCallState, ToolSpec};
+use storyos_core::{ToolCallState, ToolIntake, ToolSpec};
 
 use crate::agent_run_tool_authority::{Resolution, ToolCallRow, damaged, resolve};
 
 /// Executes the pending Host ToolCall `row` of the Host Tool `spec`, and settles it with its
 /// result and its one `tool_call_settled` Activity Run Event. The Tool Gateway executes a Host
-/// ToolCall after each other ToolCall of its response, so the refusals of the response are known.
+/// ToolCall after each other ToolCall of its response, and `finish` last, so the refusals of the
+/// response are known.
 pub(crate) async fn execute(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     row: &ToolCallRow,
     spec: &ToolSpec,
 ) -> Result<(), CompleteAgentRunError> {
-    if let Ok(storyos_core::ToolIntake::ProposeEdit(edit)) = spec.intake(&row.arguments) {
-        return crate::agent_run_propose_edit::execute(client, claim, row, &edit).await;
+    let intake = spec
+        .intake(&row.arguments)
+        .map_err(|_| damaged("The Host ToolCall is damaged"))?;
+    match &intake {
+        ToolIntake::SubmitResearch { summary, claims } => {
+            return crate::agent_run_submit_research::execute(client, claim, row, summary, claims)
+                .await;
+        }
+        ToolIntake::ProposeEdit(edit) => {
+            return crate::agent_run_propose_edit::execute(client, claim, row, edit).await;
+        }
+        ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client
         .query_one(
@@ -40,10 +51,7 @@ pub(crate) async fn execute(
         .await
         .map_err(crate::agent_run_work::complete_database_error)?
         .get(0);
-    let result = spec
-        .intake(&row.arguments)
-        .ok()
-        .and_then(|intake| storyos_core::execute_host_tool(&intake, refused_beside))
+    let result = storyos_core::execute_host_tool(&intake, refused_beside)
         .ok_or_else(|| damaged("The Host ToolCall is damaged"))?;
     resolve(
         client,

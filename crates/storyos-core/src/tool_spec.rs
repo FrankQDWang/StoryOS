@@ -28,6 +28,8 @@ pub enum ToolOperation {
     Finish,
     /// The Host Tool with which the Agent proposes a change of Chapter blocks.
     ProposeEdit,
+    /// The Host Tool with which the Agent gives one research synthesis (ADR 0091).
+    SubmitResearch,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -124,6 +126,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &WEB_FETCH_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
         &PROPOSE_EDIT_TOOL_SPEC,
+        &crate::SUBMIT_RESEARCH_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -141,6 +144,10 @@ pub enum ToolIntake {
     },
     Finish,
     ProposeEdit(crate::ProposedEdit),
+    SubmitResearch {
+        summary: String,
+        claims: Vec<crate::ClaimCandidate>,
+    },
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -152,6 +159,8 @@ pub enum IntakeRefusal {
     ResultCount,
     UrlCount,
     Url,
+    /// A text of the arguments has U+0000, which the store cannot keep in a `jsonb` value.
+    UnstorableText,
 }
 
 #[derive(Deserialize)]
@@ -219,6 +228,7 @@ impl ToolSpec {
             ToolOperation::ProposeEdit => crate::ProposedEdit::deserialize(arguments)
                 .map(ToolIntake::ProposeEdit)
                 .map_err(|_| IntakeRefusal::Malformed),
+            ToolOperation::SubmitResearch => crate::submit_research::intake(arguments),
         }
     }
 }
@@ -270,11 +280,17 @@ impl ServerArguments {
             }
             (
                 Self::Search { .. },
-                ToolIntake::WebFetch { .. } | ToolIntake::Finish | ToolIntake::ProposeEdit(_),
+                ToolIntake::WebFetch { .. }
+                | ToolIntake::Finish
+                | ToolIntake::ProposeEdit(_)
+                | ToolIntake::SubmitResearch { .. },
             )
             | (
                 Self::Fetch { .. },
-                ToolIntake::WebSearch { .. } | ToolIntake::Finish | ToolIntake::ProposeEdit(_),
+                ToolIntake::WebSearch { .. }
+                | ToolIntake::Finish
+                | ToolIntake::ProposeEdit(_)
+                | ToolIntake::SubmitResearch { .. },
             ) => {
                 return None;
             }
