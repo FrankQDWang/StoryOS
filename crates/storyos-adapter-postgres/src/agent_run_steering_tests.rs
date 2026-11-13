@@ -53,6 +53,13 @@ pub(crate) enum AuthorAction {
     /// The steering inputs, in order.
     Steer(Vec<CommandCall<SteerAgentRunInput>>),
     Cancel(Box<CommandCall<CancelAgentRunInput>>),
+    /// An Author Edit of a pending candidate.
+    Edit(Box<storyos_application::ApplyAuthorEditCommand>),
+    Accept(Box<CommandCall<storyos_application::AcceptProposalInput>>),
+    Reject(Box<CommandCall<storyos_application::RejectProposalOperationsInput>>),
+    Withdraw(Box<CommandCall<storyos_application::WithdrawProposalInput>>),
+    /// Each action in order.
+    Sequence(Vec<AuthorAction>),
 }
 
 /// The fake model of the tool loop profile, and the author who acts one time at `moment`.
@@ -80,39 +87,74 @@ impl<'a> AuthorAt<'a> {
     }
 
     async fn act(&self) {
-        match &self.action {
-            AuthorAction::Steer(calls) => {
-                for call in calls {
-                    let answer = match self
-                        .store
-                        .steer_agent_run(&call.envelope, &call.input)
-                        .await
-                    {
-                        Ok(settlement) => match settlement.outcome {
-                            TransitionOutcome::NoEffect(
-                                SteerAgentRunNoEffect::SteeringRetained,
-                            ) => SteeringAnswer::Retained,
-                            TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun) => {
-                                SteeringAnswer::Conflicted
+        self.act_on(&self.action).await;
+    }
+
+    fn act_on<'b>(
+        &'b self,
+        action: &'b AuthorAction,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'b>> {
+        Box::pin(async move {
+            match action {
+                AuthorAction::Steer(calls) => {
+                    for call in calls {
+                        let answer = match self
+                            .store
+                            .steer_agent_run(&call.envelope, &call.input)
+                            .await
+                        {
+                            Ok(settlement) => match settlement.outcome {
+                                TransitionOutcome::NoEffect(
+                                    SteerAgentRunNoEffect::SteeringRetained,
+                                ) => SteeringAnswer::Retained,
+                                TransitionOutcome::Conflicted(
+                                    SteerAgentRunConflict::TerminalRun,
+                                ) => SteeringAnswer::Conflicted,
+                                TransitionOutcome::Applied(applied) => match applied.effect {},
+                                TransitionOutcome::Refused(reason) => match reason {},
+                            },
+                            Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
+                                SteeringAnswer::Refused(refusal)
                             }
-                            TransitionOutcome::Applied(applied) => match applied.effect {},
-                            TransitionOutcome::Refused(reason) => match reason {},
-                        },
-                        Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => {
-                            SteeringAnswer::Refused(refusal)
-                        }
-                        Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
-                    };
-                    self.answers.lock().unwrap().push(answer);
+                            Err(RefusableCommandError::Command(error)) => panic!("{error:?}"),
+                        };
+                        self.answers.lock().unwrap().push(answer);
+                    }
+                }
+                AuthorAction::Cancel(call) => {
+                    self.store
+                        .cancel_agent_run(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Edit(command) => {
+                    self.store.apply_author_edit(command).await.unwrap();
+                }
+                AuthorAction::Accept(call) => {
+                    self.store
+                        .accept_proposal(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Reject(call) => {
+                    self.store
+                        .reject_proposal_operations(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Withdraw(call) => {
+                    self.store
+                        .withdraw_proposal(&call.envelope, &call.input)
+                        .await
+                        .unwrap();
+                }
+                AuthorAction::Sequence(actions) => {
+                    for action in actions {
+                        self.act_on(action).await;
+                    }
                 }
             }
-            AuthorAction::Cancel(call) => {
-                self.store
-                    .cancel_agent_run(&call.envelope, &call.input)
-                    .await
-                    .unwrap();
-            }
-        }
+        })
     }
 }
 
@@ -348,7 +390,7 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
 }
 
 /// The references of the Operation Requirement of each RunStep of the Run, by position.
-async fn step_references(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn step_references(admin: &Client, run_id: &str) -> Value {
     let rows = admin
         .query(
             "SELECT jsonb_build_array(decision_position, jsonb_path_query_array(payload,
@@ -513,7 +555,7 @@ async fn after_a_steering_input_the_next_propose_edit_call_revises_the_moved_can
 
 /// Each requirement position of the Run, and each decision Model Attempt as its position and
 /// decision kind.
-async fn run_steps(admin: &Client, run_id: &str) -> Value {
+pub(crate) async fn run_steps(admin: &Client, run_id: &str) -> Value {
     admin
         .query_one(
             "SELECT jsonb_build_object(
