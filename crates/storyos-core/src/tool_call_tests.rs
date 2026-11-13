@@ -20,7 +20,7 @@ fn pinned() -> ExposureSnapshot {
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        model_registration_revision: crate::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }

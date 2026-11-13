@@ -150,8 +150,8 @@ pub use finish_rule::{
 pub use function_calling::{
     AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
     AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, ToolProbe,
-    tool_probe,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_FUNCTION_CALLING_REGISTRATION,
+    ToolProbe, tool_probe,
 };
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
@@ -305,8 +305,9 @@ pub use tool_exposure::{
     function_request_refusal_capability, requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE,
-    HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+    HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,

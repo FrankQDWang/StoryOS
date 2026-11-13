@@ -97,6 +97,8 @@ pub enum BudgetBounds {
     AgentPlanRequestV2,
     /// The bounds of V2 with the Tool projection of the request (ADR 0052, ADR 0084).
     AgentPlanRequestV3,
+    /// The bounds of V2 with the Host Tools and the `tool_choice` of the finish rule (ADR 0091).
+    AgentPlanRequestV4,
 }
 
 impl BudgetBounds {
@@ -107,6 +109,7 @@ impl BudgetBounds {
             Self::AgentPlanRequestV1 => "agent_plan_request_v1",
             Self::AgentPlanRequestV2 => "agent_plan_request_v2",
             Self::AgentPlanRequestV3 => "agent_plan_request_v3",
+            Self::AgentPlanRequestV4 => "agent_plan_request_v4",
         }
     }
 
@@ -117,6 +120,7 @@ impl BudgetBounds {
             Self::AgentPlanRequestV1,
             Self::AgentPlanRequestV2,
             Self::AgentPlanRequestV3,
+            Self::AgentPlanRequestV4,
         ]
         .into_iter()
         .find(|bounds| bounds.as_str() == value)
@@ -129,10 +133,12 @@ impl BudgetBounds {
                 max_output_tokens: 8192,
                 timeout: Duration::from_secs(/*secs*/ 180),
             }),
-            Self::AgentPlanRequestV2 | Self::AgentPlanRequestV3 => Some(RequestBounds {
-                max_output_tokens: 32_768,
-                timeout: Duration::from_secs(/*secs*/ 600),
-            }),
+            Self::AgentPlanRequestV2 | Self::AgentPlanRequestV3 | Self::AgentPlanRequestV4 => {
+                Some(RequestBounds {
+                    max_output_tokens: 32_768,
+                    timeout: Duration::from_secs(/*secs*/ 600),
+                })
+            }
         }
     }
 
@@ -200,7 +206,7 @@ impl DeploymentDestination {
     pub fn budget_bounds(&self) -> BudgetBounds {
         match self {
             Self::HostFake | Self::HostFakeToolLoop => BudgetBounds::NotRequired,
-            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV3,
+            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV4,
         }
     }
 }

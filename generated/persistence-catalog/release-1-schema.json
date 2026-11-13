@@ -4972,7 +4972,7 @@
         "project_external_use_binding_r_model_registration_revision_fkey": "FOREIGN KEY (model_registration_revision) REFERENCES storyos.model_registration_revisions(model_registration_revision)",
         "project_external_use_binding_r_tool_registration_revision_fkey": "FOREIGN KEY (tool_registration_revision) REFERENCES storyos.tool_registration_revisions(tool_registration_revision)",
         "project_external_use_binding_revisio_credential_reference_check": "CHECK (((char_length(credential_reference) >= 1) AND (char_length(credential_reference) <= 500)))",
-        "project_external_use_binding_revisions_budget_bounds_check": "CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text])))",
+        "project_external_use_binding_revisions_budget_bounds_check": "CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text])))",
         "project_external_use_binding_revisions_credential_shape": "CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL)))",
         "project_external_use_binding_revisions_credential_source_check": "CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text])))",
         "project_external_use_binding_revisions_evidence_revision_check": "CHECK (((evidence_revision >= (1)::numeric) AND (evidence_revision <= '18446744073709551615'::numeric)))",
