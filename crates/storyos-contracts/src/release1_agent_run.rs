@@ -817,8 +817,8 @@ pub struct GetAgentRunResponse {
     pub context: AgentRunContextInspect,
     // In the Run read, the Host derives one kind from `results` for a client that reads one
     // kind: the last Proposal gives `prose_change`, else a Research Artifact gives
-    // `research_synthesis`, else the Decision of the active RunStep stays. In a read of one Model
-    // Attempt, it is the Decision of that RunStep (ADR 0091 section 6).
+    // `research_synthesis`, else it is the Decision of the active RunStep or the refusal of the Run.
+    // In a read of one Model Attempt, it is the Decision of that RunStep (ADR 0091 section 6).
     pub decision: OptionalDecisionInspect,
     // Only the Run read has it: each result of the Run, in the order in which the model made
     // it. No result replaces another (ADR 0091 section 6).

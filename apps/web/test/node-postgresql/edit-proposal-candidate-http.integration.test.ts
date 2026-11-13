@@ -605,6 +605,11 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
     assert.deepEqual(current.decision.locations?.[0]?.outcome, { kind: "revised", proposal_id: proposalId,
       operation_id: before.proposal.operation_id, revision_id: after.proposal.revision_id,
       prior_revision_id: revised.proposal.revision_id, validation_receipt_id: after.proposal.validation_receipt.validation_receipt_id });
+    // The Run read gives each Proposal of the Run in its order, and the last one is the derived decision (ADR 0091).
+    assert.deepEqual(current.results?.map((result) => result.kind === "proposal"
+      && result.locations.map(({ outcome }) => outcome.kind === "revised" && outcome.revision_id)),
+    [[revised.proposal.revision_id], [after.proposal.revision_id], false]);
+    assert.equal(current.results?.at(-1)?.kind, "answer");
     const historicalOptions = { ...options, modelAttemptId: held.model_attempt.model_attempt_id };
     const historical = await getAgentRun(historicalOptions);
     // The availability of a reference is current, so only the historical reference itself stays the same.
@@ -617,6 +622,8 @@ test("guidance after a candidate Decision revises that Run's exact output and pr
     // A read of one Model Attempt gives the decision of its RunStep: the held closing RunStep gave the final text, and
     // the Run decision gave the first revision (ADR 0091).
     assert.equal(historical.decision.kind, "advisory");
+    // The results belong to the Run, so a read of one Model Attempt has none.
+    assert.equal(historical.results, undefined);
     if (held.decision.kind !== "prose_change") throw new Error("expected historical revision");
     assert.deepEqual(held.decision.locations?.map(({ outcome }) => outcome.kind === "revised"
       && [outcome.revision_id, outcome.prior_revision_id]), [[revised.proposal.revision_id, before.proposal.revision_id]]);

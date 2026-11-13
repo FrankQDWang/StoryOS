@@ -1,15 +1,17 @@
-import type { GetAgentRunResponse, GetManuscriptTreeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  GetManuscriptTreeResponse, ProseChangeLocationInspect,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 
-export function ProposalLocationLinks({ run, tree, sourceChapterId, onNavigate }: {
-  run: GetAgentRunResponse;
+/** The change locations of one Proposal, and a return to the source Chapter. */
+export function ProposalLocationLinks({ locations, tree, sourceChapterId, onNavigate }: {
+  locations: readonly ProseChangeLocationInspect[];
   tree?: GetManuscriptTreeResponse | undefined;
   sourceChapterId: string;
   onNavigate?: ((destination: ProposalDestination) => void) | undefined;
 }) {
-  if (run.decision.kind !== "prose_change") return null;
   return <div className="proposal-locations">
-    {run.decision.locations?.map((location, index, locations) => {
+    {locations.map((location, index) => {
       const outcome = location.outcome;
       if (outcome.kind === "refused") return <p key={`${location.chapter_id}:${location.manuscript_block_id}`}>{location.explanation}</p>;
       return <p key={outcome.operation_id}><button type="button" className="proposal-location"
@@ -21,7 +23,7 @@ export function ProposalLocationLinks({ run, tree, sourceChapterId, onNavigate }
             · 第{locations.slice(0, index + 1).filter(item => item.chapter_id === location.chapter_id).length}处修改<span aria-hidden="true">↗</span></span>
           <span className="location-reason">{location.explanation}</span></button></p>;
     })}
-    {(run.decision.locations?.length ?? 0) > 0 ? <button type="button" data-proposal-return=""
+    {locations.length > 0 ? <button type="button" data-proposal-return=""
       onClick={() => onNavigate?.({ chapterId: sourceChapterId })}>返回来源章节</button> : null}
   </div>;
 }

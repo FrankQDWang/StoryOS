@@ -50,6 +50,10 @@ function readArtifact(context: ReadContext, runId: string, researchArtifactId: s
   });
 }
 
+function researchArtifactId(run: GetAgentRunResponse): string | undefined {
+  return run.decision.kind === "research_synthesis" ? run.decision.research_artifact_id : undefined;
+}
+
 /** A Run whose decision is a function request or a research synthesis, so that it can have research sources. */
 export function researchDecision(run: GetAgentRunResponse): boolean {
   return run.decision.kind === "tool_request" || run.decision.kind === "research_synthesis";
@@ -60,9 +64,11 @@ export function researchDecision(run: GetAgentRunResponse): boolean {
  * Research Artifact (ADR 0040, ADR 0087). `children` go after the citation list. A failed read shows nothing, so
  * the turn shows only its result sentence.
  */
-export function ResearchTurn({ context, run, history = false, children }: {
+export function ResearchTurn({ context, run, artifactId = researchArtifactId(run), history = false, children }: {
   context: ReadContext;
   run: GetAgentRunResponse;
+  /** The Research Artifact of the Run that the turn shows. */
+  artifactId?: string | undefined;
   /** A history turn of a synthesis shows its sources only with its Artifact, so a failed Artifact read shows only
    * the result sentence (#1427). */
   history?: boolean;
@@ -72,7 +78,6 @@ export function ResearchTurn({ context, run, history = false, children }: {
   const [artifact, setArtifact] = useState<{ runId: string; read: ResearchArtifactInspect }>();
   const runId = run.run_id;
   const settled = settledRun(run);
-  const artifactId = run.decision.kind === "research_synthesis" ? run.decision.research_artifact_id : undefined;
   const { scope, baseUrl, fetchImpl } = context;
 
   useEffect(() => {
