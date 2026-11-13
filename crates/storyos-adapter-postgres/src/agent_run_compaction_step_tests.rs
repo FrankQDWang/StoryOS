@@ -119,7 +119,16 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
                       FROM storyos.tool_calls
                      WHERE run_id = $1::text::uuid AND decision_position = 0),
                    (SELECT install_state FROM storyos.active_context_compactions
-                     WHERE run_id = $1::text::uuid))::text",
+                     WHERE run_id = $1::text::uuid),
+                   (SELECT jsonb_build_array(
+                             (SELECT jsonb_agg(jsonb_build_array(item->>'source_class',
+                                                                 item->>'content'))
+                                FROM jsonb_array_elements(payload->'selected') AS item),
+                             (SELECT jsonb_agg(source->>'call_id')
+                                FROM jsonb_array_elements(
+                                  payload #> '{{operation_requirement,tool_results}}') AS source))
+                      FROM storyos.context_assembly_manifests
+                     WHERE run_id = $1::text::uuid AND manifest_role = 'compaction'))::text",
                 sent("compaction"),
                 sent("decision")
             ),
@@ -145,6 +154,20 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
             )
         })
         .collect();
+    // The Context Assembly of the summary request holds each result that it sends, so its
+    // admission and its manifest cover them.
+    let summary_items: Vec<_> = summary
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|output| json!(["tool_result", output["output"]]))
+        .collect();
+    let summary_calls: Vec<_> = summary
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|output| output["call_id"].clone())
+        .collect();
 
     // The summary request answers each call of the prior response, and the later request sends
     // each result again with its call, so the model gets each result after the install.
@@ -154,6 +177,7 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
             delivered,
             stored.as_array().unwrap().len(),
             row[3].clone(),
+            row[4].clone(),
             record.status,
             matches!(record.decision, AgentRunDecisionInspect::Advisory { ref text, .. }
                 if text == ADVISORY_TEXT),
@@ -163,6 +187,7 @@ async fn a_later_run_step_compacts_while_the_tool_results_of_the_prior_response_
             vec![(true, true), (true, true)],
             2,
             json!("installed"),
+            json!([summary_items, summary_calls]),
             AgentRunStatus::Completed,
             true,
         )

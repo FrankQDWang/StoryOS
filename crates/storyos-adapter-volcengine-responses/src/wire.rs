@@ -184,7 +184,8 @@ and the state of the manuscript passages that the conversation discussed. Write 
 of the manuscript. Reply with the summary text only, with no JSON and no other text.";
 
 /// The body of a compaction summary request: the summary instruction and the prior reference.
-/// The outputs of the calls of the prior response go before the instruction message.
+/// The outputs of the calls of the prior response go before the instruction message, and then
+/// the Host instruction says that their content is data (ADR 0085).
 pub(crate) fn summary_body(
     reference: &str,
     tool_outputs: &[ToolOutput],
@@ -205,9 +206,16 @@ pub(crate) fn summary_body(
         })
         .chain([message])
         .collect();
+    let instructions = match input.len() {
+        1 => SUMMARY_INSTRUCTIONS.to_owned(),
+        _ => format!(
+            "{SUMMARY_INSTRUCTIONS}\n\n{}",
+            storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
+        ),
+    };
     storyos_core::canonical_json(&serde_json::json!({
         "model": provider_model_id,
-        "instructions": SUMMARY_INSTRUCTIONS,
+        "instructions": instructions,
         "input": input,
         "previous_response_id": reference,
         "max_output_tokens": bounds.max_output_tokens,
