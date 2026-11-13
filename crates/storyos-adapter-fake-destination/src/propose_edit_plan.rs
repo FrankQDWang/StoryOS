@@ -1,10 +1,10 @@
 //! The `propose_edit` script of the tool loop profile (ADR 0091). For each request for which the
-//! reply form fake proposes changes, the fake proposes the same changes for the declared targets.
+//! reply form fake proposes changes, the fake proposes the same changes for the declared targets
 //! with a `finish` call beside it: the revision of a referenced candidate with the growth scripts
 //! of the reply form fake, or else a change of each target. For a reply form prose change text
-//! with no changes, it proposes that text for the first target. The end of
-//! the message scripts the other cases, by the count of the `propose_edit` results of the
-//! request:
+//! with no changes, it proposes that text for the first target, with the text as the summary.
+//! The end of the message scripts the other cases, by the count of the `propose_edit` results of
+//! the request:
 //!
 //! - `SCRIPT:propose_two_candidates`: one call that revises each referenced candidate.
 //! - `SCRIPT:propose_refused_once`: the first call names a block that is not a target, alone,
@@ -91,8 +91,10 @@ pub(crate) fn calls(
                 })
             })
             .collect();
-        let arguments =
-            serde_json::json!({"summary": "Kept the narrator voice.", "changes": changes});
+        let summary = single
+            .as_ref()
+            .map_or("Kept the narrator voice.", |(_, text)| text.as_str());
+        let arguments = serde_json::json!({"summary": summary, "changes": changes});
         // The arguments text has line breaks, so a refused call shows that it keeps its text.
         call(
             name,

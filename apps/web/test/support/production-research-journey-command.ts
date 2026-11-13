@@ -24,6 +24,8 @@ const WORKER_ENV = {
 };
 const PARAGRAPHS = ["潮水退到码头下面。", "她在雾里等那条船。"];
 const PROSE = "上午十点四十二分，涨潮漫过了王子码头。";
+const TOOL_NAMES = ["web_search", "web_fetch", "propose_edit", "submit_research", "finish"];
+const INVALID_ANSWER = "这次检索请求不符合要求，我没有改动正文。";
 
 /** Points the model and MCP destination evidence of the Project at the fakes, as the Postgres tests do. */
 async function pointAtFakes(projectId: string, model: string, mcp: string) {
@@ -54,22 +56,30 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
   try {
     const mcp = await fakeExaMcp(repositoryRoot);
     started.push(mcp.close);
+    // Each Run ends with a `finish` call and a closing response with the final answer (ADR 0091).
+    const finish = (callId: string) => [callId, "finish", {}] as const;
     const model = await fakeAgentPlan([
       callsReply("resp_s509_1", [["call_search", "web_search", { query: SEARCH_QUERY, result_count: null }]]),
       callsReply("resp_s509_2", [["call_fetch", "web_fetch", { urls: [PAGE_URL, MISSING_URL] }]]),
-      messageReply("resp_s509_3", (body, earlier) => {
+      callsReply("resp_s509_3", (body, earlier) => {
         const [search, page] = [...earlier.slice(-1), body].map((request) => taggedIdentities(request, '<source id="'));
         const [gap] = taggedIdentities(body, '<gap id="');
-        return JSON.stringify({ kind: "research_synthesis", summary: "1890 年利物浦的潮汐。", claims: [
+        return [["call_synthesis", "submit_research", { summary: "1890 年利物浦的潮汐。", claims: [
           { text: "王子码头上午十点四十二分涨潮。", citations: [page![0], search![0]] },
-          { text: "港口日志不可用。", citations: [gap] }] });
+          { text: "港口日志不可用。", citations: [gap] }] }], finish("call_finish_research")];
       }),
-      messageReply("resp_s509_4", () => JSON.stringify({ kind: "prose_change", summary: "加入涨潮时间。",
-        changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] })),
-      // An empty URL list fails the typed intake, so the batch does not validate.
-      callsReply("resp_s509_5", [["call_invalid", "web_fetch", { urls: [] }]]),
-      callsReply("resp_s509_6", [["call_held", "web_search", { query: HELD_QUERY, result_count: null }]]),
-      messageReply("resp_s509_7", () => "这一段可以写得更安静。"),
+      messageReply("resp_s509_4", () => "我整理了涨潮时间的来源。"),
+      callsReply("resp_s509_5", () => [["call_edit", "propose_edit", { summary: "加入涨潮时间。",
+        changes: [{ block_id: blockIds[0], candidate_text: PROSE, explanation: "研究给出了涨潮时间。" }] }],
+      finish("call_finish_story")]),
+      messageReply("resp_s509_6", () => "修改建议在正文中。"),
+      // An empty URL list fails the typed intake. The result tells the model the reason, and the model ends the Run.
+      callsReply("resp_s509_7", [["call_invalid", "web_fetch", { urls: [] }]]),
+      callsReply("resp_s509_8", [finish("call_finish_invalid")]),
+      messageReply("resp_s509_9", () => INVALID_ANSWER),
+      callsReply("resp_s509_10", [["call_held", "web_search", { query: HELD_QUERY, result_count: null }]]),
+      callsReply("resp_s509_11", [finish("call_finish_plain")]),
+      messageReply("resp_s509_12", () => "这一段可以写得更安静。"),
     ]);
     started.push(model.close);
     const server = await startStoryOSServer({ repositoryRoot, sessions: { "session-a": USER_A },
@@ -112,8 +122,9 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     // Each continuation gives the model its result under the original call_id, and each call ran once.
     assert.deepEqual(model.bodies.slice(1, 3).map((body) => functionOutputs(body).map((output) => output.call_id)),
       [["call_search"], ["call_fetch"]]);
-    // The first request exposes exactly the two research functions, and the server gets the arguments of the model.
-    assert.deepEqual((model.bodies[0]!.tools as { name: string }[]).map((tool) => tool.name), ["web_search", "web_fetch"]);
+    // The first request exposes exactly the two research functions and the Host Tools, and the server gets the
+    // arguments of the model.
+    assert.deepEqual((model.bodies[0]!.tools as { name: string }[]).map((tool) => tool.name), TOOL_NAMES);
     assert.deepEqual(mcp.calls().map((call) => call.params as { name: string; arguments: Record<string, unknown> })
       .map(({ name, arguments: { query, urls } }) => [name, query ?? urls]),
     [["web_search_exa", SEARCH_QUERY], ["web_fetch_exa", [PAGE_URL, MISSING_URL]]]);
@@ -167,15 +178,17 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await saved.waitFor();
     assert.deepEqual(await keptRecords(), kept);
 
-    // The model sends a research request that StoryOS cannot accept. The Run refuses, and no Tool runs.
+    // The model sends a research request that StoryOS cannot accept. No Tool runs, the model reads the reason, and
+    // it tells the author in its final answer (ADR 0091 section 3).
     const invalidRun = await send(page, "再查一下 1890 年的港口日志。");
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
-    assert.deepEqual((await getAgentRun({ ...options, runId: invalidRun })).decision,
-      { kind: "execution_refused", capability: "tool_request_invalid" });
+    const invalid = await getAgentRun({ ...options, runId: invalidRun });
+    assert.ok(invalid.decision.kind === "advisory");
+    assert.equal(invalid.decision.text, INVALID_ANSWER);
+    assert.equal(functionOutputs(model.bodies[7]!)[0]?.call_id, "call_invalid");
     await page.reload();
-    await expect(page.locator("[data-assistant-result]"))
-      .toHaveText("模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。");
+    await expect(page.locator("[data-assistant-result]")).toHaveText(INVALID_ANSWER);
 
     // The author cancels a Run in the panel while the fake Exa server holds its search answer. The cancel fences the
     // dispatched ToolCall, and the Worker drops the exchange at its next lease renewal (ADR 0086, #1425).
@@ -210,14 +223,14 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
     await page.reload();
     await expect(page.locator("[data-assistant-result]")).toHaveText(uncertain);
 
-    // A plain request also exposes the two research functions. The model answers without a call, and manual writing
-    // saves.
+    // A plain request also exposes the two research functions. The model calls only `finish` before its answer, and
+    // manual writing saves.
     const plainRun = await send(page, "这一段怎么写得更安静？");
     await pointAtFakes(setup.projectId, model.base, mcp.base);
     await settleOnce(WORKER_ENV);
     assert.equal((await getAgentRun({ ...options, runId: plainRun })).decision.kind, "advisory");
-    assert.equal(model.bodies.length, 7);
-    assert.deepEqual((model.bodies[6]!.tools as { name: string }[]).map((tool) => tool.name), ["web_search", "web_fetch"]);
+    assert.equal(model.bodies.length, 12);
+    assert.deepEqual((model.bodies[10]!.tools as { name: string }[]).map((tool) => tool.name), TOOL_NAMES);
     assert.equal(mcp.calls().length, 3);
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");

@@ -140,7 +140,8 @@ async function buildReadFixture() {
     ...await researchSource(proposal.source.run_id) };
 }
 
-/** One Source Snapshot of a refused ToolCall of the Run, and one Research Artifact that cites it. This file has no
+/** One Source Snapshot of a refused ToolCall of the Run, and one Research Artifact that cites it. The ToolCall takes the
+ * next position after the Host Tool calls of the Attempt. This file has no
  * research Tool server, so the rows write the records that a settled research ToolCall and a synthesis write; the
  * store tests prove the capture and the synthesis. */
 async function researchSource(runId: string): Promise<{ sourceSnapshotId: string; researchArtifactId: string }> {
@@ -153,7 +154,9 @@ async function researchSource(runId: string): Promise<{ sourceSnapshotId: string
         model_attempt_id, decision_id, call_id, call_position, caller_route, function_name, registration_id,
         tool_registration_revision, tool_spec_revision, arguments, argument_digest, state, refusal)
       SELECT owner_user_id, project_id, gen_random_uuid(), run_id, decision_position, model_attempt_id,
-             gen_random_uuid(), 'call_01', 0, 'model', 'web_fetch', 'web_research', gen_random_uuid(),
+             gen_random_uuid(), 'call_01', (SELECT count(*) FROM storyos.tool_calls AS earlier
+               WHERE earlier.model_attempt_id = attempt.model_attempt_id), 'model', 'web_fetch', 'web_research',
+             gen_random_uuid(),
              'storyos.tool.web-fetch.v1', '{}'::jsonb, 'sha256:' || repeat('0', 64), 'refused', 'tool_not_enabled'
         FROM attempt
       RETURNING owner_user_id, project_id, run_id, tool_call_id),
