@@ -178,10 +178,6 @@ impl ResearchSynthesis {
     }
 }
 
-/// The sentence of the Host instructions that tells the model how to cite.
-pub const CITABLE_SOURCES_INSTRUCTION: &str = "A tool_sources tag after a tool_result lists the \
-id of each source and each gap of that result. A gap is a requested page that is not available.";
-
 /// The citable identities of one ToolCall output, as data in their own tag after the result
 /// boundary. The Host made each identity, so the model can copy it exactly. A ToolCall with no
 /// Snapshot and no Gap has no tag.

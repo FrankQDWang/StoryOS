@@ -224,98 +224,31 @@ async fn locations(store: &PostgresProjectReader, scope: &ProjectScope, run_id: 
     json!(locations)
 }
 
-/// `value` with each UUID replaced by the order of its first appearance, so that the records of
-/// two Projects compare.
-fn without_identities(value: &Value, seen: &mut Vec<String>) -> Value {
-    match value {
-        Value::String(text) if uuid::Uuid::parse_str(text).is_ok() => {
-            let index = seen
-                .iter()
-                .position(|known| known == text)
-                .unwrap_or_else(|| {
-                    seen.push(text.clone());
-                    seen.len() - 1
-                });
-            json!(format!("id-{index}"))
-        }
-        Value::Array(items) => items
-            .iter()
-            .map(|item| without_identities(item, seen))
-            .collect(),
-        Value::Object(fields) => fields
-            .iter()
-            .map(|(key, item)| (key.clone(), without_identities(item, seen)))
-            .collect(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => value.clone(),
-    }
-}
-
-/// The status and the locations of the Run and the Proposal records of the fixture, with no
-/// identities.
-async fn outcome(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    fixture: &Fixture,
-    run_id: &str,
-) -> Value {
-    let mut seen = Vec::new();
-    // The panel opens the current revision of a location, or else the revision of its outcome.
-    // A later RunStep of the tool loop references the joined candidates, so their locations
-    // have a current revision. It is the revision of the outcome.
-    let mut locations = locations(store, &fixture.scope, run_id).await;
-    for location in locations.as_array_mut().unwrap() {
-        let opened = match &location["current"] {
-            Value::Null => location["outcome"]["revision_id"].clone(),
-            current => current["revision_id"].clone(),
-        };
-        location["current"] = opened;
-    }
-    let status = admin
-        .query_one(
-            "SELECT status FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap()
-        .get::<_, String>(/*idx*/ 0);
-    let records = json!([
-        status,
-        locations,
-        proposal_records(admin, &fixture.source_run).await,
-    ]);
-    without_identities(&records, &mut seen)
-}
-
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_call_revises_the_candidate_or_grows_its_proposal_as_the_reply_form_does() {
+async fn a_call_revises_the_candidate_or_grows_its_proposal() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let grow = format!("{REVISE} SCRIPT:grow_proposal");
-    // Each case gives the leads of the reply form and the tool loop Projects.
     let cases = [
-        ("revise", [0xd18, 0xd10], REVISE, false),
-        ("grow", [0xd38, 0xd30], grow.as_str(), true),
+        ("revise", 0xd10, REVISE, false),
+        ("grow", 0xd30, grow.as_str(), true),
     ];
-    for (name, [reply_lead, tool_lead], message, joined) in cases {
-        let mut outcomes = Vec::new();
-        let mut runs = Vec::new();
-        for (lead, destination) in [
-            (reply_lead, DeploymentDestination::HostFake),
-            (tool_lead, DeploymentDestination::HostFakeToolLoop),
-        ] {
-            let fixture = Fixture::new(&store, &admin, lead, destination).await;
-            let mut references = fixture.candidates(&admin).await;
-            if joined {
-                references.insert(0, fixture.chapter_text(1, 2));
-            }
-            let run_id = fixture.run(&store, &admin, 2, message, references).await;
-            outcomes.push(outcome(&store, &admin, &fixture, &run_id).await);
-            runs.push((fixture, run_id));
+    for (name, lead, message, joined) in cases {
+        let fixture = Fixture::new(
+            &store,
+            &admin,
+            lead,
+            DeploymentDestination::HostFakeToolLoop,
+        )
+        .await;
+        let mut references = fixture.candidates(&admin).await;
+        if joined {
+            references.insert(0, fixture.chapter_text(1, 2));
         }
-        let (fixture, run_id) = &runs[1];
+        let run_id = &fixture.run(&store, &admin, 2, message, references).await;
         let records = proposal_records(&admin, &fixture.source_run).await;
         let kinds: Vec<Value> = locations(&store, &fixture.scope, run_id)
             .await
@@ -327,7 +260,6 @@ async fn a_call_revises_the_candidate_or_grows_its_proposal_as_the_reply_form_do
         let blocks = if joined { 3 } else { 1 };
         let bundle = if joined { "atomic" } else { "none" };
 
-        assert_eq!(outcomes[0], outcomes[1], "{name}");
         assert_eq!(
             (
                 kinds,

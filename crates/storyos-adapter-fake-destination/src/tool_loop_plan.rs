@@ -1,4 +1,4 @@
-//! The script of the tool loop profile (ADR 0091): the fake calls `finish` in each request with
+//! The script of the fake model (ADR 0091): the fake calls `finish` in each request with
 //! `tool_choice: "required"`, and it writes the final answer in the closing request. Other author
 //! messages script the other cases of the finish rule and the RunStep limit:
 //!
@@ -6,7 +6,6 @@
 //!   each function output of the request answers the prior response.
 //! - `SCRIPT:finish_twice` gets a second `finish` call in the first closing request.
 //! - `SCRIPT:empty_final_answer` gets a closing response with an empty text.
-//! - `SCRIPT:reply_form_answer` gets a closing text that maps to a reply form question.
 //! - `SCRIPT:refuse <name> <arguments>` gets a call of `<name>` with the `<arguments>` text
 //!   before the `finish` call of the first request. The later requests are as usual, so the
 //!   model corrects the call.
@@ -16,15 +15,14 @@
 //! - `SCRIPT:submit_research ...` gets the research script of `research_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
-//!   the reply form profile in the first request.
+//!   `create_plan::response_outcome` in the first request.
 
 use storyos_application::{CreateRequest, ToolOutputOrigin};
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, NativeStreamItem, OutputPhase, StreamItemRole,
-    StreamItemState, ToolChoice, ToolOperation,
+    ADVISORY_TEXT, NativeStreamItem, StreamItemRole, StreamItemState, ToolChoice, ToolOperation,
 };
 
-use crate::create_plan::{FakeCreate, assistant_item, complete, evidence_item};
+use crate::create_plan::{FakeCreate, Intent, assistant_item, complete, evidence_item};
 
 /// The text of a response with no function call before a `finish` call that counted.
 const TEXT_BEFORE_FINISH: &str = "I have read the results.";
@@ -70,22 +68,11 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         ToolChoice::None if message == "SCRIPT:finish_twice" && finished == 1 => {
             calls(request, finished)
         }
-        ToolChoice::None if message == "SCRIPT:reply_form_answer" => complete(
-            DecisionCandidate::Clarification {
-                question: "Which chapter do you mean?".to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        ),
-        ToolChoice::None => complete(
-            DecisionCandidate::Advisory {
-                text: match message {
-                    "SCRIPT:empty_final_answer" => String::new(),
-                    _ => final_answer(request),
-                },
-            },
-            OutputPhase::FinalAnswer,
-        ),
-        ToolChoice::Auto | ToolChoice::Required
+        ToolChoice::None => complete(&match message {
+            "SCRIPT:empty_final_answer" => String::new(),
+            _ => final_answer(request),
+        }),
+        ToolChoice::Required
             if message.ends_with("SCRIPT:text_before_finish")
                 && !request.tool_outputs.is_empty()
                 && request
@@ -93,26 +80,18 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
                     .iter()
                     .all(|output| output.origin == ToolOutputOrigin::PriorResponse) =>
         {
-            complete(
-                DecisionCandidate::Advisory {
-                    text: TEXT_BEFORE_FINISH.to_owned(),
-                },
-                OutputPhase::FinalAnswer,
-            )
+            complete(TEXT_BEFORE_FINISH)
         }
-        ToolChoice::Auto | ToolChoice::Required => calls(request, finished),
+        ToolChoice::Required => calls(request, finished),
     }
 }
 
-/// The question of the reply form fake for `request`, or else the advice text: a question to the
-/// author is a final answer text (ADR 0091).
+/// The question of the fake for `request`, or else the advice text: a question to the author is
+/// a final answer text (ADR 0091).
 fn final_answer(request: &CreateRequest) -> String {
-    match crate::create_plan::reply_form_plan(request).0.output {
-        Some(storyos_core::ModelOutput {
-            candidate: DecisionCandidate::Clarification { question },
-            ..
-        }) => question,
-        _ => ADVISORY_TEXT.to_owned(),
+    match crate::create_plan::intent(request).0 {
+        Intent::Question(question) => question,
+        Intent::Advice | Intent::ProseChange(_) => ADVISORY_TEXT.to_owned(),
     }
 }
 
@@ -177,6 +156,5 @@ fn calls(request: &CreateRequest, finished: usize) -> FakeCreate {
             .chain(unexposed)
             .chain(finish.then(|| call("finish", suffix, "{}".to_owned())))
             .collect(),
-        output: None,
     }
 }

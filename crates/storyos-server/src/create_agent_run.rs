@@ -412,19 +412,6 @@ fn inspect_decision(
                 None => contracts::OptionalOpenedProposalInspect::Absent,
             },
         },
-        storyos_application::AgentRunDecisionInspect::Clarification {
-            decision_id,
-            selected,
-            question,
-            required_reply,
-            continuation_binding_id,
-        } => contracts::OptionalDecisionInspect::Clarification {
-            decision_id: decision_id.clone(),
-            selected: *selected,
-            question: question.clone(),
-            required_reply: required_reply.clone(),
-            continuation: inspect_continuation(continuation_binding_id.as_deref()),
-        },
         storyos_application::AgentRunDecisionInspect::ToolRequest { decision_id, calls } => {
             contracts::OptionalDecisionInspect::ToolRequest {
                 decision_id: decision_id.clone(),

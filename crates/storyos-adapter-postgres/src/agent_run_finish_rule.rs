@@ -14,17 +14,10 @@ pub(crate) async fn tool_choice(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<ToolChoice, CompleteAgentRunError> {
-    if !declares_host_tools(run) {
-        return Ok(ToolChoice::Auto);
-    }
     // A RunStep that reads a steering input is an ordinary RunStep: no `finish` call before it
     // counts.
     if crate::agent_run_steering::reads_input(client, claim, &run.decision_position).await? {
-        return Ok(storyos_core::step_tool_choice(
-            /*declares_host_tools*/ true,
-            run_step_limit(run)?,
-            &[],
-        ));
+        return Ok(storyos_core::step_tool_choice(run_step_limit(run)?, &[]));
     }
     let prior_step = client
         .query(
@@ -56,7 +49,6 @@ pub(crate) async fn tool_choice(
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| damaged("The ToolCall is damaged"))?;
     Ok(storyos_core::step_tool_choice(
-        /*declares_host_tools*/ true,
         run_step_limit(run)?,
         &prior_step,
     ))
@@ -72,11 +64,6 @@ pub(crate) fn run_step_limit(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
 }
 
-fn declares_host_tools(run: &RunPhaseRow) -> bool {
-    storyos_core::model_registration(&run.model_registration_revision)
-        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
-}
-
 /// The finish rule for a response that a recovery path settles in the active RunStep of `run`,
 /// with the `tool_choice` of that RunStep, as for a created response (ADR 0091, ADR 0088). In
 /// the last RunStep, the function calls of the response leave the items, so the Host executes
@@ -89,7 +76,7 @@ pub(crate) async fn recovered_outcome(
     outcome: storyos_core::AgentDecisionOutcome,
 ) -> Result<storyos_core::FinishRuleOutcome, CompleteAgentRunError> {
     let limit = run_step_limit(run)?;
-    if !limit.executes_calls(declares_host_tools(run)) {
+    if !limit.executes_calls() {
         response
             .items
             .retain(|item| item.role != storyos_core::StreamItemRole::Tool);

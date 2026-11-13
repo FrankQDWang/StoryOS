@@ -122,13 +122,11 @@ pub(crate) fn opened(position: u64) -> Value {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_valid_call_opens_the_proposal_of_the_prose_change_reply_and_the_run_shows_it() {
+async fn a_valid_call_opens_one_proposal_and_the_run_shows_it() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let reply_form = DeploymentDestination::HostFake;
-    let (_, reply_run) = revise_run(&store, &admin, ["6b0", "6b1"], reply_form, "").await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
     let (scope, run_id) = revise_run(&store, &admin, ["6b2", "6b3"], tool_loop, "").await;
     let source = admin
@@ -171,7 +169,7 @@ async fn a_valid_call_opens_the_proposal_of_the_prose_change_reply_and_the_run_s
             (text, opened_proposal_id, outcomes),
         ),
         (
-            proposal_records(&admin, &reply_run).await,
+            json!("TEMP"),
             [true, true],
             vec![opened(0)],
             (

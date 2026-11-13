@@ -1,4 +1,4 @@
-//! The public `decision` of a completed Run of the tool loop profile that recorded a Research
+//! The public `decision` of a completed Run that recorded a Research
 //! Artifact (ADR 0091 section 6): `research_synthesis` with that Artifact, in place of the final
 //! answer text or of no result. The continuation binding stays the one of the closing response,
 //! which the next Run of the Conversation continues from.
@@ -22,15 +22,13 @@ pub(crate) async fn derive(
         } => Some(continuation_binding_id.clone()),
         AgentRunDecisionInspect::Absent => None,
         AgentRunDecisionInspect::ProseChange { .. }
-        | AgentRunDecisionInspect::Clarification { .. }
         | AgentRunDecisionInspect::ResearchSynthesis { .. }
         | AgentRunDecisionInspect::ToolRequest { .. }
         | AgentRunDecisionInspect::ExecutionRefused { .. } => return Ok(()),
     };
     let Some(row) = client
         .query_opt(
-            "SELECT run.model_registration_revision::text, artifact.research_artifact_id::text,
-                    artifact.decision_id::text, closing.continuation_binding_id::text
+            "SELECT artifact.research_artifact_id::text, artifact.decision_id::text, closing.continuation_binding_id::text
                FROM storyos.agent_runs AS run
                JOIN storyos.research_artifacts AS artifact
                  ON (artifact.owner_user_id, artifact.project_id, artifact.run_id) =
@@ -53,16 +51,11 @@ pub(crate) async fn derive(
     else {
         return Ok(());
     };
-    if !storyos_core::model_registration(row.get(/*idx*/ 0))
-        .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
-    {
-        return Ok(());
-    }
     *decision = AgentRunDecisionInspect::ResearchSynthesis {
-        decision_id: row.get(/*idx*/ 2),
+        decision_id: row.get(/*idx*/ 1),
         selected: true,
-        research_artifact_id: row.get(/*idx*/ 1),
-        continuation_binding_id: answer_binding.unwrap_or_else(|| row.get(/*idx*/ 3)),
+        research_artifact_id: row.get(/*idx*/ 0),
+        continuation_binding_id: answer_binding.unwrap_or_else(|| row.get(/*idx*/ 2)),
     };
     Ok(())
 }

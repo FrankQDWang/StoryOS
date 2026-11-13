@@ -173,7 +173,6 @@ pub(crate) async fn record_original_result(
                 SET dispatch_state = $5,
                     payload = attempt.payload || jsonb_build_object(
                       'result', $6::text, 'items', $7::text::jsonb)
-                      || jsonb_strip_nulls(jsonb_build_object('synthesis_refusal', $8::text::jsonb))
                FROM storyos.context_assembly_manifests AS assembly
               WHERE attempt.owner_user_id = $1::text::uuid
                 AND attempt.project_id = $2::text::uuid
@@ -192,7 +191,6 @@ pub(crate) async fn record_original_result(
                 &dispatch_state,
                 &retrieved.label(),
                 &retrieved.items.to_string(),
-                &retrieved.synthesis_refusal,
             ],
         )
         .await
@@ -252,7 +250,7 @@ pub(crate) async fn record_original_result(
             _,
         ) => (*advances_continuation, CreateSettlement::Response),
         // The retrieved response asks for a function: the original Attempt keeps it as
-        // evidence, supplies no decision, and settles the Run with the refusal (ADR 0084).
+        // evidence, supplies no decision, and settles the Run (ADR 0084, ADR 0091).
         (AgentDecisionOutcome::NoDecision, true, _) => {
             sealed["original_result_retrieval"]["supplies_decision"] = serde_json::json!(false);
             (false, CreateSettlement::FunctionRequested)
@@ -279,10 +277,6 @@ pub(crate) async fn record_original_result(
             attempt_id: advance.attempt_id,
             items: &response.items,
             outcome: selected.outcome,
-            producer_output: response
-                .output
-                .as_ref()
-                .and_then(|output| output.prose_changes.as_deref()),
             usage: response.usage,
             cache_use: response.cache_use,
             response_reference: response.response_reference.as_deref(),
@@ -328,7 +322,6 @@ pub(crate) async fn record_late_result(
             "UPDATE storyos.model_attempts
                 SET dispatch_state = $7,
                     payload = payload || jsonb_build_object('result', $5::text, 'items', $6::text::jsonb)
-                      || jsonb_strip_nulls(jsonb_build_object('synthesis_refusal', $8::text::jsonb))
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid",
             &[
@@ -343,7 +336,6 @@ pub(crate) async fn record_late_result(
                 } else {
                     "settled"
                 },
-                &retrieved.synthesis_refusal,
             ],
         )
         .await
@@ -372,8 +364,6 @@ pub(crate) struct RetrievedResult {
     pub usage: ModelUsage,
     /// The evidence of the batch validation, when the response has a Tool item.
     pub batch_evidence: Option<serde_json::Value>,
-    /// The reason why Core refused a research synthesis of the response (ADR 0087).
-    pub synthesis_refusal: Option<String>,
 }
 
 /// A complete original response that settles the original Attempt: core validation selected its
@@ -382,7 +372,7 @@ pub(crate) struct SelectedResult {
     pub response: ModelResponse,
     pub outcome: AgentDecisionOutcome,
     /// The complete response asks for a function, and no ToolCall exists. The Host keeps it as
-    /// evidence and settles the Run with the research refusal (ADR 0084).
+    /// evidence and settles the Run (ADR 0084, ADR 0091).
     pub function_requested: bool,
     /// The finish rule settles the complete response with no Agent Decision: it opens the next
     /// RunStep, or it completes the Run with no result (ADR 0091).
@@ -409,7 +399,6 @@ impl RetrievedResult {
                 selected: None,
                 usage: ModelUsage::Unknown,
                 batch_evidence: None,
-                synthesis_refusal: None,
             });
         };
         let items = encode_items(&response.items);
@@ -419,7 +408,6 @@ impl RetrievedResult {
             .all(|item| item.state == StreamItemState::Complete);
         let usage = response.usage;
         let mut batch_evidence = None;
-        let mut synthesis_refusal = None;
         let outcome = if probe {
             AgentDecisionOutcome::NoDecision
         } else {
@@ -430,11 +418,7 @@ impl RetrievedResult {
                 crate::agent_run_propose_edit::screen(client, claim, declared, &response, batch)
                     .await?;
             batch_evidence = crate::agent_run_tool_call::batch_evidence(&batch);
-            let output = response.output.as_ref();
-            let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
-            synthesis_refusal = crate::research_artifact::refusal_evidence(output, &citable)
-                .map(|refusal| refusal.to_string());
-            validate_agent_decision(output, declared, &citable, batch)
+            validate_agent_decision(batch)
         };
         let (outcome, rule) = match crate::agent_run_finish_rule::recovered_outcome(
             client,
@@ -467,7 +451,6 @@ impl RetrievedResult {
                 }),
                 usage,
                 batch_evidence,
-                synthesis_refusal,
             },
             outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
@@ -480,7 +463,6 @@ impl RetrievedResult {
                 }),
                 usage,
                 batch_evidence,
-                synthesis_refusal,
             },
             AgentDecisionOutcome::NoDecision
                 if complete
@@ -501,7 +483,6 @@ impl RetrievedResult {
                     }),
                     usage,
                     batch_evidence,
-                    synthesis_refusal,
                 }
             }
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
@@ -510,7 +491,6 @@ impl RetrievedResult {
                 selected: None,
                 usage,
                 batch_evidence,
-                synthesis_refusal,
             },
         })
     }

@@ -162,7 +162,6 @@ pub(super) async fn load_agent_run(
                 .flatten(),
             payload.as_ref(),
             row.get::<_, Option<String>>(12),
-            crate::prose_change_location_read::decode_locations(payload.as_ref())?,
         ),
         model,
         active_compaction: crate::agent_run_compaction::load_active_compaction(
@@ -193,7 +192,6 @@ pub(super) async fn load_agent_run(
             /*settlement*/ None,
             Some(&selection.payload),
             selection.continuation_binding_id,
-            crate::prose_change_location_read::decode_locations(Some(&selection.payload))?,
         );
         model.items = selection
             .payload
@@ -235,7 +233,6 @@ fn inspect_decision(
     settlement: Option<&serde_json::Value>,
     payload: Option<&serde_json::Value>,
     continuation_binding_id: Option<String>,
-    locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
 ) -> AgentRunDecisionInspect {
     if let Some(capability) = settlement
         .and_then(|value| value.get("capability"))
@@ -269,58 +266,6 @@ fn inspect_decision(
             selected,
             text: decision
                 .get("text")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            continuation_binding_id,
-        },
-        Some("prose_change") => AgentRunDecisionInspect::ProseChange {
-            locations,
-            decision_id,
-            selected,
-            text: decision
-                .get("text")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            producer_input: decision
-                .get("producer_input")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            continuation_binding_id,
-            opened_proposal_id: decision
-                .get("opened_proposal")
-                .filter(|value| {
-                    value.get("kind").and_then(serde_json::Value::as_str) == Some("present")
-                })
-                .and_then(|value| value.get("proposal_id"))
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
-        },
-        Some("clarification") => {
-            let question = decision
-                .get("question")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            AgentRunDecisionInspect::Clarification {
-                decision_id,
-                selected,
-                required_reply: decision
-                    .get("required_reply")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or(&question)
-                    .to_owned(),
-                question,
-                continuation_binding_id,
-            }
-        }
-        Some("research_synthesis") => AgentRunDecisionInspect::ResearchSynthesis {
-            decision_id,
-            selected,
-            research_artifact_id: decision
-                .get("research_artifact_id")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
                 .to_owned(),

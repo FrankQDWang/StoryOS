@@ -100,13 +100,6 @@ async fn only_an_authorized_pending_tool_entry_dispatches_its_probe_with_no_deci
         ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items,
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::Advisory {
-                    text: "storyos-probe".to_owned(),
-                },
-                prose_changes: None,
-            }),
             usage: ModelUsage::Reported {
                 input_tokens: 90,
                 output_tokens: 30,

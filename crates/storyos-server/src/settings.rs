@@ -17,7 +17,6 @@ const KEYS: &[&str] = &[
     "worker",
     "export_lease_ttl_secs",
     "test_allow_multiple_bootstrap_sessions",
-    "test_reply_form_fake",
 ];
 
 /// The `STORYOS_` settings of the Server. Each secret is a `SecretString`.
@@ -36,9 +35,6 @@ pub struct ServerSettings {
     #[serde(default, deserialize_with = "optional_number")]
     pub export_lease_ttl_secs: Option<u64>,
     pub test_allow_multiple_bootstrap_sessions: Option<String>,
-    /// `1` makes a test Server offer the reply form profile of the fake destination in place of
-    /// the tool loop profile. Only the tests that #1463 removes set it.
-    pub test_reply_form_fake: Option<String>,
 }
 
 impl ServerSettings {
@@ -62,10 +58,9 @@ impl ServerSettings {
         let authorization = self.model_qualification_authorization.clone();
         match (self.model_destination.as_deref(), &authorization) {
             (None, None) => Ok(None),
-            (Some("host_fake"), None) => Ok(Some(match self.test_reply_form_fake.as_deref() {
-                Some("1") => storyos_core::DeploymentDestination::HostFake,
-                _ => storyos_core::DeploymentDestination::HostFakeToolLoop,
-            })),
+            (Some("host_fake"), None) => {
+                Ok(Some(storyos_core::DeploymentDestination::HostFakeToolLoop))
+            }
             (Some("volcengine_agent_plan"), _)
                 if authorization.as_deref().is_none_or(|link| {
                     link.starts_with("https://") && (9..=500).contains(&link.len())

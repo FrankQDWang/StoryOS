@@ -1,5 +1,4 @@
-//! The finish rule of ADR 0091 section 4: a Run of the tool loop profile ends only after a
-//! `finish` call that counted. Each request before such a call has `tool_choice: "required"`, and
+//! The finish rule of ADR 0091 section 4: a Run ends only after a `finish` call that counted. Each request before such a call has `tool_choice: "required"`, and
 //! the closing request after it has `tool_choice: "none"`. The RunStep limit of section 5 ends a
 //! Run at its last RunStep.
 
@@ -11,25 +10,23 @@ use crate::{
 /// The `tool_choice` of one decision request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolChoice {
-    /// The reply form profile: the model calls an exposed Tool or replies.
-    Auto,
     /// A request before a `finish` call that counted: the response holds a function call.
     Required,
-    /// The closing request after a `finish` call that counted. The route does not enforce it.
+    /// The closing request after a `finish` call that counted, the request of the last RunStep,
+    /// and a compaction summary request. The route does not enforce it.
     None,
 }
 
 impl ToolChoice {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Auto => "auto",
             Self::Required => "required",
             Self::None => "none",
         }
     }
 }
 
-/// The most RunSteps of one Run of the tool loop profile (ADR 0091 section 5).
+/// The most RunSteps of one Run (ADR 0091 section 5).
 pub const MAX_RUN_STEPS: u64 = 24;
 
 /// The place of the active RunStep against `MAX_RUN_STEPS`.
@@ -53,10 +50,9 @@ impl RunStepLimit {
     }
 
     /// Whether the Host executes the function calls of a response of this RunStep. It executes
-    /// none in the last RunStep of a mapping that declares Host Tools, also when a recovery path
-    /// settles the response.
-    pub fn executes_calls(self, declares_host_tools: bool) -> bool {
-        !declares_host_tools || self == Self::Open
+    /// none in the last RunStep, also when a recovery path settles the response.
+    pub fn executes_calls(self) -> bool {
+        self == Self::Open
     }
 }
 
@@ -68,18 +64,10 @@ pub struct PriorStepCall {
     pub state: ToolCallState,
 }
 
-/// The `tool_choice` of the request of the active RunStep. A mapping that declares no Host Tool
-/// sends `auto`. The last RunStep sends `none`. A `finish` call of the prior RunStep counts when
+/// The `tool_choice` of the request of the active RunStep. The last RunStep sends `none`. A `finish` call of the prior RunStep counts when
 /// it settled and no other call of that response was refused: then the request is the closing
 /// request.
-pub fn step_tool_choice(
-    declares_host_tools: bool,
-    limit: RunStepLimit,
-    prior_step: &[PriorStepCall],
-) -> ToolChoice {
-    if !declares_host_tools {
-        return ToolChoice::Auto;
-    }
+pub fn step_tool_choice(limit: RunStepLimit, prior_step: &[PriorStepCall]) -> ToolChoice {
     if limit == RunStepLimit::Last {
         return ToolChoice::None;
     }
@@ -99,7 +87,8 @@ pub fn step_tool_choice(
 /// What one terminal response does to its Run under the finish rule.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FinishRuleOutcome {
-    /// The response settles with this outcome, as in the reply form profile.
+    /// The response settles with this outcome: the Agent Decision of a function request, a
+    /// response with function calls that makes no Agent Decision, or the final answer.
     Settle(AgentDecisionOutcome),
     /// A response with no function call before a `finish` call that counted: it makes no Agent
     /// Decision, and the Host opens the next RunStep with the same `tool_choice`.
@@ -112,8 +101,7 @@ pub enum FinishRuleOutcome {
 /// Applies the finish rule to the outcome of one terminal response in `response_state` of a
 /// request with `tool_choice`. A function request continues to its ToolCalls in each state
 /// before the last RunStep. In the closing RunStep, the text of a complete response is the final
-/// answer as an Advisory, also when it has the shape of a reply form, and a final answer with no
-/// text gives no result. In the last RunStep, the function calls of the response are ignored.
+/// answer as an Advisory, and a final answer with no text gives no result. In the last RunStep, the function calls of the response are ignored.
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
     limit: RunStepLimit,
@@ -140,7 +128,6 @@ pub fn apply_finish_rule(
         _ if function_request => FinishRuleOutcome::Settle(outcome),
         (ToolChoice::Required, _) => FinishRuleOutcome::NextRunStep,
         (ToolChoice::None, RunStepLimit::Open) => closing_answer(response_state, items),
-        (ToolChoice::Auto, _) => FinishRuleOutcome::Settle(outcome),
     }
 }
 

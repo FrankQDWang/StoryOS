@@ -419,7 +419,6 @@ fn complete(items: Vec<NativeStreamItem>, reference: &str) -> Observation {
     Observation::Terminal(ModelResponse {
         state: storyos_core::StreamItemState::Complete,
         items,
-        output: None,
         usage: ModelUsage::Reported {
             input_tokens: 40,
             output_tokens: 12,

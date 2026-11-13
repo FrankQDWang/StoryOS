@@ -1,6 +1,5 @@
 //! The Model Provider Adapter of the Volcengine Agent Plan Responses route (ADR 0033, ADR 0039).
 
-mod decision;
 mod probe;
 mod response;
 mod stream;
@@ -9,9 +8,9 @@ mod wire;
 use std::time::Duration;
 
 use storyos_application::{
-    CacheSetting, CreatePurpose, CredentialResolver, DeclaredTarget, DestinationRequest,
-    ModelProviderAdapter, ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest,
-    RequestAttempt, RequestRoute, ResolvedCredential, RetrieveRequest, WirePayloadProjection,
+    CacheSetting, CreatePurpose, CredentialResolver, DestinationRequest, ModelProviderAdapter,
+    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, RequestAttempt,
+    RequestRoute, ResolvedCredential, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::ModelAdapter;
 
@@ -43,7 +42,6 @@ enum Exchange {
         body: String,
         credential: ResolvedCredential,
         timeout: Duration,
-        targets: Vec<DeclaredTarget>,
         continues: bool,
         /// The mapping revision of a streamed request, `None` for a request that is not streamed.
         stream: Option<String>,
@@ -53,7 +51,6 @@ enum Exchange {
         url: String,
         credential: ResolvedCredential,
         timeout: Duration,
-        targets: Vec<DeclaredTarget>,
     },
     /// A lost claim committed this Attempt. The request is not sent again.
     Reobserve,
@@ -78,39 +75,28 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // The compaction mapping streams and continues like the streaming mapping. The tool
-        // loop mapping is the compaction mapping with the finish rule.
-        let compacts = [
-            storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
-        ]
-        .contains(&route.mapping_revision.as_str());
-        let streams = compacts
-            || route.mapping_revision == storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION;
-        // Only a continuation mapping can send a prior response reference.
-        if create.previous_response_reference.is_some()
-            && !streams
-            && route.mapping_revision != storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION
-        {
+        // The tool loop mapping is the one decision and summary mapping: it streams, continues,
+        // and compacts. A decision request of an earlier mapping held the reply form (ADR 0091).
+        // A qualification probe holds no reply form (ADR 0049).
+        let probe = matches!(create.purpose, CreatePurpose::ToolQualification(_));
+        if !probe && route.mapping_revision != storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         let body = match (&create.purpose, &create.previous_response_reference) {
             (CreatePurpose::Decision, _) => {
-                wire::create_body(create, &route.provider_model_id, bounds, streams)
+                wire::create_body(create, &route.provider_model_id, bounds)
             }
             (CreatePurpose::ToolQualification(probe), _) => {
                 probe::probe_body(probe, create, &route.provider_model_id, bounds)
                     .ok_or(PreDispatchRefusal::UnsupportedRequest)?
             }
-            (CreatePurpose::CompactionSummary, Some(reference)) if compacts => wire::summary_body(
+            (CreatePurpose::CompactionSummary, Some(reference)) => wire::summary_body(
                 reference,
                 &create.tool_outputs,
                 &route.provider_model_id,
                 bounds,
-                streams,
             ),
-            // A summary needs the compaction mapping and the continuation chain of the
-            // Conversation.
+            // A summary needs the continuation chain of the Conversation.
             (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
@@ -136,10 +122,8 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 body,
                 credential,
                 timeout: bounds.timeout,
-                targets: create.declared_targets.clone(),
                 continues: create.previous_response_reference.is_some(),
-                stream: (streams && !matches!(create.purpose, CreatePurpose::ToolQualification(_)))
-                    .then(|| route.mapping_revision.clone()),
+                stream: (!probe).then(|| route.mapping_revision.clone()),
             }),
         })
     }
@@ -150,22 +134,20 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         prepared: AgentPlanExchange,
         sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let (url, body, credential, timeout, targets, continues, stream) = match prepared.0 {
+        let (url, body, credential, timeout, continues, stream) = match prepared.0 {
             Exchange::Send {
                 url,
                 body,
                 credential,
                 timeout,
-                targets,
                 continues,
                 stream,
-            } => (url, body, credential, timeout, targets, continues, stream),
+            } => (url, body, credential, timeout, continues, stream),
             Exchange::Retrieve {
                 url,
                 credential,
                 timeout,
-                targets,
-            } => return retrieve(&url, &credential, timeout, &targets).await,
+            } => return retrieve(&url, &credential, timeout).await,
             Exchange::Reobserve => {
                 return Observation::OutcomeUnknown {
                     response_reference: None,
@@ -178,7 +160,6 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 Some(mapping_revision) => {
                     return stream::observe(
                         response,
-                        &targets,
                         &mapping_revision,
                         stream::CommitPolicy {
                             bound: storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
@@ -189,7 +170,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                     .await;
                 }
                 None => match response.bytes().await {
-                    Ok(bytes) => response::observe(&bytes, &targets),
+                    Ok(bytes) => response::observe(&bytes),
                     Err(_) => Observation::OutcomeUnknown {
                         response_reference: None,
                     },
@@ -247,7 +228,6 @@ impl<R: CredentialResolver> AgentPlanResponses<R> {
                 url: format!("{}{path}", endpoint.trim_end_matches('/')),
                 credential,
                 timeout: bounds.timeout,
-                targets: retrieve.declared_targets.clone(),
             }),
         })
     }
@@ -268,16 +248,11 @@ impl<R: CredentialResolver> AgentPlanResponses<R> {
 
 /// One GET of a stored response. A response that is not terminal yet is OutcomeUnknown. A
 /// rejection keeps its native code, for example for a reference that the destination does not have.
-async fn retrieve(
-    url: &str,
-    credential: &ResolvedCredential,
-    timeout: Duration,
-    targets: &[DeclaredTarget],
-) -> Observation {
+async fn retrieve(url: &str, credential: &ResolvedCredential, timeout: Duration) -> Observation {
     match send(Method::Get, url, credential, timeout).await {
         Sent::Settled(observation) => observation,
         Sent::Accepted(response) => match response.bytes().await {
-            Ok(bytes) => response::observe(&bytes, targets),
+            Ok(bytes) => response::observe(&bytes),
             Err(_) => Observation::OutcomeUnknown {
                 response_reference: None,
             },

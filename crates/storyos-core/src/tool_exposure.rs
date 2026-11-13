@@ -195,19 +195,18 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out. The Host Tools follow when the Model
-    /// Registration has the tool loop profile.
+    /// second Tool of one function name stays out. The Host Tools follow.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
-        let Some(registration) =
-            model_registration(facts.model_registration_revision).filter(|registration| {
+        let qualified =
+            model_registration(facts.model_registration_revision).is_some_and(|registration| {
                 matches!(
                     registration.capability_profile.entries.function_calling,
                     CapabilityEvidence::Qualified { .. }
                 )
-            })
-        else {
+            });
+        if !qualified {
             return Self::empty();
-        };
+        }
         let mut tools: Vec<ExposedTool> = Vec::new();
         for bound in facts.bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active
@@ -231,14 +230,12 @@ impl ToolExposure {
                 });
             }
         }
-        if registration.declares_host_tools() {
-            tools.extend(HOST_TOOL_REGISTRATION.tools.iter().map(|spec| ExposedTool {
-                name: spec.operation.function_name(),
-                registration_id: HOST_TOOL_REGISTRATION.id,
-                registration_revision: HOST_TOOL_REGISTRATION.revision,
-                spec,
-            }));
-        }
+        tools.extend(HOST_TOOL_REGISTRATION.tools.iter().map(|spec| ExposedTool {
+            name: spec.operation.function_name(),
+            registration_id: HOST_TOOL_REGISTRATION.id,
+            registration_revision: HOST_TOOL_REGISTRATION.revision,
+            spec,
+        }));
         Self { tools }
     }
 
@@ -294,17 +291,18 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
 /// or this build does not have its pinned ToolSpec revision. The author sees one result sentence.
 pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
 
-/// The refusal capability of a Run whose function request batch did not validate for each other
-/// refusal (ADR 0084): StoryOS could not accept the request of the model. The Attempt keeps the
-/// refusal as evidence, and the author sees one result sentence.
-pub const TOOL_REQUEST_INVALID_CAPABILITY: &str = "tool_request_invalid";
-
 /// The refusal capability of a Run whose function request batch did not validate, from the
-/// `label` of its `ToolCallBatchRefusal` on the Attempt evidence.
-pub fn function_request_refusal_capability(label: &str) -> &'static str {
+/// `label` of its `ToolCallBatchRefusal` on the Attempt evidence. A structural fault of the
+/// response (a cut response, a native item that the request did not ask for, a call identifier
+/// or a name that is missing or not valid, a repeated call identifier) has no refusal: no
+/// function output can bind to its calls, so the Run completes with the results that it already
+/// made, and the response is not a continuation binding (ADR 0091).
+pub fn function_request_refusal_capability(label: &str) -> Option<&'static str> {
     match label {
-        "tool_registration_unavailable" | "unknown_spec" => RESEARCH_TOOL_UNAVAILABLE_CAPABILITY,
-        _ => TOOL_REQUEST_INVALID_CAPABILITY,
+        "tool_registration_unavailable" | "unknown_spec" => {
+            Some(RESEARCH_TOOL_UNAVAILABLE_CAPABILITY)
+        }
+        _ => None,
     }
 }
 
@@ -319,8 +317,8 @@ pub enum ResponseDisposition {
     ToolCallsPending,
     /// The response of an ordinary request made no Agent Decision and asks for a function: the
     /// batch did not validate. No ToolCall exists: the items and the usage stay as evidence, and
-    /// the Run refuses with the capability of `function_request_refusal_capability`. A probe
-    /// never gets this disposition.
+    /// the Run ends as `function_request_refusal_capability` says. A probe never gets this
+    /// disposition.
     FunctionRequested,
     /// No Agent Decision and no function request: a probe response, or a reply that validation
     /// did not accept.

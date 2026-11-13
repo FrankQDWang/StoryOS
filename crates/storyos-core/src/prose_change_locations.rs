@@ -51,18 +51,10 @@ pub enum ProseChangeRefusal {
     OversizedText,
 }
 
-/// Validate all of the result before any candidate can open (ADR 0061). Each change is for a
+/// The first rule that the prose changes break, or `None` (ADR 0061). Each change is for a
 /// different declared target with its declared base, and one or more changes are necessary.
 /// A change of a pending candidate is the only change of its result (ADR 0062). Or the result
 /// grows the Proposal of that candidate over joinable blocks (ADR 0071).
-pub fn prose_changes_match_targets(
-    targets: &[DeclaredLocation],
-    candidates: &[ProseChangeCandidate],
-) -> bool {
-    prose_change_refusal(targets, candidates).is_none()
-}
-
-/// The first rule of `prose_changes_match_targets` that the result breaks.
 pub fn prose_change_refusal(
     targets: &[DeclaredLocation],
     candidates: &[ProseChangeCandidate],

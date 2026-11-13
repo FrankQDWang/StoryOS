@@ -14,9 +14,8 @@ use storyos_application::{
     UpdateProjectAssistanceInput, complete_agent_run, issue_project_command_challenge,
 };
 use storyos_core::{
-    AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
-    NativeStreamItem, OutputPhase, ResearchToolOffer, SelectionReference, StreamItemRole,
-    StreamItemState,
+    AssistanceAvailability, DeploymentDestination, NativeStreamItem, ResearchToolOffer,
+    SelectionReference, StreamItemRole, StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -138,13 +137,6 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                 return Observation::Terminal(ModelResponse {
                     state: storyos_core::StreamItemState::Complete,
                     items: second.to_vec(),
-                    output: Some(ModelOutput {
-                        phase: OutputPhase::Commentary,
-                        candidate: DecisionCandidate::ProseChange {
-                            text: "Guard the voice".to_owned(),
-                        },
-                        prose_changes: Some(Vec::new()),
-                    }),
                     usage: ModelUsage::Unknown,
                     cache_use: storyos_application::CacheUse::Unknown,
                     response_reference: None,

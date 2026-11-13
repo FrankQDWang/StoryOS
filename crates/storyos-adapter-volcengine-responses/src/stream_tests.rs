@@ -4,12 +4,10 @@ use storyos_application::{
     PROVISIONAL_STREAM_EVENT_BOUND, ReferenceRetrieval, ReportedBinding, RequestAttempt,
     RequestRoute, ResponseReference, StreamControl,
 };
-use storyos_core::{DecisionCandidate, NativeStreamItem, StreamItemRole, StreamItemState};
+use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 
 use crate::AgentPlanResponses;
-use crate::tests::{
-    CanaryResolver, Reply, create, destination, final_answer, item, message, route,
-};
+use crate::tests::{CanaryResolver, Reply, create, destination, item, message, route};
 
 const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
 
@@ -37,7 +35,7 @@ impl ModelStreamSink for BatchSink {
 
 fn streaming_route(base: &str) -> RequestRoute {
     RequestRoute {
-        mapping_revision: storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION.to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
         bounds: Some(storyos_application::RequestBounds {
             max_output_tokens: 8192,
             timeout: std::time::Duration::from_secs(/*secs*/ 60),
@@ -133,7 +131,7 @@ fn unknown(reference: &str) -> Observation {
                 owner_user_id: None,
                 conversation_id: None,
                 destination_identity: None,
-                mapping_revision: storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION.to_owned(),
+                mapping_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION.to_owned(),
             },
         }),
     }
@@ -178,12 +176,6 @@ async fn a_streamed_response_commits_ordered_events_and_maps_its_terminal_respon
             Observation::Terminal(ModelResponse {
                 state: storyos_core::StreamItemState::Complete,
                 items: vec![done.clone()],
-                output: Some(final_answer(
-                    DecisionCandidate::Advisory {
-                        text: "Keep it.".to_owned()
-                    },
-                    None
-                )),
                 usage: ModelUsage::Reported {
                     input_tokens: 50,
                     output_tokens: 9,
@@ -277,8 +269,7 @@ async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the
     };
     let observation = super::observe(
         response,
-        &[],
-        storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION,
+        storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
         policy,
         &mut sink,
     )
@@ -421,7 +412,6 @@ async fn function_call_argument_deltas_are_provisional_and_only_the_terminal_ite
             Observation::Terminal(ModelResponse {
                 state: storyos_core::StreamItemState::Complete,
                 items: vec![done.clone()],
-                output: None,
                 usage: ModelUsage::Reported {
                     input_tokens: 70,
                     output_tokens: 21,

@@ -167,8 +167,8 @@ pub use manuscript_payload::{
     upgrade_legacy_manuscript,
 };
 pub use model_output::{
-    AgentDecisionKind, AgentDecisionOutcome, DecisionCandidate, ModelOutput, NativeStreamItem,
-    OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
+    validate_agent_decision,
 };
 pub use model_registration::{
     AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE,
@@ -245,9 +245,8 @@ pub use research_source::{
     capture_research_sources, tool_result_source_version,
 };
 pub use research_synthesis::{
-    CITABLE_SOURCES_INSTRUCTION, CitableSource, CitableSources, Citation, CitedSource,
-    ClaimCandidate, ResearchClaim, ResearchSynthesis, SynthesisRefusal, citable_sources_tag,
-    validate_research_synthesis,
+    CitableSource, CitableSources, Citation, CitedSource, ClaimCandidate, ResearchClaim,
+    ResearchSynthesis, SynthesisRefusal, citable_sources_tag, validate_research_synthesis,
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
@@ -288,8 +287,8 @@ pub use tool_dispatch::{
 pub use tool_exposure::{
     BoundTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
     RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
-    TOOL_REQUEST_INVALID_CAPABILITY, ToolCompatibilityDecision, ToolExposure,
-    function_request_refusal_capability, requests_function, response_disposition,
+    ToolCompatibilityDecision, ToolExposure, function_request_refusal_capability,
+    requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
     AGENT_PLAN_REGISTRATION, AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
@@ -647,7 +646,7 @@ mod undo_latest_author_action_tests;
 mod prose_change_locations;
 pub use prose_change_locations::{
     DeclaredLocation, DeclaredTargetKind, ProseChangeCandidate, ProseChangeRefusal,
-    prose_change_refusal, prose_changes_match_targets,
+    prose_change_refusal,
 };
 mod propose_edit;
 pub use propose_edit::{

@@ -20,7 +20,7 @@ struct BindingShape {
 
 fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
     match destination {
-        DeploymentDestination::HostFake | DeploymentDestination::HostFakeToolLoop => BindingShape {
+        DeploymentDestination::HostFakeToolLoop => BindingShape {
             control_classification: "host_internal",
             evidence_kind: "host_fake_boundary",
             endpoint: None,

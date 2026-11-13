@@ -171,8 +171,6 @@ function resultText(run: GetAgentRunResponse): string | undefined {
       return (run.decision.locations?.length ?? 0) > 0
         ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
         : "本次修改建议已生成，可以在正文中查看。";
-    case "clarification":
-      return run.decision.question;
     case "tool_request":
       return toolCallLines(run.decision.calls);
     case "research_synthesis":

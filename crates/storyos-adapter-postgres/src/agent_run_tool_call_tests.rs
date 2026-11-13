@@ -689,7 +689,6 @@ impl DuplicateSuccessorDelivery<'_> {
                     r#"{"urls":["https://example.org/tides"]}"#,
                 ),
             ],
-            output: None,
             usage: storyos_application::ModelUsage::Unknown,
             cache_use: storyos_application::CacheUse::Unknown,
             response_reference: Some("resp_f78s".to_owned()),

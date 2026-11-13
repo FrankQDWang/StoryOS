@@ -88,12 +88,7 @@ pub(crate) async fn record_create(
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }
-        let output = response.output.as_ref();
-        let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
-        if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable) {
-            retained["synthesis_refusal"] = refusal;
-        }
-        validate_agent_decision(output, &declared, &citable, batch)
+        validate_agent_decision(batch)
     };
     let outcome = match apply_finish_rule(
         request.tool_choice,
@@ -129,10 +124,6 @@ pub(crate) async fn record_create(
     };
     let result = CreateResult {
         outcome,
-        producer_output: response
-            .output
-            .as_ref()
-            .and_then(|output| output.prose_changes.as_deref()),
         settlement,
         ..response_result(dispatch, &response)
     };
@@ -147,7 +138,6 @@ fn response_result<'a>(
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
         outcome: AgentDecisionOutcome::NoDecision,
-        producer_output: None,
         usage: response.usage,
         cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
@@ -163,7 +153,6 @@ fn no_response<'a>(
         attempt_id: &dispatch.model_attempt_id,
         items: &[],
         outcome: AgentDecisionOutcome::NoDecision,
-        producer_output: None,
         usage: ModelUsage::Unknown,
         cache_use: CacheUse::Unknown,
         response_reference: None,
