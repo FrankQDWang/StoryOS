@@ -68,35 +68,30 @@ fn declares_host_tools(run: &RunPhaseRow) -> bool {
         .is_some_and(storyos_core::ModelRegistration::declares_host_tools)
 }
 
-/// The outcome of a response that a recovery path settles in the active RunStep of `run`. In the
-/// last RunStep, the finish rule applies as for a created response (ADR 0091 section 5): the text
-/// is the final answer, and `None` tells that a complete response with no text gives no result.
-/// The function calls of the response leave the items, so the Host executes none.
-pub(crate) fn recovered_outcome(
+/// The finish rule for a response that a recovery path settles in the active RunStep of `run`,
+/// with the `tool_choice` of that RunStep, as for a created response (ADR 0091, ADR 0088). In
+/// the last RunStep, the function calls of the response leave the items, so the Host executes
+/// none.
+pub(crate) async fn recovered_outcome(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     response: &mut storyos_application::ModelResponse,
     outcome: storyos_core::AgentDecisionOutcome,
-) -> Result<Option<storyos_core::AgentDecisionOutcome>, CompleteAgentRunError> {
+) -> Result<storyos_core::FinishRuleOutcome, CompleteAgentRunError> {
     let limit = run_step_limit(run)?;
-    if limit.executes_calls(declares_host_tools(run)) {
-        return Ok(Some(outcome));
+    if !limit.executes_calls(declares_host_tools(run)) {
+        response
+            .items
+            .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
     }
-    response
-        .items
-        .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
-    Ok(
-        match storyos_core::apply_finish_rule(
-            ToolChoice::None,
-            limit,
-            outcome,
-            response.state,
-            &response.items,
-        ) {
-            storyos_core::FinishRuleOutcome::Settle(outcome) => Some(outcome),
-            storyos_core::FinishRuleOutcome::NextRunStep
-            | storyos_core::FinishRuleOutcome::NoResult => None,
-        },
-    )
+    Ok(storyos_core::apply_finish_rule(
+        tool_choice(client, claim, run).await?,
+        limit,
+        outcome,
+        response.state,
+        &response.items,
+    ))
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next
@@ -117,4 +112,8 @@ pub(crate) async fn open_after_text(
 
 #[cfg(test)]
 #[path = "agent_run_finish_rule_tests.rs"]
-mod tests;
+pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "agent_run_finish_rule_recovery_tests.rs"]
+mod recovery_tests;

@@ -211,6 +211,7 @@ pub struct CurrentInput<'a> {
 impl CurrentInput<'_> {
     /// One digest over the input. A continuation whose digest differs from that of its prior
     /// request sends a full input (ADR 0085), because the prior response read the earlier input.
+    /// A compaction summary is history that the response of the later request holds (ADR 0055).
     pub fn digest(&self) -> String {
         let context: Vec<serde_json::Value> = self
             .context
@@ -218,7 +219,9 @@ impl CurrentInput<'_> {
             .filter(|item| {
                 !matches!(
                     item.source_class,
-                    ContextSourceClass::HostControl | ContextSourceClass::ToolResult
+                    ContextSourceClass::HostControl
+                        | ContextSourceClass::ToolResult
+                        | ContextSourceClass::ConversationSummary
                 )
             })
             .map(|item| serde_json::json!([item.source_class.name(), item.content]))
