@@ -221,7 +221,7 @@ pub(crate) async fn advance_before_request(
 
 /// Opens the RunStep that reads the next steering input after the active RunStep, with the
 /// Tool results of the Run, and claims the Run again. In the tool loop, no RunStep opens after
-/// the last RunStep of the limit, so its input stays unread (ADR 0091 section 5).
+/// the last RunStep of the limit, and steerAgentRun retains no input for it (ADR 0091 section 5).
 pub(crate) async fn advance(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
