@@ -190,6 +190,84 @@
       ],
       "type": "object"
     },
+    "AgentRunResultInspect": {
+      "description": "One result of a Run (ADR 0091 section 6).",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The Proposal that one `propose_edit` call opened, revised, or grew, with its locations.",
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "proposal",
+              "type": "string"
+            },
+            "locations": {
+              "items": {
+                "$ref": "#/$defs/ProseChangeLocationInspect"
+              },
+              "type": "array"
+            },
+            "proposal_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "proposal_id",
+            "locations"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Research Artifact that a `submit_research` call recorded. `getResearchArtifact` reads\nit.",
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "research_artifact",
+              "type": "string"
+            },
+            "research_artifact_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "research_artifact_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The final answer text of a completed Run. A final answer with no text is no result.",
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "answer",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AgentRunStatus": {
       "enum": [
         "queued",
@@ -2336,6 +2414,15 @@
     },
     "reference_recovery": {
       "$ref": "#/$defs/OptionalReferenceRecoveryInspect"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/AgentRunResultInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "run_id": {
       "format": "uuid",

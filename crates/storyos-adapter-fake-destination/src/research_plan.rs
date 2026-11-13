@@ -9,6 +9,8 @@
 //! - `finish_first`: a `finish` call and one call, in that order.
 //! - `again`: one call, and in the next request a second call and a `finish` call.
 //! - `quiet`: as `once`, and the closing response has an empty text.
+//! - `propose`: one call, and in the next request a `propose_edit` call of the declared targets
+//!   and a `finish` call.
 //!
 //! Each later request gets the usual script of the fake model.
 
@@ -53,11 +55,18 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
         match variant {
             "twice" => vec![submit("", &arguments), submit("_2", &arguments), finish],
             "finish_first" => vec![finish, submit("", &arguments)],
-            "again" => vec![submit("", &arguments)],
+            "again" | "propose" => vec![submit("", &arguments)],
             _ => vec![submit("", &arguments), finish],
         }
     } else if variant == "again" && !output(ToolOperation::Finish) {
         vec![submit("_2", arguments), finish]
+    } else if variant == "propose" && !output(ToolOperation::ProposeEdit) {
+        let changes = crate::prose_changes::produce_fake_changes(request, "");
+        let arguments = crate::propose_edit_plan::arguments(&changes, "Kept the narrator voice.");
+        vec![
+            function_call(ToolOperation::ProposeEdit, "", &arguments),
+            finish,
+        ]
     } else {
         return None;
     };

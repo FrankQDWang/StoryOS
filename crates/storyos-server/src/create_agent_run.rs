@@ -201,6 +201,7 @@ pub(super) async fn get_agent_run(
         status: storyos_application::wire_agent_run_status(record.status),
         context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
+        results: record.results,
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
         reference_recovery: match record.reference_recovery.as_ref() {

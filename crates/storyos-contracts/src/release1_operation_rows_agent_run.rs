@@ -8,9 +8,9 @@ use super::{
 };
 use crate::release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
-    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget,
-    AttemptCacheInspect, AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN,
+    AgentRunContextInspect, AgentRunRef, AgentRunResultInspect, AgentRunStatus,
+    AgentRunSteeringInspect, AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause,
+    AssistanceWorkingTarget, AttemptCacheInspect, AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN,
     CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
     ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
     ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
@@ -177,6 +177,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         ToolCallOutcomeInspect::decl,
         ToolCallInspect::decl,
         OptionalDecisionInspect::decl,
+        AgentRunResultInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
         OptionalModelAttemptInspect::decl,
@@ -284,6 +285,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
       },
       "redaction_profile": "storyos.author.v1",
       "reference_recovery": {"kind": "absent"},
+      "results": [],
       "run_id": "018f0000-0000-7001-8000-000000000a34",
       "schema_id": "storyos.query.agent-run.response.v2",
       "status": "queued",

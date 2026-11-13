@@ -98,25 +98,13 @@ pub(crate) fn calls(
         } else {
             produce_fake_changes(request, script)
         };
-        let changes: Vec<_> = changes
-            .into_iter()
-            .map(|change| {
-                serde_json::json!({
-                    "block_id": change.manuscript_block_id,
-                    "candidate_text": change.candidate_text,
-                    "explanation": change.explanation,
-                })
-            })
-            .collect();
         let summary = single
             .as_ref()
             .map_or("Kept the narrator voice.", |(_, text)| text.as_str());
-        let arguments = serde_json::json!({"summary": summary, "changes": changes});
-        // The arguments text has line breaks, so a refused call shows that it keeps its text.
         call(
             name,
             format!("_{results}_{index}"),
-            format!("{arguments:#}"),
+            arguments(&changes, summary),
         )
     };
     let correct = |index| proposal(index, message);
@@ -171,4 +159,23 @@ pub(crate) fn calls(
         _ if step_results == 0 => (vec![correct(0)], true),
         _ => (Vec::new(), true),
     })
+}
+
+/// The `propose_edit` arguments of `changes` with `summary`. The text has line breaks, so a
+/// refused call shows that it keeps its text.
+pub(crate) fn arguments(changes: &[ProseChangeCandidate], summary: &str) -> String {
+    let changes: Vec<_> = changes
+        .iter()
+        .map(|change| {
+            serde_json::json!({
+                "block_id": change.manuscript_block_id,
+                "candidate_text": change.candidate_text,
+                "explanation": change.explanation,
+            })
+        })
+        .collect();
+    format!(
+        "{:#}",
+        serde_json::json!({"summary": summary, "changes": changes})
+    )
 }

@@ -109,6 +109,7 @@
   "reference_recovery": {
     "kind": "absent"
   },
+  "results": [],
   "run_id": "018f0000-0000-7001-8000-000000000a34",
   "schema_id": "storyos.query.agent-run.response.v2",
   "status": "queued",
