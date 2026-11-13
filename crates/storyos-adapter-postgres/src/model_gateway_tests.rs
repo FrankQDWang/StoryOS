@@ -15,7 +15,8 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
-    NativeStreamItem, OutputPhase, ResearchToolOffer, StreamItemRole, StreamItemState,
+    NativeStreamItem, OutputPhase, ResearchToolOffer, SelectionReference, StreamItemRole,
+    StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -365,6 +366,56 @@ pub(crate) async fn admit_run_in(
     conversation: ConversationSelection,
     research: Option<&'static ResearchToolOffer>,
 ) -> String {
+    let input = (conversation, research, None);
+    admit_with(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        destination,
+        author_message,
+        input,
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of a new conversation, as `admit_run` does, with the Selection
+/// References `references`.
+pub(crate) async fn admit_referenced_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    destination: DeploymentDestination,
+    author_message: &str,
+    references: Vec<SelectionReference>,
+) -> String {
+    let input = (ConversationSelection::New, None, Some(references));
+    admit_with(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        destination,
+        author_message,
+        input,
+    )
+    .await
+}
+
+async fn admit_with(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    destination: DeploymentDestination,
+    author_message: &str,
+    (conversation, research, selection_references): (
+        ConversationSelection,
+        Option<&'static ResearchToolOffer>,
+        Option<Vec<SelectionReference>>,
+    ),
+) -> String {
     let run = command_issue(
         scope,
         &format!("{prefix}5"),
@@ -379,7 +430,7 @@ pub(crate) async fn admit_run_in(
         RUN_BYTES,
         CreateAgentRunInput {
             passage_targets: None,
-            selection_references: None,
+            selection_references,
             conversation,
             author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),

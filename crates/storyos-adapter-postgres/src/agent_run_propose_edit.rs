@@ -240,3 +240,7 @@ pub(crate) async fn public_decision(
 #[cfg(test)]
 #[path = "agent_run_propose_edit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "agent_run_propose_edit_revise_tests.rs"]
+mod revise_tests;
