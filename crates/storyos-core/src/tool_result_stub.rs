@@ -27,8 +27,10 @@ pub(crate) struct StubCall<'a> {
 }
 
 /// The stub text of `call`, at most `TOOL_RESULT_STUB_TOKEN_LIMIT` counted tokens. When the
-/// source lines do not fit, the stub keeps the first lines and says how many it left out.
-pub(crate) fn tool_result_stub(call: &StubCall<'_>) -> String {
+/// source lines do not fit, the stub keeps the first lines and says how many it left out. When a
+/// stub with no source line and no argument does not fit, because the call identities are too
+/// long, there is no stub, and the result keeps its exact form.
+pub(crate) fn tool_result_stub(call: &StubCall<'_>) -> Option<String> {
     let lines: Vec<String> = call.sources.iter().map(source_line).collect();
     let tag = |kept: &[String]| match kept.is_empty() {
         true => String::new(),
@@ -49,10 +51,10 @@ pub(crate) fn tool_result_stub(call: &StubCall<'_>) -> String {
             boundary(call, &arguments, kept, lines.len()),
             tag(&lines[..kept])
         );
-        if kept == 0 || count_context_item_tokens(&stub) <= TOOL_RESULT_STUB_TOKEN_LIMIT {
-            return stub;
+        if count_context_item_tokens(&stub) <= TOOL_RESULT_STUB_TOKEN_LIMIT {
+            return Some(stub);
         }
-        kept -= 1;
+        kept = kept.checked_sub(1)?;
     }
 }
 

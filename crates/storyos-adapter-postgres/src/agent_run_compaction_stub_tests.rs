@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 use storyos_application::{AgentRunReadSelection, AgentRunReadStore};
 use storyos_core::{
-    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, RESEARCH_RECORDED_RESULT,
-    ReadToolResultRefusal, ToolResultProjection,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, ContextSourceClass,
+    ProjectionMode, RESEARCH_RECORDED_RESULT, ReadToolResultRefusal, ToolResultProjection,
 };
 
 use crate::agent_run_submit_research::tests::{ResearchProject, research_project};
@@ -78,35 +78,16 @@ async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-/// The projection mode of each `tool_result` item of the decision Context Assembly at
-/// `position`. A full input of that RunStep sends these forms.
-async fn decision_modes(project: &ResearchProject, run_id: &str, position: u32) -> Value {
-    let row = project
-        .admin
-        .query_one(
-            "SELECT jsonb_agg(item->>'projection_mode')::text
-               FROM storyos.context_assembly_manifests AS assembly,
-                    jsonb_array_elements(assembly.payload->'selected') AS item
-              WHERE assembly.run_id = $1::text::uuid AND assembly.manifest_role = 'decision'
-                AND assembly.decision_position = $2::text::numeric
-                AND item->>'source_class' = 'tool_result'",
-            &[&run_id, &position.to_string()],
-        )
-        .await
-        .unwrap();
-    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
-}
-
-/// The ToolCall identity of each call of the Run with the function `name`.
-async fn tool_call_ids(project: &ResearchProject, run_id: &str, names: &[&str]) -> Vec<String> {
+/// The ToolCall identity of each call of the Run with the provider call identifier of `calls`.
+async fn tool_call_ids(project: &ResearchProject, run_id: &str, calls: &[&str]) -> Vec<String> {
     let mut ids = Vec::new();
-    for name in names {
+    for call in calls {
         let row = project
             .admin
             .query_one(
                 "SELECT tool_call_id::text FROM storyos.tool_calls
-                  WHERE run_id = $1::text::uuid AND function_name = $2",
-                &[&run_id, name],
+                  WHERE run_id = $1::text::uuid AND call_id = $2",
+                &[&run_id, call],
             )
             .await
             .unwrap();
@@ -121,71 +102,93 @@ fn output(call_id: &str, output: &Value) -> Value {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn each_result_that_an_earlier_request_sent_is_a_stub_and_a_read_of_it_becomes_a_stub_later()
-{
+async fn the_model_reads_a_stub_result_again_and_a_later_compaction_makes_the_read_a_stub() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let project = research_project("850").await;
-    // RunStep 0 searches, RunStep 1 reads the search, RunStep 2 submits and finishes, and
-    // RunStep 3 answers. The Run compacts at RunSteps 2 and 3.
+    // RunStep 0 searches, RunStep 1 reads an unknown call, RunStep 2 reads the search after it
+    // got its stub, RunStep 3 submits and finishes, and RunStep 4 answers. The Run compacts at
+    // RunSteps 2 and 4.
     let run_id = project
         .settle(
             "851",
-            &compacting("2 3", "SCRIPT:read_tool_result web_search call_web_search"),
+            &compacting(
+                "2 4",
+                "SCRIPT:read_tool_result web_search_late call_web_search",
+            ),
             &long_search(),
         )
         .await;
     let exact_search = sent_outputs(&project, &run_id, 1).await[0]["output"].clone();
     let at_two = sent_outputs(&project, &run_id, 2).await;
-    let at_three = sent_outputs(&project, &run_id, 3).await;
+    let at_four = sent_outputs(&project, &run_id, 4).await;
     let search_stub = at_two[0]["output"].clone();
-    let read_stub = at_three[1]["output"].clone();
+    let refused_read = at_two[1]["output"].clone();
+    let read_stub = at_four[2]["output"].clone();
     let text = |value: &Value| value.as_str().unwrap().to_owned();
-    let stub_calls = tool_call_ids(&project, &run_id, &["web_search", "read_tool_result"]).await;
-    let public = project
+    let stub_calls = tool_call_ids(
+        &project,
+        &run_id,
+        &["call_web_search", "call_read_tool_result"],
+    )
+    .await;
+    let read = project
         .store
         .read_agent_run(&project.scope, &run_id, &AgentRunReadSelection::Current)
         .await
         .unwrap()
-        .unwrap()
+        .unwrap();
+    let public = read
         .compactions
         .into_iter()
         .map(|record| record.stub_tool_call_ids)
         .collect::<Vec<_>>();
+    // The read of the Run shows the decision Context Assembly of its active RunStep 4. It keeps
+    // the stub of the installed compaction of RunStep 2, so a full input of RunStep 4 sends the
+    // stub too.
+    let public_modes = read
+        .context
+        .record
+        .selected
+        .iter()
+        .filter(|item| item.source_class == ContextSourceClass::ToolResult)
+        .map(|item| item.projection_mode)
+        .collect::<Vec<_>>();
     let facts = project.facts(&run_id).await;
-    let finish = json!(["finish", "settled", null, ""]);
+    let unknown = ReadToolResultRefusal::UnknownCall.result().text;
 
     assert_eq!(
         (
             json!({"status": facts["status"], "calls": facts["calls"],
                    "artifacts": facts["artifacts"]}),
-            // The later request of RunStep 2 sends the stub of the search and the exact read,
-            // which waits for it. The later request of RunStep 3 keeps the stub of the search,
-            // sends a stub of the read, and the exact results of the Host Tools that wait.
-            at_two,
-            at_three,
+            // The later request of RunStep 2 sends the stub of the search and the refused read,
+            // which waits for it. The model then reads the search and gets its stored result.
+            at_two.clone(),
+            // The later request of RunStep 4 keeps the stub of the search, sends a stub of the
+            // read, and the exact results of the Host Tools.
+            at_four.clone(),
             stub_records(&project, &run_id).await,
             public,
-            // The decision Context Assembly of RunStep 3 keeps the stub of the installed
-            // compaction of RunStep 2, so a full input of RunStep 3 sends the stub too.
-            decision_modes(&project, &run_id, 3).await,
+            public_modes,
         ),
         (
             json!({
                 "status": "completed",
                 "calls": [["web_search", "settled", null, null],
+                          ["read_tool_result", "refused", "unknown_call", unknown],
                           ["read_tool_result", "settled", null, exact_search],
                           ["submit_research", "settled", null, RESEARCH_RECORDED_RESULT],
-                          finish],
+                          ["finish", "settled", null, ""]],
                 "artifacts": [["snapshot"]],
             }),
             vec![
                 output("call_web_search", &search_stub),
-                output("call_read_tool_result", &exact_search),
+                output("call_read_tool_result_none", &refused_read),
             ],
             vec![
                 output("call_web_search", &search_stub),
+                output("call_read_tool_result_none", &refused_read),
                 output("call_read_tool_result", &read_stub),
                 output(
                     "call_submit_research",
@@ -207,11 +210,12 @@ async fn each_result_that_an_earlier_request_sent_is_a_stub_and_a_read_of_it_bec
                     ["tool_result_stub", "exact_required"]
                 ],
                 [
-                    3,
+                    4,
                     "installed",
                     ["web_search", "read_tool_result"],
                     [
                         "tool_result_stub",
+                        "exact_required",
                         "tool_result_stub",
                         "exact_required",
                         "exact_required"
@@ -219,12 +223,13 @@ async fn each_result_that_an_earlier_request_sent_is_a_stub_and_a_read_of_it_bec
                 ],
             ]),
             vec![vec![stub_calls[0].clone()], stub_calls.clone()],
-            json!([
-                "tool_result_stub",
-                "exact_required",
-                "exact_required",
-                "exact_required"
-            ]),
+            vec![
+                ProjectionMode::ToolResultStub,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ExactRequired,
+            ],
         )
     );
     // A stub is shorter than its result, keeps its call and its first sources, and says how

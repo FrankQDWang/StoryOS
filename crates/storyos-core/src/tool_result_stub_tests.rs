@@ -41,7 +41,7 @@ fn a_stub_gives_the_tool_the_arguments_each_source_line_and_the_read_sentence() 
     let sources = [snapshot(1), gap];
 
     assert_eq!(
-        tool_result_stub(&search(&sources)),
+        tool_result_stub(&search(&sources)).unwrap(),
         format!(
             "{SEARCH_BODY}</tool_result><tool_sources source=\"call_web_search\">\n\
              <source id=\"snapshot-01\" title=\"Liverpool tide table 01\" \
@@ -55,7 +55,7 @@ fn a_stub_gives_the_tool_the_arguments_each_source_line_and_the_read_sentence() 
 #[test]
 fn a_stub_with_too_many_source_lines_keeps_the_first_lines_and_counts_the_others() {
     let sources: Vec<CitableSource> = (1..=40).map(snapshot).collect();
-    let stub = tool_result_stub(&search(&sources));
+    let stub = tool_result_stub(&search(&sources)).unwrap();
     let kept = stub.matches("<source id=").count();
     let left_out = 40 - kept;
 
@@ -87,7 +87,7 @@ fn the_stub_of_a_read_names_the_call_that_it_read() {
     };
 
     assert_eq!(
-        tool_result_stub(&read),
+        tool_result_stub(&read).unwrap(),
         "<tool_result source=\"call_read_tool_result\" state=\"ok\" form=\"stub\">The Host \
          replaced this result with a stub after a compaction of the conversation. Tool: \
          read_tool_result. Arguments: {&quot;call_id&quot;:&quot;call_web_search&quot;}. This \
@@ -107,7 +107,8 @@ fn long_arguments_are_cut_so_that_the_stub_stays_in_its_limit() {
     let stub = tool_result_stub(&StubCall {
         arguments: &arguments,
         ..search(&sources)
-    });
+    })
+    .unwrap();
 
     assert_eq!(
         (
@@ -116,5 +117,27 @@ fn long_arguments_are_cut_so_that_the_stub_stays_in_its_limit() {
             stub.contains("<source id=\"snapshot-01\" "),
         ),
         (true, true, true)
+    );
+}
+
+#[test]
+fn a_call_identity_too_long_for_the_limit_gives_no_stub() {
+    let fits = "c".repeat(400);
+    let too_long = "c".repeat(1_000);
+    let sources = [snapshot(1)];
+    let stub = |call_id: &str| {
+        tool_result_stub(&StubCall {
+            call_id,
+            ..search(&sources)
+        })
+    };
+    let fitting = stub(&fits).unwrap();
+
+    assert_eq!(
+        (
+            count_context_item_tokens(&fitting) <= TOOL_RESULT_STUB_TOKEN_LIMIT,
+            stub(&too_long),
+        ),
+        (true, None)
     );
 }

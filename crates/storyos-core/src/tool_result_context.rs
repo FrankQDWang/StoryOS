@@ -283,13 +283,17 @@ fn candidate_item(
     let Some(read_call_id) = read_call_id.filter(|_| stub_applies) else {
         return (exact, exact_mode);
     };
-    let content = crate::tool_result_stub::tool_result_stub(&crate::tool_result_stub::StubCall {
-        call_id: candidate.call_id,
-        tool_name: candidate.function_name,
-        arguments: candidate.arguments,
-        sources: candidate.sources,
-        read_call_id: read_call_id.as_deref(),
-    });
+    let Some(content) =
+        crate::tool_result_stub::tool_result_stub(&crate::tool_result_stub::StubCall {
+            call_id: candidate.call_id,
+            tool_name: candidate.function_name,
+            arguments: candidate.arguments,
+            sources: candidate.sources,
+            read_call_id: read_call_id.as_deref(),
+        })
+    else {
+        return (exact, exact_mode);
+    };
     let stub = ToolResultItem {
         token_count: count_context_item_tokens(&content),
         source_tokens: exact.source_tokens,

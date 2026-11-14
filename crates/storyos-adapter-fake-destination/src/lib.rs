@@ -223,18 +223,28 @@ fn stub_names_unsent_call(create: &CreateRequest) -> bool {
                 || output.origin == storyos_application::ToolOutputOrigin::PriorResponse
         })
         .collect();
-    let named = |text: &str, marker: &str| {
-        text.rsplit_once(marker)
-            .and_then(|(_, rest)| rest.split(['"', '.']).next())
-            .map(str::to_owned)
+    // The stub escapes each identity as the Host boundary does (ADR 0093 section 5).
+    let escaped = |id: &str| {
+        id.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    };
+    let reads = |text: &str, id: &str| {
+        let sentence = format!("with the call_id {}.", escaped(id));
+        [
+            format!("{sentence}</tool_result>"),
+            format!("{sentence} The tool_sources tag"),
+        ]
+        .iter()
+        .any(|end| text.contains(end.as_str()))
     };
     sent.iter()
         .filter(|output| output.output.contains("form=\"stub\""))
         .any(|output| {
-            let own = named(&output.output, "<tool_result source=\"");
-            let read = named(&output.output, "with the call_id ");
-            own.as_deref() != Some(output.call_id.as_str())
-                || !read.is_some_and(|read| sent.iter().any(|call| call.call_id == read))
+            let own = format!("<tool_result source=\"{}\" ", escaped(&output.call_id));
+            !output.output.starts_with(&own)
+                || !sent.iter().any(|call| reads(&output.output, &call.call_id))
         })
 }
 

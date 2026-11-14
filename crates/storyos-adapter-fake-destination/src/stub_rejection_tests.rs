@@ -77,6 +77,20 @@ async fn the_fake_refuses_a_stub_that_names_a_call_that_the_request_does_not_sen
         vec![search(stub("call_web_fetch", "call_web_fetch"))],
         // The read stub names a call that the request does not send.
         vec![read(stub("call_read_tool_result", "call_web_search"))],
+        // Identities with a period and an escaped character.
+        vec![
+            output(
+                "call.web&search",
+                "web_search",
+                stub("call.web&amp;search", "call.web&amp;search"),
+            ),
+            read(stub("call_read_tool_result", "call.web&amp;search")),
+        ],
+        // The read stub names `call.web.2`, which starts with the identity of a sent call.
+        vec![
+            output("call.web", "web_search", stub("call.web", "call.web")),
+            read(stub("call_read_tool_result", "call.web.2")),
+        ],
     ];
     let mut reasons = Vec::new();
     for outputs in cases {
@@ -89,6 +103,8 @@ async fn the_fake_refuses_a_stub_that_names_a_call_that_the_request_does_not_sen
             None,
             None,
             Some(STUB_CALL_MISSING_REASON.to_owned()),
+            Some(STUB_CALL_MISSING_REASON.to_owned()),
+            None,
             Some(STUB_CALL_MISSING_REASON.to_owned()),
         ]
     );

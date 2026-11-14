@@ -1,8 +1,9 @@
 //! The read script of the fake model (ADR 0093). An author message
 //! `SCRIPT:read_tool_result <first> <identity>` gets, in its first request, one `web_search`
-//! call (`web_search`), one `web_search` call with an empty query that the Host refuses
-//! (`refused_search`), or no call (`none`). The next request gets one `read_tool_result` call
-//! with the `<identity>`. The request that carries the output of the read gets a `submit_research`
+//! call (`web_search` or `web_search_late`), one `web_search` call with an empty query that the
+//! Host refuses (`refused_search`), or no call (`none`). With `web_search_late`, the next request
+//! gets a `read_tool_result` call of an unknown identity. The next request gets one
+//! `read_tool_result` call with the `<identity>`. The request that carries the output of the read gets a `submit_research`
 //! call that cites the first source of that output and a `finish` call, or only a `finish` call
 //! when the output has no source. Each later request gets the usual script of the fake model.
 //! The script can follow the compaction prefix of the Host fake (ADR 0093).
@@ -33,9 +34,21 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
         &serde_json::json!({"call_id": identity}).to_string(),
     );
     let finish = function_call(ToolOperation::Finish, "", "{}");
-    let items = match output(ToolOperation::ReadToolResult) {
+    // The `read_tool_result` call of the `<identity>`, not the read of an unknown identity.
+    let read_output = request
+        .tool_outputs
+        .iter()
+        .find(|output| output.call_id == "call_read_tool_result");
+    let items = match read_output {
+        None if first == "web_search_late" && request.tool_outputs.len() == 1 => {
+            vec![function_call(
+                ToolOperation::ReadToolResult,
+                "_none",
+                r#"{"call_id":"call_none"}"#,
+            )]
+        }
         None if request.tool_outputs.is_empty() => match first {
-            "web_search" => vec![function_call(
+            "web_search" | "web_search_late" => vec![function_call(
                 ToolOperation::WebSearch,
                 "",
                 r#"{"query":"tide tables of 1890","result_count":null}"#,
