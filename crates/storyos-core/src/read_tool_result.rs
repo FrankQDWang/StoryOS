@@ -84,7 +84,6 @@ pub enum ReadToolResultRefusal {
     OtherRun,
     HostToolCall,
     NoStoredResult,
-    RestrictedSource,
 }
 
 impl ReadToolResultRefusal {
@@ -95,7 +94,6 @@ impl ReadToolResultRefusal {
             Self::OtherRun => "call_of_other_run",
             Self::HostToolCall => "host_tool_call",
             Self::NoStoredResult => "no_stored_result",
-            Self::RestrictedSource => "restricted_source",
         }
     }
 
@@ -108,7 +106,6 @@ impl ReadToolResultRefusal {
                 "the call with this identity is not a web_search or web_fetch call"
             }
             Self::NoStoredResult => "the call with this identity has no stored result",
-            Self::RestrictedSource => "the source of this result is now restricted",
         };
         crate::host_tool_result(&format!(
             "The Host refused this call because {reason}, so no result is available, and this is \
@@ -121,7 +118,6 @@ impl ReadToolResultRefusal {
 /// and its citable sources, in the item limit `item_token_limit`.
 pub fn read_tool_result(
     target: ReadTarget<'_>,
-    source_restricted: bool,
     item_token_limit: u64,
 ) -> Result<ToolResultText, ReadToolResultRefusal> {
     let call = match target {
@@ -143,9 +139,6 @@ pub fn read_tool_result(
         _ => None,
     }
     .ok_or(ReadToolResultRefusal::NoStoredResult)?;
-    if source_restricted {
-        return Err(ReadToolResultRefusal::RestrictedSource);
-    }
     let item = crate::tool_result_context::project_item(
         call.call_id,
         projection,

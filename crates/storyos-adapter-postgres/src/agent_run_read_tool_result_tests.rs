@@ -131,31 +131,17 @@ async fn each_refused_read_gives_its_reason_to_the_model_and_the_run_continues()
         ])
     };
     let finish = json!(["finish", "settled", null, ""]);
-    let search = json!(["web_search", "settled", null, null]);
-    // The source of the search result becomes restricted before the read.
-    let restrict = format!(
-        "UPDATE storyos.model_attempts
-            SET payload = payload || '{{\"covered_copy_restricted\": true}}'
-          WHERE project_id = '{}' AND model_attempt_id IN (
-                SELECT model_attempt_id FROM storyos.tool_calls
-                 WHERE project_id = '{}' AND function_name = 'web_search'
-                   AND state = 'dispatched')",
-        project.scope.project_id.as_ref(),
-        project.scope.project_id.as_ref(),
-    );
     let cases = [
         (
             "263",
             script("none", "call_unknown"),
-            "",
             vec![refused(ReadToolResultRefusal::UnknownCall), finish.clone()],
         ),
         (
             "264",
             script("web_search", "call_read_tool_result"),
-            "",
             vec![
-                search.clone(),
+                json!(["web_search", "settled", null, null]),
                 refused(ReadToolResultRefusal::HostToolCall),
                 finish.clone(),
             ],
@@ -163,36 +149,22 @@ async fn each_refused_read_gives_its_reason_to_the_model_and_the_run_continues()
         (
             "265",
             script("none", "call_web_search"),
-            "",
             vec![refused(ReadToolResultRefusal::OtherRun), finish.clone()],
         ),
         (
             "266",
             script("refused_search", "call_web_search"),
-            "",
             vec![
                 json!(["web_search", "refused", "intake_query", null]),
                 refused(ReadToolResultRefusal::NoStoredResult),
-                finish.clone(),
-            ],
-        ),
-        (
-            "267",
-            script("web_search", "call_web_search"),
-            restrict.as_str(),
-            vec![
-                search,
-                refused(ReadToolResultRefusal::RestrictedSource),
                 finish,
             ],
         ),
     ];
     let mut facts = Vec::new();
     let mut expected = Vec::new();
-    for (prefix, message, after_exchange, calls) in cases {
-        let run_id = project
-            .settle_hooked(prefix, &message, SEARCH_TEXT, after_exchange)
-            .await;
+    for (prefix, message, calls) in cases {
+        let run_id = project.settle(prefix, &message, SEARCH_TEXT).await;
         facts.push(later_calls(&project, &run_id).await);
         expected.push(json!({"status": "completed", "calls": calls}));
     }

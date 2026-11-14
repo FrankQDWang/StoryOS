@@ -25,8 +25,8 @@ A later ticket of the specification makes each Tool result that the model read a
   | `call_of_other_run` | Only a call of another Run has the identity. |
   | `host_tool_call` | The call is a call of a Host Tool. |
   | `no_stored_result` | The call did not settle with a result, or it failed its validation before it got a Tool. |
-  | `restricted_source` | The source of the result is restricted. The Host reads the restriction of the Model Attempt that requested the call, with the same flag as the compaction install check of ADR 0055. |
 
+- A Tool result has no restriction state, so the read has no refusal for a restricted source: the grant admission of the next request is the guard of the read result, as for each Tool result (ADR 0085 section 4). The coordinator decided this on 2026-11-14. The owner of a later restriction state for sources adds the refusal.
 - The rules of ADR 0091 apply: no external destination, no Destination Attempt, no Outbound Disclosure Event, and no Source Snapshot of its own. The call uses a RunStep, has a ToolCall record, and is not in the public ToolCall list. Its result goes to the model as a `tool_result` source under the grant admission of each Tool result (ADR 0085 section 4).
 - The Host instructions of the mapping `v6` add one paragraph that says when to call the Tool.
 

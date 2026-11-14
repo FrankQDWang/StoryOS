@@ -62,17 +62,6 @@ impl ResearchProject {
     /// Settles one Run with `message` through the fake model and the real MCP client. The fake
     /// MCP server answers the one research call of the Run with `text`.
     pub(crate) async fn settle(&self, prefix: &str, message: &str, text: &str) -> String {
-        self.settle_hooked(prefix, message, text, "").await
-    }
-
-    /// `settle` with the statement `after_exchange` after the research exchange.
-    pub(crate) async fn settle_hooked(
-        &self,
-        prefix: &str,
-        message: &str,
-        text: &str,
-        after_exchange: &str,
-    ) -> String {
         let run_id = admit_run_in(
             &self.store,
             &self.scope,
@@ -94,7 +83,7 @@ impl ResearchProject {
         let tools = Hooked {
             admin: &self.admin,
             after_prepare: String::new(),
-            after_exchange: after_exchange.to_owned(),
+            after_exchange: String::new(),
         };
         complete_agent_run_with_tools(
             &self.store,

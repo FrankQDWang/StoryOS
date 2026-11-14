@@ -19,13 +19,8 @@ pub(crate) async fn execute(
     let found = client
         .query_opt(
             "SELECT call.tool_call_id::text, call.run_id = $3::text::uuid,
-                    call.tool_spec_revision, call.state, call.result_text,
-                    COALESCE(attempt.payload #>> '{produced_binding,covered_copy_restricted}'
-                               = 'true'
-                             OR attempt.payload ->> 'covered_copy_restricted' = 'true', false)
+                    call.tool_spec_revision, call.state, call.result_text
                FROM storyos.tool_calls AS call
-               JOIN storyos.model_attempts AS attempt
-                 USING (owner_user_id, project_id, model_attempt_id)
               WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
                 AND call.call_id = $4
               ORDER BY call.run_id = $3::text::uuid DESC, call.decision_position DESC,
@@ -52,9 +47,6 @@ pub(crate) async fn execute(
         }
         Some(_) | None => Vec::new(),
     };
-    let restricted = found
-        .as_ref()
-        .is_some_and(|found| found.get::<_, bool>(/*idx*/ 5));
     let target = match &found {
         None => ReadTarget::Unknown,
         Some(found) if !found.get::<_, bool>(/*idx*/ 1) => ReadTarget::OtherRun,
@@ -67,8 +59,7 @@ pub(crate) async fn execute(
             sources: &sources,
         }),
     };
-    let read =
-        storyos_core::read_tool_result(target, restricted, storyos_core::CONTEXT_ITEM_TOKEN_LIMIT);
+    let read = storyos_core::read_tool_result(target, storyos_core::CONTEXT_ITEM_TOKEN_LIMIT);
     let (state, refusal, result) = match read {
         Ok(result) => (ToolCallState::Settled, None, result),
         Err(refusal) => (

@@ -90,8 +90,7 @@ fn a_read_gives_the_bounded_form_of_the_first_read_and_the_next_request_sends_it
             &sources,
             ToolResultOutput::Projected,
         )]);
-        let read =
-            read_tool_result(ReadTarget::SameRun(search(&text, &sources)), false, limit).unwrap();
+        let read = read_tool_result(ReadTarget::SameRun(search(&text, &sources)), limit).unwrap();
         assert_eq!(vec![read.text.clone()], first);
         let next = items(&[candidate(
             "call_read_tool_result",
@@ -121,35 +120,23 @@ fn each_refusal_of_a_read_gives_its_reason() {
         ..search("The Host refused this call.", &[])
     };
     let cases = [
-        (
-            ReadTarget::Unknown,
-            false,
-            ReadToolResultRefusal::UnknownCall,
-        ),
-        (ReadTarget::OtherRun, false, ReadToolResultRefusal::OtherRun),
+        (ReadTarget::Unknown, ReadToolResultRefusal::UnknownCall),
+        (ReadTarget::OtherRun, ReadToolResultRefusal::OtherRun),
         (
             ReadTarget::SameRun(finish),
-            false,
             ReadToolResultRefusal::HostToolCall,
         ),
         (
             ReadTarget::SameRun(failed),
-            false,
             ReadToolResultRefusal::NoStoredResult,
         ),
         (
             ReadTarget::SameRun(unpinned),
-            false,
             ReadToolResultRefusal::NoStoredResult,
         ),
-        (
-            ReadTarget::SameRun(search("Built in 1890.", &sources)),
-            true,
-            ReadToolResultRefusal::RestrictedSource,
-        ),
     ];
-    for (target, restricted, refusal) in cases {
-        assert_eq!(read_tool_result(target, restricted, 32_000), Err(refusal));
+    for (target, refusal) in cases {
+        assert_eq!(read_tool_result(target, 32_000), Err(refusal));
     }
     assert_eq!(
         ReadToolResultRefusal::OtherRun.result().text,
