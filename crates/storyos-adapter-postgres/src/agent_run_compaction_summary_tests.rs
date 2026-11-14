@@ -165,7 +165,7 @@ async fn scripted_stream_endpoint(replies: Vec<Vec<serde_json::Value>>) -> Strin
 }
 
 /// The streamed events of one complete response with one assistant message.
-fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
+pub(crate) fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
     let message = serde_json::json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": text}]});
     vec![
@@ -184,10 +184,10 @@ fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
     ]
 }
 
-const ADVICE: &str = "Keep it.";
+pub(crate) const ADVICE: &str = "Keep it.";
 
 /// The streamed events of one complete response with one `finish` call.
-fn finish_events(reference: &str) -> Vec<serde_json::Value> {
+pub(crate) fn finish_events(reference: &str) -> Vec<serde_json::Value> {
     let call = serde_json::json!({"id": "fc_finish", "type": "function_call",
         "status": "completed", "call_id": format!("call_finish_{reference}"), "name": "finish",
         "arguments": "{}"});
@@ -203,7 +203,7 @@ fn finish_events(reference: &str) -> Vec<serde_json::Value> {
 }
 
 /// The events of `streamed`, with the reported usage that the terminal event gives.
-fn with_usage(
+pub(crate) fn with_usage(
     mut events: Vec<serde_json::Value>,
     input: u64,
     output: u64,
@@ -218,7 +218,7 @@ fn with_usage(
 /// The responses of a first Run: a `finish` call, and the closing response whose reported usage
 /// puts the next turn above the threshold. The threshold is (1,048,576 - 32,768) x 80 percent =
 /// 812,646 tokens.
-fn near_threshold() -> [Vec<serde_json::Value>; 2] {
+pub(crate) fn near_threshold() -> [Vec<serde_json::Value>; 2] {
     [
         finish_events("resp_finish"),
         with_usage(
@@ -243,12 +243,25 @@ async fn compact_on_agent_plan(
 
 /// Settles two AgentRuns of one Conversation as `compact_on_agent_plan` does. The second AgentRun
 /// has the author message `message`.
-async fn second_run_on_agent_plan(
+pub(crate) async fn second_run_on_agent_plan(
     store: &PostgresProjectReader,
     admin: &Client,
     prefixes: [&str; 2],
     message: &str,
     replies: Vec<Vec<serde_json::Value>>,
+) -> String {
+    second_run_on_agent_plan_after(store, admin, prefixes, message, replies, "").await
+}
+
+/// Settles two AgentRuns as `second_run_on_agent_plan` does. The admin connection runs
+/// `before_claim`, with `{run}` as the second AgentRun, before the claim of that AgentRun.
+pub(crate) async fn second_run_on_agent_plan_after(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefixes: [&str; 2],
+    message: &str,
+    replies: Vec<Vec<serde_json::Value>>,
+    before_claim: &str,
 ) -> String {
     let endpoint = scripted_stream_endpoint(replies).await;
     let destination = DeploymentDestination::VolcengineAgentPlan {
@@ -283,6 +296,10 @@ async fn second_run_on_agent_plan(
         None,
     )
     .await;
+    admin
+        .batch_execute(&before_claim.replace("{run}", &run_id))
+        .await
+        .unwrap();
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
     complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
@@ -425,11 +442,11 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
 
 /// The Host fake, with one SQL statement that the admin connection runs at the first
 /// preparation of the request that `at` selects. This is a concurrent change at that moment.
-struct ChangingFake<'a> {
-    admin: &'a Client,
-    at: fn(&storyos_application::CreateRequest) -> bool,
-    statement: String,
-    done: std::sync::Mutex<bool>,
+pub(crate) struct ChangingFake<'a> {
+    pub(crate) admin: &'a Client,
+    pub(crate) at: fn(&storyos_application::CreateRequest) -> bool,
+    pub(crate) statement: String,
+    pub(crate) done: std::sync::Mutex<bool>,
 }
 
 impl storyos_application::ModelProviderAdapter for ChangingFake<'_> {

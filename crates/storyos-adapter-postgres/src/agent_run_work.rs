@@ -200,6 +200,7 @@ pub(crate) async fn load_run_phase(
                       SELECT 1 FROM storyos.active_context_compactions AS refused
                        WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
                              (run.owner_user_id, run.project_id, run.run_id)
+                         AND refused.decision_position = run.active_decision_position
                          AND refused.install_state = 'refused'))
                   ORDER BY active.manifest_role = 'later_request' DESC
                   LIMIT 1
@@ -381,11 +382,10 @@ pub(crate) async fn settle_one_phase(
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
-        // Compaction occurs before a decision request of the AgentRun, when the mapping of the
-        // pinned Registration compacts (ADR 0055).
+        // Compaction occurs before the decision request of each RunStep of the AgentRun, when
+        // the mapping of the pinned Registration compacts (ADR 0055, ADR 0093).
         let compacted = if storyos_core::model_registration(&run.model_registration_revision)
             .is_some_and(storyos_core::ModelRegistration::compacts)
-            && crate::agent_run_compaction::compacts_at_active_step(client, claim, &run).await?
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?

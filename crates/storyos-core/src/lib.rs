@@ -95,16 +95,16 @@ pub use assemble_context::{
     encode_assembly_record,
 };
 pub use compact_active_context::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
-    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
-    COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts, CompactionInstallRefusal,
-    CompactionKnownInput, CompactionRecordState, CompactionRequestFacts, CompactionSource,
-    CompactionStep, CompactionTrigger, DecisionRequestKind, HOST_FAKE_COMPACTION_OUTPUT,
-    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
-    active_context_input_digest, compaction_assembly_record, compaction_due, compaction_requested,
-    compaction_threshold, conversation_too_long, decide_compaction_install, decision_request_kind,
-    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
-    summary_fits_item, summary_text,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
+    AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    COMPACTION_SUMMARY_UNAVAILABLE, COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts,
+    CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState, CompactionRequestFacts,
+    CompactionSource, CompactionStep, CompactionTrigger, DecisionRequestKind,
+    HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction,
+    SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
+    compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
+    decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
+    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,

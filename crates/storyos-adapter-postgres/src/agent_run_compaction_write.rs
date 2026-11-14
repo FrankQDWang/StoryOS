@@ -3,7 +3,7 @@ use storyos_core::{
     CompactionInstallFacts, CompactionKnownInput, CompactionSource, ContextSufficiency,
     CurrentPassageAssembly, InstructionBindingInput, StagedCompaction, active_context_input_digest,
     assemble_current_passage_context, decide_compaction_install, encode_assembly_record,
-    later_request_record, summary_fits_item,
+    later_request_record, later_request_too_long, summary_fits_item,
 };
 use uuid::Uuid;
 
@@ -23,9 +23,9 @@ pub(super) struct Producer {
     pub usage_kind: &'static str,
 }
 
-/// Inserts the compaction record of one summary result: staged, or refused with no summary. The
-/// input digest binds the author message and the Working Target of the decision Context Assembly
-/// that the later request copies.
+/// Inserts the compaction record of one summary result at the active RunStep: staged, or refused
+/// with no summary. The input digest binds the author message and the Working Target of the
+/// decision Context Assembly that the later request copies.
 pub(super) async fn insert_staged(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -55,12 +55,13 @@ pub(super) async fn insert_staged(
                 prior_manifest_id, prior_run_step_id, producer_model_attempt_id,
                 producer_manifest_id, producer_invocation_id, producer, mapping_kind,
                 mapping_revision, known_inputs, output_text, usage_kind, loss_facts,
-                input_digest, install_state, preserved_item_ids, admission, refusal_reason)
+                input_digest, install_state, preserved_item_ids, admission, refusal_reason,
+                decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11, 'host_managed', $12,
                      $13::text::jsonb, $14, $15, $16::text::jsonb, $17, $18,
-                     $19::text::jsonb, $20::text::jsonb, $21)",
+                     $19::text::jsonb, $20::text::jsonb, $21, $22::text::numeric)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -87,6 +88,7 @@ pub(super) async fn insert_staged(
                 &serde_json::json!(staged.preserved_item_ids).to_string(),
                 &admission.to_string(),
                 &refusal_reason,
+                &run.decision_position,
             ],
         )
         .await
@@ -94,15 +96,24 @@ pub(super) async fn insert_staged(
     Ok(())
 }
 
-/// Decides the install of the staged summary for the decision request. An install commits the
-/// Context Assembly of the later request and returns `true`. A refusal records its reason, and
-/// the decision request then uses the ordinary continuation.
+/// The result of the install check of one staged summary.
+pub(super) enum InstallOutcome {
+    /// The Context Assembly of the later request is committed.
+    Installed,
+    /// The refusal reason is recorded, and the decision request uses the ordinary continuation.
+    Refused,
+    /// The full input of the later request reaches the window after the output bound, so the
+    /// AgentRun refuses with `conversation_too_long` (ADR 0093).
+    TooLong,
+}
+
+/// Decides the install of the staged summary for the decision request of the active RunStep.
 pub(super) async fn install_or_refuse(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     staged: &CompactionState,
-) -> Result<bool, CompleteAgentRunError> {
+) -> Result<InstallOutcome, CompleteAgentRunError> {
     let source = load_chain_source(client, claim, &staged.prior_model_attempt_id).await?;
     let decision = run
         .disclosure_request
@@ -133,11 +144,26 @@ pub(super) async fn install_or_refuse(
         summary_within_item_limit: summary_fits_item(decision, &staged.output_text),
     });
     let Err(refusal) = checked else {
-        insert_later_request(client, claim, run, staged, decision).await?;
-        return Ok(true);
+        let mut later = later_request_record(decision, &staged.compaction_id, &staged.output_text);
+        let targets: Vec<String> =
+            crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+                .await?
+                .into_iter()
+                .map(|target| target.block_text)
+                .collect();
+        if later_request_too_long(
+            &run.model_registration_revision,
+            &run.budget_bounds,
+            &later,
+            &targets,
+        ) {
+            return Ok(InstallOutcome::TooLong);
+        }
+        insert_later_request(client, claim, run, &mut later).await?;
+        return Ok(InstallOutcome::Installed);
     };
-    refuse(client, claim, refusal.code()).await?;
-    Ok(false)
+    refuse(client, claim, staged, refusal.code()).await?;
+    Ok(InstallOutcome::Refused)
 }
 
 /// Whether the source of the accepted install is still eligible before the later request goes
@@ -155,18 +181,21 @@ pub(super) async fn source_still_eligible(
     refuse(
         client,
         claim,
+        staged,
         storyos_core::CompactionInstallRefusal::RestrictedSource.code(),
     )
     .await?;
     Ok(false)
 }
 
-/// Whether the source of the staged install of the claimed AgentRun is restricted now.
+/// Whether the source of the staged install at `decision_position` of the claimed AgentRun is
+/// restricted now.
 pub(crate) async fn source_restricted_now(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<bool, CompleteAgentRunError> {
-    let staged = super::load_compaction_state(client, claim)
+    let staged = super::load_compaction_state(client, claim, decision_position)
         .await?
         .ok_or_else(|| unavailable("The staged compaction is missing"))?;
     let source = load_chain_source(client, claim, &staged.prior_model_attempt_id).await?;
@@ -176,6 +205,7 @@ pub(crate) async fn source_restricted_now(
 async fn refuse(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    staged: &CompactionState,
     reason: &str,
 ) -> Result<(), CompleteAgentRunError> {
     let updated = client
@@ -184,12 +214,12 @@ async fn refuse(
                 SET install_state = 'refused', refusal_reason = $4
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
+                AND compaction_id = $3::text::uuid
                 AND install_state = 'staged'",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
+                &staged.compaction_id,
                 &reason,
             ],
         )
@@ -220,20 +250,22 @@ fn decision_target(
     )
 }
 
-/// Commits the operation requirement and the Context Assembly Manifest of the later request. Its
-/// new Step Snapshot selects the summary before the decision Context.
+/// Commits the operation requirement and the Context Assembly Manifest of the later request
+/// `record`. Its new Step Snapshot selects the summary before the decision Context.
 async fn insert_later_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
-    staged: &CompactionState,
-    decision: &storyos_core::CurrentPassageAssemblyRecord,
+    record: &mut storyos_core::CurrentPassageAssemblyRecord,
 ) -> Result<(), CompleteAgentRunError> {
     let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
-    let mut record = later_request_record(decision, &staged.compaction_id, &staged.output_text);
+    let decision_requirement_id = record
+        .operation_requirement
+        .operation_requirement_id
+        .clone();
     record.operation_requirement.operation_requirement_id = requirement_id.clone();
     record.operation_requirement.input_snapshot_id = snapshot_id.clone();
-    let payload = encode_assembly_record(&record);
+    let payload = encode_assembly_record(record);
     let scope = [
         &claim.project_scope.owner_user_id.as_ref(),
         &claim.project_scope.project_id.as_ref(),
@@ -251,7 +283,7 @@ async fn insert_later_request(
             &[
                 scope[0],
                 scope[1],
-                &decision.operation_requirement.operation_requirement_id,
+                &decision_requirement_id,
                 &requirement_id,
                 &snapshot_id,
                 &payload["operation_requirement"].to_string(),
@@ -287,11 +319,12 @@ async fn insert_later_request(
     Ok(())
 }
 
-/// Records the install in the dispatch claim of the later request: its new RunStep, and the
-/// Model Invocation and Model Attempt of the claim.
+/// Records the install at `decision_position` in the dispatch claim of the later request: its new
+/// RunStep, and the Model Invocation and Model Attempt of the claim.
 pub(crate) async fn mark_installed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
     model_attempt_id: &str,
 ) -> Result<(), CompleteAgentRunError> {
     let updated = client
@@ -306,6 +339,7 @@ pub(crate) async fn mark_installed(
                 AND record.project_id = $2::text::uuid
                 AND record.run_id = $3::text::uuid
                 AND record.install_state = 'staged'
+                AND record.decision_position = $6::text::numeric
                 AND (attempt.owner_user_id, attempt.project_id, attempt.model_attempt_id) =
                     (record.owner_user_id, record.project_id, $4::text::uuid)",
             &[
@@ -314,6 +348,7 @@ pub(crate) async fn mark_installed(
                 &claim.run_id,
                 &model_attempt_id,
                 &Uuid::now_v7().to_string(),
+                &decision_position,
             ],
         )
         .await

@@ -3,6 +3,9 @@
 use crate::{canonical_json, hex_sha256};
 
 pub const ACTIVE_COMPACTION_REQUEST_PREFIX: &str = "Compact active context between calls.";
+/// After the prefix, the words that name each RunStep position where the Host fake compacts, for
+/// example `At RunSteps 0 1.`
+pub const ACTIVE_COMPACTION_POSITIONS_PREFIX: &str = "At RunSteps";
 pub const HOST_FAKE_COMPACTION_PRODUCER: &str = "host_fake_summary";
 pub const HOST_FAKE_COMPACTION_OUTPUT: &str =
     "Bounded later-request summary. Semantic preservation is unknown.";
@@ -29,6 +32,30 @@ pub struct CompactionInstallFacts {
 /// Author text that asks the Host-fake path to compact before the decision request.
 pub fn requests_active_compaction(author_message: &str) -> bool {
     author_message.starts_with(ACTIVE_COMPACTION_REQUEST_PREFIX)
+}
+
+/// Whether the Host fake compacts at the RunStep of `facts`. The prefix alone asks for one
+/// compaction: at the first RunStep that compacts. The prefix with `At RunSteps <position> ...`
+/// asks for a compaction at each named position.
+fn host_fake_compacts(facts: &CompactionRequestFacts<'_>) -> bool {
+    let Some(rest) = facts
+        .author_message
+        .strip_prefix(ACTIVE_COMPACTION_REQUEST_PREFIX)
+    else {
+        return false;
+    };
+    match rest
+        .trim_start()
+        .strip_prefix(ACTIVE_COMPACTION_POSITIONS_PREFIX)
+    {
+        Some(named) => named
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .any(|position| position == facts.decision_position),
+        None => !facts.compacted_earlier,
+    }
 }
 
 /// Digest the exact author message and Working Target captured for one install check.
@@ -174,6 +201,10 @@ pub struct CompactionRequestFacts<'a> {
     pub prior_decision_id: Option<&'a str>,
     /// Whether the prior response read the current input of the request.
     pub prior_input: crate::PriorInput,
+    /// The Decision position of the RunStep of the request.
+    pub decision_position: &'a str,
+    /// Whether the Run compacted at an earlier RunStep.
+    pub compacted_earlier: bool,
 }
 
 impl CompactionTrigger {
@@ -220,6 +251,16 @@ fn sent_input_tokens(
     if !tool_results.is_empty() && facts.prior_input == crate::PriorInput::Current {
         return outputs;
     }
+    input_tokens(current, record, facts.declared_target_texts) + outputs
+}
+
+/// The counted tokens of `items`, of each selection reference text of `record`, and of each
+/// declared target text.
+fn input_tokens<'r>(
+    items: impl IntoIterator<Item = &'r crate::assemble_context::SelectedProjection>,
+    record: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> u64 {
     let references = record
         .operation_requirement
         .selection_references
@@ -227,22 +268,43 @@ fn sent_input_tokens(
         .flatten()
         .filter_map(|admitted| admitted.selected_text.as_deref());
     let sent_texts = references
-        .chain(facts.declared_target_texts.iter().map(String::as_str))
+        .chain(declared_target_texts.iter().map(String::as_str))
         .map(crate::assemble_context::count_context_item_tokens);
-    current
-        .iter()
+    items
+        .into_iter()
         .map(|item| item.token_count)
         .chain(sent_texts)
-        .sum::<u64>()
-        + outputs
+        .sum()
 }
 
-/// Whether the decision request compacts first. The expected input can reach the threshold, or
-/// the author message can ask the Host fake to compact.
+/// Whether the full input of the later request `later` reaches the window after the output
+/// bound. The later request continues no prior response, so each text that it sends counts: the
+/// summary, the current input, and each Tool result (ADR 0093). An unknown window or output bound
+/// gives `false`.
+pub fn later_request_too_long(
+    model_registration_revision: &str,
+    budget_bounds: &str,
+    later: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> bool {
+    conversation_too_long(&CompactionTrigger {
+        window_tokens: crate::model_registration(model_registration_revision)
+            .and_then(|registration| registration.capability_profile.context_window)
+            .map(|window| window.tokens),
+        output_bound: crate::BudgetBounds::parse(budget_bounds)
+            .and_then(crate::BudgetBounds::request_bounds)
+            .map(|bounds| u64::from(bounds.max_output_tokens)),
+        prior_reported_tokens: Some(0),
+        sent_input_tokens: input_tokens(&later.selected, later, declared_target_texts),
+    })
+}
+
+/// Whether the decision request of a RunStep compacts first. The expected input can reach the
+/// threshold at each RunStep, or the author message can ask the Host fake to compact (ADR 0093).
 pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
     (crate::model_registration(facts.model_registration_revision)
         .is_some_and(|registration| registration.adapter == crate::ModelAdapter::HostFake)
-        && requests_active_compaction(facts.author_message))
+        && host_fake_compacts(facts))
         || compaction_due(&CompactionTrigger::from_facts(facts))
 }
 

@@ -21,40 +21,40 @@ pub(crate) enum CompactionAdvance {
     TooLong,
 }
 
-/// Whether the active RunStep of `run` can compact. One AgentRun compacts at most once: at the
-/// first RunStep whose request compacts. Each later RunStep continues the chain of the later
-/// request (ADR 0055).
-pub(crate) async fn compacts_at_active_step(
+/// Whether the claimed AgentRun compacted at a RunStep before the active RunStep of `run`.
+async fn compacted_earlier(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<bool, CompleteAgentRunError> {
-    let position = client
-        .query_opt(
-            "SELECT decision_position::text FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND manifest_role = 'compaction'",
+    Ok(client
+        .query_one(
+            "SELECT EXISTS (
+               SELECT 1 FROM storyos.context_assembly_manifests
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                  AND decision_position < $4::text::numeric)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &run.decision_position,
             ],
         )
         .await
         .map_err(work_error)?
-        .map(|row| row.get::<_, String>(/*idx*/ 0));
-    Ok(position.is_none_or(|position| position == run.decision_position))
+        .get(/*idx*/ 0))
 }
 
-/// Advances the active compaction of the claimed AgentRun before the decision request of its
-/// active RunStep.
+/// Advances the compaction of the active RunStep of the claimed AgentRun before its decision
+/// request. Each RunStep position has at most one compaction (ADR 0093).
 pub(crate) async fn advance_active_compaction(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<CompactionAdvance, CompleteAgentRunError> {
-    let staged = load_compaction_state(client, claim).await?;
-    let summary = summary::load_summary_attempt(client, claim).await?;
+    let staged = load_compaction_state(client, claim, &run.decision_position).await?;
+    let summary = summary::load_summary_attempt(client, claim, &run.decision_position).await?;
     let record = match (
         staged.as_ref().map(|state| state.install_state.as_str()),
         &summary,
@@ -72,9 +72,13 @@ pub(crate) async fn advance_active_compaction(
         _ => None,
     };
     let target_texts = declared_target_texts(client, claim, run, chain.as_ref()).await?;
-    let requested = chain
-        .as_ref()
-        .is_some_and(|chain| compaction_requested(&request_facts(run, chain, &target_texts)));
+    let earlier = match chain {
+        Some(_) => compacted_earlier(client, claim, run).await?,
+        None => false,
+    };
+    let requested = chain.as_ref().is_some_and(|chain| {
+        compaction_requested(&request_facts(run, chain, &target_texts, earlier))
+    });
     let ordinary = CompactionAdvance::Decide {
         later_request: false,
     };
@@ -118,9 +122,15 @@ pub(crate) async fn advance_active_compaction(
                 .await?,
             )));
         }
-        (CompactionStep::InstallOrRefuse, Some(staged), _, _) => CompactionAdvance::Decide {
-            later_request: write::install_or_refuse(client, claim, run, &staged).await?,
-        },
+        (CompactionStep::InstallOrRefuse, Some(staged), _, _) => {
+            match write::install_or_refuse(client, claim, run, &staged).await? {
+                write::InstallOutcome::Installed => CompactionAdvance::Decide {
+                    later_request: true,
+                },
+                write::InstallOutcome::Refused => ordinary,
+                write::InstallOutcome::TooLong => return Ok(CompactionAdvance::TooLong),
+            }
+        }
         // The source can become restricted after the install check. Check it again before the
         // later request goes out.
         (CompactionStep::LaterRequest, Some(staged), _, _)
@@ -154,7 +164,7 @@ pub(crate) async fn advance_active_compaction(
             started,
             chain
                 .as_ref()
-                .map(|chain| request_facts(run, chain, &target_texts))
+                .map(|chain| request_facts(run, chain, &target_texts, earlier))
                 .as_ref(),
         ) {
             DecisionRequestKind::Later => CompactionAdvance::Decide {
@@ -193,6 +203,7 @@ fn request_facts<'a>(
     run: &'a RunPhaseRow,
     chain: &'a summary::PriorChain,
     declared_target_texts: &'a [String],
+    compacted_earlier: bool,
 ) -> CompactionRequestFacts<'a> {
     CompactionRequestFacts {
         model_registration_revision: &run.model_registration_revision,
@@ -203,16 +214,19 @@ fn request_facts<'a>(
         prior_reported_tokens: chain.reported_tokens,
         prior_decision_id: chain.decision_id.as_deref(),
         prior_input: chain.prior_input,
+        decision_position: &run.decision_position,
+        compacted_earlier,
     }
 }
 
-pub(crate) async fn load_active_compaction(
+/// Each compaction record of the Run, in RunStep order.
+pub(crate) async fn load_compactions(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
-) -> Result<Option<ActiveCompactionInspect>, CreateAgentRunError> {
-    let row = client
-        .query_opt(
+) -> Result<Vec<ActiveCompactionInspect>, CreateAgentRunError> {
+    let rows = client
+        .query(
             "SELECT compaction_id::text, install_state, prior_model_attempt_id::text,
                     prior_manifest_id::text, prior_run_step_id::text,
                     producer_model_attempt_id::text, producer_manifest_id::text,
@@ -224,7 +238,8 @@ pub(crate) async fn load_active_compaction(
                FROM storyos.active_context_compactions
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid",
+                AND run_id = $3::text::uuid
+              ORDER BY decision_position",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -233,7 +248,7 @@ pub(crate) async fn load_active_compaction(
         )
         .await
         .map_err(read_error)?;
-    row.map(|row| inspect_row(&row)).transpose()
+    rows.iter().map(inspect_row).collect()
 }
 
 struct CompactionState {
@@ -244,9 +259,11 @@ struct CompactionState {
     output_text: String,
 }
 
+/// The compaction record of the RunStep at `decision_position` of the claimed AgentRun.
 async fn load_compaction_state(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<Option<CompactionState>, CompleteAgentRunError> {
     let row = client
         .query_opt(
@@ -255,11 +272,13 @@ async fn load_compaction_state(
                FROM storyos.active_context_compactions
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid",
+                AND run_id = $3::text::uuid
+                AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_position,
             ],
         )
         .await
@@ -460,3 +479,7 @@ fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> CreateAg
 #[cfg(test)]
 #[path = "agent_run_compaction_step_tests.rs"]
 mod step_tests;
+
+#[cfg(test)]
+#[path = "agent_run_compaction_repeat_tests.rs"]
+mod repeat_tests;

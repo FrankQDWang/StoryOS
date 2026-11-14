@@ -309,6 +309,11 @@
           "nullable": false,
           "type": "uuid"
         },
+        "decision_position": {
+          "default": null,
+          "nullable": false,
+          "type": "numeric(20,0)"
+        },
         "input_digest": {
           "default": null,
           "nullable": false,
@@ -427,17 +432,18 @@
       },
       "constraints": {
         "active_context_compactions_check": "CHECK (((((install_state = 'installed'::text) AND (installed_run_step_id IS NOT NULL) AND (installed_model_invocation_id IS NOT NULL) AND (installed_model_attempt_id IS NOT NULL) AND (refusal_reason IS NULL)) OR ((install_state = 'staged'::text) AND (installed_run_step_id IS NULL) AND (installed_model_invocation_id IS NULL) AND (installed_model_attempt_id IS NULL) AND (refusal_reason IS NULL)) OR ((install_state = 'refused'::text) AND (installed_run_step_id IS NULL) AND (installed_model_invocation_id IS NULL) AND (installed_model_attempt_id IS NULL) AND (refusal_reason IS NOT NULL))) IS TRUE))",
+        "active_context_compactions_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "active_context_compactions_install_state_check": "CHECK ((install_state = ANY (ARRAY['staged'::text, 'installed'::text, 'refused'::text])))",
         "active_context_compactions_mapping_kind_check": "CHECK ((mapping_kind = ANY (ARRAY['host_managed'::text, 'native'::text])))",
+        "active_context_compactions_one_position": "UNIQUE (owner_user_id, project_id, run_id, decision_position)",
         "active_context_compactions_owner_user_id_project_id_instal_fkey": "FOREIGN KEY (owner_user_id, project_id, installed_model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id)",
         "active_context_compactions_owner_user_id_project_id_prior__fkey": "FOREIGN KEY (owner_user_id, project_id, prior_model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL",
         "active_context_compactions_owner_user_id_project_id_produc_fkey": "FOREIGN KEY (owner_user_id, project_id, producer_model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL",
         "active_context_compactions_owner_user_id_project_id_run_id_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
-        "active_context_compactions_owner_user_id_project_id_run_id_key": "UNIQUE (owner_user_id, project_id, run_id)",
         "active_context_compactions_pkey": "PRIMARY KEY (owner_user_id, project_id, compaction_id)"
       },
       "indexes": {
-        "active_context_compactions_owner_user_id_project_id_run_id_key": "CREATE UNIQUE INDEX active_context_compactions_owner_user_id_project_id_run_id_key ON storyos.active_context_compactions USING btree (owner_user_id, project_id, run_id)",
+        "active_context_compactions_one_position": "CREATE UNIQUE INDEX active_context_compactions_one_position ON storyos.active_context_compactions USING btree (owner_user_id, project_id, run_id, decision_position)",
         "active_context_compactions_pkey": "CREATE UNIQUE INDEX active_context_compactions_pkey ON storyos.active_context_compactions USING btree (owner_user_id, project_id, compaction_id)"
       },
       "owner": "storyos_owner",
