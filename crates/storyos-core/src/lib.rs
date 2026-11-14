@@ -25,6 +25,7 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_tool_result;
 mod rebuild_expired_reference;
 mod research_destination;
 mod research_source;
@@ -157,8 +158,8 @@ pub use host_fake_profile::{
     SECOND_PROSE_CHANGE_TEXT, requested_execution_capability,
 };
 pub use host_tool::{
-    FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
-    host_tool, host_tool_result,
+    FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
+    HostToolRegistration, execute_host_tool, host_tool, host_tool_result,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -206,6 +207,9 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use read_tool_result::{
+    READ_TOOL_RESULT_TOOL_SPEC, ReadTarget, ReadToolResultRefusal, StoredCall, read_tool_result,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
@@ -291,7 +295,8 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -303,7 +308,8 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
+    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultOutput, ToolResultSource,
+    assemble_tool_result_continuation,
 };
 pub use tool_spec::{
     ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,

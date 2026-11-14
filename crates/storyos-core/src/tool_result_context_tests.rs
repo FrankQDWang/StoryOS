@@ -37,6 +37,7 @@ fn candidate<'a>(
         state,
         result_text,
         sources: &[],
+        output: ToolResultOutput::Projected,
     }
 }
 

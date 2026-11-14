@@ -205,7 +205,7 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
 }
 
 /// The Exposure of the research Tool Registration and the Host Tools on the Agent Plan
-/// Registration.
+/// Registration of the mapping `v5`.
 pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
     storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
         bound: &[storyos_core::BoundTool {
@@ -213,7 +213,7 @@ pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
             lifecycle: storyos_core::ToolRegistrationLifecycle::Active,
             compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        model_registration_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision,
     })
 }
 

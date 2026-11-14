@@ -176,3 +176,104 @@ async fn a_request_that_names_a_response_of_the_last_run_step_gives_each_of_its_
         )
     );
 }
+
+/// ADR 0093: the mapping `v6` declares `read_tool_result` and says in one paragraph what it
+/// does. A request of the mapping `v5` keeps three Host Tools and its instructions.
+#[tokio::test]
+async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_request() {
+    let request = |mapping: &str, registration: &str| {
+        let route = RequestRoute {
+            mapping_revision: mapping.to_owned(),
+            ..route("http://127.0.0.1:9")
+        };
+        let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
+            unreachable!("create() makes a Create request")
+        };
+        CreateRequest {
+            tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
+                bound: &[],
+                model_registration_revision: registration,
+            }),
+            tool_choice: ToolChoice::Required,
+            ..request
+        }
+    };
+    let names = |body: &serde_json::Value| -> Vec<String> {
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let v6 = adapter
+        .prepare(&DestinationRequest::Create(request(
+            storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        )))
+        .await
+        .ok()
+        .unwrap()
+        .projection;
+    let v6_body: serde_json::Value =
+        serde_json::from_str(v6.serialized_payload.as_deref().unwrap()).unwrap();
+    let v5 = body(request(
+        storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+        storyos_core::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision,
+    ))
+    .await;
+
+    assert_eq!(
+        (
+            v6.mapping_revision.as_str(),
+            &v6_body["instructions"],
+            names(&v6_body),
+            &v6_body["tools"][2],
+            &v5["instructions"],
+            names(&v5),
+        ),
+        (
+            "storyos.volcengine-agent-plan.responses.create.v6",
+            &json!(format!(
+                "{TOOL_LOOP_INSTRUCTIONS}\n\nWhen you need the complete text of an earlier \
+                 result of web_search or web_fetch in this work again, call read_tool_result \
+                 with the identity in the source attribute of the tool_result tag of that \
+                 result."
+            )),
+            vec![
+                "propose_edit".to_owned(),
+                "submit_research".to_owned(),
+                "read_tool_result".to_owned(),
+                "finish".to_owned()
+            ],
+            &json!({
+                "type": "function",
+                "name": "read_tool_result",
+                "description": "Reads again the full result of an earlier web_search or \
+                                web_fetch call of this work, with its tool_sources tag. Give the \
+                                identity in the source attribute of the tool_result tag of that \
+                                result.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"call_id": {
+                        "type": "string",
+                        "description": "The source attribute of the tool_result tag of the \
+                                        result."
+                    }},
+                    "required": ["call_id"],
+                    "additionalProperties": false
+                },
+                "strict": true
+            }),
+            &json!(TOOL_LOOP_INSTRUCTIONS),
+            vec![
+                "propose_edit".to_owned(),
+                "submit_research".to_owned(),
+                "finish".to_owned()
+            ],
+        )
+    );
+}

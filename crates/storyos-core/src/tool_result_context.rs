@@ -60,6 +60,46 @@ pub struct ToolResultCandidate<'a> {
     /// The Source Snapshots, in result order, and then the Source Gaps, in request order, that
     /// the settlement of the ToolCall captured.
     pub sources: &'a [crate::CitableSource],
+    pub output: ToolResultOutput,
+}
+
+/// How the continuation input gives the result of one ToolCall.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ToolResultOutput {
+    /// The bounded projection of the result text with its source tag and its citable sources.
+    Projected,
+    /// The settled result of a `read_tool_result` call as it is: it already is the bounded form
+    /// of the call that it read (ADR 0093). A refusal of the read is projected.
+    StoredRead,
+}
+
+/// The text of one `tool_result` item and its token counts.
+pub(crate) struct ToolResultItem {
+    pub content: String,
+    pub token_count: u64,
+    /// The token count of the complete projection and its tag, before the bound.
+    pub source_tokens: u64,
+    pub kept_result_tokens: Option<u64>,
+}
+
+/// The bounded projection of a result for the ToolCall `call_id`, followed by the tag of its
+/// citable sources. The bound never cuts an identity: it applies to the result text only.
+pub(crate) fn project_item(
+    call_id: &str,
+    projection: ToolResultProjection<'_>,
+    sources: &[crate::CitableSource],
+    item_token_limit: u64,
+) -> ToolResultItem {
+    let tag = crate::citable_sources_tag(call_id, sources);
+    let tag_tokens = count_context_item_tokens(&tag);
+    let bounded = projection.bounded_text(call_id, item_token_limit.saturating_sub(tag_tokens));
+    let content = format!("{}{tag}", bounded.text);
+    ToolResultItem {
+        token_count: count_context_item_tokens(&content),
+        source_tokens: bounded.source_tokens + tag_tokens,
+        kept_result_tokens: bounded.kept_result_tokens,
+        content,
+    }
 }
 
 impl ToolResultCandidate<'_> {
@@ -112,22 +152,34 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
-        // The bound never cuts an identity: it applies to the result text only.
-        let tag = crate::citable_sources_tag(candidate.call_id, candidate.sources);
-        let tag_tokens = count_context_item_tokens(&tag);
-        let bounded = projection.bounded_text(
-            candidate.call_id,
-            requirement.item_token_limit.saturating_sub(tag_tokens),
-        );
-        let content = format!("{}{tag}", bounded.text);
-        let token_count = count_context_item_tokens(&content);
+        let item = match (candidate.output, projection) {
+            // The result of a read is the stored bounded form of the call that it read.
+            (ToolResultOutput::StoredRead, ToolResultProjection::Ok(text)) => ToolResultItem {
+                content: text.to_owned(),
+                token_count: count_context_item_tokens(text),
+                source_tokens: count_context_item_tokens(text),
+                kept_result_tokens: None,
+            },
+            (ToolResultOutput::StoredRead | ToolResultOutput::Projected, _) => project_item(
+                candidate.call_id,
+                projection,
+                candidate.sources,
+                requirement.item_token_limit,
+            ),
+        };
+        let ToolResultItem {
+            content,
+            token_count,
+            source_tokens,
+            kept_result_tokens,
+        } = item;
         // A tag whose identities and the minimum boundary do not fit together in the item limit
         // blocks the continuation, because a cut identity cannot be cited.
         let fits = token_count <= requirement.item_token_limit;
         record.considered.push(ConsideredSource {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
-            token_count: bounded.source_tokens + tag_tokens,
+            token_count: source_tokens,
             eligible: fits,
         });
         if !fits {
@@ -148,7 +200,7 @@ pub fn assemble_tool_result_continuation(
         record.selected.push(SelectedProjection {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
-            projection_mode: match bounded.kept_result_tokens {
+            projection_mode: match kept_result_tokens {
                 Some(_) => ProjectionMode::DeterministicExcerpt,
                 None => ProjectionMode::ExactRequired,
             },
@@ -162,7 +214,7 @@ pub fn assemble_tool_result_continuation(
             decision_id: candidate.decision_id.to_owned(),
             state: projection.label().to_owned(),
             trust: TOOL_RESULT_TRUST.to_owned(),
-            kept_result_tokens: bounded.kept_result_tokens,
+            kept_result_tokens,
             source_snapshot_ids: snapshot_ids,
         });
     }

@@ -36,6 +36,12 @@ request to decide if you change the referenced text with propose_edit or only us
 replaces all of a block: keep the text outside the references unchanged unless the author \
 request says otherwise.";
 
+/// The paragraph that the mapping `v6` adds to the tool loop instructions (ADR 0093).
+pub(crate) const READ_TOOL_RESULT_INSTRUCTION: &str = "\
+When you need the complete text of an earlier result of web_search or web_fetch in this work \
+again, call read_tool_result with the identity in the source attribute of the tool_result tag of \
+that result.";
+
 /// The first paragraph of a current input that an incremental continuation sends again, so that
 /// the model reads the current input in place of the input of its earlier steps (ADR 0085).
 pub(crate) const REPLACED_INPUT_LABEL: &str = "\
@@ -57,10 +63,16 @@ pub(crate) fn create_body(
 ) -> String {
     // A continuation input wraps each result in a source tag (AP-07), and the instruction says
     // that its content is data.
+    let tool_loop = match request.route.mapping_revision.as_str() {
+        storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => {
+            format!("{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}")
+        }
+        _ => TOOL_LOOP_INSTRUCTIONS.to_owned(),
+    };
     let instructions = match request.tool_outputs.is_empty() {
-        true => TOOL_LOOP_INSTRUCTIONS.to_owned(),
+        true => tool_loop,
         false => format!(
-            "{TOOL_LOOP_INSTRUCTIONS} {}",
+            "{tool_loop} {}",
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
         ),
     };
