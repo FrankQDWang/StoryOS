@@ -131,6 +131,9 @@ pub enum ProposeEditRefusal {
     /// The referenced candidate changed after the request read it. The next RunStep reads the
     /// current candidate when it is still pending (ADR 0085).
     StaleCandidate,
+    /// The head of a target Chapter changed after the request read it. The next RunStep reads
+    /// the head (ADR 0085).
+    ChangedHead,
 }
 
 impl ProposeEditRefusal {
@@ -183,6 +186,10 @@ impl ProposeEditRefusal {
                 "stale_candidate",
                 "the candidate changed after this request read it",
             ),
+            Self::ChangedHead => (
+                "changed_head",
+                "the Chapter changed after this request read it",
+            ),
         }
     }
 
@@ -203,7 +210,8 @@ impl ProposeEditRefusal {
             | Self::SecondInResponse
             | Self::AfterProposal
             | Self::NotOpened
-            | Self::StaleCandidate => format!(
+            | Self::StaleCandidate
+            | Self::ChangedHead => format!(
                 "The Host refused this call because {}, so no Proposal opened.",
                 self.parts().1
             ),

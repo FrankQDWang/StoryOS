@@ -201,6 +201,11 @@ impl Fixture {
         )
     }
 
+    /// The id of Block `index` of the fixture head.
+    pub(crate) fn block(&self, index: usize) -> &str {
+        &self.blocks[index]
+    }
+
     /// Applies the Author Edit that puts `text` before the text of the first Chapter Block.
     /// `sequence` is the local intent sequence of the Editor Session of the fixture, from 2.
     pub(crate) async fn edit_chapter(
@@ -209,6 +214,55 @@ impl Fixture {
         sequence: u64,
         text: &str,
     ) {
+        let primitive = AuthorEditPrimitive::ReplaceBlockSelection {
+            manuscript_block_id: self.blocks[0].clone(),
+            from: 0,
+            to: 0,
+            text: text.to_owned(),
+        };
+        let command = self.chapter_edit(store, sequence, vec![primitive]).await;
+        store.apply_author_edit(&command).await.unwrap();
+    }
+
+    /// The Author Edit of the Chapter head of the fixture with one unit for each of `primitives`:
+    /// a Block text replacement or a join of two Blocks. `sequence` is the local intent sequence
+    /// of the Editor Session of the fixture, from 2.
+    pub(crate) async fn chapter_edit(
+        &self,
+        store: &PostgresProjectReader,
+        sequence: u64,
+        primitives: Vec<AuthorEditPrimitive>,
+    ) -> ApplyAuthorEditCommand {
+        let units = primitives
+            .into_iter()
+            .map(|primitive| {
+                // The selection of a unit is the range of its replacement, or the end of the left
+                // Block of its join.
+                let (from, to) = match &primitive {
+                    AuthorEditPrimitive::ReplaceBlockSelection { from, to, .. } => (*from, *to),
+                    AuthorEditPrimitive::JoinBlocks {
+                        left_manuscript_block_id,
+                        ..
+                    } => {
+                        let left = self
+                            .blocks
+                            .iter()
+                            .position(|id| id == left_manuscript_block_id);
+                        let end = SENTENCES[left.expect("a Block of the fixture")].len() as u32;
+                        (end, end)
+                    }
+                    other => panic!("{other:?}"),
+                };
+                AuthorEditUnit {
+                    normalized_primitives: vec![primitive],
+                    selection_snapshot: SelectionSnapshot {
+                        coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                        from,
+                        to,
+                    },
+                }
+            })
+            .collect();
         let prefix = format!("{:03x}", self.lead + 7);
         let (editor_session_id, _) = self.writer();
         let edit = NamedEdit {
@@ -217,30 +271,17 @@ impl Fixture {
             expected_revision_id: &self.head,
             suffix: &format!("{prefix}{sequence}"),
             local_intent_sequence: sequence,
-            text,
+            text: "",
             proposal_target: None,
         };
-        let command = adjusted_edit_command(store, &self.scope, edit, |command| {
+        adjusted_edit_command(store, &self.scope, edit, |command| {
             command.challenge_binding.challenge_rate_policy_revision =
                 storyos_application::ChallengeRateClass::AuthorEdit
                     .policy_revision()
                     .to_owned();
-            command.author_edit_units = vec![AuthorEditUnit {
-                normalized_primitives: vec![AuthorEditPrimitive::ReplaceBlockSelection {
-                    manuscript_block_id: self.blocks[0].clone(),
-                    from: 0,
-                    to: 0,
-                    text: text.to_owned(),
-                }],
-                selection_snapshot: SelectionSnapshot {
-                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
-                    from: 0,
-                    to: 0,
-                },
-            }];
+            command.author_edit_units = units;
         })
-        .await;
-        store.apply_author_edit(&command).await.unwrap();
+        .await
     }
 
     /// The Author Edit that makes `change` to the candidate text of `reference`. `sequence` is

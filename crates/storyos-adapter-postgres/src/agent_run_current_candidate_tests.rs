@@ -166,7 +166,7 @@ async fn the_next_run_step_reads_the_candidate_that_the_author_edited_and_a_late
 }
 
 /// The status and the public decision of the Run.
-async fn settled(
+pub(crate) async fn settled(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     run_id: &str,

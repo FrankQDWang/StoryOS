@@ -77,4 +77,23 @@ The author decided this rule on 2026-11-13 ([#1483](https://github.com/FrankQDWa
   - The Chapter is removed.
   - The Chapter goes over the item limit.
   - The candidate is no longer pending: the author accepted, rejected, or withdrew it.
-- This amendment does not change the rule for a Chapter text reference whose base changes during the Run.
+- This amendment does not change the rule for a Chapter text reference whose base changes during the Run. The [next amendment](#amendment-2026-11-14-a-chapter-head-that-moves-during-the-run) gives that rule.
+
+## Amendment 2026-11-14: a Chapter head that moves during the Run
+
+The author decided this rule on 2026-11-14 ([#1492](https://github.com/FrankQDWang/StoryOS/issues/1492)). It applies to each RunStep after the first RunStep of a Run in the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md). It is the rule of the amendment above for a Chapter text reference.
+
+- Before a RunStep assembles its context again, each Chapter text reference of the Run moves to the head of its Chapter when the head is not the base of the reference. The Chapter text references of the steering input that the RunStep reads move in the same way. The cause of the head move does not change the rule: an Author Edit, an accepted Proposal, or an Author Undo. The RunStep is not blocked for this cause, also when it is the closing RunStep.
+- The RunStep compares the blocks that the reference covers at its base with the blocks of the head:
+  - The base of the reference becomes the head.
+  - The start stays when its block is in the head with the same text. If not, the start is offset 0 of the first covered block in the head.
+  - The end stays when its block is in the head with the same text. If not, the end is the end of the text of the last covered block in the head.
+  - A covered block between the start and the end needs no change, because the range covers all of its text.
+- When no covered block is in the head, or when the moved range has no text in the head, the Run drops the reference for this RunStep and for each later RunStep. The RunStep is not blocked. [ADR 0062](0062-make-the-exact-selection-references-of-a-message-the-working-target.md) has the same rule for the composer when the author deletes all referenced text.
+- The Host reads the selected text from the head, as for each reference. The Context Assembly records and the Outbound Disclosure Event of the RunStep have the moved reference and its text, as they have each sent item. The panel gets no new sentence.
+- The Host refuses a `propose_edit` call on a Chapter whose head changed after the request read it. The refusal is `changed_head`, and the result of the call gives this reason. The refusal counts in the limit of 3 refused calls of ADR 0091. The model can call again on the head in a later RunStep.
+- These cases keep the rule before this amendment: the context of the next RunStep is blocked, and the Run is refused with `blocked_context`.
+  - The Chapter is removed.
+  - The Chapter goes over the item limit.
+  - The range of the reference has no text at its base.
+- The first RunStep of a Run keeps the rule before this amendment.
