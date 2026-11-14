@@ -8,6 +8,15 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, To
 use crate::agent_run_tool_authority::damaged;
 use crate::agent_run_work::complete_database_error;
 
+/// The record that names the prior response of a request.
+#[derive(Clone, Copy)]
+pub(crate) enum PriorKey<'a> {
+    /// The prior Model Continuation Binding of an ordinary request.
+    Binding(&'a str),
+    /// The prior Model Attempt of the chain of a summary request.
+    Attempt(&'a str),
+}
+
 /// The bound response that a request continues.
 pub(crate) struct PriorResponse {
     decision_id: Option<String>,
@@ -18,30 +27,32 @@ pub(crate) struct PriorResponse {
 }
 
 impl PriorResponse {
-    /// The bound response of this Conversation with the destination reference `reference`.
+    /// The bound response that `key` names. A reference does not name one response: a test
+    /// adapter can report the reference of an earlier response again.
     pub(crate) async fn load(
         client: &tokio_postgres::Client,
         claim: &ClaimedAgentRun,
-        reference: &str,
+        key: PriorKey<'_>,
     ) -> Result<Self, CompleteAgentRunError> {
+        let (binding, attempt) = match key {
+            PriorKey::Binding(binding) => (Some(binding), None),
+            PriorKey::Attempt(attempt) => (None, Some(attempt)),
+        };
         let row = client
             .query_opt(
-                "SELECT attempt.decision_id::text, attempt.payload #>> '{decision,kind}',
-                        jsonb_path_query_array(attempt.payload,
+                "SELECT decision_id::text, payload #>> '{decision,kind}',
+                        jsonb_path_query_array(payload,
                                                '$.items[*] ? (@.role == \"tool\").call_id')::text
-                   FROM storyos.model_attempts AS attempt
-                   JOIN storyos.agent_runs AS run
-                     ON (run.owner_user_id, run.project_id, run.conversation_id) =
-                        (attempt.owner_user_id, attempt.project_id, attempt.conversation_id)
-                  WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
-                    AND run.run_id = $3::text::uuid
-                    AND attempt.continuation_binding_id IS NOT NULL
-                    AND attempt.payload->>'response_reference' = $4",
+                   FROM storyos.model_attempts
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND continuation_binding_id IS NOT NULL
+                    AND (continuation_binding_id = $3::text::uuid
+                         OR model_attempt_id = $4::text::uuid)",
                 &[
                     &claim.project_scope.owner_user_id.as_ref(),
                     &claim.project_scope.project_id.as_ref(),
-                    &claim.run_id,
-                    &reference,
+                    &binding,
+                    &attempt,
                 ],
             )
             .await

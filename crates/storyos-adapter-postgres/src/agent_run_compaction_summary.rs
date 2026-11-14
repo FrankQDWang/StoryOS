@@ -15,10 +15,12 @@ use super::{load_chain_source, unavailable, work_error, write};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
-/// The summary Attempt of the claimed AgentRun, and the prior response reference that it sent.
+/// The summary Attempt of the claimed AgentRun, the prior response reference that it sent, and
+/// the prior Model Attempt of that reference.
 pub(crate) struct SummaryAttempt {
     pub model_attempt_id: String,
     pub prior_reference: Option<String>,
+    pub prior_model_attempt_id: Option<String>,
 }
 
 pub(crate) async fn load_summary_attempt(
@@ -27,7 +29,8 @@ pub(crate) async fn load_summary_attempt(
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference'
+            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference',
+                    payload->'wire'->>'prior_model_attempt_id'
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND attempt_role = 'compaction'",
@@ -42,6 +45,7 @@ pub(crate) async fn load_summary_attempt(
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
         prior_reference: row.get(/*idx*/ 1),
+        prior_model_attempt_id: row.get(/*idx*/ 2),
     }))
 }
 
@@ -115,14 +119,13 @@ pub(crate) async fn summary_request(
     run: &RunPhaseRow,
     attempt: RequestAttempt,
     previous_response_reference: Option<String>,
+    prior_model_attempt_id: Option<&str>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
-    let (tool_outputs, unexecuted_call_ids) = waiting_outputs(
-        client,
-        claim,
-        run.disclosure_request.as_ref(),
-        previous_response_reference.as_deref(),
-    )
-    .await?;
+    let prior = previous_response_reference
+        .as_ref()
+        .and(prior_model_attempt_id);
+    let (tool_outputs, unexecuted_call_ids) =
+        waiting_outputs(client, claim, run.disclosure_request.as_ref(), prior).await?;
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -144,19 +147,23 @@ pub(crate) async fn summary_request(
     }))
 }
 
-/// The outputs of the calls of the prior response `reference`, which wait for the next request,
-/// and the calls of that response that the Host did not execute.
+/// The outputs of the calls of the response of the prior Model Attempt `prior`, which wait for
+/// the next request, and the calls of that response that the Host did not execute.
 async fn waiting_outputs(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     decision: Option<&storyos_core::CurrentPassageAssemblyRecord>,
-    reference: Option<&str>,
+    prior: Option<&str>,
 ) -> Result<(Vec<ToolOutput>, Vec<String>), CompleteAgentRunError> {
-    let Some(reference) = reference else {
+    let Some(prior) = prior else {
         return Ok((Vec::new(), Vec::new()));
     };
-    let prior =
-        crate::agent_run_prior_response::PriorResponse::load(client, claim, reference).await?;
+    let prior = crate::agent_run_prior_response::PriorResponse::load(
+        client,
+        claim,
+        crate::agent_run_prior_response::PriorKey::Attempt(prior),
+    )
+    .await?;
     let mut outputs = match decision {
         Some(decision) => {
             crate::agent_run_tool_result::tool_outputs(client, claim, decision, prior.decision_id())
@@ -176,10 +183,11 @@ async fn chain_outputs(
     run: &RunPhaseRow,
     decision: &storyos_core::CurrentPassageAssemblyRecord,
 ) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
-    let reference = prior_chain(client, claim, run)
+    let prior = prior_chain(client, claim, run)
         .await?
-        .and_then(|chain| chain.reference);
-    let (outputs, _) = waiting_outputs(client, claim, Some(decision), reference.as_deref()).await?;
+        .filter(|chain| chain.reference.is_some())
+        .map(|chain| chain.model_attempt_id);
+    let (outputs, _) = waiting_outputs(client, claim, Some(decision), prior.as_deref()).await?;
     Ok(outputs)
 }
 

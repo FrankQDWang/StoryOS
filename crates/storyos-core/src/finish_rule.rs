@@ -107,7 +107,7 @@ pub enum FinishRuleOutcome {
 /// request with `tool_choice`. A function request continues to its ToolCalls in each state
 /// before the last RunStep. In the closing RunStep, the text of a complete response is the final
 /// answer as an Advisory, and a final answer with no text gives no result. A response with a Tool
-/// item that no function output can answer is never a prior response (ADR 0091 section 3).
+/// item that no function output can answer is never a prior response (ADR 0091 section 5).
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
     limit: RunStepLimit,

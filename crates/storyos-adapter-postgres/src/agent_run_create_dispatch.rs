@@ -197,8 +197,9 @@ pub(crate) async fn create_request(
         Some(_) => storyos_core::ToolChoice::None,
         None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
-    let (previous_response_reference, prior_input) = match &probe {
+    let (prior_binding, previous_response_reference, prior_input) = match &probe {
         Some(probe) => (
+            None,
             probe.previous_response_reference.clone(),
             PriorInput::Current,
         ),
@@ -207,12 +208,17 @@ pub(crate) async fn create_request(
                 .await?
         }
     };
-    // The outputs answer the response that the prior reference names (ADR 0085 section 3).
-    let prior = match (&probe, &previous_response_reference) {
-        (None, Some(reference)) => Some(
-            crate::agent_run_prior_response::PriorResponse::load(client, claim, reference).await?,
+    // The outputs answer the response that the prior binding names (ADR 0085 section 3).
+    let prior = match (&prior_binding, &previous_response_reference) {
+        (Some(binding), Some(_)) => Some(
+            crate::agent_run_prior_response::PriorResponse::load(
+                client,
+                claim,
+                crate::agent_run_prior_response::PriorKey::Binding(binding),
+            )
+            .await?,
         ),
-        (Some(_), _) | (None, None) => None,
+        (_, None) | (None, _) => None,
     };
     let tool_outputs = crate::agent_run_tool_result::tool_outputs(
         client,
@@ -304,16 +310,15 @@ pub(crate) async fn declared_targets(
     Ok(declared)
 }
 
-/// The destination reference of the prior binding that an incremental continuation sends, and
-/// whether the prior response read the current input. A claimed Attempt sends its own request
-/// again.
+/// The prior binding of an incremental continuation, its destination reference, and whether the
+/// prior response read the current input. A claimed Attempt sends its own request again.
 async fn previous_response_reference(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
     tool_exposure_digest: &str,
-) -> Result<(Option<String>, PriorInput), CompleteAgentRunError> {
+) -> Result<(Option<String>, Option<String>, PriorInput), CompleteAgentRunError> {
     let (prior_binding, prior_input) = match (&run.attempt_payload, prior_context) {
         (Some(payload), _) => {
             let payload: serde_json::Value = serde_json::from_str(payload)
@@ -352,11 +357,11 @@ async fn previous_response_reference(
             }
         }
     };
-    let reference = match prior_binding {
-        Some(binding) => binding_reference(client, claim, &binding).await?,
+    let reference = match &prior_binding {
+        Some(binding) => binding_reference(client, claim, binding).await?,
         None => None,
     };
-    Ok((reference, prior_input))
+    Ok((prior_binding, reference, prior_input))
 }
 
 /// The destination reference that the Model Attempt of one continuation binding produced.
