@@ -93,6 +93,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::CompactionSummary, Some(reference)) => wire::summary_body(
                 reference,
                 &create.tool_outputs,
+                &create.unexecuted_call_ids,
                 &route.provider_model_id,
                 bounds,
             ),

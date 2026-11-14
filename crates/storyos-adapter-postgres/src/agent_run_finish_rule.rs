@@ -65,9 +65,10 @@ pub(crate) fn run_step_limit(
 }
 
 /// The finish rule for a response that a recovery path settles in the active RunStep of `run`,
-/// with the `tool_choice` of that RunStep, as for a created response (ADR 0091, ADR 0088). In
-/// the last RunStep, the function calls of the response leave the items, so the Host executes
-/// none.
+/// with the `tool_choice` of that RunStep, as for a created response (ADR 0091, ADR 0088). The
+/// Host executes no call of the last RunStep. A response of that RunStep that advances the
+/// continuation keeps its calls as evidence, because the request that names it answers each of
+/// them (ADR 0091 section 5). The calls of another response leave the items.
 pub(crate) async fn recovered_outcome(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -76,18 +77,29 @@ pub(crate) async fn recovered_outcome(
     outcome: storyos_core::AgentDecisionOutcome,
 ) -> Result<storyos_core::FinishRuleOutcome, CompleteAgentRunError> {
     let limit = run_step_limit(run)?;
-    if !limit.executes_calls() {
-        response
-            .items
-            .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
-    }
-    Ok(storyos_core::apply_finish_rule(
+    let rule = storyos_core::apply_finish_rule(
         tool_choice(client, claim, run).await?,
         limit,
         outcome,
         response.state,
         &response.items,
-    ))
+    );
+    let advances = matches!(
+        rule,
+        storyos_core::FinishRuleOutcome::NoResult
+            | storyos_core::FinishRuleOutcome::Settle(
+                storyos_core::AgentDecisionOutcome::Decision {
+                    advances_continuation: true,
+                    ..
+                }
+            )
+    );
+    if !limit.executes_calls() && !advances {
+        response
+            .items
+            .retain(|item| item.role != storyos_core::StreamItemRole::Tool);
+    }
+    Ok(rule)
 }
 
 /// Binds the settled response of a text with no function call as the prior response of the next

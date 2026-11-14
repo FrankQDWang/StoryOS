@@ -186,6 +186,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
+        unexecuted_call_ids: Vec::new(),
     })
 }
 

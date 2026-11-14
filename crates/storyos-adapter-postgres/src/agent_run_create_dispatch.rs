@@ -191,7 +191,6 @@ pub(crate) async fn create_request(
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
-    let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
     let tool_choice = match probe {
@@ -207,6 +206,24 @@ pub(crate) async fn create_request(
             previous_response_reference(client, claim, run, prior_context, &tool_exposure.digest())
                 .await?
         }
+    };
+    // The outputs answer the response that the prior reference names (ADR 0085 section 3).
+    let prior = match (&probe, &previous_response_reference) {
+        (None, Some(reference)) => Some(
+            crate::agent_run_prior_response::PriorResponse::load(client, claim, reference).await?,
+        ),
+        (Some(_), _) | (None, None) => None,
+    };
+    let tool_outputs = crate::agent_run_tool_result::tool_outputs(
+        client,
+        claim,
+        &assembly,
+        prior.as_ref().and_then(|prior| prior.decision_id()),
+    )
+    .await?;
+    let unexecuted_call_ids = match &prior {
+        Some(prior) => prior.unexecuted_calls(&tool_outputs)?,
+        None => Vec::new(),
     };
     let input = record_input(record, assembly, &run.author_message);
     Ok(CreateRequest {
@@ -228,6 +245,7 @@ pub(crate) async fn create_request(
         tool_choice,
         successor_of: None,
         tool_outputs,
+        unexecuted_call_ids,
     })
 }
 

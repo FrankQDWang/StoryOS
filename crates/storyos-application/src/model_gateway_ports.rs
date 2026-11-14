@@ -24,6 +24,10 @@ pub const PROVISIONAL_STREAM_COMMIT_INTERVAL: std::time::Duration =
 
 /// One closed model destination request.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a Run prepares one request at a time, so the size of a Create costs nothing"
+)]
 pub enum DestinationRequest {
     Create(CreateRequest),
     Retrieve(RetrieveRequest),
@@ -136,6 +140,10 @@ pub struct CreateRequest {
     /// The function outputs of a continuation RunStep, in item order: one for each resolved
     /// ToolCall of the Run, from its selected `tool_result` Context item.
     pub tool_outputs: Vec<ToolOutput>,
+    /// The call identifiers of the prior response that have no ToolCall, because the Host
+    /// executed no call of the last RunStep. The request gives each of them the output
+    /// `UNEXECUTED_CALL_OUTPUT` (ADR 0091 section 5).
+    pub unexecuted_call_ids: Vec<String>,
 }
 
 /// One native function call of the Run and its projected output (ADR 0033: the request keeps
@@ -164,7 +172,8 @@ pub enum PriorInput {
     Replaced,
 }
 
-/// Where the native function call of one output is.
+/// Where the native function call of one output is. The response that the prior binding of the
+/// request names decides it, not a RunStep position (ADR 0085 section 3).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolOutputOrigin {
     /// The response that the prior response reference names: an incremental request sends only

@@ -105,6 +105,9 @@ impl ModelProviderAdapter for FakeDestination {
             .iter()
             .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
             .collect();
+        if !create.unexecuted_call_ids.is_empty() {
+            wire["unexecuted_call_ids"] = serde_json::json!(create.unexecuted_call_ids);
+        }
         let bytes = storyos_core::canonical_json(&wire);
         let mut projection = projection(
             format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
@@ -132,21 +135,25 @@ impl ModelProviderAdapter for FakeDestination {
                 mapping_revision,
             ),
         };
-        let plan = match (rejection, unknown) {
+        let unanswered = recovery_plan::leaves_prior_calls_unanswered(create)
+            .then_some(recovery_plan::UNANSWERED_CALL_REASON);
+        let plan = match (unanswered.or(rejection), unknown) {
             (Some(reason), _) => FakePlan::Observed(Observation::Rejected {
                 reason: reason.to_owned(),
             }),
             (None, Some(reference)) => FakePlan::UnknownCreate(reference),
-            (None, None) => FakePlan::Create(
-                tool_loop_plan::plan(create),
-                recovery_plan::mint_reference(
+            (None, None) => {
+                let planned = tool_loop_plan::plan(create);
+                let reference = recovery_plan::mint_response_reference(
                     &projection.digest,
                     match create.successor_of {
                         Some(_) => recovery_plan::SUCCESSOR_RESPONSE,
                         None => recovery_plan::continuation_code(&create.author_message),
                     },
-                ),
-            ),
+                    &planned.items,
+                );
+                FakePlan::Create(planned, reference)
+            }
         };
         Ok(PreparedRequest {
             projection,
@@ -239,21 +246,33 @@ fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
         "mapping_revision": HOST_FAKE_MAPPING_REVISION,
     });
     // The outputs that answer the calls of the prior response, as the tool loop wire sends them.
-    let serialized_payload = (!create.tool_outputs.is_empty()).then(|| {
+    let answers = !create.tool_outputs.is_empty() || !create.unexecuted_call_ids.is_empty();
+    let serialized_payload = answers.then(|| {
         wire["tool_outputs"] = create
             .tool_outputs
             .iter()
             .map(|output| serde_json::json!({"call_id": output.call_id, "output": output.output}))
             .collect();
+        if !create.unexecuted_call_ids.is_empty() {
+            wire["unexecuted_call_ids"] = serde_json::json!(create.unexecuted_call_ids);
+        }
         storyos_core::canonical_json(&wire)
     });
     let digest = wire_digest(&wire);
+    if recovery_plan::leaves_prior_calls_unanswered(create) {
+        return PreparedRequest {
+            projection: projection(digest, serialized_payload),
+            prepared: FakeExchange(FakePlan::Observed(Observation::Rejected {
+                reason: recovery_plan::UNANSWERED_CALL_REASON.to_owned(),
+            })),
+        };
+    }
     let item = create_plan::assistant_item(
         "summary",
         StreamItemState::Complete,
         storyos_core::HOST_FAKE_COMPACTION_OUTPUT,
     );
-    let reference = recovery_plan::mint_reference(&digest, /*code*/ 0);
+    let reference = recovery_plan::mint_response_reference(&digest, /*code*/ 0, &[]);
     PreparedRequest {
         projection: projection(digest, serialized_payload),
         prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(ModelResponse {

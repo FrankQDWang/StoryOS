@@ -29,6 +29,11 @@ impl ToolChoice {
 /// The most RunSteps of one Run (ADR 0091 section 5).
 pub const MAX_RUN_STEPS: u64 = 24;
 
+/// The output of each function call of a response of the last RunStep. The request that names
+/// that response sends it, because each function call needs an output (ADR 0091 section 5).
+pub const UNEXECUTED_CALL_OUTPUT: &str = "StoryOS did not execute this call, because the Run \
+     reached its limit of 24 RunSteps. No result is available, and this is not an empty result.";
+
 /// The place of the active RunStep against `MAX_RUN_STEPS`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RunStepLimit {
@@ -101,7 +106,8 @@ pub enum FinishRuleOutcome {
 /// Applies the finish rule to the outcome of one terminal response in `response_state` of a
 /// request with `tool_choice`. A function request continues to its ToolCalls in each state
 /// before the last RunStep. In the closing RunStep, the text of a complete response is the final
-/// answer as an Advisory, and a final answer with no text gives no result. In the last RunStep, the function calls of the response are ignored.
+/// answer as an Advisory, and a final answer with no text gives no result. A response with a Tool
+/// item that no function output can answer is never a prior response (ADR 0091 section 3).
 pub fn apply_finish_rule(
     tool_choice: ToolChoice,
     limit: RunStepLimit,
@@ -116,16 +122,44 @@ pub fn apply_finish_rule(
             ..
         }
     ) || requests_function(items);
+    let tool_item = items.iter().any(|item| item.role == StreamItemRole::Tool);
     match (tool_choice, limit) {
+        // The Host executes no call of the last RunStep. A later request gives each call of a
+        // valid batch the output `UNEXECUTED_CALL_OUTPUT`. A batch with a structural fault has a
+        // call that no output can name, so its response does not advance the continuation.
         (ToolChoice::None, RunStepLimit::Last) => {
             let answer: Vec<_> = items
                 .iter()
                 .filter(|item| item.role != StreamItemRole::Tool)
                 .cloned()
                 .collect();
-            closing_answer(response_state, &answer)
+            let answerable = !tool_item
+                || matches!(
+                    outcome,
+                    AgentDecisionOutcome::Decision {
+                        kind: AgentDecisionKind::ToolRequest { .. },
+                        ..
+                    }
+                );
+            match closing_answer(response_state, &answer) {
+                FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
+                    kind,
+                    selected,
+                    ..
+                }) if !answerable => FinishRuleOutcome::Settle(AgentDecisionOutcome::Decision {
+                    kind,
+                    selected,
+                    advances_continuation: false,
+                }),
+                FinishRuleOutcome::NoResult if !answerable => {
+                    FinishRuleOutcome::Settle(AgentDecisionOutcome::NoDecision)
+                }
+                rule => rule,
+            }
         }
         _ if function_request => FinishRuleOutcome::Settle(outcome),
+        // A Tool item that is not a complete function call is a structural fault (ADR 0091).
+        (ToolChoice::Required, _) if tool_item => FinishRuleOutcome::Settle(outcome),
         (ToolChoice::Required, _) => FinishRuleOutcome::NextRunStep,
         (ToolChoice::None, RunStepLimit::Open) => closing_answer(response_state, items),
     }

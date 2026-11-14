@@ -313,6 +313,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
     let summary: serde_json::Value = serde_json::from_str(&summary_body(
         "resp-1",
         &full.tool_outputs,
+        &[],
         "model-1",
         bounds,
     ))

@@ -336,17 +336,6 @@ pub(crate) async fn record(
                     }
                     ("settled", Some(decision_id), binding_id, tool_calls_pending)
                 }
-                // A successor that asks for a function keeps its items as evidence, and the Run
-                // settles once the late check is done (ADR 0084, ADR 0091).
-                AgentDecisionOutcome::NoDecision
-                    if response_disposition(&ResponseFacts {
-                        probe,
-                        outcome: &AgentDecisionOutcome::NoDecision,
-                        items: &response.items,
-                    }) == ResponseDisposition::FunctionRequested =>
-                {
-                    ("settled", None, None, true)
-                }
                 // A closing response with no text gets the continuation binding, so the next
                 // Run continues from it. A text before a counted `finish` call gets its binding
                 // when the next RunStep opens.
@@ -361,6 +350,17 @@ pub(crate) async fn record(
                             );
                     }
                     ("settled", None, Some(binding_id), false)
+                }
+                // A successor that asks for a function keeps its items as evidence, and the Run
+                // settles once the late check is done (ADR 0084, ADR 0091).
+                AgentDecisionOutcome::NoDecision
+                    if response_disposition(&ResponseFacts {
+                        probe,
+                        outcome: &AgentDecisionOutcome::NoDecision,
+                        items: &response.items,
+                    }) == ResponseDisposition::FunctionRequested =>
+                {
+                    ("settled", None, None, true)
                 }
                 AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
                     ("settled", None, None, false)

@@ -213,35 +213,18 @@ async fn stored_tool_calls(
 }
 
 /// The function outputs of the selected `tool_result` items of `assembly`, in item order. The
-/// call of each output is the stored ToolCall that the item names. The outputs of the Decision of
-/// the prior RunStep answer the prior response; the others belong to earlier RunSteps. A prior
-/// RunStep with a text and no function call has no Decision (ADR 0091).
+/// call of each output is the stored ToolCall that the item names. The outputs of the Decision
+/// `prior_decision_id` of the prior response answer that response; the others belong to earlier
+/// RunSteps (ADR 0085 section 3).
 pub(crate) async fn tool_outputs(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     assembly: &CurrentPassageAssemblyRecord,
+    prior_decision_id: Option<&str>,
 ) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
     let Some(sources) = &assembly.operation_requirement.tool_results else {
         return Ok(Vec::new());
     };
-    let prior_decisions: Vec<String> = client
-        .query(
-            "SELECT attempt.decision_id::text FROM storyos.model_attempts AS attempt
-               JOIN storyos.agent_runs AS run USING (owner_user_id, project_id, run_id)
-              WHERE attempt.owner_user_id = $1::text::uuid AND attempt.project_id = $2::text::uuid
-                AND attempt.run_id = $3::text::uuid AND attempt.decision_id IS NOT NULL
-                AND attempt.decision_position = run.active_decision_position - 1",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?
-        .iter()
-        .map(|row| row.get(/*idx*/ 0))
-        .collect();
     let selected = assembly
         .selected
         .iter()
@@ -295,10 +278,9 @@ pub(crate) async fn tool_outputs(
                 arguments => storyos_core::canonical_json(&arguments),
             },
             output: item.content.clone(),
-            origin: if prior_decisions.contains(&source.decision_id) {
-                ToolOutputOrigin::PriorResponse
-            } else {
-                ToolOutputOrigin::EarlierStep
+            origin: match prior_decision_id == Some(source.decision_id.as_str()) {
+                true => ToolOutputOrigin::PriorResponse,
+                false => ToolOutputOrigin::EarlierStep,
             },
         });
     }
