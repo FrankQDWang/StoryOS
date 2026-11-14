@@ -106,7 +106,7 @@ async function postRunWithChallenge(
   return { nonce, admitted };
 }
 
-test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval without dispatch", async () => {
+test("Worker refuses Tool, MCP, research, embedding, Memory, Subrun, and Eval without dispatch", async () => {
   const started = await startServer();
   try {
     await drainLeftoverWork();
@@ -187,6 +187,16 @@ test("Worker distinguishes prose-change, a question, and CFP holds", async () =>
     assert.equal(clarified.decision.selected, true);
     assert.equal(clarified.decision.text, CLARIFICATION);
     assert.equal(clarified.decision.continuation.kind, "present");
+
+    // ADR 0089: the words "load a skill" name no refused capability, so the message dispatches.
+    const skillWords = await admitRun(started.baseUrl, prepared, id("eb14"), "Please load a skill for this.");
+    await settleOnce();
+    const dispatched = await inspectRun(started.baseUrl, prepared, skillWords.effect.run_id);
+    assert.equal(dispatched.status, "completed");
+    assert.equal(dispatched.model_attempt.kind, "present");
+    assert.equal(dispatched.decision.kind, "advisory");
+    if (dispatched.decision.kind !== "advisory") throw new Error("expected advisory");
+    assert.equal(dispatched.decision.text, ADVISORY);
 
     writeFileSync(dispatchHold, "hold");
     const dispatchRun = await admitRun(started.baseUrl, prepared, id("eb15"), "Help with this passage.");
