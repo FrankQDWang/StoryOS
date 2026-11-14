@@ -133,7 +133,8 @@ pub fn capture_research_sources(
         ToolIntake::WebSearch { .. }
         | ToolIntake::Finish
         | ToolIntake::ProposeEdit(_)
-        | ToolIntake::SubmitResearch { .. } => &[],
+        | ToolIntake::SubmitResearch { .. }
+        | ToolIntake::ReadToolResult { .. } => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {

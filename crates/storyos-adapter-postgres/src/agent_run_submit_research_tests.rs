@@ -22,15 +22,15 @@ use crate::research_source::tests::SEARCH_TEXT;
 const FAILED_PAGE: &str = "Error fetching https://example.org/c: CRAWL_NOT_FOUND";
 
 /// One Project of the tool loop profile with the research offer. Its `first` Run completed.
-struct ResearchProject {
-    store: PostgresProjectReader,
-    admin: Client,
-    scope: ProjectScope,
+pub(crate) struct ResearchProject {
+    pub store: PostgresProjectReader,
+    pub admin: Client,
+    pub scope: ProjectScope,
     chapter_id: String,
     first: String,
 }
 
-async fn research_project(prefix: &str) -> ResearchProject {
+pub(crate) async fn research_project(prefix: &str) -> ResearchProject {
     let (store, admin) = stores().await;
     let (scope, chapter_id, first) = queued_run_offering(
         &store,
@@ -61,7 +61,7 @@ async fn research_project(prefix: &str) -> ResearchProject {
 impl ResearchProject {
     /// Settles one Run with `message` through the fake model and the real MCP client. The fake
     /// MCP server answers the one research call of the Run with `text`.
-    async fn settle(&self, prefix: &str, message: &str, text: &str) -> String {
+    pub(crate) async fn settle(&self, prefix: &str, message: &str, text: &str) -> String {
         let run_id = admit_run_in(
             &self.store,
             &self.scope,
@@ -101,7 +101,7 @@ impl ResearchProject {
     /// The status of the Run, the decision kind and `tool_choice` of each RunStep, each ToolCall
     /// as its function name, state, refusal, and Host result, and the citation kinds of each
     /// Research Artifact of the Run.
-    async fn facts(&self, run_id: &str) -> Value {
+    pub(crate) async fn facts(&self, run_id: &str) -> Value {
         let row = self
             .admin
             .query_one(

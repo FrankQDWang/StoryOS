@@ -8,6 +8,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
     ContextSourceClass, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate,
+    ToolResultOutput,
 };
 
 use crate::agent_run_tool_authority::damaged;
@@ -26,6 +27,7 @@ struct StoredToolCall {
     state: ToolCallState,
     result_text: Option<String>,
     sources: Vec<storyos_core::CitableSource>,
+    output: ToolResultOutput,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -162,6 +164,7 @@ impl RunToolResults {
                 state: call.state,
                 result_text: call.result_text.as_deref(),
                 sources: &call.sources,
+                output: call.output,
             })
             .collect()
     }
@@ -174,7 +177,8 @@ async fn stored_tool_calls(
     let rows = client
         .query(
             "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
-                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text
+                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
+                    tool_spec_revision
                FROM storyos.tool_calls AS call
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
@@ -207,6 +211,12 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
+                output: match row.get::<_, Option<&str>>(/*idx*/ 9) {
+                    Some(spec) if spec == storyos_core::READ_TOOL_RESULT_TOOL_SPEC.revision => {
+                        ToolResultOutput::StoredRead
+                    }
+                    Some(_) | None => ToolResultOutput::Projected,
+                },
             })
         })
         .collect()

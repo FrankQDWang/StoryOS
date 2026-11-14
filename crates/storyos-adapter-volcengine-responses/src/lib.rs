@@ -75,11 +75,16 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // The tool loop mapping is the one decision and summary mapping: it streams, continues,
-        // and compacts. A decision request of an earlier mapping held the reply form (ADR 0091).
+        // The tool loop mappings are the decision and summary mappings: they stream, continue,
+        // and compact. A decision request of an earlier mapping held the reply form (ADR 0091).
         // A qualification probe holds no reply form (ADR 0049).
         let probe = matches!(create.purpose, CreatePurpose::ToolQualification(_));
-        if !probe && route.mapping_revision != storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION {
+        let tool_loop = [
+            storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+        ]
+        .contains(&route.mapping_revision.as_str());
+        if !probe && !tool_loop {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         let body = match (&create.purpose, &create.previous_response_reference) {

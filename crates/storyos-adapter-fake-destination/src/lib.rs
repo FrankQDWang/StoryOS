@@ -3,6 +3,7 @@
 mod create_plan;
 mod propose_edit_plan;
 mod prose_changes;
+mod read_plan;
 mod recovery_plan;
 mod research_plan;
 mod tool_loop_plan;

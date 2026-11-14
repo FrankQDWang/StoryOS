@@ -9,9 +9,9 @@
 use serde_json::{Value, json};
 
 use crate::{
-    AgentDecisionOutcome, CapabilityEvidence, HOST_TOOL_REGISTRATION, IntakeField,
-    NativeStreamItem, StreamItemRole, StreamItemState, ToolOperation, ToolRegistrationLifecycle,
-    ToolSpec, model_registration, tool_registration,
+    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
+    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
+    tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -90,6 +90,7 @@ impl ToolOperation {
             Self::Finish => "finish",
             Self::ProposeEdit => "propose_edit",
             Self::SubmitResearch => "submit_research",
+            Self::ReadToolResult => "read_tool_result",
         }
     }
 
@@ -110,6 +111,7 @@ impl ToolOperation {
                  complete new text of each changed block."
             }
             Self::SubmitResearch => crate::submit_research::DESCRIPTION,
+            Self::ReadToolResult => crate::read_tool_result::DESCRIPTION,
         }
     }
 }
@@ -155,6 +157,7 @@ impl ExposedTool {
         let parameters = match self.spec.operation {
             ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
             ToolOperation::SubmitResearch => crate::submit_research::parameters(),
+            ToolOperation::ReadToolResult => crate::read_tool_result::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -197,16 +200,16 @@ impl ToolExposure {
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
     /// second Tool of one function name stays out. The Host Tools follow.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
-        let qualified =
-            model_registration(facts.model_registration_revision).is_some_and(|registration| {
+        let Some(registration) =
+            model_registration(facts.model_registration_revision).filter(|registration| {
                 matches!(
                     registration.capability_profile.entries.function_calling,
                     CapabilityEvidence::Qualified { .. }
                 )
-            });
-        if !qualified {
+            })
+        else {
             return Self::empty();
-        }
+        };
         let mut tools: Vec<ExposedTool> = Vec::new();
         for bound in facts.bound {
             if bound.lifecycle != ToolRegistrationLifecycle::Active
@@ -214,26 +217,27 @@ impl ToolExposure {
             {
                 continue;
             }
-            let Some(registration) = tool_registration(&bound.registration_revision) else {
+            let Some(research) = tool_registration(&bound.registration_revision) else {
                 continue;
             };
-            for tool in registration.tools {
+            for tool in research.tools {
                 let name = tool.spec.operation.function_name();
                 if tools.iter().any(|exposed| exposed.name == name) {
                     continue;
                 }
                 tools.push(ExposedTool {
                     name,
-                    registration_id: registration.id,
-                    registration_revision: registration.revision,
+                    registration_id: research.id,
+                    registration_revision: research.revision,
                     spec: tool.spec,
                 });
             }
         }
-        tools.extend(HOST_TOOL_REGISTRATION.tools.iter().map(|spec| ExposedTool {
+        let host = registration.host_tools();
+        tools.extend(host.tools.iter().map(|spec| ExposedTool {
             name: spec.operation.function_name(),
-            registration_id: HOST_TOOL_REGISTRATION.id,
-            registration_revision: HOST_TOOL_REGISTRATION.revision,
+            registration_id: host.id,
+            registration_revision: host.revision,
             spec,
         }));
         Self { tools }
