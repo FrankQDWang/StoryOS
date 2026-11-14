@@ -23,7 +23,7 @@ use crate::set_current_chapter_authority_tests::open_session_request;
 
 pub(crate) const REVISE: &str = "Revise these passages in the narrator voice.";
 
-pub(super) async fn complete(
+pub(crate) async fn complete(
     store: &PostgresProjectReader,
     admin: &Client,
     scope: &ProjectScope,

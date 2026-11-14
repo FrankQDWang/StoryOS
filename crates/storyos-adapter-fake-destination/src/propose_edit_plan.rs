@@ -20,9 +20,14 @@
 //! - `SCRIPT:propose_mixed`: two calls that name a block that is not a target in one response,
 //!   then one such call, then one call with no arguments.
 //! - `SCRIPT:incomplete`: one correct call with the incomplete stream state.
+//!
+//! `SCRIPT:propose_block <block identity>` at the end of a message of each intent gets one call
+//! that changes the named Block with a `finish` call beside it, in the first request only.
 
 use storyos_application::CreateRequest;
-use storyos_core::{DeclaredTargetKind, NativeStreamItem, ProseChangeCandidate, ToolOperation};
+use storyos_core::{
+    DeclaredTargetKind, NativeStreamItem, PROSE_CHANGE_TEXT, ProseChangeCandidate, ToolOperation,
+};
 
 use crate::create_plan::Intent;
 
@@ -36,6 +41,33 @@ pub(crate) fn calls(
 ) -> Option<(Vec<NativeStreamItem>, bool)> {
     let name = ToolOperation::ProposeEdit.function_name();
     let message = request.author_message.as_str();
+    let exposed = request
+        .tool_exposure
+        .tools
+        .iter()
+        .any(|tool| tool.name == name);
+    let results = request
+        .tool_outputs
+        .iter()
+        .filter(|output| output.name == name)
+        .count();
+    if let Some((_, block_id)) = message.rsplit_once("SCRIPT:propose_block ") {
+        let change = ProseChangeCandidate {
+            chapter_id: request.chapter_id.clone(),
+            manuscript_block_id: block_id.trim().to_owned(),
+            base_authoritative_revision_id: String::new(),
+            candidate_text: PROSE_CHANGE_TEXT.to_owned(),
+            explanation: "Preserve the narrator voice in the named Block.".to_owned(),
+        };
+        let summary = "Kept the narrator voice.";
+        let proposed = call(name, "_0_0".to_owned(), arguments(&[change], summary));
+        return exposed.then(|| {
+            (
+                (results == 0).then_some(proposed).into_iter().collect(),
+                true,
+            )
+        });
+    }
     let (intent, produce) = crate::create_plan::intent(request);
     // A prose change text with no changes opens the Proposal of the first target (Stage 1).
     let single = match intent {
@@ -44,20 +76,9 @@ pub(crate) fn calls(
         }
         _ => None,
     };
-    if !(produce || single.is_some())
-        || !request
-            .tool_exposure
-            .tools
-            .iter()
-            .any(|tool| tool.name == name)
-    {
+    if !(produce || single.is_some()) || !exposed {
         return None;
     }
-    let results = request
-        .tool_outputs
-        .iter()
-        .filter(|output| output.name == name)
-        .count();
     // A steering input continues a Run after a counted `finish` call. With no script, the fake
     // proposes again for it: only the results after the last counted `finish` output count.
     let counted_finish = |output: &&storyos_application::ToolOutput| {
