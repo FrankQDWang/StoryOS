@@ -58,7 +58,7 @@ A profile fixes the scope sequences and the authority records of an applied outc
 | --- | --- | --- |
 | `Structural` | The guarded Project update, the Activity record with `tree_revision`, the Authoritative Commit, the Forward Author Action, the canonical Snapshot, and the rebind of the current writer base when the command asks for it | The six structure commands |
 | `ChapterSelection` | The guarded Project update, the Activity record with `base_snapshot_id`, a Forward Author Action without an Authoritative Commit, the canonical Snapshot, and the required rebind of the writer base of the Editor Session | `setCurrentChapter` |
-| `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `setProjectToolEnablement`, `takeOverProjectWriter`, and the four AgentRun commands |
+| `ActivityOnly` | One Activity record | `updateProject`, `archiveProject`, `updateProjectAssistance`, `takeOverProjectWriter`, and the four AgentRun commands |
 | `ActionOnly` | One Forward Author Action | The seven Proposal decisions |
 | `AuthoritativeRevision` | The Revision with its payload, members, and Envelope, the guarded Head update, the Authoritative Commit, the Author Action, the `project_activity_events` row, the writer-base update, and the canonical Snapshot | `acceptProposal`, the applied Author Edit, and the prose and Acceptance compensations |
 
@@ -82,7 +82,7 @@ A profile fixes the scope sequences and the authority records of an applied outc
 
 ### Author Edit admitted-command step
 
-- The admit step reads the Project row without a lock, inserts the Admission, and commits. The fence stays `in_progress`. The transaction that pauses Proposal generation runs before it.
+- The admit step reads the Project row without a lock, inserts the Admission, and commits. The fence stays `in_progress`. The transaction that pauses Proposal generation runs before it. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes the pause transaction.
 - The settle step runs in a new Serializable transaction. It reads the Project row without a lock and requires an Admission that has no settlement, is not expired, and has the current writer. Otherwise it gives `admission_expired`, `stale_writer`, or a binding conflict. A settled Admission replays its Receipt. When a concurrent settle step settles the same Admission first, the step replays that Receipt.
 - `applyAuthorEdit` runs both steps in one request. The outcome query runs the settle step for an Admission without settlement, or settles it as `RequiresReconfirmation`. An exact retry of a `RequiresReconfirmation` fence is a binding conflict.
 - An Admission without a terminal settlement is `pending`. When the outcome query cannot settle it yet, it reports `outcome_unknown`. No row records this report, and the table `author_command_admission_outcome_unknown_observations` has no writer.
@@ -106,13 +106,13 @@ Each Forward command family has one compensation adapter in the module of its fo
 | `setCurrentChapter` | Compensation when the prior Chapter is a lawful target. Otherwise Barrier. |
 | `withdrawProposal`, author form | Compensation: reopen the Proposal (ADR 0068). |
 | `replanProposal`, `reopenRejectedOperations`, `reopenWithdrawnProposal` | Compensation: append the Revision before the decision again, and reject the reopened operations or withdraw the Proposal again (ADR 0068). |
-| `rejectProposalOperations`, `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. |
+| `rejectProposalOperations`, `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. Note: [ADR 0092](0092-remove-streamed-proposal-generation.md) removes `completeReadyPartialProposal` and `continueProposalGeneration`. |
 | `undoLatestAuthorAction`, `reversal_required` | Barrier. |
 
 A Barrier stops Author Undo, and Author Undo never skips it. These product decisions of ADR 0044 stay in force:
 
 - A Proposal edit records its edited Operation and that candidate before the edit (migration 0085). The Compensation restores that candidate to that Operation.
-- `createProject`, `updateProject`, `archiveProject`, `updateProjectAssistance`, and `setProjectToolEnablement` write no Author Action and are outside Author Undo Order.
+- `createProject`, `updateProject`, `archiveProject`, and `updateProjectAssistance` write no Author Action and are outside Author Undo Order.
 - The `compensated` effect omits `authoritative_revision` and `authoritative_commit_id` when the Compensation writes no such record.
 
 ### Amendment of ADR 0075

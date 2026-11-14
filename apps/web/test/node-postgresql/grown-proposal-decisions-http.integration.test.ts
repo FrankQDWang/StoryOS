@@ -12,7 +12,7 @@ import { queryStoryOSPostgres as queryPostgres } from "../support/node-integrati
 import { BINDING, USER_A, admitProse, candidateTextReference, challenged, drainLeftoverWork, id, prepare,
   readProposal, reviseCandidate, sendAuthorEdit } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { postRun, serverForFile, settleRun } from "../support/http-harness.ts";
+import { inspectFirstRunStep, postRun, serverForFile, settleRun } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -181,7 +181,9 @@ test("the reads show the joinable blocks of a crossing selection and the atomic 
   assert.equal(before.bundle_policy, "none");
   const { run, grown } = await grow(started, seeded, before);
   assert.equal(grown.bundle_policy, "atomic");
-  assert.deepEqual(run.context.joinable_block_ids, [seeded.chapter.current_revision.blocks[1]!.manuscript_block_id]);
+  // The first RunStep grows the Proposal, so its context shows the joinable Block (ADR 0091).
+  assert.deepEqual((await inspectFirstRunStep(started.baseUrl, seeded, run.run_id)).context.joinable_block_ids,
+    [seeded.chapter.current_revision.blocks[1]!.manuscript_block_id]);
 });
 
 const undoRoute = "/api/v1/projects/{project_id}/author-actions/undo";

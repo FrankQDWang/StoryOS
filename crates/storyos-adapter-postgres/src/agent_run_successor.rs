@@ -18,6 +18,10 @@ pub(crate) struct SuccessorOrigin<'a> {
     pub model_invocation_id: &'a str,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a Run prepares one request at a time, so the size of a Create costs nothing"
+)]
 pub(crate) enum SuccessorWork {
     Done(CompleteAgentRun),
     Hold(&'static str),

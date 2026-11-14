@@ -1,20 +1,20 @@
 use serde_json::json;
 
 use super::{
-    CurrentToolAuthority, ExposureSnapshot, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
+    CallValidationRefusal, CurrentToolAuthority, ExposureSnapshot, RefusedToolCall,
+    RequestedToolCall, ToolCallBatch, ToolCallBatchRefusal, ValidatedToolCall,
     validate_tool_call_batch,
 };
 use crate::{
-    AgentDecisionKind, AgentDecisionOutcome, CitableSources, DecisionCandidate,
-    EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, IntakeRefusal, ModelOutput,
-    NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
+    AgentDecisionKind, AgentDecisionOutcome, BoundTool, EXA_TOOL_REGISTRATION, ExposureFacts,
+    IntakeRefusal, NativeStreamItem, StreamItemRole, StreamItemState, ToolCompatibilityDecision,
     ToolExposure, ToolIntake, ToolRegistrationLifecycle, validate_agent_decision,
 };
 
 /// The Snapshot of the research Exposure, as the Worker pins it at the dispatch claim.
 fn pinned() -> ExposureSnapshot {
     let exposure = ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
@@ -25,21 +25,17 @@ fn pinned() -> ExposureSnapshot {
 }
 
 /// The current authority of the pinned research Registration revision.
-fn authority(enabled: bool, lifecycle: ToolRegistrationLifecycle) -> CurrentToolAuthority {
+fn authority(lifecycle: ToolRegistrationLifecycle) -> CurrentToolAuthority {
     CurrentToolAuthority {
         registration_id: "web_research".to_owned(),
         registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
-        enabled,
         lifecycle,
     }
 }
 
-/// The Project enables the pinned Registration now, and its revision is active now.
+/// The pinned research revision is active now.
 fn current() -> [CurrentToolAuthority; 1] {
-    [authority(
-        /*enabled*/ true,
-        ToolRegistrationLifecycle::Active,
-    )]
+    [authority(ToolRegistrationLifecycle::Active)]
 }
 
 fn call(item_id: &str, call_id: &str, name: &str, arguments: &str) -> NativeStreamItem {
@@ -127,7 +123,10 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
             search_call("call_01").argument_digest(),
         ),
         (
-            ToolCallBatch::Valid(vec![search_call("call_01"), fetch]),
+            ToolCallBatch::Valid(vec![
+                RequestedToolCall::Validated(search_call("call_01")),
+                RequestedToolCall::Validated(fetch),
+            ]),
             ToolCallBatch::none(),
             ToolCallBatch::none(),
             json!({"query": "tide tables of 1890", "result_count": null}),
@@ -138,7 +137,7 @@ fn a_complete_exposed_batch_validates_in_item_order_with_its_typed_arguments() {
 }
 
 #[test]
-fn one_invalid_member_rejects_the_whole_batch() {
+fn a_member_that_cannot_have_an_output_rejects_the_whole_batch() {
     let valid = call("fc_01", "call_01", "web_search", SEARCH);
     let refusal_in = |state, items: &[NativeStreamItem]| match validate_tool_call_batch(
         state,
@@ -150,10 +149,6 @@ fn one_invalid_member_rejects_the_whole_batch() {
         ToolCallBatch::Valid(calls) => panic!("valid batch of {} members", calls.len()),
     };
     let refusal = |items: &[NativeStreamItem]| refusal_in(StreamItemState::Complete, items);
-    let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
-    let six_urls =
-        json!({"urls": (0..6).map(|n| format!("https://example.org/{n}")).collect::<Vec<_>>()});
-    let unexposed = ExposureSnapshot::decode(Some(&ToolExposure::empty().snapshot())).unwrap();
     let hosted = NativeStreamItem {
         native_type: Some("web_search_call".to_owned()),
         ..call("ws_01", "call_09", "web_search", SEARCH)
@@ -166,6 +161,10 @@ fn one_invalid_member_rejects_the_whole_batch() {
         call_id: None,
         ..call("fc_04", "call_04", "web_search", SEARCH)
     };
+    let no_name = NativeStreamItem {
+        name: None,
+        ..call("fc_10", "call_10", "web_search", SEARCH)
+    };
     let long_call_id = "c".repeat(257);
     let cut_message = NativeStreamItem {
         state: StreamItemState::Incomplete,
@@ -174,17 +173,6 @@ fn one_invalid_member_rejects_the_whole_batch() {
 
     assert_eq!(
         [
-            refusal(&[valid.clone(), call("fc_02", "call_02", "edit", "{}")]),
-            refusal(&[call("fc_02", "call_02", "web_search", r#"{"query":"#)]),
-            refusal(&[call("fc_02", "call_02", "web_search", "[]")]),
-            refusal(&[call("fc_02", "call_02", "web_search", &long_query)]),
-            refusal(&[call("fc_02", "call_02", "web_fetch", &six_urls.to_string())]),
-            refusal(&[call(
-                "fc_02",
-                "call_02",
-                "web_fetch",
-                r#"{"urls":["ftp://example.org/a"]}"#
-            )]),
             refusal(&[valid.clone(), call("fc_02", "call_01", "web_fetch", FETCH)]),
             refusal(&[valid.clone(), hosted]),
             refusal(&[provisional]),
@@ -194,44 +182,16 @@ fn one_invalid_member_rejects_the_whole_batch() {
             refusal(&[call("fc_07", "call\u{0}07", "web_search", SEARCH)]),
             refusal(&[call("fc_08", "call\n08", "web_search", SEARCH)]),
             refusal(&[call("fc_09", "call\u{9f}09", "web_search", SEARCH)]),
+            refusal(&[no_name]),
+            refusal(&[call("fc_11", "call_11", &"n".repeat(129), SEARCH)]),
             refusal_in(StreamItemState::Incomplete, std::slice::from_ref(&valid)),
             refusal_in(
                 StreamItemState::Cancelled,
                 &[message("Looking"), valid.clone()]
             ),
-            refusal(&[cut_message, valid.clone()]),
-            match validate_tool_call_batch(
-                StreamItemState::Complete,
-                &[valid],
-                &unexposed,
-                &current(),
-            ) {
-                ToolCallBatch::Invalid(refusal) => refusal,
-                ToolCallBatch::Valid(_) => panic!("exposed"),
-            },
+            refusal(&[cut_message, valid]),
         ],
         [
-            ToolCallBatchRefusal::Unexposed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Malformed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Malformed {
-                call_id: "call_02".to_owned()
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::Query
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::UrlCount
-            },
-            ToolCallBatchRefusal::Intake {
-                call_id: "call_02".to_owned(),
-                refusal: IntakeRefusal::Url
-            },
             ToolCallBatchRefusal::DuplicateCallId {
                 call_id: "call_01".to_owned()
             },
@@ -259,14 +219,68 @@ fn one_invalid_member_rejects_the_whole_batch() {
             ToolCallBatchRefusal::InvalidCallId {
                 item_id: "fc_09".to_owned()
             },
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::ResponseIncomplete,
-            ToolCallBatchRefusal::Unexposed {
-                call_id: "call_01".to_owned()
+            ToolCallBatchRefusal::InvalidName {
+                item_id: "fc_10".to_owned()
             },
+            ToolCallBatchRefusal::InvalidName {
+                item_id: "fc_11".to_owned()
+            },
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
+            ToolCallBatchRefusal::ResponseIncomplete,
         ]
     );
+}
+
+#[test]
+fn a_member_that_fails_its_own_validation_is_refused_and_the_others_continue() {
+    let long_query = format!(r#"{{"query":"{}"}}"#, "x".repeat(513));
+    let six_urls =
+        json!({"urls": (0..6).map(|n| format!("https://example.org/{n}")).collect::<Vec<_>>()});
+    let (malformed, intake) = (
+        CallValidationRefusal::Malformed,
+        CallValidationRefusal::Intake,
+    );
+    let cases = [
+        ("edit", "{}", CallValidationRefusal::Unexposed),
+        ("web_search", r#"{"query":"#, malformed),
+        ("web_search", "[]", malformed),
+        ("web_search", "{\"query\":\"tide\u{0}\"}", malformed),
+        ("web_search", &long_query, intake(IntakeRefusal::Query)),
+        (
+            "web_fetch",
+            &six_urls.to_string(),
+            intake(IntakeRefusal::UrlCount),
+        ),
+        (
+            "web_fetch",
+            r#"{"urls":["ftp://example.org/a"]}"#,
+            intake(IntakeRefusal::Url),
+        ),
+    ];
+    for (name, arguments, refusal) in cases {
+        let items = [
+            call("fc_01", "call_01", name, arguments),
+            call("fc_02", "call_02", "web_search", SEARCH),
+        ];
+        let refused = RefusedToolCall {
+            call_id: "call_01".to_owned(),
+            name: name.to_owned(),
+            tool: pinned().tools.into_iter().find(|tool| tool.name == name),
+            arguments_text: arguments.to_owned(),
+            refusal,
+        };
+
+        assert_eq!(
+            validate_tool_call_batch(StreamItemState::Complete, &items, &pinned(), &current()),
+            ToolCallBatch::Valid(vec![
+                RequestedToolCall::Refused(refused.clone()),
+                RequestedToolCall::Validated(search_call("call_02")),
+            ]),
+            "{name} {arguments}"
+        );
+        assert!(!refused.arguments().to_string().contains("\\u0000"));
+    }
 }
 
 /// The refusal of a complete, exposed, intake-valid batch under the `current` authority.
@@ -285,33 +299,11 @@ fn current_refusal(current: &[CurrentToolAuthority]) -> (ToolCallBatchRefusal, &
 }
 
 #[test]
-fn a_registration_that_the_project_does_not_enable_now_rejects_the_batch() {
+fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
     let other_revision = CurrentToolAuthority {
         registration_revision: "018f0000-0000-7001-8000-0000000e0f09".to_owned(),
-        ..authority(/*enabled*/ true, ToolRegistrationLifecycle::Active)
+        ..authority(ToolRegistrationLifecycle::Active)
     };
-    let not_enabled = (
-        ToolCallBatchRefusal::NotEnabled {
-            call_id: "call_01".to_owned(),
-        },
-        "tool_not_enabled",
-    );
-
-    assert_eq!(
-        [
-            current_refusal(&[authority(
-                /*enabled*/ false,
-                ToolRegistrationLifecycle::Active
-            )]),
-            current_refusal(&[]),
-            current_refusal(&[other_revision]),
-        ],
-        [not_enabled.clone(), not_enabled.clone(), not_enabled]
-    );
-}
-
-#[test]
-fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
     let unavailable = (
         ToolCallBatchRefusal::RegistrationUnavailable {
             call_id: "call_01".to_owned(),
@@ -321,57 +313,41 @@ fn a_pinned_revision_that_is_not_active_now_rejects_the_batch() {
 
     assert_eq!(
         [
-            current_refusal(&[authority(
-                /*enabled*/ true,
-                ToolRegistrationLifecycle::Quarantined
-            )]),
-            current_refusal(&[authority(
-                /*enabled*/ true,
-                ToolRegistrationLifecycle::Retired
-            )]),
+            current_refusal(&[authority(ToolRegistrationLifecycle::Quarantined)]),
+            current_refusal(&[authority(ToolRegistrationLifecycle::Retired)]),
+            current_refusal(&[]),
+            current_refusal(&[other_revision]),
         ],
-        [unavailable.clone(), unavailable]
+        [
+            unavailable.clone(),
+            unavailable.clone(),
+            unavailable.clone(),
+            unavailable
+        ]
     );
 }
 
 #[test]
 fn a_valid_batch_is_the_decision_and_an_invalid_batch_makes_none() {
-    let advisory = ModelOutput {
-        phase: OutputPhase::FinalAnswer,
-        candidate: DecisionCandidate::Advisory {
-            text: "Looking it up.".to_owned(),
-        },
-        prose_changes: None,
-    };
-    let valid = ToolCallBatch::Valid(vec![search_call("call_01")]);
-    let invalid = ToolCallBatch::Invalid(ToolCallBatchRefusal::Unexposed {
-        call_id: "call_01".to_owned(),
+    let valid = ToolCallBatch::Valid(vec![RequestedToolCall::Validated(search_call("call_01"))]);
+    let invalid = ToolCallBatch::Invalid(ToolCallBatchRefusal::InvalidName {
+        item_id: "fc_01".to_owned(),
     });
-    let tool_request = AgentDecisionOutcome::Decision {
-        kind: AgentDecisionKind::ToolRequest {
-            calls: vec![search_call("call_01")],
-        },
-        selected: true,
-        advances_continuation: false,
-    };
 
     assert_eq!(
         [
-            validate_agent_decision(None, &[], &CitableSources::default(), valid.clone()),
-            validate_agent_decision(Some(&advisory), &[], &CitableSources::default(), valid),
-            validate_agent_decision(
-                Some(&advisory),
-                &[],
-                &CitableSources::default(),
-                invalid.clone()
-            ),
-            validate_agent_decision(None, &[], &CitableSources::default(), invalid),
-            validate_agent_decision(None, &[], &CitableSources::default(), ToolCallBatch::none()),
+            validate_agent_decision(valid),
+            validate_agent_decision(invalid),
+            validate_agent_decision(ToolCallBatch::none()),
         ],
         [
-            tool_request.clone(),
-            tool_request,
-            AgentDecisionOutcome::NoDecision,
+            AgentDecisionOutcome::Decision {
+                kind: AgentDecisionKind::ToolRequest {
+                    calls: vec![RequestedToolCall::Validated(search_call("call_01"))],
+                },
+                selected: true,
+                advances_continuation: false,
+            },
             AgentDecisionOutcome::NoDecision,
             AgentDecisionOutcome::NoDecision,
         ]
@@ -390,7 +366,7 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
             ExposureSnapshot::decode(Some(&damaged)),
         ),
         (
-            2,
+            6,
             Some(ExposureSnapshot::empty()),
             Some(ExposureSnapshot::empty()),
             None

@@ -3,13 +3,11 @@ use storyos_application::{
 };
 use storyos_core::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, ProseChangeCandidate,
-    StreamItemRole, StreamItemState, stream_batch_plan,
+    StreamItemRole, StreamItemState,
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::{
-    RunPhaseRow, WorkPhase, complete_database_error, requeue_generation, update_run,
-};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error, update_run};
 use crate::open_block_proposal::ProseOpening;
 
 /// The validated result of one Create exchange for the active decision Model Attempt.
@@ -17,7 +15,6 @@ pub(crate) struct CreateResult<'a> {
     pub attempt_id: &'a str,
     pub items: &'a [NativeStreamItem],
     pub outcome: AgentDecisionOutcome,
-    pub producer_output: Option<&'a [ProseChangeCandidate]>,
     pub usage: ModelUsage,
     pub cache_use: CacheUse,
     pub response_reference: Option<&'a str>,
@@ -28,16 +25,23 @@ pub(crate) struct CreateResult<'a> {
 pub(crate) enum CreateSettlement<'a> {
     Response,
     /// The response asks for a function, and its batch did not validate: no ToolCall exists
-    /// (ADR 0084). The items stay as evidence, and the Run refuses with one result sentence.
+    /// (ADR 0084). The items stay as evidence, and the Run ends as `function_request_refusal`
+    /// says.
     FunctionRequested,
     /// The Decision is a validated function request: its ToolCalls become durable with it, in
     /// state `pending`, and the claimed Run continues to the Tool Gateway.
     ToolCallsPending,
+    /// A text with no function call before a `finish` call that counted (ADR 0091): no Agent
+    /// Decision, and the claimed Run continues to the next RunStep.
+    NextRunStep,
+    /// A complete closing response with no text (ADR 0091): no Agent Decision, and the Run
+    /// completes. The response gets its continuation binding, so the next Run continues from it.
+    NoResult,
     NotSubmitted,
     Rejected(&'a str),
 }
 
-/// Records the stream, the Agent Decision, and any opened Proposal of one Create exchange.
+/// Records the stream and the Agent Decision of one Create exchange.
 pub(crate) async fn persist_create_result(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -56,58 +60,6 @@ pub(crate) async fn persist_create_result(
             (*selected && *advances_continuation).then_some("decision"),
         ),
     };
-    let (opened_proposal, locations, stream_hold) = match (decision_id.as_deref(), &result.outcome)
-    {
-        (
-            Some(decision_id),
-            AgentDecisionOutcome::Decision {
-                kind:
-                    AgentDecisionKind::ProseChange {
-                        text,
-                        locations: produced,
-                    },
-                selected: true,
-                ..
-            },
-        ) => {
-            let opened = open_selected_proposal(
-                client,
-                claim,
-                run,
-                decision_id,
-                text,
-                produced.as_deref(),
-                ProposalStream::Permitted,
-            )
-            .await?;
-            (
-                opened.opening.proposal_id,
-                opened.opening.locations,
-                opened.stream_hold,
-            )
-        }
-        _ => (None, None, false),
-    };
-    let research_artifact = match (decision_id.as_deref(), &result.outcome) {
-        (
-            Some(decision_id),
-            AgentDecisionOutcome::Decision {
-                kind: AgentDecisionKind::ResearchSynthesis(synthesis),
-                ..
-            },
-        ) => Some(
-            crate::research_artifact::record(
-                client,
-                claim,
-                run,
-                result.attempt_id,
-                decision_id,
-                synthesis,
-            )
-            .await?,
-        ),
-        _ => None,
-    };
     let mut payload = retained_payload;
     payload["items"] = merge_items(payload["items"].take(), result.items);
     payload["decision"] = match (&result.outcome, decision_id.as_deref()) {
@@ -118,14 +70,7 @@ pub(crate) async fn persist_create_result(
                 advances_continuation,
             },
             Some(decision_id),
-        ) => encode_decision(
-            kind,
-            decision_id,
-            *selected,
-            *advances_continuation,
-            opened_proposal.as_deref(),
-            research_artifact.as_deref(),
-        ),
+        ) => encode_decision(kind, decision_id, *selected, *advances_continuation),
         _ => serde_json::Value::Null,
     };
     payload["usage"] = encode_usage(result.usage);
@@ -140,6 +85,8 @@ pub(crate) async fn persist_create_result(
         CreateSettlement::Response
             | CreateSettlement::FunctionRequested
             | CreateSettlement::ToolCallsPending
+            | CreateSettlement::NextRunStep
+            | CreateSettlement::NoResult
     ) {
         let usage_kind = payload["usage"]["kind"]
             .as_str()
@@ -149,9 +96,9 @@ pub(crate) async fn persist_create_result(
     }
     let mut refusal = None;
     match result.settlement {
-        CreateSettlement::Response => {}
-        CreateSettlement::FunctionRequested => refusal = Some(research_refusal(&payload)),
-        CreateSettlement::ToolCallsPending => {}
+        CreateSettlement::Response | CreateSettlement::NoResult => {}
+        CreateSettlement::FunctionRequested => refusal = function_request_refusal(&payload),
+        CreateSettlement::ToolCallsPending | CreateSettlement::NextRunStep => {}
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
@@ -169,11 +116,6 @@ pub(crate) async fn persist_create_result(
             }));
         }
     }
-    crate::prose_change_decision::encode(
-        &mut payload,
-        result.producer_output,
-        locations.as_deref(),
-    );
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -222,6 +164,26 @@ pub(crate) async fn persist_create_result(
         )
         .await?;
     }
+    if matches!(result.settlement, CreateSettlement::NextRunStep) {
+        return crate::agent_run_finish_rule::open_after_text(
+            client,
+            claim,
+            run,
+            result.attempt_id,
+            &payload,
+        )
+        .await;
+    }
+    if matches!(result.settlement, CreateSettlement::NoResult) {
+        crate::agent_run_continuation::bind_produced_continuation(
+            client,
+            claim,
+            result.attempt_id,
+            &payload,
+            &payload,
+        )
+        .await?;
+    }
     let tool_calls = matches!(result.settlement, CreateSettlement::ToolCallsPending);
     update_run(
         client,
@@ -236,9 +198,6 @@ pub(crate) async fn persist_create_result(
         /*clear_lease*/ hold.is_none() && !tool_calls,
     )
     .await?;
-    if stream_hold {
-        return requeue_generation(client, claim).await;
-    }
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None if tool_calls => WorkPhase::ToolCalls,
@@ -246,31 +205,22 @@ pub(crate) async fn persist_create_result(
     })
 }
 
-/// The settlement of a Run whose response asks for a function and whose batch did not validate
-/// (ADR 0084). The refusal label of the batch evidence on `attempt_payload` gives the capability,
-/// and the author sees one result sentence for it.
-pub(crate) fn research_refusal(attempt_payload: &serde_json::Value) -> serde_json::Value {
+/// The refusal of a Run whose response asks for a function and whose batch did not validate
+/// (ADR 0084), from the refusal label of the batch evidence on `attempt_payload`. `None`: the Run
+/// completes with no refusal (ADR 0091).
+pub(crate) fn function_request_refusal(
+    attempt_payload: &serde_json::Value,
+) -> Option<serde_json::Value> {
     let label = attempt_payload
         .pointer("/tool_call_batch/refusal")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    serde_json::json!({
-        "kind": "execution_refused",
-        "capability": storyos_core::function_request_refusal_capability(label)
+    storyos_core::function_request_refusal_capability(label).map(|capability| {
+        serde_json::json!({
+            "kind": "execution_refused",
+            "capability": capability
+        })
     })
-}
-
-/// Whether a selected prose change may open a streamed Proposal that holds the Run.
-pub(crate) enum ProposalStream {
-    Permitted,
-    /// A successor settles its Run at once, so all of its Proposal opens in one step.
-    Excluded,
-}
-
-/// The Proposal of one selected prose change, and whether its streamed generation holds the Run.
-pub(crate) struct OpenedProposal {
-    pub opening: ProseOpening,
-    pub stream_hold: bool,
 }
 
 /// Opens the Proposal of one selected prose change of the Run.
@@ -281,11 +231,8 @@ pub(crate) async fn open_selected_proposal(
     decision_id: &str,
     text: &str,
     produced: Option<&[ProseChangeCandidate]>,
-    stream: ProposalStream,
-) -> Result<OpenedProposal, CompleteAgentRunError> {
-    let author_message = run.author_message.as_str();
-    let chapter_id = run.chapter_id.as_str();
-    let opening = if let Some((record, target)) =
+) -> Result<ProseOpening, CompleteAgentRunError> {
+    if let Some((record, target)) =
         crate::candidate_revision_target::admitted(client, claim, produced).await?
     {
         crate::revise_candidate_generation::apply(
@@ -295,42 +242,19 @@ pub(crate) async fn open_selected_proposal(
             &target,
             produced.unwrap_or_default(),
         )
-        .await?
-    } else if produced.is_none()
-        && matches!(stream, ProposalStream::Permitted)
-        && stream_batch_plan(author_message).is_some()
-    {
-        let (proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
-            client,
-            claim,
-            chapter_id,
-            decision_id,
-            author_message,
-        )
-        .await?;
-        return Ok(OpenedProposal {
-            opening: ProseOpening {
-                proposal_id,
-                locations: None,
-            },
-            stream_hold: matches!(work, crate::stream_proposal_generation::StreamWork::Hold),
-        });
+        .await
     } else {
         crate::open_block_proposal::open_selected_prose_change(
             client,
             claim,
-            chapter_id,
+            &run.chapter_id,
             decision_id,
             text,
-            author_message,
+            &run.author_message,
             produced,
         )
-        .await?
-    };
-    Ok(OpenedProposal {
-        opening,
-        stream_hold: false,
-    })
+        .await
+    }
 }
 
 /// Keeps the committed stream items in order. An item with a known item ID replaces that item.
@@ -420,8 +344,6 @@ pub(crate) fn encode_decision(
     decision_id: &str,
     selected: bool,
     advances_continuation: bool,
-    opened_proposal: Option<&str>,
-    research_artifact: Option<&str>,
 ) -> serde_json::Value {
     match kind {
         AgentDecisionKind::Advisory { text } => serde_json::json!({
@@ -432,44 +354,14 @@ pub(crate) fn encode_decision(
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),
-        AgentDecisionKind::ProseChange { text, .. } => serde_json::json!({
-            "kind": "prose_change",
-            "decision_id": decision_id,
-            "selected": selected,
-            "text": text,
-            "producer_input": text,
-            "authoritative": false,
-            "advances_continuation": advances_continuation,
-            "opened_proposal": match opened_proposal {
-                Some(proposal_id) => serde_json::json!({
-                    "kind": "present",
-                    "proposal_id": proposal_id
-                }),
-                None => serde_json::json!({ "kind": "absent" }),
-            }
-        }),
-        AgentDecisionKind::Clarification { question } => serde_json::json!({
-            "kind": "clarification",
-            "decision_id": decision_id,
-            "selected": selected,
-            "question": question,
-            "required_reply": question,
-            "authoritative": false,
-            "advances_continuation": advances_continuation
-        }),
         AgentDecisionKind::ToolRequest { calls } => serde_json::json!({
             "kind": "tool_request",
             "decision_id": decision_id,
             "selected": selected,
-            "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
-            "authoritative": false,
-            "advances_continuation": advances_continuation
-        }),
-        AgentDecisionKind::ResearchSynthesis(_) => serde_json::json!({
-            "kind": "research_synthesis",
-            "decision_id": decision_id,
-            "selected": selected,
-            "research_artifact_id": research_artifact,
+            "call_ids": calls
+                .iter()
+                .map(storyos_core::RequestedToolCall::call_id)
+                .collect::<Vec<_>>(),
             "authoritative": false,
             "advances_continuation": advances_continuation
         }),

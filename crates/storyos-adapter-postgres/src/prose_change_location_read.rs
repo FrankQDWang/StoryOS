@@ -1,5 +1,7 @@
 use storyos_application::{AgentRunDecisionInspect, CreateAgentRunError, ProjectScope};
-use storyos_contracts::{ProseChangeLocationCurrent, ProseChangeLocationOutcome};
+use storyos_contracts::{
+    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
+};
 
 pub(crate) async fn hydrate_locations(
     client: &tokio_postgres::Client,
@@ -14,6 +16,17 @@ pub(crate) async fn hydrate_locations(
     else {
         return Ok(());
     };
+    hydrate(client, scope, decision_id, locations).await
+}
+
+/// Gives each opened or revised location of the Decision `decision_id` the current state of its
+/// Proposal operation.
+pub(crate) async fn hydrate(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    decision_id: &str,
+    locations: &mut [ProseChangeLocationInspect],
+) -> Result<(), CreateAgentRunError> {
     for location in locations {
         let (ProseChangeLocationOutcome::Opened {
             proposal_id,
@@ -47,7 +60,7 @@ pub(crate) async fn hydrate_locations(
                   JOIN storyos.model_attempts AS attempt USING (owner_user_id,project_id,run_id)
                   JOIN storyos.operation_requirements AS requirement USING (owner_user_id,project_id,run_id)
                   WHERE generation.proposal_id=proposal.proposal_id AND attempt.decision_id=$5::text::uuid
-                    AND event.revision_id=(attempt.payload #>> '{decision,locations,0,outcome,revision_id}')::uuid
+                    AND event.revision_id=(attempt.payload #>> '{proposed_edit,locations,0,outcome,revision_id}')::uuid
                     AND (requirement.payload #>> '{operation_requirement,candidate_target,operation_id}'=operation.operation_id::text
                       OR jsonb_path_exists(requirement.payload,
                         '$.operation_requirement.selection_references[*].reference ? (@.operation_id == $id)',
@@ -55,21 +68,11 @@ pub(crate) async fn hydrate_locations(
                 )) AND proposal.chapter_id = $6::text::uuid
                 AND operation.manuscript_block_id = $7::text::uuid",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref(), &proposal_id, &operation_id,
-              &decision_id.as_str(), &location.chapter_id, &location.manuscript_block_id],
+              &decision_id, &location.chapter_id, &location.manuscript_block_id],
         ).await.map_err(super::create_agent_run::agent_run_database_error)?.map(|row| ProseChangeLocationCurrent {
             revision_id: row.get(0), generation: row.get(1), validation: row.get(2), closure: row.get(3),
             resolution: row.get(4), reservation_state: row.get(5),
         });
     }
     Ok(())
-}
-
-pub(crate) fn decode_locations(
-    payload: Option<&serde_json::Value>,
-) -> Result<Option<Vec<storyos_contracts::ProseChangeLocationInspect>>, CreateAgentRunError> {
-    payload
-        .and_then(|payload| payload.pointer("/decision/locations"))
-        .map(|value| serde_json::from_value(value.clone()))
-        .transpose()
-        .map_err(super::create_agent_run::agent_run_parse_error)
 }

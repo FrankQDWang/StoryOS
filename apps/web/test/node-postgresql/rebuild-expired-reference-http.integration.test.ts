@@ -16,7 +16,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { USER_A, admitRun, attempt, drainLeftoverWork, id, inspectRun, prepare, produced, selected, settleHeld,
+import { USER_A, admitRun, attempt, drainLeftoverWork, id, inspectFirstRunStep, inspectRun, prepare, produced, selected, settleHeld,
   settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const FIRST = "Help with this passage.";
@@ -105,13 +105,15 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     const firstBinding = produced(firstInspect);
     assert.equal(firstInspect.status, "completed");
     assert.equal(firstInspect.reference_recovery.kind, "absent");
-    assert.equal(attempt(firstInspect).input_mapping, "none");
+    const firstRequest = await inspectFirstRunStep(started.baseUrl, prepared, first.effect.run_id);
+    assert.equal(attempt(firstRequest).input_mapping, "none");
     const rebuilt = await admit(started.baseUrl, prepared, id("e433"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
     const rebuiltInspect = await inspectRun(started.baseUrl, prepared, rebuilt.effect.run_id);
     const rebuiltRecovery = recovery(rebuiltInspect);
+    const rebuiltRequest = await inspectFirstRunStep(started.baseUrl, prepared, rebuilt.effect.run_id);
     assert.equal(rebuilt.conversation_id, first.conversation_id);
     assert.equal(rebuilt.effect.project_agent_id, first.effect.project_agent_id);
     assert.equal(rebuiltInspect.status, "completed");
@@ -125,18 +127,18 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(rebuiltRecovery.semantic_erasure, false);
     assert.equal(rebuiltRecovery.opaque_reused, false);
     assert.equal(rebuiltRecovery.covered_content_included, true);
-    assert.equal(rebuiltRecovery.assembly_manifest_id, rebuiltInspect.context.assembly_manifest_id);
-    assert.equal(rebuiltRecovery.model_attempt_id, attempt(rebuiltInspect).model_attempt_id);
-    assert.equal(rebuiltRecovery.model_invocation_id, attempt(rebuiltInspect).model_invocation_id);
-    assert.notEqual(rebuiltRecovery.model_invocation_id, attempt(firstInspect).model_invocation_id);
+    assert.equal(rebuiltRecovery.assembly_manifest_id, rebuiltRequest.context.assembly_manifest_id);
+    assert.equal(rebuiltRecovery.model_attempt_id, attempt(rebuiltRequest).model_attempt_id);
+    assert.equal(rebuiltRecovery.model_invocation_id, attempt(rebuiltRequest).model_invocation_id);
+    assert.notEqual(rebuiltRecovery.model_invocation_id, attempt(firstRequest).model_invocation_id);
     assert.match(rebuiltRecovery.run_step_id ?? "", /^[0-9a-f-]{36}$/);
-    assert.equal(attempt(rebuiltInspect).input_mapping, "full");
-    assert.equal(attempt(rebuiltInspect).prior_continuation.kind, "absent");
-    assert.deepEqual(attempt(rebuiltInspect).known_prior_continuation, {
+    assert.equal(attempt(rebuiltRequest).input_mapping, "full");
+    assert.equal(attempt(rebuiltRequest).prior_continuation.kind, "absent");
+    assert.deepEqual(attempt(rebuiltRequest).known_prior_continuation, {
       kind: "present",
       continuation_binding_id: firstBinding,
     });
-    assert.equal(selected(rebuiltInspect, "author_instruction"), CORRECTION);
+    assert.equal(selected(rebuiltRequest, "author_instruction"), CORRECTION);
     const predecessor = await inspectRun(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(predecessor.status, "completed");
     assert.equal(selected(predecessor, "author_instruction"), EXPIRING);
@@ -245,7 +247,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     assert.equal(copyRecovery.opaque_reused, false);
     assert.equal(copyRecovery.covered_content_included, false);
     assert.equal(copyRecovery.semantic_erasure, false);
-    assert.equal(attempt(copyInspect).prior_continuation.kind, "absent");
+    assert.equal(attempt(await inspectFirstRunStep(started.baseUrl, prepared, copied.effect.run_id)).prior_continuation.kind, "absent");
     assert.equal(selected(copyInspect, "author_instruction"), CORRECTION);
 
     const missingFirst = await admit(started.baseUrl, prepared, id("e445"), EXPIRING);

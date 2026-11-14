@@ -105,7 +105,7 @@ impl StateAxis {
     /// Returns `value` when this axis has it. Another value is damaged evidence.
     pub(crate) fn preserved(self, value: String) -> Result<String, ReplayFault> {
         let known: &[&str] = match self {
-            Self::Generation => &["generating", "ready_partial", "ready"],
+            Self::Generation => &["ready"],
             Self::Validation => &["pending", "valid", "invalid", "conflicted"],
             Self::Closure => &["open", "withdrawn", "superseded"],
             Self::OperationResolution => &["pending", "applied", "rejected"],

@@ -3,6 +3,7 @@
 use std::convert::Infallible;
 
 use super::TransitionOutcome;
+use crate::RunStepLimit;
 use crate::transition_outcome::reason_codes;
 
 /// The durable status of one AgentRun.
@@ -111,17 +112,43 @@ pub fn classify_cancel_agent_run(
     }
 }
 
-/// Classifies steering. A Run that is not terminal retains the input and changes no authority.
+/// The RunStep that would read a steering input (ADR 0062, ADR 0091 section 5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SteeringReader {
+    OrdinaryRunStep,
+    /// Only the last RunStep of the limit, which can reply with text only, or no RunStep. The input becomes the message of the next Run.
+    NoOrdinaryRunStep,
+}
+
+impl SteeringReader {
+    /// The reader of an input at `input_position` of a Run.
+    pub fn at(input_position: u64) -> Self {
+        if RunStepLimit::at(input_position) == RunStepLimit::Last {
+            Self::NoOrdinaryRunStep
+        } else {
+            Self::OrdinaryRunStep
+        }
+    }
+}
+
+/// Classifies steering. A Run that is not terminal retains an input that an ordinary RunStep can
+/// read and changes no authority. Each other input has the answer of a Run that ended.
 pub fn classify_steer_agent_run(
     lifecycle: AgentRunStatus,
+    reader: SteeringReader,
 ) -> TransitionOutcome<Infallible, SteerAgentRunNoEffect, SteerAgentRunConflict, Infallible> {
     match lifecycle {
         AgentRunStatus::Queued
         | AgentRunStatus::Claimed
         | AgentRunStatus::Waiting
-        | AgentRunStatus::Paused => {
-            TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained)
-        }
+        | AgentRunStatus::Paused => match reader {
+            SteeringReader::OrdinaryRunStep => {
+                TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained)
+            }
+            SteeringReader::NoOrdinaryRunStep => {
+                TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun)
+            }
+        },
         AgentRunStatus::Completed | AgentRunStatus::Refused | AgentRunStatus::Cancelled => {
             TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun)
         }

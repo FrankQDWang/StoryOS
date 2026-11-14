@@ -62,16 +62,17 @@ pub async fn run_once<
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match claim_after_contention(|| claim_next_export_work(store)).await? {
         Some(ClaimedExportWork::Readable(claim)) => {
-            readable_export_claim(store, &claim, /*attempts*/ 1).await?;
+            readable_export_claim(store, &claim, Retry::SerializationFailure).await?;
             Ok(())
         }
         Some(ClaimedExportWork::Archive(claim)) => {
-            archive_export_claim(store, &claim, /*attempts*/ 1).await?;
+            archive_export_claim(store, &claim, Retry::SerializationFailure).await?;
             Ok(())
         }
         None => match claim_after_contention(|| claim_next_agent_run(store, A::ADAPTERS)).await? {
             Some(claim) => {
-                match agent_run_claim(store, destination, &claim, /*attempts*/ 1).await {
+                match agent_run_claim(store, destination, &claim, Retry::SerializationFailure).await
+                {
                     Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
                     Err(error) => Err(error.into()),
                 }
@@ -97,16 +98,16 @@ async fn step<A: ModelProviderAdapter, O: ContractFaultObserver, T: ToolDestinat
 ) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => matches!(
-            readable_export_claim(store, &claim, ATTEMPTS).await,
+            readable_export_claim(store, &claim, Retry::EachFailure).await,
             Ok(_) | Err(CompleteReadableExportError::StaleFence)
         ),
         Ok(Some(ClaimedExportWork::Archive(claim))) => matches!(
-            archive_export_claim(store, &claim, ATTEMPTS).await,
+            archive_export_claim(store, &claim, Retry::EachFailure).await,
             Ok(_) | Err(CompleteArchiveExportError::StaleFence)
         ),
         Ok(None) => match claim_next_agent_run(store, A::ADAPTERS).await {
             Ok(Some(claim)) => matches!(
-                agent_run_claim(store, destination, &claim, ATTEMPTS).await,
+                agent_run_claim(store, destination, &claim, Retry::EachFailure).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)
             ),
             Ok(None) => false,
@@ -157,10 +158,10 @@ fn claim_failed(error: &ProjectReadError) -> bool {
 async fn readable_export_claim(
     store: &impl WorkerStore,
     claim: &ClaimedReadableExport,
-    attempts: u64,
+    policy: Retry,
 ) -> Result<CompleteReadableExport, CompleteReadableExportError> {
     retry(
-        attempts,
+        policy,
         || complete_readable_export(store, claim),
         |error| matches!(error, CompleteReadableExportError::StaleFence),
     )
@@ -177,10 +178,10 @@ async fn readable_export_claim(
 async fn archive_export_claim(
     store: &impl WorkerStore,
     claim: &ClaimedArchiveExport,
-    attempts: u64,
+    policy: Retry,
 ) -> Result<CompleteArchiveExport, CompleteArchiveExportError> {
     retry(
-        attempts,
+        policy,
         || complete_archive_export(store, claim),
         |error| matches!(error, CompleteArchiveExportError::StaleFence),
     )
@@ -202,10 +203,10 @@ async fn agent_run_claim<
     store: &impl WorkerStore,
     destination: &ModelDestination<A, O, T>,
     claim: &ClaimedAgentRun,
-    attempts: u64,
+    policy: Retry,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     retry(
-        attempts,
+        policy,
         || {
             complete_agent_run_with_tools(
                 store,
@@ -230,10 +231,20 @@ impl GatewayClock for RuntimeClock {
     }
 }
 
-/// Runs the completion until it succeeds, the fence is stale, or the attempts end.
+/// The failed completions that the Worker runs again, for at most `ATTEMPTS` attempts.
+#[derive(Clone, Copy)]
+enum Retry {
+    /// The loop runs each failed completion again.
+    EachFailure,
+    /// `run_once` runs only a serialization failure again, so that it settles a contended claim as
+    /// the loop does.
+    SerializationFailure,
+}
+
+/// Runs the completion until it succeeds, the fence is stale, or the policy stops the attempts.
 /// Records the attempt and the outcome on the current claim span.
 async fn retry<T, E, F>(
-    attempts: u64,
+    policy: Retry,
     mut complete: impl FnMut() -> F,
     stale: impl Fn(&E) -> bool,
 ) -> Result<T, E>
@@ -262,7 +273,14 @@ where
                     sql_state = SqlState(error).diagnostic(),
                     "Worker attempt failed"
                 );
-                if attempt == attempts {
+                let again = attempt < ATTEMPTS
+                    && match policy {
+                        Retry::EachFailure => true,
+                        Retry::SerializationFailure => {
+                            SqlState(error).diagnostic().as_deref() == Some(SERIALIZATION_FAILURE)
+                        }
+                    };
+                if !again {
                     tracing::Span::current().record("outcome", error.diagnostic());
                     return result;
                 }

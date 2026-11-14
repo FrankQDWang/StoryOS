@@ -5,7 +5,7 @@ use storyos_application::{
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectInput, open_project_assistance,
 };
 use storyos_core::{
-    AssistanceAvailability, HOST_FAKE_REGISTRATION, ReasonCode, TransitionOutcome,
+    AssistanceAvailability, HOST_FAKE_TOOL_LOOP_REGISTRATION, ReasonCode, TransitionOutcome,
     UpdateProjectApplied, UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
     UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
 };
@@ -154,7 +154,7 @@ async fn update_project_assistance_initializes_and_toggles_only_its_own_binding(
             |(availability, expected_revision)| UpdateProjectAssistanceInput {
                 availability,
                 expected_revision,
-                destination: Some(storyos_core::DeploymentDestination::HostFake),
+                destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
             },
         )
         .to_vec(),
@@ -188,7 +188,7 @@ async fn update_project_assistance_initializes_and_toggles_only_its_own_binding(
         .expect("the initialized binding");
     assert_eq!(
         initialized.model_registration_revision,
-        HOST_FAKE_REGISTRATION.revision
+        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision
     );
     let toggled = settled[4]
         .response
@@ -232,7 +232,10 @@ async fn update_project_assistance_initializes_and_toggles_only_its_own_binding(
                   WHERE project_id = $1::text::uuid),
                 (SELECT count(*) FROM storyos.project_policy_revisions
                   WHERE project_id = $1::text::uuid)",
-            &[&scope.project_id.as_ref(), &HOST_FAKE_REGISTRATION.revision],
+            &[
+                &scope.project_id.as_ref(),
+                &HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+            ],
         )
         .await
         .unwrap();

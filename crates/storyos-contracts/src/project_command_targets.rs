@@ -36,12 +36,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.update-project-assistance.request.v1",
     ),
     target(
-        CommandKind::SetProjectToolEnablement,
-        "PUT",
-        "/api/v1/projects/{project_id}/tool-enablement",
-        "storyos.command.set-project-tool-enablement.request.v1",
-    ),
-    target(
         CommandKind::CreateEditorSession,
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
@@ -136,18 +130,6 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "POST",
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings",
         "storyos.command.reopen-rejected-operations.request.v1",
-    ),
-    target(
-        CommandKind::CompleteReadyPartialProposal,
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions",
-        "storyos.command.complete-ready-partial-proposal.request.v1",
-    ),
-    target(
-        CommandKind::ContinueProposalGeneration,
-        "POST",
-        "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations",
-        "storyos.command.continue-proposal-generation.request.v1",
     ),
     target(
         CommandKind::UndoLatestAuthorAction,

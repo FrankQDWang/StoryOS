@@ -23,6 +23,7 @@ StoryOS separates author-owned Authoritative State, inspectable Artifacts, and e
   Editor Input Fences, Author Actions, and typed Receipts are Operational
   Records. Refused Edit Drafts and Recovery Drafts are non-authoritative Draft
   Artifacts, while Proposal Conflict is a Proposal validation-axis condition;
-  none is another authority level or reusable authorization.
+  none is another authority level or reusable authorization. Note:
+  [ADR 0092](0092-remove-streamed-proposal-generation.md) removes the Editor Input Fence.
 - Extensions may add safely preservable views and data, but authoritative mutations always return to closed StoryOS Core Proposal kinds and validators.
 - Authoritative State, Artifacts, Operational Records, their references, and their derived projections cannot cross a Project Scope.

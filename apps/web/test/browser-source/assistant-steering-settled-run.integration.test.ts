@@ -23,8 +23,12 @@ const reference: ChapterTextReference = { kind: "chapter_text", chapter_id: CHAP
   start: { manuscript_block_id: BLOCK, offset: 0 }, end: { manuscript_block_id: BLOCK, offset: 4 } };
 
 type SteeringReply = "conflicted" | "refused" | "unknown";
-/** What happens after the steering reply: a failed refresh read, or a reload at one point. */
-type Interruption = "failed-refresh" | "reload-before-resend" | "reload-after-record" | "edit-before-reply";
+/**
+ * What happens after the steering reply: a failed refresh read, a reload at one point, or a Run that is still
+ * active at the reply and completes before a later scheduled read.
+ */
+type Interruption = "failed-refresh" | "reload-before-resend" | "reload-after-record" | "edit-before-reply"
+  | "active-at-reply";
 /** What the author does after the reload. */
 type AuthorStep = "send" | "edit";
 
@@ -48,6 +52,7 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
   // The steering reply waits until the author edits the composer.
   let reply = () => {};
   const edited = new Promise<void>((resolve) => { reply = resolve; });
+  let scheduled: Array<() => void> = [];
   const advisory = { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000c55", selected: true,
     text: "Keep the second sentence.", continuation: { kind: "absent" } };
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -99,8 +104,11 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
       root.render(createElement(WritingAssistantPanel, {
         collapsed: false,
         context: { scope, chapterId: CHAPTER, canSubmit: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto },
-        // No scheduled read runs, so the panel keeps the claimed Run until the steering reply.
-        scheduleRefresh: () => () => {},
+        // A scheduled read runs only when the test runs it, so the panel keeps the claimed Run until the steering reply.
+        scheduleRefresh: (refresh) => {
+          scheduled.push(refresh);
+          return () => { scheduled = scheduled.filter((item) => item !== refresh); };
+        },
       }));
     });
     await settle();
@@ -121,8 +129,16 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     addDraftReferences(scope, [{ reference, moved: false,
       label: { chapter: "第 1 章 渡口", part: { kind: "paragraphs", first: 1, last: 1 } } }]);
     await type(MESSAGE);
-    completed = true;
+    completed = interruption !== "active-at-reply";
     await send();
+    // The routes and the status while the conflicted message waits for the Run to settle.
+    const waiting = { routes: commands.map((command) => command.route),
+      status: host.querySelector("[role=status]")?.textContent ?? null };
+    if (interruption === "active-at-reply") {
+      completed = true;
+      await act(async () => { for (const refresh of scheduled) refresh(); });
+      await settle();
+    }
     if (held !== undefined) {
       // A reload keeps `sessionStorage` and starts a new page.
       await act(async () => root.unmount());
@@ -138,6 +154,7 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
     if (step === "send") await send();
     if (step === "edit") await type(EDITED);
     return {
+      waiting,
       commands,
       status: host.querySelector("[role=status]")?.textContent ?? null,
       composer: host.querySelector("textarea")!.value,
@@ -156,6 +173,20 @@ async function sendAfterCompletion(steering: SteeringReply, interruption?: Inter
 it("sends a message as a new AgentRun in the same Conversation when steering finds the Run completed", async () => {
   const result = await sendAfterCompletion("conflicted");
 
+  expect(result.commands.map((command) => command.route)).toEqual(["steering-inputs", "agent-runs"]);
+  expect(result.commands[1]!.body).toMatchObject({ create_agent_run_input: {
+    conversation: { kind: "existing", conversation_id: CONVERSATION },
+    author_message: { text: MESSAGE },
+    working_target: { kind: "selection_references", source_chapter_id: CHAPTER, references: [reference] },
+  } });
+  expect({ status: result.status, composer: result.composer, runId: result.runId, retainedIntent: result.retainedIntent })
+    .toEqual({ status: null, composer: "", runId: NEXT_RUN, retainedIntent: false });
+});
+
+it("sends the message as a new AgentRun after the Run settles when steering is conflicted while the Run is active", async () => {
+  const result = await sendAfterCompletion("conflicted", "active-at-reply");
+
+  expect(result.waiting).toEqual({ routes: ["steering-inputs"], status: null });
   expect(result.commands.map((command) => command.route)).toEqual(["steering-inputs", "agent-runs"]);
   expect(result.commands[1]!.body).toMatchObject({ create_agent_run_input: {
     conversation: { kind: "existing", conversation_id: CONVERSATION },

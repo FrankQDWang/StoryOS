@@ -41,7 +41,7 @@ async fn fake_worker_skips_an_agent_plan_run_that_only_the_agent_plan_worker_cla
         .await;
     let (store, admin) = stores().await;
     let (_, _, agent_plan_run) = queued_run(&store, "0a1", agent_plan()).await;
-    let (_, _, fake_run) = queued_run(&store, "0a2", DeploymentDestination::HostFake).await;
+    let (_, _, fake_run) = queued_run(&store, "0a2", DeploymentDestination::HostFakeToolLoop).await;
 
     let fake_claim = store
         .claim_next_agent_run(FakeDestination::ADAPTERS)

@@ -40,6 +40,7 @@ pub(crate) use authoritative_revision::{
 };
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 pub(crate) use contention::CommandError;
+use contention::contended;
 pub(crate) use profile::{
     PersistFacts, PersistInput, SelectsRecords, SettlementProfile, SingleRecordSet,
 };
@@ -175,6 +176,29 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     .await;
     record_result(&settled);
     settled
+}
+
+/// Settles one command as `settle_project_command` does. When its transaction loses a
+/// serialization race, for example with the Worker at the closing RunStep, the command settles
+/// again in a new transaction, at most `settlements` times, and classifies the committed state
+/// (#1484). The rollback of the lost transaction keeps the Challenge unused.
+pub(crate) async fn settle_project_command_after_contention<C: ProjectCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+    settlements: usize,
+) -> Result<SettledCommand<C>, C::Error> {
+    let mut settled = 1;
+    loop {
+        match settle_project_command(store, envelope, command).await {
+            Err(error)
+                if settled < settlements && error.sequence_error().is_some_and(contended) =>
+            {
+                settled += 1;
+            }
+            result => return result,
+        }
+    }
 }
 
 /// The first use of a command that settles in its Challenge transaction.

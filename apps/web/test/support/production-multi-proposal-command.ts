@@ -241,11 +241,21 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     // After a reload the open Proposal list gives the Proposals, so the candidate settles after the editor opens.
     await expect(candidate()).toHaveAttribute('data-proposal-eligibility', 'eligible');
     // The author selects all of the candidate text and adds it to the message (ADR 0062).
-    await candidate().locator('.block-proposal-text').evaluate((element) => {
-      element.closest<HTMLElement>('[data-manuscript-editor]')!.focus();
-      const text = element.firstChild!;
-      document.getSelection()!.setBaseAndExtent(text, 0, text, text.textContent!.length);
-    });
+    // After the reload, the Run read starts a second Proposal read that renders the candidate again (#1505).
+    // The editor state keeps the selection through that render. A DOM selection on an old element does not.
+    await page.evaluate(({ proposalId, operationId }) => {
+      const editor = document.querySelector<HTMLElement & { editor?: import('@tiptap/core').Editor }>(
+        '[data-manuscript-editor]')?.editor;
+      const ranges: { from: number; to: number }[] = [];
+      editor?.state.doc.descendants((node, position) => {
+        if (node.type.name === 'blockProposal' && node.attrs.proposalId === proposalId
+          && node.attrs.operationId === operationId) ranges.push({ from: position + 1, to: position + 1 + node.content.size });
+      });
+      const range = ranges[0];
+      if (editor === undefined || range === undefined) throw new Error('The candidate is not in the editor');
+      editor.commands.setTextSelection(range);
+      editor.view.focus();
+    }, { proposalId, operationId: secondaryOutcome.operation_id });
     await page.locator('[data-add-selection-reference]').click();
     await expect(page.locator('[data-selection-reference-label$="的修改建议）"]')).toHaveCount(1);
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, restored);

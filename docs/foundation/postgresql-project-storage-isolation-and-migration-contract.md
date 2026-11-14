@@ -11,6 +11,8 @@
 - Release 1 source set: the SQL files of [`crates/storyos-adapter-postgres/migrations/`](../../crates/storyos-adapter-postgres/migrations/) and the migration chain digest that the `storyos-adapter-postgres` build script derives from them ([ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md))
 - Removed catalog: [ADR 0079](../adr/0079-squash-the-migrations-into-one-baseline-and-derive-the-storage-identity.md) removed the hand-kept persistence catalog. The tag `evidence/pre-cleanup-round-2` keeps its last version. The catalog family IDs of this document refer to that version.
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the Editor Input Fence and the Proposal Pause Fence records are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 0. Release 1 closure and compatibility identity
 
 Sections 1–12 preserve the accepted Foundation decisions. This Release 1

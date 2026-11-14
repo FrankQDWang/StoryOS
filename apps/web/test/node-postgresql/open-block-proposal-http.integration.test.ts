@@ -123,9 +123,8 @@ test("Worker keeps two non-overlapping Block Proposals and refuses a reserved cu
   const first = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f151"));
   const firstId = assertOpenedProposal(first);
   const overlap = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f153"));
-  assert.equal(overlap.decision.kind, "prose_change");
-  if (overlap.decision.kind !== "prose_change") throw new Error("expected prose");
-  assert.deepEqual(overlap.decision.opened_proposal, { kind: "absent" });
+  // The reservation refuses the `propose_edit` call, and the final answer is advisory (ADR 0091 section 6).
+  assert.equal(overlap.decision.kind, "advisory");
   const secondBlockId = id("f155");
   await queryPostgres(`
     WITH first AS (
@@ -203,7 +202,6 @@ type Seed = {
   chapterId?: string;
   closure?: "open" | "withdrawn" | "superseded";
   validation?: "pending" | "valid" | "invalid" | "conflicted";
-  generation?: "generating" | "ready_partial" | "ready";
   resolutions?: readonly ("pending" | "applied" | "rejected")[];
 };
 
@@ -224,7 +222,7 @@ function seedSql(template: string, seed: Seed): string {
       FROM storyos.proposals WHERE proposal_id = '${template}';
     INSERT INTO storyos.proposal_revisions (owner_user_id, project_id, proposal_id, revision_id,
       generation, validation, closure, candidate_text, base_authoritative_revision_id)
-    SELECT owner_user_id, project_id, '${seed.proposalId}', '${revisionId}', '${seed.generation ?? "ready"}',
+    SELECT owner_user_id, project_id, '${seed.proposalId}', '${revisionId}', 'ready',
       '${seed.validation ?? "valid"}', '${seed.closure ?? "open"}', 'Candidate', base_authoritative_revision_id
       FROM storyos.proposal_revisions WHERE proposal_id = '${template}';
     INSERT INTO storyos.proposal_heads (owner_user_id, project_id, proposal_id, current_revision_id)
@@ -256,7 +254,7 @@ test("listChapterOpenProposals gives the open Proposals of one Chapter in identi
   await seed(opened.proposal_id, [
     { proposalId: seeded(3), resolutions: ["applied", "pending"] },
     { proposalId: seeded(1), validation: "conflicted" },
-    { proposalId: seeded(2), validation: "invalid", generation: "ready_partial" },
+    { proposalId: seeded(2), validation: "invalid" },
     { proposalId: seeded(4), resolutions: ["applied", "applied"] },
     { proposalId: seeded(5), resolutions: ["rejected"] },
     { proposalId: seeded(6), closure: "withdrawn" },

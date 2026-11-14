@@ -80,11 +80,16 @@ function completed(id: string, output: readonly unknown[]): unknown[] {
   ];
 }
 
-/** One response that requests each `[call_id, function name, arguments]` call in order. */
-export function callsReply(id: string, calls: readonly (readonly [string, string, unknown])[]): ModelReply {
-  return () => completed(id, calls.map(([callId, name, args], index) => ({
-    id: `fc_${index}`, type: "function_call", status: "completed", call_id: callId, name, arguments: JSON.stringify(args),
-  })));
+/** One `[call_id, function name, arguments]` function call. */
+export type ModelCall = readonly [string, string, unknown];
+
+/** One response that requests each call in order. A function makes the calls from the request bodies. */
+export function callsReply(id: string,
+  calls: readonly ModelCall[] | ((body: ReceivedBody, earlier: readonly ReceivedBody[]) => readonly ModelCall[])): ModelReply {
+  return (body, earlier) => completed(id, (typeof calls === "function" ? calls(body, earlier) : calls)
+    .map(([callId, name, args], index) => ({
+      id: `fc_${index}`, type: "function_call", status: "completed", call_id: callId, name, arguments: JSON.stringify(args),
+    })));
 }
 
 /** One response that ends with one assistant message of this text. */

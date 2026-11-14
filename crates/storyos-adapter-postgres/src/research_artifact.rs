@@ -11,10 +11,7 @@ use storyos_application::{
 use storyos_contracts::{
     ResearchArtifactInspect, ResearchArtifactLineage, ResearchCitationInspect, ResearchClaimInspect,
 };
-use storyos_core::{
-    CitableSource, CitableSources, CitedSource, DecisionCandidate, ModelOutput, ResearchSynthesis,
-    SourceGapReason,
-};
+use storyos_core::{CitableSource, CitedSource, ResearchSynthesis, SourceGapReason};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -32,14 +29,15 @@ pub(crate) async fn run_sources(
     let rows = client
         .query(
             "SELECT source.tool_call_id::text, source.id::text, source.reason, source.locator,
-                    source.owner_user_id::text, source.project_id::text, source.run_id::text
+                    source.owner_user_id::text, source.project_id::text, source.run_id::text,
+                    source.title
                FROM (SELECT owner_user_id, project_id, run_id, tool_call_id, 0 AS class,
                             entry_position AS position, source_snapshot_id AS id, locator,
-                            NULL::text AS reason
+                            NULL::text AS reason, title
                        FROM storyos.source_snapshots
                      UNION ALL
                      SELECT owner_user_id, project_id, run_id, tool_call_id, 1, gap_position,
-                            source_gap_id, locator, reason
+                            source_gap_id, locator, reason, NULL
                        FROM storyos.source_gaps) AS source
                JOIN storyos.tool_calls AS call
                  USING (owner_user_id, project_id, tool_call_id)
@@ -69,6 +67,7 @@ pub(crate) async fn run_sources(
                     id: row.get(/*idx*/ 1),
                     cited,
                     locator: row.get(/*idx*/ 3),
+                    title: row.get(/*idx*/ 7),
                     owner_user_id: row.get(/*idx*/ 4),
                     project_id: row.get(/*idx*/ 5),
                     run_id: row.get(/*idx*/ 6),
@@ -76,48 +75,6 @@ pub(crate) async fn run_sources(
             ))
         })
         .collect()
-}
-
-/// The sources that a synthesis in `output` can cite. Only a synthesis reads them.
-pub(crate) async fn decision_citable(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    output: Option<&ModelOutput>,
-) -> Result<CitableSources, CompleteAgentRunError> {
-    let sources = match output.map(|output| &output.candidate) {
-        Some(DecisionCandidate::ResearchSynthesis { .. }) => run_sources(client, claim)
-            .await?
-            .into_iter()
-            .map(|(_, source)| source)
-            .collect(),
-        Some(
-            DecisionCandidate::Advisory { .. }
-            | DecisionCandidate::ProseChange { .. }
-            | DecisionCandidate::Clarification { .. },
-        )
-        | None => Vec::new(),
-    };
-    Ok(CitableSources {
-        owner_user_id: claim.project_scope.owner_user_id.as_ref().to_owned(),
-        project_id: claim.project_scope.project_id.as_ref().to_owned(),
-        run_id: claim.run_id.clone(),
-        sources,
-    })
-}
-
-/// The Core refusal of a synthesis that made no Decision, as evidence of its Model Attempt.
-pub(crate) fn refusal_evidence(
-    output: Option<&ModelOutput>,
-    citable: &CitableSources,
-) -> Option<serde_json::Value> {
-    let Some(DecisionCandidate::ResearchSynthesis { summary, claims }) =
-        output.map(|output| &output.candidate)
-    else {
-        return None;
-    };
-    storyos_core::validate_research_synthesis(summary, claims, citable)
-        .err()
-        .map(|refusal| serde_json::json!(refusal.as_str()))
 }
 
 /// Writes the one Research Artifact of the selected synthesis Decision `decision_id`.
@@ -212,9 +169,14 @@ pub(crate) async fn proposal_lineage(
                  ON (prior.owner_user_id, prior.project_id) = (run.owner_user_id, run.project_id)
                 AND prior.continuation_binding_id::text =
                     attempt.payload #>> '{continuation,prior_continuation_binding_id}'
-               JOIN storyos.research_artifacts AS artifact
-                 ON (artifact.owner_user_id, artifact.project_id, artifact.model_attempt_id) =
-                    (prior.owner_user_id, prior.project_id, prior.model_attempt_id)
+               -- In the tool loop profile, the closing response of the Run continues the response
+               -- that recorded the Artifact (ADR 0091). A Run records at most one Artifact.
+               CROSS JOIN LATERAL (
+                 SELECT artifact.research_artifact_id FROM storyos.research_artifacts AS artifact
+                  WHERE (artifact.owner_user_id, artifact.project_id, artifact.run_id) =
+                        (prior.owner_user_id, prior.project_id, prior.run_id)
+                    AND artifact.decision_position <= prior.decision_position
+                  ORDER BY artifact.decision_position DESC LIMIT 1) AS artifact
               WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
             &[

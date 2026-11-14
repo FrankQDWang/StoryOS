@@ -3,7 +3,6 @@
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppendProposalGenerationBatch {
     pub scope_matches: bool,
-    pub generation_state: String,
     pub last_applied_stream_seq: u64,
     pub stream_seq: u64,
     pub expected_previous_stream_seq: u64,
@@ -32,7 +31,6 @@ pub enum AppendProposalGenerationBatchResult {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AppendProposalGenerationBatchRefusal {
     WrongScope,
-    GenerationClosed,
     ReservationMismatch,
     StaleHead,
 }
@@ -42,18 +40,13 @@ pub enum AppendProposalGenerationBatchConflict {
     DigestMismatch,
 }
 
-/// Classify one canonical batch against sequence, digest, reservation, and fence state.
+/// Classify one canonical batch against sequence, digest, and reservation state.
 pub fn append_proposal_generation_batch(
     command: &AppendProposalGenerationBatch,
 ) -> AppendProposalGenerationBatchResult {
     if !command.scope_matches {
         return AppendProposalGenerationBatchResult::Refused {
             reason: AppendProposalGenerationBatchRefusal::WrongScope,
-        };
-    }
-    if command.generation_state != "generating" {
-        return AppendProposalGenerationBatchResult::Refused {
-            reason: AppendProposalGenerationBatchRefusal::GenerationClosed,
         };
     }
     if !command.reservation_owns_target {

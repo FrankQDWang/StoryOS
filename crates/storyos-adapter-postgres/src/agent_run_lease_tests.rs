@@ -12,8 +12,7 @@ use tokio_postgres::{Client, NoTls};
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{claim_run, stores};
 use crate::agent_run_retrieval::tests::{adapter, real_run};
-
-const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
 
 /// A Deterministic Test Scheduler. A renewal waits until the test advances one step.
 pub(crate) struct SteppedClock {
@@ -55,7 +54,8 @@ impl GatewayClock for SteppedClock {
 }
 
 /// Serves one streamed Create. It reports the reference, then holds the response until the test
-/// releases it. A dropped release closes the stream with no terminal event.
+/// releases it. A dropped release closes the stream with no terminal event. A released response
+/// ends with a `finish` call, and the closing request gets the final answer.
 async fn held_destination(
     reference: &'static str,
 ) -> (String, oneshot::Receiver<()>, oneshot::Sender<()>) {
@@ -64,16 +64,7 @@ async fn held_destination(
     let (received, received_rx) = oneshot::channel();
     let (release, release_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let mut request = Vec::new();
-        let mut chunk = [0_u8; 4096];
-        while !request
-            .windows(/*size*/ 4)
-            .any(|window| window == b"\r\n\r\n")
-        {
-            let read = stream.read(&mut chunk).await.unwrap();
-            request.extend_from_slice(&chunk[..read]);
-        }
+        let mut stream = accepted(&listener).await;
         let created = format!(
             "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n\
              data: {{\"type\":\"response.created\",\"response\":{{\"id\":\"{reference}\",\
@@ -82,17 +73,31 @@ async fn held_destination(
         stream.write_all(created.as_bytes()).await.unwrap();
         let _ = received.send(());
         if release_rx.await.is_ok() {
-            let completed = format!(
-                "data: {{\"type\":\"response.completed\",\"response\":{{\"id\":\"{reference}\",\
-                 \"status\":\"completed\",\"output\":[{{\"id\":\"msg_01\",\"type\":\"message\",\
-                 \"role\":\"assistant\",\"status\":\"completed\",\"content\":[{{\"type\":\
-                 \"output_text\",\"text\":\"{ADVISORY}\"}}]}}],\"usage\":{{\"input_tokens\":40,\
-                 \"output_tokens\":12}}}}}}\n\n"
-            );
-            stream.write_all(completed.as_bytes()).await.unwrap();
+            let finish = finish_stream(reference);
+            let (_head, events) = finish.split_once("\r\n\r\n").unwrap();
+            stream.write_all(events.as_bytes()).await.unwrap();
+            drop(stream);
+            let mut closing = accepted(&listener).await;
+            let answer = advisory_stream(&format!("{reference}_closing"));
+            closing.write_all(answer.as_bytes()).await.unwrap();
         }
     });
     (base, received_rx, release)
+}
+
+/// The next connection of `listener`, after the head of its request.
+async fn accepted(listener: &tokio::net::TcpListener) -> tokio::net::TcpStream {
+    let (mut stream, _) = listener.accept().await.unwrap();
+    let mut request = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    while !request
+        .windows(/*size*/ 4)
+        .any(|window| window == b"\r\n\r\n")
+    {
+        let read = stream.read(&mut chunk).await.unwrap();
+        request.extend_from_slice(&chunk[..read]);
+    }
+    stream
 }
 
 /// Whether the lease of the Run ends in the future, and its fence token.

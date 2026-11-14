@@ -6,7 +6,7 @@ status: accepted
 
 On 2026-10-03, before Stage 4 execution, the author accepted this decision. It applies to every author-facing view of the Protected Web Client.
 
-After assistance, the author sees the result. For each change, the author sees where the change is, a link that opens that exact passage in the editor, and one plain-language sentence that tells what changed. The author can inspect, edit, Accept, or Reject each Proposal in the editor, as GOAL.md requires.
+After assistance, the author sees each result of the Run, in the order in which the model made them: a Proposal, a Research Artifact, and the final answer text ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 6, amended on 2026-11-13). For each change, the author sees where the change is, a link that opens that exact passage in the editor, and one plain-language sentence that tells what changed. The author can inspect, edit, Accept, or Reject each Proposal in the editor, as GOAL.md requires.
 
 The author is asked only for decisions that the author must make:
 

@@ -15,9 +15,6 @@ use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
 use super::damaged_evidence::{ReplayError, damaged_replay};
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
-};
 use super::support::{
     CommandCall, Route, SequenceError, issued, replayed_outcome, run_without_foreign_keys, stores,
     two_chapter_writer, with_new_request_ids,
@@ -659,101 +656,4 @@ fn compensation_action(receipt_id: &str) -> String {
             SET disposition = 'compensation', compensated_source_sequence = author_action_sequence
           WHERE receipt_id = '{receipt_id}'"
     )
-}
-
-/// Settles the call and replays it once without the preserved Proposal State Axes of its
-/// transition record. The columns are NOT NULL, so the helper drops the constraint for the
-/// replay, then restores the values and the constraint.
-async fn generation_replay_without_preserved_values<
-    C: ProjectCommand<Error: SequenceError> + Clone,
->(
-    store: &PostgresProjectReader,
-    admin: &Client,
-    call: &CommandCall<C>,
-) -> ReplayError {
-    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
-        panic!("the Proposal Generation decision must settle");
-    };
-    let table = "storyos.proposal_generation_transitions";
-    let columns = [
-        "preserved_validation",
-        "preserved_closure",
-        "preserved_operation_resolution",
-    ];
-    let filter = format!("WHERE receipt_id = '{}'", call.envelope.ids.receipt_id);
-    let kept = admin
-        .query_one(
-            &format!("SELECT {} FROM {table} {filter}", columns.join(", ")),
-            &[],
-        )
-        .await
-        .unwrap();
-    let alter = |change: &str| {
-        columns
-            .iter()
-            .map(|column| format!("ALTER TABLE {table} ALTER COLUMN {column} {change};"))
-            .collect::<String>()
-    };
-    let cleared = columns
-        .iter()
-        .map(|column| format!("{column} = NULL"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "{} UPDATE {table} SET {cleared} {filter}",
-            alter("DROP NOT NULL")
-        ),
-    )
-    .await;
-    let retry = with_new_request_ids(call);
-    let replayed = settle_project_command(store, &retry.envelope, &retry.input).await;
-    let restored = columns
-        .iter()
-        .enumerate()
-        .map(|(index, column)| format!("{column} = '{}'", kept.get::<_, String>(index)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "UPDATE {table} SET {restored} {filter}; {}",
-            alter("SET NOT NULL")
-        ),
-    )
-    .await;
-    let Err(error) = replayed else {
-        panic!("a replay without its preserved values must fail");
-    };
-    error.sequence().into()
-}
-
-// The two Proposal Generation decisions came after the capture of the preserved Proposal State
-// Axes, so no record of theirs has the pre-capture form (ADR 0076, replay rule).
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_generation_decision_record_without_its_preserved_values_is_damaged_evidence() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let observed = [
-        generation_replay_without_preserved_values(
-            &store,
-            &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7c60).await,
-        )
-        .await,
-        generation_replay_without_preserved_values(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7c70).await,
-        )
-        .await,
-    ];
-    assert_eq!(
-        observed,
-        [ReplayError::Unavailable, ReplayError::Unavailable]
-    );
 }

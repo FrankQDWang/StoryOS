@@ -8,12 +8,14 @@ use storyos_core::classify_pause_agent_run;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
-use crate::agent_run_control::{FencedStatus, fence_agent_run, lock_agent_run};
+use crate::agent_run_control::{
+    CONTROL_SETTLEMENTS, FencedStatus, fence_agent_run, lock_agent_run,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
     CommandResponse, CommandSpec, CommandWrite, LockedProject, ProjectActionClass, ProjectCommand,
-    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command,
+    ReceiptHeads, ReplayEffect, ZeroReceipt, settle_project_command_after_contention,
 };
 
 impl PostgresProjectReader {
@@ -23,7 +25,7 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &PauseAgentRunInput,
     ) -> Result<PauseAgentRunSettlement, PauseAgentRunError> {
-        settle_project_command(self, envelope, input).await
+        settle_project_command_after_contention(self, envelope, input, CONTROL_SETTLEMENTS).await
     }
 }
 

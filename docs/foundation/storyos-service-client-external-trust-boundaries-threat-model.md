@@ -20,6 +20,8 @@
 
 # Overview
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the Editor Input Fence are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Purpose and evidence discipline
 
 This document is the repository-scoped Foundation threat model for StoryOS. It

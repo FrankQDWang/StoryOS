@@ -58,3 +58,11 @@ When the conditions fail or the allowance is spent, the Run stops with an inspec
 - An unknown continuation Attempt whose response finished and was stored settles without a new Conversation.
 - `getAgentRun` shows the retrieval of the latest Decision position that has one.
 - The successor marker exists at each Decision position where the retrieval subject is recorded, and the successor follows the retrieval as at position 0. `getAgentRun` shows the successor selection of the shown Decision position.
+
+## Amendment 2026-11-13: the finish rule at each RunStep position
+
+[#1460](https://github.com/FrankQDWang/StoryOS/issues/1460) adds this section. It applies the finish rule of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 4 to the recovery of each RunStep of the tool loop profile.
+
+- A complete response that the retrieval or the successor settles gets the `tool_choice` of its RunStep, and the finish rule settles it as a created response. Its calls become ToolCalls, and a refused call is a result. A text before a `finish` call that counted opens the next RunStep, and that response is the prior response of the next RunStep. The text of a closing response is the final answer. A closing response with no text completes the Run with no result, and it holds the continuation binding of the next Run.
+- The successor sends the same request as its predecessor, so a successor of a closing RunStep has `tool_choice: "none"`, and the successor of an ordinary RunStep keeps the `tool_choice` of that RunStep.
+- These rules do not change the bound of section 2: one Retrieve and at most one successor for each interrupted Attempt.

@@ -44,7 +44,6 @@ mod passage_targets;
 mod pause_agent_run;
 mod project_command_challenge;
 mod project_export;
-mod proposal_generation_decision;
 mod public_origin;
 mod readable_export;
 mod reject_proposal_operations;
@@ -57,7 +56,6 @@ mod research_source;
 mod selection_references;
 mod session_bootstrap;
 mod set_current_chapter;
-mod set_project_tool_enablement;
 mod settings;
 mod snapshot;
 mod steer_agent_run;
@@ -109,7 +107,6 @@ use manuscript_tree::get_manuscript_tree;
 use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
 use project_export::{export_project_archive, get_export_operation_query};
-use proposal_generation_decision::{complete_ready_partial_proposal, continue_proposal_generation};
 use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
 };
@@ -120,7 +117,6 @@ use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use research_source::{get_research_artifact, get_research_source, list_research_sources};
 use set_current_chapter::set_current_chapter;
-use set_project_tool_enablement::set_project_tool_enablement;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use steer_agent_run::steer_agent_run;
 use takeover::take_over_project_writer;
@@ -326,13 +322,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             ),
         )
         .route(
-            contracts::SET_PROJECT_TOOL_ENABLEMENT_PATH,
-            routing::on(
-                method_filter(contracts::SET_PROJECT_TOOL_ENABLEMENT_METHOD),
-                set_project_tool_enablement,
-            ),
-        )
-        .route(
             contracts::CREATE_AGENT_RUN_PATH,
             routing::on(
                 method_filter(contracts::CREATE_AGENT_RUN_METHOD),
@@ -401,20 +390,6 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::ACCEPT_PROPOSAL_METHOD),
                 accept_proposal,
-            ),
-        )
-        .route(
-            contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
-            routing::on(
-                method_filter(contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD),
-                complete_ready_partial_proposal,
-            ),
-        )
-        .route(
-            contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
-            routing::on(
-                method_filter(contracts::CONTINUE_PROPOSAL_GENERATION_METHOD),
-                continue_proposal_generation,
             ),
         )
         .route(

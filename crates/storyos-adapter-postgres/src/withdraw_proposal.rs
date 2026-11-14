@@ -14,7 +14,7 @@ use crate::command_sequence::{
     LockedProject, ProfileSequences, ProjectCommand, ReplayEffect, settle_project_command,
     unavailable,
 };
-use crate::proposal_decision::{PreCaptureRecords, decision_classification, decode_decision};
+use crate::proposal_decision::{decision_classification, decode_decision};
 use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
@@ -202,17 +202,12 @@ impl ProjectCommand for WithdrawProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalWithdrawn, ReplayFault> {
-        decode_decision(
-            replay,
-            ("transition", "withdraw"),
-            PreCaptureRecords::Possible,
-            |record| {
-                Ok(ProposalWithdrawn {
-                    preserved_generation: record.preserved(StateAxis::Generation)?,
-                    preserved_validation: record.preserved(StateAxis::Validation)?,
-                    withdrawal_event_id: record.text("withdrawal_event_id")?,
-                })
-            },
-        )
+        decode_decision(replay, ("transition", "withdraw"), |record| {
+            Ok(ProposalWithdrawn {
+                preserved_generation: record.preserved(StateAxis::Generation)?,
+                preserved_validation: record.preserved(StateAxis::Validation)?,
+                withdrawal_event_id: record.text("withdrawal_event_id")?,
+            })
+        })
     }
 }

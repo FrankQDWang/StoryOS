@@ -186,7 +186,6 @@
         "exportHumanReadableManuscript",
         "exportProjectArchive",
         "updateProjectAssistance",
-        "setProjectToolEnablement",
         "createAgentRun",
         "pauseAgentRun",
         "steerAgentRun",

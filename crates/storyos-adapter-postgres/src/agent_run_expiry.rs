@@ -50,6 +50,10 @@ pub(crate) async fn plan_expiry_rebuild(
         assembly_manifest_id,
         ..
     } = run;
+    // A later RunStep continues from a Model Attempt of this Run, not from the prior Run (ADR 0091).
+    if run_has_decision_attempt(client, claim).await? {
+        return Ok(ExpiryAdmission::Dispatch(None));
+    }
     let Some(prior) = load_latest_attempt(client, claim, conversation_id).await? else {
         return Ok(ExpiryAdmission::Dispatch(None));
     };
@@ -281,6 +285,28 @@ struct LatestAttempt {
     payload: String,
     run_id: String,
     run_status: String,
+}
+
+async fn run_has_decision_attempt(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<bool, CompleteAgentRunError> {
+    let row = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.model_attempts
+                             WHERE owner_user_id = $1::text::uuid
+                               AND project_id = $2::text::uuid
+                               AND run_id = $3::text::uuid
+                               AND attempt_role = 'decision')",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(row.get(0))
 }
 
 async fn load_latest_attempt(

@@ -24,13 +24,15 @@ Before this change, a request worked on the Current Chapter. When the author cli
 
   The subset rule of ADR 0061 applies. Text outside these targets is not changeable. A referenced block that a pending Proposal reserves is readable, but not changeable.
 - **Exact text.** The client sends no text. The Host reads the selected text from the base Revision or from the candidate revision. A reference is unavailable when:
-  - Its base is not the current head.
+  - Its base is not the current head. A RunStep after the first moves a Chapter text reference to the current head ([ADR 0085, amendment 2026-11-14](0085-reenter-each-settled-tool-result-through-context-assembly.md#amendment-2026-11-14-a-chapter-head-that-moves-during-the-run)).
   - Its candidate is not pending at the revision of the reference.
   - Its range is reversed or empty, passes the end of the text, or splits a surrogate pair.
 
   An unavailable reference blocks the Context Assembly with `working_target_revision_unavailable`. StoryOS then sends nothing.
 - **Model input.** The request sends each reference with its exact range and its exact text. The Host instructions tell the model the rule. A change replaces all of a block. The text outside the references stays unchanged unless the author request tells otherwise. StoryOS adds no mechanical check of the text outside a reference. The author examines the Proposal and decides.
 - **One Decision.** The reply contract does not change. One reply gives one Agent Decision. The Decision is prose changes of Chapter blocks, or a revision of exactly one referenced candidate, or an answer. A reply that changes a candidate and also another target is not valid, and the current validation refuses it. StoryOS adds no interim behavior and no sentence for a request that asks to change both kinds.
+
+  > Superseded on 2026-11-14 by [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) ([#1463](https://github.com/FrankQDWang/StoryOS/issues/1463)): the reply form is gone. One `propose_edit` call is one change set, and the validation of this bullet applies to one call. A Run can make more than one call.
 - **Candidate revision.** A change of a referenced candidate goes through the current candidate revision path, and its location outcome is `revised`. When steering continues the same Run, the reference moves to the new revision and covers all of the new candidate text.
 - **Steering.** A steering input can also add 1 to 8 references, in the optional field `selection_references` of `steer-agent-run.request.v1`. The field is additive, so a request with no references keeps its schema and its digest.
   - The new references join the references of the Run in their order. A reference that the Run already has does not join again.
@@ -56,3 +58,19 @@ Before this change, a request worked on the Current Chapter. When the author cli
 - Six pull requests deliver the change. The first adds the Chapter text references. The second adds the candidate references and removes the public `proposal_candidate` kind. The third adds the references of a steering input. The fourth, the fifth, and the sixth change the web client.
 - The activity payload of a retained steering input can have the key `selection_references` (migration 0093).
 - [ADR 0071](0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md) amends the One Decision rule and its rejected option. One reply can revise a referenced candidate and grow its Proposal over Joinable Blocks.
+
+## Amendment 2026-11-13: the Host Tool `propose_edit`
+
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), the content of one prose change reply is the arguments of one `propose_edit` call ([#1456](https://github.com/FrankQDWang/StoryOS/issues/1456)). The Decision that holds the call is the Proposal source. The validation of the One Decision rule applies to one call. A call that it refuses is a refused ToolCall, and its result gives the reason. The reply form went in #1463.
+
+## Amendment 2026-11-13: steering at each RunStep position
+
+This clarifies the Steering rules for a Run of more than one RunStep in the tool loop profile ([#1459](https://github.com/FrankQDWang/StoryOS/issues/1459)). The rules for a Run of one RunStep do not change.
+
+- A steering input has the position of the RunStep that reads it: the position after the active RunStep, or after the input before it. That RunStep reads the records of the RunStep before it, also its Tool results.
+- When an input arrives before the active RunStep sends its request, the Run moves to the RunStep of that input, and the active RunStep sends no request. A RunStep that read an input does not do this, so each input gets its request.
+- A RunStep that reads an input is an ordinary RunStep. An earlier `finish` call no longer counts, and its request has `tool_choice: "required"` ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 4). An input counts no new RunSteps, so the limit of 24 holds. No RunStep opens after the last RunStep.
+- When the RunStep that would read an input is the last RunStep, or when no RunStep can open after the active RunStep, `steerAgentRun` retains nothing and gives the `conflicted` answer of a Run that ended. The last RunStep can reply with text only, so it cannot do what the input asks. The Web Client keeps the message with its references and sends it as the next Run of the Conversation after the Run settles ([#1480](https://github.com/FrankQDWang/StoryOS/issues/1480)).
+- Each RunStep moves the candidate references to the revision that the RunStep before it made, with or without an input.
+- Each RunStep after the first also moves the candidate references to the current revision of a candidate that is still pending, for example after an Author Edit during the Run ([ADR 0085, amendment 2026-11-14](0085-reenter-each-settled-tool-result-through-context-assembly.md#amendment-2026-11-14-a-candidate-that-the-author-changes-during-the-run)).
+- After a call that opened a Proposal, the Host refuses each later `propose_edit` call of the Run. A steering input removes this refusal for the RunStep that reads it and for the RunSteps after it.

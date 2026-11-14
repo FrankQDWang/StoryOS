@@ -1,188 +1,85 @@
 //! Derive one scripted Create result from the exact request, with no process memory.
 
-use storyos_application::{CreateRequest, DeclaredTarget};
+use storyos_application::CreateRequest;
 use storyos_core::DeclaredTargetKind;
 use storyos_core::{
-    ADVISORY_TEXT, DecisionCandidate, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
-    STREAM_SECOND_TEXT, StreamItemRole, StreamItemState,
+    ADVISORY_TEXT, NativeStreamItem, OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION,
+    PROSE_CHANGE_TEXT, StreamItemRole, StreamItemState,
 };
 
-use crate::prose_changes::{
-    is_fake_candidate_revision_request, produce_fake_candidate_revision, produce_fake_growth,
-    produce_fake_prose_changes,
-};
+use crate::prose_changes::is_fake_candidate_revision_request;
 
 const CLARIFICATION_QUESTION: &str = "Which wording should stay in this sentence?";
 
-/// The native items and structured output of one fake Create exchange.
+/// The native items of one fake Create exchange.
 pub(crate) struct FakeCreate {
     pub items: Vec<NativeStreamItem>,
-    pub output: Option<ModelOutput>,
 }
 
-pub(crate) fn plan_create(request: &CreateRequest) -> FakeCreate {
-    let mut planned = plan_message(&request.author_message, request.passage_resolution);
-    apply_prose_changes(request, &mut planned);
-    planned
+/// What the fake model does for one author message.
+pub(crate) enum Intent {
+    Advice,
+    /// A prose change with this summary.
+    ProseChange(String),
+    /// A question to the author, which is a final answer text (ADR 0091).
+    Question(String),
 }
 
-fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResolution>) -> FakeCreate {
-    if let Some(resolution) = resolution {
-        return resolved(resolution);
-    }
-    if let Some(scripted) = scripted_plan(author_message) {
-        return scripted;
-    }
-    if author_message.starts_with("Stream this passage:") {
-        return FakeCreate {
-            items: vec![
-                assistant_item("1", StreamItemState::Provisional, STREAM_FIRST_TEXT),
-                assistant_item("2", StreamItemState::Provisional, STREAM_SECOND_TEXT),
-                assistant_item("3", StreamItemState::Complete, PROSE_CHANGE_TEXT),
-            ],
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::ProseChange {
-                    text: PROSE_CHANGE_TEXT.to_owned(),
-                },
-                prose_changes: None,
-            }),
-        };
+fn message_intent(author_message: &str, resolution: Option<OrdinaryPassageResolution>) -> Intent {
+    match resolution {
+        Some(OrdinaryPassageResolution::Resolved) => {
+            return Intent::ProseChange(PROSE_CHANGE_TEXT.to_owned());
+        }
+        Some(OrdinaryPassageResolution::Clarification) => {
+            return Intent::Question(PASSAGE_REFERENCE_QUESTION.to_owned());
+        }
+        None => {}
     }
     if author_message.starts_with("Revise this passage:")
         || author_message.starts_with("Revise these passages")
         || author_message.starts_with("Tighten this paragraph")
     {
-        return complete(
-            DecisionCandidate::ProseChange {
-                text: PROSE_CHANGE_TEXT.to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        );
-    }
-    if author_message.starts_with("Which wording should I keep?") {
-        return complete(
-            DecisionCandidate::Clarification {
-                question: CLARIFICATION_QUESTION.to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        );
-    }
-    complete(
-        DecisionCandidate::Advisory {
-            text: ADVISORY_TEXT.to_owned(),
-        },
-        OutputPhase::FinalAnswer,
-    )
-}
-
-fn resolved(resolution: OrdinaryPassageResolution) -> FakeCreate {
-    match resolution {
-        OrdinaryPassageResolution::Resolved => complete(
-            DecisionCandidate::ProseChange {
-                text: PROSE_CHANGE_TEXT.to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        ),
-        OrdinaryPassageResolution::Clarification => complete(
-            DecisionCandidate::Clarification {
-                question: PASSAGE_REFERENCE_QUESTION.to_owned(),
-            },
-            OutputPhase::FinalAnswer,
-        ),
+        Intent::ProseChange(PROSE_CHANGE_TEXT.to_owned())
+    } else if author_message.starts_with("Which wording should I keep?") {
+        Intent::Question(CLARIFICATION_QUESTION.to_owned())
+    } else {
+        Intent::Advice
     }
 }
 
-fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
+/// The intent of `request`, and whether its changes come from the fake change script. The tool
+/// loop fake calls `propose_edit` for a prose change.
+pub(crate) fn intent(request: &CreateRequest) -> (Intent, bool) {
     let author_message = request.author_message.as_str();
+    let mut intent = message_intent(author_message, request.passage_resolution);
     let candidate = request
         .declared_targets
         .iter()
-        // The last referenced candidate, so that a test can revise a later Operation.
-        .rfind(|target| target.kind == DeclaredTargetKind::PendingCandidate);
-    if candidate.is_some()
+        .any(|target| target.kind == DeclaredTargetKind::PendingCandidate);
+    if candidate
         && is_fake_candidate_revision_request(author_message)
-        && let Some(output) = planned.output.as_mut()
-        && let DecisionCandidate::Advisory { text } = &output.candidate
+        && matches!(intent, Intent::Advice)
     {
-        output.candidate = DecisionCandidate::ProseChange { text: text.clone() };
+        intent = Intent::ProseChange(ADVISORY_TEXT.to_owned());
     }
-    let prose_change = planned
-        .output
-        .as_ref()
-        .is_some_and(|output| matches!(output.candidate, DecisionCandidate::ProseChange { .. }));
-    let produce = match candidate {
-        Some(_) => prose_change,
-        None => {
-            author_message.starts_with("Revise these passages")
-                || (request
-                    .declared_targets
-                    .first()
-                    .is_some_and(|target| target.collection)
-                    && prose_change)
-        }
-    };
-    if !produce {
-        return;
-    }
-    let changes = match candidate {
-        Some(candidate) => {
-            let mut changes = produce_fake_candidate_revision(
-                &[candidate.location()],
-                author_message,
-                &candidate.block_text,
-            );
-            changes.extend(produce_fake_growth(
-                &request.declared_targets,
-                author_message,
-            ));
-            changes
-        }
-        None => produce_fake_prose_changes(
-            &request
+    let prose_change = matches!(intent, Intent::ProseChange(_));
+    let produce = if candidate {
+        prose_change
+    } else {
+        author_message.starts_with("Revise these passages")
+            || (request
                 .declared_targets
-                .iter()
-                .map(DeclaredTarget::location)
-                .collect::<Vec<_>>(),
-            author_message,
-        ),
+                .first()
+                .is_some_and(|target| target.collection)
+                && prose_change)
     };
-    if let Some(item) = planned.items.first_mut() {
-        item.text = Some(storyos_core::canonical_json(&serde_json::json!(changes)));
-        item.summary = Some("host_fake_native_prose_changes".to_owned());
-    }
-    if author_message.ends_with("SCRIPT:incomplete") {
-        planned.output = None;
-        if let Some(item) = planned.items.first_mut() {
-            item.state = StreamItemState::Incomplete;
-        }
-        return;
-    }
-    if let Some(output) = planned.output.as_mut() {
-        if author_message.ends_with("SCRIPT:unselected")
-            && matches!(output.candidate, DecisionCandidate::ProseChange { .. })
-        {
-            output.phase = OutputPhase::Commentary;
-        }
-        output.prose_changes = Some(changes);
-    }
+    (intent, produce)
 }
 
-fn complete(candidate: DecisionCandidate, phase: OutputPhase) -> FakeCreate {
-    let text = match &candidate {
-        DecisionCandidate::Advisory { text }
-        | DecisionCandidate::ProseChange { text }
-        | DecisionCandidate::Clarification { question: text }
-        | DecisionCandidate::ResearchSynthesis { summary: text, .. } => text.clone(),
-    };
+/// One complete assistant text.
+pub(crate) fn complete(text: &str) -> FakeCreate {
     FakeCreate {
-        items: vec![assistant_item("1", StreamItemState::Complete, &text)],
-        output: Some(ModelOutput {
-            phase,
-            candidate,
-            prose_changes: None,
-        }),
+        items: vec![assistant_item("1", StreamItemState::Complete, text)],
     }
 }
 
@@ -205,7 +102,11 @@ pub(crate) fn assistant_item(
     }
 }
 
-fn evidence_item(role: StreamItemRole, state: StreamItemState, summary: &str) -> NativeStreamItem {
+pub(crate) fn evidence_item(
+    role: StreamItemRole,
+    state: StreamItemState,
+    summary: &str,
+) -> NativeStreamItem {
     NativeStreamItem {
         item_id: "1".to_owned(),
         role,
@@ -220,22 +121,15 @@ fn evidence_item(role: StreamItemRole, state: StreamItemState, summary: &str) ->
     }
 }
 
-fn scripted_plan(author_message: &str) -> Option<FakeCreate> {
+/// The scripted outcome of a model response: a stream state, a partial tool call, or a
+/// refusal.
+pub(crate) fn response_outcome(author_message: &str) -> Option<FakeCreate> {
     let state = match author_message {
         "SCRIPT:partial" => StreamItemState::Provisional,
         "SCRIPT:incomplete" => StreamItemState::Incomplete,
         "SCRIPT:failed" => StreamItemState::Failed,
         "SCRIPT:cancelled" => StreamItemState::Cancelled,
         "SCRIPT:unknown" => StreamItemState::Unknown,
-        "SCRIPT:invalid" => StreamItemState::Complete,
-        "SCRIPT:unselected" => {
-            return Some(complete(
-                DecisionCandidate::Advisory {
-                    text: ADVISORY_TEXT.to_owned(),
-                },
-                OutputPhase::Commentary,
-            ));
-        }
         "SCRIPT:tool_partial" => {
             return Some(FakeCreate {
                 items: vec![NativeStreamItem {
@@ -247,7 +141,6 @@ fn scripted_plan(author_message: &str) -> Option<FakeCreate> {
                         "partial_tool_arguments",
                     )
                 }],
-                output: None,
             });
         }
         "SCRIPT:refusal" => {
@@ -260,13 +153,11 @@ fn scripted_plan(author_message: &str) -> Option<FakeCreate> {
                         "host_fake_refusal",
                     )
                 }],
-                output: None,
             });
         }
         _ => return None,
     };
     Some(FakeCreate {
         items: vec![assistant_item("1", state, ADVISORY_TEXT)],
-        output: None,
     })
 }

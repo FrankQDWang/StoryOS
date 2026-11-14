@@ -54,7 +54,9 @@ it.each([
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN, status: "completed",
         decision: { kind: "research_synthesis", decision_id: artifactFixture.artifact.lineage.decision_id,
-          selected: true, research_artifact_id: ARTIFACT, continuation: { kind: "absent" } }, ...recovery });
+          selected: true, research_artifact_id: ARTIFACT, continuation: { kind: "absent" } },
+        results: [{ kind: "research_artifact", decision_id: artifactFixture.artifact.lineage.decision_id,
+          research_artifact_id: ARTIFACT }], ...recovery });
     }
     if (path.endsWith(`/agent-runs/${RUN}/research-sources`)) return jsonResponse({ code: "resource_unavailable" }, 404);
     if (path.endsWith(`/research-artifacts/${ARTIFACT}`)) return jsonResponse({ ...artifactFixture, project_scope: scope });

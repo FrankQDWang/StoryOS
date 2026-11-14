@@ -18,7 +18,7 @@ import {
   sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
-import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, heldWorker, id, inspectRun, prepare, settleHeld,
+import { BINDING, USER_A, admitRun, challenged, drainLeftoverWork, heldWorker, id, inspectFirstRunStep, inspectRun, prepare, settleHeld,
   settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
@@ -35,6 +35,8 @@ function presentAttempt(response: GetAgentRunResponse) {
   return response.model_attempt;
 }
 
+// The lost create, its retrieval, and its successor belong to the first RunStep. The closing RunStep adds one
+// Invocation and one decision Attempt (ADR 0091), so these queries read the first RunStep only.
 async function roles(projectId: string, runId: string) {
   return queryPostgres(`
     SELECT count(DISTINCT model_invocation_id)::text
@@ -43,7 +45,7 @@ async function roles(projectId: string, runId: string) {
         || ' ' || count(*) FILTER (WHERE attempt_role = 'successor')::text
       FROM storyos.model_attempts
      WHERE project_id = '${projectId}'::uuid
-       AND run_id = '${runId}'::uuid;
+       AND run_id = '${runId}'::uuid AND decision_position = 0;
   `);
 }
 
@@ -56,7 +58,7 @@ async function predecessor(projectId: string, runId: string) {
       FROM storyos.model_attempts
      WHERE project_id = '${projectId}'::uuid
        AND run_id = '${runId}'::uuid
-       AND attempt_role = 'decision';
+       AND attempt_role = 'decision' AND decision_position = 0;
   `);
 }
 
@@ -69,9 +71,11 @@ async function requeue(projectId: string, runId: string) {
   `);
 }
 
-function assertClosedSuccessor(found: ReturnType<typeof successor>) {
+// The response of a dispatched successor is the `finish` call of the first RunStep, so it supplies a ToolCall
+// (ADR 0091).
+function assertClosedSuccessor(found: ReturnType<typeof successor>, suppliesToolCall = false) {
   assert.equal(found.successor_settles_predecessor, false);
-  assert.equal(found.supplies_tool_call, false);
+  assert.equal(found.supplies_tool_call, suppliesToolCall);
   assert.equal(found.advances_predecessor_continuation, false);
   assert.equal(found.reuses_changed_context, false);
 }
@@ -85,7 +89,7 @@ test("one successor shares the invocation and a restart does not add another", a
     await settleOnce();
     const first = await inspectRun(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(first);
-    const attempt = presentAttempt(first);
+    const attempt = presentAttempt(await inspectFirstRunStep(started.baseUrl, prepared, created.effect.run_id));
     assert.equal(first.status, "completed");
     assert.equal(first.usage.kind, "unknown");
     assert.equal(first.decision.kind, "advisory");
@@ -102,7 +106,7 @@ test("one successor shares the invocation and a restart does not add another", a
     assert.equal(found.predecessor_usage_kind, "unknown");
     assert.equal(found.predecessor_reservation_released, false);
     assert.equal(found.lookup_unavailable_reason ?? null, null);
-    assertClosedSuccessor(found);
+    assertClosedSuccessor(found, true);
     if (first.original_result_retrieval.kind !== "present") throw new Error("expected retrieval");
     assert.equal(first.original_result_retrieval.disposition, "kept_unknown");
     assert.equal(first.original_result_retrieval.keep_reason, "unknown_result");
@@ -124,7 +128,7 @@ test("one successor shares the invocation and a restart does not add another", a
          AND successor.attempt_role = 'successor'
        WHERE decision.project_id = '${prepared.projectId}'::uuid
          AND decision.run_id = '${created.effect.run_id}'::uuid
-         AND decision.attempt_role = 'decision';
+         AND decision.attempt_role = 'decision' AND decision.decision_position = 0;
     `), "true unknown_create_successor false SCRIPT:successor-once");
     assert.equal(await queryPostgres(`
       SELECT (SELECT count(*)
@@ -391,12 +395,13 @@ test("a late predecessor updates evidence and usage only", async () => {
         && found.predecessor_reservation_released === false;
     });
     const before = successor(held);
-    if (held.decision.kind !== "advisory") throw new Error("expected advisory");
+    // The successor answers the first RunStep with its `finish` call. The final answer comes in the closing RunStep
+    // (ADR 0091).
+    if (held.decision.kind !== "tool_request") throw new Error("expected tool request");
     const decisionId = held.decision.decision_id;
-    assert.equal(held.decision.text, ADVISORY);
     assert.equal(before.disposition, "dispatched");
     assert.equal(before.predecessor_usage_kind, "unknown");
-    assertClosedSuccessor(before);
+    assertClosedSuccessor(before, true);
     assert.equal(await predecessor(prepared.projectId, created.effect.run_id), "none uncertain unknown false");
     assert.equal(await queryPostgres(`
       SELECT coalesce(bool_or(item->>'report' = 'host_fake_late_predecessor'), false)::text
@@ -404,7 +409,7 @@ test("a late predecessor updates evidence and usage only", async () => {
        CROSS JOIN LATERAL jsonb_array_elements(coalesce(payload->'evidence', '[]'::jsonb)) AS item
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.effect.run_id}'::uuid
-         AND attempt_role = 'decision';
+         AND attempt_role = 'decision' AND decision_position = 0;
     `), "false");
     unlinkSync(hold);
     await worker;
@@ -413,13 +418,16 @@ test("a late predecessor updates evidence and usage only", async () => {
     assert.equal(after.status, "completed");
     assert.equal(after.usage.kind, "unknown");
     if (after.decision.kind !== "advisory") throw new Error("expected advisory");
-    assert.equal(after.decision.decision_id, decisionId);
     assert.equal(after.decision.text, ADVISORY);
+    // The late predecessor does not replace the decision of the first RunStep.
+    const firstStep = await inspectFirstRunStep(started.baseUrl, prepared, created.effect.run_id);
+    assert.deepEqual([firstStep.decision.kind, "decision_id" in firstStep.decision ? firstStep.decision.decision_id : null],
+      ["tool_request", decisionId]);
     assert.equal(after.items.every((item) => item.call_id === null), true);
     assert.equal(found.predecessor_usage_kind, "reported");
     assert.equal(found.predecessor_reservation_released, true);
     assert.equal(found.successor_model_attempt_id, before.successor_model_attempt_id);
-    assertClosedSuccessor(found);
+    assertClosedSuccessor(found, true);
     assert.equal(await predecessor(prepared.projectId, created.effect.run_id), "none uncertain reported true");
     assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
     assert.equal(await queryPostgres(`
@@ -428,14 +436,14 @@ test("a late predecessor updates evidence and usage only", async () => {
        CROSS JOIN LATERAL jsonb_array_elements(coalesce(payload->'evidence', '[]'::jsonb)) AS item
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.effect.run_id}'::uuid
-         AND attempt_role = 'decision';
+         AND attempt_role = 'decision' AND decision_position = 0;
     `), "true");
     assert.equal(await queryPostgres(`
       SELECT coalesce(decision_id::text, 'none')
         FROM storyos.model_attempts
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.effect.run_id}'::uuid
-         AND attempt_role = 'decision';
+         AND attempt_role = 'decision' AND decision_position = 0;
     `), "none");
   } finally {
     if (existsSync(hold)) unlinkSync(hold);

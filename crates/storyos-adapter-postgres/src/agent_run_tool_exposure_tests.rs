@@ -2,21 +2,21 @@ use serde_json::json;
 use storyos_adapter_volcengine_responses::AgentPlanExchange;
 use storyos_application::{
     ConversationSelection, DestinationRequest, ModelProviderAdapter, ModelStreamSink,
-    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    SetProjectToolEnablementInput, complete_agent_run,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, complete_agent_run,
 };
 use storyos_core::{
-    DeploymentDestination, EXA_TOOL_REGISTRATION, EnabledTool, ExposureFacts, ModelAdapter,
-    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolEnablement, ToolExposure,
-    ToolRegistrationLifecycle,
+    BoundTool, DeploymentDestination, EXA_TOOL_REGISTRATION, ExposureFacts, ModelAdapter,
+    RESEARCH_TOOL_OFFER, ToolCompatibilityDecision, ToolExposure, ToolRegistrationLifecycle,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::{RuntimeClock, admit_run_in, claim_run, queued_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, real_run, recovery};
-use crate::command_sequence::tests::{SET_PROJECT_TOOL_ENABLEMENT, issued};
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, real_run, recovery, research_run,
+};
 
-const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
+/// The final answer of a closing response.
+const ADVISORY: &str = "Keep it.";
 const ARGUMENTS: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 
 pub(crate) fn sse(events: &[serde_json::Value]) -> String {
@@ -29,7 +29,7 @@ pub(crate) fn sse(events: &[serde_json::Value]) -> String {
     reply
 }
 
-/// A stream that reports `reference` and ends with one complete Advisory.
+/// A stream that reports `reference` and ends with one complete final answer.
 pub(crate) fn advisory_stream(reference: &str) -> String {
     let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
         "status": "completed", "content": [{"type": "output_text", "text": ADVISORY}]});
@@ -41,6 +41,29 @@ pub(crate) fn advisory_stream(reference: &str) -> String {
             "id": reference, "status": "completed", "output": [message],
             "usage": {"input_tokens": 40, "output_tokens": 12}}}),
     ])
+}
+
+/// A stream that reports `reference` and ends with one complete `finish` call.
+pub(crate) fn finish_stream(reference: &str) -> String {
+    let call = json!({"id": "fc_finish", "type": "function_call", "status": "completed",
+        "call_id": format!("call_finish_{reference}"), "name": "finish", "arguments": "{}"});
+    sse(&[
+        json!({"type": "response.created",
+               "response": {"id": reference, "status": "in_progress", "output": []}}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+        json!({"type": "response.completed", "response": {
+            "id": reference, "status": "completed", "output": [call],
+            "usage": {"input_tokens": 40, "output_tokens": 4}}}),
+    ])
+}
+
+/// The two streams of a model that ends its Run: a `finish` call in `reference`, then the
+/// closing Advisory in `reference` with `_closing`.
+pub(crate) fn finish_then_advisory(reference: &str) -> [String; 2] {
+    [
+        finish_stream(reference),
+        advisory_stream(&format!("{reference}_closing")),
+    ]
 }
 
 /// One function call item with `arguments` and `status`.
@@ -81,16 +104,41 @@ pub(crate) fn function_call_stream(reference: &str) -> String {
     ])
 }
 
-/// The Exposure of the research Tool on the current Agent Plan Registration.
+/// The Exposure of the research Tool and the Host Tools on the current Agent Plan Registration.
 fn research_exposure() -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        enabled: &[EnabledTool {
+        bound: &[BoundTool {
             registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
             lifecycle: ToolRegistrationLifecycle::Active,
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
     })
+}
+
+/// The Exposure of the Host Tools alone on the current Agent Plan Registration.
+pub(crate) fn host_exposure() -> ToolExposure {
+    ToolExposure::compute(&ExposureFacts {
+        bound: &[],
+        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+    })
+}
+
+/// The `tools` field of a request body that declares `exposure`.
+fn declared(exposure: &ToolExposure) -> serde_json::Value {
+    json!(
+        exposure
+            .declarations()
+            .iter()
+            .map(|declaration| json!({
+                "type": "function",
+                "name": declaration.name,
+                "description": declaration.description,
+                "parameters": declaration.parameters,
+                "strict": true,
+            }))
+            .collect::<Vec<_>>()
+    )
 }
 
 /// The status and settlement of the Run, and the input mapping, prior binding, Step Snapshot,
@@ -122,18 +170,16 @@ async fn attempt_facts(admin: &Client, run_id: &str) -> [Option<serde_json::Valu
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_settles_the_run() {
+async fn a_bound_tool_is_declared_on_a_new_transport_and_its_function_call_settles_the_run() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![
-        advisory_stream("resp_t1"),
-        function_call_stream("resp_t2"),
-        // The continuation RunStep answers the refused ToolCall.
-        advisory_stream("resp_t3"),
-    ])
-    .await;
+    let mut replies = finish_then_advisory("resp_t1").to_vec();
+    replies.push(function_call_stream("resp_t2"));
+    // The continuation RunStep answers the refused ToolCall.
+    replies.extend(finish_then_advisory("resp_t3"));
+    let (base, served) = destination(replies).await;
     let plan = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: None,
     };
@@ -141,7 +187,8 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &base],
         )
         .await
@@ -150,23 +197,8 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
-    // The author enables the research Tool between the two requests of one Conversation.
-    let call = issued(
-        &store,
-        &scope,
-        0xf71a,
-        &SET_PROJECT_TOOL_ENABLEMENT,
-        SetProjectToolEnablementInput {
-            registration_id: "web_research".to_owned(),
-            requested: ToolEnablement::Enabled,
-            offer: Some(&RESEARCH_TOOL_OFFER),
-        },
-    )
-    .await;
-    store
-        .set_project_tool_enablement(&call.envelope, &call.input)
-        .await
-        .unwrap();
+    // The deployment starts to offer the research destination between the two requests of one
+    // Conversation, so the second createAgentRun binds it.
     let second = admit_run_in(
         &store,
         &scope,
@@ -177,6 +209,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
         ConversationSelection::Existing {
             conversation_id: "018f0000-0000-7001-8000-00000006f716".to_owned(),
         },
+        Some(&RESEARCH_TOOL_OFFER),
     )
     .await;
     let claim = claim_run(&admin, scope, second.clone()).await;
@@ -226,7 +259,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
             vec![
                 Some(json!("none")),
                 Some(serde_json::Value::Null),
-                Some(ToolExposure::empty().snapshot()),
+                Some(host_exposure().snapshot()),
             ],
             Some(json!("completed")),
             None,
@@ -234,7 +267,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
             Some(serde_json::Value::Null),
             Some(exposure.snapshot()),
             json!(declared),
-            json!("auto"),
+            json!("required"),
             None,
             Some(json!([{
                 "item_id": "fc_01",
@@ -249,11 +282,7 @@ async fn an_enabled_tool_is_declared_on_a_new_transport_and_its_function_call_se
                 "native_type": "function_call",
                 "name": "web_search"
             }])),
-            vec![
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-            ],
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 5],
         )
     );
 }
@@ -274,16 +303,14 @@ async fn retrieval_facts(admin: &Client, run_id: &str) -> (Option<String>, Optio
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal() {
+async fn a_retrieved_call_of_an_unexposed_name_is_a_refused_call_and_the_run_continues() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![
-        broken_stream("resp_f73"),
-        stored_function_call("resp_f73"),
-    ])
-    .await;
+    let mut replies = vec![broken_stream("resp_f73"), stored_function_call("resp_f73")];
+    replies.extend(finish_then_advisory("resp_f73b"));
+    let (base, served) = destination(replies).await;
     let (scope, run_id) = real_run(&store, &admin, "f73", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
@@ -299,19 +326,16 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
         ),
         (
             [
-                Some("refused".to_owned()),
-                Some(
-                    r#"{"kind": "execution_refused", "capability": "tool_request_invalid"}"#
-                        .to_owned()
-                ),
+                Some("completed".to_owned()),
                 None,
+                Some("Keep it.".to_owned()),
                 Some("settled".to_owned()),
                 None,
                 Some("true".to_owned()),
-                Some("decision:true,retrieval:true".to_owned()),
+                Some("decision:true,retrieval:true,decision:true,decision:true".to_owned()),
             ],
             (
-                Some("complete_function_request".to_owned()),
+                Some("complete_selected".to_owned()),
                 Some("web_search".to_owned()),
             ),
             // The provisional item of the lost stream stays before the retrieved call.
@@ -343,25 +367,25 @@ async fn a_retrieved_function_request_settles_the_run_with_the_research_refusal(
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_f73 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
     );
 }
 
 /// The real adapter. Before the claim of the first Create that is a successor when `successor`
-/// is set, and that is not a successor when it is not, the author disables the research Tool
-/// with the Command Challenge `suffix`. Each prepared Create keeps its Exposure Snapshot and the
-/// `tools` field of its body.
-pub(crate) struct DisableBeforeClaim<'a> {
-    pub store: &'a crate::PostgresProjectReader,
-    pub scope: &'a storyos_application::ProjectScope,
-    pub suffix: u16,
+/// is set, and that is not a successor when it is not, a Tool Contract Drift quarantines the
+/// research revision. Each prepared Create keeps its Exposure Snapshot and the `tools` field of
+/// its body.
+pub(crate) struct QuarantineBeforeClaim<'a> {
+    pub admin: &'a Client,
     pub successor: bool,
-    pub disabled: std::sync::atomic::AtomicBool,
+    pub quarantined: std::sync::atomic::AtomicBool,
     pub prepared: std::sync::Mutex<Vec<(serde_json::Value, Option<serde_json::Value>)>>,
 }
 
-impl ModelProviderAdapter for DisableBeforeClaim<'_> {
+impl ModelProviderAdapter for QuarantineBeforeClaim<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
     type Prepared = AgentPlanExchange;
 
@@ -380,16 +404,13 @@ impl ModelProviderAdapter for DisableBeforeClaim<'_> {
                 .push((create.tool_exposure.snapshot(), body.get("tools").cloned()));
             if create.successor_of.is_some() == self.successor
                 && !self
-                    .disabled
+                    .quarantined
                     .swap(/*val*/ true, std::sync::atomic::Ordering::Relaxed)
             {
-                crate::agent_run_tool_call::tests::set_research_tool(
-                    self.store,
-                    self.scope,
-                    self.suffix,
-                    ToolEnablement::Disabled,
-                )
-                .await;
+                self.admin
+                    .batch_execute(&crate::agent_run_tool_call::tests::quarantine_statement())
+                    .await
+                    .unwrap();
             }
         }
         Ok(prepared)
@@ -411,27 +432,19 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (base, served) = destination(vec![advisory_stream("resp_f79")]).await;
-    let (scope, run_id) = real_run(&store, &admin, "f79", &base).await;
-    crate::agent_run_tool_call::tests::set_research_tool(
-        &store,
-        &scope,
-        0xf79a,
-        ToolEnablement::Enabled,
-    )
-    .await;
+    let (base, served) = destination(finish_then_advisory("resp_f79").to_vec()).await;
+    let (scope, run_id) = research_run(&store, &admin, "f79", &base).await;
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let route = DisableBeforeClaim {
-        store: &store,
-        scope: &scope,
-        suffix: 0xf79b,
+    let route = QuarantineBeforeClaim {
+        admin: &admin,
         successor: false,
-        disabled: std::sync::atomic::AtomicBool::new(/*v*/ false),
+        quarantined: std::sync::atomic::AtomicBool::new(/*v*/ false),
         prepared: std::sync::Mutex::new(Vec::new()),
     };
     complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
+    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
     let attempts: i64 = admin
         .query_one(
             "SELECT count(*) FROM storyos.model_attempts WHERE run_id = $1::text::uuid",
@@ -456,27 +469,16 @@ async fn an_exposure_change_before_the_claim_sends_the_request_again_with_the_cu
             vec![
                 (
                     research_exposure().snapshot(),
-                    Some(json!(
-                        research_exposure()
-                            .declarations()
-                            .iter()
-                            .map(|declaration| json!({
-                                "type": "function",
-                                "name": declaration.name,
-                                "description": declaration.description,
-                                "parameters": declaration.parameters,
-                                "strict": true,
-                            }))
-                            .collect::<Vec<_>>()
-                    )),
+                    Some(declared(&research_exposure()))
                 ),
-                (ToolExposure::empty().snapshot(), None),
+                (host_exposure().snapshot(), Some(declared(&host_exposure()))),
+                (host_exposure().snapshot(), Some(declared(&host_exposure()))),
             ],
-            1,
+            2,
             Some(json!("completed")),
-            Some(ToolExposure::empty().snapshot()),
-            None,
-            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
+            Some(host_exposure().snapshot()),
+            Some(declared(&host_exposure())),
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned(); 2],
         )
     );
 }

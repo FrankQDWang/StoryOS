@@ -31,7 +31,7 @@ pub(crate) async fn load(
             AND proposal.chapter_id=$3::text::uuid AND proposal.proposal_id=$4::text::uuid
             AND operation.operation_id=$5::text::uuid AND head.current_revision_id=$6::text::uuid
             AND proposal.kind = 'block_edit' AND revision.closure='open'
-            AND revision.generation IN ('ready','ready_partial')
+            AND revision.generation = 'ready'
             AND operation.resolution='pending' AND operation.reservation_state='unresolved'
             AND operation.candidate_blocks IS NULL AND revision.candidate_blocks IS NULL
             AND NOT EXISTS (SELECT 1 FROM storyos.chapter_removal_decisions AS removal

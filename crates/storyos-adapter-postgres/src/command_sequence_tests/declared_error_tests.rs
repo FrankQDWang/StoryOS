@@ -16,15 +16,12 @@ use crate::set_current_chapter_authority_tests::open_session;
 use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
 use super::project_session::{
-    TAKE_OVER_PROJECT_WRITER, set_project_tool_enablement_call, take_over_project_writer,
-    take_over_project_writer_call, update_project_assistance_call, update_project_call,
+    TAKE_OVER_PROJECT_WRITER, take_over_project_writer, take_over_project_writer_call,
+    update_project_assistance_call, update_project_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
-};
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
 use super::rollback::{Failing, FailurePoint, UnchallengedKind, WrappedSpec};
 use super::steer_agent_run::steer_agent_run_call;
@@ -204,11 +201,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         .await,
         declared_errors(
             &store,
-            &set_project_tool_enablement_call(&store, /*base*/ 0xb570).await,
-        )
-        .await,
-        declared_errors(
-            &store,
             &take_over_project_writer_call(&store, /*base*/ 0x93a0).await,
         )
         .await,
@@ -241,16 +233,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
         declared_errors(
             &store,
             &withdraw_proposal_call(&store, &admin, /*base*/ 0x9400).await,
-        )
-        .await,
-        declared_errors(
-            &store,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9410).await,
-        )
-        .await,
-        declared_errors(
-            &store,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9420).await,
         )
         .await,
         declared_errors(
@@ -311,11 +293,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             None,
             "invalid_challenge",
         ),
-        (
-            CommandKind::SetProjectToolEnablement,
-            None,
-            "invalid_challenge",
-        ),
         (CommandKind::TakeOverProjectWriter, None, "binding_conflict"),
         (
             CommandKind::ReopenWithdrawnProposal,
@@ -339,16 +316,6 @@ async fn every_command_returns_its_declared_contention_and_missing_admission_err
             "invalid_challenge",
         ),
         (CommandKind::WithdrawProposal, None, "invalid_challenge"),
-        (
-            CommandKind::CompleteReadyPartialProposal,
-            None,
-            "invalid_challenge",
-        ),
-        (
-            CommandKind::ContinueProposalGeneration,
-            None,
-            "invalid_challenge",
-        ),
         (CommandKind::PauseAgentRun, None, "invalid_challenge"),
         (CommandKind::CancelAgentRun, None, "invalid_challenge"),
         (

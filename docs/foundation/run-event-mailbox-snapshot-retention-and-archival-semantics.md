@@ -20,6 +20,8 @@
 - Author-view boundary: [ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)
 - Decisions: [ADR 0008](../adr/0008-allow-policy-governed-post-seal-operational-compaction.md), [ADR 0009](../adr/0009-require-snapshot-resync-at-replay-generation-boundaries.md), [ADR 0010](../adr/0010-require-lifecycle-proof-before-recovery-visibility.md), and [ADR 0011](../adr/0011-require-explicit-project-deletion-settlement.md)
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the input fence and the proposal pause fence records are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Purpose and authority
 
 This specification defines the project-local lifecycle that bounds Run and

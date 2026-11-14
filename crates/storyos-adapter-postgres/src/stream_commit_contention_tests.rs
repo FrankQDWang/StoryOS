@@ -75,13 +75,13 @@ async fn a_stream_commit_beside_the_work_of_another_run_commits() {
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, streaming) =
-        queued_run(&store, "5c1", DeploymentDestination::HostFake).await;
+        queued_run(&store, "5c1", DeploymentDestination::HostFakeToolLoop).await;
     let other = admit_run(
         &store,
         &scope,
         &chapter_id,
         "5c2",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "Cancel this run.",
     )
     .await;

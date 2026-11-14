@@ -155,7 +155,11 @@ test.each(["grow_unjoinable", "grow_gap"])("a %s reply is refused and the Propos
   const before = await openProposal(started, seeded, id(`${ns}61`));
   const { run } = await request(started, seeded, `make these lines one tight scene. SCRIPT:${script}`, id(`${ns}71`),
     [candidateTextReference(before), chapterReference(seeded.chapter, [1, 0], [2, 4])]);
-  assert.deepEqual(run.decision, { kind: "absent" });
+  // The Host refuses the `propose_edit` call and returns the reason to the model. The Run ends with the final text as
+  // advice (ADR 0091).
+  assert.equal(run.decision.kind, "advisory");
+  assert.equal(await queryPostgres(`SELECT string_agg(state || ':' || coalesce(refusal, ''), ' ') FROM storyos.tool_calls
+    WHERE run_id = '${run.run_id}'::uuid AND function_name = 'propose_edit';`), "refused:change_shape");
   assert.deepEqual(await readProposal(started, seeded, before.proposal_id), before);
   assert.equal(await revisions(before.proposal_id), "1 none");
   assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");

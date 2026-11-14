@@ -130,7 +130,11 @@ pub fn capture_research_sources(
 ) -> ResearchCapture {
     let requested: &[String] = match intake {
         ToolIntake::WebFetch { urls } => urls,
-        ToolIntake::WebSearch { .. } => &[],
+        ToolIntake::WebSearch { .. }
+        | ToolIntake::Finish
+        | ToolIntake::ProposeEdit(_)
+        | ToolIntake::SubmitResearch { .. }
+        | ToolIntake::ReadToolResult { .. } => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {

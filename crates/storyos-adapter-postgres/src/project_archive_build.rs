@@ -114,7 +114,6 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "editor_session_base_snapshots",
         "canonical/editor_session_base_snapshots.json",
     ),
-    ("editor_input_fences", "canonical/editor_input_fences.json"),
     ("editor_sessions", "canonical/editor_sessions.json"),
     (
         "external_contract_compatibility_decisions",
@@ -186,10 +185,6 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("project_snapshots", "canonical/project_snapshots.json"),
     (
-        "project_tool_enablements",
-        "canonical/project_tool_enablements.json",
-    ),
-    (
         "project_writer_generations",
         "canonical/project_writer_generations.json",
     ),
@@ -201,10 +196,6 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     (
         "proposal_generation_heads",
         "canonical/proposal_generation_heads.json",
-    ),
-    (
-        "proposal_generation_transitions",
-        "canonical/proposal_generation_transitions.json",
     ),
     ("proposal_heads", "canonical/proposal_heads.json"),
     ("proposal_operations", "canonical/proposal_operations.json"),
@@ -228,10 +219,6 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     (
         "proposal_rejection_receipts",
         "canonical/proposal_rejection_receipts.json",
-    ),
-    (
-        "proposal_pause_fences",
-        "canonical/proposal_pause_fences.json",
     ),
     ("proposal_revisions", "canonical/proposal_revisions.json"),
     (

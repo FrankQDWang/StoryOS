@@ -14,7 +14,7 @@ pub const EXA_ACCOUNT_BOUNDARY: &str =
     "The Exa account of the deployment operator that holds the Exa API key";
 
 /// The research destination that a deployment offers with its model destination: the
-/// Registration and the Project-scoped facts that Project Tool Enablement records (ADR 0083).
+/// Registration and the Project-scoped facts that `createAgentRun` records (ADR 0090).
 #[derive(Debug, Eq, PartialEq)]
 pub struct ResearchToolOffer {
     pub registration: &'static ToolRegistration,

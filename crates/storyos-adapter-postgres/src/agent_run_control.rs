@@ -9,6 +9,9 @@ use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
 
+/// The most settlements of one control command that loses a serialization race with the Worker.
+pub(crate) const CONTROL_SETTLEMENTS: usize = 3;
+
 /// The AgentRun row that a control command locked.
 pub(crate) struct LockedAgentRun {
     pub lifecycle: AgentRunStatus,
@@ -94,3 +97,7 @@ pub(crate) async fn fence_agent_run(
         .get::<_, i64>(/*idx*/ 0);
     u64::try_from(fence_generation).map_err(unavailable)
 }
+
+#[cfg(test)]
+#[path = "agent_run_control_race_tests.rs"]
+mod race_tests;

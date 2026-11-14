@@ -18,6 +18,8 @@ pub struct CitableSource {
     pub id: String,
     pub cited: CitedSource,
     pub locator: String,
+    /// The title of a Snapshot, when the result gave one.
+    pub title: Option<String>,
     pub owner_user_id: String,
     pub project_id: String,
     pub run_id: String,
@@ -177,10 +179,6 @@ impl ResearchSynthesis {
         format!("sha256:{}", crate::hex_sha256(content.as_bytes()))
     }
 }
-
-/// The sentence of the Host instructions that tells the model how to cite.
-pub const CITABLE_SOURCES_INSTRUCTION: &str = "A tool_sources tag after a tool_result lists the \
-id of each source and each gap of that result. A gap is a requested page that is not available.";
 
 /// The citable identities of one ToolCall output, as data in their own tag after the result
 /// boundary. The Host made each identity, so the model can copy it exactly. A ToolCall with no

@@ -34,6 +34,8 @@ it.each([
       predecessor_fenced: false, allowance_consumed: false } }, NO_RESULT],
   ["a successor with no result", { status: "completed", original_result_retrieval: retrieval,
     unknown_create_successor: successor("dispatched") }, NO_RESULT],
+  // A closing response with no text gives the Run no result (ADR 0091).
+  ["a completed Run with no result", { status: "completed" }, NO_RESULT],
   ["a request after one with no result", { status: "refused",
     decision: { kind: "execution_refused", capability: "expiry_rebuild_unknown_create" } },
   "上一条请求还没有结果，请开始新对话。"],
@@ -46,10 +48,7 @@ it.each([
   ["a research request that no Tool can execute now", { status: "refused",
     decision: { kind: "execution_refused", capability: "research_tool_unavailable" } },
   "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。"],
-  ["a research request that StoryOS could not accept while research is enabled", { status: "refused",
-    decision: { kind: "execution_refused", capability: "tool_request_invalid" } },
-  "模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。", "enabled"],
-])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence, researchTool = "disabled") => {
+])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
@@ -59,7 +58,7 @@ it.each([
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     if (path.endsWith("/assistance")) {
-      return jsonResponse({ ...assistanceFixture, project_scope: scope, research_tool: researchTool });
+      return jsonResponse({ ...assistanceFixture, project_scope: scope });
     }
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN,
@@ -93,7 +92,8 @@ it.each([
 
     expect({
       result,
-      researchTool: host.querySelector("[data-research-tool]")?.getAttribute("data-research-tool") ?? null,
+      // The panel has no research control: research needs no switch (ADR 0090).
+      researchControl: host.querySelector("[data-research-tool]") !== null,
       // No stopped request tells the author that research is not open (#1426).
       saysResearchNotOpen: result?.includes("没有开放") ?? null,
       runStatus: host.querySelector("[data-assistant-run-status]")?.textContent ?? null,
@@ -102,7 +102,7 @@ it.each([
       pendingRefreshes,
     }).toEqual({
       result: sentence,
-      researchTool,
+      researchControl: false,
       saysResearchNotOpen: false,
       runStatus: null,
       newConversationEnabled: true,

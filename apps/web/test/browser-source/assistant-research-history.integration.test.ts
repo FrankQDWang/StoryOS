@@ -17,7 +17,9 @@ const time = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: 
 function synthesisRun(runId: string, researchArtifactId: string) {
   return { ...agentRunFixture, project_scope: scope, run_id: runId, status: "completed",
     decision: { kind: "research_synthesis", decision_id: artifactFixture.artifact.lineage.decision_id,
-      selected: true, research_artifact_id: researchArtifactId, continuation: { kind: "absent" } } };
+      selected: true, research_artifact_id: researchArtifactId, continuation: { kind: "absent" } },
+    results: [{ kind: "research_artifact", decision_id: artifactFixture.artifact.lineage.decision_id,
+      research_artifact_id: researchArtifactId }] };
 }
 
 /** Stores a history exchange of the settled Run `earlier` before the current Run `current`. */
@@ -172,7 +174,9 @@ it("shows only the result sentence for an earlier research turn whose Artifact r
   const earlier = synthesisRun("018f0000-0000-7001-8000-000000000f05", "018f0000-0000-7001-8000-000000000f06");
   const current = { ...agentRunFixture, project_scope: scope, run_id: "018f0000-0000-7001-8000-000000000f07",
     status: "completed", decision: { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000f08",
-      selected: true, text: "The tide tables are in the port archive.", continuation: { kind: "absent" } } };
+      selected: true, text: "The tide tables are in the port archive.", continuation: { kind: "absent" } },
+    results: [{ kind: "answer", decision_id: "018f0000-0000-7001-8000-000000000f08",
+      text: "The tide tables are in the port archive." }] };
   storeConversation(earlier, current.run_id, "f2");
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;

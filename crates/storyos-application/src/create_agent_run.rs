@@ -25,6 +25,9 @@ pub struct CreateAgentRunInput {
     /// The destination of the deployment, from Host configuration. The Run binds it. `None`
     /// refuses a first use, and an exact retry still replays its acknowledgement.
     pub destination: Option<storyos_core::DeploymentDestination>,
+    /// The research destination of the deployment, from Host configuration. The Project gets
+    /// its current research records before the Run is admitted (ADR 0090). `None` offers none.
+    pub research: Option<&'static storyos_core::ResearchToolOffer>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,8 +84,11 @@ pub struct AgentRunRecord {
     pub steering_inputs: Vec<AgentRunSteeringInspect>,
     pub context: AgentRunContext,
     pub decision: AgentRunDecisionInspect,
+    /// Each result of the Run in the order in which the model made it. Only the Run read has it.
+    pub results: Option<Vec<storyos_contracts::AgentRunResultInspect>>,
     pub model: Option<AgentRunModelInspect>,
-    pub active_compaction: Option<ActiveCompactionInspect>,
+    /// Each compaction record of the Run, in RunStep order (ADR 0093).
+    pub compactions: Vec<ActiveCompactionInspect>,
     pub reference_recovery: Option<ReferenceRecoveryInspect>,
     pub original_result_retrieval: Option<OriginalResultRetrievalInspect>,
     pub unknown_create_successor: Option<UnknownCreateSuccessorInspect>,
@@ -138,6 +144,10 @@ pub struct ActiveCompactionInspect {
     pub installed_model_attempt_id: Option<String>,
     pub preserved_item_ids: Vec<String>,
     pub admission: AgentRunContinuationAdmission,
+    /// Each ToolCall whose result the later request sends as a stub (ADR 0093).
+    pub stub_tool_call_ids: Vec<String>,
+    /// Each earlier author message that the later request sends (ADR 0093).
+    pub kept_author_message_ids: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -251,13 +261,6 @@ pub enum AgentRunDecisionInspect {
         locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
         continuation_binding_id: Option<String>,
         opened_proposal_id: Option<String>,
-    },
-    Clarification {
-        decision_id: String,
-        selected: bool,
-        question: String,
-        required_reply: String,
-        continuation_binding_id: Option<String>,
     },
     ToolRequest {
         decision_id: String,

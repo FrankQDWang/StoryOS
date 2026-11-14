@@ -267,11 +267,6 @@ const NON_PUBLIC_OPERATIONS: &[NonPublic] = &[
         reason: "AgentRunDecision producer; internal Proposal generation contract, not a browser-selected public route.",
     },
     NonPublic {
-        name: "PauseProposalGeneration",
-        source: Owner::Core,
-        reason: "EditorInputFence safety transition; internal coordination, not the explicit ContinueProposalGeneration route.",
-    },
-    NonPublic {
         name: "ValidateProposal",
         source: Owner::Core,
         reason: "Validation attempt is an internal Core/producer operation; its ValidationReceipt is exposed through Proposal/Receipt queries and Project Activity.",

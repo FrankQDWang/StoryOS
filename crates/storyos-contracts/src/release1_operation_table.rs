@@ -37,8 +37,6 @@ mod research_source_rows;
 mod run_control_rows;
 #[path = "release1_operation_rows_stream.rs"]
 mod stream_rows;
-#[path = "release1_operation_rows_tool_enablement.rs"]
-mod tool_enablement_rows;
 #[path = "release1_operation_rows_volume.rs"]
 mod volume_rows;
 
@@ -336,7 +334,6 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &project_settings_rows::UPDATE_PROJECT_ROW,
     &project_settings_rows::GET_PROJECT_ASSISTANCE_ROW,
     &project_settings_rows::UPDATE_PROJECT_ASSISTANCE_ROW,
-    &tool_enablement_rows::SET_PROJECT_TOOL_ENABLEMENT_ROW,
     &editor_session_rows::CREATE_EDITOR_SESSION_ROW,
     &editor_session_rows::GET_EDITOR_SESSION_ROW,
     &editor_session_rows::TAKE_OVER_PROJECT_WRITER_ROW,
@@ -354,8 +351,6 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &proposal_recovery_rows::REPLAN_PROPOSAL_ROW,
     &proposal_recovery_rows::REOPEN_WITHDRAWN_PROPOSAL_ROW,
     &proposal_recovery_rows::REOPEN_REJECTED_OPERATIONS_ROW,
-    &generation_rows::COMPLETE_READY_PARTIAL_PROPOSAL_ROW,
-    &generation_rows::CONTINUE_PROPOSAL_GENERATION_ROW,
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,

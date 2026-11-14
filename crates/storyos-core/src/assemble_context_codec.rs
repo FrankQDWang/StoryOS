@@ -55,6 +55,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
         payload["operation_requirement"]["cause"] = serde_json::json!("tool_result_continuation");
         payload["operation_requirement"]["tool_results"] = serde_json::json!(sources);
     }
+    if let Some(sources) = &record.operation_requirement.earlier_author_messages {
+        payload["operation_requirement"]["earlier_author_messages"] = serde_json::json!(sources);
+    }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
             "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
@@ -138,6 +141,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .ok()?,
             tool_results: requirement
                 .get("tool_results")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
+            earlier_author_messages: requirement
+                .get("earlier_author_messages")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,
@@ -293,6 +301,7 @@ fn encode_selected(source: &SelectedProjection) -> serde_json::Value {
             ProjectionMode::ExactRequired => "exact_required",
             ProjectionMode::DerivedSummary => "derived_summary",
             ProjectionMode::DeterministicExcerpt => "deterministic_excerpt",
+            ProjectionMode::ToolResultStub => "tool_result_stub",
         },
         "token_count": source.token_count,
         "content": source.content,
@@ -307,6 +316,7 @@ fn decode_selected(value: &serde_json::Value) -> Option<SelectedProjection> {
             "exact_required" => ProjectionMode::ExactRequired,
             "derived_summary" => ProjectionMode::DerivedSummary,
             "deterministic_excerpt" => ProjectionMode::DeterministicExcerpt,
+            "tool_result_stub" => ProjectionMode::ToolResultStub,
             _ => return None,
         },
         token_count: value.get("token_count")?.as_u64()?,

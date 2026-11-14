@@ -2,6 +2,19 @@
 
 const FULL_CONTINUATION_INPUT_PREFIX: &str = "Submit the complete current request.";
 
+/// Whether the prior response of an incremental continuation read the current input of the
+/// request: the selected Context text, the declared targets, the selection references, and the
+/// passage input (ADR 0085).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PriorInput {
+    /// The prior response read the current input, or the request sends no prior response.
+    Current,
+    /// The current input changed after the prior response read it. The incremental request sends
+    /// the current input again before the Tool outputs, and the input says that it replaces the
+    /// earlier input.
+    Replaced,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContinuationInputMapping {
     None,
@@ -35,10 +48,6 @@ pub struct ContinuationMappingInput {
     pub mapping_can_represent: bool,
     /// The destination confirmed that the prior reference expired or is unusable.
     pub prior_reference_unusable: bool,
-    /// The input of a Tool result continuation, other than its Tool results, differs from the
-    /// input that the prior response read: for example, the author edited the Chapter during the
-    /// Tool exchange (ADR 0085).
-    pub current_input_changed: bool,
 }
 
 /// Ordinary author text can use a delta plus an eligible prior reference.
@@ -59,12 +68,10 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     {
         return ContinuationInputMapping::NewTransport;
     }
-    // An incremental request sends only the new items, so it needs a usable prior reference that
-    // holds the current input. Otherwise the request sends the full input (ADR 0033).
-    if input.mapping_can_represent
-        && !input.prior_reference_unusable
-        && !input.current_input_changed
-    {
+    // An incremental request sends only the new items, so it needs a usable prior reference.
+    // Otherwise the request sends the full input (ADR 0033). A changed current input is a new
+    // item of an incremental request (ADR 0085).
+    if input.mapping_can_represent && !input.prior_reference_unusable {
         ContinuationInputMapping::Incremental
     } else {
         ContinuationInputMapping::Full

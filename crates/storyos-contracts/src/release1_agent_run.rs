@@ -217,6 +217,7 @@ pub enum ProjectionMode {
     ExactRequired,
     DerivedSummary,
     DeterministicExcerpt,
+    ToolResultStub,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -463,13 +464,6 @@ pub enum OptionalDecisionInspect {
         authoritative: bool,
         opened_proposal: OptionalOpenedProposalInspect,
     },
-    Clarification {
-        decision_id: String,
-        selected: bool,
-        question: String,
-        required_reply: String,
-        continuation: OptionalContinuationInspect,
-    },
     /// A function request Decision: one entry for each ToolCall in item order (ADR 0040).
     ToolRequest {
         decision_id: String,
@@ -482,6 +476,26 @@ pub enum OptionalDecisionInspect {
         research_artifact_id: String,
         continuation: OptionalContinuationInspect,
     },
+}
+
+/// One result of a Run (ADR 0091 section 6).
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AgentRunResultInspect {
+    /// The Proposal that one `propose_edit` call opened, revised, or grew, with its locations.
+    Proposal {
+        decision_id: String,
+        proposal_id: String,
+        locations: Vec<ProseChangeLocationInspect>,
+    },
+    /// The Research Artifact that a `submit_research` call recorded. `getResearchArtifact` reads
+    /// it.
+    ResearchArtifact {
+        decision_id: String,
+        research_artifact_id: String,
+    },
+    /// The final answer text of a completed Run. A final answer with no text is no result.
+    Answer { decision_id: String, text: String },
 }
 
 /// What one ToolCall asked for, from its validated arguments, and how it settled.
@@ -616,6 +630,10 @@ pub enum OptionalActiveCompactionInspect {
         installed: OptionalCompactionInstallInspect,
         preserved_item_ids: Vec<String>,
         admission: ContinuationAdmissionInspect,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stub_tool_call_ids: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kept_author_message_ids: Option<Vec<String>>,
     },
 }
 
@@ -802,9 +820,24 @@ pub struct GetAgentRunResponse {
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContextInspect,
+    // In the Run read, the Host derives one kind from `results` for a client that reads one
+    // kind: the last Proposal gives `prose_change`, else a Research Artifact gives
+    // `research_synthesis`, else it is the Decision of the active RunStep or the refusal of the Run.
+    // In a read of one Model Attempt, it is the Decision of that RunStep (ADR 0091 section 6).
     pub decision: OptionalDecisionInspect,
+    // Only the Run read has it: each result of the Run, in the order in which the model made
+    // it. No result replaces another (ADR 0091 section 6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub results: Option<Vec<AgentRunResultInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
+    // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,
+    // Each compaction record of the Run in RunStep order, or no field when the Run has none
+    // (ADR 0093). Each item is `present`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compactions: Option<Vec<OptionalActiveCompactionInspect>>,
     pub reference_recovery: OptionalReferenceRecoveryInspect,
     pub original_result_retrieval: OptionalOriginalResultRetrievalInspect,
     pub unknown_create_successor: OptionalUnknownCreateSuccessorInspect,

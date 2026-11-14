@@ -116,10 +116,9 @@ pub const AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE: ModelCapabilityProfile
         combinations: AGENT_PLAN_CAPABILITY_PROFILE.combinations,
     };
 
-/// The current Agent Plan Registration: the qualified dated version with qualified function
-/// calling. Nothing is pending, so the link authorizes no probe. An ordinary AgentRun sends no
-/// Tool.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The qualified dated version with qualified function calling and the reply form mapping `v4`.
+/// An AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_FUNCTION_CALLING_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa17",
     capability_profile: &AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
     ..AGENT_PLAN_PINNED_VERSION_REGISTRATION

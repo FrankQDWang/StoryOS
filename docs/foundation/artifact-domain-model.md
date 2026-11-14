@@ -11,6 +11,8 @@
 - Operational lifecycle refinement: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
 - Ownership and deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the generation values `generating` and `ready_partial`, the pause of an Agent generation by author input, and the `EditorInputFence` are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Purpose
 
 This specification defines the durable domain language shared by the StoryOS editor, Agent Kernel, Tools, Skills, MCP integrations, transcript, and any future observation surface. It establishes:

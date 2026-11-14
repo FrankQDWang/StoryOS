@@ -2,7 +2,8 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DestinationRequest,
-    DispatchClaim, ModelUsage, Observation, RequestAttempt, WirePayloadProjection,
+    DispatchClaim, ModelUsage, Observation, RequestAttempt, ToolOutput, ToolOutputOrigin,
+    WirePayloadProjection,
 };
 use storyos_core::{
     AssistanceAvailability, SummaryObservation, compaction_assembly_record, encode_assembly_record,
@@ -14,26 +15,33 @@ use super::{load_chain_source, unavailable, work_error, write};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
-/// The summary Attempt of the claimed AgentRun, and the prior response reference that it sent.
+/// The summary Attempt of the claimed AgentRun, the prior response reference that it sent, and
+/// the prior Model Attempt of that reference.
 pub(crate) struct SummaryAttempt {
     pub model_attempt_id: String,
     pub prior_reference: Option<String>,
+    pub prior_model_attempt_id: Option<String>,
 }
 
+/// The summary Attempt of the RunStep at `decision_position` of the claimed AgentRun.
 pub(crate) async fn load_summary_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference'
+            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference',
+                    payload->'wire'->>'prior_model_attempt_id'
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND attempt_role = 'compaction'",
+                AND run_id = $3::text::uuid AND attempt_role = 'compaction'
+                AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_position,
             ],
         )
         .await
@@ -41,6 +49,7 @@ pub(crate) async fn load_summary_attempt(
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
         prior_reference: row.get(/*idx*/ 1),
+        prior_model_attempt_id: row.get(/*idx*/ 2),
     }))
 }
 
@@ -51,6 +60,10 @@ pub(crate) struct PriorChain {
     pub reference: Option<String>,
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub reported_tokens: Option<u64>,
+    /// The Decision of the prior response, whose calls the request answers.
+    pub decision_id: Option<String>,
+    /// Whether the prior response read the current input of the request.
+    pub prior_input: storyos_application::PriorInput,
 }
 
 /// The prior binding that the current continuation decision selects, or `None` when the decision
@@ -84,7 +97,8 @@ pub(crate) async fn prior_chain(
             "SELECT model_attempt_id::text, payload->>'response_reference',
                     CASE WHEN payload->'usage'->>'kind' = 'reported'
                          THEN ((payload->'usage'->>'input_tokens')::bigint
-                               + (payload->'usage'->>'output_tokens')::bigint)::text END
+                               + (payload->'usage'->>'output_tokens')::bigint)::text END,
+                    decision_id::text
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND continuation_binding_id = $3::text::uuid",
@@ -102,17 +116,27 @@ pub(crate) async fn prior_chain(
         reported_tokens: row
             .get::<_, Option<String>>(/*idx*/ 2)
             .and_then(|tokens| tokens.parse().ok()),
+        decision_id: row.get(/*idx*/ 3),
+        prior_input: continuation.prior_input,
     }))
 }
 
-/// The summary request: no project content, and the response reference of the prior chain.
+/// The summary request: no project content, and the response reference of the prior chain. The
+/// outputs of the calls of the prior response go first, because each native function call needs
+/// its output (ADR 0085, ADR 0091 section 5).
 pub(crate) async fn summary_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt: RequestAttempt,
     previous_response_reference: Option<String>,
+    prior_model_attempt_id: Option<&str>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
+    let prior = previous_response_reference
+        .as_ref()
+        .and(prior_model_attempt_id);
+    let (tool_outputs, unexecuted_call_ids) =
+        waiting_outputs(client, claim, run.disclosure_request.as_ref(), prior).await?;
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -122,13 +146,73 @@ pub(crate) async fn summary_request(
         passage_resolution: None,
         passage_input: None,
         context: Vec::new(),
+        earlier_author_messages: Vec::new(),
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference,
+        prior_input: storyos_application::PriorInput::Current,
         tool_exposure: storyos_core::ToolExposure::empty(),
+        tool_choice: storyos_core::ToolChoice::None,
         successor_of: None,
-        tool_outputs: Vec::new(),
+        tool_outputs,
+        unexecuted_call_ids,
     }))
+}
+
+/// The outputs of the calls of the response of the prior Model Attempt `prior`, which wait for
+/// the next request, and the calls of that response that the Host did not execute.
+async fn waiting_outputs(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    decision: Option<&storyos_core::CurrentPassageAssemblyRecord>,
+    prior: Option<&str>,
+) -> Result<(Vec<ToolOutput>, Vec<String>), CompleteAgentRunError> {
+    let Some(prior) = prior else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let prior = crate::agent_run_prior_response::PriorResponse::load(
+        client,
+        claim,
+        crate::agent_run_prior_response::PriorKey::Attempt(prior),
+    )
+    .await?;
+    let mut outputs = match decision {
+        Some(decision) => {
+            crate::agent_run_tool_result::tool_outputs(client, claim, decision, prior.decision_id())
+                .await?
+        }
+        None => Vec::new(),
+    };
+    outputs.retain(|output| output.origin == ToolOutputOrigin::PriorResponse);
+    let unexecuted = prior.unexecuted_calls(&outputs)?;
+    Ok((outputs, unexecuted))
+}
+
+/// The outputs that the summary request of the current prior chain sends.
+async fn chain_outputs(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
+    let prior = prior_chain(client, claim, run)
+        .await?
+        .filter(|chain| chain.reference.is_some())
+        .map(|chain| chain.model_attempt_id);
+    let (outputs, _) = waiting_outputs(client, claim, Some(decision), prior.as_deref()).await?;
+    Ok(outputs)
+}
+
+/// The Context Assembly of a summary request that sends `outputs`.
+fn summary_record(
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+    outputs: &[ToolOutput],
+) -> storyos_core::CurrentPassageAssemblyRecord {
+    let call_ids: Vec<&str> = outputs
+        .iter()
+        .map(|output| output.call_id.as_str())
+        .collect();
+    compaction_assembly_record(decision, &call_ids)
 }
 
 /// Commits the dispatch claim of the summary request: its Context Assembly, manifests, and Model
@@ -143,7 +227,9 @@ pub(crate) async fn commit_claim(
 ) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
     if run.settled()
         || run.attempt_id.is_some()
-        || load_summary_attempt(client, claim).await?.is_some()
+        || load_summary_attempt(client, claim, &run.decision_position)
+            .await?
+            .is_some()
     {
         return Ok(None);
     }
@@ -157,7 +243,7 @@ pub(crate) async fn commit_claim(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
-    let record = compaction_assembly_record(decision_record);
+    let record = summary_record(decision_record, &request.tool_outputs);
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
@@ -177,6 +263,7 @@ pub(crate) async fn commit_claim(
                     disclosure_grant_id = $6::text::uuid, disclosure_grant_scope = $7
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                AND decision_position = $8::text::numeric
                 AND destination_context_manifest_id IS NULL
           RETURNING context_assembly_manifest_id::text",
             &[
@@ -187,6 +274,7 @@ pub(crate) async fn commit_claim(
                 &outbound_manifest_id,
                 &run.grant_id,
                 &run.grant_scope,
+                &run.decision_position,
             ],
         )
         .await
@@ -231,11 +319,11 @@ pub(crate) async fn commit_claim(
                (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
                 outbound_disclosure_event_id, destination_context_manifest_id,
                 outbound_disclosure_manifest_id, wire_payload_projection_id, model_invocation_id,
-                conversation_id, dispatch_state, payload, attempt_role)
+                conversation_id, dispatch_state, payload, attempt_role, decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb, 'compaction')",
+                     $12::text::jsonb, 'compaction', $13::text::numeric)",
             &[
                 scope[0],
                 scope[1],
@@ -249,6 +337,7 @@ pub(crate) async fn commit_claim(
                 &Uuid::now_v7().to_string(),
                 &run.conversation_id,
                 &payload.to_string(),
+                &run.decision_position,
             ],
         )
         .await
@@ -276,8 +365,9 @@ pub(crate) async fn commit_assembly(
         .query_opt(
             "SELECT 1 FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND manifest_role = 'compaction'",
-            &[scope[0], scope[1], &claim.run_id],
+                AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                AND decision_position = $4::text::numeric",
+            &[scope[0], scope[1], &claim.run_id, &run.decision_position],
         )
         .await
         .map_err(work_error)?;
@@ -285,7 +375,8 @@ pub(crate) async fn commit_assembly(
         return Ok(());
     }
     let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
-    let mut manifest_payload = encode_assembly_record(&compaction_assembly_record(decision_record));
+    let outputs = chain_outputs(client, claim, run, decision_record).await?;
+    let mut manifest_payload = encode_assembly_record(&summary_record(decision_record, &outputs));
     manifest_payload["operation_requirement"]["operation_requirement_id"] =
         serde_json::json!(requirement_id);
     manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
@@ -293,9 +384,9 @@ pub(crate) async fn commit_assembly(
         .execute(
             "INSERT INTO storyos.operation_requirements
                (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
-                receipt_id, payload, requirement_role)
+                receipt_id, payload, requirement_role, decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'compaction'
+                    receipt_id, $6::text::jsonb, 'compaction', decision_position
                FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND operation_requirement_id = $3::text::uuid",
@@ -316,9 +407,10 @@ pub(crate) async fn commit_assembly(
         .execute(
             "INSERT INTO storyos.context_assembly_manifests
                (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role)
+                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role,
+                decision_position)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::jsonb, receipt_id, 'compaction'
+                    sufficiency, $6::text::jsonb, receipt_id, 'compaction', decision_position
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND context_assembly_manifest_id = $3::text::uuid",
@@ -371,7 +463,10 @@ pub(crate) async fn admitted(
     Ok(admit(
         run,
         assistance.as_ref(),
-        &compaction_assembly_record(decision_record),
+        &summary_record(
+            decision_record,
+            &chain_outputs(client, claim, run, decision_record).await?,
+        ),
     )
     .is_ok())
 }
@@ -521,4 +616,4 @@ fn observation_kind(observation: &Observation) -> &'static str {
 
 #[cfg(test)]
 #[path = "agent_run_compaction_summary_tests.rs"]
-mod tests;
+pub(crate) mod tests;

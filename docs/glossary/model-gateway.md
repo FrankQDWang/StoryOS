@@ -81,7 +81,7 @@ An immutable, provider-neutral observation in one Model Attempt's strictly order
 _Avoid_: UI token, raw SSE frame, transcript entry, Agent Decision
 
 **Model Tool Request**:
-A provider-neutral candidate inside one complete model output that names an exposed Tool and supplies its business arguments without creating authority or a ToolCall. Native and Host-compiled requests share this form; the Host validates the entire requested batch against the exact Step Snapshot before persisting the Agent Decision and idempotently deriving independently authorized ToolCalls, while any invalid member rejects the whole batch.
+A provider-neutral candidate inside one complete model output that names an exposed Tool and supplies its business arguments without creating authority or a ToolCall. The Host validates each requested call against the exact Step Snapshot before persisting the Agent Decision and idempotently deriving independently authorized ToolCalls. A call that fails its validation becomes a refused ToolCall, its result gives the reason, and the other calls of the response continue ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). A response whose function call items are incomplete or malformed gives no ToolCall, and the Run completes with the results that it already made.
 _Avoid_: ToolCall, provider function frame, executable request, provider-hosted Tool
 
 **Model Failure**:

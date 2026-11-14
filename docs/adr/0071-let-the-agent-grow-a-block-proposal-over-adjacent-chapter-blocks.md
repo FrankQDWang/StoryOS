@@ -13,6 +13,8 @@ The author can select text that starts in a pending Proposal candidate and conti
 ## Decision
 
 - **Proposal Growth.** One reply can revise the referenced candidate and also change Joinable Blocks. Then StoryOS adds those blocks to the same Proposal. This is one Agent Decision on one Proposal, so it needs no Agent tool loop.
+
+  > Superseded on 2026-11-14 by [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) ([#1463](https://github.com/FrankQDWang/StoryOS/issues/1463)): one `propose_edit` call is the growth, not one reply or one Agent Decision.
 - **Scope.** Only a `block_edit` Proposal grows. The real model makes only `block_edit` Proposals. An `inline_edit` Proposal does not grow, and its Proposal Anchors do not change.
 - **Joinable Block.** A Chapter block is joinable when all these conditions are true:
   - The Run references one or more pending candidates, and all of them are candidates of one Proposal.
@@ -20,7 +22,7 @@ The author can select text that starts in a pending Proposal candidate and conti
   - No pending Proposal reserves the block.
   - The pending Operations of the Proposal of the candidate make one adjacent run of blocks. The joinable blocks continue that run up or down with no gap.
 - **Working Target.** The request marks each joinable target block. The Host instructions tell the model that it can change the candidate together with joinable blocks. The model changes the joinable blocks next to the candidate first, with no gap.
-- **Reply validation.** The reply contract keeps its shape. A reply is a growth when it changes the referenced candidate and one or more joinable blocks, and no other block. The changed joinable blocks above the Proposal, and the changed joinable blocks below it, each start next to the Proposal and have no gap. These replies are not valid, and no Proposal changes:
+- **Reply validation.** The reply contract keeps its shape. (Superseded by [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md): the reply form is gone, and these rules apply to the arguments of one `propose_edit` call.) A reply is a growth when it changes the referenced candidate and one or more joinable blocks, and no other block. The changed joinable blocks above the Proposal, and the changed joinable blocks below it, each start next to the Proposal and have no gap. These replies are not valid, and no Proposal changes:
   - A change of the candidate and of a block that is not joinable.
   - A change of the candidate and of a joinable block that leaves a gap.
   - A change of two candidates.
@@ -50,3 +52,7 @@ The author can select text that starts in a pending Proposal candidate and conti
   - The editor shows each Operation of a grown Proposal at its block. On each part of an `atomic` Proposal, the `接受` and `拒绝` controls select all parts. The labels do not change, and the editor adds no control for a set of parts. The author selected this on 2026-10-23.
   - A withdrawal closes all of the grown Proposal in one step. The reservations of its Operations follow the present rule for a withdrawn Proposal.
   - Context Inspect shows the Joinable Blocks that the dispatched request of the decision marked, in the optional field `joinable_block_ids`. The Model Attempt records them when StoryOS dispatches the request.
+
+## Amendment 2026-11-13: the Host Tool `propose_edit`
+
+In the tool loop profile of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md), one `propose_edit` call is one change set ([#1457](https://github.com/FrankQDWang/StoryOS/issues/1457)). A call that changes the referenced candidate and Joinable Blocks is a growth, and the reply validation of this ADR applies to the call. A call that it refuses is a refused ToolCall with the label `change_shape`, and no Proposal changes. The location outcomes and the Proposal records are the same as for the reply. The reply form went in #1463.

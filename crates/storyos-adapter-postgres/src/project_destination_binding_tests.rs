@@ -93,7 +93,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, fake_run) =
-        queued_run(&store, "e7a", DeploymentDestination::HostFake).await;
+        queued_run(&store, "e7a", DeploymentDestination::HostFakeToolLoop).await;
     let fake_binding = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -146,7 +146,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             eligibility_evidence: Some(storyos_core::AGENT_PLAN_ELIGIBILITY_EVIDENCE.to_owned()),
             credential_source: "operator_quota".to_owned(),
             credential_reference: Some(storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()),
-            budget_bounds: "agent_plan_request_v3".to_owned(),
+            budget_bounds: "agent_plan_request_v4".to_owned(),
             runtime_qualification: "qualified".to_owned(),
         }
     );
@@ -202,51 +202,92 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_binding_with_the_qualification_bounds_gets_the_long_chapter_bounds() {
+async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_records() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, _) = queued_run(&store, "e7f", agent_plan()).await;
-    let qualified = open_project_assistance(&store, &scope)
-        .await
-        .unwrap()
-        .unwrap();
-    // A binding from before migration 0091 has the bounds of ADR 0049.
+    let reply_form = storyos_core::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION.revision;
     admin
         .execute(
-            "UPDATE storyos.project_external_use_binding_revisions
-                SET budget_bounds = 'agent_plan_request_v1'
-              WHERE project_model_use_binding_revision = $1::text::uuid",
-            &[&qualified.project_model_use_binding_revision],
+            "INSERT INTO storyos.model_registration_revisions
+               (model_registration_revision, model_kind, api_surface, provider_model_id,
+                capability_profile_revision)
+             SELECT $1::text::uuid, model_kind, api_surface, provider_model_id,
+                    capability_profile_revision
+               FROM storyos.model_registration_revisions
+              WHERE model_registration_revision = $2::text::uuid
+             ON CONFLICT DO NOTHING",
+            &[&reply_form, &AGENT_PLAN_REGISTRATION.revision],
         )
         .await
         .unwrap();
-
-    admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "e80",
-        agent_plan(),
-        "Help with this passage.",
-    )
-    .await;
-    let current = open_project_assistance(&store, &scope)
-        .await
-        .unwrap()
-        .unwrap();
-
-    assert_ne!(
-        current.project_model_use_binding_revision,
-        qualified.project_model_use_binding_revision
-    );
-    assert_eq!(
-        binding_facts(&admin, &current.external_compatibility_decision)
+    // A binding from before migration 0091 has the bounds of ADR 0049, and a binding from
+    // before the tool loop has the reply form Registration with the bounds of its Tools.
+    let earlier = [
+        (
+            "e80",
+            AGENT_PLAN_REGISTRATION.revision,
+            "agent_plan_request_v1",
+        ),
+        ("e81", reply_form, "agent_plan_request_v3"),
+    ];
+    let mut rebound = Vec::new();
+    for (prefix, registration, bounds) in earlier {
+        let before = open_project_assistance(&store, &scope)
             .await
-            .budget_bounds,
-        "agent_plan_request_v3"
+            .unwrap()
+            .unwrap();
+        admin
+            .batch_execute(&format!(
+                "SET session_replication_role = replica;
+                 UPDATE storyos.project_external_use_binding_revisions
+                    SET budget_bounds = '{bounds}', model_registration_revision = '{registration}'
+                  WHERE project_model_use_binding_revision = '{binding}';
+                 SET session_replication_role = DEFAULT;",
+                binding = before.project_model_use_binding_revision,
+            ))
+            .await
+            .unwrap();
+        admit_run(
+            &store,
+            &scope,
+            &chapter_id,
+            prefix,
+            agent_plan(),
+            "Help with this passage.",
+        )
+        .await;
+        let current = open_project_assistance(&store, &scope)
+            .await
+            .unwrap()
+            .unwrap();
+        rebound.push((
+            current.project_model_use_binding_revision != before.project_model_use_binding_revision,
+            current.model_registration_revision.clone(),
+            binding_facts(&admin, &current.external_compatibility_decision)
+                .await
+                .budget_bounds,
+        ));
+    }
+
+    let head = (
+        true,
+        AGENT_PLAN_REGISTRATION.revision.to_owned(),
+        "agent_plan_request_v4".to_owned(),
     );
+    assert_eq!(rebound, vec![head.clone(), head]);
+    // The HTTP phases drain the queued Runs of the shared database, so the test parks its Runs.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE project_id = $1::text::uuid AND status = 'queued'",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
 }
 
 const AUTHORITY_PAUSE: &str =
@@ -313,13 +354,14 @@ async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispat
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "e7c", DeploymentDestination::HostFake).await;
+    let (scope, chapter_id, _) =
+        queued_run(&store, "e7c", DeploymentDestination::HostFakeToolLoop).await;
     let run_id = admit_run(
         &store,
         &scope,
         &chapter_id,
         "e7d",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "SCRIPT:successor-once",
     )
     .await;
@@ -398,13 +440,14 @@ async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spe
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "f5a", DeploymentDestination::HostFake).await;
+    let (scope, chapter_id, _) =
+        queued_run(&store, "f5a", DeploymentDestination::HostFakeToolLoop).await;
     let run_id = admit_run(
         &store,
         &scope,
         &chapter_id,
         "f5b",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "SCRIPT:successor-once",
     )
     .await;

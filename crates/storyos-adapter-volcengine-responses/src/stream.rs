@@ -8,8 +8,8 @@ use tokio::time::Instant;
 
 use serde_json::Value;
 use storyos_application::{
-    DeclaredTarget, ModelStreamSink, Observation, ReferenceRetrieval, ReportedBinding,
-    ResponseReference, StreamControl,
+    ModelStreamSink, Observation, ReferenceRetrieval, ReportedBinding, ResponseReference,
+    StreamControl,
 };
 use storyos_core::{NativeStreamItem, RetrievalBounds, StreamItemState};
 
@@ -34,7 +34,6 @@ pub(crate) struct CommitPolicy {
 /// terminal response event is OutcomeUnknown.
 pub(crate) async fn observe(
     mut response: reqwest::Response,
-    targets: &[DeclaredTarget],
     mapping_revision: &str,
     policy: CommitPolicy,
     sink: &mut impl ModelStreamSink,
@@ -65,7 +64,7 @@ pub(crate) async fn observe(
             else {
                 continue;
             };
-            match state.apply(&event, targets) {
+            match state.apply(&event) {
                 Step::Continue => {}
                 Step::Reference => {
                     if sink
@@ -117,7 +116,7 @@ enum Step {
 }
 
 impl StreamState {
-    fn apply(&mut self, event: &Value, targets: &[DeclaredTarget]) -> Step {
+    fn apply(&mut self, event: &Value) -> Step {
         let text = |field: &str| event.get(field).and_then(Value::as_str).unwrap_or_default();
         let index = event
             .get("output_index")
@@ -135,9 +134,7 @@ impl StreamState {
             }
             "response.completed" | "response.incomplete" | "response.failed" => {
                 match event.get("response") {
-                    Some(response) => {
-                        Step::Terminal(crate::response::observe_value(response, targets))
-                    }
+                    Some(response) => Step::Terminal(crate::response::observe_value(response)),
                     None => Step::Continue,
                 }
             }

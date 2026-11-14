@@ -11,7 +11,7 @@ import type { CreateAgentRunRequest, CreateEditorSessionRequest, GetChapterRespo
 import { queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { BINDING, challenged, drainLeftoverWork, id, operations, prepare, readProposal, revisions, sendAuthorEdit } from "../support/acceptance.ts";
 import type { Started } from "../support/acceptance.ts";
-import { postRun, runWorker, serverForFile, settleRun } from "../support/http-harness.ts";
+import { inspectRun, postRun, runWorker, serverForFile, settleRun } from "../support/http-harness.ts";
 
 const started = serverForFile();
 
@@ -65,6 +65,10 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   const options = { baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl };
   const settle = () => settleRun(started.baseUrl, { projectId, fetchImpl }, created.effect.run_id);
+  // The steering starts the third RunStep, after the first RunStep and the closing RunStep (ADR 0091).
+  const steeredStep = async () => inspectRun(started.baseUrl, { projectId, fetchImpl }, created.effect.run_id,
+    await queryPostgres(`SELECT model_attempt_id::text FROM storyos.model_attempts
+      WHERE run_id = '${created.effect.run_id}'::uuid AND decision_position = 2;`));
   const steerAfterDecision = async (message: string, steerKey: string, added: SelectionReference[]) => {
     const directory = await mkdtemp(join(tmpdir(), "storyos-grow-again-"));
     const hold = join(directory, "decision");
@@ -88,7 +92,7 @@ async function admit(started: Started, seeded: Seeded, text: string, key: string
         idempotencyKey: steerKey, antiForgery }));
     assert.equal(steered.effect.kind, "retained");
   };
-  return { settle, steerAfterDecision };
+  return { settle, steerAfterDecision, steeredStep };
 }
 
 function candidateReference(proposal: Proposal, operationId: string, revisionId: string, end: number): SelectionReference {
@@ -149,7 +153,7 @@ test("steering after a growth moves the references and grows the Proposal again 
   const run = await growth.settle();
   const { after, grownRevision, references } = await movedReferences(started, seeded, before, first);
   assert.equal(run.status, "completed");
-  assert.deepEqual(run.context.selection_references, [
+  assert.deepEqual((await growth.steeredStep()).context.selection_references, [
     ...references.map((moved) => ({ ...moved, availability: { kind: "superseded", current_revision_id: after.revision_id } })),
     { reference: added, manuscript_block_ids: [seeded.chapter.current_revision.blocks[2]!.manuscript_block_id],
       availability: { kind: "current" } }]);
@@ -174,11 +178,18 @@ test("a second growth over a Block that is not adjacent to the run is refused", 
   await growth.steerAfterDecision("Join only the far line. SCRIPT:grow_gap", id(`${ns}72`), [added]);
   const run = await growth.settle();
   const { after, references } = await movedReferences(started, seeded, before, first);
-  assert.deepEqual(run.context.selection_references, [
+  assert.deepEqual((await growth.steeredStep()).context.selection_references, [
     ...references.map((moved) => ({ ...moved, availability: { kind: "current" } })),
     { reference: added, manuscript_block_ids: seeded.chapter.current_revision.blocks.slice(2)
       .map((block) => block.manuscript_block_id), availability: { kind: "current" } }]);
-  assert.deepEqual(run.decision, { kind: "absent" });
+  // The Host refuses the `propose_edit` call and returns the reason to the model. The Run decision stays the first
+  // growth, and the final text is advice (ADR 0091).
+  assert.equal(await queryPostgres(`SELECT string_agg(state || ':' || coalesce(refusal, ''), ' ' ORDER BY decision_position)
+    FROM storyos.tool_calls WHERE run_id = '${run.run_id}'::uuid AND function_name = 'propose_edit';`),
+  "settled: refused:change_shape");
+  if (run.decision.kind !== "prose_change") throw new Error("expected the first growth Decision");
+  assert.deepEqual(run.decision.locations?.map(({ outcome }) => outcome.kind === "revised" && outcome.revision_id),
+    [after.revision_id, after.revision_id]);
   assert.deepEqual(operations(after), pending(seeded, [first, `${SENTENCES[1]}${JOINED}`]));
   assert.equal(await revisions(before.proposal_id), "2 atomic");
 });

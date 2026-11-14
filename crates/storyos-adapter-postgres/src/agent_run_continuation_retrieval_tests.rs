@@ -11,16 +11,18 @@ use storyos_application::{
     ModelStreamSink, NoContractFaults, Observation, OriginalResultRetrievalDisposition,
     PreDispatchRefusal, PreparedRequest, ProjectScope, complete_agent_run_with_tools,
 };
-use storyos_core::{ModelAdapter, ToolEnablement};
+use storyos_core::ModelAdapter;
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{RuntimeClock, claim_run, stores};
-use crate::agent_run_retrieval::tests::{adapter, broken_stream, destination, not_found, real_run};
-use crate::agent_run_tool_call::tests::set_research_tool;
+use crate::agent_run_retrieval::tests::{
+    adapter, broken_stream, destination, not_found, research_run,
+};
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp, reply};
+use crate::agent_run_tool_exposure::tests::advisory_stream;
 use crate::command_sequence::tests::{CANCEL_AGENT_RUN, issued};
-use crate::research_artifact::tests::{Reply, computed, message_stream, tagged};
+use crate::research_artifact::tests::{Reply, computed, tagged};
 use crate::research_source::tests::{SEARCH_TEXT, calls_stream};
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -29,8 +31,6 @@ const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
 enum Fault {
     /// An admin statement.
     Sql(String),
-    /// The author disables the research Tool with a fresh challenge of this suffix.
-    Disable(u16),
     /// The author cancels the Run with a fresh challenge of this suffix.
     Cancel(u16),
 }
@@ -87,9 +87,6 @@ impl ModelProviderAdapter for Hooks<'_> {
         match &self.fault {
             Some((at, Fault::Sql(statement))) if *at == count => {
                 self.admin.execute(statement.as_str(), &[]).await.unwrap();
-            }
-            Some((at, Fault::Disable(suffix))) if *at == count => {
-                set_research_tool(self.store, &self.scope, *suffix, ToolEnablement::Disabled).await;
             }
             Some((at, Fault::Cancel(suffix))) if *at == count => {
                 let input = CancelAgentRunInput {
@@ -251,11 +248,15 @@ async fn artifacts(admin: &Client, run_id: &str) -> Vec<Value> {
         .collect()
 }
 
-/// A Retrieve reply with a stored response of one message of `text` in `status`.
-fn stored_message(reference: &str, text: &str, status: &str) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": status, "content": [{"type": "output_text", "text": text}]});
-    let body = json!({"id": reference, "status": status, "output": [message],
+/// A Retrieve reply with a stored complete response of a `submit_research` call with
+/// `arguments` and a `finish` call.
+fn stored_synthesis(reference: &str, arguments: &str) -> String {
+    let call = |name: &str, arguments: &str| {
+        json!({"id": format!("fc_{name}"), "type": "function_call", "status": "completed",
+               "call_id": format!("call_{name}"), "name": name, "arguments": arguments})
+    };
+    let body = json!({"id": reference, "status": "completed",
+        "output": [call("submit_research", arguments), call("finish", "{}")],
         "usage": {"input_tokens": 40, "output_tokens": 12}})
     .to_string();
     format!(
@@ -269,11 +270,28 @@ fn stored_message(reference: &str, text: &str, status: &str) -> String {
 /// identities that the continuation request tagged.
 type Later = fn(&str, &[String]) -> String;
 
-/// A research synthesis with `summary` whose one claim cites the first tagged Snapshot.
-fn synthesis_text(summary: &str, sources: &[String]) -> String {
-    json!({"kind": "research_synthesis", "summary": summary,
+/// The `submit_research` arguments of a synthesis with `summary` whose one claim cites the first
+/// tagged Snapshot.
+fn synthesis_arguments(summary: &str, sources: &[String]) -> String {
+    json!({"summary": summary,
         "claims": [{"text": "High water came at 10.42.", "citations": [sources[0]]}]})
     .to_string()
+}
+
+/// A stream of a `submit_research` call with `arguments` and a `finish` call.
+fn synthesis_stream(reference: &str, arguments: &str) -> String {
+    calls_stream(
+        reference,
+        &[
+            ("call_submit_research", "submit_research", arguments),
+            ("call_finish", "finish", "{}"),
+        ],
+    )
+}
+
+/// The final answer to the closing request of the Run.
+fn closing(reference: &str, _sources: &[String]) -> String {
+    advisory_stream(&format!("{reference}_closing"))
 }
 
 /// Admits one research Run. Its first response requests one search, the fake MCP server answers
@@ -283,10 +301,10 @@ async fn continuation_run(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     later: &[Later],
 ) -> (ProjectScope, String, tokio::task::JoinHandle<Vec<String>>) {
-    let (scope, run_id) = real_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
+    let (scope, run_id) =
+        research_run(store, admin, prefix, "http://127.0.0.1:9/api/plan/v3").await;
     let continuation = format!("resp_{prefix}_2");
     let sources = Arc::new(Mutex::new(Vec::new()));
     let tagged_sources = Arc::clone(&sources);
@@ -312,12 +330,12 @@ async fn continuation_run(
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+                SET endpoint = $2
+              WHERE project_id = $1::text::uuid AND evidence_kind = 'volcengine_agent_plan_boundary'",
             &[&scope.project_id.as_ref(), &model_base],
         )
         .await
         .unwrap();
-    set_research_tool(store, &scope, suffix, ToolEnablement::Enabled).await;
     let result = reply(
         /*id*/ 0,
         json!({"content": [{"type": "text", "text": SEARCH_TEXT}], "isError": false}),
@@ -407,11 +425,13 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
         .await;
     let (store, admin) = stores().await;
     let synthesis: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        stored_message(reference, &text, "completed")
+        stored_synthesis(
+            reference,
+            &synthesis_arguments("The tides of 1890.", sources),
+        )
     };
     let (scope, run_id, served) =
-        continuation_run(&store, &admin, "d81", 0xd81a, &[synthesis]).await;
+        continuation_run(&store, &admin, "d81", &[synthesis, closing]).await;
     // The Worker crashes after the continuation stream broke, before its record.
     let crashed = drain(
         &store,
@@ -454,7 +474,8 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = artifact.run_id AND attempt.attempt_role = 'decision'
                 AND attempt.decision_position = 1
-               JOIN storyos.tool_calls AS call ON call.run_id = artifact.run_id
+               JOIN storyos.tool_calls AS call
+                 ON call.run_id = artifact.run_id AND call.call_id = 'call_01'
               WHERE artifact.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -501,6 +522,10 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                 json!({"role": "retrieval", "position": "1", "dispatch_state": "settled",
                        "usage": {"kind": "unknown"}, "reservation": reserved,
                        "result": "complete_selected", "decided": false, "own_evidence": true}),
+                json!({"role": "decision", "position": "2", "dispatch_state": "settled",
+                       "usage": {"kind": "reported", "input_tokens": 40, "output_tokens": 12},
+                       "reservation": null, "result": null, "decided": true,
+                       "own_evidence": true}),
             ],
             vec![
                 "retrieval manifest:1".to_owned(),
@@ -512,6 +537,7 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                 post(),
                 post(),
                 "GET /api/plan/v3/responses/resp_d81_2 HTTP/1.1".to_owned(),
+                post(),
             ],
         )
     );
@@ -536,23 +562,18 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
         .await;
     let (store, admin) = stores().await;
     let successor: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        message_stream(&format!("{reference}_s"), &text, "completed")
+        let arguments = synthesis_arguments("The tides of 1890.", sources);
+        synthesis_stream(&format!("{reference}_s"), &arguments)
     };
     // The predecessor finished after its stream broke, and the late Retrieve reads it.
     let late: Later = |reference, sources| {
-        stored_message(
-            reference,
-            &synthesis_text("A late answer.", sources),
-            "completed",
-        )
+        stored_synthesis(reference, &synthesis_arguments("A late answer.", sources))
     };
     let (scope, run_id, served) = continuation_run(
         &store,
         &admin,
         "a91",
-        0xa91a,
-        &[|_, _| not_found(), successor, late],
+        &[|_, _| not_found(), successor, late, closing],
     )
     .await;
     let model = hooks(
@@ -588,6 +609,7 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
     let reserved = json!({"kind": "worst_case", "released": false});
     let released = json!({"kind": "worst_case", "released": true});
     let reported = json!({"kind": "reported", "input_tokens": 40, "output_tokens": 12});
+    let successor_usage = json!({"kind": "reported", "input_tokens": 90, "output_tokens": 30});
     let attempt = |role: &str, state: &str, usage: &Value, reservation: &Value, result: Value| {
         json!({"role": role, "position": "1", "dispatch_state": state, "usage": usage,
                "reservation": reservation, "result": result,
@@ -627,8 +649,9 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
         ),
         (
             // The Decision is the one of the successor; the retrieval kept the unknown outcome.
+            // The shown Attempt is the closing request.
             json!({"status": "Completed", "decision": "research_synthesis",
-                   "dispatch_state": "uncertain", "disposition": "kept_unknown",
+                   "dispatch_state": "settled", "disposition": "kept_unknown",
                    "keep_reason": "unknown_result", "reservation_released": false,
                    "usage_kind": "unknown"}),
             true,
@@ -658,9 +681,17 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                     &reserved,
                     json!("unknown")
                 ),
-                attempt("successor", "settled", &reported, &released, Value::Null),
+                attempt(
+                    "successor",
+                    "settled",
+                    &successor_usage,
+                    &released,
+                    Value::Null
+                ),
             ]),
-            json!(artifact),
+            // The Host executes the `submit_research` call of the successor after the late
+            // Retrieve, so no Artifact exists yet.
+            json!([]),
             // The late result is evidence only: it settles the usage and the reservation of the
             // predecessor, and it changes neither the Run, the Decision, nor the Artifact.
             (
@@ -684,7 +715,16 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                         &reserved,
                         json!("unknown")
                     ),
-                    attempt("successor", "settled", &reported, &released, Value::Null),
+                    attempt(
+                        "successor",
+                        "settled",
+                        &successor_usage,
+                        &released,
+                        Value::Null
+                    ),
+                    json!({"role": "decision", "position": "2", "dispatch_state": "settled",
+                           "usage": reported, "reservation": null, "result": null,
+                           "decided": true, "own_evidence": true}),
                 ],
                 artifact,
                 // The successor copies the Context Assembly of position 1, as the Retrieve does.
@@ -702,6 +742,7 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                     "GET /api/plan/v3/responses/resp_a91_2 HTTP/1.1".to_owned(),
                     post(),
                     "GET /api/plan/v3/responses/resp_a91_2 HTTP/1.1".to_owned(),
+                    post(),
                 ]
             ),
         )
@@ -733,12 +774,11 @@ async fn failed_condition(
     store: &PostgresProjectReader,
     admin: &Client,
     prefix: &str,
-    suffix: u16,
     at: usize,
     fault: impl FnOnce(&str) -> Fault,
 ) -> (bool, Value, usize, Vec<String>) {
     let (scope, run_id, served) =
-        continuation_run(store, admin, prefix, suffix, &[|_, _| not_found()]).await;
+        continuation_run(store, admin, prefix, &[|_, _| not_found()]).await;
     let fault = Some((at, fault(&run_id)));
     let model = hooks(
         store, admin, &scope, &run_id, /*crash_after*/ None, fault,
@@ -768,7 +808,7 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
     let (store, admin) = stores().await;
     // The Host recorded that the budget does not cover both Attempts. A real route admits a Run
     // only with a known request bound, and the Retrieve needs it too, so the test writes the fact.
-    let budget = failed_condition(&store, &admin, "a92", 0xa92a, 3, |run_id| {
+    let budget = failed_condition(&store, &admin, "a92", 3, |run_id| {
         Fault::Sql(format!(
             "UPDATE storyos.model_attempts
                 SET payload = jsonb_set(payload,
@@ -778,12 +818,15 @@ async fn a_failed_condition_or_a_cancellation_stops_the_continuation_with_no_suc
         ))
     })
     .await;
-    // The author disables the research Tool during the Retrieve: the Tool Exposure changes.
-    let exposure =
-        failed_condition(&store, &admin, "a93", 0xa93a, 3, |_| Fault::Disable(0xa93b)).await;
+    // A Tool Contract Drift quarantines the research revision during the Retrieve: the Tool
+    // Exposure changes.
+    let exposure = failed_condition(&store, &admin, "a93", 3, |_| {
+        Fault::Sql(crate::agent_run_tool_call::tests::quarantine_statement())
+    })
+    .await;
+    crate::agent_run_tool_call::tests::reactivate_research_revision(&admin).await;
     // The author cancels the Run during the Retrieve.
-    let cancelled =
-        failed_condition(&store, &admin, "a94", 0xa94a, 3, |_| Fault::Cancel(0xa94b)).await;
+    let cancelled = failed_condition(&store, &admin, "a94", 3, |_| Fault::Cancel(0xa94b)).await;
 
     let marker = |disposition: &str, reason: Option<&str>, fenced: bool| {
         json!({"disposition": disposition, "pause_reason": reason, "allowance_consumed": fenced,
@@ -833,7 +876,6 @@ async fn an_interrupted_successor_of_a_continuation_waits_with_an_unknown_outcom
         &store,
         &admin,
         "a95",
-        0xa95a,
         &[|_, _| not_found(), broken, |_, _| not_found()],
     )
     .await;
@@ -920,15 +962,20 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
         )
     };
     let synthesis: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        message_stream(&format!("{reference}_3"), &text, "completed")
+        let arguments = synthesis_arguments("The tides of 1890.", sources);
+        synthesis_stream(&format!("{reference}_3"), &arguments)
     };
     let (scope, run_id, served) = continuation_run(
         &store,
         &admin,
         "a96",
-        0xa96a,
-        &[|_, _| not_found(), search, |_, _| not_found(), synthesis],
+        &[
+            |_, _| not_found(),
+            search,
+            |_, _| not_found(),
+            synthesis,
+            closing,
+        ],
     )
     .await;
     let model = hooks(
@@ -944,7 +991,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
             inspect(&read(&store, &scope, &run_id).await),
             outcome(&admin, &run_id).await,
             artifacts(&admin, &run_id).await,
-            payloads.last().map(request_items),
+            payloads.get(payloads.len() - 2).map(request_items),
             served.await.unwrap(),
         ),
         (
@@ -953,7 +1000,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
                    "keep_reason": "unknown_result", "reservation_released": false,
                    "usage_kind": "unknown"}),
             json!({"status": "completed", "settlement": null,
-                   "roles": "decision,decision,retrieval,successor,late_retrieval,decision",
+                   "roles": "decision,decision,retrieval,successor,late_retrieval,decision,decision",
                    "marker": {"disposition": "dispatched", "pause_reason": null,
                               "allowance_consumed": true, "predecessor_fenced": true,
                               "dispatch_prohibited": false, "late_evidence_applied": false}}),
@@ -970,6 +1017,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
                 "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
                 post(),
                 "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
+                post(),
                 post(),
             ],
         )

@@ -200,4 +200,4 @@ pub(crate) async fn record_late(
 
 #[cfg(test)]
 #[path = "agent_run_tool_recovery_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -534,8 +534,7 @@ fn payload_aggregate(
         },
         ProjectActivityKind::ProjectCreated
         | ProjectActivityKind::ProjectUpdated
-        | ProjectActivityKind::ProjectAssistanceUpdated
-        | ProjectActivityKind::ProjectToolEnablementSet => ActivityAggregateRef {
+        | ProjectActivityKind::ProjectAssistanceUpdated => ActivityAggregateRef {
             kind: "project".to_owned(),
             id: project_id.to_owned(),
         },

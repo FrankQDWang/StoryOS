@@ -135,6 +135,11 @@ fn create_agent_run_input(
         run_id: Uuid::now_v7().to_string(),
         conversation_id,
         project_agent_id: Uuid::now_v7().to_string(),
+        // Each deployment with a model destination offers web research (ADR 0083, ADR 0090).
+        // The Server never reads its key.
+        research: destination
+            .as_ref()
+            .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
     })
 }
@@ -196,8 +201,16 @@ pub(super) async fn get_agent_run(
         status: storyos_application::wire_agent_run_status(record.status),
         context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
+        results: record.results,
         model_attempt: inspect_model(record.model.as_ref()),
-        active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
+        active_compaction: inspect_active_compaction(record.compactions.last()),
+        compactions: (!record.compactions.is_empty()).then(|| {
+            record
+                .compactions
+                .iter()
+                .map(|compaction| inspect_active_compaction(Some(compaction)))
+                .collect()
+        }),
         reference_recovery: match record.reference_recovery.as_ref() {
             None => contracts::OptionalReferenceRecoveryInspect::Absent,
             Some(recovery) => contracts::OptionalReferenceRecoveryInspect::Present {
@@ -407,19 +420,6 @@ fn inspect_decision(
                 None => contracts::OptionalOpenedProposalInspect::Absent,
             },
         },
-        storyos_application::AgentRunDecisionInspect::Clarification {
-            decision_id,
-            selected,
-            question,
-            required_reply,
-            continuation_binding_id,
-        } => contracts::OptionalDecisionInspect::Clarification {
-            decision_id: decision_id.clone(),
-            selected: *selected,
-            question: question.clone(),
-            required_reply: required_reply.clone(),
-            continuation: inspect_continuation(continuation_binding_id.as_deref()),
-        },
         storyos_application::AgentRunDecisionInspect::ToolRequest { decision_id, calls } => {
             contracts::OptionalDecisionInspect::ToolRequest {
                 decision_id: decision_id.clone(),
@@ -544,6 +544,10 @@ fn inspect_active_compaction(
                 .external_compatibility_decision
                 .clone(),
         },
+        stub_tool_call_ids: (!compaction.stub_tool_call_ids.is_empty())
+            .then(|| compaction.stub_tool_call_ids.clone()),
+        kept_author_message_ids: (!compaction.kept_author_message_ids.is_empty())
+            .then(|| compaction.kept_author_message_ids.clone()),
     }
 }
 
@@ -789,6 +793,9 @@ fn inspect_context(
                     }
                     storyos_core::ProjectionMode::DeterministicExcerpt => {
                         contracts::ProjectionMode::DeterministicExcerpt
+                    }
+                    storyos_core::ProjectionMode::ToolResultStub => {
+                        contracts::ProjectionMode::ToolResultStub
                     }
                 },
                 token_count: source.token_count.to_string(),

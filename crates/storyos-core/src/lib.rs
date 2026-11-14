@@ -16,26 +16,32 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
+mod earlier_author_messages;
+mod finish_rule;
 mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
+mod host_tool;
 mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
-mod project_tool_enablement;
+mod read_tool_result;
 mod rebuild_expired_reference;
 mod research_destination;
 mod research_source;
 mod research_synthesis;
 mod retrieve_original_result;
+mod submit_research;
 mod tool_call;
 mod tool_call_recovery;
 mod tool_dispatch;
 mod tool_exposure;
+mod tool_loop_profile;
 mod tool_registration;
 mod tool_result;
 mod tool_result_context;
+mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -43,10 +49,8 @@ pub use ordinary_passage_request::{
     OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
 };
 mod open_block_proposal;
-mod pause_proposal_generation;
 mod project_archive;
 mod project_export;
-mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
@@ -73,8 +77,8 @@ pub use accept_proposal::{
 };
 pub use agent_run_control::{
     AgentRunStatus, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
-    PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_cancel_agent_run,
-    classify_pause_agent_run, classify_steer_agent_run,
+    PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
+    classify_cancel_agent_run, classify_pause_agent_run, classify_steer_agent_run,
 };
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
@@ -93,19 +97,19 @@ pub use assemble_context::{
     encode_assembly_record,
 };
 pub use compact_active_context::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
-    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
-    COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts, CompactionInstallRefusal,
-    CompactionKnownInput, CompactionRecordState, CompactionRequestFacts, CompactionSource,
-    CompactionStep, CompactionTrigger, DecisionRequestKind, HOST_FAKE_COMPACTION_OUTPUT,
-    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
-    active_context_input_digest, compaction_assembly_record, compaction_due, compaction_requested,
-    compaction_threshold, conversation_too_long, decide_compaction_install, decision_request_kind,
-    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
-    summary_fits_item, summary_text,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
+    AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    COMPACTION_SUMMARY_UNAVAILABLE, COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts,
+    CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState, CompactionRequestFacts,
+    CompactionSource, CompactionStep, CompactionTrigger, DecisionRequestKind,
+    HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction,
+    SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
+    compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
+    decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
+    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
-    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
+    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
 pub use create_admission::{
@@ -140,17 +144,28 @@ pub use deployment_destination::{
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
 };
+pub use earlier_author_messages::{
+    EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
+    is_earlier_author_message, keep_earlier_author_messages,
+};
+pub use finish_rule::{
+    FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
+    UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
+};
 pub use function_calling::{
     AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
     AGENT_PLAN_FUNCTION_CALLING_PENDING_CAPABILITY_PROFILE,
-    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, ToolProbe,
-    tool_probe,
+    AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_FUNCTION_CALLING_REGISTRATION,
+    ToolProbe, tool_probe,
 };
 pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, PROSE_CHANGE_TEXT,
-    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT,
-    requested_execution_capability, stream_batch_plan,
+    SECOND_PROSE_CHANGE_TEXT, requested_execution_capability,
+};
+pub use host_tool::{
+    FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
+    HostToolRegistration, execute_host_tool, host_tool, host_tool_result,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -159,8 +174,8 @@ pub use manuscript_payload::{
     upgrade_legacy_manuscript,
 };
 pub use model_output::{
-    AgentDecisionKind, AgentDecisionOutcome, DecisionCandidate, ModelOutput, NativeStreamItem,
-    OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
+    AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, StreamItemRole, StreamItemState,
+    validate_agent_decision,
 };
 pub use model_registration::{
     AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE,
@@ -187,10 +202,6 @@ pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
 };
-pub use pause_proposal_generation::{
-    PauseProposalGeneration, PauseProposalGenerationRefusal, PauseProposalGenerationResult,
-    pause_proposal_generation,
-};
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
@@ -203,17 +214,8 @@ pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
 };
-pub use project_tool_enablement::{
-    CurrentEnablement, EnablementBinding, PinnedEnablement, ProjectToolState,
-    SetProjectToolEnablement, SetProjectToolEnablementApplied, SetProjectToolEnablementNoEffect,
-    SetProjectToolEnablementRefusal, SetProjectToolEnablementResult, ToolEnablement,
-    set_project_tool_enablement,
-};
-pub use proposal_generation_decision::{
-    CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
-    CompleteReadyPartialProposalResult, ContinueProposalGeneration,
-    ContinueProposalGenerationRefusal, ContinueProposalGenerationResult,
-    ProposalGenerationConflict, complete_ready_partial_proposal, continue_proposal_generation,
+pub use read_tool_result::{
+    READ_TOOL_RESULT_TOOL_SPEC, ReadTarget, ReadToolResultRefusal, StoredCall, read_tool_result,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
@@ -253,9 +255,8 @@ pub use research_source::{
     capture_research_sources, tool_result_source_version,
 };
 pub use research_synthesis::{
-    CITABLE_SOURCES_INSTRUCTION, CitableSource, CitableSources, Citation, CitedSource,
-    ClaimCandidate, ResearchClaim, ResearchSynthesis, SynthesisRefusal, citable_sources_tag,
-    validate_research_synthesis,
+    CitableSource, CitableSources, Citation, CitedSource, ClaimCandidate, ResearchClaim,
+    ResearchSynthesis, SynthesisRefusal, citable_sources_tag, validate_research_synthesis,
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
@@ -273,12 +274,16 @@ pub use set_current_chapter::{
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };
+pub use submit_research::{
+    RESEARCH_RECORDED_RESULT, SUBMIT_RESEARCH_TOOL_SPEC, SubmitResearchRefusal,
+};
 pub use take_over_project_writer::{
     CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
     TakeOverProjectWriterResult, take_over_project_writer,
 };
 pub use tool_call::{
-    CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS, SnapshotTool, ToolCallBatch,
+    CallValidationRefusal, CurrentToolAuthority, ExposureSnapshot, MAX_CALL_ID_CHARS,
+    MAX_FUNCTION_NAME_CHARS, RefusedToolCall, RequestedToolCall, SnapshotTool, ToolCallBatch,
     ToolCallBatchRefusal, ValidatedToolCall, validate_tool_call_batch,
 };
 pub use tool_call_recovery::{
@@ -290,10 +295,16 @@ pub use tool_dispatch::{
     ToolObservation, ToolResultText, admit_tool_dispatch, function_request_step, settle_tool_call,
 };
 pub use tool_exposure::{
-    EnabledTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
+    BoundTool, ExposedTool, ExposureFacts, FUNCTION_CALL_NATIVE_TYPE, FunctionDeclaration,
     RESEARCH_TOOL_UNAVAILABLE_CAPABILITY, ResponseDisposition, ResponseFacts,
-    TOOL_REQUEST_INVALID_CAPABILITY, ToolCompatibilityDecision, ToolExposure,
-    function_request_refusal_capability, requests_function, response_disposition,
+    ToolCompatibilityDecision, ToolExposure, function_request_refusal_capability,
+    requests_function, response_disposition,
+};
+pub use tool_loop_profile::{
+    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
+    HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
 pub use tool_registration::{
     ContractCheck, ContractDifference, MCP_STREAMABLE_HTTP_ADAPTER_REVISION, RegisteredTool,
@@ -303,12 +314,14 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
+    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput, ToolResultSource,
+    assemble_tool_result_continuation, stub_tool_call_ids,
 };
+pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
-    ExternalRead, ExternalWrite, IntakeField, IntakeRefusal, ServerArguments,
-    TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope, ToolIntake, ToolOperation, ToolSpec,
-    WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
+    ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
+    PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,
+    ToolIntake, ToolOperation, ToolSpec, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC, tool_spec,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
@@ -645,13 +658,21 @@ mod undo_latest_author_action_tests;
 
 mod prose_change_locations;
 pub use prose_change_locations::{
-    DeclaredLocation, DeclaredTargetKind, ProseChangeCandidate, prose_changes_match_targets,
+    DeclaredLocation, DeclaredTargetKind, ProseChangeCandidate, ProseChangeRefusal,
+    prose_change_refusal,
+};
+mod propose_edit;
+pub use propose_edit::{
+    BlockChange, MAX_REFUSED_PROPOSE_EDIT_CALLS, PROPOSAL_WAITS_RESULT, ProposeEditHistory,
+    ProposeEditRefusal, ProposedEdit, propose_edit_parameters, screen_proposed_edits,
 };
 mod selection_reference;
 pub use selection_reference::{
-    AdmittedSelection, GrownCandidate, SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint,
-    advance_candidate_references, assemble_selection_references, merge_steering_references,
-    reference_joined_candidates, select_candidate_text, select_chapter_text,
+    AdmittedSelection, ChapterHeadPlace, CurrentCandidate, GrownCandidate,
+    SELECTION_REFERENCE_LIMIT, SelectionReference, TextPoint, advance_candidate_references,
+    assemble_selection_references, follow_chapter_head, follow_current_candidates,
+    merge_steering_references, reference_joined_candidates, select_candidate_text,
+    select_chapter_text,
 };
 
 mod assemble_candidate_context;

@@ -24,6 +24,8 @@ an Eval page, API, assessment, fixture, oracle, or evidence bundle. Ordinary
 Agent input/output, Trace, usage, timing, and recovery proof remain required
 by their existing owners. Historical Stage 1 exclusions remain unchanged.
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for the Editor Input Fence are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Authority, claim ceiling, and non-scope
 
 ### 1.1 Authority order

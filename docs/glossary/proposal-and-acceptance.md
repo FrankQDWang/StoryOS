@@ -13,7 +13,7 @@ A stable, independently resolvable domain change within a Proposal; dynamically 
 _Avoid_: Diff hunk, visual change marker
 
 **Proposal Growth**:
-One Agent Decision that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md)). Steering on the same Run then changes the Chapter reference of each joined block into a reference to its new candidate.
+One `propose_edit` call that revises the referenced candidate of a pending `block_edit` Proposal in one new Proposal Revision. The same Revision adds one pending Operation for each changed Joinable Block. The Proposal then has the bundle policy `atomic`. A growth writes no Proposal Anchor and no Author Action, so Author Undo does not reverse it ([ADR 0071](../adr/0071-let-the-agent-grow-a-block-proposal-over-adjacent-chapter-blocks.md), [ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). Steering on the same Run then changes the Chapter reference of each joined block into a reference to its new candidate.
 _Avoid_: Proposal merge, Proposal extension, second Proposal for one passage
 
 **Joinable Block**:
@@ -21,19 +21,11 @@ A Chapter block next to the Proposal of the referenced candidates. All of these 
 _Avoid_: Covered block, adjacent target, join candidate
 
 **Proposal Generation**:
-One durably identified Agent production attempt for a Proposal, owning a strictly ordered and idempotent sequence of candidate batches under one active-writer boundary. A paused or completed Generation never reopens; explicit continuation creates a new Generation identity from an exact Proposal Revision.
+One durably identified Agent write of one complete candidate batch into a new Proposal Revision. Only the revision of a candidate and a Proposal Growth write one. A Proposal opens complete, and each Proposal Revision is `ready`. Release 1 has no streamed generation, no pause of a generation, and no command that continues or completes a generation ([ADR 0092](../adr/0092-remove-streamed-proposal-generation.md)).
 _Avoid_: Network stream, resumable socket, mutable generator session
 
-**Proposal Pause Fence**:
-The immutable boundary that ends one Proposal Generation at an exact Proposal Revision and digest, admitted-through batch sequence, projection checkpoint, and Editor Input Fence. Later batches remain Run evidence but are permanently ineligible for Proposal or editor replay.
-_Avoid_: Network cancellation, UI pause flag, queued late delta
-
-**Editor Input Fence**:
-The immutable Operational Record and automatic safety cause identified by `EditorInputFenceId` that binds the first completed author-input signal to one exact Editor Session, writer generation, local intent range, and active Proposal Generation before semantic command admission. It closes the Agent write gate but grants no author-command authority and receives no Author Action Sequence.
-_Avoid_: Author Command Admission, browser event as domain command, reusable write permission
-
 **Proposal State Axes**:
-The orthogonal generation (`generating | ready_partial | ready`), validation (`pending | valid | invalid | conflicted`), closure (`open | withdrawn | superseded`), and per-Operation resolution (`pending | applied | rejected`) facts of a Proposal. Completion, partial application, and Acceptance Eligibility are derived projections rather than additional states, while Retention State remains separate.
+The orthogonal generation (`ready`), validation (`pending | valid | invalid | conflicted`), closure (`open | withdrawn | superseded`), and per-Operation resolution (`pending | applied | rejected`) facts of a Proposal. The generation axis has one value, because each Proposal Revision is complete ([ADR 0092](../adr/0092-remove-streamed-proposal-generation.md)). Completion, partial application, and Acceptance Eligibility are derived projections rather than additional states, while Retention State remains separate.
 _Avoid_: Proposal status, accepted Proposal state, rejected Proposal state, stale state
 
 **Proposal Transition**:
@@ -73,7 +65,7 @@ A per-editor-session fallback used when the environment cannot uphold lossless P
 _Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
 
 **Proposal Recovery Conflict**:
-The fail-closed condition on a preserved Proposal surface. In it, the durable Proposal Heads, stream sequences, Pause Fences, digests, or editor checkpoint cannot prove one clear review projection. Agent replay and Acceptance stay disabled until an explicit reconciliation. No cache or network order can fill the uncertainty.
+The fail-closed condition on a preserved Proposal surface. In it, the durable Proposal Heads, digests, or editor checkpoint cannot prove one clear review projection. Agent replay and Acceptance stay disabled until an explicit reconciliation. No cache or network order can fill the uncertainty.
 _Avoid_: Best-effort replay, hidden repair, ordinary validation pending, Draft Artifact
 
 **Editor Support Profile**:
@@ -91,10 +83,6 @@ _Avoid_: Mixed-domain Proposal, nested workflow
 **Acceptance Eligibility**:
 The predicate requiring an exact Proposal Revision to be retained, ready, open, and selected only over pending Operations. The validation `invalid`, an invalid Acceptance condition, or a Proposal Recovery Conflict removes eligibility. A base behind the Chapter Head does not remove it, because the Acceptance is then a Replacing Acceptance ([ADR 0064](../adr/0064-accept-a-proposal-on-an-earlier-base-by-replacing-its-target-text.md)). Proposal identity, creator confidence, or a historical Validation Receipt cannot grant eligibility alone.
 _Avoid_: Acceptable type, trusted Proposal
-
-**Ready Partial**:
-A Proposal generation outcome preserved after production stops before its intended completion. It remains editable but is not eligible for Acceptance until the author explicitly completes the current content or generation finishes.
-_Avoid_: Failed Proposal, accepted partial
 
 **Proposal Invalidity**:
 The condition in which an exact Proposal Revision violates its own schema, Operation contract, or domain invariants even against its declared base. Invalidity belongs to the Proposal content rather than later target drift.
@@ -125,7 +113,7 @@ An author redo of a successfully undone Acceptance is a new Acceptance attempt a
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
 
 **Author Action**:
-The immutable `AuthorActionRef` Operational Record that the transaction of one successfully committed author-owned Core Transition creates. It binds its Author Action Sequence, its canonical Revision, Receipt, or Commit, and its `Forward | Compensation` disposition. A successful author-authored Proposal Revision receives one Forward Author Action, also without an Authoritative Commit. Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create none. Project creation and Project setting changes are not author-owned Core Transitions, and they create none.
+The immutable `AuthorActionRef` Operational Record that the transaction of one successfully committed author-owned Core Transition creates. It binds its Author Action Sequence, its canonical Revision, Receipt, or Commit, and its `Forward | Compensation` disposition. A successful author-authored Proposal Revision receives one Forward Author Action, also without an Authoritative Commit. Admission, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create none. Project creation and Project setting changes are not author-owned Core Transitions, and they create none.
 _Avoid_: Author Command Admission, physical-human gesture, browser history item, attempted command
 
 **Author Action Sequence**:

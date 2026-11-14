@@ -11,15 +11,10 @@ use super::acceptance::accept_proposal_call;
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
-use super::project_session::{
-    set_project_tool_enablement_call, update_project_assistance_call, update_project_call,
-};
+use super::project_session::{update_project_assistance_call, update_project_call};
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
-};
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
@@ -155,12 +150,6 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
-            &set_project_tool_enablement_call(&store, /*base*/ 0xb560).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
         )
         .await,
@@ -186,18 +175,6 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &store,
             &admin,
             &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7550).await,
-        )
-        .await,
-        evidence_replays(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7560).await,
         )
         .await,
         evidence_replays(
@@ -236,7 +213,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 20];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 17];
     expected.push(separated(ReceiptResult::NoEffect));
     expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
@@ -391,22 +368,8 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
             "result_payload - 'transition'",
         )
         .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9c50).await,
-            "result_payload - 'transition'",
-        )
-        .await,
-        replay_with_receipt_payload(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9c60).await,
-            "result_payload - 'transition'",
-        )
-        .await,
     ];
-    assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
 }
 
 #[tokio::test]

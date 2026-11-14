@@ -1,0 +1,46 @@
+继续为这部小说准备资料。请严格按三步做：
+第一步：在同一个回复里并行调用 web_search 5 次，用下面 A 组的 5 个查询。
+第二步：A 组结果回来后，在同一个回复里并行调用 web_search 31 次，用下面 B 组的 31 个查询，一个都不要少。
+所有搜索的 result_count 都用 10，查询原文照用。
+第三步：B 组结果回来后，用 read_tool_result 重新读取 A 组第 1 个搜索的完整结果，核对其中关于雾号的具体数字，并在同一个回复里调用 finish。
+不要调用 submit_research。最后用中文写一段不超过 300 字的总结：哪些资料能用到鹰嘴岛的雾天场景里，并列出你引用的来源链接。
+
+A 组：
+A1. steam fog whistle and fog trumpet specifications at 19th century lighthouses
+A2. lighthouse keeper wives and families living on remote island stations in the 1890s
+A3. lighthouse tender ships delivering supplies to island light stations in the 19th century
+A4. shipwrecks caused by fog near lighthouses in the 1890s
+A5. lighthouse keeper salary, rules and inspections by the Lighthouse Board in the 1890s
+
+B 组：
+B1. history of fog signals: bells, guns, sirens and diaphones
+B2. Daboll trumpet fog signal history
+B3. Chinese Maritime Customs Service lighthouses in the 1890s
+B4. lighthouses on the China coast built by the Imperial Maritime Customs
+B5. life of a lighthouse keeper on a rock tower station in winter storms
+B6. lighthouse lamp wicks, kerosene and colza oil in the 19th century
+B7. clockwork rotation mechanism of lighthouse lenses with weights
+B8. lighthouse keeper rescue of shipwrecked sailors in the 19th century
+B9. fog bell tower construction and bell weight at lighthouse stations
+B10. Trinity House lighthouse keepers rules and duties in Victorian times
+B11. Victorian era lighthouse keeper uniforms and daily routine
+B12. lighthouse keeper journal entries describing fog and storms
+B13. how lighthouse keepers communicated with the mainland in the 1890s
+B14. food and provisions of lighthouse keepers on isolated islands
+B15. lighthouse keeper children schooling on remote island stations
+B16. lightships and their crews in the late 19th century
+B17. lighthouse characteristics: flashing patterns and identification at night
+B18. fog signal sound range and audibility experiments by Joseph Henry and John Tyndall
+B19. lighthouse keeper isolation and loneliness stories from the 19th century
+B20. typhoon damage to lighthouses along the South China Sea coast
+B21. Chinese fishing junks and navigation in fog in the late Qing dynasty
+B22. lighthouse keeper tools and equipment inventory in the 1890s
+B23. lighthouse keeper assistant and apprentice training in the 19th century
+B24. bird strikes and lantern room damage at lighthouses
+B25. compressed air fog siren machinery in a lighthouse engine room
+B26. famous 19th century lighthouse keepers and their stories
+B27. lighthouse logbook weather observation records in the 1890s
+B28. lighthouse station architecture: keeper's house and oil house
+B29. lantern room glazing cleaning and soot removal duties
+B30. lighthouse keepers' superstitions and folklore about the sea
+B31. coastal steamship routes in East Asia in the 1890s

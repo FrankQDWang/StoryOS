@@ -8,6 +8,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
     ContextSourceClass, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate,
+    ToolResultForm, ToolResultOutput,
 };
 
 use crate::agent_run_tool_authority::damaged;
@@ -26,6 +27,12 @@ struct StoredToolCall {
     state: ToolCallState,
     result_text: Option<String>,
     sources: Vec<storyos_core::CitableSource>,
+    output: ToolResultOutput,
+    function_name: String,
+    /// The canonical arguments of the call.
+    arguments: String,
+    /// Whether an installed compaction of the Run sent this result as a stub (ADR 0093).
+    installed_stub: bool,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -37,26 +44,22 @@ pub(crate) async fn open_continuation(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (Some(attempt_id), Some(decision_id)) = (&run.attempt_id, &run.decision_id) else {
+    let (Some(attempt_id), Some(_)) = (&run.attempt_id, &run.decision_id) else {
         return Err(damaged("The function request Decision is missing"));
     };
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     crate::agent_run_continuation::bind_produced_continuation(
-        client,
-        claim,
-        decision_id,
-        attempt_id,
-        &payload,
-        &payload,
+        client, claim, attempt_id, &payload, &payload,
     )
     .await?;
     open_next_step(client, claim, run).await
 }
 
-/// Commits gates one to six of the next Context Assembly and makes it the active RunStep. A
-/// successor Decision calls this directly: its Attempt already holds the produced binding of its
+/// Commits gates one to six of the next Context Assembly and makes it the active RunStep. The
+/// next RunStep also reads the steering input that waits for it (ADR 0062). A successor Decision
+/// calls this directly: its Attempt already holds the produced binding of its
 /// function request, so the next RunStep continues the successor response (ADR 0088).
 pub(crate) async fn open_next_step(
     client: &tokio_postgres::Client,
@@ -67,57 +70,50 @@ pub(crate) async fn open_next_step(
         .disclosure_request
         .as_ref()
         .ok_or_else(|| damaged("The Context Assembly of the function request is damaged"))?;
-    let receipt_id: String = client
-        .query_one(
-            "SELECT receipt_id::text FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND context_assembly_manifest_id = $3::text::uuid",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &run.assembly_manifest_id,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?
-        .get(/*idx*/ 0);
-    let stored = stored_tool_calls(client, claim).await?;
-    let candidates: Vec<ToolResultCandidate<'_>> = stored
-        .iter()
-        .map(|call| ToolResultCandidate {
-            tool_call_id: &call.tool_call_id,
-            call_id: &call.call_id,
-            owner_user_id: &call.owner_user_id,
-            project_id: &call.project_id,
-            run_id: &call.run_id,
-            model_attempt_id: &call.model_attempt_id,
-            decision_id: &call.decision_id,
-            state: call.state,
-            result_text: call.result_text.as_deref(),
-            sources: &call.sources,
-        })
-        .collect();
-    let next_position = (run
-        .decision_position
-        .parse::<u64>()
-        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
-        + 1)
-    .to_string();
+    let mut retained = retained.clone();
+    let steering =
+        crate::agent_run_steering::read_next(client, claim, &run.decision_position, &mut retained)
+            .await?;
     let requirement = &retained.operation_requirement;
-    let references: Option<Vec<storyos_core::SelectionReference>> =
-        requirement.selection_references.as_ref().map(|references| {
-            references
-                .iter()
-                .map(|admitted| admitted.reference.clone())
-                .collect()
-        });
+    let receipt_id: String = match &steering {
+        Some(input) => input.receipt_id.clone(),
+        None => client
+            .query_one(
+                "SELECT receipt_id::text FROM storyos.context_assembly_manifests
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND context_assembly_manifest_id = $3::text::uuid",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &run.assembly_manifest_id,
+                ],
+            )
+            .await
+            .map_err(complete_database_error)?
+            .get(/*idx*/ 0),
+    };
+    let results = RunToolResults::load(client, claim).await?;
+    let candidates = results.candidates();
+    let next_position = crate::agent_run_steering::next_position(&run.decision_position)?;
+    let (author_message, references) = match steering {
+        Some(input) => (input.author_message, input.references),
+        None => (
+            run.author_message.clone(),
+            requirement.selection_references.as_ref().map(|references| {
+                references
+                    .iter()
+                    .map(|admitted| admitted.reference.clone())
+                    .collect()
+            }),
+        ),
+    };
     persist_current_passage_assembly(
         client,
         &PassageContextInput {
             project_scope: &claim.project_scope,
             run_id: &claim.run_id,
             chapter_id: &run.chapter_id,
-            author_message: &run.author_message,
+            author_message: &author_message,
             receipt_id: &receipt_id,
             decision_position: &next_position,
             passage_targets: requirement.passage_targets.as_deref(),
@@ -148,6 +144,63 @@ pub(crate) async fn open_next_step(
 }
 
 /// Each resolved ToolCall of the Run, in item order across its RunSteps.
+pub(crate) struct RunToolResults(Vec<StoredToolCall>);
+
+impl RunToolResults {
+    pub(crate) async fn load(
+        client: &tokio_postgres::Client,
+        claim: &ClaimedAgentRun,
+    ) -> Result<Self, CompleteAgentRunError> {
+        stored_tool_calls(client, claim).await.map(Self)
+    }
+
+    /// One `tool_result` Context Candidate for each ToolCall of a decision request. The Core
+    /// rule gives the form of each result from its stored facts (ADR 0093 section 5).
+    pub(crate) fn candidates(&self) -> Vec<ToolResultCandidate<'_>> {
+        self.candidates_in(|call| ToolResultForm::in_decision_request(call.installed_stub))
+    }
+
+    /// The candidates of the later request of a compaction whose summary request continued the
+    /// response of the Decision `waiting_decision_id` (ADR 0093 section 5).
+    pub(crate) fn later_request_candidates(
+        &self,
+        waiting_decision_id: Option<&str>,
+    ) -> Vec<ToolResultCandidate<'_>> {
+        self.candidates_in(|call| {
+            ToolResultForm::in_later_request(
+                call.installed_stub,
+                &call.decision_id,
+                waiting_decision_id,
+            )
+        })
+    }
+
+    fn candidates_in(
+        &self,
+        form: impl Fn(&StoredToolCall) -> ToolResultForm,
+    ) -> Vec<ToolResultCandidate<'_>> {
+        self.0
+            .iter()
+            .map(|call| ToolResultCandidate {
+                tool_call_id: &call.tool_call_id,
+                call_id: &call.call_id,
+                owner_user_id: &call.owner_user_id,
+                project_id: &call.project_id,
+                run_id: &call.run_id,
+                model_attempt_id: &call.model_attempt_id,
+                decision_id: &call.decision_id,
+                state: call.state,
+                result_text: call.result_text.as_deref(),
+                sources: &call.sources,
+                output: call.output,
+                function_name: &call.function_name,
+                arguments: &call.arguments,
+                form: form(call),
+            })
+            .collect()
+    }
+}
+
 async fn stored_tool_calls(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -155,7 +208,13 @@ async fn stored_tool_calls(
     let rows = client
         .query(
             "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
-                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text
+                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
+                    tool_spec_revision, function_name, arguments::text,
+                    EXISTS (SELECT 1 FROM storyos.active_context_compactions AS record
+                             WHERE (record.owner_user_id, record.project_id, record.run_id) =
+                                   (call.owner_user_id, call.project_id, call.run_id)
+                               AND record.install_state = 'installed'
+                               AND record.stub_tool_call_ids ? call.tool_call_id::text)
                FROM storyos.tool_calls AS call
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
@@ -188,23 +247,39 @@ async fn stored_tool_calls(
                 state: ToolCallState::parse(row.get(/*idx*/ 7))
                     .ok_or_else(|| damaged("The ToolCall is damaged"))?,
                 result_text: row.get(/*idx*/ 8),
+                output: match row.get::<_, Option<&str>>(/*idx*/ 9) {
+                    Some(spec) if spec == storyos_core::READ_TOOL_RESULT_TOOL_SPEC.revision => {
+                        ToolResultOutput::StoredRead
+                    }
+                    Some(spec)
+                        if storyos_core::tool_spec(spec)
+                            .is_some_and(|spec| spec.envelope.is_some()) =>
+                    {
+                        ToolResultOutput::Research
+                    }
+                    Some(_) | None => ToolResultOutput::HostTool,
+                },
+                function_name: row.get(/*idx*/ 10),
+                arguments: canonical_arguments(row.get(/*idx*/ 11))?,
+                installed_stub: row.get(/*idx*/ 12),
             })
         })
         .collect()
 }
 
 /// The function outputs of the selected `tool_result` items of `assembly`, in item order. The
-/// call of each output is the stored ToolCall that the item names. The outputs of the last
-/// Decision answer the prior response; the others belong to earlier RunSteps.
+/// call of each output is the stored ToolCall that the item names. The outputs of the Decision
+/// `prior_decision_id` of the prior response answer that response; the others belong to earlier
+/// RunSteps (ADR 0085 section 3).
 pub(crate) async fn tool_outputs(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     assembly: &CurrentPassageAssemblyRecord,
+    prior_decision_id: Option<&str>,
 ) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
     let Some(sources) = &assembly.operation_requirement.tool_results else {
         return Ok(Vec::new());
     };
-    let last_decision = sources.last().map(|source| source.decision_id.as_str());
     let selected = assembly
         .selected
         .iter()
@@ -247,35 +322,45 @@ pub(crate) async fn tool_outputs(
         let row = stored
             .remove(&ordinal)
             .ok_or_else(|| damaged("The ToolCall of a tool_result is missing"))?;
-        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 2))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         outputs.push(ToolOutput {
             call_id: source.call_id.clone(),
             name: row.get(/*idx*/ 1),
-            arguments: storyos_core::canonical_json(&arguments),
+            arguments: canonical_arguments(row.get(/*idx*/ 2))?,
             output: item.content.clone(),
-            origin: if Some(source.decision_id.as_str()) == last_decision {
-                ToolOutputOrigin::PriorResponse
-            } else {
-                ToolOutputOrigin::EarlierStep
+            origin: match prior_decision_id == Some(source.decision_id.as_str()) {
+                true => ToolOutputOrigin::PriorResponse,
+                false => ToolOutputOrigin::EarlierStep,
             },
         });
     }
     Ok(outputs)
 }
 
+/// The arguments of a stored call as the request sends them. A call that failed its validation
+/// keeps its arguments text as a JSON string.
+fn canonical_arguments(stored: &str) -> Result<String, CompleteAgentRunError> {
+    let arguments: serde_json::Value = serde_json::from_str(stored)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    Ok(match arguments {
+        serde_json::Value::String(text) => text,
+        arguments => storyos_core::canonical_json(&arguments),
+    })
+}
+
 /// True when the active RunStep is a `tool_result_continuation` and the input that its request
 /// sends, other than its Tool outputs, differs from the input of the function request Attempt
 /// before it. The input is all that the model reads: the selected Context text, the declared
-/// targets, the selection references, and the passage input. The prior response read the input
-/// of that Attempt, so an incremental request cannot carry a change.
+/// targets, the selection references, and the passage input. `author_message` is the message that
+/// the RunStep reads, with each steering input. The prior response read the input of that
+/// Attempt, so an incremental request sends a changed input again (ADR 0085).
 pub(crate) async fn continuation_input_changed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    author_message: &str,
 ) -> Result<bool, CompleteAgentRunError> {
     let Some(row) = client
         .query_opt(
-            "SELECT requirement.payload::text, run.author_message, run.chapter_id::text,
+            "SELECT requirement.payload::text, run.chapter_id::text,
                     attempt.payload #>> '{wire,current_input_digest}'
                FROM storyos.agent_runs AS run
                JOIN storyos.operation_requirements AS requirement
@@ -307,13 +392,12 @@ pub(crate) async fn continuation_input_changed(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let assembly = storyos_core::decode_assembly_record(&record)
         .ok_or_else(|| damaged("The continuation Context is invalid"))?;
-    let author_message: String = row.get(/*idx*/ 1);
-    let chapter_id: String = row.get(/*idx*/ 2);
+    let chapter_id: String = row.get(/*idx*/ 1);
     let declared_targets =
         crate::agent_run_create_dispatch::declared_targets(client, claim, &chapter_id).await?;
-    let input = crate::agent_run_create_dispatch::record_input(&record, assembly, &author_message);
+    let input = crate::agent_run_create_dispatch::record_input(&record, assembly, author_message);
     let current = storyos_application::CurrentInput {
-        author_message: &author_message,
+        author_message,
         chapter_id: &chapter_id,
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input.as_ref(),
@@ -321,7 +405,7 @@ pub(crate) async fn continuation_input_changed(
         declared_targets: &declared_targets,
         selection_references: &input.selection_references,
     };
-    let prior: Option<String> = row.get(/*idx*/ 3);
+    let prior: Option<String> = row.get(/*idx*/ 2);
     Ok(prior.as_deref() != Some(current.digest().as_str()))
 }
 
@@ -351,11 +435,15 @@ pub(crate) async fn proposal_source_lineage(
                      requirement.decision_position) =
                     (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
                 AND requirement.requirement_role = 'primary'
-               JOIN storyos.model_attempts AS attempt
-                 ON (attempt.owner_user_id, attempt.project_id, attempt.run_id,
-                     attempt.decision_position) =
-                    (run.owner_user_id, run.project_id, run.run_id, run.active_decision_position)
-                AND attempt.attempt_role = 'decision'
+               -- A successor Attempt holds the Decision of the RunStep when it exists.
+               CROSS JOIN LATERAL (
+                 SELECT attempt.model_attempt_id FROM storyos.model_attempts AS attempt
+                  WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id,
+                         attempt.decision_position) =
+                        (run.owner_user_id, run.project_id, run.run_id,
+                         run.active_decision_position)
+                    AND attempt.attempt_role IN ('decision', 'successor')
+                  ORDER BY attempt.attempt_role = 'successor' DESC LIMIT 1) AS attempt
               WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
                 AND requirement.payload #> '{operation_requirement,tool_results}' IS NOT NULL",

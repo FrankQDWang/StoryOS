@@ -1,0 +1,5 @@
+我在写一部 1890 年代的灯塔小说。请先记住三条故事设定：林三是老守塔人周伯的徒弟；雾天时雾钟每分钟敲三下；灯塔在一座叫鹰嘴岛的小岛上。现在请在同一个回复里并行调用 web_search 3 次，每次 result_count 都用 10，查询用英文：
+1. 19th century lighthouse keeper daily duties and log book entries
+2. fog bell striking machinery at lighthouses in the 1890s
+3. Fresnel lens and lamp oil maintenance at 1890s lighthouses
+拿到结果后，请用 read_tool_result 重新读取第 1 个搜索的完整结果，并在同一个回复里调用 finish。不要调用 submit_research。最后用中文回答，不超过 200 字。

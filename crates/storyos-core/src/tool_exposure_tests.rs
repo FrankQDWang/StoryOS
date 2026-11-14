@@ -1,30 +1,30 @@
 use serde_json::json;
 
 use super::{
-    EnabledTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
+    BoundTool, ExposedTool, ExposureFacts, ResponseDisposition, ResponseFacts,
     ToolCompatibilityDecision, ToolExposure, requests_function, response_disposition,
 };
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION, NativeStreamItem,
-    StreamItemRole, StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC,
-    WEB_SEARCH_TOOL_SPEC,
+    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
+    StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
-fn enabled(
+fn bound(
     lifecycle: ToolRegistrationLifecycle,
     compatibility: Option<ToolCompatibilityDecision>,
-) -> EnabledTool {
-    EnabledTool {
+) -> BoundTool {
+    BoundTool {
         registration_revision: EXA_TOOL_REGISTRATION.revision.to_owned(),
         lifecycle,
         compatibility,
     }
 }
 
-fn exposure(enabled: &[EnabledTool], model_registration_revision: &str) -> ToolExposure {
+fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExposure {
     ToolExposure::compute(&ExposureFacts {
-        enabled,
+        bound,
         model_registration_revision,
     })
 }
@@ -49,56 +49,112 @@ fn research_exposure() -> ToolExposure {
 }
 
 #[test]
-fn an_active_compatible_enablement_on_a_qualified_registration_exposes_its_tools() {
-    let active = [enabled(
+fn an_active_compatible_binding_on_a_qualified_registration_exposes_its_tools() {
+    let active = [bound(
         ToolRegistrationLifecycle::Active,
         Some(ToolCompatibilityDecision::Compatible),
     )];
+    let mut expected = research_exposure();
+    expected
+        .tools
+        .extend(exposure(&[], AGENT_PLAN_REGISTRATION.revision).tools);
     assert_eq!(
         exposure(&active, AGENT_PLAN_REGISTRATION.revision),
-        research_exposure()
+        expected
     );
 }
 
 #[test]
-fn each_other_enablement_or_registration_exposes_nothing() {
+fn each_other_binding_or_registration_exposes_nothing() {
     let compatible = Some(ToolCompatibilityDecision::Compatible);
-    let cases: [(&[EnabledTool], &str); 6] = [
+    let host_tools = exposure(&[], AGENT_PLAN_REGISTRATION.revision);
+    let cases: [(&[BoundTool], &str); 5] = [
         (&[], AGENT_PLAN_REGISTRATION.revision),
         (
-            &[enabled(ToolRegistrationLifecycle::Quarantined, compatible)],
+            &[bound(ToolRegistrationLifecycle::Quarantined, compatible)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[enabled(ToolRegistrationLifecycle::Retired, compatible)],
+            &[bound(ToolRegistrationLifecycle::Retired, compatible)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[enabled(ToolRegistrationLifecycle::Active, None)],
+            &[bound(ToolRegistrationLifecycle::Active, None)],
             AGENT_PLAN_REGISTRATION.revision,
         ),
         (
-            &[EnabledTool {
+            &[BoundTool {
                 registration_revision: "018f0000-0000-7001-8000-0000000e0dead".to_owned(),
                 lifecycle: ToolRegistrationLifecycle::Active,
                 compatibility: compatible,
             }],
             AGENT_PLAN_REGISTRATION.revision,
         ),
-        (
-            &[enabled(ToolRegistrationLifecycle::Active, compatible)],
-            HOST_FAKE_REGISTRATION.revision,
-        ),
     ];
-    for (enabled, revision) in cases {
-        assert_eq!(exposure(enabled, revision), ToolExposure::empty());
+    for (bound, revision) in cases {
+        assert_eq!(exposure(bound, revision), host_tools);
     }
+    // A Model Registration with no qualified function calling exposes no Tool.
+    for revision in [
+        HOST_FAKE_REGISTRATION.revision,
+        AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision,
+    ] {
+        assert_eq!(
+            exposure(
+                &[bound(ToolRegistrationLifecycle::Active, compatible)],
+                revision
+            ),
+            ToolExposure::empty()
+        );
+    }
+}
+
+#[test]
+fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
+    let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
+        tools: registration
+            .tools
+            .iter()
+            .map(|spec| ExposedTool {
+                name: spec.operation.function_name(),
+                registration_id: registration.id,
+                registration_revision: registration.revision,
+                spec,
+            })
+            .collect(),
+    };
+    let names = |exposure: ToolExposure| -> Vec<&str> {
+        exposure.tools.iter().map(|tool| tool.name).collect()
+    };
+    for revision in [
+        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+        AGENT_PLAN_REGISTRATION.revision,
+    ] {
+        assert_eq!(exposure(&[], revision), host(&HOST_TOOL_REGISTRATION));
+    }
+    // A Run that pinned the Registration of the mapping `v5` keeps three Host Tools (ADR 0093).
+    let pinned = exposure(&[], crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision);
+    assert_eq!(pinned, host(&crate::FIRST_HOST_TOOL_REGISTRATION));
     assert_eq!(
-        exposure(
-            &[enabled(ToolRegistrationLifecycle::Active, compatible)],
-            AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision
+        (
+            names(pinned),
+            names(exposure(&[], AGENT_PLAN_REGISTRATION.revision))
         ),
-        ToolExposure::empty()
+        (
+            vec!["propose_edit", "submit_research", "finish"],
+            vec![
+                "propose_edit",
+                "submit_research",
+                "read_tool_result",
+                "finish"
+            ]
+        )
+    );
+    assert_eq!(
+        host(&HOST_TOOL_REGISTRATION).tools[3]
+            .declaration()
+            .parameters,
+        json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
     );
 }
 

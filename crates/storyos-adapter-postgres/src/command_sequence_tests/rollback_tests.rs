@@ -22,15 +22,11 @@ use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
 use super::project_session::{
-    set_project_tool_enablement_call, take_over_project_writer_call,
-    update_project_assistance_call, update_project_call,
+    take_over_project_writer_call, update_project_assistance_call, update_project_call,
 };
 use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
-};
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
@@ -393,12 +389,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &set_project_tool_enablement_call(&store, /*base*/ 0xb540).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
             &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
         )
         .await,
@@ -436,18 +426,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &store,
             &admin,
             &withdraw_proposal_call(&store, &admin, /*base*/ 0x7480).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7540).await,
         )
         .await,
         failed_then_settled(
@@ -496,11 +474,11 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             .collect::<Vec<_>>();
         (failures, result)
     };
-    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 9];
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 8]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 6]);
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::NoEffect));

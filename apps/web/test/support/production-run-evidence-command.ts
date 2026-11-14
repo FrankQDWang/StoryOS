@@ -61,9 +61,11 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     const first = await inspect(firstId);
     assert.equal(first.status, "completed");
     assert.equal(first.context.sufficiency.kind, "complete");
+    // The audit query reads the closing RunStep, which also selects the result of the `finish` call (ADR 0091).
     assert.deepEqual(first.context.selected.filter((input) => input.source_class !== "host_control")
       .map((input) => [input.source_class, input.content]),
-    [["author_instruction", message], ["working_target", original]]);
+    [["author_instruction", message], ["working_target", original],
+      ["tool_result", '<tool_result source="call_finish" state="empty">The tool answered with no entry.</tool_result>']]);
     assert.ok(first.evidence.some((item) => item.kind === "provider_opaque"));
     assert.equal(first.run_id, firstId);
     assert.equal(first.project_scope.project_id, setup.projectId);
@@ -211,9 +213,12 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       assert.equal(later.disposition, disposition);
       assert.equal(later.successor_settles_predecessor, false);
       if (disposition === "dispatched") {
-        assert.ok(run.model_attempt.kind === "present");
         assert.equal(run.status, "completed");
-        assert.equal(run.model_attempt.dispatch_state, "uncertain");
+        // The default read shows the closing RunStep. The lost create of the first RunStep stays uncertain (ADR 0091).
+        const predecessor = await getAgentRun({ baseUrl: server.baseUrl, projectId: setup.projectId, runId,
+          fetchImpl: setup.fetchImpl, modelAttemptId: later.predecessor_model_attempt_id });
+        assert.ok(predecessor.model_attempt.kind === "present");
+        assert.equal(predecessor.model_attempt.dispatch_state, "uncertain");
       } else assert.equal(later.pause_reason, "budget_insufficient");
       await page.reload();
       assert.deepEqual((await inspect(runId)).unknown_create_successor, later);

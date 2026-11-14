@@ -116,7 +116,12 @@ impl ModelDispatchStore for PostgresProjectReader {
             // next work phase refuses the install, and the decision request does not go out
             // with the summary.
             if run.later_request
-                && crate::agent_run_compaction::source_restricted_now(client, claim).await?
+                && crate::agent_run_compaction::source_restricted_now(
+                    client,
+                    claim,
+                    &run.decision_position,
+                )
+                .await?
             {
                 return Ok(None);
             }
@@ -124,8 +129,13 @@ impl ModelDispatchStore for PostgresProjectReader {
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
                 || run.chapter_id != request.chapter_id
-                || (run.decision_position == "0"
-                    && crate::agent_run_steering::advance(client, claim, lease_seconds).await?)
+                || crate::agent_run_steering::advance_before_request(
+                    client,
+                    claim,
+                    &run.decision_position,
+                    lease_seconds,
+                )
+                .await?
             {
                 return Ok(None);
             }
@@ -164,8 +174,13 @@ impl ModelDispatchStore for PostgresProjectReader {
                 return Ok(None);
             };
             if run.later_request {
-                crate::agent_run_compaction::mark_installed(client, claim, &model_attempt_id)
-                    .await?;
+                crate::agent_run_compaction::mark_installed(
+                    client,
+                    claim,
+                    &run.decision_position,
+                    &model_attempt_id,
+                )
+                .await?;
             }
             if let Some(dispatch) = rebuild.as_deref() {
                 crate::agent_run_expiry::insert_recovery(

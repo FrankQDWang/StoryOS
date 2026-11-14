@@ -148,7 +148,11 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     const consumed = await getAgentRun({ ...options, runId });
     assert.equal(consumed.status, "completed");
     assert.ok(consumed.model_attempt.kind === "present");
-    assert.equal(consumed.steering_inputs[0]?.model_attempt_id, consumed.model_attempt.model_attempt_id);
+    // The RunStep after the paused Model Attempt consumes the steering input. The default read shows the closing
+    // RunStep (ADR 0091).
+    assert.equal(consumed.steering_inputs[0]?.model_attempt_id, await queryStoryOSPostgres(`SELECT model_attempt_id::text
+      FROM storyos.model_attempts WHERE run_id = '${runId}'::uuid AND attempt_role = 'decision'
+      ORDER BY model_attempt_id OFFSET 1 LIMIT 1;`));
     assert.equal(consumed.context.selected.find(item => item.source_class === "author_instruction")?.content,
       ["Help with this passage.", guidance].join("\n"));
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, proposal);

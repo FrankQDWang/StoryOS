@@ -4,8 +4,8 @@ This document gives the rules to deliver a specification and its tickets. The ru
 
 ## Roles
 
-- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 800 counted lines only when the lines above the limit are mechanical or generated.
-- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 800 counted lines.
+- **Author:** decides each change of the product, a contract, a number, or a waiver. The author approves the ticket graph of a specification. The author approves a ticket that must add more than 1500 counted lines only when the lines above the limit are mechanical or generated.
+- **Coordinator:** one session for each specification. It owns the specification, the shared tracker state, and the integration branch. It starts one executor for each ready ticket, answers the questions of the executors, examines the evidence, and merges the ticket pull requests and the aggregate pull request. Only the coordinator changes the integration branch. The coordinator approves a split of a ticket only for its size. Before dispatch, the coordinator splits each other ticket that must add more than 1500 counted lines.
 - **Executor:** one session for each ticket, in its own worktree and branch. It implements the ticket, opens the ticket pull request, runs the checks and the review, and sends the final report. It does not merge.
 - **Reviewer:** a new read-only Codex thread for each review axis. `make review` starts it. The reviewer is never the agent tool that implements the ticket. [Codex review](#codex-review) tells who runs `make review`.
 
@@ -26,6 +26,10 @@ When Wayfinder has resolved the required decisions, use the `to-spec` skill, the
 
 A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
 
+`make check` does not run the project-scope guards and the exact-dist browser journeys. A ticket that changes a Web test, a browser journey, a panel surface, or a wire form requires `make check-full`, and its body says so.
+
+When a specification changes a request form of a real route, the live run is a ticket after the first slice that sends that form. Do not make it the last ticket, because its findings give more tickets.
+
 ### 2. Dispatch
 
 The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch. Run independent ready tickets in parallel.
@@ -40,6 +44,8 @@ The executor reads the current ticket, the current parent, the native dependenci
 
 To claim, assign the issue and post the [Claim](#claim). GitHub keeps the edit history of each issue body, so the Claim has no copy or hash of the body. When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
+A session that works gets a message only after its turn. Thus the coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
+
 Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
 
 ### 4. Implement
@@ -47,6 +53,7 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch. Before the final evidence, merge the current integration tip into the branch.
+- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator. The coordinator splits the ticket.
 
 ### 5. Open the pull request
@@ -74,9 +81,13 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 - Each finding that the ticket does not fix, with its owner issue.
 - The state of the worktree: clean or dirty.
 
+After the final report, make no commit, push, or pull request for the ticket. When a message of the coordinator arrives after the report, reply with the facts only. A change after the report needs a new request of the coordinator.
+
 ### 8. Merge the ticket
 
 The coordinator examines the evidence against the [merge gate](#merge-gate). Then it merges the ticket pull request into the integration branch and posts the [Resolution](#resolution) on the ticket.
+
+After the merge of the first ticket that requires `make check-full`, and again before the aggregate pull request, the coordinator runs `make check-full` on the integration branch.
 
 ### 9. Merge the specification
 
@@ -193,7 +204,7 @@ Each worktree owns its source, `target/`, `node_modules/`, release package, and 
 
 ### Heavy runs on a shared host
 
-Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. Remove the slot after the run.
+Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
 
 ### Development PostgreSQL
 
@@ -220,7 +231,7 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 
 Do not stop to ask before a live model request. The author gave a standing permission. [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
 
-1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count.
+1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
 

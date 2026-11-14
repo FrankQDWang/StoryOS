@@ -1,6 +1,6 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorEditError, AuthorEditSettlement, AuthorEditSettlementEffect,
-    ProjectCommandChallengeError, ProjectCommandEnvelope,
+    ProjectCommandEnvelope,
 };
 use storyos_core::{
     ApplyAuthorEdit, ApplyAuthorEditOutcome, ApplyVersionedAuthorEdit, AuthorEditApplied,
@@ -49,29 +49,11 @@ impl PostgresProjectReader {
             .await
     }
 
-    async fn pause_generating_proposals_for_input(
-        &self,
-        command: &ApplyAuthorEditCommand,
-    ) -> Result<(), AuthorEditError> {
-        let transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(author_edit_challenge_error)?;
-        super::stream_proposal_pause::pause_generating_proposals(&transaction.client, command)
-            .await?;
-        transaction
-            .commit()
-            .await
-            .map_err(author_edit_challenge_error)?;
-        Ok(())
-    }
-
     pub(crate) async fn apply_author_edit_with_fault(
         &self,
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
-        self.pause_generating_proposals_for_input(command).await?;
         let envelope = author_edit_envelope(command);
         let author_edit = AuthorEdit::new(command, fault);
         let settled = admit_and_settle(self, &envelope, &author_edit, || {
@@ -194,18 +176,6 @@ pub(super) fn parse_u64(value: String) -> Result<u64, AuthorEditError> {
     value
         .parse::<u64>()
         .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))
-}
-
-pub(super) fn author_edit_challenge_error(error: ProjectCommandChallengeError) -> AuthorEditError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => AuthorEditError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => AuthorEditError::InvalidChallenge,
-        // Only a Challenge issue applies the rate limit, so this error is a store fault here.
-        error @ ProjectCommandChallengeError::RateLimited { .. } => {
-            AuthorEditError::Unavailable(Box::new(error))
-        }
-        ProjectCommandChallengeError::Unavailable(source) => AuthorEditError::Unavailable(source),
-    }
 }
 
 pub(super) fn author_edit_database_error(error: tokio_postgres::Error) -> AuthorEditError {
