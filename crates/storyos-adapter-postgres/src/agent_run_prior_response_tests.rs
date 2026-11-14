@@ -142,8 +142,8 @@ async fn a_request_after_a_steering_input_between_two_requests_answers_each_call
 
     // The closing request of RunStep 2 is prepared, and then the input stops it. The request of
     // the RunStep that read the input names the response of RunStep 1, so it answers the
-    // `finish` call of that response after the current input. The closing request after it
-    // answers the call of the response of that RunStep.
+    // `finish` call of that response after the current input. The response of that RunStep read
+    // the input, so the closing request after it sends only the output of its call.
     assert_eq!(
         (adapter.requests(), record.status),
         (
@@ -151,7 +151,7 @@ async fn a_request_after_a_steering_input_between_two_requests_answers_each_call
                 ["decision", false, ["message"]],
                 ["decision", true, [["output", "call_finish"]]],
                 ["decision", true, ["message", ["output", "call_finish"]]],
-                ["decision", true, ["message", ["output", "call_finish_1"]]],
+                ["decision", true, [["output", "call_finish_1"]]],
             ]),
             AgentRunStatus::Completed,
         )

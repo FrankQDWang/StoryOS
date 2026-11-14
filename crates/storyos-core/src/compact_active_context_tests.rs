@@ -137,11 +137,11 @@ fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision
 
 #[test]
 fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
-    let trigger = |window, output_bound, prior, new_turn_tokens| CompactionTrigger {
+    let trigger = |window, output_bound, prior, sent_input_tokens| CompactionTrigger {
         window_tokens: window,
         output_bound,
         prior_reported_tokens: prior,
-        new_turn_tokens,
+        sent_input_tokens,
     };
     let doubao = (Some(262_144), Some(32_768));
 
@@ -330,6 +330,8 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         decision: None,
         declared_target_texts: &[],
         prior_reported_tokens: prior,
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
     let undated = crate::AGENT_PLAN_RECOVERY_REGISTRATION.revision;
@@ -398,6 +400,8 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
             decision: Some(decision),
             declared_target_texts: &[],
             prior_reported_tokens: Some(780_000),
+            prior_decision_id: None,
+            prior_input: crate::PriorInput::Current,
         })
     };
     let without_references = due(&decision);
