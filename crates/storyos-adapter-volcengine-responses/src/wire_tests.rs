@@ -364,3 +364,101 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
         )
     );
 }
+
+#[test]
+fn an_incremental_continuation_with_a_changed_input_sends_the_current_input_before_the_outputs() {
+    let DestinationRequest::Create(request) = crate::tests::create(
+        crate::tests::route("http://127.0.0.1:9"),
+        RequestAttempt::New,
+    ) else {
+        unreachable!("create() makes a Create request")
+    };
+    let bounds = request.route.bounds.unwrap();
+    let output = |call_id: &str, origin| storyos_application::ToolOutput {
+        call_id: call_id.to_owned(),
+        name: "propose_edit".to_owned(),
+        arguments: "{}".to_owned(),
+        output: format!(r#"<tool_result source="{call_id}" state="ok">Waits.</tool_result>"#),
+        origin,
+    };
+    let chapter = request.declared_targets[0].clone();
+    let changed = CreateRequest {
+        previous_response_reference: Some("resp-1".to_owned()),
+        prior_input: PriorInput::Replaced,
+        declared_targets: vec![pending_candidate(&chapter)],
+        tool_outputs: vec![
+            output("call-1", ToolOutputOrigin::EarlierStep),
+            output("call-2", ToolOutputOrigin::PriorResponse),
+        ],
+        ..request
+    };
+    let unchanged = CreateRequest {
+        prior_input: PriorInput::Current,
+        ..changed.clone()
+    };
+    let body = |request: &CreateRequest| -> serde_json::Value {
+        serde_json::from_str(&create_body(request, "model-1", bounds)).unwrap()
+    };
+    let result = serde_json::json!({"type": "function_call_output", "call_id": "call-2",
+        "output": r#"<tool_result source="call-2" state="ok">Waits.</tool_result>"#});
+
+    assert_eq!(
+        (
+            body(&changed)["previous_response_id"].clone(),
+            body(&changed)["input"].clone(),
+            body(&unchanged)["input"].clone(),
+        ),
+        (
+            serde_json::json!("resp-1"),
+            serde_json::json!([
+                {"role": "user", "content": [{"type": "input_text", "text": format!(
+                    "{REPLACED_INPUT_LABEL}\n\nAuthor request:\nTighten this paragraph.\n\n\
+                     Working text:\nThe rain fell hard.\n\nTarget blocks:\n[block_id: block-2] \
+                     (pending Proposal candidate)\nThe wind stopped."
+                )}]},
+                result.clone(),
+            ]),
+            serde_json::json!([result]),
+        )
+    );
+}
+
+#[test]
+fn a_changed_input_after_a_text_response_with_no_tool_call_says_that_it_replaces_the_earlier_input()
+{
+    let DestinationRequest::Create(request) = crate::tests::create(
+        crate::tests::route("http://127.0.0.1:9"),
+        RequestAttempt::New,
+    ) else {
+        unreachable!("create() makes a Create request")
+    };
+    let bounds = request.route.bounds.unwrap();
+    let changed = CreateRequest {
+        previous_response_reference: Some("resp-1".to_owned()),
+        prior_input: PriorInput::Replaced,
+        tool_outputs: Vec::new(),
+        ..request
+    };
+    let unchanged = CreateRequest {
+        prior_input: PriorInput::Current,
+        ..changed.clone()
+    };
+    let input = |request: &CreateRequest| -> serde_json::Value {
+        serde_json::from_str::<serde_json::Value>(&create_body(request, "model-1", bounds)).unwrap()
+            ["input"]
+            .clone()
+    };
+    let message = |text: String| serde_json::json!([{"role": "user", "content": [{"type": "input_text", "text": text}]}]);
+    let text = "Author request:\nTighten this paragraph.\n\nWorking text:\nThe rain fell hard.\n\n\
+                Target blocks:\n[block_id: 018f0000-0000-7001-8000-0000000000b1]\n\
+                The rain fell hard on the old roof.";
+
+    // The prior response has no call, so the request has no Tool output.
+    assert_eq!(
+        (input(&changed), input(&unchanged)),
+        (
+            message(format!("{REPLACED_INPUT_LABEL}\n\n{text}")),
+            message(text.to_owned()),
+        )
+    );
+}

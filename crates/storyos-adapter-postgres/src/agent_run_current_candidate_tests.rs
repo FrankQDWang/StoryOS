@@ -224,12 +224,14 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
     };
 
     // The call of the first RunStep is refused and its `finish` call does not count. The next
-    // RunStep calls only `finish`, and the closing RunStep reads the edited text and answers.
+    // RunStep reads the edited text and calls only `finish`. The closing RunStep continues that
+    // response with the same input, so its request sends only the output, and it answers.
     assert_eq!(
         (
             status,
             text,
             step_references(&admin, &run_id).await,
+            sent_revision(&admin, &run_id, "1", &edited).await,
             sent_revision(&admin, &run_id, "2", &edited).await,
         ),
         (
@@ -241,6 +243,7 @@ async fn a_run_with_no_accepted_call_after_the_author_edit_completes_with_its_fi
                 [2, [moved(&reference, &edited, &edited_text)]]
             ]),
             json!([[edited_text], [edited_text]]),
+            json!([[edited_text], []]),
         )
     );
 }
@@ -484,13 +487,15 @@ async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text(
         panic!("{decision:?}");
     };
 
-    // The reference covers the empty candidate, and the closing RunStep answers.
+    // The reference covers the empty candidate. The next RunStep sends it, and the closing
+    // RunStep continues that response with the same input and answers.
     assert_eq!(
         (
             status,
             text,
             emptied_text.clone(),
             step_references(&admin, &run_id).await[2].clone(),
+            sent_revision(&admin, &run_id, "1", &emptied).await,
             sent_revision(&admin, &run_id, "2", &emptied).await,
         ),
         (
@@ -499,6 +504,7 @@ async fn a_run_whose_candidate_the_author_emptied_completes_with_its_final_text(
             String::new(),
             json!([2, [moved(&reference, &emptied, "")]]),
             json!([[""], [""]]),
+            json!([[""], []]),
         )
     );
 }

@@ -78,9 +78,9 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
   assert.equal(queried.conversation_id, created.conversation_id);
   assert.deepEqual(queried.steering_inputs.map((item) => [item.input_position, item.author_message, item.model_attempt_id !== null]),
     corrections.map((text, index) => [String(index + 1), text, true]));
-  // Compaction occurs before the first decision request, and a new Conversation has no prior
-  // response to compact.
-  assert.equal(queried.active_compaction.kind, "absent");
+  // A new Conversation has no prior response before the first decision request. The next RunStep
+  // continues the prior response, so the compaction request compacts before it (ADR 0085).
+  assert.equal(queried.active_compaction.kind, original === FIRST ? "absent" : "present");
   assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
   // The tool loop fake records its whole wire request as the sent content (ADR 0091).
   const sent = queried.evidence.find((item) => item.kind === "sent_content");

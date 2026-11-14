@@ -124,6 +124,8 @@ pub struct CreateRequest {
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
+    /// Whether the prior response read the current input of this request (ADR 0085).
+    pub prior_input: PriorInput,
     /// The Tool Exposure of this RunStep. The adapter declares each exposed Tool as one function
     /// and sends no Tool for an empty Exposure (ADR 0084).
     pub tool_exposure: ToolExposure,
@@ -147,6 +149,19 @@ pub struct ToolOutput {
     /// The bounded `tool_result` projection of the stored ToolCall.
     pub output: String,
     pub origin: ToolOutputOrigin,
+}
+
+/// Whether the prior response of an incremental continuation read the current input of the
+/// request: the selected Context text, the declared targets, the selection references, and the
+/// passage input (ADR 0085).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PriorInput {
+    /// The prior response read the current input, or the request sends no prior response.
+    Current,
+    /// The current input changed after the prior response read it. The incremental request sends
+    /// the current input again before the Tool outputs, and the input says that it replaces the
+    /// earlier input.
+    Replaced,
 }
 
 /// Where the native function call of one output is.
@@ -210,7 +225,8 @@ pub struct CurrentInput<'a> {
 
 impl CurrentInput<'_> {
     /// One digest over the input. A continuation whose digest differs from that of its prior
-    /// request sends a full input (ADR 0085), because the prior response read the earlier input.
+    /// request sends its input again (ADR 0085), because the prior response read the earlier
+    /// input.
     /// A compaction summary is history that the response of the later request holds (ADR 0055).
     pub fn digest(&self) -> String {
         let context: Vec<serde_json::Value> = self

@@ -12,10 +12,11 @@ pub use tool_loop_plan::LIMIT_ANSWER;
 use storyos_application::{
     CacheUse, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,
     ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
-    ResponseReference, StreamControl, WirePayloadProjection,
+    PriorInput, ResponseReference, StreamControl, WirePayloadProjection,
 };
 use storyos_core::{
-    HOST_FAKE_MAPPING_REVISION, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, ModelAdapter, StreamItemState,
+    ContextSourceClass, DeclaredTargetKind, HOST_FAKE_MAPPING_REVISION,
+    HOST_FAKE_TOOL_LOOP_MAPPING_REVISION, ModelAdapter, StreamItemState,
 };
 
 const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
@@ -87,13 +88,7 @@ impl ModelProviderAdapter for FakeDestination {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
         let mapping_revision = HOST_FAKE_TOOL_LOOP_MAPPING_REVISION;
-        let mut wire = match &create.passage_input {
-            Some(input) => input.clone(),
-            None => serde_json::json!({
-                "author_message": create.author_message,
-                "chapter_id": create.chapter_id,
-            }),
-        };
+        let mut wire = current_input(create);
         wire["mapping_revision"] = serde_json::json!(mapping_revision);
         if let Some(reference) = &create.previous_response_reference {
             wire["previous_response_reference"] = serde_json::json!(reference);
@@ -185,6 +180,55 @@ impl ModelProviderAdapter for FakeDestination {
             response_reference: Some(reference),
         })
     }
+}
+
+/// The current input that a request sends, as the tool loop wire sends it: an incremental
+/// continuation with Tool outputs sends it only when it changed after the prior response read it.
+/// A changed input says that it replaces the earlier input (ADR 0085).
+fn current_input(create: &CreateRequest) -> serde_json::Value {
+    let incremental =
+        create.previous_response_reference.is_some() && !create.tool_outputs.is_empty();
+    let replaced =
+        create.previous_response_reference.is_some() && create.prior_input == PriorInput::Replaced;
+    if incremental && !replaced {
+        return serde_json::json!({});
+    }
+    let mut wire = match &create.passage_input {
+        Some(input) => input.clone(),
+        None => serde_json::json!({
+            "author_message": create.author_message,
+            "chapter_id": create.chapter_id,
+        }),
+    };
+    wire["context"] = create
+        .context
+        .iter()
+        .filter(|item| {
+            !matches!(
+                item.source_class,
+                ContextSourceClass::HostControl | ContextSourceClass::ToolResult
+            )
+        })
+        .map(|item| {
+            serde_json::json!({"source_class": item.source_class.name(), "content": item.content})
+        })
+        .collect();
+    wire["declared_targets"] = create
+        .declared_targets
+        .iter()
+        .map(|target| {
+            let kind = match target.kind {
+                DeclaredTargetKind::ChapterBlock => "chapter_block",
+                DeclaredTargetKind::PendingCandidate => "pending_candidate",
+                DeclaredTargetKind::JoinableBlock { .. } => "joinable_block",
+            };
+            serde_json::json!({"block_id": target.block_id, "kind": kind})
+        })
+        .collect();
+    if replaced {
+        wire["replaces_earlier_input"] = serde_json::json!(true);
+    }
+    wire
 }
 
 /// The fixed Host-managed summary of the fake destination, as one complete assistant item.

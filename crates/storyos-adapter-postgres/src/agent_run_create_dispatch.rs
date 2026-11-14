@@ -2,7 +2,8 @@
 
 use storyos_application::{
     CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
-    DispatchClaim, ModelResponse, ModelUsage, Observation, RequestAttempt, RequestContextItem,
+    DispatchClaim, ModelResponse, ModelUsage, Observation, PriorInput, RequestAttempt,
+    RequestContextItem,
 };
 use storyos_core::{
     AgentDecisionOutcome, FinishRuleOutcome, ResponseDisposition, ResponseFacts, apply_finish_rule,
@@ -197,8 +198,11 @@ pub(crate) async fn create_request(
         Some(_) => storyos_core::ToolChoice::None,
         None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
-    let previous_response_reference = match &probe {
-        Some(probe) => probe.previous_response_reference.clone(),
+    let (previous_response_reference, prior_input) = match &probe {
+        Some(probe) => (
+            probe.previous_response_reference.clone(),
+            PriorInput::Current,
+        ),
         None => {
             previous_response_reference(client, claim, run, prior_context, &tool_exposure.digest())
                 .await?
@@ -219,6 +223,7 @@ pub(crate) async fn create_request(
         declared_targets,
         selection_references: input.selection_references,
         previous_response_reference,
+        prior_input,
         tool_exposure,
         tool_choice,
         successor_of: None,
@@ -281,21 +286,30 @@ pub(crate) async fn declared_targets(
     Ok(declared)
 }
 
-/// The destination reference of the prior binding that an incremental continuation sends.
+/// The destination reference of the prior binding that an incremental continuation sends, and
+/// whether the prior response read the current input. A claimed Attempt sends its own request
+/// again.
 async fn previous_response_reference(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
     tool_exposure_digest: &str,
-) -> Result<Option<String>, CompleteAgentRunError> {
-    let prior_binding = match (&run.attempt_payload, prior_context) {
-        (Some(payload), _) => serde_json::from_str::<serde_json::Value>(payload)
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
-            .pointer("/wire/prior_continuation_binding_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned),
-        (None, PriorContext::Rebuild | PriorContext::Summary) => None,
+) -> Result<(Option<String>, PriorInput), CompleteAgentRunError> {
+    let (prior_binding, prior_input) = match (&run.attempt_payload, prior_context) {
+        (Some(payload), _) => {
+            let payload: serde_json::Value = serde_json::from_str(payload)
+                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+            (
+                payload
+                    .pointer("/wire/prior_continuation_binding_id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                crate::agent_run_continuation::parse_wire(&payload)
+                    .map_or(PriorInput::Current, |wire| wire.prior_input),
+            )
+        }
+        (None, PriorContext::Rebuild | PriorContext::Summary) => (None, PriorInput::Current),
         (None, PriorContext::Continue) => {
             match crate::update_project_assistance::read_assistance_record(
                 client,
@@ -305,7 +319,7 @@ async fn previous_response_reference(
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
             {
                 Some(assistance) => {
-                    crate::agent_run_continuation::decide_continuation(
+                    let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
                         &run.conversation_id,
@@ -313,17 +327,18 @@ async fn previous_response_reference(
                         &assistance,
                         tool_exposure_digest,
                     )
-                    .await?
-                    .prior_binding_id
+                    .await?;
+                    (wire.prior_binding_id, wire.prior_input)
                 }
-                None => None,
+                None => (None, PriorInput::Current),
             }
         }
     };
-    match prior_binding {
-        Some(binding) => binding_reference(client, claim, &binding).await,
-        None => Ok(None),
-    }
+    let reference = match prior_binding {
+        Some(binding) => binding_reference(client, claim, &binding).await?,
+        None => None,
+    };
+    Ok((reference, prior_input))
 }
 
 /// The destination reference that the Model Attempt of one continuation binding produced.

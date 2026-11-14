@@ -42,12 +42,12 @@ const REFUSALS = [
   ["Please run an eval on this.", "eval"],
 ] as const;
 
-function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
+function assertEvidence(queried: GetAgentRunResponse, sentContent: string | undefined) {
   if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
   const attemptId = queried.model_attempt.model_attempt_id;
   // The tool loop fake records its whole wire request as the sent content (ADR 0091).
   const evidence = queried.evidence.map((item) => item.kind === "sent_content"
-    ? { ...item, content: (JSON.parse(item.content) as { author_message: string }).author_message } : item);
+    ? { ...item, content: (JSON.parse(item.content) as { author_message?: string }).author_message } : item);
   // The default read shows the closing RunStep. It also refers to the binding of the RunStep before it.
   const known = queried.model_attempt.known_prior_continuation;
   const prior = known.kind === "present" ? known.continuation_binding_id : null;
@@ -268,7 +268,9 @@ test("Worker distinguishes prose-change, a question, and CFP holds", async () =>
     if (afterDecision.model_attempt.kind !== "present") throw new Error("expected attempt");
     assert.match(afterDecision.model_attempt.model_attempt_id, UUID_V7);
     assert.equal(afterDecision.model_attempt.dispatch_state, "settled");
-    assertEvidence(afterDecision, "Help with this passage.");
+    // The closing RunStep continues the prior response with the same input, so it sends only the
+    // Tool output (ADR 0085).
+    assertEvidence(afterDecision, undefined);
     assert.equal(afterDecision.redaction_profile, "storyos.author.v1");
     assert.equal(afterDecision.items[0]?.state, "complete");
     assert.equal(afterDecision.items[0]?.phase, "complete");

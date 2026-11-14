@@ -309,7 +309,7 @@ pub(crate) async fn tool_outputs(
 /// sends, other than its Tool outputs, differs from the input of the function request Attempt
 /// before it. The input is all that the model reads: the selected Context text, the declared
 /// targets, the selection references, and the passage input. The prior response read the input
-/// of that Attempt, so an incremental request cannot carry a change.
+/// of that Attempt, so an incremental request sends a changed input again (ADR 0085).
 pub(crate) async fn continuation_input_changed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
