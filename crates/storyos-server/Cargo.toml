@@ -23,6 +23,7 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+yaml-rust2.workspace = true
 [dev-dependencies]
 tower.workspace = true
 [lints]
