@@ -105,6 +105,9 @@ The Host started the compaction at RunStep 2 with these numbers:
 | Counted tokens of the 31 new outputs (the `compaction` manifest of position 2) | 888,771 |
 | Expected input of RunStep 2 | **959,628** (threshold 812,646) |
 | Counted tokens of the later request (summary 11,929 + 2 author items 3,246 + 5 stubs 9,535 + 31 exact results 888,771 + working target 28) | 913,509 (window after the output bound 1,015,808) |
+| Margin of the later request to the bound of `later_request_too_long` | 102,299 (10.1 percent of 1,015,808) |
+
+The check `later_request_too_long` compares counted tokens with the window after the output bound. The same counted measure that started the compaction early can thus also end a Run with a false `conversation_too_long` ([#1520](https://github.com/FrankQDWang/StoryOS/issues/1520)). This later request was 102,299 counted tokens below that bound. Its reported input was 242,134 tokens.
 
 ## The later request as the route got it
 
@@ -155,6 +158,8 @@ Reported usage of each request of Run 2, before and after the compaction:
 
 - Counted tokens against reported tokens: the 31 group B results have 888,771 counted tokens and about 228,700 reported tokens (3.9 to 1). The 5 group A results have 143,543 counted tokens and about 36,500 reported tokens. Run 1 gave 3.97 to 1. An English search result of 10 entries is about 28,400 counted tokens and 7,200 reported tokens.
 - The compaction removed Run 1 (about 32,000 reported tokens) and the 5 group A results (about 36,500 reported tokens). It added the summary (6,473 output tokens of M6), the 5 stubs (9,535 counted tokens), and the section (417 counted tokens). The 31 group B results stay exact by design (ADR 0093 section 5), and they are about 94 percent of the reported input of the later request (97 percent of its counted tokens).
+- The part that could become stubs: the 5 group A results went from 143,543 counted tokens to 5 stubs of 9,535 counted tokens. This is a reduction of 134,008 counted tokens (93.4 percent).
+- The reduction of 19.2 percent is a property of this Run, not of an ordinary Run. This Run put 31 results into the response that the summary continued, and these waiting outputs stay exact.
 - The summary request M6 took 2 min 46 s from its claim to the claim of M7. This is below the request timeout of 600 s.
 - `cached_tokens` stayed at most 1,848 for each request.
 
@@ -174,9 +179,17 @@ The coordinator asked for one estimate, with its arithmetic, of a second Run tha
 
 ## Author view
 
-After Run 2, the panel showed the two author messages, the two answers, and the source list of each research Run (357 lines in all, each "<title>（获取于 …）"). A text search of the page found no "Conversation Summary", no "Summary of the earlier conversation", no "Earlier author messages", no "stub", no "compaction", no "摘要", and no "存根". The one match of "Summary" and "summary" is in two source titles ("Summary of lights, buoys, and beacons in Chinese waters", "A summary of researches in sound"), and the one match of "压缩" is the Project title. The editor showed the Chapter with its one paragraph. No summary and no compaction fact are visible to the author.
+After Run 2, the panel showed the two author messages, the two answers, and a source list of 357 lines, each "<title>（获取于 …）". The database has 30 Source Snapshots of Run 1 and 357 of Run 2. After Run 1, the panel showed the 30 lines of Run 1. After Run 2, the page had only the 357 lines of Run 2, and the 30 lines of Run 1 were not on the page. This record does not examine the cause. A text search of the page found no "Conversation Summary", no "Summary of the earlier conversation", no "Earlier author messages", no "stub", no "compaction", no "摘要", and no "存根". The one match of "Summary" and "summary" is in two source titles ("Summary of lights, buoys, and beacons in Chinese waters", "A summary of researches in sound"), and the one match of "压缩" is the Project title. The editor showed the Chapter with its one paragraph. No summary and no compaction fact are visible to the author.
 
 Final answer of Run 2 (short): it confirmed the 36 searches and the read of A1, gave the fog signal numbers of A1 (steam pressure 50–100 psi, siren 72 psi, Henry's relative power 9 : 7 : 4, a range of 20–30 miles in good conditions, Tyndall's advice of 2–3 miles), gave the facts that the 鹰嘴岛 scene can use, and cited 7 URLs.
+
+Languages of this Conversation:
+
+- The two author messages are in Chinese. Only the search queries in them are in English, because this Run needed English results for the calibration.
+- The Chapter text is in Chinese: one paragraph of 28 characters, "雾从海面升起来的时候，林三爬上钟楼，抓住绳子，开始敲钟。"
+- The Tool results are in English.
+- The summary (M6) is in English, with the Chinese names (finding F3).
+- The final answer of Run 1 (M3, before the compaction) and the final answer of Run 2 (M8, after the compaction) are in Chinese, as the author messages asked. The English summary did not change the language of the final answer.
 
 ## Observations
 
@@ -191,10 +204,14 @@ The open item "no live request covered the request form after a compaction at Ru
 
 ## Findings
 
+The IDs are the IDs of the findings message to the coordinator.
+
 | ID | Finding | Effect | Owner |
 | --- | --- | --- | --- |
-| F1 | The expected input counts new Tool outputs in Unicode scalars (ADR 0052), and the reported usage counts Provider tokens. For English Exa results, one reported token is 3.9 counted tokens. The compaction started at an expected input of 959,628 when the reported context was 299,550 tokens (29 percent of the window). For Chinese text the ratio is about 1.45 ([pinned version record](agent-plan-pinned-version-qualification-2026-10-14.md)). | In a Run with many English Tool results, the threshold of 812,646 starts a compaction at about 300,000 reported tokens. A reported input near 812,646 is not reachable through Tool results without a much larger cost. This is the measurement for the threshold decision of the author. | Sent to the coordinator; the author decides the threshold. |
-| F2 | The later request keeps the outputs of the response that the summary continued in their exact form (ADR 0093 section 5). Here they were 31 results and about 94 percent of the reported input of the later request. | The compaction reduced the reported input by 19.2 percent only. A Run whose last response has many calls gets little room from the compaction. | Sent to the coordinator; design fact for the threshold decision. |
-| F3 | The summary is in English, although the instruction says "Write in the language of the manuscript" and the manuscript is Chinese. The summary request has English Tool results and an English instruction. | The summary text costs more tokens than a summary in Chinese would, and the model reads its earlier turns in another language. No loss of content was found. | Sent to the coordinator; no owner issue yet. |
-| F4 | The public `usage` of `getAgentRun` and of each compaction record shows only `{"kind": "reported"}`, with no token numbers. The numbers are only on the Model Attempt rows. | An operator cannot read the measured sizes through the public read. | Observation; sent to the coordinator. |
-| F5 | The panel lists each Source Snapshot of a research Run: 357 lines for the two Runs. | A long source list for the author after many searches. | Observation; sent to the coordinator. |
+| F1 | The expected input counts new Tool outputs in Unicode scalars (ADR 0052), and the reported usage counts Provider tokens. For English Exa results, one reported token is 3.9 counted tokens. The compaction started at an expected input of 959,628 when the reported context was 299,550 tokens (29 percent of the window). For Chinese text the ratio is about 1.45 ([pinned version record](agent-plan-pinned-version-qualification-2026-10-14.md)). The check `later_request_too_long` uses the same counted measure. The later request was 913,509 counted tokens, 102,299 below the bound of 1,015,808. | In a Run with many English Tool results, the threshold of 812,646 starts a compaction at about 300,000 reported tokens. A reported input near 812,646 is not reachable through Tool results without a much larger cost. The same measure can give a false `conversation_too_long`. This is the measurement for the threshold decision of the author. | [#1520](https://github.com/FrankQDWang/StoryOS/issues/1520). The author decides the threshold. |
+| F2 | The later request keeps the outputs of the response that the summary continued in their exact form (ADR 0093 section 5). Here they were 31 results and about 94 percent of the reported input of the later request. The part that could become stubs went from 143,543 to 9,535 counted tokens (93.4 percent less). | The compaction reduced the reported input by 19.2 percent only. This is a property of this Run, which put 31 results into the last response, and not the reduction of an ordinary Run. | No issue. Property of this Run. |
+| F3 | The summary is in English, although the instruction says "Write in the language of the manuscript" and the manuscript is Chinese. The author messages and the Chapter text are in Chinese, and the Tool results and the instruction are in English. | The summary text costs more tokens than a summary in Chinese would. The final answer after the compaction (M8) stayed in Chinese, as the author message asked. No loss of content was found. | No issue. |
+| F4 | The stubs kept 7 of 10 source lines (A1), 6 of 10 (A2 to A4), and 7 of 9 (A5). The final answer cited 7 sources: 2 from the kept lines of A1, which the model also read again, and 5 from exact group B results. | The model cited no source that a stub left out without a read. | Observation. |
+| F5 | The public `usage` of `getAgentRun` and of each compaction record shows only `{"kind": "reported"}`, with no token numbers. The numbers are only on the Model Attempt rows. | An operator cannot read the measured sizes through the public read. | Observation. |
+| F6 | The panel lists each Source Snapshot of a research Run: 30 lines for Run 1 and 357 lines for Run 2. After Run 2, the page had only the 357 lines of Run 2. | A long source list for the author after many searches. | Observation. |
+| F7 | The summary request M6 took 2 min 46 s, with 299,550 input and 6,473 output tokens. | Below the request timeout of 600 s. | Observation. |
