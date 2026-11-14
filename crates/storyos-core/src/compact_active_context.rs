@@ -134,8 +134,9 @@ pub struct CompactionTrigger {
     /// The reported input and output tokens of the last response of the chain, or `None` when
     /// the destination did not report them.
     pub prior_reported_tokens: Option<u64>,
-    /// The counted tokens of the new turn.
-    pub new_turn_tokens: u64,
+    /// The counted tokens of the text that the request sends. The reported usage of the prior
+    /// response counts each text that the Provider conversation already holds (ADR 0056).
+    pub sent_input_tokens: u64,
 }
 
 /// Whether the expected input of the next request reaches the threshold. An unknown window, an
@@ -147,8 +148,9 @@ pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
         trigger.prior_reported_tokens,
     ) {
         (Some(window), Some(output_bound), Some(prior)) => {
-            compaction_threshold(window, output_bound)
-                .is_some_and(|threshold| prior.saturating_add(trigger.new_turn_tokens) >= threshold)
+            compaction_threshold(window, output_bound).is_some_and(|threshold| {
+                prior.saturating_add(trigger.sent_input_tokens) >= threshold
+            })
         }
         _ => false,
     }
@@ -168,6 +170,10 @@ pub struct CompactionRequestFacts<'a> {
     pub declared_target_texts: &'a [String],
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub prior_reported_tokens: Option<u64>,
+    /// The Decision of the prior response. The request sends the output of each of its calls.
+    pub prior_decision_id: Option<&'a str>,
+    /// Whether the prior response read the current input of the request.
+    pub prior_input: crate::PriorInput,
 }
 
 impl CompactionTrigger {
@@ -182,27 +188,53 @@ impl CompactionTrigger {
                 .and_then(crate::BudgetBounds::request_bounds)
                 .map(|bounds| u64::from(bounds.max_output_tokens)),
             prior_reported_tokens: facts.prior_reported_tokens,
-            // The request sends each selected item, each selection reference text, and each
-            // declared target text (ADR 0056).
-            new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
-                let references = record
-                    .operation_requirement
-                    .selection_references
-                    .iter()
-                    .flatten()
-                    .filter_map(|admitted| admitted.selected_text.as_deref());
-                let sent_texts = references
-                    .chain(facts.declared_target_texts.iter().map(String::as_str))
-                    .map(crate::assemble_context::count_context_item_tokens);
-                record
-                    .selected
-                    .iter()
-                    .map(|item| item.token_count)
-                    .chain(sent_texts)
-                    .sum()
-            }),
+            sent_input_tokens: facts.decision.map_or(
+                /*default*/ 0,
+                |record| sent_input_tokens(record, facts),
+            ),
         }
     }
+}
+
+/// The counted tokens of the text of `record` that the request sends (ADR 0056). A request with
+/// no Tool result sends the new turn: each selected item, each selection reference text, and
+/// each declared target text. A later RunStep sends the outputs of the calls of its prior
+/// response, and the current input again only when the prior response did not read it (ADR 0085).
+fn sent_input_tokens(
+    record: &crate::CurrentPassageAssemblyRecord,
+    facts: &CompactionRequestFacts<'_>,
+) -> u64 {
+    let (tool_results, current): (Vec<_>, Vec<_>) = record
+        .selected
+        .iter()
+        .partition(|item| item.source_class == crate::ContextSourceClass::ToolResult);
+    let outputs: u64 = record
+        .operation_requirement
+        .tool_results
+        .iter()
+        .flatten()
+        .zip(&tool_results)
+        .filter(|(source, _)| facts.prior_decision_id == Some(source.decision_id.as_str()))
+        .map(|(_, item)| item.token_count)
+        .sum();
+    if !tool_results.is_empty() && facts.prior_input == crate::PriorInput::Current {
+        return outputs;
+    }
+    let references = record
+        .operation_requirement
+        .selection_references
+        .iter()
+        .flatten()
+        .filter_map(|admitted| admitted.selected_text.as_deref());
+    let sent_texts = references
+        .chain(facts.declared_target_texts.iter().map(String::as_str))
+        .map(crate::assemble_context::count_context_item_tokens);
+    current
+        .iter()
+        .map(|item| item.token_count)
+        .chain(sent_texts)
+        .sum::<u64>()
+        + outputs
 }
 
 /// Whether the decision request compacts first. The expected input can reach the threshold, or
@@ -256,7 +288,7 @@ pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {
         trigger.prior_reported_tokens,
     ) {
         (Some(window), Some(output_bound), Some(prior)) => {
-            prior.saturating_add(trigger.new_turn_tokens) >= window.saturating_sub(output_bound)
+            prior.saturating_add(trigger.sent_input_tokens) >= window.saturating_sub(output_bound)
         }
         _ => false,
     }

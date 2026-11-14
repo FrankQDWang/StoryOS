@@ -690,15 +690,15 @@ async fn a_later_run_step_counts_only_the_outputs_of_its_prior_response_in_the_e
         .lock()
         .await;
     let (store, admin) = stores().await;
-    // RunStep 1 of the second Run sends only the output of the `finish` call of RunStep 1. The
-    // reported usage of that response already has the author message of 4,800 tokens. The
-    // threshold is 812,646 tokens.
+    // The request at position 1 of the second Run sends only the output of the `finish` call of
+    // the response at position 0. The reported usage of that response already has the author
+    // message of 4,800 tokens. The threshold is 812,646 tokens.
     let message = "Help again. ".repeat(/*n*/ 400);
     let cases = [
         // 810,646 tokens and the short output are below the threshold.
         (["811", "812"], 810_546, None),
-        // 812,646 tokens are at the threshold before the output.
-        (["813", "814"], 812_546, Some("installed")),
+        // 812,645 tokens are one token below the threshold, and the output puts them above it.
+        (["813", "814"], 812_545, Some("installed")),
     ];
     for (prefixes, input_tokens, install_state) in cases {
         let run_id = second_run_on_agent_plan(
@@ -709,7 +709,11 @@ async fn a_later_run_step_counts_only_the_outputs_of_its_prior_response_in_the_e
             vec![
                 finish_events("resp_finish"),
                 streamed("resp_decision", ADVICE),
-                with_usage(finish_events("resp_again"), input_tokens, /*output*/ 100),
+                with_usage(
+                    finish_events("resp_again"),
+                    input_tokens,
+                    /*output*/ 100,
+                ),
                 streamed("resp_closing", ADVICE),
                 streamed("resp_later_closing", ADVICE),
             ],

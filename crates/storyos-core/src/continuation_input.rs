@@ -2,6 +2,19 @@
 
 const FULL_CONTINUATION_INPUT_PREFIX: &str = "Submit the complete current request.";
 
+/// Whether the prior response of an incremental continuation read the current input of the
+/// request: the selected Context text, the declared targets, the selection references, and the
+/// passage input (ADR 0085).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PriorInput {
+    /// The prior response read the current input, or the request sends no prior response.
+    Current,
+    /// The current input changed after the prior response read it. The incremental request sends
+    /// the current input again before the Tool outputs, and the input says that it replaces the
+    /// earlier input.
+    Replaced,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContinuationInputMapping {
     None,

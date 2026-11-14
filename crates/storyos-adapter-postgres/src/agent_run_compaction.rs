@@ -191,7 +191,7 @@ async fn declared_target_texts(
 /// The loaded facts of the decision request of `run` that continues `chain`.
 fn request_facts<'a>(
     run: &'a RunPhaseRow,
-    chain: &summary::PriorChain,
+    chain: &'a summary::PriorChain,
     declared_target_texts: &'a [String],
 ) -> CompactionRequestFacts<'a> {
     CompactionRequestFacts {
@@ -201,6 +201,8 @@ fn request_facts<'a>(
         decision: run.disclosure_request.as_ref(),
         declared_target_texts,
         prior_reported_tokens: chain.reported_tokens,
+        prior_decision_id: chain.decision_id.as_deref(),
+        prior_input: chain.prior_input,
     }
 }
 

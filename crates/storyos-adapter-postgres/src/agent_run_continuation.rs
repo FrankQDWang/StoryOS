@@ -44,7 +44,13 @@ pub(crate) async fn decide_continuation(
     let (prior_binding_id, prior_input) = match mapping {
         ContinuationInputMapping::Incremental => (
             known_prior_binding_id.clone(),
-            match crate::agent_run_tool_result::continuation_input_changed(client, claim).await? {
+            match crate::agent_run_tool_result::continuation_input_changed(
+                client,
+                claim,
+                author_message,
+            )
+            .await?
+            {
                 true => PriorInput::Replaced,
                 false => PriorInput::Current,
             },

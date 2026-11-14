@@ -56,6 +56,10 @@ pub(crate) struct PriorChain {
     pub reference: Option<String>,
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub reported_tokens: Option<u64>,
+    /// The Decision of the prior response, whose calls the request answers.
+    pub decision_id: Option<String>,
+    /// Whether the prior response read the current input of the request.
+    pub prior_input: storyos_application::PriorInput,
 }
 
 /// The prior binding that the current continuation decision selects, or `None` when the decision
@@ -89,7 +93,8 @@ pub(crate) async fn prior_chain(
             "SELECT model_attempt_id::text, payload->>'response_reference',
                     CASE WHEN payload->'usage'->>'kind' = 'reported'
                          THEN ((payload->'usage'->>'input_tokens')::bigint
-                               + (payload->'usage'->>'output_tokens')::bigint)::text END
+                               + (payload->'usage'->>'output_tokens')::bigint)::text END,
+                    decision_id::text
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND continuation_binding_id = $3::text::uuid",
@@ -107,6 +112,8 @@ pub(crate) async fn prior_chain(
         reported_tokens: row
             .get::<_, Option<String>>(/*idx*/ 2)
             .and_then(|tokens| tokens.parse().ok()),
+        decision_id: row.get(/*idx*/ 3),
+        prior_input: continuation.prior_input,
     }))
 }
 

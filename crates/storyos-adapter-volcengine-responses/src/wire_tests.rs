@@ -167,8 +167,10 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
         decision: Some(&decision),
         declared_target_texts: &target_texts,
         prior_reported_tokens: None,
+        prior_decision_id: None,
+        prior_input: PriorInput::Current,
     })
-    .new_turn_tokens;
+    .sent_input_tokens;
     // With each sent text empty, the wire text keeps only its framing.
     let framing = CreateRequest {
         context: request
