@@ -213,7 +213,7 @@ async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_r
     let v6 = adapter
         .prepare(&DestinationRequest::Create(request(
             storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
-            storyos_core::AGENT_PLAN_REGISTRATION.revision,
+            storyos_core::AGENT_PLAN_READ_RESULT_REGISTRATION.revision,
         )))
         .await
         .ok()

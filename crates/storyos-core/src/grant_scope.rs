@@ -14,6 +14,10 @@ pub enum GrantScope {
     /// The second scope and the source class `tool_result`: the projected results of the
     /// resolved ToolCalls of the Run for its continuation RunStep (S5-05).
     ProjectWritingAssistanceV3,
+    /// The third scope and the Skill source classes `skill_catalog`, `skill_instruction`, and
+    /// `skill_resource`: the text of the Skills that the operator of the deployment provides
+    /// (ADR 0089 section 4).
+    ProjectWritingAssistanceV4,
     /// The research destination that `createAgentRun` binds (ADR 0090): the Purpose `research`,
     /// the source classes `agent_query` and `agent_url_selection`, no length bound, no Ambient
     /// Context. It covers no model request.
@@ -22,13 +26,14 @@ pub enum GrantScope {
 
 impl GrantScope {
     /// The scope that each new grant records.
-    pub const CURRENT: Self = Self::ProjectWritingAssistanceV3;
+    pub const CURRENT: Self = Self::ProjectWritingAssistanceV4;
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProjectWritingAssistanceV1 => "project_writing_assistance_v1",
             Self::ProjectWritingAssistanceV2 => "project_writing_assistance_v2",
             Self::ProjectWritingAssistanceV3 => "project_writing_assistance_v3",
+            Self::ProjectWritingAssistanceV4 => "project_writing_assistance_v4",
             Self::ResearchToolV1 => "research_tool_v1",
         }
     }
@@ -38,6 +43,7 @@ impl GrantScope {
             "project_writing_assistance_v1" => Some(Self::ProjectWritingAssistanceV1),
             "project_writing_assistance_v2" => Some(Self::ProjectWritingAssistanceV2),
             "project_writing_assistance_v3" => Some(Self::ProjectWritingAssistanceV3),
+            "project_writing_assistance_v4" => Some(Self::ProjectWritingAssistanceV4),
             "research_tool_v1" => Some(Self::ResearchToolV1),
             _ => None,
         }
@@ -48,11 +54,14 @@ impl GrantScope {
             (
                 Self::ProjectWritingAssistanceV1
                 | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3,
+                | Self::ProjectWritingAssistanceV3
+                | Self::ProjectWritingAssistanceV4,
                 ContextPurpose::CurrentPassageAssistance,
             )
             | (
-                Self::ProjectWritingAssistanceV2 | Self::ProjectWritingAssistanceV3,
+                Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3
+                | Self::ProjectWritingAssistanceV4,
                 ContextPurpose::ActiveContextCompaction,
             ) => true,
             (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction)
@@ -68,20 +77,33 @@ impl GrantScope {
             (
                 Self::ProjectWritingAssistanceV1
                 | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3,
+                | Self::ProjectWritingAssistanceV3
+                | Self::ProjectWritingAssistanceV4,
                 ContextSourceClass::AuthorInstruction
                 | ContextSourceClass::WorkingTarget
                 | ContextSourceClass::InstructionBinding,
             )
             | (
-                Self::ProjectWritingAssistanceV2 | Self::ProjectWritingAssistanceV3,
+                Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3
+                | Self::ProjectWritingAssistanceV4,
                 ContextSourceClass::ConversationSummary,
             )
-            | (Self::ProjectWritingAssistanceV3, ContextSourceClass::ToolResult) => true,
+            | (
+                Self::ProjectWritingAssistanceV3 | Self::ProjectWritingAssistanceV4,
+                ContextSourceClass::ToolResult,
+            )
+            | (
+                Self::ProjectWritingAssistanceV4,
+                ContextSourceClass::SkillCatalog
+                | ContextSourceClass::SkillInstruction
+                | ContextSourceClass::SkillResource,
+            ) => true,
             (
                 Self::ProjectWritingAssistanceV1
                 | Self::ProjectWritingAssistanceV2
-                | Self::ProjectWritingAssistanceV3,
+                | Self::ProjectWritingAssistanceV3
+                | Self::ProjectWritingAssistanceV4,
                 ContextSourceClass::HostControl,
             )
             | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary)
@@ -90,13 +112,24 @@ impl GrantScope {
                 ContextSourceClass::ToolResult,
             )
             | (
+                Self::ProjectWritingAssistanceV1
+                | Self::ProjectWritingAssistanceV2
+                | Self::ProjectWritingAssistanceV3,
+                ContextSourceClass::SkillCatalog
+                | ContextSourceClass::SkillInstruction
+                | ContextSourceClass::SkillResource,
+            )
+            | (
                 Self::ResearchToolV1,
                 ContextSourceClass::AuthorInstruction
                 | ContextSourceClass::WorkingTarget
                 | ContextSourceClass::InstructionBinding
                 | ContextSourceClass::ConversationSummary
                 | ContextSourceClass::HostControl
-                | ContextSourceClass::ToolResult,
+                | ContextSourceClass::ToolResult
+                | ContextSourceClass::SkillCatalog
+                | ContextSourceClass::SkillInstruction
+                | ContextSourceClass::SkillResource,
             ) => false,
         }
     }

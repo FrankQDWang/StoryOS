@@ -82,6 +82,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let tool_loop = [
             storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
             storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+            storyos_core::AGENT_PLAN_SKILL_MAPPING_REVISION,
         ]
         .contains(&route.mapping_revision.as_str());
         if !probe && !tool_loop {
@@ -366,3 +367,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tool_loop_wire_tests.rs"]
 mod tool_loop_wire_tests;
+
+#[cfg(test)]
+#[path = "skill_wire_tests.rs"]
+mod skill_wire_tests;

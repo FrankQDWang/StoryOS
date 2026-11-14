@@ -189,3 +189,71 @@ fn only_the_third_scope_covers_a_tool_result() {
         ]
     );
 }
+
+const SKILL_CLASSES: [ContextSourceClass; 3] = [
+    ContextSourceClass::SkillCatalog,
+    ContextSourceClass::SkillInstruction,
+    ContextSourceClass::SkillResource,
+];
+
+fn with_item(
+    mut request: CurrentPassageAssemblyRecord,
+    source_class: ContextSourceClass,
+) -> CurrentPassageAssemblyRecord {
+    request.selected.push(SelectedProjection {
+        source_class,
+        source_version: "source-1".to_owned(),
+        projection_mode: ProjectionMode::ExactRequired,
+        token_count: 4,
+        content: "text".to_owned(),
+    });
+    request
+}
+
+#[test]
+fn only_the_fourth_scope_covers_the_skill_source_classes_and_it_keeps_the_third_scope() {
+    let request = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
+    let scopes = [
+        "project_writing_assistance_v1",
+        "project_writing_assistance_v2",
+        "project_writing_assistance_v3",
+        "project_writing_assistance_v4",
+        "research_tool_v1",
+    ];
+    let admitted = |request: &CurrentPassageAssemblyRecord| {
+        scopes.map(|scope| {
+            admit_disclosure(&GrantFacts {
+                grant_scope: Some(scope),
+                ..facts(request)
+            })
+            .is_ok()
+        })
+    };
+    let third_scope = with_item(
+        with_item(request.clone(), ContextSourceClass::ConversationSummary),
+        ContextSourceClass::ToolResult,
+    );
+    let summary = crate::compaction_assembly_record(&request, &[]);
+
+    assert_eq!(
+        SKILL_CLASSES.map(|class| admitted(&with_item(request.clone(), class))),
+        [[false, false, false, true, false]; 3]
+    );
+    assert_eq!(
+        [admitted(&third_scope), admitted(&summary)],
+        [
+            [false, false, true, true, false],
+            [false, true, true, true, false]
+        ]
+    );
+    assert_eq!(
+        (
+            GrantScope::CURRENT,
+            GrantScope::parse("project_writing_assistance_v4").map(GrantScope::as_str),
+        ),
+        (
+            GrantScope::ProjectWritingAssistanceV4,
+            Some("project_writing_assistance_v4"),
+        )
+    );
+}

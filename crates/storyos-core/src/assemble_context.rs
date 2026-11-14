@@ -62,6 +62,13 @@ pub enum ContextSourceClass {
     ConversationSummary,
     /// The projected result of one resolved ToolCall of the Run. It is Data-only Context.
     ToolResult,
+    /// The name and the description of each Skill of the catalog of the Run (ADR 0089).
+    SkillCatalog,
+    /// The `SKILL.md` text of one Skill. It has the instruction rank below the Project
+    /// Instruction, and it is not Data-only Context (ADR 0089 section 3).
+    SkillInstruction,
+    /// The text of one resource file of a Skill (ADR 0089 section 3).
+    SkillResource,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
