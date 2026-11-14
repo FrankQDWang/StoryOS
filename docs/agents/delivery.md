@@ -26,6 +26,10 @@ When Wayfinder has resolved the required decisions, use the `to-spec` skill, the
 
 A ticket body has Parent, What to build, observable acceptance criteria, and its native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only when a wide refactor cannot stay a complete passing vertical slice.
 
+`make check` does not run the project-scope guards and the exact-dist browser journeys. A ticket that changes a Web test, a browser journey, a panel surface, or a wire form requires `make check-full`, and its body says so.
+
+When a specification changes a request form of a real route, the live run is a ticket after the first slice that sends that form. Do not make it the last ticket, because its findings give more tickets.
+
 ### 2. Dispatch
 
 The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch. Run independent ready tickets in parallel.
@@ -77,6 +81,8 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 ### 8. Merge the ticket
 
 The coordinator examines the evidence against the [merge gate](#merge-gate). Then it merges the ticket pull request into the integration branch and posts the [Resolution](#resolution) on the ticket.
+
+After the merge of the first ticket that requires `make check-full`, and again before the aggregate pull request, the coordinator runs `make check-full` on the integration branch.
 
 ### 9. Merge the specification
 
@@ -193,7 +199,7 @@ Each worktree owns its source, `target/`, `node_modules/`, release package, and 
 
 ### Heavy runs on a shared host
 
-Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. Remove the slot after the run.
+Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p <main checkout>/target/verify-slots`, then `mkdir <main checkout>/target/verify-slots/slot-<N>` with N from 1 to 3. When `mkdir` fails, the slot is in use: try the next slot, or wait. Put an owner file with your session and the command in the slot. After the run, remove the slot with `rm <owner file>` and then `rmdir <slot>`, each as one command. A client can refuse `rm -rf`, and then the slot stays.
 
 ### Development PostgreSQL
 
