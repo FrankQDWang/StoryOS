@@ -181,6 +181,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
         declared_targets: vec![target()],
         selection_references: Vec::new(),
         previous_response_reference: None,
+        prior_input: storyos_application::PriorInput::Current,
         tool_exposure: storyos_core::ToolExposure::empty(),
         tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,

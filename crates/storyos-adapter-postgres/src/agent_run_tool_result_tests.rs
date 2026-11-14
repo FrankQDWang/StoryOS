@@ -869,7 +869,8 @@ async fn a_result_above_the_item_limit_reenters_with_a_prefix_and_an_explicit_ma
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() {
+async fn a_chapter_edit_during_the_tool_exchange_sends_the_current_input_after_the_prior_response()
+{
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -892,19 +893,14 @@ async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() 
         std::slice::from_ref(&source),
     )
     .await;
-    let mut rebuilt = continuation_step(
+    // The prior response read the Chapter before the edit, so the request continues it with the
+    // current input before the output.
+    let continued = continuation_step(
         "e5b",
         "tool_request",
-        json!([
-            {"role": "user"},
-            {"type": "function_call", "call_id": "call_01", "name": "web_search",
-             "arguments": SEARCH},
-            ok_output(RESULT),
-        ]),
+        json!([{"role": "user"}, ok_output(RESULT)]),
         &source,
     );
-    // The prior response read the Chapter before the edit, so the request does not continue it.
-    rebuilt["previous_response_id"] = Value::Null;
     let message: String = admin
         .query_one(
             "SELECT (payload #>> '{wire,serialized_payload}')::jsonb #>> '{input,0,content,0,text}'
@@ -924,7 +920,7 @@ async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() 
             ran.mcp,
         ),
         (
-            completed(vec![request_step(), rebuilt, closing]),
+            completed(vec![request_step(), continued, closing]),
             true,
             vec![MODEL_POST.to_owned(); 3],
             vec![POST.to_owned(); 4],
@@ -934,7 +930,8 @@ async fn a_chapter_edit_during_the_tool_exchange_sends_the_full_current_input() 
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_target_reservation_during_the_tool_exchange_sends_the_full_current_input() {
+async fn a_target_reservation_during_the_tool_exchange_sends_the_current_input_after_the_prior_response()
+ {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -974,24 +971,42 @@ async fn a_target_reservation_during_the_tool_exchange_sends_the_full_current_in
         std::slice::from_ref(&source),
     )
     .await;
-    let mut rebuilt = continuation_step(
+    // The prior response read the earlier targets, so the request continues it with the current
+    // targets before the output.
+    let continued = continuation_step(
         "e5c",
         "tool_request",
-        json!([
-            {"role": "user"},
-            {"type": "function_call", "call_id": "call_01", "name": "web_search",
-             "arguments": SEARCH},
-            ok_output(RESULT),
-        ]),
+        json!([{"role": "user"}, ok_output(RESULT)]),
         &source,
     );
-    // The prior response read the earlier targets, so the request does not continue it.
-    rebuilt["previous_response_id"] = Value::Null;
+    // The message of each request names the target block only before the reservation.
+    let names_target: Vec<bool> = admin
+        .query(
+            "SELECT (payload #>> '{wire,serialized_payload}')::jsonb #>> '{input,0,content,0,text}'
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND decision_position IN (0, 1)
+              ORDER BY decision_position",
+            &[&ran.run_id],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| {
+            row.get::<_, String>(/*idx*/ 0)
+                .contains(&ran.target_block_id)
+        })
+        .collect();
 
     assert_eq!(
-        (run_facts(&admin, &ran.run_id).await, ran.model, ran.mcp),
         (
-            completed(vec![request_step(), rebuilt, closing]),
+            run_facts(&admin, &ran.run_id).await,
+            names_target,
+            ran.model,
+            ran.mcp,
+        ),
+        (
+            completed(vec![request_step(), continued, closing]),
+            vec![true, false],
             vec![MODEL_POST.to_owned(); 3],
             vec![POST.to_owned(); 4],
         )

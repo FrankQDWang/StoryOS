@@ -59,6 +59,7 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference: None,
+        prior_input: storyos_application::PriorInput::Current,
         tool_exposure: storyos_core::ToolExposure::empty(),
         tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,

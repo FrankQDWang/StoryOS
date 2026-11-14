@@ -2,15 +2,18 @@ use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, ProjectAssistanceRecord,
     WirePayloadProjection,
 };
-use storyos_core::{DeclaredTargetKind, DestinationKind, RuntimeQualification};
+use storyos_core::{
+    ContinuationInputMapping, DeclaredTargetKind, DestinationKind, RuntimeQualification,
+};
 use uuid::Uuid;
 
+use crate::agent_run_continuation::clear_prior;
 use crate::agent_run_expiry::RebuildDispatch;
 use crate::agent_run_work::{RunPhaseRow, complete_database_error};
 
 /// Commits the dispatch claim: the Model Attempt, its Wire Payload Projection, and its
 /// Outbound Disclosure Event, which starts as OutcomeUnknown. `None` means that the prior
-/// reference that the claim decides again is not the reference of the prepared request.
+/// reference or the prior input that the claim decides again is not that of the prepared request.
 pub(crate) async fn persist_uncertain_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -45,23 +48,20 @@ pub(crate) async fn persist_uncertain_attempt(
     .await?;
     let model_invocation_id = match rebuild {
         Some(dispatch) => {
-            continuation.mapping = storyos_core::ContinuationInputMapping::Full;
-            continuation.prior_binding_id = None;
+            clear_prior(&mut continuation, ContinuationInputMapping::Full);
             dispatch.model_invocation_id.clone()
         }
         None => Uuid::now_v7().to_string(),
     };
     // The later request of a compaction sends the summary in place of the prior response.
     if run.later_request {
-        continuation.mapping = storyos_core::ContinuationInputMapping::NewTransport;
-        continuation.prior_binding_id = None;
+        clear_prior(&mut continuation, ContinuationInputMapping::NewTransport);
     }
     // A probe sends no prior binding of the Conversation. Its wire payload names the prior
     // response that a function output probe continues.
     let probe = match &request.purpose {
         CreatePurpose::ToolQualification(probe) => {
-            continuation.mapping = storyos_core::ContinuationInputMapping::Full;
-            continuation.prior_binding_id = None;
+            clear_prior(&mut continuation, ContinuationInputMapping::Full);
             Some(probe.probe())
         }
         CreatePurpose::Decision | CreatePurpose::CompactionSummary => None,
@@ -72,7 +72,10 @@ pub(crate) async fn persist_uncertain_attempt(
         }
         None => None,
     };
-    if probe.is_none() && decided_reference != request.previous_response_reference {
+    if probe.is_none()
+        && (decided_reference != request.previous_response_reference
+            || continuation.prior_input != request.prior_input)
+    {
         return Ok(None);
     }
     let mut payload = serde_json::json!({

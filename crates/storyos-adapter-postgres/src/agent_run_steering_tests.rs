@@ -356,14 +356,16 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
             ]),
             "2",
         ),
-        // While the closing request is out. Its final answer does not complete the Run.
+        // While the closing request is out. Its final answer does not complete the Run. The
+        // closing request continues the prior response with the same input, so it sends only
+        // the output.
         (
             "f42",
             0xf620,
             Moment::DuringRequest(2),
             json!([
                 [0, "tool_request", MESSAGE, required, []],
-                [1, "advisory", MESSAGE, none, [call]],
+                [1, "advisory", null, none, [call]],
                 [2, "tool_request", STEERED, required, [call]],
                 [3, "advisory", STEERED, none, [call, "call_finish_1"]]
             ]),

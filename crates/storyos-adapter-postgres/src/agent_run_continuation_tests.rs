@@ -11,9 +11,11 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::agent_run_dispatch::tests::{
-    RuntimeClock, admit_run_in, claim_run, queued_run_offering, stores,
+    RuntimeClock, admit_referenced_run, admit_run_in, claim_run, stores,
 };
+use crate::agent_run_propose_edit::revise_tests::{CandidateChange, Fixture};
 use crate::agent_run_propose_edit::tests::REVISE;
+use crate::agent_run_steering::tests::{AuthorAction, AuthorAt, Moment, queued, settle, steering};
 
 async fn complete(
     store: &PostgresProjectReader,
@@ -46,7 +48,7 @@ async fn requests(admin: &Client, run_id: &str) -> Vec<Value> {
                       attempt.payload ->> 'response_reference',
                       jsonb_path_query_array(wire, '$.declared_targets[*].block_id'),
                       jsonb_path_query_array(wire,
-                        '$.selected[*] ? (@.source_class == \"working_target\").content'),
+                        '$.context[*] ? (@.source_class == \"working_target\").content'),
                       (SELECT jsonb_path_query_array(manifest.payload,
                                 '$.selected[*] ? (@.source_class == \"working_target\").content')
                          FROM storyos.context_assembly_manifests AS manifest
@@ -78,9 +80,10 @@ async fn conversation(admin: &Client, run_id: &str) -> String {
         .get(/*idx*/ 0)
 }
 
-async fn proposal_block(admin: &Client, run_id: &str) -> Value {
-    let block: String = admin
-        .query_one(
+/// Each block that a Proposal of the Run reserves.
+async fn reserved_blocks(admin: &Client, run_id: &str) -> Vec<Value> {
+    admin
+        .query(
             "SELECT operation.manuscript_block_id::text
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_operations AS operation USING (owner_user_id, project_id, proposal_id)
@@ -89,8 +92,9 @@ async fn proposal_block(admin: &Client, run_id: &str) -> Value {
         )
         .await
         .unwrap()
-        .get(/*idx*/ 0);
-    json!(block)
+        .iter()
+        .map(|row| json!(row.get::<_, String>(/*idx*/ 0)))
+        .collect()
 }
 
 #[tokio::test]
@@ -102,30 +106,29 @@ async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_
         .await;
     let (store, admin) = stores().await;
     let tool_loop = DeploymentDestination::HostFakeToolLoop;
-    let (scope, chapter_id, first) =
-        queued_run_offering(&store, "cd1", tool_loop.clone(), None).await;
-    complete(&store, &admin, &scope, &first).await;
+    let fixture = Fixture::new(&store, &admin, 0xcd0, tool_loop.clone()).await;
+    let (scope, first) = (&fixture.scope, &fixture.source_run);
     let edit = admit_run_in(
         &store,
-        &scope,
-        &chapter_id,
-        "cd2",
+        scope,
+        &fixture.chapter_id,
+        "cd8",
         tool_loop,
         REVISE,
         ConversationSelection::Existing {
-            conversation_id: conversation(&admin, &first).await,
+            conversation_id: conversation(&admin, first).await,
         },
         None,
     )
     .await;
-    complete(&store, &admin, &scope, &edit).await;
-    let first_closing = requests(&admin, &first).await.last().unwrap()[3].clone();
+    complete(&store, &admin, scope, &edit).await;
+    let first_closing = requests(&admin, first).await.last().unwrap()[3].clone();
     let steps = requests(&admin, &edit).await;
-    let reserved = proposal_block(&admin, &edit).await;
+    let reserved = reserved_blocks(&admin, &edit).await;
     let targets = steps[0][4].as_array().unwrap().clone();
     let current_targets: Vec<Value> = targets
         .iter()
-        .filter(|block| **block != reserved)
+        .filter(|block| !reserved.contains(block))
         .cloned()
         .collect();
 
@@ -134,7 +137,7 @@ async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_
     assert_eq!(
         (
             steps.clone(),
-            targets.contains(&reserved),
+            reserved.iter().all(|block| targets.contains(block)),
             current_targets.len() < targets.len(),
         ),
         (
@@ -163,4 +166,131 @@ async fn the_request_after_an_opened_proposal_continues_the_prior_response_with_
         )
     );
     assert_ne!(steps[1][6], json!([]));
+}
+
+/// For the RunStep at `position`: its input mapping, whether its request named the response of
+/// the RunStep before it, whether the request says that its input replaces the earlier input, and
+/// whether the request sent `text`.
+async fn continued(admin: &Client, run_id: &str, position: u64, text: &str) -> Value {
+    let steps = requests(admin, run_id).await;
+    let row = admin
+        .query_one(
+            "SELECT payload #>> '{wire,serialized_payload}'
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = $2::text::numeric",
+            &[&run_id, &position.to_string()],
+        )
+        .await
+        .unwrap();
+    let wire: Value = serde_json::from_str(row.get(/*idx*/ 0)).unwrap();
+    let index = usize::try_from(position).unwrap();
+    json!([
+        steps[index][1],
+        steps[index][2] == steps[index - 1][3],
+        wire["replaces_earlier_input"],
+        wire.to_string().contains(text),
+    ])
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_run_step_after_a_steering_input_an_author_edit_or_a_head_move_continues_the_prior_response()
+ {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let tool_loop = DeploymentDestination::HostFakeToolLoop;
+    let message = "Help with this passage.";
+    let edited = "Still, ";
+    // A steering input while the first request is out.
+    let (scope, _, steered) = queued(&store, "cca").await;
+    let input = steering(&store, &scope, 0xccb0, &steered, "Keep the voice.", None).await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Steer(vec![input]),
+    );
+    settle(&store, &admin, &scope, &steered, &author)
+        .await
+        .unwrap();
+    // An Author Edit of the referenced candidate while the first request is out.
+    let candidate = Fixture::new(&store, &admin, 0xce0, tool_loop.clone()).await;
+    let reference = candidate.candidates(&admin).await.remove(0);
+    let candidate_run = admit_referenced_run(
+        &store,
+        &candidate.scope,
+        &candidate.chapter_id,
+        "ce8",
+        tool_loop.clone(),
+        message,
+        vec![reference.clone()],
+    )
+    .await;
+    let edit = candidate
+        .candidate_edit(
+            &store,
+            &admin,
+            &reference,
+            2,
+            CandidateChange::Prefix(edited),
+        )
+        .await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Edit(Box::new(edit)),
+    );
+    settle(&store, &admin, &candidate.scope, &candidate_run, &author)
+        .await
+        .unwrap();
+    // An Author Edit of a referenced Chapter Block, which moves the head, while the first request
+    // is out.
+    let chapter = Fixture::new(&store, &admin, 0xcc0, tool_loop.clone()).await;
+    let chapter_run = admit_referenced_run(
+        &store,
+        &chapter.scope,
+        &chapter.chapter_id,
+        "cc8",
+        tool_loop,
+        message,
+        vec![chapter.chapter_text(1, 2)],
+    )
+    .await;
+    let edit = chapter
+        .chapter_edit(
+            &store,
+            2,
+            vec![storyos_core::AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: chapter.block(1).to_owned(),
+                from: 0,
+                to: 0,
+                text: edited.to_owned(),
+            }],
+        )
+        .await;
+    let author = AuthorAt::new(
+        &store,
+        Moment::DuringRequest(1),
+        AuthorAction::Edit(Box::new(edit)),
+    );
+    settle(&store, &admin, &chapter.scope, &chapter_run, &author)
+        .await
+        .unwrap();
+
+    // The next RunStep of each Run continues the response of the first RunStep, and it sends the
+    // changed input.
+    assert_eq!(
+        [
+            continued(&admin, &steered, 1, "Keep the voice.").await,
+            continued(&admin, &candidate_run, 1, edited).await,
+            continued(&admin, &chapter_run, 1, "Still, Wind rose.").await,
+        ],
+        [
+            json!(["incremental", true, true, true]),
+            json!(["incremental", true, true, true]),
+            json!(["incremental", true, true, true]),
+        ]
+    );
 }
