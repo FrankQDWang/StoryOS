@@ -183,11 +183,14 @@ impl ModelProviderAdapter for FakeDestination {
 }
 
 /// The current input that a request sends, as the tool loop wire sends it: an incremental
-/// continuation sends it only when it changed after the prior response read it (ADR 0085).
+/// continuation with Tool outputs sends it only when it changed after the prior response read it.
+/// A changed input says that it replaces the earlier input (ADR 0085).
 fn current_input(create: &CreateRequest) -> serde_json::Value {
     let incremental =
         create.previous_response_reference.is_some() && !create.tool_outputs.is_empty();
-    if incremental && create.prior_input == PriorInput::Current {
+    let replaced =
+        create.previous_response_reference.is_some() && create.prior_input == PriorInput::Replaced;
+    if incremental && !replaced {
         return serde_json::json!({});
     }
     let mut wire = match &create.passage_input {
@@ -222,7 +225,7 @@ fn current_input(create: &CreateRequest) -> serde_json::Value {
             serde_json::json!({"block_id": target.block_id, "kind": kind})
         })
         .collect();
-    if incremental {
+    if replaced {
         wire["replaces_earlier_input"] = serde_json::json!(true);
     }
     wire

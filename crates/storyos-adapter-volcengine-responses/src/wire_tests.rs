@@ -422,3 +422,45 @@ fn an_incremental_continuation_with_a_changed_input_sends_the_current_input_befo
         )
     );
 }
+
+#[test]
+fn a_changed_input_after_a_text_response_with_no_tool_call_says_that_it_replaces_the_earlier_input()
+ {
+    let DestinationRequest::Create(request) = crate::tests::create(
+        crate::tests::route("http://127.0.0.1:9"),
+        RequestAttempt::New,
+    ) else {
+        unreachable!("create() makes a Create request")
+    };
+    let bounds = request.route.bounds.unwrap();
+    let changed = CreateRequest {
+        previous_response_reference: Some("resp-1".to_owned()),
+        prior_input: PriorInput::Replaced,
+        tool_outputs: Vec::new(),
+        ..request
+    };
+    let unchanged = CreateRequest {
+        prior_input: PriorInput::Current,
+        ..changed.clone()
+    };
+    let input = |request: &CreateRequest| -> serde_json::Value {
+        serde_json::from_str::<serde_json::Value>(&create_body(request, "model-1", bounds))
+            .unwrap()["input"]
+            .clone()
+    };
+    let message = |text: String| {
+        serde_json::json!([{"role": "user", "content": [{"type": "input_text", "text": text}]}])
+    };
+    let text = "Author request:\nTighten this paragraph.\n\nWorking text:\nThe rain fell hard.\n\n\
+                Target blocks:\n[block_id: 018f0000-0000-7001-8000-0000000000b1]\n\
+                The rain fell hard on the old roof.";
+
+    // The prior response has no call, so the request has no Tool output.
+    assert_eq!(
+        (input(&changed), input(&unchanged)),
+        (
+            message(format!("{REPLACED_INPUT_LABEL}\n\n{text}")),
+            message(text.to_owned()),
+        )
+    );
+}

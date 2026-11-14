@@ -83,7 +83,8 @@ pub(crate) fn create_body(
 
 /// The input items. A prior response reference holds the author message and the calls of that
 /// response, so an incremental continuation sends only their outputs. When the current input
-/// changed after the prior response read it, the outputs follow the current input.
+/// changed after the prior response read it, the outputs follow the current input, and the
+/// current input says that it replaces the earlier input.
 fn input(request: &CreateRequest) -> serde_json::Value {
     let message = |text: String| {
         serde_json::json!({
@@ -91,19 +92,19 @@ fn input(request: &CreateRequest) -> serde_json::Value {
             "content": [{"type": "input_text", "text": text}],
         })
     };
+    let replaced = request.previous_response_reference.is_some()
+        && request.prior_input == PriorInput::Replaced;
+    let current = || match replaced {
+        true => message(format!("{REPLACED_INPUT_LABEL}\n\n{}", request_text(request))),
+        false => message(request_text(request)),
+    };
     let output = |call_id: &str, output: &str| serde_json::json!({"type": "function_call_output", "call_id": call_id, "output": output});
     if request.tool_outputs.is_empty() {
-        return serde_json::json!([message(request_text(request))]);
+        return serde_json::json!([current()]);
     }
     if request.previous_response_reference.is_some() {
-        let replaced = match request.prior_input {
-            PriorInput::Current => None,
-            PriorInput::Replaced => Some(message(format!(
-                "{REPLACED_INPUT_LABEL}\n\n{}",
-                request_text(request)
-            ))),
-        };
         return replaced
+            .then(current)
             .into_iter()
             .chain(
                 request
