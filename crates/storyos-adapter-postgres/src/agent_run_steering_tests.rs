@@ -339,7 +339,7 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
             json!([
                 [0, "tool_request", MESSAGE, required, []],
                 [1, "tool_request", STEERED, required, [call]],
-                [2, "advisory", STEERED, none, [call, "call_finish_1"]]
+                [2, "advisory", null, none, [call, "call_finish_1"]]
             ]),
             "1",
         ),
@@ -352,7 +352,7 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
             json!([
                 [0, "tool_request", MESSAGE, required, []],
                 [2, "tool_request", STEERED, required, [call]],
-                [3, "advisory", STEERED, none, [call, "call_finish_1"]]
+                [3, "advisory", null, none, [call, "call_finish_1"]]
             ]),
             "2",
         ),
@@ -367,7 +367,7 @@ async fn the_author_steers_at_each_run_step_position_and_the_next_run_step_reads
                 [0, "tool_request", MESSAGE, required, []],
                 [1, "advisory", null, none, [call]],
                 [2, "tool_request", STEERED, required, [call]],
-                [3, "advisory", STEERED, none, [call, "call_finish_1"]]
+                [3, "advisory", null, none, [call, "call_finish_1"]]
             ]),
             "2",
         ),
@@ -935,7 +935,7 @@ async fn a_pause_before_the_first_request_opens_no_position_and_the_input_opens_
             (
                 json!([
                     [1, "tool_request", STEERED, "required", []],
-                    [2, "advisory", STEERED, "none", [call]]
+                    [2, "advisory", null, "none", [call]]
                 ]),
                 json!(["completed", 2, [0, 1, 2], STEERED]),
                 json!({"status": format!("{:?}", AgentRunStatus::Completed),

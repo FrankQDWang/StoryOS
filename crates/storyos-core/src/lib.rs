@@ -107,7 +107,7 @@ pub use compact_active_context::{
     summary_fits_item, summary_text,
 };
 pub use continuation_input::{
-    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
+    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
 pub use create_admission::{

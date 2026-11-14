@@ -300,15 +300,17 @@ pub(crate) async fn tool_outputs(
 /// True when the active RunStep is a `tool_result_continuation` and the input that its request
 /// sends, other than its Tool outputs, differs from the input of the function request Attempt
 /// before it. The input is all that the model reads: the selected Context text, the declared
-/// targets, the selection references, and the passage input. The prior response read the input
-/// of that Attempt, so an incremental request sends a changed input again (ADR 0085).
+/// targets, the selection references, and the passage input. `author_message` is the message that
+/// the RunStep reads, with each steering input. The prior response read the input of that
+/// Attempt, so an incremental request sends a changed input again (ADR 0085).
 pub(crate) async fn continuation_input_changed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    author_message: &str,
 ) -> Result<bool, CompleteAgentRunError> {
     let Some(row) = client
         .query_opt(
-            "SELECT requirement.payload::text, run.author_message, run.chapter_id::text,
+            "SELECT requirement.payload::text, run.chapter_id::text,
                     attempt.payload #>> '{wire,current_input_digest}'
                FROM storyos.agent_runs AS run
                JOIN storyos.operation_requirements AS requirement
@@ -340,13 +342,12 @@ pub(crate) async fn continuation_input_changed(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let assembly = storyos_core::decode_assembly_record(&record)
         .ok_or_else(|| damaged("The continuation Context is invalid"))?;
-    let author_message: String = row.get(/*idx*/ 1);
-    let chapter_id: String = row.get(/*idx*/ 2);
+    let chapter_id: String = row.get(/*idx*/ 1);
     let declared_targets =
         crate::agent_run_create_dispatch::declared_targets(client, claim, &chapter_id).await?;
-    let input = crate::agent_run_create_dispatch::record_input(&record, assembly, &author_message);
+    let input = crate::agent_run_create_dispatch::record_input(&record, assembly, author_message);
     let current = storyos_application::CurrentInput {
-        author_message: &author_message,
+        author_message,
         chapter_id: &chapter_id,
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input.as_ref(),
@@ -354,7 +355,7 @@ pub(crate) async fn continuation_input_changed(
         declared_targets: &declared_targets,
         selection_references: &input.selection_references,
     };
-    let prior: Option<String> = row.get(/*idx*/ 3);
+    let prior: Option<String> = row.get(/*idx*/ 2);
     Ok(prior.as_deref() != Some(current.digest().as_str()))
 }
 
