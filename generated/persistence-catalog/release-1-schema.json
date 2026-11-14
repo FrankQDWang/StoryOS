@@ -339,6 +339,11 @@
           "nullable": true,
           "type": "uuid"
         },
+        "kept_author_message_ids": {
+          "default": "'[]'::jsonb",
+          "nullable": false,
+          "type": "jsonb"
+        },
         "known_inputs": {
           "default": null,
           "nullable": false,
