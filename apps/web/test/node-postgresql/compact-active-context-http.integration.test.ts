@@ -76,6 +76,7 @@ test("active context compaction summarizes the prior response, then installs or 
     const ordinaryInspect = await inspectRun(started.baseUrl, prepared, ordinary.effect.run_id);
     assert.equal(ordinaryInspect.status, "completed");
     assert.equal(ordinaryInspect.active_compaction.kind, "absent");
+    assert.equal(ordinaryInspect.compactions, undefined);
     assert.equal(attempt(ordinaryInspect).input_mapping, "incremental");
 
     // Compact, and hold after the summary stages. Each Run has a first and a closing RunStep (ADR 0091).
@@ -208,6 +209,20 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(compaction(reclaimed).install_state, "installed");
     assert.equal(attempt(await inspectFirstRunStep(started.baseUrl, prepared, stale.run.effect.run_id)).input_mapping, "new_transport");
     assert.equal(selected(await inspectFirstRunStep(started.baseUrl, prepared, stale.run.effect.run_id), "author_instruction"), COMPACT);
+
+    // The Host fake compacts at each RunStep that the message names. The read gives each record in
+    // RunStep order, and `active_compaction` is the last one (ADR 0093).
+    const twice = await admitRun(started.baseUrl, prepared, id("d218"), `${COMPACT} At RunSteps 0 1. Help again.`, conversation);
+    await settleOnce();
+    const twiceInspect = await inspectRun(started.baseUrl, prepared, twice.effect.run_id);
+    const records = (twiceInspect.compactions ?? []).map((record) => {
+      if (record.kind !== "present") throw new Error("expected a compaction record");
+      return record;
+    });
+    assert.equal(twiceInspect.status, "completed");
+    assert.deepEqual(records.map((record) => record.install_state), ["installed", "installed"]);
+    assert.deepEqual(twiceInspect.active_compaction, twiceInspect.compactions?.[1]);
+    assert.equal(records[1]?.prior_model_attempt_id, records[0]?.installed.kind === "present" ? records[0].installed.model_attempt_id : undefined);
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     await stopRealServer(started.server);

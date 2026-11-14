@@ -153,9 +153,13 @@ async fn one_run_compacts_at_two_run_steps_and_the_second_summary_continues_the_
 
 /// Settles a first AgentRun and then an AgentRun that compacts at RunSteps 0 and 1 in the same
 /// Conversation. The admin connection runs `statement`, with `{project}`, `{chapter}`, and
-/// `{run}`, at the first preparation of the second summary request. Returns the compaction
+/// `{run}`, at the first preparation of the request that `at` selects. Returns the compaction
 /// records, the input mapping of the decision request of RunStep 1, and the Run status.
-async fn compact_twice_with_change(prefixes: [&str; 2], statement: &str) -> Value {
+async fn compact_twice_with_change(
+    prefixes: [&str; 2],
+    at: fn(&storyos_application::CreateRequest) -> bool,
+    statement: &str,
+) -> Value {
     let (store, admin) = stores().await;
     let destination = DeploymentDestination::HostFakeToolLoop;
     let (scope, chapter_id, first) = queued_run(&store, prefixes[0], destination.clone()).await;
@@ -179,10 +183,7 @@ async fn compact_twice_with_change(prefixes: [&str; 2], statement: &str) -> Valu
     .await;
     let adapter = ChangingFake {
         admin: &admin,
-        // Only the second summary request answers a call: the `finish` call of RunStep 0.
-        at: |create| {
-            create.purpose == CreatePurpose::CompactionSummary && !create.tool_outputs.is_empty()
-        },
+        at,
         statement: statement
             .replace("{project}", scope.project_id.as_ref())
             .replace("{chapter}", &chapter_id)
@@ -229,28 +230,42 @@ async fn the_install_check_refuses_a_changed_input_or_a_restricted_source_at_the
                 (revision.owner_user_id, revision.project_id, revision.payload_id)
             AND head.project_id = '{project}'::uuid
             AND head.manuscript_object_id = '{chapter}'::uuid";
-    // The source of the second summary is the later request of RunStep 0.
-    let restricted_source = r#"UPDATE storyos.model_attempts
-            SET payload = payload || '{"covered_copy_restricted": true}'
+    // The source of the second summary is the later request of RunStep 0. It becomes restricted
+    // after the install check, while the second later request is prepared.
+    let restricted_source = "UPDATE storyos.model_attempts
+            SET payload = jsonb_set(payload, '{produced_binding,covered_copy_restricted}', 'true')
           WHERE run_id = '{run}'::uuid AND attempt_role = 'decision'
-            AND decision_position = 0"#;
+            AND decision_position = 0";
+    // Of the requests of the Run, only the second summary request and the second later request
+    // answer a call: the `finish` call of RunStep 0.
+    let second_summary: fn(&storyos_application::CreateRequest) -> bool = |create| {
+        create.purpose == CreatePurpose::CompactionSummary && !create.tool_outputs.is_empty()
+    };
+    let second_later: fn(&storyos_application::CreateRequest) -> bool = |create| {
+        create.purpose == CreatePurpose::Decision
+            && !create.tool_outputs.is_empty()
+            && create.context.first().map(|item| item.source_class)
+                == Some(storyos_core::ContextSourceClass::ConversationSummary)
+    };
     let cases = [
         (
             ["842", "843"],
+            second_summary,
             changed_input,
             "changed_input",
             "incremental",
         ),
         (
             ["844", "845"],
+            second_later,
             restricted_source,
             "restricted_source",
             "new_transport",
         ),
     ];
-    for (prefixes, statement, reason, mapping) in cases {
+    for (prefixes, at, statement, reason, mapping) in cases {
         assert_eq!(
-            compact_twice_with_change(prefixes, statement).await,
+            compact_twice_with_change(prefixes, at, statement).await,
             json!([
                 [[0, "installed", null], [1, "refused", reason]],
                 mapping,
