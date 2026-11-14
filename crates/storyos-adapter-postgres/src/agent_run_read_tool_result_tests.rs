@@ -16,16 +16,16 @@ async fn outputs(project: &ResearchProject, run_id: &str, position: i32) -> Valu
         .query_one(
             "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'tool_outputs')::text
                FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND decision_position = $2::numeric",
-            &[&run_id, &position],
+              WHERE run_id = $1::text::uuid AND decision_position = $2::text::numeric",
+            &[&run_id, &position.to_string()],
         )
         .await
         .unwrap();
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
-/// The status of the Run and each ToolCall after the first as its function name, state,
-/// refusal, and Host result.
+/// The status of the Run and each ToolCall as its function name, state, refusal, and Host
+/// result.
 async fn later_calls(project: &ResearchProject, run_id: &str) -> Value {
     let facts = project.facts(run_id).await;
     json!({"status": facts["status"], "calls": facts["calls"]})
@@ -44,6 +44,7 @@ async fn a_read_gives_the_stored_result_as_the_first_read_and_submit_research_ci
 
     // The request after the search sent its result. The request after the read sent the same
     // text again as the output of the read, with the source tag and the sources of the search.
+    // The fake lists each output of the Run in its request.
     let first = outputs(&project, &run_id, 1).await;
     let read = outputs(&project, &run_id, 2).await;
     let search_output = first[0]["output"].as_str().unwrap().to_owned();
@@ -99,7 +100,8 @@ async fn a_read_gives_the_stored_result_as_the_first_read_and_submit_research_ci
                 "artifacts": [["snapshot"]],
             }),
             &json!([{"call_id": "call_web_search", "output": search_output}]),
-            &json!([{"call_id": "call_read_tool_result", "output": search_output}]),
+            &json!([{"call_id": "call_web_search", "output": search_output},
+                    {"call_id": "call_read_tool_result", "output": search_output}]),
             true,
             "host_tools".to_owned(),
         )
