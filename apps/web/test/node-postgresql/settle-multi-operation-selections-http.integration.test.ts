@@ -290,11 +290,14 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
     const question = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       'Rewrite the first paragraph of chapter "Chapter A"', id(`${ns}81`));
     // A question to the author is the final text of an advisory decision, and the closing RunStep keeps its
-    // continuation (ADR 0091 section 1).
+    // continuation (ADR 0091 section 1). The request that does not resolve has the text of the Current Chapter,
+    // as a message with no passage request does (#1496).
     if (question.decision.kind !== "advisory") throw new Error("expected the question as advice");
     assert.deepEqual({ question: question.decision.text, continuation: question.decision.continuation.kind,
-      targets: question.context.passage_targets, prose: question.context.selected.filter((source) => source.source_class === "working_target") },
-      { question: "Which unique Chapter and paragraph numbers should I revise?", continuation: "present", targets: undefined, prose: [] });
+      targets: question.context.passage_targets, prose: question.context.selected
+        .filter((source) => source.source_class === "working_target").map((source) => source.content) },
+      { question: "Which unique Chapter and paragraph numbers should I revise?", continuation: "present", targets: undefined,
+        prose: ["Hello \nWorld"] });
     const questionText = question.decision.text;
     assert.equal(question.items.some((item) => item.text === questionText), true);
     const conversation = { kind: "existing", conversation_id: question.conversation_id } as const;

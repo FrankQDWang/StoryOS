@@ -104,27 +104,21 @@ pub(crate) async fn persist_current_passage_assembly(
                         }
                         Err(()) => None,
                     };
-                    let resolved = targets.is_some();
-                    let mut record = match targets {
-                        Some(targets) => {
+                    // A request that does not resolve keeps the Current Chapter as its working
+                    // text and targets, as a message with no passage request does. The model
+                    // reads the message and decides what to change.
+                    let (mut record, resolution) = match targets {
+                        Some(targets) => (
                             crate::passage_collection::assemble(client, command, &source, &targets)
-                                .await?
-                        }
-                        None => assemble_current_passage_context(&CurrentPassageAssembly {
-                            chapter_body: String::new(),
-                            ..source.clone()
-                        }),
+                                .await?,
+                            storyos_core::OrdinaryPassageResolution::Resolved,
+                        ),
+                        None => (
+                            assemble_current_passage_context(&source),
+                            storyos_core::OrdinaryPassageResolution::Clarification,
+                        ),
                     };
-                    if !resolved {
-                        record.selected.retain(|item| {
-                            item.source_class != storyos_core::ContextSourceClass::WorkingTarget
-                        });
-                    }
-                    record.operation_requirement.ordinary_resolution = Some(if resolved {
-                        storyos_core::OrdinaryPassageResolution::Resolved
-                    } else {
-                        storyos_core::OrdinaryPassageResolution::Clarification
-                    });
+                    record.operation_requirement.ordinary_resolution = Some(resolution);
                     record
                 }
             },
@@ -354,3 +348,7 @@ pub(crate) async fn current_chapter_payload(
         .map_err(agent_run_database_error)?;
     Ok(row.map(|row| (row.get(0), row.get(1))))
 }
+
+#[cfg(test)]
+#[path = "create_agent_run_context_tests.rs"]
+mod tests;
