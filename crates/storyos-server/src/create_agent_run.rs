@@ -31,13 +31,14 @@ pub(super) async fn create_agent_run(
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
     let destination = state.config.model_destination.clone();
+    let skills = Arc::clone(&state.config.skills);
     let admitted = admit(
         &state,
         &project_id,
         &[],
         request,
         &CREATE_AGENT_RUN,
-        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination),
+        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination, skills),
     )
     .await?;
     let message = &admitted.input.author_message;
@@ -91,6 +92,7 @@ pub(super) async fn create_agent_run(
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
     destination: Option<storyos_core::DeploymentDestination>,
+    skills: Arc<storyos_core::SkillSet>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
     let conversation_id = match &input.conversation {
@@ -141,6 +143,7 @@ fn create_agent_run_input(
             .as_ref()
             .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
+        skills,
     })
 }
 

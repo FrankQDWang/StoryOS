@@ -346,3 +346,49 @@ fn a_skill_set_has_at_most_32_packages_in_the_order_of_their_names() {
         Err(SkillLimitExceeded)
     );
 }
+
+#[test]
+fn a_run_pins_each_offered_reference_and_snapshots_only_the_digests_that_the_project_lacks() {
+    let package = |name: &str, notes: &[u8]| {
+        let mut package = with_field("name", text(name));
+        package.directory_name = name.to_owned();
+        package.files.push(file("notes.md", notes));
+        admit_skill_package(package).expect("valid package")
+    };
+    let kept = package("plot-notes", b"kept");
+    let changed = package("style-guide", b"changed");
+    let added = package("voice-notes", b"added");
+    let offered = SkillSet::new(vec![added.clone(), kept.clone(), changed.clone()]).expect("3");
+    let catalog = vec![kept.reference(), changed.reference(), added.reference()];
+    let earlier = package("style-guide", b"earlier").package_digest;
+
+    assert_eq!(
+        plan_skill_catalog(
+            &offered,
+            &BTreeSet::from([kept.package_digest.clone(), earlier])
+        ),
+        SkillCatalogPlan {
+            snapshots: vec![&changed, &added],
+            catalog: catalog.clone(),
+        }
+    );
+    let all = offered
+        .packages()
+        .iter()
+        .map(|package| package.package_digest.clone())
+        .collect();
+    assert_eq!(
+        plan_skill_catalog(&offered, &all),
+        SkillCatalogPlan {
+            snapshots: Vec::new(),
+            catalog,
+        }
+    );
+    assert_eq!(
+        plan_skill_catalog(&SkillSet::default(), &all),
+        SkillCatalogPlan {
+            snapshots: Vec::new(),
+            catalog: Vec::new(),
+        }
+    );
+}

@@ -274,9 +274,9 @@ pub use set_current_chapter::{
 };
 pub use skill_package::{
     FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
-    SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillFile, SkillFileInput,
+    SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillCatalogPlan, SkillFile, SkillFileInput,
     SkillLimitExceeded, SkillPackage, SkillPackageInput, SkillPackageReference,
-    SkillPackageRefusal, SkillSet, admit_skill_package, skill_md_frontmatter,
+    SkillPackageRefusal, SkillSet, admit_skill_package, plan_skill_catalog, skill_md_frontmatter,
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,

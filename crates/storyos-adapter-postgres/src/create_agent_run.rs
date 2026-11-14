@@ -193,6 +193,13 @@ impl ProjectCommand for CreateAgentRunInput {
         )
         .await
         .map_err(sequence_error)?;
+        crate::skill_package_snapshot::pin_skill_catalog(
+            client,
+            envelope,
+            &applied.run_id,
+            &self.skills,
+        )
+        .await?;
         context::persist_current_passage_assembly(
             client,
             &context::PassageContextInput {

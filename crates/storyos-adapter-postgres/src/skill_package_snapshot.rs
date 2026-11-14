@@ -1,0 +1,150 @@
+//! The SkillPackage Snapshots of a Project and the Skill catalog of each Run (ADR 0089 section
+//! 2). `createAgentRun` writes them in the transaction of the Run row. A Snapshot is immutable and
+//! content-addressed by its package digest, and the runtime role can only read and insert them.
+
+use std::collections::BTreeSet;
+
+use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
+use storyos_core::{SkillPackage, SkillPackageReference, SkillSet, plan_skill_catalog};
+use tokio_postgres::Client;
+
+use crate::command_sequence::unavailable;
+
+/// Writes the Snapshot of each package of `offered` whose digest the Project does not have, and
+/// pins the reference of each package of `offered` as the Skill catalog of `run_id`.
+pub(crate) async fn pin_skill_catalog(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    run_id: &str,
+    offered: &SkillSet,
+) -> Result<(), ProjectCommandError> {
+    if offered.packages().is_empty() {
+        return Ok(());
+    }
+    let scope = &envelope.project_scope;
+    let stored = stored_digests(client, scope, offered).await?;
+    let plan = plan_skill_catalog(offered, &stored);
+    for package in plan.snapshots {
+        insert_snapshot(client, envelope, package).await?;
+    }
+    insert_catalog(client, scope, run_id, &plan.catalog).await
+}
+
+async fn stored_digests(
+    client: &Client,
+    scope: &ProjectScope,
+    offered: &SkillSet,
+) -> Result<BTreeSet<String>, ProjectCommandError> {
+    let digests: Vec<&str> = offered
+        .packages()
+        .iter()
+        .map(|package| package.package_digest.as_str())
+        .collect();
+    let rows = client
+        .query(
+            "SELECT package_digest
+               FROM storyos.skill_package_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND package_digest = ANY($3::text[])",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &digests,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(rows.iter().map(|row| row.get(/*idx*/ 0)).collect())
+}
+
+/// Writes the Snapshot row of `package` and one row for each of its files, with the exact bytes.
+async fn insert_snapshot(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    package: &SkillPackage,
+) -> Result<(), ProjectCommandError> {
+    let files = &package.files;
+    let paths: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    let bytes: Vec<&[u8]> = files.iter().map(|file| file.bytes.as_slice()).collect();
+    let lengths = files
+        .iter()
+        .map(|file| i32::try_from(file.byte_length))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(unavailable)?;
+    let sha256: Vec<&str> = files.iter().map(|file| file.sha256.as_str()).collect();
+    let tokens = files
+        .iter()
+        .map(|file| file.tokens.map(i64::try_from).transpose())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(unavailable)?;
+    let readable: Vec<bool> = files.iter().map(|file| file.readable).collect();
+    let file_count = i32::try_from(files.len()).map_err(unavailable)?;
+    let byte_count: i32 = lengths.iter().sum();
+    client
+        .execute(
+            "WITH snapshot AS (
+               INSERT INTO storyos.skill_package_snapshots
+                 (owner_user_id, project_id, package_digest, skill_name, description, file_count,
+                  byte_count, receipt_id)
+               VALUES ($1::text::uuid, $2::text::uuid, $3, $4, $5, $6, $7, $8::text::uuid)
+             )
+             INSERT INTO storyos.skill_package_snapshot_files
+               (owner_user_id, project_id, package_digest, path, bytes, byte_length, sha256,
+                tokens, readable)
+             SELECT $1::text::uuid, $2::text::uuid, $3, file.path, file.bytes, file.byte_length,
+                    file.sha256, file.tokens, file.readable
+               FROM unnest($9::text[], $10::bytea[], $11::int[], $12::text[], $13::bigint[],
+                           $14::bool[])
+                    AS file(path, bytes, byte_length, sha256, tokens, readable)",
+            &[
+                &envelope.project_scope.owner_user_id.as_ref(),
+                &envelope.project_scope.project_id.as_ref(),
+                &package.package_digest,
+                &package.name,
+                &package.description,
+                &file_count,
+                &byte_count,
+                &envelope.ids.receipt_id,
+                &paths,
+                &bytes,
+                &lengths,
+                &sha256,
+                &tokens,
+                &readable,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(())
+}
+
+async fn insert_catalog(
+    client: &Client,
+    scope: &ProjectScope,
+    run_id: &str,
+    catalog: &[SkillPackageReference],
+) -> Result<(), ProjectCommandError> {
+    let names: Vec<&str> = catalog.iter().map(|entry| entry.name.as_str()).collect();
+    let digests: Vec<&str> = catalog
+        .iter()
+        .map(|entry| entry.package_digest.as_str())
+        .collect();
+    client
+        .execute(
+            "INSERT INTO storyos.agent_run_skill_catalog_entries
+               (owner_user_id, project_id, run_id, skill_name, package_digest)
+             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, entry.skill_name,
+                    entry.package_digest
+               FROM unnest($4::text[], $5::text[]) AS entry(skill_name, package_digest)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+                &names,
+                &digests,
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(())
+}
