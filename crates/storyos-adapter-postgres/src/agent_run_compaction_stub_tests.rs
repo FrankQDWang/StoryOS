@@ -78,6 +78,25 @@ async fn stub_records(project: &ResearchProject, run_id: &str) -> Value {
     serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
 }
 
+/// The projection mode of each `tool_result` item of the decision Context Assembly at
+/// `position`. A full input of that RunStep sends these forms.
+async fn decision_modes(project: &ResearchProject, run_id: &str, position: u32) -> Value {
+    let row = project
+        .admin
+        .query_one(
+            "SELECT jsonb_agg(item->>'projection_mode')::text
+               FROM storyos.context_assembly_manifests AS assembly,
+                    jsonb_array_elements(assembly.payload->'selected') AS item
+              WHERE assembly.run_id = $1::text::uuid AND assembly.manifest_role = 'decision'
+                AND assembly.decision_position = $2::text::numeric
+                AND item->>'source_class' = 'tool_result'",
+            &[&run_id, &position.to_string()],
+        )
+        .await
+        .unwrap();
+    serde_json::from_str(row.get::<_, &str>(/*idx*/ 0)).unwrap()
+}
+
 /// The ToolCall identity of each call of the Run with the function `name`.
 async fn tool_call_ids(project: &ResearchProject, run_id: &str, names: &[&str]) -> Vec<String> {
     let mut ids = Vec::new();
@@ -148,6 +167,9 @@ async fn each_result_that_an_earlier_request_sent_is_a_stub_and_a_read_of_it_bec
             at_three,
             stub_records(&project, &run_id).await,
             public,
+            // The decision Context Assembly of RunStep 3 keeps the stub of the installed
+            // compaction of RunStep 2, so a full input of RunStep 3 sends the stub too.
+            decision_modes(&project, &run_id, 3).await,
         ),
         (
             json!({
@@ -197,6 +219,12 @@ async fn each_result_that_an_earlier_request_sent_is_a_stub_and_a_read_of_it_bec
                 ],
             ]),
             vec![vec![stub_calls[0].clone()], stub_calls.clone()],
+            json!([
+                "tool_result_stub",
+                "exact_required",
+                "exact_required",
+                "exact_required"
+            ]),
         )
     );
     // A stub is shorter than its result, keeps its call and its first sources, and says how

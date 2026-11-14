@@ -506,3 +506,66 @@ fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
         [true, false, false]
     );
 }
+
+/// ADR 0093 section 5: the full input of a later request counts the stubs, not the exact results.
+#[test]
+fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Research the tides.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    // 32 results at the item limit are above the window after the output bound.
+    let text = "Tide. ".repeat(6_000);
+    let ids: Vec<String> = (0..32).map(|index| format!("call_{index:02}")).collect();
+    let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
+        ids.iter()
+            .map(|id| crate::ToolResultCandidate {
+                tool_call_id: id,
+                call_id: id,
+                owner_user_id: "owner-1",
+                project_id: "project-1",
+                run_id: "run-1",
+                model_attempt_id: "attempt-1",
+                decision_id: "decision-1",
+                state: crate::ToolCallState::Settled,
+                result_text: Some(&text),
+                sources: &[],
+                output: crate::ToolResultOutput::Research,
+                function_name: "web_search",
+                arguments: r#"{"query":"tides","result_count":null}"#,
+                form,
+            })
+            .collect()
+    };
+    crate::assemble_tool_result_continuation(
+        &mut decision,
+        &candidates(crate::ToolResultForm::Exact),
+    );
+    let too_long = |form| {
+        let later = later_request_record(&decision, "compaction-1", "Summary.", &candidates(form));
+        super::later_request_too_long(
+            crate::AGENT_PLAN_REGISTRATION.revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &[],
+        )
+    };
+
+    assert_eq!(
+        [
+            too_long(crate::ToolResultForm::Exact),
+            too_long(crate::ToolResultForm::Stub),
+        ],
+        [true, false]
+    );
+}
