@@ -49,7 +49,7 @@ const ARTIFACT_LINES = [
 ];
 
 /** Renders the panel for the stored request and returns its host, the opened Proposals, and a cleanup. */
-async function renderPanel(runs: readonly ReturnType<typeof completedRun>[], stored: object) {
+async function renderPanel(runs: readonly { run_id: string }[], stored: object) {
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({ scope, chapterId: CHAPTER,
     conversationId: CONVERSATION, ...stored }));
   const fetchImpl: typeof fetch = async (input) => {
@@ -116,7 +116,7 @@ it.each([
 
 it("shows the same results in the history turn of the Conversation", async () => {
   const current = { ...agentRunFixture, project_scope: scope, run_id: "018f0000-0000-7001-8000-000000000d41",
-    status: "queued", decision: { kind: "absent" } } as unknown as ReturnType<typeof completedRun>;
+    status: "queued", decision: { kind: "absent" } };
   await inActEnvironment(async () => {
     const panel = await renderPanel([ALL, current], { message: "Use this in the story.",
       correlationId: "018f0000-0000-7001-8000-000000000d14", idempotencyKey: "018f0000-0000-7001-8000-000000000d15",
