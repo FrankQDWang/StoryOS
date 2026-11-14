@@ -35,6 +35,21 @@ Written at 13:18:42 UTC, before the first request.
 
 Plan change at 13:33:07 UTC, after Run 1 and before the first request of Run 2. Calibration of Run 1: one English search result of 10 entries has about 28,400 counted tokens and about 7,160 reported tokens (3.97 counted tokens for each reported token). With a prior usage of about 77,000 tokens after RunStep 1, the threshold needs at least 26 group B results, and the window limit of the later request permits at most 34. N = 31 gives an expected input of about 950,000. New caps: 9 model requests (3 used, Run 2 at most 6) and 39 Exa exchanges (3 used, Run 2 exactly 36). The gate cap was 5 model requests.
 
+Host limits, verified on the tip before the gate opened (coordinator decision of 2026-11-14):
+
+| Limit | Value | Source |
+| --- | --- | --- |
+| Function calls in one response | No Host limit. The route accepted 31 calls in M5. | No such constant in `storyos-core`; `step_tool_choice` in `finish_rule.rs` counts only `finish` and refused calls. |
+| RunSteps of one Run | 24 | `MAX_RUN_STEPS`, `finish_rule.rs` |
+| Results of one `web_search` | 10 | `RESULT_COUNT_MAX`, `tool_spec.rs` |
+| URLs of one `web_fetch` | 5 | `URLS_MAX`, `tool_spec.rs` |
+| Counted tokens of one Context item (one Tool result) | 32,000 | `CONTEXT_ITEM_TOKEN_LIMIT`, `assemble_context.rs` |
+| Stored text of one Tool result | 262,144 bytes | `TOOL_RESULT_TEXT_MAX_BYTES`, `tool_spec.rs` |
+| Refused `propose_edit` calls of one Run | 3 | `MAX_REFUSED_PROPOSE_EDIT_CALLS`, `propose_edit.rs` |
+| The later request check | The counted tokens of the selected items, the reference texts, and the declared targets of the later request must stay below the window after the output bound, 1,015,808. | `later_request_too_long`, `compact_active_context.rs` |
+
+At the gate, the 31 group B results had 840,972 characters. With the citable sources tag (about 1,600 counted tokens for each result in Run 1), the estimate was about 890,000 counted tokens, an expected input of about 961,000, and a later request of at most about 937,000 counted tokens with a summary at its limit of 32,000. The records later gave 888,771, 959,628, and 913,509.
+
 Final count: **8 model requests and 39 Exa exchanges, equal to the plan.** No Retrieve, no recovery, and no refusal occurred. Each Model Attempt is `settled`. The gate refused 64 claim attempts from 13:36:09 to 13:43:35 UTC, and none of them sent a request.
 
 ## Live request log
@@ -142,6 +157,20 @@ Reported usage of each request of Run 2, before and after the compaction:
 - The compaction removed Run 1 (about 32,000 reported tokens) and the 5 group A results (about 36,500 reported tokens). It added the summary (6,473 output tokens of M6), the 5 stubs (9,535 counted tokens), and the section (417 counted tokens). The 31 group B results stay exact by design (ADR 0093 section 5), and they are about 94 percent of the reported input of the later request (97 percent of its counted tokens).
 - The summary request M6 took 2 min 46 s from its claim to the claim of M7. This is below the request timeout of 600 s.
 - `cached_tokens` stayed at most 1,848 for each request.
+
+**What this Run does not show.** This Run reached the threshold by the Host rule: the expected input was 959,628. The largest reported input of a request was 299,550. Thus this Run does not show the behaviour of the model, the summary, or the route at a reported context near 812,646.
+
+## Estimate of a second Run to a reported input of about 800,000
+
+The coordinator asked for one estimate, with its arithmetic, of a second Run that brings the reported input of the summary request to about 800,000 tokens. This Run did not send it. The author decides.
+
+- Rule: a RunStep compacts when P + C >= 812,646, where P is the reported usage of the prior response and C is the counted tokens of the new outputs. A result adds about C / r reported tokens, where r is the counted to reported ratio. For the summary request to have about 800,000 reported tokens, each earlier RunStep must stay below the threshold, so each RunStep can add at most (812,646 - P) / r reported tokens. The gap to the threshold thus falls by the factor (1 - 1/r) at each RunStep.
+- English results (r = 3.9): the factor is 0.744. From P = 35,000 (gap 777,646) to a gap of about 25,000 needs ln(25,000 / 777,646) / ln(0.744) = 11.6, thus 12 RunSteps. The input of these requests is the sum of 812,646 - 777,646 x 0.744^j for j = 0 to 11: 12 x 812,646 - 777,646 x (1 - 0.744^12) / (1 - 0.744) = 9,751,752 - 2,955,000 = about 6,800,000 tokens. With the summary request and the later requests, about 7,700,000 input tokens and about 105 Exa exchanges (about 752,000 reported tokens at 7,200 for each result).
+- Chinese results (r = about 1.45, the ratio of generated Chinese prose; the ratio of real Chinese web pages is not measured): the factor is 0.31. One Chinese result of about 28,000 counted tokens is about 19,300 reported tokens.
+  - Each RunStep j sends a request with the input P_j and asks for n_j results. The check at RunStep j+1 is P_j + 28,000 x n_j < 812,646.
+  - RunStep 0: P = 35,000, 27 results (check 35,000 + 756,000 = 791,000). RunStep 1: P = 556,100, 9 results (check 808,100). RunStep 2: P = 729,800, 2 results (check 785,800). RunStep 3: P = 768,400, 1 result (check 796,400). RunStep 4: P = 787,700, 1 result. RunStep 5: the check is 787,700 + 28,000 = 815,700, so the compaction starts, and the summary request has about 807,000 reported input tokens.
+  - Requests and their input: RunSteps 0 to 4 35,000 + 556,100 + 729,800 + 768,400 + 787,700, the summary request about 807,000, the later request about 60,000 (summary, stubs, one exact result), and the closing request after the read about 80,000. Total about 3,800,000 input tokens in 8 model requests and 40 Exa exchanges.
+  - Risk: a calibration Run must measure r for real Chinese search results first. A lower r makes the first RunStep cross the threshold early, and a gate before each RunStep is necessary.
 
 ## Author view
 
