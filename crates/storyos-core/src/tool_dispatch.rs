@@ -128,7 +128,8 @@ impl GrantScope {
             }
             Self::ProjectWritingAssistanceV1
             | Self::ProjectWritingAssistanceV2
-            | Self::ProjectWritingAssistanceV3 => false,
+            | Self::ProjectWritingAssistanceV3
+            | Self::ProjectWritingAssistanceV4 => false,
         }
     }
 }

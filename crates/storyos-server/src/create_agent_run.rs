@@ -898,6 +898,15 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
             contracts::ContextSourceClass::ConversationSummary
         }
         storyos_core::ContextSourceClass::ToolResult => contracts::ContextSourceClass::ToolResult,
+        storyos_core::ContextSourceClass::SkillCatalog => {
+            contracts::ContextSourceClass::SkillCatalog
+        }
+        storyos_core::ContextSourceClass::SkillInstruction => {
+            contracts::ContextSourceClass::SkillInstruction
+        }
+        storyos_core::ContextSourceClass::SkillResource => {
+            contracts::ContextSourceClass::SkillResource
+        }
     }
 }
 

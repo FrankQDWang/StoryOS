@@ -784,7 +784,10 @@
         "working_target",
         "instruction_binding",
         "conversation_summary",
-        "tool_result"
+        "tool_result",
+        "skill_catalog",
+        "skill_instruction",
+        "skill_resource"
       ],
       "type": "string"
     },

@@ -389,6 +389,9 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::InstructionBinding => "instruction_binding",
         ContextSourceClass::ConversationSummary => "conversation_summary",
         ContextSourceClass::ToolResult => "tool_result",
+        ContextSourceClass::SkillCatalog => "skill_catalog",
+        ContextSourceClass::SkillInstruction => "skill_instruction",
+        ContextSourceClass::SkillResource => "skill_resource",
     }
 }
 
@@ -400,6 +403,9 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "instruction_binding" => Some(ContextSourceClass::InstructionBinding),
         "conversation_summary" => Some(ContextSourceClass::ConversationSummary),
         "tool_result" => Some(ContextSourceClass::ToolResult),
+        "skill_catalog" => Some(ContextSourceClass::SkillCatalog),
+        "skill_instruction" => Some(ContextSourceClass::SkillInstruction),
+        "skill_resource" => Some(ContextSourceClass::SkillResource),
         _ => None,
     }
 }

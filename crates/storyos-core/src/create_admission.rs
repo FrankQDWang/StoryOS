@@ -46,7 +46,6 @@ pub fn admit_create(facts: &CreateAdmissionFacts<'_>) -> CreateAdmission {
             ExecutionCapability::Research => "research",
             ExecutionCapability::Embedding => "embedding",
             ExecutionCapability::Memory => "memory",
-            ExecutionCapability::Skill => "skill",
             ExecutionCapability::Subrun => "subrun",
             ExecutionCapability::Eval => "eval",
         });

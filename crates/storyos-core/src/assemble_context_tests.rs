@@ -353,6 +353,42 @@ fn persisted_assembly_record_roundtrips() {
 }
 
 #[test]
+fn each_skill_source_class_roundtrips_with_its_persisted_name() {
+    let mut record = assemble_current_passage_context(&complete_input());
+    for source_class in [
+        ContextSourceClass::SkillCatalog,
+        ContextSourceClass::SkillInstruction,
+        ContextSourceClass::SkillResource,
+    ] {
+        record.selected.push(SelectedProjection {
+            source_class,
+            source_version: "sha256:skill".to_owned(),
+            projection_mode: ProjectionMode::ExactRequired,
+            token_count: 3,
+            content: "Skill <text> & \"quotes\"".to_owned(),
+        });
+    }
+    let payload = encode_assembly_record(&record);
+
+    assert_eq!(
+        payload["selected"]
+            .as_array()
+            .expect("selected")
+            .iter()
+            .map(|item| item["source_class"].as_str().expect("class"))
+            .collect::<Vec<_>>(),
+        [
+            "author_instruction",
+            "working_target",
+            "skill_catalog",
+            "skill_instruction",
+            "skill_resource"
+        ]
+    );
+    assert_eq!(decode_assembly_record(&payload), Some(record));
+}
+
+#[test]
 fn historical_assembly_without_block_selection_remains_readable() {
     let record = assemble_current_passage_context(&complete_input());
     let mut payload = encode_assembly_record(&record);

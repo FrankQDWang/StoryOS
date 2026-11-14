@@ -126,8 +126,10 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     let names = |exposure: ToolExposure| -> Vec<&str> {
         exposure.tools.iter().map(|tool| tool.name).collect()
     };
+    // The mappings `v6` and `v7` declare the same Host Tools (ADR 0089 section 3).
     for revision in [
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+        crate::AGENT_PLAN_READ_RESULT_REGISTRATION.revision,
         AGENT_PLAN_REGISTRATION.revision,
     ] {
         assert_eq!(exposure(&[], revision), host(&HOST_TOOL_REGISTRATION));
