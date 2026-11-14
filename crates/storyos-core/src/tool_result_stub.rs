@@ -38,7 +38,10 @@ pub(crate) fn tool_result_stub(call: &StubCall<'_>) -> String {
             kept.join("\n")
         ),
     };
-    let arguments = bounded_arguments(call, lines.first().map(|line| tag(&[line.clone()])));
+    let arguments = bounded_arguments(
+        call,
+        lines.first().map(|line| tag(std::slice::from_ref(line))),
+    );
     let mut kept = lines.len();
     loop {
         let stub = format!(

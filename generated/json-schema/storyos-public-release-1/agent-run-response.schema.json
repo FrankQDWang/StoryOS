@@ -1069,7 +1069,6 @@
               ]
             },
             "stub_tool_call_ids": {
-              "description": "Each ToolCall whose result the later request sends as a stub.",
               "items": {
                 "type": "string"
               },
