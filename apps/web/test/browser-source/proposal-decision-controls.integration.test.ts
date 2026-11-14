@@ -153,9 +153,10 @@ it("shows the missing target text after a refused Acceptance and keeps Accept an
       await expect.poll(() => shown.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
       expect(shown.status()).toBeNull();
       await act(async () => { shown.card()?.querySelector<HTMLButtonElement>("button[data-proposal-accept]")?.click(); });
-      await expect.poll(() => shown.status()).toBe(MISSING_TARGET);
-      expect({ accept: shown.controls().accept, reject: shown.controls().reject, failures: shown.tab.failures })
-        .toEqual({ accept: 1, reject: 1, failures: [] });
+      // The controls come back only after the journal check of the next decision generation.
+      await expect.poll(() => ({ status: shown.status(), accept: shown.controls().accept,
+        reject: shown.controls().reject, failures: shown.tab.failures }))
+        .toEqual({ status: MISSING_TARGET, accept: 1, reject: 1, failures: [] });
     } finally {
       await shown.tab.unmount(); await test.close();
     }
@@ -173,18 +174,19 @@ it("keeps the refusal text of a refused Acceptance through a reload until the ne
       try {
         await expect.poll(() => first.card()?.getAttribute("data-proposal-eligibility")).toBe("eligible");
         await act(async () => { first.card()?.querySelector<HTMLButtonElement>("button[data-proposal-accept]")?.click(); });
-        await expect.poll(() => first.status()).toBe("此次接受已被拒绝，候选文字仍保留。");
-        expect({ accept: first.controls().accept, reject: first.controls().reject })
-          .toEqual({ accept: 1, reject: 1 });
+        // The controls come back only after the journal check of the next decision generation (#1505).
+        await expect.poll(() => ({ status: first.status(), accept: first.controls().accept,
+          reject: first.controls().reject }))
+          .toEqual({ status: "此次接受已被拒绝，候选文字仍保留。", accept: 1, reject: 1 });
       } finally {
         await first.tab.unmount();
       }
       // A reload: the Local Edit Journal keeps the refused Acceptance, getProposal does not.
       const reloaded = await display(workspace, proposal, answerRejection(workspace, proposal));
       try {
-        await expect.poll(() => reloaded.status()).toBe("上次接受已被拒绝，候选文字仍保留。");
-        expect({ accept: reloaded.controls().accept, reject: reloaded.controls().reject })
-          .toEqual({ accept: 1, reject: 1 });
+        await expect.poll(() => ({ status: reloaded.status(), accept: reloaded.controls().accept,
+          reject: reloaded.controls().reject }))
+          .toEqual({ status: "上次接受已被拒绝，候选文字仍保留。", accept: 1, reject: 1 });
         // The next decision: a Rejection that keeps the Proposal open, as a Rejection of some Operations does.
         await act(async () => { reloaded.card()?.querySelector<HTMLButtonElement>("button[data-proposal-reject]")?.click(); });
         // Reject comes back only after the journal check of the next decision generation.
