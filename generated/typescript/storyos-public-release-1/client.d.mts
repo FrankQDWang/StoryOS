@@ -391,7 +391,7 @@ export type ContextPurpose = "current_passage_assistance";
 
 export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result";
 
-export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt";
+export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 
 export type ContextSufficiency = { "kind": "complete" } | { "kind": "blocked", reasons: Array<ContextBlockReason>, };
 
@@ -457,7 +457,11 @@ export type ActiveCompactionKnownInput = { "kind": "model_attempt", id: string, 
 
 export type OptionalCompactionInstallInspect = { "kind": "absent" } | { "kind": "present", run_step_id: string, model_invocation_id: string, model_attempt_id: string, };
 
-export type OptionalActiveCompactionInspect = { "kind": "absent" } | { "kind": "present", compaction_id: string, install_state: ActiveCompactionInstallState, prior_model_attempt_id: string, prior_manifest_id: string, prior_run_step_id: string, producer_model_attempt_id: string, producer_manifest_id: string, producer_invocation_id: string, producer: string, mapping_kind: ActiveCompactionMappingKind, mapping_revision: string, known_inputs: Array<ActiveCompactionKnownInput>, output_text: string, usage: AgentRunUsageInspect, loss_facts: Array<string>, refusal_reason?: string | null, installed: OptionalCompactionInstallInspect, preserved_item_ids: Array<string>, admission: ContinuationAdmissionInspect, };
+export type OptionalActiveCompactionInspect = { "kind": "absent" } | { "kind": "present", compaction_id: string, install_state: ActiveCompactionInstallState, prior_model_attempt_id: string, prior_manifest_id: string, prior_run_step_id: string, producer_model_attempt_id: string, producer_manifest_id: string, producer_invocation_id: string, producer: string, mapping_kind: ActiveCompactionMappingKind, mapping_revision: string, known_inputs: Array<ActiveCompactionKnownInput>, output_text: string, usage: AgentRunUsageInspect, loss_facts: Array<string>, refusal_reason?: string | null, installed: OptionalCompactionInstallInspect, preserved_item_ids: Array<string>, admission: ContinuationAdmissionInspect, 
+/**
+ * Each ToolCall whose result the later request sends as a stub.
+ */
+stub_tool_call_ids?: Array<string> | null, };
 
 export type ReferenceRecoveryDisposition = "rebuilt" | "blocked" | "unknown_create";
 
