@@ -30,9 +30,11 @@ fn serialization_failure_state(error: &(dyn std::error::Error + 'static)) -> Opt
         .map(|_| "40001".to_owned())
 }
 
-/// A store with one queued AgentRun. The first claims fail with a serialization failure.
+/// A store with one queued AgentRun. The first claims and the first completions fail with a
+/// serialization failure.
 struct RaceStore {
     claim_failures: Mutex<u64>,
+    completion_failures: Mutex<u64>,
     settled: Mutex<Vec<ClaimedAgentRun>>,
 }
 
@@ -117,6 +119,13 @@ impl ModelDispatchStore for RaceStore {
         &self,
         claim: &ClaimedAgentRun,
     ) -> Result<NextDispatchWork, CompleteAgentRunError> {
+        let mut failures = self.completion_failures.lock().unwrap();
+        if *failures > 0 {
+            *failures -= 1;
+            return Err(CompleteAgentRunError::Unavailable(Box::new(
+                SerializationFailure,
+            )));
+        }
         self.settled.lock().unwrap().push(claim.clone());
         Ok(NextDispatchWork::Settled(CompleteAgentRun::Settled))
     }
@@ -187,6 +196,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
     storyos_application::register_sql_state(serialization_failure_state);
     let store = RaceStore {
         claim_failures: Mutex::new(1),
+        completion_failures: Mutex::new(0),
         settled: Mutex::new(Vec::new()),
     };
     let destination = ModelDestination {
@@ -198,6 +208,27 @@ async fn run_once_claims_again_after_a_serialization_failure() {
     run_once(&store, &destination)
         .await
         .expect("the second claim should complete the AgentRun");
+
+    assert_eq!(*store.settled.lock().unwrap(), vec![claim()]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn run_once_completes_again_after_a_serialization_failure() {
+    storyos_application::register_sql_state(serialization_failure_state);
+    let store = RaceStore {
+        claim_failures: Mutex::new(0),
+        completion_failures: Mutex::new(1),
+        settled: Mutex::new(Vec::new()),
+    };
+    let destination = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+    };
+
+    run_once(&store, &destination)
+        .await
+        .expect("the second completion should settle the AgentRun");
 
     assert_eq!(*store.settled.lock().unwrap(), vec![claim()]);
 }
