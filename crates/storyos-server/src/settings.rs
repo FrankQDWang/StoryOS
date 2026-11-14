@@ -17,6 +17,7 @@ const KEYS: &[&str] = &[
     "worker",
     "export_lease_ttl_secs",
     "test_allow_multiple_bootstrap_sessions",
+    "skills_dir",
 ];
 
 /// The `STORYOS_` settings of the Server. Each secret is a `SecretString`.
@@ -35,6 +36,8 @@ pub struct ServerSettings {
     #[serde(default, deserialize_with = "optional_number")]
     pub export_lease_ttl_secs: Option<u64>,
     pub test_allow_multiple_bootstrap_sessions: Option<String>,
+    /// The Skill directory of the deployment (ADR 0089). An absent value gives no Skill.
+    pub skills_dir: Option<std::path::PathBuf>,
 }
 
 impl ServerSettings {

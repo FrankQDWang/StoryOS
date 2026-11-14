@@ -59,6 +59,7 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
+mod skill_package;
 mod statistics_profile;
 mod take_over_project_writer;
 mod transition_outcome;
@@ -270,6 +271,12 @@ pub use revision_comparison::{
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
+};
+pub use skill_package::{
+    FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
+    SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillFile, SkillFileInput,
+    SkillLimitExceeded, SkillPackage, SkillPackageInput, SkillPackageReference,
+    SkillPackageRefusal, SkillSet, admit_skill_package, skill_md_frontmatter,
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
