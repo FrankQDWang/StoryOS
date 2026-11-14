@@ -354,3 +354,7 @@ pub(crate) async fn current_chapter_payload(
         .map_err(agent_run_database_error)?;
     Ok(row.map(|row| (row.get(0), row.get(1))))
 }
+
+#[cfg(test)]
+#[path = "create_agent_run_context_tests.rs"]
+mod tests;
