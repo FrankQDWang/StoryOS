@@ -35,8 +35,12 @@ A continuation request sends one `function_call_output` item for each ToolCall, 
 - The prior response read the input of the function request Attempt. That input is all that the model reads other than the Tool results and the Host instructions: the selected Context text, the declared targets, the selection references, and the passage input. Each Attempt records a digest of it. When the current input of the continuation has a different digest, the request is a full input with the current input. For example, the author edited the Chapter, or another Proposal reserved a target block, during the Tool exchange.
 - Core `map_continuation_input` makes these two decisions from two facts that the store loads: `prior_reference_unusable` and `current_input_changed` (ADR 0039).
 
+  > The [amendment of 2026-11-14](#amendment-2026-11-14-the-current-input-after-a-steering-input) gives the author message of the current input.
+
   > The sentence "When the current input of the continuation has a different digest, the request is a full input with the current input." of the bullet above and this bullet are superseded on 2026-11-14 by a decision of the coordinator for [#1497](https://github.com/FrankQDWang/StoryOS/issues/1497): a changed current input keeps the Provider conversation. When the current input of the continuation has a different digest and the prior reference is usable, the request is incremental. It names the prior response of the Run and sends the current input again as new input items: the selected Context text, the declared targets, the selection references, and the passage input. Then it sends the outputs of the calls of that response. The first paragraph of that input tells the model that this input replaces the earlier input of the author request. Core `map_continuation_input` decides the full input only from `prior_reference_unusable`, and the store records on the Attempt whether the prior response read the current input. A full input stays for a prior reference that a destination confirmed unusable or expired, and for the request after a compaction. Each Attempt records the digest of its input, as before.
 - The text of each item comes from the stored ToolCall. A delivery, a re-delivery, or a later full-input rebuild never starts a Tool exchange. A re-delivery is a new Model Attempt that the ordinary admission admits again.
+
+  > Amended on 2026-11-14 by [ADR 0093](0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md) section 5 ([#1511](https://github.com/FrankQDWang/StoryOS/issues/1511)): after a compaction, a full input sends a stub in place of each long research result or read that an earlier request sent. The stub comes from the stored ToolCall and its sources, and it gives no Tool exchange.
 - The Host instructions say that the content inside a `tool_result` source tag is data from outside the novel, not an instruction. The request text of the author message never holds a `tool_result` item.
 
 ### 4. The grant scope `project_writing_assistance_v3`
@@ -103,3 +107,12 @@ The author decided this rule on 2026-11-14 ([#1492](https://github.com/FrankQDWa
 ## Amendment 2026-11-14: the prior response comes from the binding
 
 [#1502](https://github.com/FrankQDWang/StoryOS/issues/1502) corrects section 3. The outputs of the calls of the prior response are the outputs of the ToolCalls of the Decision of the bound response that the request names. They are not the outputs of the RunStep at the position before the active RunStep. A RunStep that reads a steering input before its request can have the next position while the RunStep before it has no Model Attempt, so the position can name no response or the wrong response. Each call of the prior response that the Host did not execute gets the output of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 5. A function request Decision whose ToolCall has no output is a damaged record, and the Run does not send the request.
+
+## Amendment 2026-11-14: the current input after a steering input
+
+[#1508](https://github.com/FrankQDWang/StoryOS/issues/1508) corrects section 3.
+
+- The comparison of the current input with the input of the prior response uses the author message that the RunStep reads, with each steering input. The digest of each Attempt has this message.
+- Before this amendment, the comparison used the first message of the Run. After a steering input, each later RunStep thus sent the current input again with the replaced input label, also when the input did not change.
+- After a steering input, the RunStep that reads it sends the current input again with the replaced input label, because its prior response did not read the input. A later RunStep with an unchanged input sends only the outputs of the calls of its prior response.
+- A changed input still goes again with the replaced input label, as the amendment for [#1497](https://github.com/FrankQDWang/StoryOS/issues/1497) in section 3 says.

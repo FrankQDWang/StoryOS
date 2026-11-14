@@ -1004,6 +1004,15 @@
             "installed": {
               "$ref": "#/$defs/OptionalCompactionInstallInspect"
             },
+            "kept_author_message_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "kind": {
               "const": "present",
               "type": "string"
@@ -1065,6 +1074,15 @@
             "refusal_reason": {
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "stub_tool_call_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
                 "null"
               ]
             },
@@ -1856,7 +1874,8 @@
       "enum": [
         "exact_required",
         "derived_summary",
-        "deterministic_excerpt"
+        "deterministic_excerpt",
+        "tool_result_stub"
       ],
       "type": "string"
     },
@@ -2365,6 +2384,15 @@
     },
     "captured_memory_settings": {
       "$ref": "#/$defs/CapturedMemorySettingsInspect"
+    },
+    "compactions": {
+      "items": {
+        "$ref": "#/$defs/OptionalActiveCompactionInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "context": {
       "$ref": "#/$defs/AgentRunContextInspect"

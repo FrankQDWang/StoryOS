@@ -15,6 +15,8 @@ On 2026-10-12 and 2026-10-13, the author selected the rule that starts Host-mana
 - The Model Capability Profile records the context window of its model, which input and output share, as one fact with its evidence. For `doubao-seed-2.1-pro`, the documented window is 262,144 tokens.
 - The threshold is a rule, not a stored number: 80 percent of the window after the output bound of the use binding. For `doubao-seed-2.1-pro` with `agent_plan_request_v2` (32,768 output tokens), the threshold is 183,500 tokens. A new Registration with another window changes the threshold with no code change and no new ADR.
 - Before the first decision request of an AgentRun, the Host calculates the expected input. It is the reported input and output tokens of the last response of the chain, plus the counted tokens of the new turn. Compaction starts when the expected input reaches the threshold.
+
+  > The [amendment of 2026-11-14](#amendment-2026-11-14-the-expected-input-of-a-later-runstep) gives the expected input of a RunStep after the first RunStep of a Run.
 - A profile with no window, an unknown output bound, or unreported usage gives no automatic compaction.
 - With a known window, a requested compaction can fail to install: the summary request refuses, no complete summary comes, or the install check refuses. When the expected input then reaches the window after the output bound, the AgentRun refuses before dispatch with `conversation_too_long`. The author sees one sentence: this conversation is too long, so start a new conversation ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)).
 - With no known window, StoryOS does not refuse before dispatch. When the destination rejects an input that is too long, the AgentRun refuses with `conversation_too_long`, and the author sees the same sentence. The section below gives the mapping.
@@ -50,3 +52,13 @@ On 2026-10-14, [Pin the Served Doubao Model Version and Record Its Context Windo
 - An AgentRun that pinned `fa13` or an earlier Registration with a window keeps the window of 262,144 tokens and the threshold of 183,500 tokens.
 - A live probe of approximately 827,800 provider tokens, above the new threshold, was accepted on the dated version ([evidence record](../research/agent-plan-pinned-version-qualification-2026-10-14.md)). No automatic compaction at the new threshold was examined.
 - The statements above with 262,144 tokens and 183,500 tokens apply to the undated identifier `doubao-seed-2.1-pro`.
+
+## Amendment 2026-11-14: the expected input of a later RunStep
+
+[#1508](https://github.com/FrankQDWang/StoryOS/issues/1508) adds this section. It applies to each RunStep of a Run where the Host evaluates the threshold ([ADR 0055](0055-install-a-host-managed-compaction-summary-for-the-decision-request.md)).
+
+- The expected input of a RunStep is the reported input and output tokens of the prior response, plus the counted tokens of only the text that the next request sends. A text that the Provider conversation already holds counts one time: the reported usage of the prior response has it.
+- At the first RunStep of a Run, the request sends the new turn, as before this amendment.
+- At a later RunStep, the request sends the outputs of the calls of the prior response. Each other Tool result of the Run went in an earlier request. The request sends the current input again only when the prior response did not read it ([ADR 0085](0085-reenter-each-settled-tool-result-through-context-assembly.md) section 3). Then the current input counts too.
+- The check for `conversation_too_long` uses the same expected input.
+- Before this amendment, a later RunStep added each selected item of its Context Assembly to the reported usage: the author message, the Working Target, and each Tool result of the Run. Thus a Run could compact, or end with `conversation_too_long`, too early. A test with the scripted stream endpoint proved it.

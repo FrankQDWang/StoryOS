@@ -16,6 +16,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
+mod earlier_author_messages;
 mod finish_rule;
 mod function_calling;
 mod grant_scope;
@@ -25,6 +26,7 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_tool_result;
 mod rebuild_expired_reference;
 mod research_destination;
 mod research_source;
@@ -39,6 +41,7 @@ mod tool_loop_profile;
 mod tool_registration;
 mod tool_result;
 mod tool_result_context;
+mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -94,19 +97,19 @@ pub use assemble_context::{
     encode_assembly_record,
 };
 pub use compact_active_context::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
-    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
-    COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts, CompactionInstallRefusal,
-    CompactionKnownInput, CompactionRecordState, CompactionRequestFacts, CompactionSource,
-    CompactionStep, CompactionTrigger, DecisionRequestKind, HOST_FAKE_COMPACTION_OUTPUT,
-    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
-    active_context_input_digest, compaction_assembly_record, compaction_due, compaction_requested,
-    compaction_threshold, conversation_too_long, decide_compaction_install, decision_request_kind,
-    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
-    summary_fits_item, summary_text,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
+    AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    COMPACTION_SUMMARY_UNAVAILABLE, COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts,
+    CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState, CompactionRequestFacts,
+    CompactionSource, CompactionStep, CompactionTrigger, DecisionRequestKind,
+    HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction,
+    SummaryObservation, active_context_input_digest, compaction_assembly_record, compaction_due,
+    compaction_requested, compaction_threshold, conversation_too_long, decide_compaction_install,
+    decision_request_kind, later_request_record, later_request_too_long, next_compaction_step,
+    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
-    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
+    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput, PriorInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
 pub use create_admission::{
@@ -141,6 +144,10 @@ pub use deployment_destination::{
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
 };
+pub use earlier_author_messages::{
+    EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
+    is_earlier_author_message, keep_earlier_author_messages,
+};
 pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
     UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
@@ -157,8 +164,8 @@ pub use host_fake_profile::{
     SECOND_PROSE_CHANGE_TEXT, requested_execution_capability,
 };
 pub use host_tool::{
-    FINISH_DOES_NOT_COUNT_RESULT, HOST_TOOL_REGISTRATION, HostToolRegistration, execute_host_tool,
-    host_tool, host_tool_result,
+    FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
+    HostToolRegistration, execute_host_tool, host_tool, host_tool_result,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -206,6 +213,9 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use read_tool_result::{
+    READ_TOOL_RESULT_TOOL_SPEC, ReadTarget, ReadToolResultRefusal, StoredCall, read_tool_result,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
@@ -291,7 +301,8 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_REGISTRATION, AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
+    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
 };
@@ -303,8 +314,10 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultSource, assemble_tool_result_continuation,
+    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput, ToolResultSource,
+    assemble_tool_result_continuation, stub_tool_call_ids,
 };
+pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
     ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
     PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,

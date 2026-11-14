@@ -1,12 +1,12 @@
 use super::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
-    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
-    CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
-    CompactionSource, CompactionStep, CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT,
-    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
-    active_context_input_digest, compaction_due, compaction_threshold, conversation_too_long,
-    decide_compaction_install, later_request_record, next_compaction_step,
-    requests_active_compaction, stage_compaction,
+    ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX,
+    AGENT_PLAN_COMPACTION_PRODUCER, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    COMPACTION_SUMMARY_UNAVAILABLE, CompactionInstallFacts, CompactionInstallRefusal,
+    CompactionKnownInput, CompactionRecordState, CompactionSource, CompactionStep,
+    CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
+    StagedCompaction, SummaryObservation, active_context_input_digest, compaction_due,
+    compaction_threshold, conversation_too_long, decide_compaction_install, later_request_record,
+    next_compaction_step, requests_active_compaction, stage_compaction,
 };
 
 fn facts(
@@ -137,11 +137,11 @@ fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision
 
 #[test]
 fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
-    let trigger = |window, output_bound, prior, new_turn_tokens| CompactionTrigger {
+    let trigger = |window, output_bound, prior, sent_input_tokens| CompactionTrigger {
         window_tokens: window,
         output_bound,
         prior_reported_tokens: prior,
-        new_turn_tokens,
+        sent_input_tokens,
     };
     let doubao = (Some(262_144), Some(32_768));
 
@@ -193,7 +193,7 @@ fn the_later_request_selects_the_summary_first_as_a_derived_summary() {
         instruction: crate::InstructionBindingInput::Absent,
         destination_identity: "destination-1".to_owned(),
     });
-    let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.");
+    let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.", &[]);
     let first = &later.selected[0];
 
     assert_eq!(
@@ -330,6 +330,10 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         decision: None,
         declared_target_texts: &[],
         prior_reported_tokens: prior,
+        prior_decision_id: None,
+        prior_input: crate::PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
     let undated = crate::AGENT_PLAN_RECOVERY_REGISTRATION.revision;
@@ -398,6 +402,10 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
             decision: Some(decision),
             declared_target_texts: &[],
             prior_reported_tokens: Some(780_000),
+            prior_decision_id: None,
+            prior_input: crate::PriorInput::Current,
+            decision_position: "0",
+            compacted_earlier: false,
         })
     };
     let without_references = due(&decision);
@@ -422,4 +430,142 @@ fn the_text_of_overlapping_selection_references_counts_toward_compaction() {
     );
 
     assert_eq!((without_references, due(&decision)), (false, true));
+}
+
+#[test]
+fn the_host_fake_compacts_one_time_or_at_each_named_run_step() {
+    let requested = |message: &str, decision_position, compacted_earlier| {
+        super::compaction_requested(&super::CompactionRequestFacts {
+            model_registration_revision: crate::HOST_FAKE_REGISTRATION.revision,
+            budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            author_message: message,
+            decision: None,
+            declared_target_texts: &[],
+            prior_reported_tokens: None,
+            prior_decision_id: None,
+            prior_input: crate::PriorInput::Current,
+            decision_position,
+            compacted_earlier,
+        })
+    };
+    let once = format!("{ACTIVE_COMPACTION_REQUEST_PREFIX} Help with this passage.");
+    let named = format!(
+        "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 0 2. Search the web: rain"
+    );
+
+    assert_eq!(
+        [
+            requested(&once, "1", false),
+            requested(&once, "1", true),
+            requested(&named, "0", false),
+            requested(&named, "1", false),
+            requested(&named, "2", true),
+            requested("At RunSteps 0. Help.", "0", false),
+        ],
+        [true, false, true, false, true, false]
+    );
+}
+
+#[test]
+fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
+    let decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Help again.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let others: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    let targets = ["Target.".to_owned()];
+    // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
+    let too_long = |revision, summary_tokens| {
+        let mut later = later_request_record(&decision, "compaction-1", "Summary.", &[]);
+        later.selected[0].token_count = summary_tokens;
+        super::later_request_too_long(
+            revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &targets,
+        )
+    };
+    let at_window = 1_015_808 - others - 7;
+
+    assert_eq!(
+        [
+            too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window),
+            too_long(crate::AGENT_PLAN_REGISTRATION.revision, at_window - 1),
+            too_long(crate::HOST_FAKE_REGISTRATION.revision, at_window),
+        ],
+        [true, false, false]
+    );
+}
+
+/// ADR 0093 section 5: the full input of a later request counts the stubs, not the exact results.
+#[test]
+fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Research the tides.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    // 32 results at the item limit are above the window after the output bound.
+    let text = "Tide. ".repeat(6_000);
+    let ids: Vec<String> = (0..32).map(|index| format!("call_{index:02}")).collect();
+    let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
+        ids.iter()
+            .map(|id| crate::ToolResultCandidate {
+                tool_call_id: id,
+                call_id: id,
+                owner_user_id: "owner-1",
+                project_id: "project-1",
+                run_id: "run-1",
+                model_attempt_id: "attempt-1",
+                decision_id: "decision-1",
+                state: crate::ToolCallState::Settled,
+                result_text: Some(&text),
+                sources: &[],
+                output: crate::ToolResultOutput::Research,
+                function_name: "web_search",
+                arguments: r#"{"query":"tides","result_count":null}"#,
+                form,
+            })
+            .collect()
+    };
+    crate::assemble_tool_result_continuation(
+        &mut decision,
+        &candidates(crate::ToolResultForm::Exact),
+    );
+    let too_long = |form| {
+        let later = later_request_record(&decision, "compaction-1", "Summary.", &candidates(form));
+        super::later_request_too_long(
+            crate::AGENT_PLAN_REGISTRATION.revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &[],
+        )
+    };
+
+    assert_eq!(
+        [
+            too_long(crate::ToolResultForm::Exact),
+            too_long(crate::ToolResultForm::Stub),
+        ],
+        [true, false]
+    );
 }

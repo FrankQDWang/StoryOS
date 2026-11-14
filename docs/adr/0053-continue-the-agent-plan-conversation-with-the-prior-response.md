@@ -85,3 +85,7 @@ This is not an exception to the rule that a changed mapping needs a new Registra
 3. The decision applies only until the aggregate pull request of #1451 merges into `main`. After that merge, each change of the exact mapping needs a new mapping revision and a new Registration, as this ADR states.
 
 The live run records of 2026-11-14 for [#1464](../research/agent-tool-loop-live-run-2026-11-14.md) and [#1496](../research/unresolved-passage-request-live-run-2026-11-14.md) used `v5` before this item: the request after an opened Proposal had the full input mapping. The [record of #1497](../research/agent-tool-loop-changed-input-live-run-2026-11-14.md) used `v5` with this item. The real route accepted the item in the request with the response `resp_02179462183106202e43eb8440d3b95b4166e4756a96011d8618c`.
+
+## Amendment 2026-11-14: the head Registration takes the mapping v6
+
+[ADR 0093](0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md) ([#1509](https://github.com/FrankQDWang/StoryOS/issues/1509)) gives the mapping `storyos.volcengine-agent-plan.responses.create.v6` to the new head Registration `018f0000-0000-7001-8000-00000000fa20`. It is Registration `fa19` with the mapping `v6`. An AgentRun that pinned `fa19` keeps the mapping `v5` and refuses with Registration drift after the deployment offers `fa20`.

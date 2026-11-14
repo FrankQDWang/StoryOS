@@ -45,7 +45,8 @@ async fn run_facts(admin: &Client, run_id: &str) -> Value {
                              (attempt.run_id, attempt.decision_position, 'primary')
                        WHERE attempt.run_id = run.run_id),
                       'calls', (SELECT jsonb_agg(to_jsonb(call) - 'tool_call_id' - 'owner_user_id'
-                                  - 'project_id' - 'run_id' - 'model_attempt_id' - 'decision_id')
+                                  - 'project_id' - 'run_id' - 'model_attempt_id' - 'decision_id'
+                                  ORDER BY call.decision_position, call.call_position)
                                   FROM storyos.tool_calls AS call WHERE call.run_id = run.run_id),
                       'events', (SELECT jsonb_agg(jsonb_build_object(
                                    'kind', event.event_kind,
@@ -91,9 +92,9 @@ async fn a_finish_call_settles_in_process_and_reenters_as_one_tool_result() {
             "status": "completed", "position": 1,
             "steps": [
                 {"position": 0, "decision": "tool_request", "tool_choice": "required",
-                 "tools": ["propose_edit", "submit_research", "finish"], "tool_outputs": [], "tool_results": []},
+                 "tools": ["propose_edit", "submit_research", "read_tool_result", "finish"], "tool_outputs": [], "tool_results": []},
                 {"position": 1, "decision": "advisory", "tool_choice": "none",
-                 "tools": ["propose_edit", "submit_research", "finish"],
+                 "tools": ["propose_edit", "submit_research", "read_tool_result", "finish"],
                  "tool_outputs": [{"call_id": "call_finish", "output": EMPTY_OUTPUT}],
                  "tool_results": ["empty"]},
             ],

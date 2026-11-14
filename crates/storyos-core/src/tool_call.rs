@@ -103,6 +103,7 @@ impl ValidatedToolCall {
             ToolIntake::SubmitResearch { summary, claims } => {
                 crate::submit_research::arguments(summary, claims)
             }
+            ToolIntake::ReadToolResult { call_id } => json!({ "call_id": call_id }),
         }
     }
 

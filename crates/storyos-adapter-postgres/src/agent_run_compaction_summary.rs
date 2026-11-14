@@ -23,9 +23,11 @@ pub(crate) struct SummaryAttempt {
     pub prior_model_attempt_id: Option<String>,
 }
 
+/// The summary Attempt of the RunStep at `decision_position` of the claimed AgentRun.
 pub(crate) async fn load_summary_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision_position: &str,
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
     let row = client
         .query_opt(
@@ -33,11 +35,13 @@ pub(crate) async fn load_summary_attempt(
                     payload->'wire'->>'prior_model_attempt_id'
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND attempt_role = 'compaction'",
+                AND run_id = $3::text::uuid AND attempt_role = 'compaction'
+                AND decision_position = $4::text::numeric",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_position,
             ],
         )
         .await
@@ -56,6 +60,10 @@ pub(crate) struct PriorChain {
     pub reference: Option<String>,
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub reported_tokens: Option<u64>,
+    /// The Decision of the prior response, whose calls the request answers.
+    pub decision_id: Option<String>,
+    /// Whether the prior response read the current input of the request.
+    pub prior_input: storyos_application::PriorInput,
 }
 
 /// The prior binding that the current continuation decision selects, or `None` when the decision
@@ -89,7 +97,8 @@ pub(crate) async fn prior_chain(
             "SELECT model_attempt_id::text, payload->>'response_reference',
                     CASE WHEN payload->'usage'->>'kind' = 'reported'
                          THEN ((payload->'usage'->>'input_tokens')::bigint
-                               + (payload->'usage'->>'output_tokens')::bigint)::text END
+                               + (payload->'usage'->>'output_tokens')::bigint)::text END,
+                    decision_id::text
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND continuation_binding_id = $3::text::uuid",
@@ -107,6 +116,8 @@ pub(crate) async fn prior_chain(
         reported_tokens: row
             .get::<_, Option<String>>(/*idx*/ 2)
             .and_then(|tokens| tokens.parse().ok()),
+        decision_id: row.get(/*idx*/ 3),
+        prior_input: continuation.prior_input,
     }))
 }
 
@@ -135,6 +146,7 @@ pub(crate) async fn summary_request(
         passage_resolution: None,
         passage_input: None,
         context: Vec::new(),
+        earlier_author_messages: Vec::new(),
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference,
@@ -215,7 +227,9 @@ pub(crate) async fn commit_claim(
 ) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
     if run.settled()
         || run.attempt_id.is_some()
-        || load_summary_attempt(client, claim).await?.is_some()
+        || load_summary_attempt(client, claim, &run.decision_position)
+            .await?
+            .is_some()
     {
         return Ok(None);
     }
@@ -249,6 +263,7 @@ pub(crate) async fn commit_claim(
                     disclosure_grant_id = $6::text::uuid, disclosure_grant_scope = $7
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                AND decision_position = $8::text::numeric
                 AND destination_context_manifest_id IS NULL
           RETURNING context_assembly_manifest_id::text",
             &[
@@ -259,6 +274,7 @@ pub(crate) async fn commit_claim(
                 &outbound_manifest_id,
                 &run.grant_id,
                 &run.grant_scope,
+                &run.decision_position,
             ],
         )
         .await
@@ -349,8 +365,9 @@ pub(crate) async fn commit_assembly(
         .query_opt(
             "SELECT 1 FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND manifest_role = 'compaction'",
-            &[scope[0], scope[1], &claim.run_id],
+                AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                AND decision_position = $4::text::numeric",
+            &[scope[0], scope[1], &claim.run_id, &run.decision_position],
         )
         .await
         .map_err(work_error)?;
@@ -599,4 +616,4 @@ fn observation_kind(observation: &Observation) -> &'static str {
 
 #[cfg(test)]
 #[path = "agent_run_compaction_summary_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -167,8 +167,12 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
         decision: Some(&decision),
         declared_target_texts: &target_texts,
         prior_reported_tokens: None,
+        prior_decision_id: None,
+        prior_input: PriorInput::Current,
+        decision_position: "0",
+        compacted_earlier: false,
     })
-    .new_turn_tokens;
+    .sent_input_tokens;
     // With each sent text empty, the wire text keeps only its framing.
     let framing = CreateRequest {
         context: request
@@ -205,7 +209,7 @@ fn the_compaction_estimate_counts_each_text_that_the_request_sends() {
 }
 
 /// The Exposure of the research Tool Registration and the Host Tools on the Agent Plan
-/// Registration.
+/// Registration of the mapping `v5`.
 pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
     storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
         bound: &[storyos_core::BoundTool {
@@ -213,7 +217,7 @@ pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
             lifecycle: storyos_core::ToolRegistrationLifecycle::Active,
             compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),
         }],
-        model_registration_revision: storyos_core::AGENT_PLAN_REGISTRATION.revision,
+        model_registration_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision,
     })
 }
 
@@ -311,6 +315,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
         serde_json::from_str(&create_body(request, "model-1", bounds)).unwrap()
     };
     let summary: serde_json::Value = serde_json::from_str(&summary_body(
+        storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
         "resp-1",
         &full.tool_outputs,
         &[],

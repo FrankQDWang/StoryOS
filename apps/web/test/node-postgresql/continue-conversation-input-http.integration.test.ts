@@ -82,10 +82,14 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
   // continues the prior response, so the compaction request compacts before it (ADR 0085).
   assert.equal(queried.active_compaction.kind, original === FIRST ? "absent" : "present");
   assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
-  // The tool loop fake records its whole wire request as the sent content (ADR 0091).
-  const sent = queried.evidence.find((item) => item.kind === "sent_content");
+  // The tool loop fake records its whole wire request as the sent content (ADR 0091). The request
+  // that read the steering inputs sends the message with them. A later request with the same input
+  // sends only its Tool outputs (ADR 0085).
+  const reader = queried.steering_inputs.at(-1)?.model_attempt_id ?? "";
+  const read = await inspectRun(started.baseUrl, prepared, runId, reader);
+  const sent = read.evidence.find((item) => item.kind === "sent_content");
   assert.deepEqual(sent && { ...sent, content: (JSON.parse(sent.content) as { author_message: string }).author_message }, {
-    kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,
+    kind: "sent_content", attempt_id: attempt(read).model_attempt_id,
     availability: "current", content: [original, ...corrections].join("\n"),
   });
 });

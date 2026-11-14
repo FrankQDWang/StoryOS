@@ -154,7 +154,10 @@ pub(crate) async fn load_run_phase(
 ) -> Result<RunPhaseRow, CompleteAgentRunError> {
     let Some(row) = client
         .query_opt(
-            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message) AS author_message,
+            // The current author message is the one `author_instruction` item that is not an
+            // earlier author message of a later request (ADR 0093 section 6).
+            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'
+                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message) AS author_message,
                     run.chapter_id::text AS chapter_id, run.conversation_id::text AS conversation_id,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text AS assembly_manifest_id,
                     assembly.destination_context_manifest_id::text AS destination_manifest_id,
@@ -200,6 +203,7 @@ pub(crate) async fn load_run_phase(
                       SELECT 1 FROM storyos.active_context_compactions AS refused
                        WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
                              (run.owner_user_id, run.project_id, run.run_id)
+                         AND refused.decision_position = run.active_decision_position
                          AND refused.install_state = 'refused'))
                   ORDER BY active.manifest_role = 'later_request' DESC
                   LIMIT 1
@@ -381,11 +385,10 @@ pub(crate) async fn settle_one_phase(
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
-        // Compaction occurs before a decision request of the AgentRun, when the mapping of the
-        // pinned Registration compacts (ADR 0055).
+        // Compaction occurs before the decision request of each RunStep of the AgentRun, when
+        // the mapping of the pinned Registration compacts (ADR 0055, ADR 0093).
         let compacted = if storyos_core::model_registration(&run.model_registration_revision)
             .is_some_and(storyos_core::ModelRegistration::compacts)
-            && crate::agent_run_compaction::compacts_at_active_step(client, claim, &run).await?
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?

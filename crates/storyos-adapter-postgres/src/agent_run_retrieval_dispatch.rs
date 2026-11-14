@@ -550,6 +550,7 @@ pub(crate) async fn copy_active_context(
                   SELECT 1 FROM storyos.active_context_compactions AS refused
                    WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
                          ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                     AND refused.decision_position = $6::text::numeric
                      AND refused.install_state = 'refused'))
               ORDER BY requirement_role = 'later_request' DESC
               LIMIT 1",
@@ -586,6 +587,7 @@ pub(crate) async fn copy_active_context(
                   SELECT 1 FROM storyos.active_context_compactions AS refused
                    WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
                          ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                     AND refused.decision_position = $8::text::numeric
                      AND refused.install_state = 'refused'))
               ORDER BY manifest_role = 'later_request' DESC
               LIMIT 1",

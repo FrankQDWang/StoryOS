@@ -24,7 +24,7 @@ const WORKER_ENV = {
 };
 const PARAGRAPHS = ["潮水退到码头下面。", "她在雾里等那条船。"];
 const PROSE = "上午十点四十二分，涨潮漫过了王子码头。";
-const TOOL_NAMES = ["web_search", "web_fetch", "propose_edit", "submit_research", "finish"];
+const TOOL_NAMES = ["web_search", "web_fetch", "propose_edit", "submit_research", "read_tool_result", "finish"];
 const INVALID_ANSWER = "这次检索请求不符合要求，我没有改动正文。";
 
 /** Points the model and MCP destination evidence of the Project at the fakes, as the Postgres tests do. */

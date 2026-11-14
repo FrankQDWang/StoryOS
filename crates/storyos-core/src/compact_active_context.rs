@@ -3,6 +3,9 @@
 use crate::{canonical_json, hex_sha256};
 
 pub const ACTIVE_COMPACTION_REQUEST_PREFIX: &str = "Compact active context between calls.";
+/// After the prefix, the words that name each RunStep position where the Host fake compacts, for
+/// example `At RunSteps 0 1.`
+pub const ACTIVE_COMPACTION_POSITIONS_PREFIX: &str = "At RunSteps";
 pub const HOST_FAKE_COMPACTION_PRODUCER: &str = "host_fake_summary";
 pub const HOST_FAKE_COMPACTION_OUTPUT: &str =
     "Bounded later-request summary. Semantic preservation is unknown.";
@@ -29,6 +32,30 @@ pub struct CompactionInstallFacts {
 /// Author text that asks the Host-fake path to compact before the decision request.
 pub fn requests_active_compaction(author_message: &str) -> bool {
     author_message.starts_with(ACTIVE_COMPACTION_REQUEST_PREFIX)
+}
+
+/// Whether the Host fake compacts at the RunStep of `facts`. The prefix alone asks for one
+/// compaction: at the first RunStep that compacts. The prefix with `At RunSteps <position> ...`
+/// asks for a compaction at each named position.
+fn host_fake_compacts(facts: &CompactionRequestFacts<'_>) -> bool {
+    let Some(rest) = facts
+        .author_message
+        .strip_prefix(ACTIVE_COMPACTION_REQUEST_PREFIX)
+    else {
+        return false;
+    };
+    match rest
+        .trim_start()
+        .strip_prefix(ACTIVE_COMPACTION_POSITIONS_PREFIX)
+    {
+        Some(named) => named
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .any(|position| position == facts.decision_position),
+        None => !facts.compacted_earlier,
+    }
 }
 
 /// Digest the exact author message and Working Target captured for one install check.
@@ -134,8 +161,9 @@ pub struct CompactionTrigger {
     /// The reported input and output tokens of the last response of the chain, or `None` when
     /// the destination did not report them.
     pub prior_reported_tokens: Option<u64>,
-    /// The counted tokens of the new turn.
-    pub new_turn_tokens: u64,
+    /// The counted tokens of the text that the request sends. The reported usage of the prior
+    /// response counts each text that the Provider conversation already holds (ADR 0056).
+    pub sent_input_tokens: u64,
 }
 
 /// Whether the expected input of the next request reaches the threshold. An unknown window, an
@@ -147,8 +175,9 @@ pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
         trigger.prior_reported_tokens,
     ) {
         (Some(window), Some(output_bound), Some(prior)) => {
-            compaction_threshold(window, output_bound)
-                .is_some_and(|threshold| prior.saturating_add(trigger.new_turn_tokens) >= threshold)
+            compaction_threshold(window, output_bound).is_some_and(|threshold| {
+                prior.saturating_add(trigger.sent_input_tokens) >= threshold
+            })
         }
         _ => false,
     }
@@ -168,6 +197,14 @@ pub struct CompactionRequestFacts<'a> {
     pub declared_target_texts: &'a [String],
     /// The reported input and output tokens of the prior response, or `None` when unreported.
     pub prior_reported_tokens: Option<u64>,
+    /// The Decision of the prior response. The request sends the output of each of its calls.
+    pub prior_decision_id: Option<&'a str>,
+    /// Whether the prior response read the current input of the request.
+    pub prior_input: crate::PriorInput,
+    /// The Decision position of the RunStep of the request.
+    pub decision_position: &'a str,
+    /// Whether the Run compacted at an earlier RunStep.
+    pub compacted_earlier: bool,
 }
 
 impl CompactionTrigger {
@@ -182,35 +219,92 @@ impl CompactionTrigger {
                 .and_then(crate::BudgetBounds::request_bounds)
                 .map(|bounds| u64::from(bounds.max_output_tokens)),
             prior_reported_tokens: facts.prior_reported_tokens,
-            // The request sends each selected item, each selection reference text, and each
-            // declared target text (ADR 0056).
-            new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
-                let references = record
-                    .operation_requirement
-                    .selection_references
-                    .iter()
-                    .flatten()
-                    .filter_map(|admitted| admitted.selected_text.as_deref());
-                let sent_texts = references
-                    .chain(facts.declared_target_texts.iter().map(String::as_str))
-                    .map(crate::assemble_context::count_context_item_tokens);
-                record
-                    .selected
-                    .iter()
-                    .map(|item| item.token_count)
-                    .chain(sent_texts)
-                    .sum()
-            }),
+            sent_input_tokens: facts.decision.map_or(
+                /*default*/ 0,
+                |record| sent_input_tokens(record, facts),
+            ),
         }
     }
 }
 
-/// Whether the decision request compacts first. The expected input can reach the threshold, or
-/// the author message can ask the Host fake to compact.
+/// The counted tokens of the text of `record` that the request sends (ADR 0056). A request with
+/// no Tool result sends the new turn: each selected item, each selection reference text, and
+/// each declared target text. A later RunStep sends the outputs of the calls of its prior
+/// response, and the current input again only when the prior response did not read it (ADR 0085).
+fn sent_input_tokens(
+    record: &crate::CurrentPassageAssemblyRecord,
+    facts: &CompactionRequestFacts<'_>,
+) -> u64 {
+    let (tool_results, current): (Vec<_>, Vec<_>) = record
+        .selected
+        .iter()
+        .partition(|item| item.source_class == crate::ContextSourceClass::ToolResult);
+    let outputs: u64 = record
+        .operation_requirement
+        .tool_results
+        .iter()
+        .flatten()
+        .zip(&tool_results)
+        .filter(|(source, _)| facts.prior_decision_id == Some(source.decision_id.as_str()))
+        .map(|(_, item)| item.token_count)
+        .sum();
+    if !tool_results.is_empty() && facts.prior_input == crate::PriorInput::Current {
+        return outputs;
+    }
+    input_tokens(current, record, facts.declared_target_texts) + outputs
+}
+
+/// The counted tokens of `items`, of each selection reference text of `record`, and of each
+/// declared target text.
+fn input_tokens<'r>(
+    items: impl IntoIterator<Item = &'r crate::assemble_context::SelectedProjection>,
+    record: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> u64 {
+    let references = record
+        .operation_requirement
+        .selection_references
+        .iter()
+        .flatten()
+        .filter_map(|admitted| admitted.selected_text.as_deref());
+    let sent_texts = references
+        .chain(declared_target_texts.iter().map(String::as_str))
+        .map(crate::assemble_context::count_context_item_tokens);
+    items
+        .into_iter()
+        .map(|item| item.token_count)
+        .chain(sent_texts)
+        .sum()
+}
+
+/// Whether the full input of the later request `later` reaches the window after the output
+/// bound. The later request continues no prior response, so each text that it sends counts: the
+/// summary, the current input, and each Tool result (ADR 0093). An unknown window or output bound
+/// gives `false`.
+pub fn later_request_too_long(
+    model_registration_revision: &str,
+    budget_bounds: &str,
+    later: &crate::CurrentPassageAssemblyRecord,
+    declared_target_texts: &[String],
+) -> bool {
+    conversation_too_long(&CompactionTrigger {
+        window_tokens: crate::model_registration(model_registration_revision)
+            .and_then(|registration| registration.capability_profile.context_window)
+            .map(|window| window.tokens),
+        output_bound: crate::BudgetBounds::parse(budget_bounds)
+            .and_then(crate::BudgetBounds::request_bounds)
+            .map(|bounds| u64::from(bounds.max_output_tokens)),
+        prior_reported_tokens: Some(0),
+        sent_input_tokens: input_tokens(&later.selected, later, declared_target_texts),
+    })
+}
+
+/// Whether the decision request of a RunStep compacts first. The expected input can reach the
+/// threshold at each RunStep, or the author message can ask the Host fake to compact (ADR 0093).
 pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
     (crate::model_registration(facts.model_registration_revision)
         .is_some_and(|registration| registration.adapter == crate::ModelAdapter::HostFake)
-        && requests_active_compaction(facts.author_message))
+        && host_fake_compacts(facts))
         || compaction_due(&CompactionTrigger::from_facts(facts))
 }
 
@@ -256,7 +350,7 @@ pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {
         trigger.prior_reported_tokens,
     ) {
         (Some(window), Some(output_bound), Some(prior)) => {
-            prior.saturating_add(trigger.new_turn_tokens) >= window.saturating_sub(output_bound)
+            prior.saturating_add(trigger.sent_input_tokens) >= window.saturating_sub(output_bound)
         }
         _ => false,
     }
@@ -446,13 +540,16 @@ pub fn summary_fits_item(decision: &crate::CurrentPassageAssemblyRecord, summary
 
 /// The Context Assembly of the later request: the decision Context Assembly with the summary of
 /// the same Conversation as the first selected item. The summary is a Derived Summary, so the
-/// sufficiency of the Exact Required input does not change.
+/// sufficiency of the Exact Required input does not change. Each Tool result whose candidate in
+/// `candidates` has the stub form is a stub (ADR 0093 section 5).
 pub fn later_request_record(
     decision: &crate::CurrentPassageAssemblyRecord,
     compaction_id: &str,
     summary: &str,
+    candidates: &[crate::ToolResultCandidate<'_>],
 ) -> crate::CurrentPassageAssemblyRecord {
     let mut record = decision.clone();
+    crate::tool_result_context::stub_selected_results(&mut record, candidates);
     let token_count = crate::assemble_context::count_context_item_tokens(summary);
     record.considered.insert(
         /*index*/ 0,

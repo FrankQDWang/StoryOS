@@ -111,4 +111,4 @@ pub(crate) async fn execute(
 
 #[cfg(test)]
 #[path = "agent_run_submit_research_tests.rs"]
-mod tests;
+pub(crate) mod tests;

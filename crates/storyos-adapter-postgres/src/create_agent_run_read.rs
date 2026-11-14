@@ -165,10 +165,7 @@ pub(super) async fn load_agent_run(
         ),
         results: None,
         model,
-        active_compaction: crate::agent_run_compaction::load_active_compaction(
-            client, scope, run_id,
-        )
-        .await?,
+        compactions: crate::agent_run_compaction::load_compactions(client, scope, run_id).await?,
         reference_recovery: crate::agent_run_expiry::load_reference_recovery(client, scope, run_id)
             .await?,
         original_result_retrieval: crate::agent_run_retrieval::load_original_result_retrieval(

@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, FINISH_TOOL_SPEC, HOST_FAKE_REGISTRATION,
+    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
     StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
@@ -110,31 +110,50 @@ fn each_other_binding_or_registration_exposes_nothing() {
 }
 
 #[test]
-fn a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
-    let host = |name, spec| ExposedTool {
-        name,
-        registration_id: HOST_TOOL_REGISTRATION.id,
-        registration_revision: HOST_TOOL_REGISTRATION.revision,
-        spec,
+fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mapping() {
+    let host = |registration: &'static crate::HostToolRegistration| ToolExposure {
+        tools: registration
+            .tools
+            .iter()
+            .map(|spec| ExposedTool {
+                name: spec.operation.function_name(),
+                registration_id: registration.id,
+                registration_revision: registration.revision,
+                spec,
+            })
+            .collect(),
     };
-    let finish = host("finish", &FINISH_TOOL_SPEC);
+    let names = |exposure: ToolExposure| -> Vec<&str> {
+        exposure.tools.iter().map(|tool| tool.name).collect()
+    };
     for revision in [
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
         AGENT_PLAN_REGISTRATION.revision,
     ] {
-        assert_eq!(
-            exposure(&[], revision),
-            ToolExposure {
-                tools: vec![
-                    host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
-                    host("submit_research", &crate::SUBMIT_RESEARCH_TOOL_SPEC),
-                    finish.clone()
-                ]
-            }
-        );
+        assert_eq!(exposure(&[], revision), host(&HOST_TOOL_REGISTRATION));
     }
+    // A Run that pinned the Registration of the mapping `v5` keeps three Host Tools (ADR 0093).
+    let pinned = exposure(&[], crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision);
+    assert_eq!(pinned, host(&crate::FIRST_HOST_TOOL_REGISTRATION));
     assert_eq!(
-        finish.declaration().parameters,
+        (
+            names(pinned),
+            names(exposure(&[], AGENT_PLAN_REGISTRATION.revision))
+        ),
+        (
+            vec!["propose_edit", "submit_research", "finish"],
+            vec![
+                "propose_edit",
+                "submit_research",
+                "read_tool_result",
+                "finish"
+            ]
+        )
+    );
+    assert_eq!(
+        host(&HOST_TOOL_REGISTRATION).tools[3]
+            .declaration()
+            .parameters,
         json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
     );
 }

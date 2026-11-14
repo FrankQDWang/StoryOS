@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretString};
 
-pub use storyos_core::RequestBounds;
 use storyos_core::{
     ContextSourceClass, ModelAdapter, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
     StreamItemState, ToolExposure,
 };
+pub use storyos_core::{PriorInput, RequestBounds};
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 
@@ -121,8 +121,12 @@ pub struct CreateRequest {
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
-    /// The selected items of the active decision Context Assembly, in order.
+    /// The selected items of the active decision Context Assembly, in order, other than the
+    /// earlier author messages.
     pub context: Vec<RequestContextItem>,
+    /// The exact texts of the earlier author messages that the later request of a compaction
+    /// sends before the current input, oldest first (ADR 0093 section 6).
+    pub earlier_author_messages: Vec<String>,
     pub declared_targets: Vec<DeclaredTarget>,
     /// The exact text ranges that the author added to the message, in order.
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
@@ -157,19 +161,6 @@ pub struct ToolOutput {
     /// The bounded `tool_result` projection of the stored ToolCall.
     pub output: String,
     pub origin: ToolOutputOrigin,
-}
-
-/// Whether the prior response of an incremental continuation read the current input of the
-/// request: the selected Context text, the declared targets, the selection references, and the
-/// passage input (ADR 0085).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PriorInput {
-    /// The prior response read the current input, or the request sends no prior response.
-    Current,
-    /// The current input changed after the prior response read it. The incremental request sends
-    /// the current input again before the Tool outputs, and the input says that it replaces the
-    /// earlier input.
-    Replaced,
 }
 
 /// Where the native function call of one output is. The response that the prior binding of the

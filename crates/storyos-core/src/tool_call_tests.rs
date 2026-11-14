@@ -366,7 +366,7 @@ fn the_snapshot_record_decodes_to_the_pinned_exposure() {
             ExposureSnapshot::decode(Some(&damaged)),
         ),
         (
-            5,
+            6,
             Some(ExposureSnapshot::empty()),
             Some(ExposureSnapshot::empty()),
             None

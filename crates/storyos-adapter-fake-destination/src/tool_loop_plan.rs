@@ -13,6 +13,7 @@
 //!   `finish` call counts. Its request with `tool_choice: "none"` gets a text and a `finish`
 //!   call, and `SCRIPT:never_finish_quietly` gets only the `finish` call.
 //! - `SCRIPT:submit_research ...` gets the research script of `research_plan`.
+//! - `SCRIPT:read_tool_result ...` gets the read script of `read_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
 //!   `create_plan::response_outcome` in the first request.
@@ -35,6 +36,9 @@ const UNEXPOSED_NAME: &str = "look_up_notes";
 
 pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
     if let Some(planned) = crate::research_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::read_plan::plan(request) {
         return planned;
     }
     let message = request.author_message.as_str();

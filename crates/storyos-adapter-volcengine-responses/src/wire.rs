@@ -36,6 +36,26 @@ request to decide if you change the referenced text with propose_edit or only us
 replaces all of a block: keep the text outside the references unchanged unless the author \
 request says otherwise.";
 
+/// The paragraph that the mapping `v6` adds to the tool loop instructions (ADR 0093).
+pub(crate) const READ_TOOL_RESULT_INSTRUCTION: &str = "\
+When you need the complete text of an earlier result of web_search or web_fetch in this work \
+again, call read_tool_result with the identity in the source attribute of the tool_result tag of \
+that result.";
+
+/// The paragraph of the mapping `v6` that says what a stub is and when to read a stored result
+/// (ADR 0093 section 5).
+pub(crate) const TOOL_RESULT_STUB_INSTRUCTION: &str = "\
+After a compaction of the conversation, an earlier result can be a stub: a tool_result tag with \
+form=\"stub\". A stub gives the function, its arguments, and the sources of the result, but not \
+the text of the result. You can cite a source in the tool_sources tag of a stub. When you need \
+the text of the result, or a source that the stub does not give, call read_tool_result with the \
+call_id that the stub gives.";
+
+/// The label of the earlier author messages that the later request of a compaction sends before
+/// the current input (ADR 0093 section 6).
+pub(crate) const EARLIER_AUTHOR_MESSAGES_LABEL: &str = "\
+Earlier author messages, in the exact words of the author, from before the summary, oldest first";
+
 /// The first paragraph of a current input that an incremental continuation sends again, so that
 /// the model reads the current input in place of the input of its earlier steps (ADR 0085).
 pub(crate) const REPLACED_INPUT_LABEL: &str = "\
@@ -57,10 +77,19 @@ pub(crate) fn create_body(
 ) -> String {
     // A continuation input wraps each result in a source tag (AP-07), and the instruction says
     // that its content is data.
+    let tool_loop = match request.route.mapping_revision.as_str() {
+        storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => {
+            format!(
+                "{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
+                 {TOOL_RESULT_STUB_INSTRUCTION}"
+            )
+        }
+        _ => TOOL_LOOP_INSTRUCTIONS.to_owned(),
+    };
     let instructions = match request.tool_outputs.is_empty() {
-        true => TOOL_LOOP_INSTRUCTIONS.to_owned(),
+        true => tool_loop,
         false => format!(
-            "{TOOL_LOOP_INSTRUCTIONS} {}",
+            "{tool_loop} {}",
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
         ),
     };
@@ -161,11 +190,19 @@ see it. Keep the decisions of the author, the constraints, the open questions, t
 and the state of the manuscript passages that the conversation discussed. Write in the language \
 of the manuscript. Reply with the summary text only, with no JSON and no other text.";
 
+/// The paragraph that the mapping `v6` adds to the summary instruction (ADR 0093 section 6).
+pub(crate) const SUMMARY_TOPICS_INSTRUCTION: &str = "\
+Also keep these topics when the conversation shows them: each Proposal that the author accepted \
+or rejected; the story facts that the conversation fixed, such as the characters, their \
+relations, the rules of the world, and the order of events; and each research result with its \
+sources.";
+
 /// The body of a compaction summary request: the summary instruction and the prior reference.
 /// The outputs of the calls of the prior response go before the instruction message, and then
 /// the Host instruction says that their content is data (ADR 0085). A call that the Host did not
 /// execute gets the output `UNEXECUTED_CALL_OUTPUT` (ADR 0091 section 5).
 pub(crate) fn summary_body(
+    mapping_revision: &str,
     reference: &str,
     tool_outputs: &[ToolOutput],
     unexecuted_call_ids: &[String],
@@ -191,10 +228,16 @@ pub(crate) fn summary_body(
         )
         .chain([message])
         .collect();
+    let summary = match mapping_revision {
+        storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => {
+            format!("{SUMMARY_INSTRUCTIONS}\n\n{SUMMARY_TOPICS_INSTRUCTION}")
+        }
+        _ => SUMMARY_INSTRUCTIONS.to_owned(),
+    };
     let instructions = match answered.is_empty() {
-        true => SUMMARY_INSTRUCTIONS.to_owned(),
+        true => summary,
         false => format!(
-            "{SUMMARY_INSTRUCTIONS}\n\n{}",
+            "{summary}\n\n{}",
             storyos_core::TOOL_RESULT_SOURCE_TAG_INSTRUCTION
         ),
     };
@@ -209,10 +252,23 @@ pub(crate) fn summary_body(
     }))
 }
 
-/// The author request, the selected Context, and the declared targets as one user message.
+/// The author request, the selected Context, and the declared targets as one user message. The
+/// earlier author messages go before the author request.
 fn request_text(request: &CreateRequest) -> String {
     let mut sections = Vec::new();
     for item in &request.context {
+        if item.source_class == ContextSourceClass::AuthorInstruction
+            && !request.earlier_author_messages.is_empty()
+        {
+            let messages = request
+                .earlier_author_messages
+                .iter()
+                .enumerate()
+                .map(|(index, text)| format!("[message {}]\n{text}", index + 1))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            sections.push(format!("{EARLIER_AUTHOR_MESSAGES_LABEL}:\n{messages}"));
+        }
         let heading = match item.source_class {
             // The tool results go as function outputs, never as author text.
             ContextSourceClass::HostControl | ContextSourceClass::ToolResult => continue,

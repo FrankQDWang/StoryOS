@@ -178,6 +178,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
             ),
             item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
         ],
+        earlier_author_messages: Vec::new(),
         declared_targets: vec![target()],
         selection_references: Vec::new(),
         previous_response_reference: None,

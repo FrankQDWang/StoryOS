@@ -243,6 +243,7 @@ pub(crate) async fn create_request(
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
         context: input.context,
+        earlier_author_messages: input.earlier_author_messages,
         declared_targets,
         selection_references: input.selection_references,
         previous_response_reference,
@@ -260,6 +261,7 @@ pub(crate) struct RecordInput {
     pub passage_resolution: Option<storyos_core::OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
     pub context: Vec<RequestContextItem>,
+    pub earlier_author_messages: Vec<String>,
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
 }
 
@@ -268,16 +270,23 @@ pub(crate) fn record_input(
     assembly: storyos_core::CurrentPassageAssemblyRecord,
     author_message: &str,
 ) -> RecordInput {
+    let (earlier, current): (Vec<_>, Vec<_>) = assembly
+        .selected
+        .iter()
+        .partition(|item| storyos_core::is_earlier_author_message(&assembly, item));
     RecordInput {
         passage_resolution: assembly.operation_requirement.ordinary_resolution,
         passage_input: crate::passage_collection::passage_input(record, author_message),
-        context: assembly
-            .selected
+        context: current
             .into_iter()
             .map(|item| RequestContextItem {
                 source_class: item.source_class,
-                content: item.content,
+                content: item.content.clone(),
             })
+            .collect(),
+        earlier_author_messages: earlier
+            .into_iter()
+            .map(|item| item.content.clone())
             .collect(),
         selection_references: assembly
             .operation_requirement

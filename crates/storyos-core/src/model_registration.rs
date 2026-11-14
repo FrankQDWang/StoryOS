@@ -941,6 +941,7 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_PINNED_VERSION_REGISTRATION,
         &crate::AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION,
         &crate::AGENT_PLAN_FUNCTION_CALLING_REGISTRATION,
+        &crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION,
         &crate::AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()

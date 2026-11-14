@@ -30,6 +30,8 @@ pub enum ToolOperation {
     ProposeEdit,
     /// The Host Tool with which the Agent gives one research synthesis (ADR 0091).
     SubmitResearch,
+    /// The Host Tool with which the Agent reads a stored research result again (ADR 0093).
+    ReadToolResult,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -127,6 +129,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &FINISH_TOOL_SPEC,
         &PROPOSE_EDIT_TOOL_SPEC,
         &crate::SUBMIT_RESEARCH_TOOL_SPEC,
+        &crate::READ_TOOL_RESULT_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -147,6 +150,9 @@ pub enum ToolIntake {
     SubmitResearch {
         summary: String,
         claims: Vec<crate::ClaimCandidate>,
+    },
+    ReadToolResult {
+        call_id: String,
     },
 }
 
@@ -229,6 +235,7 @@ impl ToolSpec {
                 .map(ToolIntake::ProposeEdit)
                 .map_err(|_| IntakeRefusal::Malformed),
             ToolOperation::SubmitResearch => crate::submit_research::intake(arguments),
+            ToolOperation::ReadToolResult => crate::read_tool_result::intake(arguments),
         }
     }
 }
@@ -283,14 +290,16 @@ impl ServerArguments {
                 ToolIntake::WebFetch { .. }
                 | ToolIntake::Finish
                 | ToolIntake::ProposeEdit(_)
-                | ToolIntake::SubmitResearch { .. },
+                | ToolIntake::SubmitResearch { .. }
+                | ToolIntake::ReadToolResult { .. },
             )
             | (
                 Self::Fetch { .. },
                 ToolIntake::WebSearch { .. }
                 | ToolIntake::Finish
                 | ToolIntake::ProposeEdit(_)
-                | ToolIntake::SubmitResearch { .. },
+                | ToolIntake::SubmitResearch { .. }
+                | ToolIntake::ReadToolResult { .. },
             ) => {
                 return None;
             }

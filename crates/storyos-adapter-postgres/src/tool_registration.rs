@@ -147,12 +147,12 @@ pub(crate) async fn insert_registration_rows(
     Ok(())
 }
 
-/// Inserts the global row of the Host Tool Registration, if it is absent. It has no server and no
+/// Inserts the global row of a Host Tool Registration, if it is absent. It has no server and no
 /// pinned server contract, so it has no tool rows.
 pub(crate) async fn insert_host_registration_row(
     client: &tokio_postgres::Client,
+    registration: &storyos_core::HostToolRegistration,
 ) -> Result<(), tokio_postgres::Error> {
-    let registration = &storyos_core::HOST_TOOL_REGISTRATION;
     client
         .execute(
             "INSERT INTO storyos.tool_registration_revisions
