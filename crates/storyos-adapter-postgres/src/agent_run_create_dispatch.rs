@@ -191,15 +191,15 @@ pub(crate) async fn create_request(
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
-    let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
     // A Tool qualification probe settles after its one response, so the finish rule does not
     // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
     let tool_choice = match probe {
         Some(_) => storyos_core::ToolChoice::None,
         None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
     };
-    let (previous_response_reference, prior_input) = match &probe {
+    let (prior_binding, previous_response_reference, prior_input) = match &probe {
         Some(probe) => (
+            None,
             probe.previous_response_reference.clone(),
             PriorInput::Current,
         ),
@@ -207,6 +207,29 @@ pub(crate) async fn create_request(
             previous_response_reference(client, claim, run, prior_context, &tool_exposure.digest())
                 .await?
         }
+    };
+    // The outputs answer the response that the prior binding names (ADR 0085 section 3).
+    let prior = match (&prior_binding, &previous_response_reference) {
+        (Some(binding), Some(_)) => Some(
+            crate::agent_run_prior_response::PriorResponse::load(
+                client,
+                claim,
+                crate::agent_run_prior_response::PriorKey::Binding(binding),
+            )
+            .await?,
+        ),
+        (_, None) | (None, _) => None,
+    };
+    let tool_outputs = crate::agent_run_tool_result::tool_outputs(
+        client,
+        claim,
+        &assembly,
+        prior.as_ref().and_then(|prior| prior.decision_id()),
+    )
+    .await?;
+    let unexecuted_call_ids = match &prior {
+        Some(prior) => prior.unexecuted_calls(&tool_outputs)?,
+        None => Vec::new(),
     };
     let input = record_input(record, assembly, &run.author_message);
     Ok(CreateRequest {
@@ -228,6 +251,7 @@ pub(crate) async fn create_request(
         tool_choice,
         successor_of: None,
         tool_outputs,
+        unexecuted_call_ids,
     })
 }
 
@@ -286,16 +310,15 @@ pub(crate) async fn declared_targets(
     Ok(declared)
 }
 
-/// The destination reference of the prior binding that an incremental continuation sends, and
-/// whether the prior response read the current input. A claimed Attempt sends its own request
-/// again.
+/// The prior binding of an incremental continuation, its destination reference, and whether the
+/// prior response read the current input. A claimed Attempt sends its own request again.
 async fn previous_response_reference(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
     tool_exposure_digest: &str,
-) -> Result<(Option<String>, PriorInput), CompleteAgentRunError> {
+) -> Result<(Option<String>, Option<String>, PriorInput), CompleteAgentRunError> {
     let (prior_binding, prior_input) = match (&run.attempt_payload, prior_context) {
         (Some(payload), _) => {
             let payload: serde_json::Value = serde_json::from_str(payload)
@@ -334,11 +357,11 @@ async fn previous_response_reference(
             }
         }
     };
-    let reference = match prior_binding {
-        Some(binding) => binding_reference(client, claim, &binding).await?,
+    let reference = match &prior_binding {
+        Some(binding) => binding_reference(client, claim, binding).await?,
         None => None,
     };
-    Ok((reference, prior_input))
+    Ok((prior_binding, reference, prior_input))
 }
 
 /// The destination reference that the Model Attempt of one continuation binding produced.

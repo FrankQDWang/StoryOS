@@ -100,3 +100,11 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 - The request mapping of the model route changes, so the Model Registration gets a new mapping revision ([ADR 0053](0053-continue-the-agent-plan-conversation-with-the-prior-response.md)).
 - Tool Registration gets a kind for a Host Tool. The Skill Tools of Stage 6 use it.
 - The External MCP Surface of [ADR 0082](0082-keep-room-for-an-external-mcp-surface.md) is not affected.
+
+## Amendment 2026-11-14: an output for each call of a prior response
+
+[#1502](https://github.com/FrankQDWang/StoryOS/issues/1502) adds this rule to section 5. A request that names a prior response gives exactly one `function_call_output` item for each `function_call` item of that response. No path makes a request that names a prior response with a call that has no output.
+
+- The Host executes no call of the response of the last RunStep. When that response advances the continuation, the next request that names it gives each of its calls this output: "StoryOS did not execute this call, because the Run reached its limit of 24 RunSteps. No result is available, and this is not an empty result." That request is the first request of the next Run of the Conversation, or the compaction summary request of that Run. The first request sends the current input and then these outputs. The summary request sends these outputs and then its instruction. Both forms use only item kinds that the real route accepted before.
+- A Tool item that is not a valid function call, for example the incomplete call item of a cut response, is a structural fault. The Host cannot give it an output that the real route accepted before, so its response does not advance the continuation. In the last RunStep, the text of that response is the final answer. Before the last RunStep, the response settles with no Decision and the Run ends. Before this rule, that response opened the next RunStep, and the request of that RunStep named it with no output for its call.
+- A cancelled or refused Run and a recovery successor give no prior response to a later request: the next Run continues only from a completed Run, and a successor binding is used only in its own Run.

@@ -663,14 +663,15 @@ test.each(["chapter", "collection"])("a %s reply that changes only the last targ
 });
 
 // Each `propose_edit` call that the Host refuses, with the refusal label of its ToolCall. An incomplete call item is
-// not a function request, so it gives no ToolCall, and the Run continues to the final answer (ADR 0091).
+// not a function request, so it gives no ToolCall. No output can answer it, so its response does not advance the
+// continuation, and the Run ends with no Decision (ADR 0091 section 5).
 test.each([
   ["duplicate_location", "advisory", "refused:repeated_block"],
   ["empty_locations", "advisory", "refused:no_change"],
   ["malformed_locations", "advisory", "refused:empty_explanation"],
   ["undeclared_location", "advisory", "refused:undeclared_block"],
   ["oversized_explanation", "advisory", "refused:oversized_text"],
-  ["incomplete", "advisory", null],
+  ["incomplete", "absent", null],
 ])("a %s reply opens no Proposal", async (script, decision, calls) => {
   const started = await startServer();
   try {

@@ -99,6 +99,51 @@ pub(crate) fn unknown_create(
     }))
 }
 
+/// The reference of a response that the fake planned. Its first group is a digest of the call
+/// identifiers of the response, and its fourth group starts with `9`, so that a later request
+/// that names it can prove an output for each of its calls.
+pub(crate) fn mint_response_reference(
+    wire_digest: &str,
+    code: u8,
+    items: &[storyos_core::NativeStreamItem],
+) -> String {
+    let calls: Vec<&str> = items
+        .iter()
+        .filter_map(|item| item.call_id.as_deref())
+        .collect();
+    let mut reference = mint_reference(wire_digest, code);
+    reference.replace_range(0..8, &calls_digest(&calls));
+    reference.replace_range(19..20, "9");
+    reference
+}
+
+/// The reason of the rejection of a request that names a prior response and does not give
+/// exactly one output for each call of that response, as the real route rejects it.
+pub(crate) const UNANSWERED_CALL_REASON: &str = "function_call_output_missing";
+
+/// Whether `create` names a planned prior response and does not answer exactly each of its
+/// calls. The outputs that the request answers are those that the tool loop wire sends with a
+/// prior response reference. The reference of an unknown create does not name its calls.
+pub(crate) fn leaves_prior_calls_unanswered(create: &storyos_application::CreateRequest) -> bool {
+    let Some(reference) = create.previous_response_reference.as_deref() else {
+        return false;
+    };
+    let answered: Vec<&str> = create
+        .tool_outputs
+        .iter()
+        .filter(|output| output.origin == storyos_application::ToolOutputOrigin::PriorResponse)
+        .map(|output| output.call_id.as_str())
+        .chain(create.unexecuted_call_ids.iter().map(String::as_str))
+        .collect();
+    reference.get(19..20) == Some("9") && reference.get(0..8) != Some(&calls_digest(&answered))
+}
+
+fn calls_digest(call_ids: &[&str]) -> String {
+    let mut call_ids = call_ids.to_vec();
+    call_ids.sort_unstable();
+    storyos_core::hex_sha256(call_ids.join("\n").as_bytes())[0..8].to_owned()
+}
+
 /// A UUID-shaped reference whose last group starts with the later result code.
 pub(crate) fn mint_reference(wire_digest: &str, code: u8) -> String {
     let hash = storyos_core::hex_sha256(wire_digest.as_bytes());

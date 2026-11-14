@@ -64,6 +64,7 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         tool_choice: storyos_core::ToolChoice::Required,
         successor_of: None,
         tool_outputs: Vec::new(),
+        unexecuted_call_ids: Vec::new(),
     })
 }
 

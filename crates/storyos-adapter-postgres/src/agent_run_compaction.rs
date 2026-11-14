@@ -95,6 +95,7 @@ pub(crate) async fn advance_active_compaction(
                         run,
                         RequestAttempt::New,
                         chain.reference,
+                        Some(&chain.model_attempt_id),
                     )
                     .await?,
                 )));
@@ -106,8 +107,15 @@ pub(crate) async fn advance_active_compaction(
                 model_attempt_id: summary.model_attempt_id,
             });
             return Ok(CompactionAdvance::Dispatch(Box::new(
-                summary::summary_request(client, claim, run, attempt, summary.prior_reference)
-                    .await?,
+                summary::summary_request(
+                    client,
+                    claim,
+                    run,
+                    attempt,
+                    summary.prior_reference,
+                    summary.prior_model_attempt_id.as_deref(),
+                )
+                .await?,
             )));
         }
         (CompactionStep::InstallOrRefuse, Some(staged), _, _) => CompactionAdvance::Decide {

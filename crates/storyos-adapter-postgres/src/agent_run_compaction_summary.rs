@@ -2,7 +2,8 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DestinationRequest,
-    DispatchClaim, ModelUsage, Observation, RequestAttempt, ToolOutput, WirePayloadProjection,
+    DispatchClaim, ModelUsage, Observation, RequestAttempt, ToolOutput, ToolOutputOrigin,
+    WirePayloadProjection,
 };
 use storyos_core::{
     AssistanceAvailability, SummaryObservation, compaction_assembly_record, encode_assembly_record,
@@ -14,10 +15,12 @@ use super::{load_chain_source, unavailable, work_error, write};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
-/// The summary Attempt of the claimed AgentRun, and the prior response reference that it sent.
+/// The summary Attempt of the claimed AgentRun, the prior response reference that it sent, and
+/// the prior Model Attempt of that reference.
 pub(crate) struct SummaryAttempt {
     pub model_attempt_id: String,
     pub prior_reference: Option<String>,
+    pub prior_model_attempt_id: Option<String>,
 }
 
 pub(crate) async fn load_summary_attempt(
@@ -26,7 +29,8 @@ pub(crate) async fn load_summary_attempt(
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference'
+            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference',
+                    payload->'wire'->>'prior_model_attempt_id'
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND attempt_role = 'compaction'",
@@ -41,6 +45,7 @@ pub(crate) async fn load_summary_attempt(
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
         prior_reference: row.get(/*idx*/ 1),
+        prior_model_attempt_id: row.get(/*idx*/ 2),
     }))
 }
 
@@ -105,20 +110,22 @@ pub(crate) async fn prior_chain(
     }))
 }
 
-/// The summary request: no project content, and the response reference of the prior chain. At a
-/// later RunStep, the outputs of the calls of the prior response go first, because each native
-/// function call needs its output (ADR 0085).
+/// The summary request: no project content, and the response reference of the prior chain. The
+/// outputs of the calls of the prior response go first, because each native function call needs
+/// its output (ADR 0085, ADR 0091 section 5).
 pub(crate) async fn summary_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt: RequestAttempt,
     previous_response_reference: Option<String>,
+    prior_model_attempt_id: Option<&str>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
-    let tool_outputs = match &run.disclosure_request {
-        Some(assembly) => waiting_outputs(client, claim, assembly).await?,
-        None => Vec::new(),
-    };
+    let prior = previous_response_reference
+        .as_ref()
+        .and(prior_model_attempt_id);
+    let (tool_outputs, unexecuted_call_ids) =
+        waiting_outputs(client, claim, run.disclosure_request.as_ref(), prior).await?;
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -136,17 +143,51 @@ pub(crate) async fn summary_request(
         tool_choice: storyos_core::ToolChoice::None,
         successor_of: None,
         tool_outputs,
+        unexecuted_call_ids,
     }))
 }
 
-/// The outputs of the calls of the prior response, which wait for the next request.
+/// The outputs of the calls of the response of the prior Model Attempt `prior`, which wait for
+/// the next request, and the calls of that response that the Host did not execute.
 async fn waiting_outputs(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    decision: Option<&storyos_core::CurrentPassageAssemblyRecord>,
+    prior: Option<&str>,
+) -> Result<(Vec<ToolOutput>, Vec<String>), CompleteAgentRunError> {
+    let Some(prior) = prior else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let prior = crate::agent_run_prior_response::PriorResponse::load(
+        client,
+        claim,
+        crate::agent_run_prior_response::PriorKey::Attempt(prior),
+    )
+    .await?;
+    let mut outputs = match decision {
+        Some(decision) => {
+            crate::agent_run_tool_result::tool_outputs(client, claim, decision, prior.decision_id())
+                .await?
+        }
+        None => Vec::new(),
+    };
+    outputs.retain(|output| output.origin == ToolOutputOrigin::PriorResponse);
+    let unexecuted = prior.unexecuted_calls(&outputs)?;
+    Ok((outputs, unexecuted))
+}
+
+/// The outputs that the summary request of the current prior chain sends.
+async fn chain_outputs(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     decision: &storyos_core::CurrentPassageAssemblyRecord,
 ) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
-    let mut outputs = crate::agent_run_tool_result::tool_outputs(client, claim, decision).await?;
-    outputs.retain(|output| output.origin == storyos_application::ToolOutputOrigin::PriorResponse);
+    let prior = prior_chain(client, claim, run)
+        .await?
+        .filter(|chain| chain.reference.is_some())
+        .map(|chain| chain.model_attempt_id);
+    let (outputs, _) = waiting_outputs(client, claim, Some(decision), prior.as_deref()).await?;
     Ok(outputs)
 }
 
@@ -317,7 +358,7 @@ pub(crate) async fn commit_assembly(
         return Ok(());
     }
     let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
-    let outputs = waiting_outputs(client, claim, decision_record).await?;
+    let outputs = chain_outputs(client, claim, run, decision_record).await?;
     let mut manifest_payload = encode_assembly_record(&summary_record(decision_record, &outputs));
     manifest_payload["operation_requirement"]["operation_requirement_id"] =
         serde_json::json!(requirement_id);
@@ -407,7 +448,7 @@ pub(crate) async fn admitted(
         assistance.as_ref(),
         &summary_record(
             decision_record,
-            &waiting_outputs(client, claim, decision_record).await?,
+            &chain_outputs(client, claim, run, decision_record).await?,
         ),
     )
     .is_ok())

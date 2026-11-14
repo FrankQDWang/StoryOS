@@ -99,3 +99,7 @@ The author decided this rule on 2026-11-14 ([#1492](https://github.com/FrankQDWa
   - The Chapter goes over the item limit.
   - The range of the reference has no text at its base.
 - The first RunStep of a Run keeps the rule before this amendment.
+
+## Amendment 2026-11-14: the prior response comes from the binding
+
+[#1502](https://github.com/FrankQDWang/StoryOS/issues/1502) corrects section 3. The outputs of the calls of the prior response are the outputs of the ToolCalls of the Decision of the bound response that the request names. They are not the outputs of the RunStep at the position before the active RunStep. A RunStep that reads a steering input before its request can have the next position while the RunStep before it has no Model Attempt, so the position can name no response or the wrong response. Each call of the prior response that the Host did not execute gets the output of [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 5. A function request Decision whose ToolCall has no output is a damaged record, and the Run does not send the request.

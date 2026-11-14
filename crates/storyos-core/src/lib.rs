@@ -142,8 +142,8 @@ pub use deployment_destination::{
     RuntimeQualification,
 };
 pub use finish_rule::{
-    FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice, apply_finish_rule,
-    step_tool_choice,
+    FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,
+    UNEXECUTED_CALL_OUTPUT, apply_finish_rule, step_tool_choice,
 };
 pub use function_calling::{
     AGENT_PLAN_FUNCTION_CALLING_CAPABILITY_PROFILE,
