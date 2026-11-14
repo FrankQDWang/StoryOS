@@ -114,6 +114,121 @@ pub fn advance_candidate_references<'a>(
     }
 }
 
+/// The current revision of one pending candidate, and all of its text.
+pub struct CurrentCandidate<'a> {
+    pub target: super::ProposalCandidateTarget,
+    pub candidate_text: &'a str,
+}
+
+/// Move each candidate reference to the current revision of its candidate in `current` (ADR
+/// 0085). A reference whose candidate text changed covers all of the current text. The other
+/// references keep their ranges.
+pub fn follow_current_candidates<'a>(
+    references: impl IntoIterator<Item = &'a mut AdmittedSelection>,
+    current: &[CurrentCandidate<'_>],
+) {
+    for admitted in references {
+        if let SelectionReference::ProposalCandidateText {
+            proposal_id,
+            operation_id,
+            revision_id,
+            start_offset,
+            end_offset,
+            ..
+        } = &mut admitted.reference
+            && let Some(candidate) = current.iter().find(|candidate| {
+                candidate.target.proposal_id == *proposal_id
+                    && candidate.target.operation_id == *operation_id
+            })
+            && candidate.target.revision_id != *revision_id
+        {
+            revision_id.clone_from(&candidate.target.revision_id);
+            if admitted.candidate_text.as_deref() != Some(candidate.candidate_text) {
+                *start_offset = 0;
+                *end_offset = u32::try_from(candidate.candidate_text.encode_utf16().count())
+                    .unwrap_or(u32::MAX);
+            }
+        }
+    }
+}
+
+/// The place of a Chapter text reference in the current head of its Chapter (ADR 0085).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ChapterHeadPlace {
+    /// The reference with the head as its base and the range of the rule.
+    Moved(SelectionReference),
+    /// No text of the covered blocks is in the head, so the Run drops the reference.
+    Dropped,
+}
+
+/// Move a Chapter text reference from its base to the head `head_revision_id` of its Chapter
+/// (ADR 0085). `base` and `head` are the `(block id, text)` pairs of the two revisions in block
+/// order. A start or an end whose block has the same text in the head stays. A changed or removed
+/// start moves to offset 0 of the first covered block in the head, and a changed or removed end
+/// to the end of the last covered block in the head. `None` keeps the rule of ADR 0062: the
+/// reference is not a Chapter text reference, its base is the head, or its range has no text at
+/// its base.
+pub fn follow_chapter_head(
+    reference: &SelectionReference,
+    base: &[(String, String)],
+    head_revision_id: &str,
+    head: &[(String, String)],
+) -> Option<ChapterHeadPlace> {
+    let SelectionReference::ChapterText {
+        chapter_id,
+        base_authoritative_revision_id,
+        start,
+        end,
+    } = reference
+    else {
+        return None;
+    };
+    if base_authoritative_revision_id == head_revision_id {
+        return None;
+    }
+    let (_, covered) = select_chapter_text(base, start, end)?;
+    let in_head: Vec<&(String, String)> =
+        head.iter().filter(|(id, _)| covered.contains(id)).collect();
+    let (Some((first, _)), Some((last, last_text))) = (in_head.first(), in_head.last()) else {
+        return Some(ChapterHeadPlace::Dropped);
+    };
+    fn block_text<'a>(blocks: &'a [(String, String)], point: &TextPoint) -> Option<&'a str> {
+        blocks
+            .iter()
+            .find(|(id, _)| *id == point.manuscript_block_id)
+            .map(|(_, text)| text.as_str())
+    }
+    let unchanged = |point: &TextPoint| {
+        block_text(head, point).is_some_and(|current| block_text(base, point) == Some(current))
+    };
+    let start = if unchanged(start) {
+        start.clone()
+    } else {
+        TextPoint {
+            manuscript_block_id: first.clone(),
+            offset: 0,
+        }
+    };
+    let end = if unchanged(end) {
+        end.clone()
+    } else {
+        TextPoint {
+            manuscript_block_id: last.clone(),
+            offset: u32::try_from(last_text.encode_utf16().count()).unwrap_or(u32::MAX),
+        }
+    };
+    // ADR 0062: a reference whose text the author removed disappears with no sentence.
+    if select_chapter_text(head, &start, &end).is_none() {
+        return Some(ChapterHeadPlace::Dropped);
+    }
+    Some(ChapterHeadPlace::Moved(SelectionReference::ChapterText {
+        chapter_id: chapter_id.clone(),
+        base_authoritative_revision_id: head_revision_id.to_owned(),
+        start,
+        end,
+    }))
+}
+
 /// One pending candidate that a Proposal Growth revised or added, at its new Revision.
 pub struct GrownCandidate<'a> {
     pub chapter_id: &'a str,
@@ -265,9 +380,10 @@ pub fn select_chapter_text(
     (!text.is_empty()).then(|| (text, covered.iter().map(|(id, _)| id.clone()).collect()))
 }
 
-/// The exact non-empty text between two UTF-16 offsets of a candidate text.
+/// The exact non-empty text between two UTF-16 offsets of a candidate text. An empty candidate,
+/// for example after the author removed all of its text, has the empty selection (ADR 0085).
 pub fn select_candidate_text(text: &str, start: u32, end: u32) -> Option<String> {
-    utf16_range(text, start, end).filter(|selected| !selected.is_empty())
+    utf16_range(text, start, end).filter(|selected| !selected.is_empty() || text.is_empty())
 }
 
 /// A range that splits a surrogate pair or passes the end of the text has no text.

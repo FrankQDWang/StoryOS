@@ -20,8 +20,9 @@ use crate::agent_run_retrieval::tests::{
     adapter, broken_stream, destination, not_found, research_run,
 };
 use crate::agent_run_tool_dispatch::tests::{client, exa_tools, mcp_replies, point_mcp, reply};
+use crate::agent_run_tool_exposure::tests::advisory_stream;
 use crate::command_sequence::tests::{CANCEL_AGENT_RUN, issued};
-use crate::research_artifact::tests::{Reply, computed, message_stream, tagged};
+use crate::research_artifact::tests::{Reply, computed, tagged};
 use crate::research_source::tests::{SEARCH_TEXT, calls_stream};
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -247,11 +248,15 @@ async fn artifacts(admin: &Client, run_id: &str) -> Vec<Value> {
         .collect()
 }
 
-/// A Retrieve reply with a stored response of one message of `text` in `status`.
-fn stored_message(reference: &str, text: &str, status: &str) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": status, "content": [{"type": "output_text", "text": text}]});
-    let body = json!({"id": reference, "status": status, "output": [message],
+/// A Retrieve reply with a stored complete response of a `submit_research` call with
+/// `arguments` and a `finish` call.
+fn stored_synthesis(reference: &str, arguments: &str) -> String {
+    let call = |name: &str, arguments: &str| {
+        json!({"id": format!("fc_{name}"), "type": "function_call", "status": "completed",
+               "call_id": format!("call_{name}"), "name": name, "arguments": arguments})
+    };
+    let body = json!({"id": reference, "status": "completed",
+        "output": [call("submit_research", arguments), call("finish", "{}")],
         "usage": {"input_tokens": 40, "output_tokens": 12}})
     .to_string();
     format!(
@@ -265,11 +270,28 @@ fn stored_message(reference: &str, text: &str, status: &str) -> String {
 /// identities that the continuation request tagged.
 type Later = fn(&str, &[String]) -> String;
 
-/// A research synthesis with `summary` whose one claim cites the first tagged Snapshot.
-fn synthesis_text(summary: &str, sources: &[String]) -> String {
-    json!({"kind": "research_synthesis", "summary": summary,
+/// The `submit_research` arguments of a synthesis with `summary` whose one claim cites the first
+/// tagged Snapshot.
+fn synthesis_arguments(summary: &str, sources: &[String]) -> String {
+    json!({"summary": summary,
         "claims": [{"text": "High water came at 10.42.", "citations": [sources[0]]}]})
     .to_string()
+}
+
+/// A stream of a `submit_research` call with `arguments` and a `finish` call.
+fn synthesis_stream(reference: &str, arguments: &str) -> String {
+    calls_stream(
+        reference,
+        &[
+            ("call_submit_research", "submit_research", arguments),
+            ("call_finish", "finish", "{}"),
+        ],
+    )
+}
+
+/// The final answer to the closing request of the Run.
+fn closing(reference: &str, _sources: &[String]) -> String {
+    advisory_stream(&format!("{reference}_closing"))
 }
 
 /// Admits one research Run. Its first response requests one search, the fake MCP server answers
@@ -403,10 +425,13 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
         .await;
     let (store, admin) = stores().await;
     let synthesis: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        stored_message(reference, &text, "completed")
+        stored_synthesis(
+            reference,
+            &synthesis_arguments("The tides of 1890.", sources),
+        )
     };
-    let (scope, run_id, served) = continuation_run(&store, &admin, "d81", &[synthesis]).await;
+    let (scope, run_id, served) =
+        continuation_run(&store, &admin, "d81", &[synthesis, closing]).await;
     // The Worker crashes after the continuation stream broke, before its record.
     let crashed = drain(
         &store,
@@ -449,7 +474,8 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = artifact.run_id AND attempt.attempt_role = 'decision'
                 AND attempt.decision_position = 1
-               JOIN storyos.tool_calls AS call ON call.run_id = artifact.run_id
+               JOIN storyos.tool_calls AS call
+                 ON call.run_id = artifact.run_id AND call.call_id = 'call_01'
               WHERE artifact.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -496,6 +522,10 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                 json!({"role": "retrieval", "position": "1", "dispatch_state": "settled",
                        "usage": {"kind": "unknown"}, "reservation": reserved,
                        "result": "complete_selected", "decided": false, "own_evidence": true}),
+                json!({"role": "decision", "position": "2", "dispatch_state": "settled",
+                       "usage": {"kind": "reported", "input_tokens": 40, "output_tokens": 12},
+                       "reservation": null, "result": null, "decided": true,
+                       "own_evidence": true}),
             ],
             vec![
                 "retrieval manifest:1".to_owned(),
@@ -507,6 +537,7 @@ async fn a_restart_retrieves_the_stored_synthesis_of_a_continuation_once_and_rec
                 post(),
                 post(),
                 "GET /api/plan/v3/responses/resp_d81_2 HTTP/1.1".to_owned(),
+                post(),
             ],
         )
     );
@@ -531,22 +562,18 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
         .await;
     let (store, admin) = stores().await;
     let successor: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        message_stream(&format!("{reference}_s"), &text, "completed")
+        let arguments = synthesis_arguments("The tides of 1890.", sources);
+        synthesis_stream(&format!("{reference}_s"), &arguments)
     };
     // The predecessor finished after its stream broke, and the late Retrieve reads it.
     let late: Later = |reference, sources| {
-        stored_message(
-            reference,
-            &synthesis_text("A late answer.", sources),
-            "completed",
-        )
+        stored_synthesis(reference, &synthesis_arguments("A late answer.", sources))
     };
     let (scope, run_id, served) = continuation_run(
         &store,
         &admin,
         "a91",
-        &[|_, _| not_found(), successor, late],
+        &[|_, _| not_found(), successor, late, closing],
     )
     .await;
     let model = hooks(
@@ -582,6 +609,7 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
     let reserved = json!({"kind": "worst_case", "released": false});
     let released = json!({"kind": "worst_case", "released": true});
     let reported = json!({"kind": "reported", "input_tokens": 40, "output_tokens": 12});
+    let successor_usage = json!({"kind": "reported", "input_tokens": 90, "output_tokens": 30});
     let attempt = |role: &str, state: &str, usage: &Value, reservation: &Value, result: Value| {
         json!({"role": role, "position": "1", "dispatch_state": state, "usage": usage,
                "reservation": reservation, "result": result,
@@ -621,8 +649,9 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
         ),
         (
             // The Decision is the one of the successor; the retrieval kept the unknown outcome.
+            // The shown Attempt is the closing request.
             json!({"status": "Completed", "decision": "research_synthesis",
-                   "dispatch_state": "uncertain", "disposition": "kept_unknown",
+                   "dispatch_state": "settled", "disposition": "kept_unknown",
                    "keep_reason": "unknown_result", "reservation_released": false,
                    "usage_kind": "unknown"}),
             true,
@@ -652,9 +681,17 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                     &reserved,
                     json!("unknown")
                 ),
-                attempt("successor", "settled", &reported, &released, Value::Null),
+                attempt(
+                    "successor",
+                    "settled",
+                    &successor_usage,
+                    &released,
+                    Value::Null
+                ),
             ]),
-            json!(artifact),
+            // The Host executes the `submit_research` call of the successor after the late
+            // Retrieve, so no Artifact exists yet.
+            json!([]),
             // The late result is evidence only: it settles the usage and the reservation of the
             // predecessor, and it changes neither the Run, the Decision, nor the Artifact.
             (
@@ -678,7 +715,16 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                         &reserved,
                         json!("unknown")
                     ),
-                    attempt("successor", "settled", &reported, &released, Value::Null),
+                    attempt(
+                        "successor",
+                        "settled",
+                        &successor_usage,
+                        &released,
+                        Value::Null
+                    ),
+                    json!({"role": "decision", "position": "2", "dispatch_state": "settled",
+                           "usage": reported, "reservation": null, "result": null,
+                           "decided": true, "own_evidence": true}),
                 ],
                 artifact,
                 // The successor copies the Context Assembly of position 1, as the Retrieve does.
@@ -696,6 +742,7 @@ async fn a_not_found_retrieve_of_a_continuation_sends_one_successor_that_settles
                     "GET /api/plan/v3/responses/resp_a91_2 HTTP/1.1".to_owned(),
                     post(),
                     "GET /api/plan/v3/responses/resp_a91_2 HTTP/1.1".to_owned(),
+                    post(),
                 ]
             ),
         )
@@ -915,14 +962,20 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
         )
     };
     let synthesis: Later = |reference, sources| {
-        let text = synthesis_text("The tides of 1890.", sources);
-        message_stream(&format!("{reference}_3"), &text, "completed")
+        let arguments = synthesis_arguments("The tides of 1890.", sources);
+        synthesis_stream(&format!("{reference}_3"), &arguments)
     };
     let (scope, run_id, served) = continuation_run(
         &store,
         &admin,
         "a96",
-        &[|_, _| not_found(), search, |_, _| not_found(), synthesis],
+        &[
+            |_, _| not_found(),
+            search,
+            |_, _| not_found(),
+            synthesis,
+            closing,
+        ],
     )
     .await;
     let model = hooks(
@@ -938,7 +991,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
             inspect(&read(&store, &scope, &run_id).await),
             outcome(&admin, &run_id).await,
             artifacts(&admin, &run_id).await,
-            payloads.last().map(request_items),
+            payloads.get(payloads.len() - 2).map(request_items),
             served.await.unwrap(),
         ),
         (
@@ -947,7 +1000,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
                    "keep_reason": "unknown_result", "reservation_released": false,
                    "usage_kind": "unknown"}),
             json!({"status": "completed", "settlement": null,
-                   "roles": "decision,decision,retrieval,successor,late_retrieval,decision",
+                   "roles": "decision,decision,retrieval,successor,late_retrieval,decision,decision",
                    "marker": {"disposition": "dispatched", "pause_reason": null,
                               "allowance_consumed": true, "predecessor_fenced": true,
                               "dispatch_prohibited": false, "late_evidence_applied": false}}),
@@ -964,6 +1017,7 @@ async fn a_successor_function_request_continues_to_a_synthesis_at_the_next_posit
                 "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
                 post(),
                 "GET /api/plan/v3/responses/resp_a96_2 HTTP/1.1".to_owned(),
+                post(),
                 post(),
             ],
         )

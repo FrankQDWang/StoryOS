@@ -296,9 +296,12 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(second.context.selected.find((item) =>
       item.source_class === "working_target")?.content, before.chapter.current_revision.body);
     assert.ok(completed.decision.kind === "prose_change" && completed.decision.continuation.kind === "present");
-    assert.ok(second.model_attempt.kind === "present");
-    assert.equal(second.model_attempt.input_mapping, "incremental");
-    assert.deepEqual(second.model_attempt.prior_continuation, completed.decision.continuation);
+    // The first RunStep continues from the decision of the prior Run. The default read shows the closing RunStep
+    // (ADR 0091).
+    const secondStep = await firstRunStep(options, secondRunId);
+    assert.ok(secondStep.model_attempt.kind === "present");
+    assert.equal(secondStep.model_attempt.input_mapping, "incremental");
+    assert.deepEqual(secondStep.model_attempt.prior_continuation, completed.decision.continuation);
     assert.deepEqual(await page.locator(".assistant-author-message").allTextContents(), [MESSAGE, CORRECTION]);
     if (second.decision.kind !== "prose_change"
       || second.decision.opened_proposal.kind !== "present") throw new Error("Second Proposal not opened");
@@ -690,9 +693,11 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(separate.conversation_id, newAcknowledgement.conversation_id);
     await assert.rejects(() => getAgentRun({ ...options, projectId: uuidV7(), runId: newRunId }),
       (error) => error instanceof StoryOSProtocolError && error.status === 404);
-    assert.ok(separate.model_attempt.kind === "present");
-    assert.equal(separate.model_attempt.input_mapping, "none");
-    assert.deepEqual(separate.model_attempt.prior_continuation, { kind: "absent" });
+    // The first RunStep of a new Conversation has no prior response (ADR 0091).
+    const separateStep = await firstRunStep(options, newRunId);
+    assert.ok(separateStep.model_attempt.kind === "present");
+    assert.equal(separateStep.model_attempt.input_mapping, "none");
+    assert.deepEqual(separateStep.model_attempt.prior_continuation, { kind: "absent" });
     assert.equal(separate.context.selected.find((item) =>
       item.source_class === "working_target")?.content, acceptedChapter.chapter.current_revision.body);
     await page.reload();
@@ -718,8 +723,9 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     }
     const plainFollowUp = await getAgentRun({ ...options, runId: followUpRunId });
     assert.ok(separate.decision.kind === "advisory" && separate.decision.continuation.kind === "present");
-    assert.ok(plainFollowUp.model_attempt.kind === "present");
-    assert.deepEqual(plainFollowUp.model_attempt.prior_continuation, separate.decision.continuation);
+    const followUpStep = await firstRunStep(options, followUpRunId);
+    assert.ok(followUpStep.model_attempt.kind === "present");
+    assert.deepEqual(followUpStep.model_attempt.prior_continuation, separate.decision.continuation);
     assert.equal(plainFollowUp.context.selected.find((item) =>
       item.source_class === "author_instruction")?.content, followUp);
     assert.equal(plainFollowUp.context.selected.find((item) =>
@@ -741,4 +747,11 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.close();
     await context.clearCookies({ name: "storyos_session" });
   }
+}
+
+/** Reads the AgentRun at the Model Attempt of its first RunStep. */
+async function firstRunStep(options: Omit<Parameters<typeof getAgentRun>[0], "runId">, runId: string) {
+  return getAgentRun({ ...options, runId, modelAttemptId: await queryStoryOSPostgres(`
+    SELECT model_attempt_id::text FROM storyos.model_attempts WHERE run_id = '${runId}'::uuid
+       AND attempt_role = 'decision' ORDER BY decision_position LIMIT 1;`) });
 }

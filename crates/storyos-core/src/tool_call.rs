@@ -1,11 +1,13 @@
 //! The ToolCall batch of one terminal Model Attempt (ADR 0033, ADR 0034, ADR 0084). The Host
 //! validates the complete requested business-tool batch against the Tool Exposure that the Step
 //! Snapshot pinned, against the typed intake of each named ToolSpec, and against the current
-//! authority: the Project must enable the Registration now, and its pinned revision must be
-//! active now. The contract of each member (name, revisions, intake) comes from the Snapshot,
-//! never from the current Registration. One invalid member rejects the whole batch, and an
-//! invalid batch makes the Agent Decision invalid. A valid batch is part of the Decision: only a durable Decision derives
-//! one ToolCall for each member, in item order.
+//! authority: its pinned revision must be active now. The contract of each member (name,
+//! revisions, intake) comes from the Snapshot, never from the current Registration. A member
+//! whose name is not exposed or whose arguments do not fit is a refused call, and its result
+//! gives the model the reason (ADR 0091 section 3). A member that cannot have an output, or
+//! whose pinned revision cannot execute now, rejects the whole batch, and an invalid batch makes
+//! the Agent Decision invalid. A valid batch is part of the Decision: only a durable Decision
+//! derives one ToolCall for each member, in item order.
 
 use serde_json::{Value, json};
 
@@ -16,6 +18,9 @@ use crate::{
 
 /// The longest native call identifier that a ToolCall row keeps.
 pub const MAX_CALL_ID_CHARS: usize = 256;
+
+/// The longest function name that a ToolCall row keeps.
+pub const MAX_FUNCTION_NAME_CHARS: usize = 128;
 
 /// One exposed Tool, as the Step Snapshot of the Attempt pinned it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,6 +98,11 @@ impl ValidatedToolCall {
                 result_count,
             } => json!({ "query": query, "result_count": result_count }),
             ToolIntake::WebFetch { urls } => json!({ "urls": urls }),
+            ToolIntake::Finish => json!({}),
+            ToolIntake::ProposeEdit(edit) => edit.arguments(),
+            ToolIntake::SubmitResearch { summary, claims } => {
+                crate::submit_research::arguments(summary, claims)
+            }
         }
     }
 
@@ -125,9 +135,10 @@ pub enum ToolCallBatchRefusal {
     InvalidCallId {
         item_id: String,
     },
-    /// The function name is not a Tool of the pinned Exposure.
-    Unexposed {
-        call_id: String,
+    /// The function name is missing or empty, is longer than `MAX_FUNCTION_NAME_CHARS`, or holds
+    /// a control character.
+    InvalidName {
+        item_id: String,
     },
     /// The pinned revision of the Registration is not active now.
     RegistrationUnavailable {
@@ -136,14 +147,6 @@ pub enum ToolCallBatchRefusal {
     /// The pinned ToolSpec revision of the name is not a ToolSpec of this build.
     UnknownSpec {
         call_id: String,
-    },
-    /// The arguments text is not a JSON object.
-    Malformed {
-        call_id: String,
-    },
-    Intake {
-        call_id: String,
-        refusal: IntakeRefusal,
     },
     DuplicateCallId {
         call_id: String,
@@ -158,18 +161,109 @@ impl ToolCallBatchRefusal {
             Self::UnexpectedItem { .. } => "unexpected_item",
             Self::Incomplete { .. } => "incomplete_arguments",
             Self::InvalidCallId { .. } => "invalid_call_id",
-            Self::Unexposed { .. } => "unexposed_name",
+            Self::InvalidName { .. } => "invalid_name",
             Self::RegistrationUnavailable { .. } => "tool_registration_unavailable",
             Self::UnknownSpec { .. } => "unknown_spec",
-            Self::Malformed { .. } => "malformed_arguments",
-            Self::Intake { refusal, .. } => match refusal {
-                IntakeRefusal::Malformed => "intake_malformed",
-                IntakeRefusal::Query => "intake_query",
-                IntakeRefusal::ResultCount => "intake_result_count",
-                IntakeRefusal::UrlCount => "intake_url_count",
-                IntakeRefusal::Url => "intake_url",
-            },
             Self::DuplicateCallId { .. } => "duplicate_call_id",
+        }
+    }
+}
+
+/// Why the Host refused one call of a batch. The model reads the reason as the call result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CallValidationRefusal {
+    /// The function name is not a Tool of the pinned Exposure.
+    Unexposed,
+    /// The arguments text is not a JSON object.
+    Malformed,
+    Intake(IntakeRefusal),
+    ProposeEdit(crate::ProposeEditRefusal),
+}
+
+impl CallValidationRefusal {
+    /// The stable label of the refusal, for the `refusal` of the ToolCall row.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unexposed => "unexposed_name",
+            Self::Malformed => "malformed_arguments",
+            Self::Intake(IntakeRefusal::Malformed) => "intake_malformed",
+            Self::Intake(IntakeRefusal::Query) => "intake_query",
+            Self::Intake(IntakeRefusal::ResultCount) => "intake_result_count",
+            Self::Intake(IntakeRefusal::UrlCount) => "intake_url_count",
+            Self::Intake(IntakeRefusal::Url) => "intake_url",
+            Self::Intake(IntakeRefusal::UnstorableText) => "unstorable_text",
+            Self::ProposeEdit(refusal) => refusal.label(),
+        }
+    }
+
+    /// The result of the refused call: the reason in one sentence.
+    pub fn result_text(self) -> String {
+        let reason = match self {
+            Self::Unexposed => "this Run has no Tool with this function name",
+            Self::Malformed => "its arguments text is not a JSON object",
+            Self::Intake(IntakeRefusal::Malformed) => {
+                "its arguments do not agree with the parameters of the Tool"
+            }
+            Self::Intake(IntakeRefusal::Query) => {
+                "its query is empty, has more than 512 characters, or has a control character"
+            }
+            Self::Intake(IntakeRefusal::ResultCount) => "its result count is not from 1 to 10",
+            Self::Intake(IntakeRefusal::UrlCount) => "it does not have from 1 to 5 URLs",
+            Self::Intake(IntakeRefusal::Url) => {
+                "one of its URLs is not an absolute http or https URL with a host and no user \
+                 information"
+            }
+            Self::Intake(IntakeRefusal::UnstorableText) => {
+                "a text of its arguments has the character U+0000"
+            }
+            Self::ProposeEdit(refusal) => return refusal.result_text(),
+        };
+        format!(
+            "The Host refused this call because {reason}, so no result is available, and this \
+             is not an empty result."
+        )
+    }
+}
+
+/// One member of a batch that failed its own validation. It is a refused ToolCall.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RefusedToolCall {
+    pub call_id: String,
+    pub name: String,
+    /// The pinned Tool of the name. `None` when the Exposure has no Tool with the name.
+    pub tool: Option<SnapshotTool>,
+    /// The arguments text of the item, as the model sent it.
+    pub arguments_text: String,
+    pub refusal: CallValidationRefusal,
+}
+
+impl RefusedToolCall {
+    /// The arguments text as a JSON string. The store cannot keep U+0000, so U+FFFD replaces it.
+    pub fn arguments(&self) -> Value {
+        Value::String(self.arguments_text.replace('\0', "\u{fffd}"))
+    }
+
+    /// The digest of the exact arguments text.
+    pub fn argument_digest(&self) -> String {
+        format!(
+            "sha256:{}",
+            crate::project_archive::hex_sha256(self.arguments_text.as_bytes())
+        )
+    }
+}
+
+/// One member of a valid batch, in item order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RequestedToolCall {
+    Validated(ValidatedToolCall),
+    Refused(RefusedToolCall),
+}
+
+impl RequestedToolCall {
+    pub fn call_id(&self) -> &str {
+        match self {
+            Self::Validated(call) => &call.call_id,
+            Self::Refused(call) => &call.call_id,
         }
     }
 }
@@ -177,8 +271,9 @@ impl ToolCallBatchRefusal {
 /// The complete requested batch of one terminal Model Attempt, after validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ToolCallBatch {
-    /// Each member validated, in item order. An empty batch requests no Tool.
-    Valid(Vec<ValidatedToolCall>),
+    /// Each member validated or was refused alone, in item order. An empty batch requests no
+    /// Tool.
+    Valid(Vec<RequestedToolCall>),
     Invalid(ToolCallBatchRefusal),
 }
 
@@ -193,22 +288,18 @@ impl ToolCallBatch {
 /// `current` authority of its Registrations. Each Tool item is a member of the batch. A batch
 /// with a member exists only in a complete response whose other items completed.
 ///
-/// A member is valid only when each of these conditions is true:
-/// - It is a complete function call.
-/// - Its call identifier has a kept length and no control character.
-/// - No earlier member has its call identifier.
-/// - Its name is exposed.
-/// - The Project enables its Registration now.
-/// - Its pinned revision admits a new ToolCall now.
-/// - Its arguments text is a JSON object.
-/// - The object fits the typed intake of the pinned ToolSpec.
+/// The batch is valid only when each member is a complete function call whose call identifier
+/// and name have a kept length and no control character, whose call identifier no earlier
+/// member has, and whose exposed name has a pinned revision that admits a new ToolCall now and a
+/// ToolSpec of this build. A member is refused when its name is not exposed, its arguments text
+/// is not a JSON object, or the object does not fit the typed intake of the pinned ToolSpec.
 pub fn validate_tool_call_batch(
     state: StreamItemState,
     items: &[NativeStreamItem],
     exposure: &ExposureSnapshot,
     current: &[CurrentToolAuthority],
 ) -> ToolCallBatch {
-    let mut calls: Vec<ValidatedToolCall> = Vec::new();
+    let mut calls: Vec<RequestedToolCall> = Vec::new();
     let members = items
         .iter()
         .filter(|item| item.role == StreamItemRole::Tool);
@@ -233,8 +324,8 @@ fn validate_member(
     item: &NativeStreamItem,
     exposure: &ExposureSnapshot,
     current: &[CurrentToolAuthority],
-    earlier: &[ValidatedToolCall],
-) -> Result<ValidatedToolCall, ToolCallBatchRefusal> {
+    earlier: &[RequestedToolCall],
+) -> Result<RequestedToolCall, ToolCallBatchRefusal> {
     if item.native_type.as_deref() != Some(FUNCTION_CALL_NATIVE_TYPE) {
         return Err(ToolCallBatchRefusal::UnexpectedItem {
             item_id: item.item_id.clone(),
@@ -256,12 +347,29 @@ fn validate_member(
         });
     }
     let call_id = call_id.clone();
-    if earlier.iter().any(|call| call.call_id == call_id) {
+    if earlier.iter().any(|call| call.call_id() == call_id) {
         return Err(ToolCallBatchRefusal::DuplicateCallId { call_id });
     }
     let name = item.name.clone().unwrap_or_default();
+    if name.is_empty()
+        || name.chars().count() > MAX_FUNCTION_NAME_CHARS
+        || name.chars().any(char::is_control)
+    {
+        return Err(ToolCallBatchRefusal::InvalidName {
+            item_id: item.item_id.clone(),
+        });
+    }
+    let refused = |tool: Option<&SnapshotTool>, refusal| {
+        Ok(RequestedToolCall::Refused(RefusedToolCall {
+            call_id: call_id.clone(),
+            name: name.clone(),
+            tool: tool.cloned(),
+            arguments_text: arguments.clone(),
+            refusal,
+        }))
+    };
     let Some(exposed) = exposure.tools.iter().find(|tool| tool.name == name) else {
-        return Err(ToolCallBatchRefusal::Unexposed { call_id });
+        return refused(None, CallValidationRefusal::Unexposed);
     };
     let admitted = current.iter().any(|authority| {
         authority.registration_id == exposed.registration_id
@@ -269,33 +377,33 @@ fn validate_member(
             && authority.lifecycle.admit_new_tool_call().is_ok()
     });
     if !admitted {
-        return Err(ToolCallBatchRefusal::RegistrationUnavailable { call_id });
+        return Err(ToolCallBatchRefusal::RegistrationUnavailable {
+            call_id: call_id.clone(),
+        });
     }
     let Some(spec) = crate::tool_spec(&exposed.spec_revision)
         .filter(|spec| spec.operation.function_name() == exposed.name)
     else {
-        return Err(ToolCallBatchRefusal::UnknownSpec { call_id });
-    };
-    let Ok(value) = serde_json::from_str::<Value>(arguments) else {
-        return Err(ToolCallBatchRefusal::Malformed { call_id });
-    };
-    if !value.is_object() {
-        return Err(ToolCallBatchRefusal::Malformed { call_id });
-    }
-    let intake = spec
-        .intake(&value)
-        .map_err(|refusal| ToolCallBatchRefusal::Intake {
+        return Err(ToolCallBatchRefusal::UnknownSpec {
             call_id: call_id.clone(),
-            refusal,
-        })?;
-    Ok(ValidatedToolCall {
+        });
+    };
+    let value = match serde_json::from_str::<Value>(arguments) {
+        Ok(value) if value.is_object() => value,
+        Ok(_) | Err(_) => return refused(Some(exposed), CallValidationRefusal::Malformed),
+    };
+    let intake = match spec.intake(&value) {
+        Ok(intake) => intake,
+        Err(refusal) => return refused(Some(exposed), CallValidationRefusal::Intake(refusal)),
+    };
+    Ok(RequestedToolCall::Validated(ValidatedToolCall {
         call_id,
         name,
         registration_id: exposed.registration_id.clone(),
         registration_revision: exposed.registration_revision.clone(),
         spec_revision: exposed.spec_revision.clone(),
         intake,
-    })
+    }))
 }
 
 #[cfg(test)]

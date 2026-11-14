@@ -27,7 +27,6 @@ mod release1_project_assistance;
 mod release1_project_export;
 mod release1_project_export_query;
 mod release1_proposal;
-mod release1_proposal_generation_decision;
 mod release1_readable_export;
 mod release1_readable_export_query;
 mod release1_reject_proposal_operations;
@@ -79,26 +78,26 @@ pub use release1_accept_proposal::{
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
-    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceWorkingTarget, AttemptCacheInspect,
-    AttemptEvidence, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD,
-    CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-    CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
-    ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
-    ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
-    ConversationSelection, CreateAgentRunEffect, CreateAgentRunRequest, CreateAgentRunResponse,
-    CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD,
-    GET_AGENT_RUN_PATH, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse,
-    HostControlInspect, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
-    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
-    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
-    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
-    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
-    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
-    SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
-    SourceAvailability, TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
-    UnknownCreateSuccessorDisposition,
+    AgentRunContextInspect, AgentRunRef, AgentRunResultInspect, AgentRunStatus,
+    AgentRunSteeringInspect, AgentRunStreamItemInspect, AgentRunUsageInspect,
+    AssistanceWorkingTarget, AttemptCacheInspect, AttemptEvidence, CREATE_AGENT_RUN_DIGEST_PROFILE,
+    CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
+    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
+    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
+    CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo,
+    EvidenceAvailability, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
+    OptionalActiveCompactionInspect, OptionalCompactionInstallInspect, OptionalContinuationInspect,
+    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
+    OptionalOpenedProposalInspect, OptionalOriginalResultRetrievalInspect,
+    OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
+    OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
+    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
+    ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
+    SelectionReferenceInspect, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
+    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
@@ -208,19 +207,6 @@ pub use release1_proposal::{
     GetProposalResponse, OptionalAcceptanceRefusalInspect, OptionalRevisionComparisonInspect,
     OptionalValidationReceiptInspect, ProposalOperationInspect, ProposalSourceConditionInspect,
     ProposalSourceInspect, ReplacementSpanInspect,
-};
-pub use release1_proposal_generation_decision::{
-    COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE, COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
-    COMPLETE_READY_PARTIAL_PROPOSAL_PATH, COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
-    COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
-    CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE, CONTINUE_PROPOSAL_GENERATION_METHOD,
-    CONTINUE_PROPOSAL_GENERATION_PATH, CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
-    CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID, CompleteReadyPartialProposalEffect,
-    CompleteReadyPartialProposalRefusalReason, CompleteReadyPartialProposalRequest,
-    CompleteReadyPartialProposalResponse, ContinueProposalGenerationEffect,
-    ContinueProposalGenerationRefusalReason, ContinueProposalGenerationRequest,
-    ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
-    ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,

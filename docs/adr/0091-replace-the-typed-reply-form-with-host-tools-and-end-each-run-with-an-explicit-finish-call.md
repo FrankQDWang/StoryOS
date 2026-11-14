@@ -4,7 +4,7 @@ status: accepted
 
 # Replace the Typed Reply Form With Host Tools and End Each Run With an Explicit Finish Call
 
-The author decided this on 2026-11-12 in conversation, before the Skill tickets of Stage 6 ([#364](https://github.com/FrankQDWang/StoryOS/issues/364)). This ADR changes how the model gives its result to StoryOS. It changes no rule about what a Proposal or a Research Artifact can hold, and it changes nothing that the author sees in a Run that succeeds.
+The author decided this on 2026-11-12 in conversation, before the Skill tickets of Stage 6 ([#364](https://github.com/FrankQDWang/StoryOS/issues/364)). This ADR changes how the model gives its result to StoryOS. It changes no rule about what a Proposal or a Research Artifact can hold, and it changes nothing that the author sees in a Run that succeeds. Section 6, as the author amended it on 2026-11-13, adds one change for the author: the panel shows each result of a Run.
 
 ## Context
 
@@ -61,10 +61,19 @@ The author approved these numbers on 2026-11-12.
 | `propose_edit` calls of one Run that the validation can refuse | 3. After the third refusal, the Host refuses each later call, and the result tells the model to end the Run and to tell the author. |
 | RunSteps of one Run | 24. The request of the last RunStep has `tool_choice: "none"`. The text of its response is the final answer. The Host executes no function call of that response. A response with no text completes the Run with no result. |
 
-### 6. The author sees no change in a Run that succeeds
+A steering input that only the last RunStep or no RunStep can read gets the `conflicted` answer of a Run that ended, and the Web Client sends it as the message of the next Run ([ADR 0062](0062-make-the-exact-selection-references-of-a-message-the-working-target.md), [#1480](https://github.com/FrankQDWang/StoryOS/issues/1480)).
 
-- The public `decision` of an AgentRun stays. The Host derives it from the records of the Run: a Proposal gives `prose_change` with its locations, a Research Artifact gives `research_synthesis`, and a Run with neither gives the final answer text.
-- The panel shows a Run that made a Proposal as it does today: the Host sentence and the change locations, and a click opens the Chapter. The final answer text of such a Run is not shown.
+### 6. The panel shows each result of a Run
+
+The author amended this section on 2026-11-13 ([#1474](https://github.com/FrankQDWang/StoryOS/issues/1474)). Before the amendment, the Host derived one kind for the public `decision` of a Run, a Proposal first, and the panel did not show the other results of the Run.
+
+- The model decides what a Run gives. One Run can make a Proposal with `propose_edit`, record a Research Artifact with `submit_research`, and give a final answer text. The Host has no rule that selects one result kind.
+- The Run read of `getAgentRun` gives `results`: each result of the Run, in the order in which the model made it. A `proposal` result is the Proposal of one `propose_edit` call that settled, with its change locations. A `research_artifact` result is the Artifact of the `submit_research` call that settled. An `answer` result is the final answer text of a completed Run, and it is the last result. The order of the calls is the RunStep position, then the position of the call in its response. Each result is there only when the Run has it. A final answer with no text gives no result. No result replaces another.
+- A read of one Model Attempt (`model_attempt_id`) has no `results`. The results belong to the Run, and that read shows one RunStep: its `decision` is the Decision of that RunStep.
+- The public `decision` of the Run read stays for a client that reads one kind and for a Run in progress. The Host derives it from the same records as `results`: the last Proposal gives `prose_change` with its locations, else the Research Artifact gives `research_synthesis`, else it is the Decision of the active RunStep or the refusal of the Run. Thus `decision` names no result that `results` does not have. The panel reads `results` for each settled Run that the Host did not refuse.
+- The panel shows each result in that order, each with the display of its kind. A Proposal shows the Host sentence and the change locations, and a click opens the Chapter. A Research Artifact shows the research turn of [ADR 0087](0087-record-a-research-synthesis-as-one-immutable-research-artifact.md) section 7: the sources, the summary, the claims, the citation list, and "Use this in the story" in the current turn. The final answer text shows as it is. A Run with one result shows it as before.
+- A history turn of the Conversation shows the same results as the current turn. "Use this in the story" stays with the current turn, because it sends in the current Conversation.
+- The panel shows the sentence for a Run with no result only for a completed Run with no Proposal, no Research Artifact, and no text. A Run that the Host refused and a Run that waits for a Tool show as before. The author gets no new control.
 - A Run in which the model makes an invalid call no longer ends with a fixed sentence. The model corrects the call, or it tells the author in the final answer.
 
 ### 7. Order
@@ -83,10 +92,19 @@ This change lands before the Skill tickets of Stage 6. Its first ticket is a rec
 ## Consequences
 
 - Each Run has two or more model requests. A Run that only answers a question had one.
-- The parser of the reply form, the answer that an unparsed text becomes, the malformed reply sentence of the panel, and the refusal `tool_request_invalid` go.
+- The parser of the reply form, the answer that an unparsed text becomes, the malformed reply sentence of the panel, and the refusal `tool_request_invalid` go. They went in #1463.
 - These sentences are superseded when the tickets land: the bullet "One Decision" of ADR 0062, the sentences of ADR 0071 that one reply is one Agent Decision and that the reply contract keeps its shape, the reply form of ADR 0087 section 1 and the repair sentence of its section 3, the last sentence of ADR 0085 section 5, and the batch rule of the glossary entry Model Tool Request. The validation rules of these ADRs stay, and they apply to one call.
 - Steering, compaction, and the recovery of an unknown Attempt work today only at the first RunStep position or have a bounded rule for a continuation ([ADR 0088](0088-recover-an-unknown-continuation-attempt-by-retrieval-and-one-bounded-successor.md)). Each Run now has more than one RunStep, so the tickets must make these paths correct at each position.
 - The fake model adapter emits function calls, and each test that it drives goes through the ToolCall path.
+- The output of a Host Tool call is a `tool_result` source, so each Run on the tool loop needs a grant with scope `project_writing_assistance_v3` ([ADR 0051](0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)). A binding with an earlier scope gets new binding records at the next `createAgentRun`, and each new grant records the third scope. A Run that pins a grant with the first or second scope refuses at its closing request with `disclosure_outside_grant`.
 - The request mapping of the model route changes, so the Model Registration gets a new mapping revision ([ADR 0053](0053-continue-the-agent-plan-conversation-with-the-prior-response.md)).
 - Tool Registration gets a kind for a Host Tool. The Skill Tools of Stage 6 use it.
 - The External MCP Surface of [ADR 0082](0082-keep-room-for-an-external-mcp-surface.md) is not affected.
+
+## Amendment 2026-11-14: an output for each call of a prior response
+
+[#1502](https://github.com/FrankQDWang/StoryOS/issues/1502) adds this rule to section 5. A request that names a prior response gives exactly one `function_call_output` item for each `function_call` item of that response. No path makes a request that names a prior response with a call that has no output.
+
+- The Host executes no call of the response of the last RunStep. When that response advances the continuation, the next request that names it gives each of its calls this output: "StoryOS did not execute this call, because the Run reached its limit of 24 RunSteps. No result is available, and this is not an empty result." That request is the first request of the next Run of the Conversation, or the compaction summary request of that Run. The first request sends the current input and then these outputs. The summary request sends these outputs and then its instruction. Both forms use only item kinds that the real route accepted before.
+- A Tool item that is not a valid function call, for example the incomplete call item of a cut response, is a structural fault. The Host cannot give it an output that the real route accepted before, so its response does not advance the continuation. In the last RunStep, the text of that response is the final answer. Before the last RunStep, the response settles with no Decision and the Run ends. Before this rule, that response opened the next RunStep, and the request of that RunStep named it with no output for its call.
+- A cancelled or refused Run and a recovery successor give no prior response to a later request: the next Run continues only from a completed Run, and a successor binding is used only in its own Run.

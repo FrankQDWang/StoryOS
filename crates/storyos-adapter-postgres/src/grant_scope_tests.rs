@@ -42,8 +42,8 @@ async fn settle(
     dispatch_evidence(admin, run_id).await
 }
 
-/// The status of a run, the grant evidence of its decision Model Attempt, and the grant that its
-/// decision manifest names.
+/// The status of a run, the grant evidence of its first decision Model Attempt, and the grant that
+/// its first decision manifest names.
 async fn grant_evidence(
     admin: &Client,
     run_id: &str,
@@ -53,11 +53,13 @@ async fn grant_evidence(
             "SELECT run.status,
                     (SELECT (attempt.payload->'disclosure_grant')::text
                        FROM storyos.model_attempts AS attempt
-                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'),
+                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                        AND attempt.decision_position = 0),
                     (SELECT jsonb_build_object('grant_id', manifest.disclosure_grant_id,
                                                'grant_scope', manifest.disclosure_grant_scope)::text
                        FROM storyos.context_assembly_manifests AS manifest
-                      WHERE manifest.run_id = run.run_id AND manifest.manifest_role = 'decision')
+                      WHERE manifest.run_id = run.run_id AND manifest.manifest_role = 'decision'
+                        AND manifest.decision_position = 0)
                FROM storyos.agent_runs AS run
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
@@ -114,7 +116,8 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, run_id) = queued_run(&store, "d5a", DeploymentDestination::HostFake).await;
+    let (scope, _, run_id) =
+        queued_run(&store, "d5a", DeploymentDestination::HostFakeToolLoop).await;
     let (grant_id, grant_scope) = current_grant(&store, &admin, &scope).await;
 
     let evidence = settle(&store, &admin, &FakeDestination, &scope, &run_id).await;
@@ -123,9 +126,10 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
         grant_scope.as_deref(),
         Some("project_writing_assistance_v3")
     );
+    // The `finish` RunStep and the closing RunStep.
     assert_eq!(
         (evidence.model_attempts, evidence.disclosure_events),
-        (1, 1)
+        (2, 2)
     );
     let admitted = serde_json::json!({
         "grant_id": grant_id,
@@ -145,13 +149,13 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         .await;
     let (store, admin) = stores().await;
     let (scope, chapter_id, unscoped_run) =
-        queued_run(&store, "d5b", DeploymentDestination::HostFake).await;
+        queued_run(&store, "d5b", DeploymentDestination::HostFakeToolLoop).await;
     let pinned_run = admit_run(
         &store,
         &scope,
         &chapter_id,
         "d5c",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "Help with this passage.",
     )
     .await;
@@ -164,7 +168,7 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         &scope,
         &chapter_id,
         "d5d",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "Help with this passage.",
     )
     .await;
@@ -274,7 +278,7 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
     let mut changed = Vec::new();
     for (prefix, statement) in ["d5e", "d6a"].into_iter().zip(changes) {
         let (scope, chapter_id, run_id) =
-            queued_run(&store, prefix, DeploymentDestination::HostFake).await;
+            queued_run(&store, prefix, DeploymentDestination::HostFakeToolLoop).await;
         let adapter = ChangeGrantAtPrepare {
             admin: &admin,
             statement,
@@ -291,7 +295,7 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
         scope,
         chapter_id,
         "d6f",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "Help with this passage.",
     )
     .await;
@@ -304,7 +308,7 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
     );
     assert_eq!(
         (rebound.status.as_str(), rebound.model_attempts),
-        ("completed", 1)
+        ("completed", 2)
     );
 }
 
@@ -316,9 +320,9 @@ async fn each_project_dispatches_only_under_its_own_grant() {
         .await;
     let (store, admin) = stores().await;
     let (granted_scope, _, granted_run) =
-        queued_run(&store, "d6b", DeploymentDestination::HostFake).await;
+        queued_run(&store, "d6b", DeploymentDestination::HostFakeToolLoop).await;
     let (other_scope, _, other_run) =
-        queued_run(&store, "d6c", DeploymentDestination::HostFake).await;
+        queued_run(&store, "d6c", DeploymentDestination::HostFakeToolLoop).await;
     remove_grant_scope(&admin, &current_grant(&store, &admin, &other_scope).await.0).await;
 
     let other = settle(&store, &admin, &FakeDestination, &other_scope, &other_run).await;
@@ -334,7 +338,7 @@ async fn each_project_dispatches_only_under_its_own_grant() {
     assert_eq!(other, refused_before_claim());
     assert_eq!(
         (granted.status.as_str(), granted.model_attempts),
-        ("completed", 1)
+        ("completed", 2)
     );
 }
 
@@ -345,13 +349,14 @@ async fn a_retrieve_after_an_unknown_create_checks_the_current_grant_and_sends_n
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "d6d", DeploymentDestination::HostFake).await;
+    let (scope, chapter_id, _) =
+        queued_run(&store, "d6d", DeploymentDestination::HostFakeToolLoop).await;
     let run_id = admit_run(
         &store,
         &scope,
         &chapter_id,
         "d6e",
-        DeploymentDestination::HostFake,
+        DeploymentDestination::HostFakeToolLoop,
         "SCRIPT:retrieve-complete",
     )
     .await;
@@ -406,7 +411,8 @@ async fn a_recorded_purpose_outside_the_scope_refuses_before_dispatch() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, _, run_id) = queued_run(&store, "d7a", DeploymentDestination::HostFake).await;
+    let (scope, _, run_id) =
+        queued_run(&store, "d7a", DeploymentDestination::HostFakeToolLoop).await;
     admin
         .execute(
             "UPDATE storyos.context_assembly_manifests

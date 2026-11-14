@@ -34,6 +34,8 @@ it.each([
       predecessor_fenced: false, allowance_consumed: false } }, NO_RESULT],
   ["a successor with no result", { status: "completed", original_result_retrieval: retrieval,
     unknown_create_successor: successor("dispatched") }, NO_RESULT],
+  // A closing response with no text gives the Run no result (ADR 0091).
+  ["a completed Run with no result", { status: "completed" }, NO_RESULT],
   ["a request after one with no result", { status: "refused",
     decision: { kind: "execution_refused", capability: "expiry_rebuild_unknown_create" } },
   "上一条请求还没有结果，请开始新对话。"],
@@ -46,9 +48,6 @@ it.each([
   ["a research request that no Tool can execute now", { status: "refused",
     decision: { kind: "execution_refused", capability: "research_tool_unavailable" } },
   "联网检索现在不可用，正文没有改动。你可以重试，或继续手动写作。"],
-  ["a research request that StoryOS could not accept", { status: "refused",
-    decision: { kind: "execution_refused", capability: "tool_request_invalid" } },
-  "模型发出的联网检索请求不符合要求，正文没有改动。你可以重试，或继续手动写作。"],
 ])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({

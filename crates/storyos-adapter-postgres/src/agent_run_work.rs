@@ -5,7 +5,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
-    CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification, stream_batch_plan,
+    CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification,
 };
 
 use crate::agent_run_compaction::CompactionAdvance;
@@ -367,8 +367,13 @@ pub(crate) async fn settle_one_phase(
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
     if run.attempt_id.is_none()
-        && run.decision_position == "0"
-        && crate::agent_run_steering::advance(client, claim, lease_seconds).await?
+        && crate::agent_run_steering::advance_before_request(
+            client,
+            claim,
+            &run.decision_position,
+            lease_seconds,
+        )
+        .await?
     {
         return Ok(WorkPhase::Hold("steering"));
     }
@@ -376,11 +381,11 @@ pub(crate) async fn settle_one_phase(
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
-        // Compaction occurs before the first decision request of the AgentRun, when the mapping
-        // of the pinned Registration compacts.
-        let compacted = if run.decision_position == "0"
-            && storyos_core::model_registration(&run.model_registration_revision)
-                .is_some_and(storyos_core::ModelRegistration::compacts)
+        // Compaction occurs before a decision request of the AgentRun, when the mapping of the
+        // pinned Registration compacts (ADR 0055).
+        let compacted = if storyos_core::model_registration(&run.model_registration_revision)
+            .is_some_and(storyos_core::ModelRegistration::compacts)
+            && crate::agent_run_compaction::compacts_at_active_step(client, claim, &run).await?
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?
@@ -440,8 +445,6 @@ pub(crate) async fn settle_one_phase(
     let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let RunPhaseRow {
-        author_message,
-        chapter_id,
         destination_manifest_id: destination_manifest,
         decision_id,
         continuation_id,
@@ -491,23 +494,7 @@ pub(crate) async fn settle_one_phase(
     {
         return crate::agent_run_tool_dispatch::advance(client, claim, &run).await;
     }
-    if payload.pointer("/decision/locations").is_none()
-        && stream_batch_plan(author_message).is_some()
-        && let Some(decision) = decision_id.as_deref()
-    {
-        let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
-            client,
-            claim,
-            chapter_id,
-            decision,
-            author_message,
-        )
-        .await?;
-        if matches!(work, crate::stream_proposal_generation::StreamWork::Hold) {
-            return requeue_generation(client, claim).await;
-        }
-    }
-    if let Some(decision) = decision_id
+    if decision_id.is_some()
         && continuation_id.is_none()
         && payload
             .get("decision")
@@ -518,7 +505,6 @@ pub(crate) async fn settle_one_phase(
         crate::agent_run_continuation::bind_produced_continuation(
             client,
             claim,
-            decision,
             &attempt_id,
             &payload,
             &payload,
@@ -576,17 +562,6 @@ pub(crate) async fn update_run(
         .await
         .map_err(complete_database_error)?;
     Ok(())
-}
-
-pub(crate) async fn requeue_generation(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    update_run(
-        client, claim, "queued", /*settlement*/ None, /*clear_lease*/ true,
-    )
-    .await?;
-    Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
 pub(crate) async fn hold_if_requested(kind: &str) {

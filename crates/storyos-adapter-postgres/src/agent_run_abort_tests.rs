@@ -5,10 +5,7 @@ use storyos_application::{
     NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ReferenceRetrieval,
     ReportedBinding, ResponseReference, WirePayloadProjection, complete_agent_run,
 };
-use storyos_core::{
-    AGENT_PLAN_REGISTRATION, DecisionCandidate, DeploymentDestination, ModelAdapter, ModelOutput,
-    OutputPhase, RetrievalBounds,
-};
+use storyos_core::{AGENT_PLAN_REGISTRATION, DeploymentDestination, ModelAdapter, RetrievalBounds};
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::RuntimeClock;
@@ -57,13 +54,6 @@ impl ModelProviderAdapter for CancelledStream<'_> {
             return Observation::Terminal(ModelResponse {
                 state: storyos_core::StreamItemState::Complete,
                 items: Vec::new(),
-                output: Some(ModelOutput {
-                    phase: OutputPhase::FinalAnswer,
-                    candidate: DecisionCandidate::Advisory {
-                        text: "Too late.".to_owned(),
-                    },
-                    prose_changes: None,
-                }),
                 usage: ModelUsage::Reported {
                     input_tokens: 40,
                     output_tokens: 12,

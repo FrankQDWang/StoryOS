@@ -1,6 +1,6 @@
 use storyos_application::{
     AgentRunContinuationAdmission, AgentRunInputMapping, ClaimedAgentRun, CompleteAgentRunError,
-    ProjectAssistanceRecord,
+    PriorInput, ProjectAssistanceRecord,
 };
 use storyos_core::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
@@ -11,6 +11,9 @@ use storyos_core::{
 pub(crate) struct ContinuationWire {
     pub mapping: ContinuationInputMapping,
     pub prior_binding_id: Option<String>,
+    /// Whether the prior response read the current input. Only an incremental request has a
+    /// replaced input (ADR 0085).
+    pub prior_input: PriorInput,
     pub known_prior_binding_id: Option<String>,
     pub admission: ContinuationIdentity,
 }
@@ -37,29 +40,40 @@ pub(crate) async fn decide_continuation(
         prior_reference_unusable: prior
             .as_ref()
             .is_some_and(|loaded| loaded.confirmed_unusable),
-        current_input_changed: crate::agent_run_tool_result::continuation_input_changed(
-            client, claim,
-        )
-        .await?,
     });
-    let prior_binding_id = match mapping {
-        ContinuationInputMapping::Incremental => known_prior_binding_id.clone(),
+    let (prior_binding_id, prior_input) = match mapping {
+        ContinuationInputMapping::Incremental => (
+            known_prior_binding_id.clone(),
+            match crate::agent_run_tool_result::continuation_input_changed(client, claim).await? {
+                true => PriorInput::Replaced,
+                false => PriorInput::Current,
+            },
+        ),
         ContinuationInputMapping::None
         | ContinuationInputMapping::Full
-        | ContinuationInputMapping::NewTransport => None,
+        | ContinuationInputMapping::NewTransport => (None, PriorInput::Current),
     };
     Ok(ContinuationWire {
         mapping,
         prior_binding_id,
+        prior_input,
         known_prior_binding_id,
         admission,
     })
+}
+
+/// Clears the prior reference: the request sends the full input or starts a new transport.
+pub(crate) fn clear_prior(wire: &mut ContinuationWire, mapping: ContinuationInputMapping) {
+    wire.mapping = mapping;
+    wire.prior_binding_id = None;
+    wire.prior_input = PriorInput::Current;
 }
 
 pub(crate) fn encode_wire(wire: &ContinuationWire) -> serde_json::Value {
     serde_json::json!({
         "input_mapping": mapping_name(wire.mapping),
         "prior_continuation_binding_id": wire.prior_binding_id,
+        "prior_input": prior_input_name(wire.prior_input),
         "known_prior_continuation_binding_id": wire.known_prior_binding_id,
         "admission": identity_value(&wire.admission)
     })
@@ -75,6 +89,11 @@ pub(crate) fn parse_wire(payload: &serde_json::Value) -> Option<ContinuationWire
                 .and_then(serde_json::Value::as_str),
         ),
         prior_binding_id: string_field(continuation, "prior_continuation_binding_id"),
+        prior_input: parse_prior_input(
+            continuation
+                .get("prior_input")
+                .and_then(serde_json::Value::as_str),
+        ),
         known_prior_binding_id: string_field(continuation, "known_prior_continuation_binding_id"),
         admission,
     })
@@ -91,14 +110,13 @@ pub(crate) fn encode_produced_binding(
     value
 }
 
-/// Gives the selected Decision `decision_id` of `attempt_id` its Model Continuation Binding, so
-/// that a later request of the Conversation can continue its response (ADR 0033). The wire
+/// Gives the settled response of `attempt_id` its Model Continuation Binding, so that a later
+/// request of the Conversation can continue it (ADR 0033). The wire
 /// admission of `wire_payload` names the binding: a successor Attempt sends the request of its
 /// predecessor, so it uses the wire admission of the predecessor (ADR 0088).
 pub(crate) async fn bind_produced_continuation(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    decision_id: &str,
     attempt_id: &str,
     payload: &serde_json::Value,
     wire_payload: &serde_json::Value,
@@ -118,7 +136,7 @@ pub(crate) async fn bind_produced_continuation(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND decision_id = $5::text::uuid
+                AND model_attempt_id = $5::text::uuid
                 AND continuation_binding_id IS NULL
                 AND attempt_role IN ('decision', 'successor')",
             &[
@@ -126,7 +144,7 @@ pub(crate) async fn bind_produced_continuation(
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &binding,
-                &decision_id,
+                &attempt_id,
                 &next_payload.to_string(),
             ],
         )
@@ -312,6 +330,21 @@ fn mapping_name(mapping: ContinuationInputMapping) -> &'static str {
     }
 }
 
+// An Attempt with no `prior_input` field sent no replaced input.
+fn parse_prior_input(name: Option<&str>) -> PriorInput {
+    match name {
+        Some("replaced") => PriorInput::Replaced,
+        _ => PriorInput::Current,
+    }
+}
+
+fn prior_input_name(input: PriorInput) -> &'static str {
+    match input {
+        PriorInput::Current => "current",
+        PriorInput::Replaced => "replaced",
+    }
+}
+
 fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
     value
         .get(field)
@@ -319,3 +352,7 @@ fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+#[path = "agent_run_continuation_tests.rs"]
+mod tests;

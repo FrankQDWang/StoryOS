@@ -7,8 +7,8 @@ use secrecy::{ExposeSecret, SecretString};
 
 pub use storyos_core::RequestBounds;
 use storyos_core::{
-    ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
-    RetrievalBounds, StreamItemState, ToolExposure,
+    ContextSourceClass, ModelAdapter, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
+    StreamItemState, ToolExposure,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -24,6 +24,10 @@ pub const PROVISIONAL_STREAM_COMMIT_INTERVAL: std::time::Duration =
 
 /// One closed model destination request.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a Run prepares one request at a time, so the size of a Create costs nothing"
+)]
 pub enum DestinationRequest {
     Create(CreateRequest),
     Retrieve(RetrieveRequest),
@@ -124,14 +128,22 @@ pub struct CreateRequest {
     pub selection_references: Vec<storyos_core::AdmittedSelection>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
+    /// Whether the prior response read the current input of this request (ADR 0085).
+    pub prior_input: PriorInput,
     /// The Tool Exposure of this RunStep. The adapter declares each exposed Tool as one function
     /// and sends no Tool for an empty Exposure (ADR 0084).
     pub tool_exposure: ToolExposure,
+    /// The `tool_choice` of the finish rule (ADR 0091).
+    pub tool_choice: storyos_core::ToolChoice,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
     /// The function outputs of a continuation RunStep, in item order: one for each resolved
     /// ToolCall of the Run, from its selected `tool_result` Context item.
     pub tool_outputs: Vec<ToolOutput>,
+    /// The call identifiers of the prior response that have no ToolCall, because the Host
+    /// executed no call of the last RunStep. The request gives each of them the output
+    /// `UNEXECUTED_CALL_OUTPUT` (ADR 0091 section 5).
+    pub unexecuted_call_ids: Vec<String>,
 }
 
 /// One native function call of the Run and its projected output (ADR 0033: the request keeps
@@ -147,7 +159,21 @@ pub struct ToolOutput {
     pub origin: ToolOutputOrigin,
 }
 
-/// Where the native function call of one output is.
+/// Whether the prior response of an incremental continuation read the current input of the
+/// request: the selected Context text, the declared targets, the selection references, and the
+/// passage input (ADR 0085).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PriorInput {
+    /// The prior response read the current input, or the request sends no prior response.
+    Current,
+    /// The current input changed after the prior response read it. The incremental request sends
+    /// the current input again before the Tool outputs, and the input says that it replaces the
+    /// earlier input.
+    Replaced,
+}
+
+/// Where the native function call of one output is. The response that the prior binding of the
+/// request names decides it, not a RunStep position (ADR 0085 section 3).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolOutputOrigin {
     /// The response that the prior response reference names: an incremental request sends only
@@ -208,7 +234,9 @@ pub struct CurrentInput<'a> {
 
 impl CurrentInput<'_> {
     /// One digest over the input. A continuation whose digest differs from that of its prior
-    /// request sends a full input (ADR 0085), because the prior response read the earlier input.
+    /// request sends its input again (ADR 0085), because the prior response read the earlier
+    /// input.
+    /// A compaction summary is history that the response of the later request holds (ADR 0055).
     pub fn digest(&self) -> String {
         let context: Vec<serde_json::Value> = self
             .context
@@ -216,7 +244,9 @@ impl CurrentInput<'_> {
             .filter(|item| {
                 !matches!(
                     item.source_class,
-                    ContextSourceClass::HostControl | ContextSourceClass::ToolResult
+                    ContextSourceClass::HostControl
+                        | ContextSourceClass::ToolResult
+                        | ContextSourceClass::ConversationSummary
                 )
             })
             .map(|item| serde_json::json!([item.source_class.name(), item.content]))
@@ -430,7 +460,6 @@ pub struct ModelResponse {
     /// `Cancelled`. An item keeps its own state.
     pub state: StreamItemState,
     pub items: Vec<NativeStreamItem>,
-    pub output: Option<ModelOutput>,
     pub usage: ModelUsage,
     pub cache_use: CacheUse,
     pub response_reference: Option<String>,

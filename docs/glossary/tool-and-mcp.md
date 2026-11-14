@@ -53,7 +53,7 @@ The disposable Project Scope-bound projection of a bound Tool for one caller and
 _Avoid_: Tool Registration, project enablement, authorization
 
 **ToolCall**:
-An Operational Record for one requested invocation of an exact Tool Registration, including its caller route, validated arguments, resolved targets, Tool Effect Request, authorization state, execution lifecycle, and outcome. A ToolCall may produce Artifacts or other Operational Records but never inherits their lifecycle or authority.
+An Operational Record for one requested invocation of an exact Tool Registration, including its caller route, validated arguments, resolved targets, Tool Effect Request, authorization state, execution lifecycle, and outcome. A ToolCall may produce Artifacts or other Operational Records but never inherits their lifecycle or authority. A call that fails its own validation (a name that the Exposure does not have, or arguments that do not fit the ToolSpec) is a `refused` ToolCall: it keeps the arguments text as the model sent it, it pins its Tool Registration only when the Exposure has the name, and its result gives the reason ([ADR 0091](../adr/0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)).
 _Avoid_: Tool result, Artifact, Approval, model message
 
 **Tool Result Continuation**:

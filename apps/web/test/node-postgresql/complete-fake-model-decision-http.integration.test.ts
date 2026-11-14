@@ -27,7 +27,8 @@ import {
 import { BINDING, PROSE, USER_A, UUID_V7, admitRun, challenged, createEmpty, drainLeftoverWork, freshNamespace, id,
   inspectRun, issueChallenge, prepare, problemCode, runRequest, settleOnce, startServer, waitFor } from "../support/http-harness.ts";
 
-const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa01";
+// The test Server offers the tool loop profile of the fake destination (ADR 0091).
+const HOST_FAKE_MODEL_REGISTRATION = "018f0000-0000-7001-8000-00000000fa18";
 const ADVISORY = "This passage is inspectable Host-fake advice. It is not Authoritative State.";
 const CLARIFICATION = "Which wording should stay in this sentence?";
 const REFUSALS = [
@@ -41,12 +42,21 @@ const REFUSALS = [
   ["Please run an eval on this.", "eval"],
 ] as const;
 
-function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
+function assertEvidence(queried: GetAgentRunResponse, sentContent: string | undefined) {
   if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
   const attemptId = queried.model_attempt.model_attempt_id;
-  assert.deepEqual(queried.evidence, [
+  // The tool loop fake records its whole wire request as the sent content (ADR 0091).
+  const evidence = queried.evidence.map((item) => item.kind === "sent_content"
+    ? { ...item, content: (JSON.parse(item.content) as { author_message?: string }).author_message } : item);
+  // The default read shows the closing RunStep. It also refers to the binding of the RunStep before it.
+  const known = queried.model_attempt.known_prior_continuation;
+  const prior = known.kind === "present" ? known.continuation_binding_id : null;
+  const reference = (referenceId: string) => ({ kind: "stored_reference", attempt_id: attemptId, availability: "current",
+    reference_id: referenceId });
+  assert.deepEqual(evidence, [
     { kind: "sent_content", attempt_id: attemptId, availability: "current", content: sentContent },
-    { kind: "stored_reference", attempt_id: attemptId, availability: "current", reference_id: queried.context.assembly_manifest_id },
+    reference(queried.context.assembly_manifest_id),
+    ...(prior ? [reference(prior)] : []),
     { kind: "provider_report", attempt_id: attemptId, availability: "current", report: "host_fake_no_provider_usage" },
     { kind: "provider_opaque", attempt_id: attemptId, availability: "unknown", unknown_facts: ["provider_internal_content"] },
   ]);
@@ -145,7 +155,7 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
   }
 });
 
-test("Worker distinguishes prose-change, clarification, and CFP holds", async () => {
+test("Worker distinguishes prose-change, a question, and CFP holds", async () => {
   const started = await startServer();
   const dispatchHold = join(tmpdir(), `storyos-fake-dispatch-${process.pid}`);
   const streamHold = join(tmpdir(), `storyos-fake-stream-${process.pid}`);
@@ -161,7 +171,10 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     if (proseInspect.decision.kind !== "prose_change") throw new Error("expected prose");
     assert.equal(proseInspect.decision.selected, true);
     assert.equal(proseInspect.decision.text, PROSE);
-    assert.equal(proseInspect.decision.producer_input, PROSE);
+    // The `propose_edit` call opens a Proposal with locations, and the producer input is its changes (ADR 0091).
+    assert.deepEqual(proseInspect.decision.locations?.map((location) => location.candidate_text), [PROSE]);
+    assert.deepEqual(JSON.parse(proseInspect.decision.producer_input), proseInspect.decision.locations?.map(
+      ({ outcome: _outcome, current: _current, ...change }) => change));
     assert.equal(proseInspect.decision.authoritative, false);
     assert.equal(proseInspect.decision.continuation.kind, "present");
 
@@ -169,12 +182,12 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     await settleOnce();
     const clarified = await inspectRun(started.baseUrl, prepared, clarification.effect.run_id);
     assert.equal(clarified.status, "completed");
-    assert.equal(clarified.decision.kind, "clarification");
-    if (clarified.decision.kind !== "clarification") throw new Error("expected clarification");
+    // A question to the author is the advisory final answer text, and the Conversation continues (ADR 0091).
+    assert.equal(clarified.decision.kind, "advisory");
+    if (clarified.decision.kind !== "advisory") throw new Error("expected advisory");
     assert.equal(clarified.decision.selected, true);
-    assert.equal(clarified.decision.question, CLARIFICATION);
-    assert.equal(clarified.decision.required_reply, CLARIFICATION);
-    assert.equal(clarified.decision.continuation.kind, "absent");
+    assert.equal(clarified.decision.text, CLARIFICATION);
+    assert.equal(clarified.decision.continuation.kind, "present");
 
     writeFileSync(dispatchHold, "hold");
     const dispatchRun = await admitRun(started.baseUrl, prepared, id("eb15"), "Help with this passage.");
@@ -199,20 +212,12 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     unlinkSync(streamHold);
     await streamWorker;
     assert.equal((await inspectRun(started.baseUrl, prepared, streamRun.effect.run_id)).status, "completed");
-    const unselected = await admitRun(started.baseUrl, prepared, id("eb18"), "SCRIPT:unselected");
-    await settleOnce();
-    const unselectedInspect = await inspectRun(started.baseUrl, prepared, unselected.effect.run_id);
-    assert.equal(unselectedInspect.status, "completed");
-    assert.equal(unselectedInspect.decision.kind, "absent");
-    assert.equal(unselectedInspect.items[0]?.state, "complete");
-    assert.equal(unselectedInspect.items[0]?.phase, "complete");
     const scriptCases = [
       ["SCRIPT:partial", "provisional", "assistant"],
       ["SCRIPT:incomplete", "incomplete", "assistant"],
       ["SCRIPT:failed", "failed", "assistant"],
       ["SCRIPT:cancelled", "cancelled", "assistant"],
       ["SCRIPT:unknown", "unknown", "assistant"],
-      ["SCRIPT:invalid", "complete", "assistant"],
       ["SCRIPT:tool_partial", "provisional", "tool"],
       ["SCRIPT:refusal", "complete", "assistant"],
     ] as const;
@@ -263,7 +268,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     if (afterDecision.model_attempt.kind !== "present") throw new Error("expected attempt");
     assert.match(afterDecision.model_attempt.model_attempt_id, UUID_V7);
     assert.equal(afterDecision.model_attempt.dispatch_state, "settled");
-    assertEvidence(afterDecision, "Help with this passage.");
+    // The closing RunStep continues the prior response with the same input, so it sends only the
+    // Tool output (ADR 0085).
+    assertEvidence(afterDecision, undefined);
     assert.equal(afterDecision.redaction_profile, "storyos.author.v1");
     assert.equal(afterDecision.items[0]?.state, "complete");
     assert.equal(afterDecision.items[0]?.phase, "complete");

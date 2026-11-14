@@ -7,7 +7,6 @@ use storyos_application::{
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
 };
-use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGenerationInput};
 use storyos_contracts::CommandKind;
 use storyos_core::{AssistanceAvailability, CreateChapterPlacement};
 use uuid::Uuid;
@@ -29,10 +28,6 @@ use super::proposal_decision::{
     reject_proposal_operations, rejected_operation, reopen_rejected_operations,
     reopen_withdrawn_proposal, replan_proposal, withdraw_proposal, withdrawable_proposal,
     withdrawn_proposal,
-};
-use super::proposal_generation::{
-    COMPLETE_READY_PARTIAL_PROPOSAL, CONTINUE_PROPOSAL_GENERATION, complete_ready_partial_proposal,
-    continue_proposal_generation, ready_partial_proposal,
 };
 use super::steer_agent_run::{STEER_AGENT_RUN, steer_agent_run, steering};
 use super::structure::{
@@ -250,7 +245,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         let input = UpdateProjectAssistanceInput {
             availability,
             expected_revision,
-            destination: Some(storyos_core::DeploymentDestination::HostFake),
+            destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         };
         let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_ASSISTANCE, input).await;
         let outcome = replayed_outcome(
@@ -449,54 +444,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             .get(/*idx*/ 0);
         withdrawal_records.push(records);
     }
-    let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
-    for (suffix, expected_authoritative_revision_id) in [
-        (0x750a, &generation.other_chapter_revision_id),
-        (
-            0x750b,
-            &generation.complete.expected_authoritative_revision_id,
-        ),
-        (
-            0x750c,
-            &generation.complete.expected_authoritative_revision_id,
-        ),
-    ] {
-        let input = CompleteReadyPartialProposalInput {
-            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
-            ..generation.complete.clone()
-        };
-        let call = issued(
-            &store,
-            &scope,
-            suffix,
-            &COMPLETE_READY_PARTIAL_PROPOSAL,
-            input,
-        )
-        .await;
-        let outcome =
-            replayed_outcome(&store, &admin, &call, complete_ready_partial_proposal).await;
-        observed.push((COMPLETE_READY_PARTIAL_PROPOSAL.kind, outcome));
-    }
-    for (suffix, expected_authoritative_revision_id) in [
-        (0x750d, &generation.other_chapter_revision_id),
-        (
-            0x750e,
-            &generation.complete.expected_authoritative_revision_id,
-        ),
-        (
-            0x750f,
-            &generation.complete.expected_authoritative_revision_id,
-        ),
-    ] {
-        let input = ContinueProposalGenerationInput {
-            expected_generation_state: "ready".to_owned(),
-            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
-            ..generation.continuation.clone()
-        };
-        let call = issued(&store, &scope, suffix, &CONTINUE_PROPOSAL_GENERATION, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, continue_proposal_generation).await;
-        observed.push((CONTINUE_PROPOSAL_GENERATION.kind, outcome));
-    }
 
     let scope = seed_project(&store, "b210").await;
     let (waiting, completed) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
@@ -578,8 +525,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
     let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
-    let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
-    let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let invalid = ("invalid", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
@@ -644,15 +589,6 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             (CommandKind::WithdrawProposal, no_effect),
             (CommandKind::WithdrawProposal, refused),
             (CommandKind::WithdrawProposal, conflicted),
-            (CommandKind::CompleteReadyPartialProposal, conflicted),
-            (
-                CommandKind::CompleteReadyPartialProposal,
-                generation_completed
-            ),
-            (CommandKind::CompleteReadyPartialProposal, refused),
-            (CommandKind::ContinueProposalGeneration, conflicted),
-            (CommandKind::ContinueProposalGeneration, generation_started),
-            (CommandKind::ContinueProposalGeneration, refused),
             (CommandKind::PauseAgentRun, activity_applied),
             (CommandKind::PauseAgentRun, no_effect),
             (CommandKind::PauseAgentRun, conflicted),

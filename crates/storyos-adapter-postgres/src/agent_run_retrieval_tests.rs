@@ -115,6 +115,17 @@ pub(crate) fn stored(reference: &str, status: &str) -> String {
     )
 }
 
+/// The stored complete response that a Retrieve reads: one complete `finish` call.
+pub(crate) fn stored_finish(reference: &str) -> String {
+    let body = format!(
+        r#"{{"id":"{reference}","status":"completed","output":[{{"id":"fc_finish","type":"function_call","status":"completed","call_id":"call_finish_{reference}","name":"finish","arguments":"{{}}"}}],"usage":{{"input_tokens":40,"output_tokens":4}}}}"#
+    );
+    format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
 /// The answer of the route to a Retrieve of a stream that broke before its terminal event
 /// (ADR 0057).
 pub(crate) fn not_found() -> String {
@@ -176,12 +187,15 @@ async fn agent_plan_run(
     (scope, run_id)
 }
 
-/// The status, settlement, and decision of the Run, and the retrieval facts of its Attempts.
+/// The status, settlement, and final answer of the Run, and the retrieval facts of its first
+/// RunStep and of its Attempts.
 pub(crate) async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7] {
     let row = admin
         .query_one(
             "SELECT run.status, run.settlement::text,
-                    decision.payload->'decision'->>'text',
+                    (SELECT last.payload->'decision'->>'text' FROM storyos.model_attempts AS last
+                      WHERE last.run_id = run.run_id AND last.attempt_role = 'decision'
+                      ORDER BY last.decision_position DESC LIMIT 1),
                     decision.payload->'original_result_retrieval'->>'disposition',
                     decision.payload->'original_result_retrieval'->>'keep_reason',
                     decision.payload->'reservation'->>'released',
@@ -193,6 +207,7 @@ pub(crate) async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+                AND decision.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -210,7 +225,8 @@ async fn a_restarted_worker_retrieves_the_committed_reference_once_and_settles_t
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![
         broken_stream("resp_c41"),
-        stored("resp_c41", "completed"),
+        stored_finish("resp_c41"),
+        crate::agent_run_tool_exposure::tests::advisory_stream("resp_c41_closing"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "c41", &base).await;
@@ -245,11 +261,12 @@ async fn a_restarted_worker_retrieves_the_committed_reference_once_and_settles_t
                 Some("settled".to_owned()),
                 None,
                 Some("true".to_owned()),
-                Some("decision:true,retrieval:true".to_owned()),
+                Some("decision:true,retrieval:true,decision:true".to_owned()),
             ],
             vec![
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_c41 HTTP/1.1".to_owned(),
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
             ],
         )
     );

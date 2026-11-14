@@ -14,8 +14,6 @@ CREATE DOMAIN storyos.command_kind AS text CHECK (VALUE IN (
     'acceptProposal',
     'applyAuthorEdit',
     'cancelAgentRun',
-    'completeReadyPartialProposal',
-    'continueProposalGeneration',
     'createAgentRun',
     'createChapter',
     'createEditorSession',
@@ -69,8 +67,6 @@ CREATE DOMAIN storyos.result_kind AS text CHECK (VALUE IN (
     'invalid',
     'no_effect',
     'proposal_closure_changed',
-    'proposal_generation_completed',
-    'proposal_generation_started',
     'proposal_operations_resolved',
     'proposal_revised',
     'refused'
@@ -79,8 +75,6 @@ CREATE DOMAIN storyos.result_kind AS text CHECK (VALUE IN (
 CREATE DOMAIN storyos.receipt_result_kind AS text CHECK (VALUE IN (
     'authoritative_applied',
     'proposal_closure_changed',
-    'proposal_generation_completed',
-    'proposal_generation_started',
     'proposal_operations_resolved',
     'proposal_revised'
 ));
@@ -714,20 +708,6 @@ CREATE TABLE storyos.author_command_admissions (
             AND challenge_consumed_at IS NOT NULL
             AND challenge_expires_at IS NOT NULL)
         OR (command_kind = 'reopenRejectedOperations'::text
-            AND action_class = 'explicit_editor_command'::text
-            AND editor_session_id IS NOT NULL
-            AND writer_generation IS NOT NULL
-            AND chapter_object_id IS NOT NULL
-            AND expected_authoritative_revision_id IS NOT NULL
-            AND expected_proposal_head_revision_ids = '{}'::uuid[]
-            AND target_refs = '{}'::text[]
-            AND observed_ownership_partition IS NULL
-            AND undo_group_id IS NULL
-            AND completed_intent_record_id IS NULL
-            AND local_intent_sequence IS NULL
-            AND challenge_consumed_at IS NOT NULL
-            AND challenge_expires_at IS NOT NULL)
-        OR (command_kind = ANY (ARRAY['completeReadyPartialProposal'::text, 'continueProposalGeneration'::text])
             AND action_class = 'explicit_editor_command'::text
             AND editor_session_id IS NOT NULL
             AND writer_generation IS NOT NULL
@@ -1460,38 +1440,6 @@ CREATE TABLE storyos.domain_receipts (
             AND prior_heads = resulting_heads
             AND expected_heads = resulting_heads)
         OR (command_kind = 'reopenRejectedOperations'::text
-            AND result_kind = ANY (ARRAY['conflicted'::text, 'refused'::text])
-            AND result_payload ? 'reason'::text
-            AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
-        OR (command_kind = 'completeReadyPartialProposal'::text
-            AND result_kind = 'proposal_generation_completed'::text
-            AND result_payload = '{"transition": "generation_completed"}'::jsonb
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
-        OR (command_kind = 'completeReadyPartialProposal'::text
-            AND result_kind = ANY (ARRAY['conflicted'::text, 'refused'::text])
-            AND result_payload ? 'reason'::text
-            AND (result_payload - 'reason'::text) = '{}'::jsonb
-            AND jsonb_typeof((result_payload -> 'reason'::text)) = 'string'::text
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
-        OR (command_kind = 'continueProposalGeneration'::text
-            AND result_kind = 'proposal_generation_started'::text
-            AND result_payload = '{"transition": "generation_started"}'::jsonb
-            AND cardinality(authoritative_revision_ids) = 0
-            AND cardinality(authoritative_commit_ids) = 0
-            AND prior_heads = resulting_heads
-            AND expected_heads = resulting_heads)
-        OR (command_kind = 'continueProposalGeneration'::text
             AND result_kind = ANY (ARRAY['conflicted'::text, 'refused'::text])
             AND result_payload ? 'reason'::text
             AND (result_payload - 'reason'::text) = '{}'::jsonb
@@ -2758,42 +2706,6 @@ BEGIN
         ERRCODE = '23514',
         MESSAGE = 'reopenWithdrawnProposal with zero effect cannot have an authority or Activity relation';
     END IF;
-  ELSIF scoped_command_kind = 'completeReadyPartialProposal'
-        AND scoped_result_kind = 'proposal_generation_completed' THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 1, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'completeReadyPartialProposal completed requires one Author Action and zero authority';
-    END IF;
-  ELSIF scoped_command_kind = 'completeReadyPartialProposal'
-        AND scoped_result_kind IN ('conflicted', 'refused') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'completeReadyPartialProposal with zero effect cannot have an authority or Activity relation';
-    END IF;
-  ELSIF scoped_command_kind = 'continueProposalGeneration'
-        AND scoped_result_kind = 'proposal_generation_started' THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 1, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'continueProposalGeneration started requires one Author Action and zero authority';
-    END IF;
-  ELSIF scoped_command_kind = 'continueProposalGeneration'
-        AND scoped_result_kind IN ('conflicted', 'refused') THEN
-    IF (activity_count, action_count, commit_count, revision_envelope_count,
-        payload_count)
-         <> (0, 0, 0, 0, 0) THEN
-      RAISE EXCEPTION USING
-        ERRCODE = '23514',
-        MESSAGE = 'continueProposalGeneration with zero effect cannot have an authority or Activity relation';
-    END IF;
   ELSIF scoped_command_kind = 'applyAuthorEdit'
         AND scoped_result_kind = 'proposal_revised' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count,
@@ -3657,21 +3569,22 @@ GRANT UPDATE(model_registration_revision) ON TABLE storyos.model_registration_he
 -- Only an active revision changes, and only to quarantined or retired. The quarantine columns are
 -- the Activity record of the quarantine. A tool row joins only the transaction that inserts its
 -- revision, so the tool set of a stored revision does not change.
+-- A Host Tool Registration (ADR 0091) has no server: its server columns are null.
 
 CREATE TABLE storyos.tool_registration_revisions (
     tool_registration_revision uuid NOT NULL,
     registration_kind text NOT NULL,
-    server_url text NOT NULL,
-    server_name text NOT NULL,
-    protocol_revision text NOT NULL,
+    server_url text,
+    server_name text,
+    protocol_revision text,
     adapter_revision text NOT NULL,
     lifecycle text DEFAULT 'active'::text NOT NULL,
     quarantine_differences jsonb,
     quarantined_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT tool_registration_revisions_pkey PRIMARY KEY (tool_registration_revision),
-    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = 'mcp_remote'::text)),
-    CONSTRAINT tool_registration_revisions_identity_check CHECK (char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
+    CONSTRAINT tool_registration_revisions_kind_check CHECK ((registration_kind = ANY (ARRAY['mcp_remote'::text, 'host'::text]))),
+    CONSTRAINT tool_registration_revisions_identity_check CHECK (((registration_kind = 'mcp_remote'::text) = (server_url IS NOT NULL)) AND ((server_url IS NULL) = (server_name IS NULL)) AND ((server_url IS NULL) = (protocol_revision IS NULL)) AND char_length(server_url) BETWEEN 1 AND 2048 AND char_length(server_name) BETWEEN 1 AND 200 AND char_length(protocol_revision) BETWEEN 1 AND 64 AND char_length(adapter_revision) BETWEEN 1 AND 200),
     CONSTRAINT tool_registration_revisions_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'quarantined'::text, 'retired'::text]))),
     CONSTRAINT tool_registration_revisions_quarantine_check CHECK (
         ((quarantine_differences IS NULL) = (quarantined_at IS NULL))
@@ -3803,7 +3716,7 @@ CREATE TABLE storyos.project_external_use_binding_revisions (
     credential_reference text,
     budget_bounds text NOT NULL,
     CONSTRAINT project_external_use_binding_revisio_credential_reference_check CHECK (((char_length(credential_reference) >= 1) AND (char_length(credential_reference) <= 500))),
-    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text]))),
+    CONSTRAINT project_external_use_binding_revisions_budget_bounds_check CHECK ((budget_bounds = ANY (ARRAY['not_required'::text, 'unqualified'::text, 'agent_plan_request_v1'::text, 'agent_plan_request_v2'::text, 'agent_plan_request_v3'::text, 'agent_plan_request_v4'::text]))),
     CONSTRAINT project_external_use_binding_revisions_credential_shape CHECK (((credential_source = 'none'::text) = (credential_reference IS NULL))),
     CONSTRAINT project_external_use_binding_revisions_credential_source_check CHECK ((credential_source = ANY (ARRAY['none'::text, 'operator_quota'::text]))),
     CONSTRAINT project_external_use_binding_revisions_registration_shape CHECK ((num_nonnulls(model_registration_revision, tool_registration_revision) = 1)),
@@ -4119,6 +4032,10 @@ GRANT SELECT,INSERT,UPDATE ON TABLE storyos.model_attempts TO storyos_runtime;
 -- identifier, so a second delivery of the same observation creates no second row. The Tool Gateway
 -- claims each row one time: `attempt` holds the Admission Decision, the Wire Payload Projection
 -- without the key, the Destination Attempt, and the Outbound Disclosure Event. The result text is data.
+-- A ToolCall of the Host Tools (`host_tools`, ADR 0091) executes in StoryOS: it settles with no
+-- Destination Attempt and no Outbound Disclosure Event. A member that failed its validation is a
+-- `refused` row with its arguments text as a JSON string and its reason as its result. When the Run
+-- exposes no Tool with its name, it pins no Registration or ToolSpec (ADR 0091 section 3).
 
 CREATE TABLE storyos.tool_calls (
     owner_user_id uuid NOT NULL,
@@ -4132,9 +4049,9 @@ CREATE TABLE storyos.tool_calls (
     call_position integer NOT NULL,
     caller_route text NOT NULL,
     function_name text NOT NULL,
-    registration_id text NOT NULL,
-    tool_registration_revision uuid NOT NULL,
-    tool_spec_revision text NOT NULL,
+    registration_id text,
+    tool_registration_revision uuid,
+    tool_spec_revision text,
     arguments jsonb NOT NULL,
     argument_digest text NOT NULL,
     state text NOT NULL,
@@ -4155,10 +4072,11 @@ CREATE TABLE storyos.tool_calls (
     CONSTRAINT tool_calls_digest_check CHECK (argument_digest ~ '^sha256:[0-9a-f]{64}$'::text),
     CONSTRAINT tool_calls_name_check CHECK (char_length(function_name) BETWEEN 1 AND 128 AND char_length(registration_id) BETWEEN 1 AND 128 AND char_length(tool_spec_revision) BETWEEN 1 AND 200),
     CONSTRAINT tool_calls_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text, 'refused'::text, 'awaiting_approval'::text]))),
+    CONSTRAINT tool_calls_pin_shape CHECK (((registration_id IS NULL) = (tool_registration_revision IS NULL)) AND ((registration_id IS NULL) = (tool_spec_revision IS NULL)) AND ((registration_id IS NULL) <= (state = 'refused'::text))),
     CONSTRAINT tool_calls_refusal_shape CHECK (((state = ANY (ARRAY['refused'::text, 'awaiting_approval'::text])) = (refusal IS NOT NULL)) AND (char_length(refusal) BETWEEN 1 AND 64)),
-    CONSTRAINT tool_calls_attempt_shape CHECK (((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= (attempt IS NOT NULL)) AND (attempt IS NULL OR jsonb_typeof(attempt) = 'object'::text)),
+    CONSTRAINT tool_calls_attempt_shape CHECK (((destination_attempt_id IS NULL) = (attempt IS NULL)) AND ((state = ANY (ARRAY['pending'::text, 'awaiting_approval'::text])) <= (attempt IS NULL)) AND ((state = ANY (ARRAY['dispatched'::text, 'settled'::text, 'failed'::text, 'unknown'::text])) <= ((attempt IS NOT NULL) OR (registration_id = 'host_tools'::text AND state = 'settled'::text))) AND ((registration_id = 'host_tools'::text) <= (attempt IS NULL)) AND (attempt IS NULL OR jsonb_typeof(attempt) = 'object'::text)),
     CONSTRAINT tool_calls_outcome_shape CHECK (((effect_outcome IS NULL) = ((state = ANY (ARRAY['pending'::text, 'dispatched'::text])) OR (attempt IS NULL))) AND (effect_outcome IS NULL OR jsonb_typeof(effect_outcome) = 'object'::text)),
-    CONSTRAINT tool_calls_result_shape CHECK (((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND (result_text IS NULL OR state = 'settled'::text) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (result_bytes BETWEEN 0 AND 262144)),
+    CONSTRAINT tool_calls_result_shape CHECK (((result_text IS NULL) = (result_digest IS NULL)) AND ((result_text IS NULL) = (result_bytes IS NULL)) AND (result_text IS NULL OR state = ANY (ARRAY['settled'::text, 'refused'::text])) AND (result_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (result_bytes BETWEEN 0 AND 262144)),
     CONSTRAINT tool_calls_owner_user_id_project_id_run_id_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
     CONSTRAINT tool_calls_owner_user_id_project_id_model_attempt_id_fkey FOREIGN KEY (owner_user_id, project_id, model_attempt_id) REFERENCES storyos.model_attempts(owner_user_id, project_id, model_attempt_id) MATCH FULL
 );
@@ -4369,7 +4287,7 @@ CREATE TABLE storyos.proposal_revisions (
     CONSTRAINT proposal_revisions_candidate_blocks_check CHECK (((candidate_blocks IS NULL) OR ((jsonb_typeof(candidate_blocks) = 'array'::text) AND (jsonb_array_length(candidate_blocks) > 0)))),
     CONSTRAINT proposal_revisions_closure_check CHECK ((closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))),
     CONSTRAINT proposal_revisions_edited_operation_evidence CHECK (((edited_operation_id IS NULL) = (prior_operation_candidate_text IS NULL))),
-    CONSTRAINT proposal_revisions_generation_check CHECK ((generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text]))),
+    CONSTRAINT proposal_revisions_generation_check CHECK ((generation = ANY (ARRAY['ready'::text]))),
     CONSTRAINT proposal_revisions_validation_check CHECK ((validation = ANY (ARRAY['pending'::text, 'valid'::text, 'invalid'::text, 'conflicted'::text]))),
     CONSTRAINT proposal_revisions_pkey PRIMARY KEY (owner_user_id, project_id, proposal_id, revision_id),
     CONSTRAINT proposal_revisions_owner_user_id_project_id_base_authorita_fkey FOREIGN KEY (owner_user_id, project_id, base_authoritative_revision_id) REFERENCES storyos.authoritative_revisions(owner_user_id, project_id, revision_id) MATCH FULL,
@@ -4599,7 +4517,7 @@ CREATE TABLE storyos.proposal_rejection_receipts (
     preserved_validation text,
     preserved_closure text,
     CONSTRAINT proposal_rejection_receipts_check CHECK (((result = 'proposal_operations_resolved'::text) = (rejection_reason = 'author_declined'::text))),
-    CONSTRAINT proposal_rejection_receipts_check1 CHECK ((((preserved_generation IS NULL) AND (preserved_validation IS NULL) AND (preserved_closure IS NULL)) OR ((result = 'proposal_operations_resolved'::text) AND (preserved_generation IS NOT NULL) AND (preserved_validation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text])) AND (preserved_validation = ANY (ARRAY['pending'::text, 'valid'::text, 'invalid'::text, 'conflicted'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
+    CONSTRAINT proposal_rejection_receipts_check1 CHECK ((((preserved_generation IS NULL) AND (preserved_validation IS NULL) AND (preserved_closure IS NULL)) OR ((result = 'proposal_operations_resolved'::text) AND (preserved_generation IS NOT NULL) AND (preserved_validation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['ready'::text])) AND (preserved_validation = ANY (ARRAY['pending'::text, 'valid'::text, 'invalid'::text, 'conflicted'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
     CONSTRAINT proposal_rejection_receipts_result_check CHECK ((result = ANY (ARRAY['proposal_operations_resolved'::text, 'conflicted'::text, 'refused'::text]))),
     CONSTRAINT proposal_rejection_receipts_pkey PRIMARY KEY (owner_user_id, project_id, rejection_receipt_id),
     CONSTRAINT proposal_rejection_receipts_owner_user_id_project_id_propo_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id) REFERENCES storyos.proposals(owner_user_id, project_id, proposal_id) MATCH FULL,
@@ -4660,7 +4578,7 @@ CREATE TABLE storyos.proposal_operation_reopenings (
     preserved_generation text,
     preserved_closure text,
     CONSTRAINT proposal_operation_reopenings_author_action_sequence_check CHECK (((author_action_sequence >= (1)::numeric) AND (author_action_sequence <= '18446744073709551615'::numeric))),
-    CONSTRAINT proposal_operation_reopenings_check CHECK ((((preserved_generation IS NULL) AND (preserved_closure IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
+    CONSTRAINT proposal_operation_reopenings_check CHECK ((((preserved_generation IS NULL) AND (preserved_closure IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['ready'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
     CONSTRAINT proposal_operation_reopenings_prior_resolution_check CHECK ((prior_resolution = 'rejected'::text)),
     CONSTRAINT proposal_operation_reopenings_resulting_resolution_check CHECK ((resulting_resolution = 'pending'::text)),
     CONSTRAINT proposal_operation_reopenings_owner_user_id_project_id_reje_key UNIQUE (owner_user_id, project_id, rejection_event_id),
@@ -4728,58 +4646,7 @@ CREATE POLICY proposal_stream_events_exact_scope ON storyos.proposal_stream_even
 
 GRANT SELECT,INSERT ON TABLE storyos.proposal_stream_events TO storyos_runtime;
 
-CREATE TABLE storyos.editor_input_fences (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    editor_input_fence_id uuid NOT NULL,
-    editor_session_id uuid NOT NULL,
-    writer_generation bigint NOT NULL,
-    local_intent_sequence bigint NOT NULL,
-    proposal_id uuid NOT NULL,
-    generation_id uuid NOT NULL,
-    CONSTRAINT editor_input_fences_local_intent_sequence_check CHECK ((local_intent_sequence >= 1)),
-    CONSTRAINT editor_input_fences_writer_generation_check CHECK ((writer_generation >= 1)),
-    CONSTRAINT editor_input_fences_owner_user_id_project_id_generation_id_key UNIQUE (owner_user_id, project_id, generation_id),
-    CONSTRAINT editor_input_fences_pkey PRIMARY KEY (owner_user_id, project_id, editor_input_fence_id),
-    CONSTRAINT editor_input_fences_owner_user_id_project_id_generation_id_fkey FOREIGN KEY (owner_user_id, project_id, generation_id) REFERENCES storyos.proposal_generations(owner_user_id, project_id, generation_id) MATCH FULL,
-    CONSTRAINT editor_input_fences_owner_user_id_project_id_proposal_id_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id) REFERENCES storyos.proposals(owner_user_id, project_id, proposal_id) MATCH FULL
-);
-
-ALTER TABLE storyos.editor_input_fences ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.editor_input_fences FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY editor_input_fences_exact_scope ON storyos.editor_input_fences USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.editor_input_fences TO storyos_runtime;
-
-CREATE TABLE storyos.proposal_pause_fences (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    proposal_pause_fence_id uuid NOT NULL,
-    proposal_id uuid NOT NULL,
-    generation_id uuid NOT NULL,
-    proposal_revision_id uuid NOT NULL,
-    admitted_through_stream_seq bigint NOT NULL,
-    editor_input_fence_id uuid NOT NULL,
-    projection_checkpoint_id uuid NOT NULL,
-    CONSTRAINT proposal_pause_fences_admitted_through_stream_seq_check CHECK ((admitted_through_stream_seq >= 0)),
-    CONSTRAINT proposal_pause_fences_owner_user_id_project_id_generation_i_key UNIQUE (owner_user_id, project_id, generation_id),
-    CONSTRAINT proposal_pause_fences_pkey PRIMARY KEY (owner_user_id, project_id, proposal_pause_fence_id),
-    CONSTRAINT proposal_pause_fences_owner_user_id_project_id_editor_inpu_fkey FOREIGN KEY (owner_user_id, project_id, editor_input_fence_id) REFERENCES storyos.editor_input_fences(owner_user_id, project_id, editor_input_fence_id) MATCH FULL,
-    CONSTRAINT proposal_pause_fences_owner_user_id_project_id_generation__fkey FOREIGN KEY (owner_user_id, project_id, generation_id) REFERENCES storyos.proposal_generations(owner_user_id, project_id, generation_id) MATCH FULL,
-    CONSTRAINT proposal_pause_fences_owner_user_id_project_id_proposal_id_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id, proposal_revision_id) REFERENCES storyos.proposal_revisions(owner_user_id, project_id, proposal_id, revision_id) MATCH FULL
-);
-
-ALTER TABLE storyos.proposal_pause_fences ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.proposal_pause_fences FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY proposal_pause_fences_exact_scope ON storyos.proposal_pause_fences USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.proposal_pause_fences TO storyos_runtime;
-
--- Proposal Generation heads and transitions
+-- Proposal Generation heads
 
 CREATE TABLE storyos.proposal_generation_heads (
     owner_user_id uuid NOT NULL,
@@ -4798,43 +4665,6 @@ ALTER TABLE storyos.proposal_generation_heads FORCE ROW LEVEL SECURITY;
 CREATE POLICY proposal_generation_heads_exact_scope ON storyos.proposal_generation_heads USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
 
 GRANT SELECT,INSERT,UPDATE ON TABLE storyos.proposal_generation_heads TO storyos_runtime;
-
-CREATE TABLE storyos.proposal_generation_transitions (
-    owner_user_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    transition_id uuid NOT NULL,
-    proposal_id uuid NOT NULL,
-    proposal_revision_id uuid NOT NULL,
-    prior_generation_id uuid NOT NULL,
-    resulting_generation_id uuid NOT NULL,
-    prior_generation_state text NOT NULL,
-    resulting_generation_state text NOT NULL,
-    prior_run_id uuid NOT NULL,
-    resulting_run_id uuid NOT NULL,
-    preserved_validation text NOT NULL,
-    preserved_closure text NOT NULL,
-    preserved_operation_resolution text NOT NULL,
-    receipt_id uuid NOT NULL,
-    author_action_sequence numeric(20,0) NOT NULL,
-    CONSTRAINT proposal_generation_transition_resulting_generation_state_check CHECK ((resulting_generation_state = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text]))),
-    CONSTRAINT proposal_generation_transitions_author_action_sequence_check CHECK (((author_action_sequence >= (1)::numeric) AND (author_action_sequence <= '18446744073709551615'::numeric))),
-    CONSTRAINT proposal_generation_transitions_prior_generation_state_check CHECK ((prior_generation_state = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text]))),
-    CONSTRAINT proposal_generation_transitions_pkey PRIMARY KEY (owner_user_id, project_id, transition_id),
-    CONSTRAINT proposal_generation_transiti_owner_user_id_project_id_pri_fkey1 FOREIGN KEY (owner_user_id, project_id, prior_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
-    CONSTRAINT proposal_generation_transiti_owner_user_id_project_id_res_fkey1 FOREIGN KEY (owner_user_id, project_id, resulting_run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
-    CONSTRAINT proposal_generation_transitio_owner_user_id_project_id_pri_fkey FOREIGN KEY (owner_user_id, project_id, prior_generation_id) REFERENCES storyos.proposal_generations(owner_user_id, project_id, generation_id) MATCH FULL,
-    CONSTRAINT proposal_generation_transitio_owner_user_id_project_id_pro_fkey FOREIGN KEY (owner_user_id, project_id, proposal_id, proposal_revision_id) REFERENCES storyos.proposal_revisions(owner_user_id, project_id, proposal_id, revision_id) MATCH FULL,
-    CONSTRAINT proposal_generation_transitio_owner_user_id_project_id_rec_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
-    CONSTRAINT proposal_generation_transitio_owner_user_id_project_id_res_fkey FOREIGN KEY (owner_user_id, project_id, resulting_generation_id) REFERENCES storyos.proposal_generations(owner_user_id, project_id, generation_id) MATCH FULL
-);
-
-ALTER TABLE storyos.proposal_generation_transitions ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE storyos.proposal_generation_transitions FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY proposal_generation_transitions_exact_scope ON storyos.proposal_generation_transitions USING (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid))) WITH CHECK (((owner_user_id = (NULLIF(current_setting('storyos.owner_user_id'::text, true), ''::text))::uuid) AND (project_id = (NULLIF(current_setting('storyos.project_id'::text, true), ''::text))::uuid)));
-
-GRANT SELECT,INSERT ON TABLE storyos.proposal_generation_transitions TO storyos_runtime;
 
 -- Proposal compensation identity
 
@@ -4887,7 +4717,7 @@ CREATE TABLE storyos.proposal_replans (
     preserved_generation text,
     preserved_closure text,
     CONSTRAINT proposal_replans_author_action_sequence_check CHECK (((author_action_sequence >= (1)::numeric) AND (author_action_sequence <= '18446744073709551615'::numeric))),
-    CONSTRAINT proposal_replans_check CHECK ((((preserved_generation IS NULL) AND (preserved_closure IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
+    CONSTRAINT proposal_replans_check CHECK ((((preserved_generation IS NULL) AND (preserved_closure IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_closure IS NOT NULL) AND (preserved_generation = ANY (ARRAY['ready'::text])) AND (preserved_closure = ANY (ARRAY['open'::text, 'withdrawn'::text, 'superseded'::text]))))),
     CONSTRAINT proposal_replans_source_condition_kind_check CHECK ((source_condition_kind = ANY (ARRAY['proposal_conflict'::text, 'proposal_recovery_conflict'::text]))),
     CONSTRAINT proposal_replans_owner_user_id_project_id_replan_receipt_id_key UNIQUE (owner_user_id, project_id, replan_receipt_id),
     CONSTRAINT proposal_replans_owner_user_id_project_id_source_condition__key UNIQUE (owner_user_id, project_id, source_condition_ref),
@@ -5012,7 +4842,7 @@ CREATE TABLE storyos.proposal_withdrawals (
     CONSTRAINT proposal_withdrawals_author_action_sequence_check CHECK (((author_action_sequence IS NULL) OR ((author_action_sequence >= (1)::numeric) AND (author_action_sequence <= '18446744073709551615'::numeric)))),
     CONSTRAINT proposal_withdrawals_check CHECK (((withdrawal_reason = 'author_withdrew'::text) = (author_action_sequence IS NOT NULL))),
     CONSTRAINT proposal_withdrawals_check1 CHECK (((author_note IS NULL) OR (withdrawal_reason = 'author_withdrew'::text))),
-    CONSTRAINT proposal_withdrawals_check2 CHECK ((((preserved_generation IS NULL) AND (preserved_validation IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_validation IS NOT NULL) AND (preserved_generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text])) AND (preserved_validation = ANY (ARRAY['pending'::text, 'valid'::text, 'invalid'::text, 'conflicted'::text]))))),
+    CONSTRAINT proposal_withdrawals_check2 CHECK ((((preserved_generation IS NULL) AND (preserved_validation IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_validation IS NOT NULL) AND (preserved_generation = ANY (ARRAY['ready'::text])) AND (preserved_validation = ANY (ARRAY['pending'::text, 'valid'::text, 'invalid'::text, 'conflicted'::text]))))),
     CONSTRAINT proposal_withdrawals_withdrawal_reason_check CHECK ((withdrawal_reason = ANY (ARRAY['author_withdrew'::text, 'current_producer_withdrew'::text]))),
     CONSTRAINT proposal_withdrawals_owner_user_id_project_id_withdrawal_re_key UNIQUE (owner_user_id, project_id, withdrawal_receipt_id),
     CONSTRAINT proposal_withdrawals_pkey PRIMARY KEY (owner_user_id, project_id, withdrawal_event_id),
@@ -5086,7 +4916,7 @@ CREATE TABLE storyos.proposal_withdrawal_reopenings (
     reopen_receipt_id uuid NOT NULL,
     author_action_sequence numeric(20,0) NOT NULL,
     CONSTRAINT proposal_withdrawal_reopenings_author_action_sequence_check CHECK (((author_action_sequence >= (1)::numeric) AND (author_action_sequence <= '18446744073709551615'::numeric))),
-    CONSTRAINT proposal_withdrawal_reopenings_check CHECK ((((preserved_generation IS NULL) AND (preserved_operation_resolution IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_operation_resolution IS NOT NULL) AND (preserved_generation = ANY (ARRAY['generating'::text, 'ready_partial'::text, 'ready'::text])) AND (preserved_operation_resolution = ANY (ARRAY['pending'::text, 'applied'::text, 'rejected'::text]))))),
+    CONSTRAINT proposal_withdrawal_reopenings_check CHECK ((((preserved_generation IS NULL) AND (preserved_operation_resolution IS NULL)) OR ((preserved_generation IS NOT NULL) AND (preserved_operation_resolution IS NOT NULL) AND (preserved_generation = ANY (ARRAY['ready'::text])) AND (preserved_operation_resolution = ANY (ARRAY['pending'::text, 'applied'::text, 'rejected'::text]))))),
     CONSTRAINT proposal_withdrawal_reopening_owner_user_id_project_id_reop_key UNIQUE (owner_user_id, project_id, reopen_receipt_id),
     CONSTRAINT proposal_withdrawal_reopenings_pkey PRIMARY KEY (owner_user_id, project_id, reopen_event_id),
     CONSTRAINT proposal_withdrawal_reopenin_owner_user_id_project_id_pro_fkey1 FOREIGN KEY (owner_user_id, project_id, proposal_id, resulting_proposal_revision_id) REFERENCES storyos.proposal_revisions(owner_user_id, project_id, proposal_id, revision_id) MATCH FULL,

@@ -21,7 +21,33 @@ pub(crate) enum CompactionAdvance {
     TooLong,
 }
 
-/// Advances the active compaction of the claimed AgentRun before its first decision request.
+/// Whether the active RunStep of `run` can compact. One AgentRun compacts at most once: at the
+/// first RunStep whose request compacts. Each later RunStep continues the chain of the later
+/// request (ADR 0055).
+pub(crate) async fn compacts_at_active_step(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<bool, CompleteAgentRunError> {
+    let position = client
+        .query_opt(
+            "SELECT decision_position::text FROM storyos.context_assembly_manifests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND manifest_role = 'compaction'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(work_error)?
+        .map(|row| row.get::<_, String>(/*idx*/ 0));
+    Ok(position.is_none_or(|position| position == run.decision_position))
+}
+
+/// Advances the active compaction of the claimed AgentRun before the decision request of its
+/// active RunStep.
 pub(crate) async fn advance_active_compaction(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -69,6 +95,7 @@ pub(crate) async fn advance_active_compaction(
                         run,
                         RequestAttempt::New,
                         chain.reference,
+                        Some(&chain.model_attempt_id),
                     )
                     .await?,
                 )));
@@ -80,8 +107,15 @@ pub(crate) async fn advance_active_compaction(
                 model_attempt_id: summary.model_attempt_id,
             });
             return Ok(CompactionAdvance::Dispatch(Box::new(
-                summary::summary_request(client, claim, run, attempt, summary.prior_reference)
-                    .await?,
+                summary::summary_request(
+                    client,
+                    claim,
+                    run,
+                    attempt,
+                    summary.prior_reference,
+                    summary.prior_model_attempt_id.as_deref(),
+                )
+                .await?,
             )));
         }
         (CompactionStep::InstallOrRefuse, Some(staged), _, _) => CompactionAdvance::Decide {
@@ -420,3 +454,7 @@ fn work_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
 fn read_error(error: impl std::error::Error + Send + Sync + 'static) -> CreateAgentRunError {
     CreateAgentRunError::Unavailable(Box::new(error))
 }
+
+#[cfg(test)]
+#[path = "agent_run_compaction_step_tests.rs"]
+mod step_tests;

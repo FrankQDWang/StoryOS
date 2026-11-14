@@ -28,9 +28,6 @@ use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::proposal_generation::{
-    complete_ready_partial_proposal_call, continue_proposal_generation_call,
-};
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
@@ -434,18 +431,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
-            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7540).await,
-        )
-        .await,
-        failed_then_settled(
-            &store,
-            &admin,
             &pause_agent_run_call(&store, &admin, /*base*/ 0xb230).await,
         )
         .await,
@@ -493,7 +478,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 8]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 6]);
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::NoEffect));

@@ -343,34 +343,6 @@ export type ReopenRejectedOperationsEffect = { "kind": "resolved", author_action
 
 export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };
 
-export type CompleteReadyPartialProposalInput = { proposal_revision_id: string, generation_id: string, expected_candidate_digest: string, last_applied_stream_seq: string, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type CompleteReadyPartialProposalRequest = { command_schema: string, complete_ready_partial_proposal_input: CompleteReadyPartialProposalInput, };
-
-export type ContinueProposalGenerationInput = { proposal_revision_id: string, prior_generation_id: string, expected_generation_state: string, expected_candidate_digest: string, selected_pending_operation_ids: Array<string>, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type ContinueProposalGenerationRequest = { command_schema: string, continue_proposal_generation_input: ContinueProposalGenerationInput, };
-
-export type ProposalGenerationReceiptResult = "proposal_generation_completed" | "proposal_generation_started" | "conflicted" | "refused";
-
-export type ProposalGenerationReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ProposalGenerationReceiptResult, created_at: string, };
-
-export type CompleteReadyPartialProposalRefusalReason = "stale_proposal_revision" | "not_eligible" | "not_ready_partial" | "stale_generation" | "stale_candidate";
-
-export type ContinueProposalGenerationRefusalReason = "stale_proposal_revision" | "not_eligible" | "not_continuable" | "stale_generation" | "stale_candidate" | "operation_not_pending" | "duplicate_identities";
-
-export type ProposalGenerationConflictReason = "changed_head";
-
-export type ProposalGenerationUndoDisposition = "forward";
-
-export type CompleteReadyPartialProposalEffect = { "kind": "completed", author_action_sequence: string, undo_disposition: ProposalGenerationUndoDisposition, generation_id: string, prior_generation_state: string, resulting_generation_state: string, preserved_validation: string, preserved_closure: string, preserved_operation_resolution: string, generation_event_ref: string, } | { "kind": "conflicted", reason: ProposalGenerationConflictReason, } | { "kind": "refused", reason: CompleteReadyPartialProposalRefusalReason, };
-
-export type ContinueProposalGenerationEffect = { "kind": "started", author_action_sequence: string, undo_disposition: ProposalGenerationUndoDisposition, prior_generation_id: string, new_generation_id: string, prior_generation_state: string, resulting_generation_state: string, prior_run_id: string, resulting_run_id: string, preserved_validation: string, preserved_closure: string, preserved_operation_resolution: string, generation_event_ref: string, } | { "kind": "conflicted", reason: ProposalGenerationConflictReason, } | { "kind": "refused", reason: ContinueProposalGenerationRefusalReason, };
-
-export type CompleteReadyPartialProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ProposalGenerationReceipt, project: ControlledProject, effect: CompleteReadyPartialProposalEffect, };
-
-export type ContinueProposalGenerationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ProposalGenerationReceipt, project: ControlledProject, effect: ContinueProposalGenerationEffect, };
-
 export type UndoLatestAuthorActionInput = { expected_author_undo_frontier_sequence: string, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type UndoLatestAuthorActionRequest = { command_schema: string, undo_latest_author_action_input: UndoLatestAuthorActionInput, };
@@ -467,7 +439,9 @@ export type ToolCallOutcomeInspect = "pending" | "settled" | "failed" | "unknown
 
 export type ToolCallInspect = { "kind": "search", query: string, outcome: ToolCallOutcomeInspect, } | { "kind": "page_read", urls: Array<string>, outcome: ToolCallOutcomeInspect, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, } | { "kind": "research_synthesis", decision_id: string, selected: boolean, research_artifact_id: string, continuation: OptionalContinuationInspect, };
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "tool_request", decision_id: string, calls: Array<ToolCallInspect>, } | { "kind": "research_synthesis", decision_id: string, selected: boolean, research_artifact_id: string, continuation: OptionalContinuationInspect, };
+
+export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "answer", decision_id: string, text: string, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
@@ -501,7 +475,7 @@ export type CapturedMemorySettingsInspect = { "kind": "available", memory_settin
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
@@ -731,10 +705,6 @@ export declare function digestReopenWithdrawnProposal(request: ReopenWithdrawnPr
 export declare function reopenWithdrawnProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenWithdrawnProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenWithdrawnProposalResponse>;
 export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;
-export declare function digestCompleteReadyPartialProposal(request: CompleteReadyPartialProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function completeReadyPartialProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: CompleteReadyPartialProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<CompleteReadyPartialProposalResponse>;
-export declare function digestContinueProposalGeneration(request: ContinueProposalGenerationRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function continueProposalGeneration(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ContinueProposalGenerationRequest; idempotencyKey: string; antiForgery: string }): Promise<ContinueProposalGenerationResponse>;
 export declare function digestUndoLatestAuthorAction(request: UndoLatestAuthorActionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { projectId: string; request: UndoLatestAuthorActionRequest; idempotencyKey: string; antiForgery: string }): Promise<UndoLatestAuthorActionResponse>;
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

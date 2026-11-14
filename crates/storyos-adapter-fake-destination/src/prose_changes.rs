@@ -1,13 +1,13 @@
 //! Fake-destination prose changes for the exact declared targets.
 
-use storyos_application::DeclaredTarget;
+use storyos_application::{CreateRequest, DeclaredTarget};
 use storyos_core::{
     CONTEXT_ITEM_TOKEN_LIMIT, DeclaredLocation, DeclaredTargetKind, PROSE_CHANGE_TEXT,
     ProseChangeCandidate, SECOND_PROSE_CHANGE_TEXT,
 };
 
 /// Produce complete fake-destination changes for the exact declared targets.
-pub(crate) fn produce_fake_prose_changes(
+fn produce_fake_prose_changes(
     targets: &[DeclaredLocation],
     author_message: &str,
 ) -> Vec<ProseChangeCandidate> {
@@ -37,8 +37,6 @@ pub(crate) fn produce_fake_prose_changes(
             first.explanation.clear();
         } else if author_message.ends_with("SCRIPT:undeclared_location") {
             first.manuscript_block_id = first.chapter_id.clone();
-        } else if author_message.ends_with("SCRIPT:stale_location_base") {
-            first.base_authoritative_revision_id = first.manuscript_block_id.clone();
         } else if author_message.ends_with("SCRIPT:oversized_explanation") {
             first.explanation = "a".repeat(CONTEXT_ITEM_TOKEN_LIMIT as usize + 1);
         }
@@ -55,6 +53,36 @@ pub(crate) fn produce_fake_prose_changes(
         candidates.clear();
     }
     candidates
+}
+
+/// The changes of one fake prose change for `request`: the revision of the last referenced
+/// candidate with its growth, or else a change of each declared target.
+pub(crate) fn produce_fake_changes(
+    request: &CreateRequest,
+    author_message: &str,
+) -> Vec<ProseChangeCandidate> {
+    let candidate = request
+        .declared_targets
+        .iter()
+        .rfind(|target| target.kind == DeclaredTargetKind::PendingCandidate);
+    let Some(candidate) = candidate else {
+        let targets: Vec<_> = request
+            .declared_targets
+            .iter()
+            .map(DeclaredTarget::location)
+            .collect();
+        return produce_fake_prose_changes(&targets, author_message);
+    };
+    let mut changes = produce_fake_candidate_revision(
+        &[candidate.location()],
+        author_message,
+        &candidate.block_text,
+    );
+    changes.extend(produce_fake_growth(
+        &request.declared_targets,
+        author_message,
+    ));
+    changes
 }
 
 /// Revise the exact fresh candidate through the fake destination's bounded result contract.
@@ -79,7 +107,7 @@ pub(crate) fn produce_fake_candidate_revision(
 /// The other changes of a fake Proposal Growth reply (ADR 0071). `SCRIPT:grow_proposal` changes
 /// each joinable block. `SCRIPT:grow_gap` leaves out the joinable blocks next to the candidate.
 /// `SCRIPT:grow_unjoinable` changes the first Chapter block that is not joinable.
-pub(crate) fn produce_fake_growth(
+fn produce_fake_growth(
     targets: &[DeclaredTarget],
     author_message: &str,
 ) -> Vec<ProseChangeCandidate> {

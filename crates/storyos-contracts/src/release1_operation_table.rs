@@ -351,8 +351,6 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &proposal_recovery_rows::REPLAN_PROPOSAL_ROW,
     &proposal_recovery_rows::REOPEN_WITHDRAWN_PROPOSAL_ROW,
     &proposal_recovery_rows::REOPEN_REJECTED_OPERATIONS_ROW,
-    &generation_rows::COMPLETE_READY_PARTIAL_PROPOSAL_ROW,
-    &generation_rows::CONTINUE_PROPOSAL_GENERATION_ROW,
     &author_edit_rows::UNDO_LATEST_AUTHOR_ACTION_ROW,
     &agent_run_rows::CREATE_AGENT_RUN_ROW,
     &agent_run_rows::GET_AGENT_RUN_ROW,

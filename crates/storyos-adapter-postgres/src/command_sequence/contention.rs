@@ -99,7 +99,7 @@ impl RefusalCode for AcceptanceRefusalReason {
 }
 
 /// Whether a store fault comes from a serialization failure, a unique violation, or a deadlock.
-pub(super) fn contended(error: &ProjectCommandError) -> bool {
+pub(crate) fn contended(error: &ProjectCommandError) -> bool {
     let ProjectCommandError::Unavailable(source) = error else {
         return false;
     };

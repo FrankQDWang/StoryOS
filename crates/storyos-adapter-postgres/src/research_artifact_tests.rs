@@ -18,10 +18,10 @@ use crate::agent_run_retrieval::tests::{
     adapter, broken_stream, destination, real_run, research_run, stored,
 };
 use crate::agent_run_tool_dispatch::tests::{Hooked, exa_tools, mcp_replies, point_mcp, reply};
-use crate::agent_run_tool_exposure::tests::sse;
+use crate::agent_run_tool_exposure::tests::{advisory_stream, finish_stream};
 use crate::command_sequence::tests::{REJECT_PROPOSAL_OPERATIONS, issued, seed_project};
 use crate::project_archive_build::tests::{export_command, zip_store_files};
-use crate::research_source::tests::{SEARCH_TEXT, calls_stream};
+use crate::research_source::tests::{SEARCH_TEXT, calls_stream, calls_stream_in};
 use crate::set_current_chapter_authority_tests::open_session_request;
 
 const SEARCH: &str = r#"{"query":"tide tables of 1890","result_count":null}"#;
@@ -76,20 +76,6 @@ pub(crate) async fn computed(
     (base, served)
 }
 
-/// A stream that reports `reference` and ends with one message of `text` in `status`.
-pub(crate) fn message_stream(reference: &str, text: &str, status: &str) -> String {
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": status, "content": [{"type": "output_text", "text": text}]});
-    sse(&[
-        json!({"type": "response.created",
-               "response": {"id": reference, "status": "in_progress", "output": []}}),
-        json!({"type": "response.output_item.done", "output_index": 0, "item": message}),
-        json!({"type": format!("response.{status}"), "response": {
-            "id": reference, "status": status, "output": [message],
-            "usage": {"input_tokens": 40, "output_tokens": 12}}}),
-    ])
-}
-
 /// The identities that the `tool_sources` tags of the function outputs of `body` name after
 /// `tag`, in order.
 pub(crate) fn tagged(body: &Value, tag: &str) -> Vec<String> {
@@ -108,17 +94,32 @@ pub(crate) fn tagged(body: &Value, tag: &str) -> Vec<String> {
         .collect()
 }
 
-/// A synthesis reply in `status` whose claims cite the tagged identities that `cite` selects.
+/// A synthesis reply in `status`: a `submit_research` call whose claims cite the tagged
+/// identities that `cite` selects, and a `finish` call.
 fn synthesis(reference: &str, status: &'static str, cite: Cite) -> Reply {
     let reference = reference.to_owned();
     Box::new(move |body| {
         let claims = cite(&tagged(body, "<source id=\""), &tagged(body, "<gap id=\""));
-        let text = json!({"kind": "research_synthesis", "summary": "The tides of 1890.",
+        let arguments = json!({"summary": "The tides of 1890.",
             "claims": claims.iter()
                 .map(|(text, citations)| json!({"text": text, "citations": citations}))
-                .collect::<Vec<_>>()});
-        message_stream(&reference, &text.to_string(), status)
+                .collect::<Vec<_>>()})
+        .to_string();
+        calls_stream_in(
+            &reference,
+            &[
+                ("call_submit", "submit_research", &arguments),
+                ("call_finish", "finish", "{}"),
+            ],
+            status,
+        )
     })
+}
+
+/// The reply of `reference` to a closing request: the final answer.
+fn closing(reference: &str) -> Reply {
+    let reference = reference.to_owned();
+    Box::new(move |_| advisory_stream(&reference))
 }
 
 /// Settles one research Run whose first response requests `call`. The fake MCP server answers
@@ -227,7 +228,8 @@ async fn expected(
                JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = artifact.run_id AND attempt.decision_position = 1
                 AND attempt.attempt_role = 'decision'
-               JOIN storyos.tool_calls AS call ON call.run_id = artifact.run_id
+               JOIN storyos.tool_calls AS call
+                 ON call.run_id = artifact.run_id AND call.call_id = 'call_01'
               WHERE artifact.research_artifact_id = $1::text::uuid",
             &[&artifact_id],
         )
@@ -295,7 +297,10 @@ async fn a_valid_synthesis_becomes_one_immutable_artifact_with_its_lineage_and_c
         .await;
     let (store, admin, scope, run_id) =
         synthesis_run("c31", ("web_search", SEARCH), SEARCH_TEXT, |_| {
-            vec![synthesis("resp_c31_2", "completed", two_snapshot_claims)]
+            vec![
+                synthesis("resp_c31_2", "completed", two_snapshot_claims),
+                closing("resp_c31_3"),
+            ]
         })
         .await;
     let id = artifact_id(&store, &scope, &run_id).await;
@@ -385,9 +390,12 @@ async fn a_synthesis_that_cites_only_gaps_is_a_partial_artifact() {
         .await;
     let (store, admin, scope, run_id) =
         synthesis_run("c32", ("web_fetch", FETCH), FAILED_PAGE, |_| {
-            vec![synthesis("resp_c32_2", "completed", |_, gaps| {
-                vec![("No tide table is available.", gaps.to_vec())]
-            })]
+            vec![
+                synthesis("resp_c32_2", "completed", |_, gaps| {
+                    vec![("No tide table is available.", gaps.to_vec())]
+                }),
+                closing("resp_c32_3"),
+            ]
         })
         .await;
     let id = artifact_id(&store, &scope, &run_id).await;
@@ -418,30 +426,40 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
         .lock()
         .await;
     let mut observed = Vec::new();
-    for (prefix, reply) in [
+    // The model reads the refusal of the call, so its next `finish` call counts.
+    let finish = |reference: &'static str| -> Reply { Box::new(move |_| finish_stream(reference)) };
+    for (prefix, replies) in [
         (
             "c33",
-            synthesis("resp_c33_2", "completed", |sources, _| {
-                vec![
-                    ("High water came at 10.42.", vec![sources[0].clone()]),
-                    (
-                        "The run never read this page.",
-                        vec!["018f0000-0000-7001-8000-0000000c33ff".to_owned()],
-                    ),
-                ]
-            }),
+            vec![
+                synthesis("resp_c33_2", "completed", |sources, _| {
+                    vec![
+                        ("High water came at 10.42.", vec![sources[0].clone()]),
+                        (
+                            "The run never read this page.",
+                            vec!["018f0000-0000-7001-8000-0000000c33ff".to_owned()],
+                        ),
+                    ]
+                }),
+                finish("resp_c33_3"),
+                closing("resp_c33_4"),
+            ],
         ),
+        // An incomplete response with calls is an invalid tool request. The Host executes none of
+        // its calls, and the Run completes with no result and no refusal (ADR 0091 section 3).
         (
             "c34",
-            synthesis("resp_c34_2", "incomplete", two_snapshot_claims),
+            vec![synthesis("resp_c34_2", "incomplete", two_snapshot_claims)],
         ),
     ] {
         let (_store, admin, _scope, run_id) =
-            synthesis_run(prefix, ("web_search", SEARCH), SEARCH_TEXT, |_| vec![reply]).await;
+            synthesis_run(prefix, ("web_search", SEARCH), SEARCH_TEXT, |_| replies).await;
         let row = admin
             .query_one(
                 "SELECT run.status, attempt.payload #>> '{decision,kind}',
-                        attempt.payload ->> 'synthesis_refusal'
+                        (SELECT call.refusal FROM storyos.tool_calls AS call
+                          WHERE call.run_id = run.run_id AND call.call_id = 'call_submit'),
+                        run.settlement ->> 'capability'
                    FROM storyos.agent_runs AS run
                    JOIN storyos.model_attempts AS attempt
                      ON attempt.run_id = run.run_id AND attempt.decision_position = 1
@@ -454,6 +472,7 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
             row.get::<_, String>(0),
             row.get::<_, Option<String>>(1),
             row.get::<_, Option<String>>(2),
+            row.get::<_, Option<String>>(3),
             artifact_count(&admin, &run_id).await,
         ));
     }
@@ -463,11 +482,12 @@ async fn an_invalid_or_incomplete_synthesis_writes_no_artifact() {
         vec![
             (
                 "completed".to_owned(),
-                None,
+                Some("tool_request".to_owned()),
                 Some("uncaptured_citation".to_owned()),
+                None,
                 0
             ),
-            ("completed".to_owned(), None, None, 0),
+            ("completed".to_owned(), None, None, None, 0),
         ]
     );
 }
@@ -491,29 +511,34 @@ async fn use_in_the_story(prefix: &str, story: &str, successor: bool) -> Story {
     let reference = |suffix: &str| format!("resp_{prefix}{suffix}");
     let (store, admin, scope, run_id) =
         synthesis_run(prefix, ("web_search", SEARCH), SEARCH_TEXT, |block| {
-            let change = json!({"kind": "prose_change", "summary": "Added the tides.",
+            let change = json!({"summary": "Added the tides.",
                 "changes": [{"block_id": block, "candidate_text": "High water came at 10.42.",
                              "explanation": "The research gives the tides."}]})
             .to_string();
             let (lost, retrieved, late) = (reference("_3"), reference("_3"), reference("_3"));
             let story = reference("_4");
-            let mut replies: Vec<Reply> = vec![synthesis(
-                &reference("_2"),
-                "completed",
-                two_snapshot_claims,
-            )];
+            let proposed: Reply = Box::new(move |_| {
+                calls_stream(
+                    &story,
+                    &[
+                        ("call_propose", "propose_edit", &change),
+                        ("call_finish", "finish", "{}"),
+                    ],
+                )
+            });
+            let mut replies: Vec<Reply> = vec![
+                synthesis(&reference("_2"), "completed", two_snapshot_claims),
+                closing(&reference("_2_closing")),
+            ];
             if successor {
                 replies.push(Box::new(move |_| broken_stream(&lost)));
                 replies.push(Box::new(move |_| stored(&retrieved, "in_progress")));
-                replies.push(Box::new(move |_| {
-                    message_stream(&story, &change, "completed")
-                }));
+                replies.push(proposed);
                 replies.push(Box::new(move |_| stored(&late, "completed")));
             } else {
-                replies.push(Box::new(move |_| {
-                    message_stream(&story, &change, "completed")
-                }));
+                replies.push(proposed);
             }
+            replies.push(closing(&reference("_4_closing")));
             replies
         })
         .await;
@@ -668,7 +693,7 @@ async fn a_successor_proposal_names_the_successor_attempt_and_the_artifact() {
         ),
         (
             story_lineage(&story),
-            "decision,retrieval,successor,late_retrieval".to_owned()
+            "decision,retrieval,successor,late_retrieval,decision".to_owned()
         )
     );
 }
@@ -681,7 +706,10 @@ async fn the_project_export_packs_the_artifact_and_a_reload_reads_it_unchanged()
         .await;
     let (store, admin, scope, run_id) =
         synthesis_run("c37", ("web_search", SEARCH), SEARCH_TEXT, |_| {
-            vec![synthesis("resp_c37_2", "completed", two_snapshot_claims)]
+            vec![
+                synthesis("resp_c37_2", "completed", two_snapshot_claims),
+                closing("resp_c37_3"),
+            ]
         })
         .await;
     let id = artifact_id(&store, &scope, &run_id).await;
@@ -750,13 +778,16 @@ async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps
         .await;
     let (store, admin) = stores().await;
     // The first RunStep has no ToolResult, so the Run captured no source to cite.
-    let text = json!({"kind": "research_synthesis", "summary": "The tides of 1890.",
+    let arguments = json!({"summary": "The tides of 1890.",
         "claims": [{"text": "High water came at 10.42.",
                     "citations": ["018f0000-0000-7001-8000-0000000c38ff"]}]})
     .to_string();
-    let message = json!({"id": "msg_01", "type": "message", "role": "assistant",
-        "status": "completed", "content": [{"type": "output_text", "text": text}]});
-    let body = json!({"id": "resp_c38", "status": "completed", "output": [message],
+    let call = |name: &str, arguments: &str| {
+        json!({"id": format!("fc_{name}"), "type": "function_call", "status": "completed",
+               "call_id": format!("call_{name}"), "name": name, "arguments": arguments})
+    };
+    let body = json!({"id": "resp_c38", "status": "completed",
+        "output": [call("submit_research", &arguments), call("finish", "{}")],
         "usage": {"input_tokens": 40, "output_tokens": 12}})
     .to_string();
     let (base, _served) = destination(vec![
@@ -766,6 +797,9 @@ async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps
              connection: close\r\n\r\n{body}",
             body.len()
         ),
+        // The model reads the refusal, and its next `finish` call counts.
+        finish_stream("resp_c38_2"),
+        advisory_stream("resp_c38_3"),
     ])
     .await;
     let (scope, run_id) = real_run(&store, &admin, "c38", &base).await;
@@ -775,8 +809,10 @@ async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps
         .unwrap();
     let row = admin
         .query_one(
-            "SELECT attempt.payload ->> 'result', attempt.payload ->> 'synthesis_refusal'
+            "SELECT attempt.payload ->> 'result', call.refusal
                FROM storyos.model_attempts AS attempt
+               JOIN storyos.tool_calls AS call
+                 ON call.run_id = attempt.run_id AND call.function_name = 'submit_research'
               WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'retrieval'",
             &[&run_id],
         )
@@ -790,7 +826,7 @@ async fn a_retrieved_synthesis_of_the_first_runstep_writes_no_artifact_and_keeps
             artifact_count(&admin, &run_id).await,
         ),
         (
-            Some("incomplete".to_owned()),
+            Some("complete_selected".to_owned()),
             Some("uncaptured_citation".to_owned()),
             0
         )

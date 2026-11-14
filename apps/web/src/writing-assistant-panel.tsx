@@ -7,7 +7,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse,
-  ProjectScope, SelectionReference,
+  ProjectScope, ProseChangeLocationInspect, SelectionReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -15,13 +15,14 @@ import {
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
 import {
-  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
+  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, NO_RESULT_SENTENCE,
   PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, RESEARCH_SYNTHESIS_SENTENCE, RESEARCH_TOOL_UNAVAILABLE_SENTENCE,
-  USE_RESEARCH_MESSAGE, malformedStructuredReply, settledRun, toolCallLines,
-  stoppedWithoutResult, TOOL_REQUEST_INVALID_SENTENCE,
+  USE_RESEARCH_MESSAGE, proposalSentence, runResults, settledRun, toolCallLines,
+  stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
+import { RunResultList } from "./run-result-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
@@ -166,13 +167,9 @@ function resultText(run: GetAgentRunResponse): string | undefined {
   if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
     case "advisory":
-      return malformedStructuredReply(run.decision.text) ? MALFORMED_REPLY_SENTENCE : run.decision.text;
+      return run.decision.text;
     case "prose_change":
-      return (run.decision.locations?.length ?? 0) > 0
-        ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
-        : "本次修改建议已生成，可以在正文中查看。";
-    case "clarification":
-      return run.decision.question;
+      return proposalSentence(run.decision.locations ?? []);
     case "tool_request":
       return toolCallLines(run.decision.calls);
     case "research_synthesis":
@@ -191,14 +188,22 @@ function resultText(run: GetAgentRunResponse): string | undefined {
           return PREVIOUS_REQUEST_UNRESOLVED_SENTENCE;
         case "research_tool_unavailable":
           return RESEARCH_TOOL_UNAVAILABLE_SENTENCE;
-        case "tool_request_invalid":
-          return TOOL_REQUEST_INVALID_SENTENCE;
         default:
           return "本次请求未能执行。";
       }
     case "absent":
       return undefined;
   }
+}
+
+/** The Proposals that a Run shows: each Proposal result of a settled Run, or else the Proposal of its decision. */
+function shownProposals(run: GetAgentRunResponse): { decisionId: string; proposalId?: string; locations: ProseChangeLocationInspect[] }[] {
+  const results = runResults(run);
+  if (results !== undefined) return results.flatMap(result => result.kind === "proposal"
+    ? [{ decisionId: result.decision_id, proposalId: result.proposal_id, locations: result.locations }] : []);
+  if (run.decision.kind !== "prose_change") return [];
+  return [{ decisionId: run.decision.decision_id, locations: run.decision.locations ?? [],
+    ...(run.decision.opened_proposal.kind === "present" ? { proposalId: run.decision.opened_proposal.proposal_id } : {}) }];
 }
 
 /** The labels of the references that went with one message. */
@@ -314,8 +319,8 @@ export function WritingAssistantPanel({
     setRun(result);
     // The Run exists, so its references go from the composer also after a lost acknowledgement.
     clearDraftReferences(current.scope, current.referenceKeys ?? []);
-    if (result.decision.kind === "prose_change") {
-      for (const location of result.decision.locations ?? []) {
+    for (const proposal of shownProposals(result)) {
+      for (const location of proposal.locations) {
         if (location.outcome.kind === "revised") {
           const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
             projectId: current.scope.project_id, proposalId: location.outcome.proposal_id });
@@ -328,15 +333,12 @@ export function WritingAssistantPanel({
             });
         }
         if (location.outcome.kind === "opened") onOpenedProposal?.({
-          proposalId: location.outcome.proposal_id, runId: result.run_id,
-          decisionId: result.decision.decision_id,
+          proposalId: location.outcome.proposal_id, runId: result.run_id, decisionId: proposal.decisionId,
         });
       }
-      if ((result.decision.locations?.length ?? 0) === 0
-        && result.decision.opened_proposal.kind === "present") onOpenedProposal?.({
-          proposalId: result.decision.opened_proposal.proposal_id, runId: result.run_id,
-          decisionId: result.decision.decision_id,
-        });
+      if (proposal.locations.length === 0 && proposal.proposalId !== undefined) onOpenedProposal?.({
+        proposalId: proposal.proposalId, runId: result.run_id, decisionId: proposal.decisionId,
+      });
     }
     setStatus("");
     return result;
@@ -539,6 +541,9 @@ export function WritingAssistantPanel({
       .finally(() => setSending(false));
   };
 
+  const useResearch = <button type="button" data-assistant-use-research="" disabled={sending || unresolved}
+    onClick={() => submit(USE_RESEARCH_MESSAGE, () => {}, { references: [], labels: [], keys: [] })}>用到故事里</button>;
+
   return (
     <aside id="writing-assistant-panel" className="agent-panel" data-writing-assistant=""
       data-assistant-availability={availability}
@@ -570,12 +575,19 @@ export function WritingAssistantPanel({
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <AuthorMessages message={exchange.message} labels={exchange.referenceLabels} run={exchange.run}
                 guidance={exchange.guidance} />
-              {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
               {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
-              {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
-                : <ResearchTurn context={context} run={exchange.run} history />}
-              {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
-                sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
+              {exchange.run !== undefined && runResults(exchange.run) !== undefined
+                ? <RunResultList run={exchange.run} results={runResults(exchange.run)!} context={context} history
+                  tree={context?.tree} sourceChapterId={exchange.chapterId ?? reference.chapterId}
+                  onNavigate={onNavigateProposal} />
+                : <>
+                  {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+                  {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
+                    : <ResearchTurn context={context} run={exchange.run} history />}
+                  {exchange.run?.decision.kind !== "prose_change" ? null
+                    : <ProposalLocationLinks locations={exchange.run.decision.locations ?? []} tree={context?.tree}
+                      sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
+                </>}
             </section>
           ))}
           {reference === undefined ? null : (
@@ -586,12 +598,13 @@ export function WritingAssistantPanel({
               <AuthorMessages message={reference.message} labels={reference.referenceLabels} run={run}
                 guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
-              {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
-                {context === undefined ? null : <ResearchTurn context={context} run={run}>
-                  <button type="button" data-assistant-use-research="" disabled={sending || unresolved}
-                    onClick={() => submit(USE_RESEARCH_MESSAGE, () => {}, { references: [], labels: [], keys: [] })}>用到故事里</button>
-                </ResearchTurn>}
-                <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
+              {run === undefined ? null : runResults(run) !== undefined
+                ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
+                  sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
+                : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
+                  {context === undefined ? null : <ResearchTurn context={context} run={run}>{useResearch}</ResearchTurn>}
+                  {run.decision.kind !== "prose_change" ? null : <ProposalLocationLinks locations={run.decision.locations ?? []}
+                    tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} />}</>}
               {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
                 void inspectResult();
               }}>检查结果</button> : null}

@@ -70,12 +70,18 @@ pub(crate) async fn next_unresolved(
                 "SELECT {ROW_COLUMNS} FROM storyos.tool_calls
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid AND state IN ('pending', 'dispatched')
-                  ORDER BY decision_position, call_position LIMIT 1 FOR UPDATE"
+                  -- A Host ToolCall goes after the other ToolCalls of its response, and
+                  -- `finish` goes last (ADR 0091).
+                  ORDER BY decision_position, tool_registration_revision = $4::text::uuid,
+                           tool_spec_revision = $5, call_position
+                  LIMIT 1 FOR UPDATE"
             ),
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &storyos_core::HOST_TOOL_REGISTRATION.revision,
+                &storyos_core::FINISH_TOOL_SPEC.revision,
             ],
         )
         .await

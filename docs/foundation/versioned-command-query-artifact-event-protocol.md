@@ -10,6 +10,8 @@ Primary-source evidence: [Versioned HTTP, SSE, schema, digest, and MCP protocol 
 
 Security input: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 
+> **Superseded note:** [ADR 0092](../adr/0092-remove-streamed-proposal-generation.md) removes streamed Proposal generation. The rules of this document for `PauseProposalGeneration`, `ContinueProposalGeneration`, and `CompleteReadyPartialProposal` are historical. A Proposal opens complete, and each Proposal Revision is `ready`.
+
 ## 1. Purpose and authority
 
 This specification fixes the Foundation wire contract shared by the StoryOS

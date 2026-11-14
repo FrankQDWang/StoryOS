@@ -6,9 +6,9 @@ use super::{
 };
 use crate::{
     AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, AgentDecisionKind,
-    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, HOST_FAKE_REGISTRATION, NativeStreamItem,
-    StreamItemRole, StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC,
-    WEB_SEARCH_TOOL_SPEC,
+    AgentDecisionOutcome, EXA_TOOL_REGISTRATION, FINISH_TOOL_SPEC, HOST_FAKE_REGISTRATION,
+    HOST_FAKE_TOOL_LOOP_REGISTRATION, HOST_TOOL_REGISTRATION, NativeStreamItem, StreamItemRole,
+    StreamItemState, ToolRegistrationLifecycle, WEB_FETCH_TOOL_SPEC, WEB_SEARCH_TOOL_SPEC,
 };
 
 fn bound(
@@ -54,16 +54,21 @@ fn an_active_compatible_binding_on_a_qualified_registration_exposes_its_tools() 
         ToolRegistrationLifecycle::Active,
         Some(ToolCompatibilityDecision::Compatible),
     )];
+    let mut expected = research_exposure();
+    expected
+        .tools
+        .extend(exposure(&[], AGENT_PLAN_REGISTRATION.revision).tools);
     assert_eq!(
         exposure(&active, AGENT_PLAN_REGISTRATION.revision),
-        research_exposure()
+        expected
     );
 }
 
 #[test]
 fn each_other_binding_or_registration_exposes_nothing() {
     let compatible = Some(ToolCompatibilityDecision::Compatible);
-    let cases: [(&[BoundTool], &str); 6] = [
+    let host_tools = exposure(&[], AGENT_PLAN_REGISTRATION.revision);
+    let cases: [(&[BoundTool], &str); 5] = [
         (&[], AGENT_PLAN_REGISTRATION.revision),
         (
             &[bound(ToolRegistrationLifecycle::Quarantined, compatible)],
@@ -85,20 +90,52 @@ fn each_other_binding_or_registration_exposes_nothing() {
             }],
             AGENT_PLAN_REGISTRATION.revision,
         ),
-        (
-            &[bound(ToolRegistrationLifecycle::Active, compatible)],
-            HOST_FAKE_REGISTRATION.revision,
-        ),
     ];
     for (bound, revision) in cases {
-        assert_eq!(exposure(bound, revision), ToolExposure::empty());
+        assert_eq!(exposure(bound, revision), host_tools);
+    }
+    // A Model Registration with no qualified function calling exposes no Tool.
+    for revision in [
+        HOST_FAKE_REGISTRATION.revision,
+        AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision,
+    ] {
+        assert_eq!(
+            exposure(
+                &[bound(ToolRegistrationLifecycle::Active, compatible)],
+                revision
+            ),
+            ToolExposure::empty()
+        );
+    }
+}
+
+#[test]
+fn a_registration_of_the_tool_loop_profile_declares_the_host_tools() {
+    let host = |name, spec| ExposedTool {
+        name,
+        registration_id: HOST_TOOL_REGISTRATION.id,
+        registration_revision: HOST_TOOL_REGISTRATION.revision,
+        spec,
+    };
+    let finish = host("finish", &FINISH_TOOL_SPEC);
+    for revision in [
+        HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
+        AGENT_PLAN_REGISTRATION.revision,
+    ] {
+        assert_eq!(
+            exposure(&[], revision),
+            ToolExposure {
+                tools: vec![
+                    host("propose_edit", &crate::PROPOSE_EDIT_TOOL_SPEC),
+                    host("submit_research", &crate::SUBMIT_RESEARCH_TOOL_SPEC),
+                    finish.clone()
+                ]
+            }
+        );
     }
     assert_eq!(
-        exposure(
-            &[bound(ToolRegistrationLifecycle::Active, compatible)],
-            AGENT_PLAN_FUNCTION_CALLING_PENDING_REGISTRATION.revision
-        ),
-        ToolExposure::empty()
+        finish.declaration().parameters,
+        json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
     );
 }
 

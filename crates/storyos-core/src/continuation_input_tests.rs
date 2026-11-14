@@ -32,7 +32,6 @@ fn classify(
         prior,
         mapping_can_represent,
         prior_reference_unusable: false,
-        current_input_changed: false,
     })
 }
 
@@ -104,24 +103,21 @@ fn a_changed_exposure_changes_the_transport_and_not_the_processing_boundary() {
 }
 
 #[test]
-fn an_unusable_prior_reference_or_a_changed_current_input_sends_the_full_input() {
-    let input = |prior_reference_unusable, current_input_changed| ContinuationMappingInput {
+fn an_unusable_prior_reference_sends_the_full_input() {
+    let input = |prior_reference_unusable| ContinuationMappingInput {
         current: matching_prior(),
         prior: Some(matching_prior()),
         mapping_can_represent: true,
         prior_reference_unusable,
-        current_input_changed,
     };
 
     assert_eq!(
         [
-            map_continuation_input(&input(false, false)),
-            map_continuation_input(&input(true, false)),
-            map_continuation_input(&input(false, true)),
+            map_continuation_input(&input(false)),
+            map_continuation_input(&input(true)),
         ],
         [
             ContinuationInputMapping::Incremental,
-            ContinuationInputMapping::Full,
             ContinuationInputMapping::Full,
         ]
     );

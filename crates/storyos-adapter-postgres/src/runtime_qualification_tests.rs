@@ -8,13 +8,13 @@ use storyos_application::{
 };
 use storyos_core::{
     AGENT_PLAN_ENDPOINT, AGENT_PLAN_REGISTRATION, AssistanceAvailability, BudgetBounds,
-    DecisionCandidate, DeploymentDestination, DestinationKind, ModelAdapter, ModelOutput,
-    OutputPhase, RuntimeQualification,
+    DeploymentDestination, DestinationKind, ModelAdapter, RuntimeQualification, ToolChoice,
 };
 use tokio_postgres::Client;
 
 use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, claim_run, queued_run, stores};
+use crate::agent_run_finish_rule::tests::{finish_before, text_item};
 
 const AUTHORIZATION: &str =
     "https://github.com/FrankQDWang/StoryOS/issues/393#issuecomment-6098554693";
@@ -41,14 +41,16 @@ impl ScriptedAgentPlan {
     }
 }
 
+/// The scripted observation answers the closing request. A request before a `finish` call that
+/// counted gets the `finish` call first.
 impl ModelProviderAdapter for ScriptedAgentPlan {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ();
+    type Prepared = ToolChoice;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
-    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
         let DestinationRequest::Create(create) = request else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
@@ -61,17 +63,26 @@ impl ModelProviderAdapter for ScriptedAgentPlan {
                 serialized_payload: None,
                 cache_setting: None,
             },
-            prepared: (),
+            prepared: create.tool_choice,
         })
     }
 
-    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
-        self.observation.clone()
+    async fn exchange(
+        &self,
+        tool_choice: ToolChoice,
+        _sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        match (&self.observation, tool_choice) {
+            (Observation::Terminal(response), ToolChoice::Required) => {
+                Observation::Terminal(finish_before(response))
+            }
+            (observation, _) => observation.clone(),
+        }
     }
 }
 
 /// The status, settlement, Attempt count, and the qualification, network, and input mapping
-/// facts of the decision Attempt of one AgentRun.
+/// facts of the first decision Attempt of one AgentRun.
 async fn qualification_evidence(admin: &Client, run_id: &str) -> [Option<String>; 6] {
     let row = admin
         .query_one(
@@ -84,6 +95,7 @@ async fn qualification_evidence(admin: &Client, run_id: &str) -> [Option<String>
                FROM storyos.agent_runs AS run
                LEFT JOIN storyos.model_attempts AS attempt
                  ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+                AND attempt.decision_position = 0
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
         )
@@ -231,14 +243,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     settle(&store, &admin, &scope, &unknown_run, &unknown).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
         state: storyos_core::StreamItemState::Complete,
-        items: Vec::new(),
-        output: Some(ModelOutput {
-            phase: OutputPhase::FinalAnswer,
-            candidate: DecisionCandidate::Advisory {
-                text: "Keep the second sentence.".to_owned(),
-            },
-            prose_changes: None,
-        }),
+        items: vec![text_item("Keep the second sentence.")],
         usage: ModelUsage::Reported {
             input_tokens: 412,
             output_tokens: 133,
@@ -314,7 +319,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         [
             text("completed"),
             None,
-            text("1"),
+            text("2"),
             None,
             text("true"),
             text(mapping),
@@ -333,10 +338,14 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         (
             // The unknown create sends its one bounded successor, which is also unknown.
             vec![(route.clone(), None); 4],
+            // Each Run sends its closing request after the `finish` call.
             vec![
                 (route.clone(), None),
+                (route.clone(), Some("resp_01_finish".to_owned())),
                 (route.clone(), Some("resp_01".to_owned())),
-                (route, None)
+                (route.clone(), Some("resp_01_finish".to_owned())),
+                (route.clone(), None),
+                (route, Some("resp_01_finish".to_owned())),
             ],
             [
                 text("refused"),
@@ -372,12 +381,12 @@ struct CancellingAgentPlan<'a> {
 
 impl ModelProviderAdapter for CancellingAgentPlan<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ();
+    type Prepared = ToolChoice;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
-    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
         if let DestinationRequest::Abort(_) = request {
             *self.aborts.lock().unwrap() += 1;
             return Err(PreDispatchRefusal::UnsupportedRequest);
@@ -387,7 +396,11 @@ impl ModelProviderAdapter for CancellingAgentPlan<'_> {
             .await
     }
 
-    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+    async fn exchange(
+        &self,
+        _prepared: ToolChoice,
+        _sink: &mut impl ModelStreamSink,
+    ) -> Observation {
         self.admin
             .execute(
                 "UPDATE storyos.agent_runs
@@ -502,12 +515,12 @@ struct LateResponseAgentPlan<'a> {
 
 impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ();
+    type Prepared = ToolChoice;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
-    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
         let DestinationRequest::Create(_) = request else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
@@ -519,7 +532,11 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
         Ok(prepared)
     }
 
-    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+    async fn exchange(
+        &self,
+        _prepared: ToolChoice,
+        _sink: &mut impl ModelStreamSink,
+    ) -> Observation {
         self.admin
             .execute(
                 "UPDATE storyos.agent_runs SET status = 'cancelled'
@@ -531,13 +548,6 @@ impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
         Observation::Terminal(ModelResponse {
             state: storyos_core::StreamItemState::Complete,
             items: Vec::new(),
-            output: Some(ModelOutput {
-                phase: OutputPhase::FinalAnswer,
-                candidate: DecisionCandidate::Advisory {
-                    text: "Too late.".to_owned(),
-                },
-                prose_changes: None,
-            }),
             usage: ModelUsage::Reported {
                 input_tokens: 300,
                 output_tokens: 20,
@@ -610,12 +620,12 @@ struct ReferenceChangingAgentPlan<'a> {
 
 impl ModelProviderAdapter for ReferenceChangingAgentPlan<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
-    type Prepared = ();
+    type Prepared = ToolChoice;
 
     async fn prepare(
         &self,
         request: &DestinationRequest,
-    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+    ) -> Result<PreparedRequest<ToolChoice>, PreDispatchRefusal> {
         let DestinationRequest::Create(create) = request else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
@@ -640,7 +650,11 @@ impl ModelProviderAdapter for ReferenceChangingAgentPlan<'_> {
             .await
     }
 
-    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+    async fn exchange(
+        &self,
+        _prepared: ToolChoice,
+        _sink: &mut impl ModelStreamSink,
+    ) -> Observation {
         Observation::NotSubmitted
     }
 }
@@ -655,14 +669,7 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
     let (scope, chapter_id, first) = queued_run(&store, "ea9", authorized()).await;
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
         state: storyos_core::StreamItemState::Complete,
-        items: Vec::new(),
-        output: Some(ModelOutput {
-            phase: OutputPhase::FinalAnswer,
-            candidate: DecisionCandidate::Advisory {
-                text: "Keep it.".to_owned(),
-            },
-            prose_changes: None,
-        }),
+        items: vec![text_item("Keep the second sentence.")],
         usage: ModelUsage::Unknown,
         cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
@@ -726,35 +733,39 @@ impl storyos_application::CredentialResolver for TestCredential {
     }
 }
 
-/// Answers one streamed Responses request on a local port with one terminal event that holds
-/// `body`, and returns the endpoint.
-async fn scripted_endpoint(body: String) -> String {
+/// Answers each streamed Responses request on a local port with one terminal event that holds
+/// the next of `bodies`, and returns the endpoint.
+async fn scripted_endpoint(bodies: Vec<String>) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
     tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let mut request = Vec::new();
-        let mut chunk = [0_u8; 4096];
-        while !request
-            .windows(/*size*/ 4)
-            .any(|window| window == b"\r\n\r\n")
-        {
-            let read = stream.read(&mut chunk).await.unwrap();
-            request.extend_from_slice(&chunk[..read]);
+        for body in bodies {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            while !request
+                .windows(/*size*/ 4)
+                .any(|window| window == b"\r\n\r\n")
+            {
+                let read = stream.read(&mut chunk).await.unwrap();
+                request.extend_from_slice(&chunk[..read]);
+            }
+            let event =
+                format!("data: {{\"type\":\"response.completed\",\"response\":{body}}}\n\n");
+            let head =
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+            stream
+                .write_all((head.to_owned() + &event).as_bytes())
+                .await
+                .unwrap();
         }
-        let event = format!("data: {{\"type\":\"response.completed\",\"response\":{body}}}\n\n");
-        let head =
-            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
-        stream
-            .write_all((head.to_owned() + &event).as_bytes())
-            .await
-            .unwrap();
     });
     endpoint
 }
 
-/// The Provider evidence of the AgentRun that the real adapter settles through `endpoint`.
+/// The Provider evidence of the AgentRun that the real adapter settles through an endpoint that
+/// answers with a `finish` call and then with `body`.
 async fn real_attempt_evidence(
     store: &crate::PostgresProjectReader,
     admin: &Client,
@@ -767,7 +778,10 @@ async fn real_attempt_evidence(
     Option<storyos_application::AttemptCache>,
 ) {
     let (scope, _, run_id) = queued_run(store, prefix, authorized()).await;
-    let endpoint = scripted_endpoint(body.to_string()).await;
+    let finish = serde_json::json!({"id": format!("{}_finish", body["id"].as_str().unwrap()),
+        "status": "completed", "output": [{"id": "fc_01", "type": "function_call",
+        "status": "completed", "call_id": "call_finish", "name": "finish", "arguments": "{}"}]});
+    let endpoint = scripted_endpoint(vec![finish.to_string(), body.to_string()]).await;
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions

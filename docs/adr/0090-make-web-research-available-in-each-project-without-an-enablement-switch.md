@@ -33,6 +33,8 @@ Tool Exposure, the validation of a ToolCall batch, and the admission of a ToolCa
 - A batch that asks for a Tool whose Registration was quarantined after the Run pinned its Exposure refuses with `research_tool_unavailable`.
 - A batch that asks for a Tool that the Run never exposed refuses with `tool_request_invalid`.
 
+  > Superseded on 2026-11-14 by [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 3 ([#1463](https://github.com/FrankQDWang/StoryOS/issues/1463)): a call of a Tool that the Run never exposed is a refused ToolCall with the label `unexposed_name`, and the Run continues. No Run refuses with `tool_request_invalid`.
+
 ### 5. What this supersedes
 
 This ADR supersedes the sentences of ADR 0083 section 3 that make Project Tool Enablement the admission boundary and that describe disablement, and the sentence of ADR 0083 section 4 that puts the consent at enablement. The rest of ADR 0083 stays in force: the service, the two operations, the transport, the key, the grant scope, and no approval prompt.

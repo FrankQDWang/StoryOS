@@ -3,14 +3,15 @@
 //! the `active` Tool Registration of the current research binding of the Project, its
 //! `compatible` compatibility Decision, and the qualified function calling entry of the pinned Model Registration. The
 //! projection grants nothing, changes no Registration, and names no service: the model sees the
-//! operation of a ToolSpec, and the Step Snapshot pins the Registration revision behind it.
+//! operation of a ToolSpec, and the Step Snapshot pins the Registration revision behind it. A
+//! Model Registration of the tool loop profile also gets the Host Tools (ADR 0091).
 
 use serde_json::{Value, json};
 
 use crate::{
-    AgentDecisionOutcome, CapabilityEvidence, IntakeField, NativeStreamItem, StreamItemRole,
-    StreamItemState, ToolOperation, ToolRegistrationLifecycle, ToolSpec, model_registration,
-    tool_registration,
+    AgentDecisionOutcome, CapabilityEvidence, HOST_TOOL_REGISTRATION, IntakeField,
+    NativeStreamItem, StreamItemRole, StreamItemState, ToolOperation, ToolRegistrationLifecycle,
+    ToolSpec, model_registration, tool_registration,
 };
 
 /// The native type of the function call item of the Agent Plan route.
@@ -86,6 +87,9 @@ impl ToolOperation {
         match self {
             Self::WebSearch => "web_search",
             Self::WebFetch => "web_fetch",
+            Self::Finish => "finish",
+            Self::ProposeEdit => "propose_edit",
+            Self::SubmitResearch => "submit_research",
         }
     }
 
@@ -96,6 +100,16 @@ impl ToolOperation {
                  needs facts that the supplied text does not give."
             }
             Self::WebFetch => "Reads the text of up to 5 web pages that you give by URL.",
+            Self::Finish => {
+                "Says that your work on the author request is complete. After its result, write \
+                 the final answer to the author."
+            }
+            Self::ProposeEdit => {
+                "Proposes a change of the target blocks of the request. StoryOS validates the \
+                 change and opens a Proposal that waits for the decision of the author. Give the \
+                 complete new text of each changed block."
+            }
+            Self::SubmitResearch => crate::submit_research::DESCRIPTION,
         }
     }
 }
@@ -138,15 +152,20 @@ impl ExposedTool {
             properties.insert(field.name().to_owned(), field.schema());
             required.push(field.name());
         }
-        FunctionDeclaration {
-            name: self.name,
-            description: self.spec.operation.description(),
-            parameters: json!({
+        let parameters = match self.spec.operation {
+            ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
+            ToolOperation::SubmitResearch => crate::submit_research::parameters(),
+            ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
                 "required": required,
                 "additionalProperties": false,
             }),
+        };
+        FunctionDeclaration {
+            name: self.name,
+            description: self.spec.operation.description(),
+            parameters,
         }
     }
 
@@ -176,7 +195,7 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out.
+    /// second Tool of one function name stays out. The Host Tools follow.
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let qualified =
             model_registration(facts.model_registration_revision).is_some_and(|registration| {
@@ -211,6 +230,12 @@ impl ToolExposure {
                 });
             }
         }
+        tools.extend(HOST_TOOL_REGISTRATION.tools.iter().map(|spec| ExposedTool {
+            name: spec.operation.function_name(),
+            registration_id: HOST_TOOL_REGISTRATION.id,
+            registration_revision: HOST_TOOL_REGISTRATION.revision,
+            spec,
+        }));
         Self { tools }
     }
 
@@ -266,17 +291,18 @@ pub fn requests_function(items: &[NativeStreamItem]) -> bool {
 /// or this build does not have its pinned ToolSpec revision. The author sees one result sentence.
 pub const RESEARCH_TOOL_UNAVAILABLE_CAPABILITY: &str = "research_tool_unavailable";
 
-/// The refusal capability of a Run whose function request batch did not validate for each other
-/// refusal (ADR 0084): StoryOS could not accept the request of the model. The Attempt keeps the
-/// refusal as evidence, and the author sees one result sentence.
-pub const TOOL_REQUEST_INVALID_CAPABILITY: &str = "tool_request_invalid";
-
 /// The refusal capability of a Run whose function request batch did not validate, from the
-/// `label` of its `ToolCallBatchRefusal` on the Attempt evidence.
-pub fn function_request_refusal_capability(label: &str) -> &'static str {
+/// `label` of its `ToolCallBatchRefusal` on the Attempt evidence. A structural fault of the
+/// response (a cut response, a native item that the request did not ask for, a call identifier
+/// or a name that is missing or not valid, a repeated call identifier) has no refusal: no
+/// function output can bind to its calls, so the Run completes with the results that it already
+/// made, and the response is not a continuation binding (ADR 0091).
+pub fn function_request_refusal_capability(label: &str) -> Option<&'static str> {
     match label {
-        "tool_registration_unavailable" | "unknown_spec" => RESEARCH_TOOL_UNAVAILABLE_CAPABILITY,
-        _ => TOOL_REQUEST_INVALID_CAPABILITY,
+        "tool_registration_unavailable" | "unknown_spec" => {
+            Some(RESEARCH_TOOL_UNAVAILABLE_CAPABILITY)
+        }
+        _ => None,
     }
 }
 
@@ -291,8 +317,8 @@ pub enum ResponseDisposition {
     ToolCallsPending,
     /// The response of an ordinary request made no Agent Decision and asks for a function: the
     /// batch did not validate. No ToolCall exists: the items and the usage stay as evidence, and
-    /// the Run refuses with the capability of `function_request_refusal_capability`. A probe
-    /// never gets this disposition.
+    /// the Run ends as `function_request_refusal_capability` says. A probe never gets this
+    /// disposition.
     FunctionRequested,
     /// No Agent Decision and no function request: a probe response, or a reply that validation
     /// did not accept.

@@ -1,5 +1,6 @@
 use super::{
-    AgentRunStatus, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_steer_agent_run,
+    AgentRunStatus, SteerAgentRunConflict, SteerAgentRunNoEffect, SteeringReader,
+    classify_steer_agent_run,
 };
 use crate::TransitionOutcome;
 
@@ -12,7 +13,7 @@ fn steering_of_a_run_that_is_not_terminal_is_retained_without_effect() {
         AgentRunStatus::Paused,
     ] {
         assert_eq!(
-            classify_steer_agent_run(lifecycle),
+            classify_steer_agent_run(lifecycle, SteeringReader::OrdinaryRunStep),
             TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained)
         );
     }
@@ -26,7 +27,7 @@ fn steering_of_a_terminal_run_conflicts() {
         AgentRunStatus::Cancelled,
     ] {
         assert_eq!(
-            classify_steer_agent_run(lifecycle),
+            classify_steer_agent_run(lifecycle, SteeringReader::OrdinaryRunStep),
             TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun)
         );
     }

@@ -1,12 +1,14 @@
 //! The ToolCall rows of one durable Agent Decision (ADR 0034, ADR 0084). The store writes them
-//! in the transaction that makes the Decision durable, one for each validated member in item
-//! order. The identity is the Model Attempt and the native call identifier, so a second delivery
-//! of the same observation or a retry of the same commit creates no second row.
+//! in the transaction that makes the Decision durable, one for each member in item order. A
+//! member that failed its validation is a `refused` row with its reason as its result (ADR 0091
+//! section 3). The identity is the Model Attempt and the native call identifier, so a second
+//! delivery of the same observation or a retry of the same commit creates no second row.
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
-    CurrentToolAuthority, ExposureSnapshot, StreamItemRole, ToolAttemptSettlement, ToolCallBatch,
-    ToolCallClass, ToolCallState, ToolRegistrationLifecycle, ValidatedToolCall, tool_call_class,
+    CurrentToolAuthority, ExposureSnapshot, RequestedToolCall, StreamItemRole,
+    ToolAttemptSettlement, ToolCallBatch, ToolCallClass, ToolCallState, ToolRegistrationLifecycle,
+    tool_call_class,
 };
 use uuid::Uuid;
 
@@ -23,47 +25,125 @@ pub(crate) struct ToolCallOwner<'a> {
     pub decision_id: &'a str,
 }
 
-/// Inserts one `pending` row for each call. An existing row of the same Attempt and call
-/// identifier stays as it is.
+/// Inserts one `pending` row for each validated call, and one `refused` row with its result and
+/// its `tool_call_settled` Activity Run Event for each refused call. An existing row of the same
+/// Attempt and call identifier stays as it is.
 pub(crate) async fn insert_tool_calls(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     owner: &ToolCallOwner<'_>,
-    calls: &[ValidatedToolCall],
+    calls: &[RequestedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
+    // The global row of the Host Tool Registration appears at its first ToolCall.
+    if calls.iter().any(|call| {
+        matches!(call, RequestedToolCall::Validated(call)
+            if call.registration_revision == storyos_core::HOST_TOOL_REGISTRATION.revision)
+    }) {
+        crate::tool_registration::insert_host_registration_row(client)
+            .await
+            .map_err(complete_database_error)?;
+    }
     for (position, call) in (0_i32..).zip(calls) {
-        client
+        let (name, pin, arguments, argument_digest, refusal) = match call {
+            RequestedToolCall::Validated(call) => (
+                &call.name,
+                Some((
+                    &call.registration_id,
+                    &call.registration_revision,
+                    &call.spec_revision,
+                )),
+                call.arguments(),
+                call.argument_digest(),
+                None,
+            ),
+            RequestedToolCall::Refused(call) => (
+                &call.name,
+                call.tool.as_ref().map(|tool| {
+                    (
+                        &tool.registration_id,
+                        &tool.registration_revision,
+                        &tool.spec_revision,
+                    )
+                }),
+                call.arguments(),
+                call.argument_digest(),
+                Some(call.refusal),
+            ),
+        };
+        let tool_call_id = Uuid::now_v7().to_string();
+        let text = refusal.map(storyos_core::CallValidationRefusal::result_text);
+        let digest = text
+            .as_deref()
+            .map(|text| format!("sha256:{}", storyos_core::hex_sha256(text.as_bytes())));
+        let bytes = text
+            .as_deref()
+            .map(|text| i32::try_from(text.len()))
+            .transpose()
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+        let state = match refusal {
+            Some(_) => ToolCallState::Refused,
+            None => ToolCallState::Pending,
+        };
+        let inserted = client
             .execute(
                 "INSERT INTO storyos.tool_calls
                    (owner_user_id, project_id, tool_call_id, run_id, decision_position,
                     model_attempt_id, decision_id, call_id, call_position, caller_route,
                     function_name, registration_id, tool_registration_revision,
-                    tool_spec_revision, arguments, argument_digest, state)
+                    tool_spec_revision, arguments, argument_digest, state, refusal, result_text,
+                    result_digest, result_bytes)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                          $5::text::numeric, $6::text::uuid, $7::text::uuid, $8, $9, $10,
-                         $11, $12, $13::text::uuid, $14, $15::text::jsonb, $16, 'pending')
+                         $11, $12, $13::text::uuid, $14, $15::text::jsonb, $16, $17, $18, $19,
+                         $20, $21)
                  ON CONFLICT ON CONSTRAINT tool_calls_attempt_call_key DO NOTHING",
                 &[
                     &claim.project_scope.owner_user_id.as_ref(),
                     &claim.project_scope.project_id.as_ref(),
-                    &Uuid::now_v7().to_string(),
+                    &tool_call_id,
                     &owner.run_id,
                     &owner.decision_position,
                     &owner.model_attempt_id,
                     &owner.decision_id,
-                    &call.call_id,
+                    &call.call_id(),
                     &position,
                     &MODEL_CALLER_ROUTE,
-                    &call.name,
-                    &call.registration_id,
-                    &call.registration_revision,
-                    &call.spec_revision,
-                    &call.arguments().to_string(),
-                    &call.argument_digest(),
+                    name,
+                    &pin.map(|(id, _, _)| id),
+                    &pin.map(|(_, revision, _)| revision),
+                    &pin.map(|(_, _, spec)| spec),
+                    &arguments.to_string(),
+                    &argument_digest,
+                    &state.as_str(),
+                    &refusal.map(storyos_core::CallValidationRefusal::label),
+                    &text,
+                    &digest,
+                    &bytes,
                 ],
             )
             .await
             .map_err(complete_database_error)?;
+        if inserted == 1
+            && let Some(refusal) = refusal
+        {
+            crate::agent_run_tool_authority::append_event(
+                client,
+                claim,
+                "tool_call_settled",
+                &serde_json::json!({
+                    "tool_call_id": tool_call_id,
+                    "call_id": call.call_id(),
+                    "tool_registration_revision": pin.map(|(_, revision, _)| revision),
+                    "tool_spec_revision": pin.map(|(_, _, spec)| spec),
+                    "destination_attempt_id": null,
+                    "state": state.as_str(),
+                    "refusal": refusal.label(),
+                    "outcome": null,
+                    "result_bytes": bytes,
+                }),
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -125,8 +205,10 @@ pub(crate) async fn unresolved_tool_effect(
     }))
 }
 
-/// Fills the calls of a function request Decision from its ToolCall rows in item order: the
-/// validated arguments and the outcome, and no identifier (ADR 0040).
+/// Fills the calls of a function request Decision from its research ToolCall rows in item order:
+/// the validated arguments and the outcome, and no identifier (ADR 0040). A Host ToolCall and a
+/// call that failed its validation, which has no validated arguments, are not in the public list
+/// (ADR 0091).
 pub(crate) async fn hydrate_calls(
     client: &tokio_postgres::Client,
     scope: &storyos_application::ProjectScope,
@@ -140,12 +222,14 @@ pub(crate) async fn hydrate_calls(
         .query(
             "SELECT tool_spec_revision, arguments::text, state FROM storyos.tool_calls
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND decision_id = $3::text::uuid
+                AND decision_id = $3::text::uuid AND registration_id <> $4
+                AND jsonb_typeof(arguments) = 'object'
               ORDER BY call_position",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &decision_id.as_str(),
+                &storyos_core::HOST_TOOL_REGISTRATION.id,
             ],
         )
         .await
@@ -191,6 +275,12 @@ pub(crate) fn call_inspect(
             ToolCallInspect::Search { query, outcome }
         }
         storyos_core::ToolIntake::WebFetch { urls } => ToolCallInspect::PageRead { urls, outcome },
+        // The public list holds only research calls.
+        storyos_core::ToolIntake::Finish
+        | storyos_core::ToolIntake::ProposeEdit(_)
+        | storyos_core::ToolIntake::SubmitResearch { .. } => {
+            return Err(damaged());
+        }
     })
 }
 
@@ -201,7 +291,7 @@ pub(crate) fn batch_evidence(batch: &ToolCallBatch) -> Option<serde_json::Value>
         ToolCallBatch::Valid(calls) if calls.is_empty() => None,
         ToolCallBatch::Valid(calls) => Some(serde_json::json!({
             "kind": "valid",
-            "call_ids": calls.iter().map(|call| call.call_id.as_str()).collect::<Vec<_>>(),
+            "call_ids": calls.iter().map(RequestedToolCall::call_id).collect::<Vec<_>>(),
         })),
         ToolCallBatch::Invalid(refusal) => Some(serde_json::json!({
             "kind": "invalid",

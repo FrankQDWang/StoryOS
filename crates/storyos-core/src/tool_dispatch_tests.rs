@@ -11,11 +11,11 @@ const EXTERNAL_WRITE_SPEC: ToolSpec = ToolSpec {
     revision: "storyos.tool.test-external-write.v1",
     operation: ToolOperation::WebSearch,
     intake_contract: &[IntakeField::Query],
-    envelope: ToolEffectEnvelope {
+    envelope: Some(ToolEffectEnvelope {
         external_read: ExternalRead::OneSearch,
         external_write: ExternalWrite::Declared,
         outbound_disclosure: IntakeField::Query,
-    },
+    }),
     result_text_max_bytes: 16,
 };
 
@@ -27,6 +27,7 @@ fn search_effect(spec: &ToolSpec) -> ToolEffectRequest {
             result_count: None,
         },
     )
+    .unwrap()
 }
 
 fn admitted_facts(effect: &ToolEffectRequest) -> ToolDispatchFacts<'_> {
@@ -103,7 +104,8 @@ fn both_research_effects_dispatch_and_each_changed_authority_refuses_with_its_re
         &ToolIntake::WebFetch {
             urls: vec!["https://example.org/tides".to_owned()],
         },
-    );
+    )
+    .unwrap();
     let write = search_effect(&EXTERNAL_WRITE_SPEC);
     let refusal = |change: fn(&mut ToolDispatchFacts<'_>)| {
         let mut facts = admitted_facts(&search);

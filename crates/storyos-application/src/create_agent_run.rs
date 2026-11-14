@@ -84,6 +84,8 @@ pub struct AgentRunRecord {
     pub steering_inputs: Vec<AgentRunSteeringInspect>,
     pub context: AgentRunContext,
     pub decision: AgentRunDecisionInspect,
+    /// Each result of the Run in the order in which the model made it. Only the Run read has it.
+    pub results: Option<Vec<storyos_contracts::AgentRunResultInspect>>,
     pub model: Option<AgentRunModelInspect>,
     pub active_compaction: Option<ActiveCompactionInspect>,
     pub reference_recovery: Option<ReferenceRecoveryInspect>,
@@ -254,13 +256,6 @@ pub enum AgentRunDecisionInspect {
         locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
         continuation_binding_id: Option<String>,
         opened_proposal_id: Option<String>,
-    },
-    Clarification {
-        decision_id: String,
-        selected: bool,
-        question: String,
-        required_reply: String,
-        continuation_binding_id: Option<String>,
     },
     ToolRequest {
         decision_id: String,

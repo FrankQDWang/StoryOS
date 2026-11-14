@@ -2,11 +2,12 @@
 
 use storyos_application::{
     CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
-    DispatchClaim, ModelUsage, Observation, RequestAttempt, RequestContextItem,
+    DispatchClaim, ModelResponse, ModelUsage, Observation, PriorInput, RequestAttempt,
+    RequestContextItem,
 };
 use storyos_core::{
-    AgentDecisionOutcome, ResponseDisposition, ResponseFacts, response_disposition,
-    validate_agent_decision,
+    AgentDecisionOutcome, FinishRuleOutcome, ResponseDisposition, ResponseFacts, apply_finish_rule,
+    response_disposition, validate_agent_decision,
 };
 
 use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
@@ -82,15 +83,37 @@ pub(crate) async fn record_create(
     } else {
         let batch =
             crate::agent_run_tool_call::validate_batch(client, &retained, &response).await?;
+        let batch =
+            crate::agent_run_propose_edit::screen(client, claim, &declared, &response, batch)
+                .await?;
         if let Some(evidence) = crate::agent_run_tool_call::batch_evidence(&batch) {
             retained["tool_call_batch"] = evidence;
         }
-        let output = response.output.as_ref();
-        let citable = crate::research_artifact::decision_citable(client, claim, output).await?;
-        if let Some(refusal) = crate::research_artifact::refusal_evidence(output, &citable) {
-            retained["synthesis_refusal"] = refusal;
+        validate_agent_decision(batch)
+    };
+    let rule = match probe {
+        true => FinishRuleOutcome::Settle(outcome),
+        false => apply_finish_rule(
+            request.tool_choice,
+            crate::agent_run_finish_rule::run_step_limit(run)?,
+            outcome,
+            response.state,
+            &response.items,
+        ),
+    };
+    let outcome = match rule {
+        FinishRuleOutcome::Settle(outcome) => outcome,
+        rule @ (FinishRuleOutcome::NextRunStep | FinishRuleOutcome::NoResult) => {
+            let settlement = match rule {
+                FinishRuleOutcome::NextRunStep => CreateSettlement::NextRunStep,
+                _ => CreateSettlement::NoResult,
+            };
+            let result = CreateResult {
+                settlement,
+                ..response_result(dispatch, &response)
+            };
+            return persist_create_result(client, claim, run, result, retained).await;
         }
-        validate_agent_decision(output, &declared, &citable, batch)
     };
     // Core decides the disposition of the response (ADR 0084).
     let settlement = match response_disposition(&ResponseFacts {
@@ -105,19 +128,26 @@ pub(crate) async fn record_create(
         }
     };
     let result = CreateResult {
+        outcome,
+        settlement,
+        ..response_result(dispatch, &response)
+    };
+    persist_create_result(client, claim, run, result, retained).await
+}
+
+fn response_result<'a>(
+    dispatch: &'a DispatchClaim,
+    response: &'a ModelResponse,
+) -> CreateResult<'a> {
+    CreateResult {
         attempt_id: &dispatch.model_attempt_id,
         items: &response.items,
-        outcome,
-        producer_output: response
-            .output
-            .as_ref()
-            .and_then(|output| output.prose_changes.as_deref()),
+        outcome: AgentDecisionOutcome::NoDecision,
         usage: response.usage,
         cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
-        settlement,
-    };
-    persist_create_result(client, claim, run, result, retained).await
+        settlement: CreateSettlement::Response,
+    }
 }
 
 fn no_response<'a>(
@@ -128,7 +158,6 @@ fn no_response<'a>(
         attempt_id: &dispatch.model_attempt_id,
         items: &[],
         outcome: AgentDecisionOutcome::NoDecision,
-        producer_output: None,
         usage: ModelUsage::Unknown,
         cache_use: CacheUse::Unknown,
         response_reference: None,
@@ -162,13 +191,45 @@ pub(crate) async fn create_request(
     let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let probe = crate::agent_run_tool_probe::probe_request(client, claim, run).await?;
     let tool_exposure = crate::agent_run_tool_exposure::tool_exposure(client, claim, run).await?;
-    let tool_outputs = crate::agent_run_tool_result::tool_outputs(client, claim, &assembly).await?;
-    let previous_response_reference = match &probe {
-        Some(probe) => probe.previous_response_reference.clone(),
+    // A Tool qualification probe settles after its one response, so the finish rule does not
+    // apply to it, and its probe body sends no `tool_choice` (ADR 0049).
+    let tool_choice = match probe {
+        Some(_) => storyos_core::ToolChoice::None,
+        None => crate::agent_run_finish_rule::tool_choice(client, claim, run).await?,
+    };
+    let (prior_binding, previous_response_reference, prior_input) = match &probe {
+        Some(probe) => (
+            None,
+            probe.previous_response_reference.clone(),
+            PriorInput::Current,
+        ),
         None => {
             previous_response_reference(client, claim, run, prior_context, &tool_exposure.digest())
                 .await?
         }
+    };
+    // The outputs answer the response that the prior binding names (ADR 0085 section 3).
+    let prior = match (&prior_binding, &previous_response_reference) {
+        (Some(binding), Some(_)) => Some(
+            crate::agent_run_prior_response::PriorResponse::load(
+                client,
+                claim,
+                crate::agent_run_prior_response::PriorKey::Binding(binding),
+            )
+            .await?,
+        ),
+        (_, None) | (None, _) => None,
+    };
+    let tool_outputs = crate::agent_run_tool_result::tool_outputs(
+        client,
+        claim,
+        &assembly,
+        prior.as_ref().and_then(|prior| prior.decision_id()),
+    )
+    .await?;
+    let unexecuted_call_ids = match &prior {
+        Some(prior) => prior.unexecuted_calls(&tool_outputs)?,
+        None => Vec::new(),
     };
     let input = record_input(record, assembly, &run.author_message);
     Ok(CreateRequest {
@@ -185,9 +246,12 @@ pub(crate) async fn create_request(
         declared_targets,
         selection_references: input.selection_references,
         previous_response_reference,
+        prior_input,
         tool_exposure,
+        tool_choice,
         successor_of: None,
         tool_outputs,
+        unexecuted_call_ids,
     })
 }
 
@@ -246,21 +310,29 @@ pub(crate) async fn declared_targets(
     Ok(declared)
 }
 
-/// The destination reference of the prior binding that an incremental continuation sends.
+/// The prior binding of an incremental continuation, its destination reference, and whether the
+/// prior response read the current input. A claimed Attempt sends its own request again.
 async fn previous_response_reference(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     prior_context: PriorContext,
     tool_exposure_digest: &str,
-) -> Result<Option<String>, CompleteAgentRunError> {
-    let prior_binding = match (&run.attempt_payload, prior_context) {
-        (Some(payload), _) => serde_json::from_str::<serde_json::Value>(payload)
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
-            .pointer("/wire/prior_continuation_binding_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned),
-        (None, PriorContext::Rebuild | PriorContext::Summary) => None,
+) -> Result<(Option<String>, Option<String>, PriorInput), CompleteAgentRunError> {
+    let (prior_binding, prior_input) = match (&run.attempt_payload, prior_context) {
+        (Some(payload), _) => {
+            let payload: serde_json::Value = serde_json::from_str(payload)
+                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+            (
+                payload
+                    .pointer("/wire/prior_continuation_binding_id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                crate::agent_run_continuation::parse_wire(&payload)
+                    .map_or(PriorInput::Current, |wire| wire.prior_input),
+            )
+        }
+        (None, PriorContext::Rebuild | PriorContext::Summary) => (None, PriorInput::Current),
         (None, PriorContext::Continue) => {
             match crate::update_project_assistance::read_assistance_record(
                 client,
@@ -270,7 +342,7 @@ async fn previous_response_reference(
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
             {
                 Some(assistance) => {
-                    crate::agent_run_continuation::decide_continuation(
+                    let wire = crate::agent_run_continuation::decide_continuation(
                         client,
                         claim,
                         &run.conversation_id,
@@ -278,17 +350,18 @@ async fn previous_response_reference(
                         &assistance,
                         tool_exposure_digest,
                     )
-                    .await?
-                    .prior_binding_id
+                    .await?;
+                    (wire.prior_binding_id, wire.prior_input)
                 }
-                None => None,
+                None => (None, PriorInput::Current),
             }
         }
     };
-    match prior_binding {
-        Some(binding) => binding_reference(client, claim, &binding).await,
-        None => Ok(None),
-    }
+    let reference = match &prior_binding {
+        Some(binding) => binding_reference(client, claim, binding).await?,
+        None => None,
+    };
+    Ok((prior_binding, reference, prior_input))
 }
 
 /// The destination reference that the Model Attempt of one continuation binding produced.
