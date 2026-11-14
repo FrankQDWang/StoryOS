@@ -1,0 +1,122 @@
+---
+status: accepted
+---
+
+# Deliver Standard Skills from the Deployment and Load Them with Host Tools
+
+The author decided this on 2026-11-12 in conversation, at the start of Stage 6 ([#364](https://github.com/FrankQDWang/StoryOS/issues/364)). This ADR records the scope of Stage 6, one reversal of the Skill glossary, and the disclosure rule for Skill text. It is the first ADR on Skills. Until now, [the Skill glossary](../glossary/skill.md) was the only Skill contract.
+
+The first form of this ADR had an upload by the author, an installation review, and a Skill Draft. The author withdrew them on 2026-11-12, before this ADR merged: in the first release, only the operator of the deployment provides Skills. This text is the one form that `main` gets.
+
+## Context
+
+The Skill glossary dates from the planning of 2026-08-29. It defines a standard SkillPackage and, around it, an optional StoryOS Skill Extension with parameters, Tool Roles, Outcome Profiles, Hard Applicability, and an Invocation Policy. It also defines three Installation Scopes, four kinds of Skill Source, a Skill Revocation, and a Skill Script Execution. The Stage 6 parent asks for the smallest current implementation.
+
+At `main` `963a6a3a`, the repository has these facts:
+
+- No Skill code, table, route, or Web control exists.
+- Each record of author content belongs to one Project. The only records that the Projects of a deployment share are the Model Registrations and the Tool Registrations.
+- No sandbox and no script runtime exists. The Tool Approval of Stage 5 was not built ([ADR 0083](0083-use-exa-as-the-first-mcp-research-destination-and-admit-it-through-project-tool-enablement.md) section 4), and [ADR 0084](0084-execute-the-research-tool-in-storyos-and-perform-no-provider-hosted-operation.md) withdrew the Provider sandbox.
+- A Run is a tool loop ([ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md)). A Host Tool is a Tool that StoryOS itself executes: it has no external destination, and its result returns to the model in the next RunStep. Four Host Tools exist.
+- The operator of the deployment configures the model destination and the research destination, and that configuration is the consent ([ADR 0048](0048-use-the-deployment-model-destination-by-default.md), [ADR 0090](0090-make-web-research-available-in-each-project-without-an-enablement-switch.md)). `createAgentRun` writes the records of both destinations with no action of the author.
+- A new Context source class needs a new scope revision of the standing grant ([ADR 0051](0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)).
+- A change of a request form needs a new mapping revision and a new Registration ([ADR 0093](0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md) section 3).
+- No author-facing view shows Run internals ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)).
+
+The open Agent Skills format gives the package rules: one directory with a `SKILL.md`; a `name` of 1 to 64 characters that is the same as the directory name; a `description` of 1 to 1024 characters; optional `scripts/`, `references/`, and `assets/` directories.
+
+## Decision
+
+### 1. Stage 6 delivers standard Skills only
+
+Stage 6 delivers the provision of standard SkillPackages by the deployment, the selection, the progressive loading, and the joint use. A standard package needs no StoryOS-specific file.
+
+These contracts stay deferred. Their glossary entries stay, and no released Stage implements them:
+
+- Each Skill that an author provides: the upload, the Skill Installation Candidate, the Skill Installation Record, the replacement and the removal by an author, and the Skill Draft. A later release adds them with their own entry, and the author decides that design first.
+- The StoryOS Skill Extension and each concept that needs it: the Skill Parameter Set, the Skill Invocation Policy, Hard Applicability, the Skill Tool Role, the Skill Dependency Resolution, the Skill Outcome Profile, and the Skill Outcome Obligation.
+- The Skill Script Execution. A package can hold scripts. They are files that StoryOS does not run.
+- The Skill Revocation. The author cancels a Run that must stop.
+- The Installation Scopes UserLocal and ProjectLocal, and each Skill Source other than the deployment.
+
+### 2. The deployment provides the Skills
+
+The one Skill Source is the deployment, and the one Installation Scope is SystemOfficial: read-only, and the same in each Project of the deployment.
+
+- **The directory.** One deployment setting names one directory. Each child directory is one package, and its name is the Skill name, so a name is unique in the deployment. A deployment with no setting has no Skill: a Run has no catalog, and the `$` picker has no entry.
+- **The reader.** Only the Server reads the directory, one time, when it starts. It validates each package against the Agent Skills format and the limits of section 9. A package that fails stops the start, and the message names the package and the rule. The Worker never reads the directory.
+- **The Snapshot.** Before it admits a Run, `createAgentRun` makes sure that the Project has the SkillPackage Snapshot of each Skill of the deployment: the complete package, content-addressed by its digest, a record of that Project. It writes a Snapshot only when the Project does not have that digest. The Run pins its catalog: the SkillPackage Reference of each Skill at admission. Each later step of the Run reads only these Snapshots.
+- **A change.** The operator changes the directory and starts the Server again. The next Run of a Project gets the new catalog. A Run in progress keeps its catalog and its Snapshots, and each earlier record stays readable. No enablement switch exists: a Skill of the deployment is in the catalog of each Project.
+
+### 3. Loading is a call of a Host Tool
+
+The glossary defined the Skill Load Request and the Skill Resource Load Request as typed requests of an Agent Decision that are not ToolCalls. This ADR reverses that. The two requests are calls of two Host Tools of ADR 0091:
+
+- `load_skill` loads the complete `SKILL.md` of one Skill of the catalog of the Run.
+- `read_skill_resource` reads one text file of the Snapshot of a Skill that the Run loaded or that the author selected.
+
+The rules of a Host Tool apply: no external destination, no Destination Attempt, no Outbound Disclosure Event, a ToolCall record, and a result that returns to the model in the next RunStep. A refused call returns its reason, and the Run continues.
+
+The catalog is one Context item of each Run with a Skill: the name, the description, and the reference of each Skill. The loaded text is not Data-only Context. The catalog, the instruction text, and the resource text have their own Context source classes, and the instruction text keeps the instruction rank of the Context contract: below the Project Instruction and above Data-only Context. The Host loads the complete `SKILL.md` and never shortens it.
+
+An explicit selection by the author needs no load call. The Host puts the `SKILL.md` of the selected Skill into the first RunStep.
+
+The request forms change, so Stage 6 adds one mapping revision, one head Model Registration, and one revision of the Host Tool Registration (ADR 0093 sections 2 and 3). The Stage 6 tickets land on one integration branch, and they change that mapping in place until the branch merges into `main`, by the rule of ADR 0093 section 3. The tickets record these names, the ToolSpecs, and the names of the source classes when they land.
+
+**Compaction.** The rules of ADR 0093 apply with two additions. The `SKILL.md` text of a Skill, loaded or selected, keeps its exact form in each request after a compaction. The result of a `read_skill_resource` call above the stub limit becomes a stub, as a research result does, and the model reads the resource again when it needs the text.
+
+### 4. The provision by the operator is the disclosure consent
+
+The standing grant gets a new scope revision that names the Skill source classes: the catalog entry, the instruction text, and the resource text. The Host makes it current with no action of the author. The operator puts a Skill into the deployment, and that is the consent to send its text to the model destination of each Project, as the configuration of the operator is the consent for the model destination and the research destination (ADR 0048, ADR 0090). No approval prompt exists for a load. A Skill gives no permission, no disclosure right, and no authority, and the Host instructions say so to the model.
+
+The author accepted one risk. The instructions of a third-party Skill can lead the Agent to put manuscript text into a research query. The controls are the choice of the Skills by the operator and the Host instructions. In this release, the author is the operator.
+
+### 5. Selection
+
+The author selects a Skill with the `$` picker, which lists the catalog of the deployment and stores the exact SkillPackage Reference. The selection binds the Run of that message only. An instruction in ordinary words to use a named Skill is a choice of the Agent from the catalog. The Host parses no Skill name from a message, so no name is ambiguous and no Run waits for one.
+
+No record holds the Skills of a Project Conversation. In a later message, the model can still have the text from the Provider conversation, and the Agent loads the Skill again when it does not.
+
+### 6. Joint use
+
+Each loaded Skill is one separate, attributable Context item. The order of the items serves only reproducible serialization. The Host merges nothing and ranks nothing. The Host finds no Skill Conflict. When two Skills ask for incompatible things, the Agent asks the author in its answer.
+
+### 7. A Skill that is not available
+
+A Skill problem does not stop the writing work. A `load_skill` call for a name that is not in the catalog of the Run, and a `read_skill_resource` call for a file that is not readable, are refused calls with a reason, and the Run continues. A message whose `$` selection names a reference that is not in the catalog of the deployment refuses before the Run starts, with one plain sentence, and the author sends the message again without the selection.
+
+### 8. What the author sees
+
+After a turn, the panel names each Skill that the turn used, in the place where it names each research call. For a Skill that the Agent loaded, the panel gives the reason that the Agent gave in the load call. For a Skill that the author selected, the panel says so. The `$` picker shows the name and the description of each Skill. No view shows a `SKILL.md`: the operator has the files. The panel has no entry to manage Skills. The composed instructions of a RunStep are Run internals and stay in the read-only audit query.
+
+### 9. Limits
+
+| Item | Limit |
+| --- | --- |
+| One package | 1 MiB and 64 files |
+| `SKILL.md`, and each resource that the Agent can read | 32,000 tokens, UTF-8 text |
+| Skills of one deployment | 32 |
+| One Run | 8 Skill loads and 16 resource reads |
+
+A package above its limit, and a `SKILL.md` above its limit, fail the validation at the start of the Server. A file that is not UTF-8 text, or that is above the token limit, stays in the package, and a read of it is a refused call. An explicit selection uses one of the 8 loads.
+
+## Considered options
+
+- **The complete glossary design in Stage 6.** Rejected. No real Skill of the author needs the Extension, and each of its parts needs a mechanism that does not exist: a Run Finalization Gate, a Run Wait, a second Tool Registration with an effect ceiling.
+- **An upload by the author, with a Candidate review, a replacement, and a removal.** Rejected for the first release by the author on 2026-11-12. It was the first form of this ADR. Its tickets were more than half of the estimated size of Stage 6, and the author is the one person who adds a Skill today.
+- **Packages in the repository, compiled into the binaries.** Rejected. A new Skill needs a release, each Skill changes the request fixtures of the tests, and a private or third-party Skill must enter the repository.
+- **The Worker reads the directory.** Rejected. Two processes read the directory at two times, so a Run can pin a Skill that the Worker does not have. With the Snapshot in the Project, the Worker needs only the database.
+- **A Snapshot only at the first load of a Skill.** Rejected. An Agent load occurs in the Worker, so the Worker must read the directory.
+- **A script runtime.** Rejected for Stage 6. It needs a server sandbox and a Tool Approval. An approval prompt for each script is the interaction that the author refused in Stage 5.
+- **A new Agent Decision kind and a new continuation cause for a load.** Rejected. The tool loop of ADR 0091 already has the behavior: the model asks, the Host answers, the next RunStep reads the answer.
+- **A one-shot approval for each Skill load.** Rejected. The operator chooses the Skills, and the Agent decides when a Skill helps.
+- **A conversation-level list of Skills in effect.** Rejected for Stage 6. It needs a control to remove a Skill from the list and a rule to send the text again after each rebuild of the Provider conversation.
+
+## Consequences
+
+- The Skill glossary changes with this ADR. The Skill Load Request and the Skill Resource Load Request are calls of Host Tools. The Skill Invocation has no ambiguous-name wait. SystemOfficial is the scope of a Skill that the deployment provides. Each deferred entry says so.
+- The user stories 1, 2, 9, 10, 11, and 12 of the Stage 6 parent are waived. The stories 7 and 13 are narrowed to the usage record and to a change by the operator that does not change active work.
+- Each Project stores its own copy of each package of the deployment. The limits of section 9 bound it at 32 MiB for one catalog.
+- In a later deployment with more than one author, the operator chooses the Skills for each author. That release decides again what an author sees and controls.
+- A later Stage that adds a second scope or source decides how same-name packages coexist. A later Stage that adds a script runtime builds the Tool Approval first.
+- The External MCP Surface of [ADR 0082](0082-keep-room-for-an-external-mcp-surface.md) is not affected.
