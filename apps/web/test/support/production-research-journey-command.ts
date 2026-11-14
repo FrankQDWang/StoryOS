@@ -165,7 +165,9 @@ export async function verifyProductionResearchJourney(context: BrowserContext): 
       FROM storyos.proposals WHERE proposal_id = '${location.proposal_id}'::uuid`),
     `research_artifact:${research.decision.research_artifact_id}`);
     await page.reload();
-    await expect(page.locator("[data-assistant-result]")).toContainText("这次修改涉及 1 个章节、1 处文字");
+    // The panel shows each result of the Run in the order of the model: the Proposal, then the final answer (#1474).
+    await expect(page.locator("[data-assistant-result]"))
+      .toHaveText(["这次修改涉及 1 个章节、1 处文字，具体建议在下方。", "修改建议在正文中。"]);
     // The synthesis turn is in the history now. It shows the same sources, claims, and citations, and it has no
     // "用到故事里" button, because that button sends in the current Conversation (#1427).
     const researchTurn = page.locator(`[data-assistant-history-run="${researchRun}"]`);
