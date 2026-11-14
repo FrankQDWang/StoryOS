@@ -5,6 +5,7 @@ fn source(id: &str, cited: CitedSource, project_id: &str) -> CitableSource {
         id: id.to_owned(),
         cited,
         locator: format!("https://example.org/{id}"),
+        title: None,
         owner_user_id: "user-1".to_owned(),
         project_id: project_id.to_owned(),
         run_id: "run-1".to_owned(),
@@ -106,6 +107,7 @@ fn the_citable_tag_escapes_each_value_so_that_no_locator_closes_it() {
     let sources = [
         CitableSource {
             locator: "https://example.org/a\"/><x".to_owned(),
+            title: None,
             ..source("s1", CitedSource::Snapshot, "proj-1")
         },
         source(

@@ -540,13 +540,16 @@ pub fn summary_fits_item(decision: &crate::CurrentPassageAssemblyRecord, summary
 
 /// The Context Assembly of the later request: the decision Context Assembly with the summary of
 /// the same Conversation as the first selected item. The summary is a Derived Summary, so the
-/// sufficiency of the Exact Required input does not change.
+/// sufficiency of the Exact Required input does not change. Each Tool result whose candidate in
+/// `candidates` has the stub form is a stub (ADR 0093 section 5).
 pub fn later_request_record(
     decision: &crate::CurrentPassageAssemblyRecord,
     compaction_id: &str,
     summary: &str,
+    candidates: &[crate::ToolResultCandidate<'_>],
 ) -> crate::CurrentPassageAssemblyRecord {
     let mut record = decision.clone();
+    crate::tool_result_context::stub_selected_results(&mut record, candidates);
     let token_count = crate::assemble_context::count_context_item_tokens(summary);
     record.considered.insert(
         /*index*/ 0,

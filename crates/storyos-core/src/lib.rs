@@ -40,6 +40,7 @@ mod tool_loop_profile;
 mod tool_registration;
 mod tool_result;
 mod tool_result_context;
+mod tool_result_stub;
 mod tool_spec;
 mod unknown_create_successor;
 pub use ordinary_passage_request::{
@@ -308,9 +309,10 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultOutput, ToolResultSource,
-    assemble_tool_result_continuation,
+    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput, ToolResultSource,
+    assemble_tool_result_continuation, stub_tool_call_ids,
 };
+pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
     ExternalRead, ExternalWrite, FINISH_TOOL_SPEC, IntakeField, IntakeRefusal,
     PROPOSE_EDIT_TOOL_SPEC, ServerArguments, TOOL_RESULT_TEXT_MAX_BYTES, ToolEffectEnvelope,

@@ -37,7 +37,10 @@ fn candidate<'a>(
         state,
         result_text,
         sources: &[],
-        output: ToolResultOutput::Projected,
+        output: ToolResultOutput::Research,
+        function_name: "web_search",
+        arguments: "{}",
+        form: ToolResultForm::Exact,
     }
 }
 
@@ -78,6 +81,7 @@ fn each_resolved_tool_call_is_one_candidate_named_by_its_snapshots_with_its_cita
         id: id.to_owned(),
         cited,
         locator: format!("https://example.org/{id}"),
+        title: None,
         owner_user_id: "user-1".to_owned(),
         project_id: "proj-1".to_owned(),
         run_id: "run-1".to_owned(),
@@ -248,6 +252,7 @@ fn a_cut_result_keeps_each_citable_id_whole_inside_the_item_limit() {
         id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
         cited: CitedSource::Snapshot,
         locator: "https://example.org/tides".to_owned(),
+        title: None,
         owner_user_id: "user-1".to_owned(),
         project_id: "proj-1".to_owned(),
         run_id: "run-1".to_owned(),
@@ -286,6 +291,7 @@ fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continua
         id: "018f0000-0000-7001-8000-000000000a01".to_owned(),
         cited: CitedSource::Snapshot,
         locator: format!("https://example.org/{}", "a".repeat(2000)),
+        title: None,
         owner_user_id: "user-1".to_owned(),
         project_id: "proj-1".to_owned(),
         run_id: "run-1".to_owned(),
@@ -321,6 +327,57 @@ fn a_citable_tag_above_the_item_limit_rejects_the_result_and_blocks_the_continua
                     source_class: ContextSourceClass::ToolResult,
                 }],
             },
+        )
+    );
+}
+
+#[test]
+fn only_a_long_research_result_or_read_in_the_stub_form_becomes_a_stub() {
+    let long = "Tide. ".repeat(500);
+    let research = |id, text, form| ToolResultCandidate {
+        form,
+        ..candidate(id, ToolCallState::Settled, Some(text))
+    };
+    let candidates = [
+        research("call_long", &long, ToolResultForm::Stub),
+        research("call_short", "High water at 10.42.", ToolResultForm::Stub),
+        research("call_exact", &long, ToolResultForm::Exact),
+        ToolResultCandidate {
+            output: ToolResultOutput::HostTool,
+            function_name: "propose_edit",
+            ..research("call_host", &long, ToolResultForm::Stub)
+        },
+        ToolResultCandidate {
+            output: ToolResultOutput::StoredRead,
+            function_name: "read_tool_result",
+            arguments: r#"{"call_id":"call_long"}"#,
+            ..research("call_read", &long, ToolResultForm::Stub)
+        },
+    ];
+    let mut record = passage();
+    assemble_tool_result_continuation(&mut record, &candidates);
+    let modes: Vec<ProjectionMode> = tool_items(&record).into_iter().map(|item| item.1).collect();
+    let read = &tool_items(&record)[4].2;
+
+    assert_eq!(
+        (
+            modes,
+            stub_tool_call_ids(&record),
+            read.contains("the full result of the call call_long"),
+            record.considered[record.considered.len() - 1].token_count
+                > crate::TOOL_RESULT_STUB_TOKEN_LIMIT,
+        ),
+        (
+            vec![
+                ProjectionMode::ToolResultStub,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ExactRequired,
+                ProjectionMode::ToolResultStub,
+            ],
+            vec!["call_long".to_owned(), "call_read".to_owned()],
+            true,
+            true,
         )
     );
 }

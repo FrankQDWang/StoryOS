@@ -71,6 +71,9 @@ pub enum ProjectionMode {
     DerivedSummary,
     /// A prefix of the content with an explicit truncation mark.
     DeterministicExcerpt,
+    /// The stub of a Tool result after a compaction: the call, its sources, and how to read the
+    /// full result again (ADR 0093).
+    ToolResultStub,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -177,7 +177,7 @@ The fifth Context Assembly gate and its attributable minimum-necessary transform
 _Avoid_: Source Revision, silent truncation, rewritten history, evidence replacement
 
 **Context Projection Policy**:
-The immutable, versioned source-class and destination contract selecting exactly one projection mode: Exact Required, Deterministic Excerpt, Derived Summary, or Reference Only, with hard item bounds and failure behavior. Budget is allocated first to non-degradable Mandatory Context, then declared degradable Mandatory Context, then ranked dynamic context; an unfit Exact Required item requires another eligible route, a new reframed operation, or a Blocked decision.
+The immutable, versioned source-class and destination contract selecting exactly one projection mode: Exact Required, Deterministic Excerpt, Derived Summary, Tool Result Stub, or Reference Only, with hard item bounds and failure behavior. Budget is allocated first to non-degradable Mandatory Context, then declared degradable Mandatory Context, then ranked dynamic context; an unfit Exact Required item requires another eligible route, a new reframed operation, or a Blocked decision.
 _Avoid_: Arbitrary token truncation, best-effort fit, provider-side default
 
 **Exact Required Projection**:
@@ -195,6 +195,10 @@ _Avoid_: Rewritten history, semantic equivalence proof, source evidence
 **Context Compaction Projection**:
 An immutable Operational Record of one bounded active-context replacement, with known input and prior projection references, producer, output or native opaque reference, reported usage, and loss or unknown-state evidence. It supplies later requests without rewriting prior Messages, Run Events, Tool results, Step Snapshots, manifests, or request history, and is neither an Artifact nor Authoritative State.
 _Avoid_: Durable history deletion, Memory Document, semantic erasure, mutable past request
+
+**Tool Result Stub**:
+A Projection mode of a `tool_result` item after a compaction: the Tool, its arguments, the citable sources, and the identity of the call, in at most 2,000 counted tokens, in place of a result that an earlier request sent ([ADR 0093](../adr/0093-compact-a-run-more-than-one-time-keep-tool-results-as-stubs-and-keep-the-recent-author-messages.md)). The stored result stays, and the model reads it again with `read_tool_result`.
+_Avoid_: Summary of a result, deleted result, truncation
 
 **Opaque Provider Continuity**:
 A Provider-specific cache handle, prior-response reference, encrypted compaction object, or other non-inspectable mechanism bound to its original destination and validated Adapter mapping. It may support an admitted request but is neither StoryOS history nor authorization, and unknown internal content or model influence is not reconstructed from the reference.

@@ -223,6 +223,8 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.deepEqual(records.map((record) => record.install_state), ["installed", "installed"]);
     assert.deepEqual(twiceInspect.active_compaction, twiceInspect.compactions?.[1]);
     assert.equal(records[1]?.prior_model_attempt_id, records[0]?.installed.kind === "present" ? records[0].installed.model_attempt_id : undefined);
+    // The result of `finish` is short, so it keeps its exact form, and no record names a stub (ADR 0093).
+    assert.deepEqual(records.map((record) => record.stub_tool_call_ids), [undefined, undefined]);
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     await stopRealServer(started.server);

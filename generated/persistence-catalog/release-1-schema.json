@@ -424,6 +424,11 @@
           "nullable": false,
           "type": "uuid"
         },
+        "stub_tool_call_ids": {
+          "default": "'[]'::jsonb",
+          "nullable": false,
+          "type": "jsonb"
+        },
         "usage_kind": {
           "default": null,
           "nullable": false,

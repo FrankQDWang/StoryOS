@@ -1861,6 +1861,7 @@ dependencies = [
  "serde_json",
  "storyos-application",
  "storyos-core",
+ "tokio",
  "tracing",
 ]
 

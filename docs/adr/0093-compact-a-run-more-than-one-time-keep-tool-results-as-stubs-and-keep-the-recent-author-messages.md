@@ -4,7 +4,7 @@ status: accepted
 
 # Compact a Run More Than One Time, Keep Tool Results as Stubs, and Keep the Recent Author Messages
 
-The author approved the specification [#1507](https://github.com/FrankQDWang/StoryOS/issues/1507) on 2026-11-14. This ADR records its decisions. Each ticket of the specification adds its section. This version has the sections of [#1509](https://github.com/FrankQDWang/StoryOS/issues/1509): the Host Tool `read_tool_result`, the mapping `v6`, and the new Registrations. It amends [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 2 with a fourth Host Tool. It also has the section of [#1510](https://github.com/FrankQDWang/StoryOS/issues/1510): a compaction at each RunStep. That section amends [ADR 0055](0055-install-a-host-managed-compaction-summary-for-the-decision-request.md) (the amendment of 2026-11-13: one compaction for each Run, and the input limit after a compaction).
+The author approved the specification [#1507](https://github.com/FrankQDWang/StoryOS/issues/1507) on 2026-11-14. This ADR records its decisions. Each ticket of the specification adds its section. This version has the sections of [#1509](https://github.com/FrankQDWang/StoryOS/issues/1509): the Host Tool `read_tool_result`, the mapping `v6`, and the new Registrations. It amends [ADR 0091](0091-replace-the-typed-reply-form-with-host-tools-and-end-each-run-with-an-explicit-finish-call.md) section 2 with a fourth Host Tool. It also has the section of [#1510](https://github.com/FrankQDWang/StoryOS/issues/1510): a compaction at each RunStep. That section amends [ADR 0055](0055-install-a-host-managed-compaction-summary-for-the-decision-request.md) (the amendment of 2026-11-13: one compaction for each Run, and the input limit after a compaction). It also has the section of [#1511](https://github.com/FrankQDWang/StoryOS/issues/1511): the stub of each Tool result that the model read before a compaction. That section amends [ADR 0085](0085-reenter-each-settled-tool-result-through-context-assembly.md) section 3 and the rule "Tool results keep their form" of the amendment of 2026-11-13 to ADR 0055.
 
 ## Context
 
@@ -61,14 +61,39 @@ The later tickets of #1507 change the request forms of `v6` again: the stub outp
 - **The Host fake.** The author message prefix `Compact active context between calls.` alone asks for one compaction, at the first RunStep that compacts, as before. The prefix with `At RunSteps <position> ...`, for example `At RunSteps 0 1.`, asks for a compaction at each named position. It is a test request (ADR 0056).
 - **Tool results.** The request after a compaction still sends each Tool result of the Run in its exact form. A later ticket of the specification changes that.
 
+  > Superseded by section 5 ([#1511](https://github.com/FrankQDWang/StoryOS/issues/1511)).
+
+### 5. Tool result stubs
+
+[#1511](https://github.com/FrankQDWang/StoryOS/issues/1511) adds this section.
+
+- **Which results.** The later request of a compaction at the position P sends each function call of the Run, as before. A call is a stub when a decision request of the Run sent its output before the summary request of P. The summary request of P continues a prior response, and it sends the outputs of the calls of that response. These outputs wait for the later request, so they keep their bounded exact form. The Host finds them by the Decision of that response (the coordinator decided this rule on 2026-11-14). Each other call of the Run settled at an earlier RunStep, and the request after that RunStep sent its output, because each native function call needs its output (ADR 0085).
+- **Which Tools.** Only the result of a `web_search` or `web_fetch` call and the result of a `read_tool_result` call can be a stub, and only with the state `ok`. `read_tool_result` cannot read the result of a Host Tool, so the result of `finish`, `propose_edit`, `submit_research`, and a refused read keeps its exact form.
+- **Size.** A stub has at most 2,000 counted tokens (the count of ADR 0052). A result that is not larger than this limit keeps its exact form.
+- **The stub.** The stub keeps the `tool_result` boundary with the identity of its call and the attribute `form="stub"`. Its text gives the Tool name, the canonical arguments of the call, and one sentence that tells the model to call `read_tool_result` with the identity of the call. The `tool_sources` tag of ADR 0087 follows, with one line for each Snapshot (its identity, its title when the result gave one, and its locator) and one line for each Gap (its identity, its locator, and its reason). Thus the model can cite a source of a stub with `submit_research`.
+  - When all source lines do not fit, the tag keeps the first lines. The text gives the number of the sources and says that the model must read the result again before it cites one of the other sources.
+  - When the arguments do not fit with the first source line, the Host cuts the arguments and ends them with a mark.
+  - When a stub with no source line and no argument does not fit, because the identities of the calls are too long, the result keeps its exact form.
+  - The stub of a `read_tool_result` call names the call that it read, and its `read_tool_result` sentence gives the identity of that call. It has no `tool_sources` tag, because the stub of that call has the sources.
+- **Later full inputs.** The compaction record names each ToolCall whose result its later request sends as a stub. Each later RunStep of the Run selects the result of a ToolCall that an installed record names as a stub. Thus a full input after the compaction, for example after an expired prior reference, sends the stub again. An incremental request sends only the outputs of the calls of its prior response. These calls are newer than each installed compaction, so they are never stubs.
+- **Records.** A stub is a Context item of the source class `tool_result` with the projection mode `tool_result_stub`. Its considered source keeps the token count of the exact result. The grant scope does not change, and the stub goes through the grant admission of each Tool result. A Tool result has no restriction state (section 1), so the stub has no restriction check.
+- **The input limit.** The check for `conversation_too_long` after the install (section 4) counts the stubs, because it counts the selected items of the later request.
+- **The summary request.** It gets no stub. It sends the waiting outputs in their exact form, as before.
+- **Host instructions.** The mapping `v6` adds one paragraph after the paragraph of section 1: it says what a stub is, that the model can cite a source of a stub, and that the model calls `read_tool_result` for the text of the result or for a source that the stub does not give. The mapping stays `v6`, and the head Registration stays `fa20` (section 3).
+- **The public read.** The compaction record in `getAgentRun` gets the optional field `stub_tool_call_ids`, absent when the later request sent no stub. The public `ProjectionMode` of a selected item gets the value `tool_result_stub`, because the decision Context Assembly of a RunStep after a compaction selects the stubs. The read shows the decision Context Assembly of the active RunStep, as before, and not the Context Assembly of a later request. Thus the stubs of a compaction at the active RunStep show only in `stub_tool_call_ids` of its record, and the decision Context Assembly of each later RunStep selects them.
+- **The Host fake.** The fake destination refuses a request with the reason `stub_call_missing` when a stub that the request sends names a call that the request does not send: as its own call, or as the call that a read stub read. It compares the escaped identities of the calls, as the stub gives them. A research script and a read script can follow the compaction prefix.
+
 ## Considered options
 
 - **The read result is the raw stored text, and the next request projects it again with the identity of the read call.** Rejected. The model would see a second source tag for the same result, and the `tool_sources` tag would have no Snapshot, so `submit_research` could not cite the sources.
 - **Execute the research Tool again.** Rejected for the reason of ADR 0085: a second exchange is a second external read with a second disclosure.
 - **A separate chain of summaries, or one summary request for each earlier summary.** Rejected. The Provider conversation of the later request already holds the earlier summary, so the next summary request continues it.
+- **A stub for each result, also for a short result or the result of a Host Tool.** Rejected. A stub of a short result is not smaller, and `read_tool_result` cannot read the result of a Host Tool.
+- **A stub for the waiting outputs of the summary request.** Rejected. No decision request sent them, so the model did not read them.
 
 ## Consequences
 
 - An AgentRun that pinned `fa19` refuses with Registration drift after the deployment offers `fa20`, as for each earlier head (ADR 0053).
 - Section 1 and section 2 need no migration and no public schema change. The row of the Host Tool Registration `e0102` appears at its first ToolCall.
 - Section 4 changes the release baseline and adds one optional field to `getAgentRun`. The local database has no data to keep.
+- Section 5 adds the column `stub_tool_call_ids` to `active_context_compactions` in the release baseline, one optional field to the compaction record of `getAgentRun`, and the projection mode `tool_result_stub`.

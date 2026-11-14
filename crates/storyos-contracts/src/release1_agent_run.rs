@@ -217,6 +217,7 @@ pub enum ProjectionMode {
     ExactRequired,
     DerivedSummary,
     DeterministicExcerpt,
+    ToolResultStub,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -629,6 +630,8 @@ pub enum OptionalActiveCompactionInspect {
         installed: OptionalCompactionInstallInspect,
         preserved_item_ids: Vec<String>,
         admission: ContinuationAdmissionInspect,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stub_tool_call_ids: Option<Vec<String>>,
     },
 }
 

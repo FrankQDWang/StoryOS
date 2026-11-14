@@ -18,6 +18,8 @@ pub struct CitableSource {
     pub id: String,
     pub cited: CitedSource,
     pub locator: String,
+    /// The title of a Snapshot, when the result gave one.
+    pub title: Option<String>,
     pub owner_user_id: String,
     pub project_id: String,
     pub run_id: String,

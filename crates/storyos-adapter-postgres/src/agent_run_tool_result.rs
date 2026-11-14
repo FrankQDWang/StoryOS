@@ -8,7 +8,7 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
     ContextSourceClass, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate,
-    ToolResultOutput,
+    ToolResultForm, ToolResultOutput,
 };
 
 use crate::agent_run_tool_authority::damaged;
@@ -28,6 +28,11 @@ struct StoredToolCall {
     result_text: Option<String>,
     sources: Vec<storyos_core::CitableSource>,
     output: ToolResultOutput,
+    function_name: String,
+    /// The canonical arguments of the call.
+    arguments: String,
+    /// Whether an installed compaction of the Run sent this result as a stub (ADR 0093).
+    stubbed: bool,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -149,8 +154,29 @@ impl RunToolResults {
         stored_tool_calls(client, claim).await.map(Self)
     }
 
-    /// One `tool_result` Context Candidate for each ToolCall.
+    /// One `tool_result` Context Candidate for each ToolCall. A result that an installed
+    /// compaction sent as a stub stays a stub in each later full input (ADR 0093 section 5).
     pub(crate) fn candidates(&self) -> Vec<ToolResultCandidate<'_>> {
+        self.candidates_where(|call| call.stubbed)
+    }
+
+    /// The candidates of the later request of a compaction whose summary request continued the
+    /// response of the Decision `waiting_decision_id`. Each result that an earlier decision
+    /// request sent is a stub. The outputs of the calls of that response wait for this request,
+    /// so they keep their exact form (ADR 0093 section 5).
+    pub(crate) fn later_request_candidates(
+        &self,
+        waiting_decision_id: Option<&str>,
+    ) -> Vec<ToolResultCandidate<'_>> {
+        self.candidates_where(|call| {
+            call.stubbed || waiting_decision_id != Some(call.decision_id.as_str())
+        })
+    }
+
+    fn candidates_where(
+        &self,
+        stub: impl Fn(&StoredToolCall) -> bool,
+    ) -> Vec<ToolResultCandidate<'_>> {
         self.0
             .iter()
             .map(|call| ToolResultCandidate {
@@ -165,6 +191,12 @@ impl RunToolResults {
                 result_text: call.result_text.as_deref(),
                 sources: &call.sources,
                 output: call.output,
+                function_name: &call.function_name,
+                arguments: &call.arguments,
+                form: match stub(call) {
+                    true => ToolResultForm::Stub,
+                    false => ToolResultForm::Exact,
+                },
             })
             .collect()
     }
@@ -178,7 +210,12 @@ async fn stored_tool_calls(
         .query(
             "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
                     run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
-                    tool_spec_revision
+                    tool_spec_revision, function_name, arguments::text,
+                    EXISTS (SELECT 1 FROM storyos.active_context_compactions AS record
+                             WHERE (record.owner_user_id, record.project_id, record.run_id) =
+                                   (call.owner_user_id, call.project_id, call.run_id)
+                               AND record.install_state = 'installed'
+                               AND record.stub_tool_call_ids ? call.tool_call_id::text)
                FROM storyos.tool_calls AS call
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
@@ -215,8 +252,17 @@ async fn stored_tool_calls(
                     Some(spec) if spec == storyos_core::READ_TOOL_RESULT_TOOL_SPEC.revision => {
                         ToolResultOutput::StoredRead
                     }
-                    Some(_) | None => ToolResultOutput::Projected,
+                    Some(spec)
+                        if storyos_core::tool_spec(spec)
+                            .is_some_and(|spec| spec.envelope.is_some()) =>
+                    {
+                        ToolResultOutput::Research
+                    }
+                    Some(_) | None => ToolResultOutput::HostTool,
                 },
+                function_name: row.get(/*idx*/ 10),
+                arguments: canonical_arguments(row.get(/*idx*/ 11))?,
+                stubbed: row.get(/*idx*/ 12),
             })
         })
         .collect()
@@ -277,16 +323,10 @@ pub(crate) async fn tool_outputs(
         let row = stored
             .remove(&ordinal)
             .ok_or_else(|| damaged("The ToolCall of a tool_result is missing"))?;
-        let arguments: serde_json::Value = serde_json::from_str(row.get(/*idx*/ 2))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         outputs.push(ToolOutput {
             call_id: source.call_id.clone(),
             name: row.get(/*idx*/ 1),
-            // A call that failed its validation keeps its arguments text as a JSON string.
-            arguments: match arguments {
-                serde_json::Value::String(text) => text,
-                arguments => storyos_core::canonical_json(&arguments),
-            },
+            arguments: canonical_arguments(row.get(/*idx*/ 2))?,
             output: item.content.clone(),
             origin: match prior_decision_id == Some(source.decision_id.as_str()) {
                 true => ToolOutputOrigin::PriorResponse,
@@ -295,6 +335,17 @@ pub(crate) async fn tool_outputs(
         });
     }
     Ok(outputs)
+}
+
+/// The arguments of a stored call as the request sends them. A call that failed its validation
+/// keeps its arguments text as a JSON string.
+fn canonical_arguments(stored: &str) -> Result<String, CompleteAgentRunError> {
+    let arguments: serde_json::Value = serde_json::from_str(stored)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    Ok(match arguments {
+        serde_json::Value::String(text) => text,
+        arguments => storyos_core::canonical_json(&arguments),
+    })
 }
 
 /// True when the active RunStep is a `tool_result_continuation` and the input that its request
