@@ -315,6 +315,7 @@ fn a_continuation_sends_each_output_with_its_call_id_after_the_original_calls() 
         serde_json::from_str(&create_body(request, "model-1", bounds)).unwrap()
     };
     let summary: serde_json::Value = serde_json::from_str(&summary_body(
+        storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION,
         "resp-1",
         &full.tool_outputs,
         &[],

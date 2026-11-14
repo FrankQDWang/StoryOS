@@ -4765,6 +4765,7 @@ CREATE TABLE storyos.active_context_compactions (
     preserved_item_ids jsonb NOT NULL,
     admission jsonb NOT NULL,
     stub_tool_call_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
+    kept_author_message_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT active_context_compactions_check CHECK (((((install_state = 'installed'::text) AND (installed_run_step_id IS NOT NULL) AND (installed_model_invocation_id IS NOT NULL) AND (installed_model_attempt_id IS NOT NULL) AND (refusal_reason IS NULL)) OR ((install_state = 'staged'::text) AND (installed_run_step_id IS NULL) AND (installed_model_invocation_id IS NULL) AND (installed_model_attempt_id IS NULL) AND (refusal_reason IS NULL)) OR ((install_state = 'refused'::text) AND (installed_run_step_id IS NULL) AND (installed_model_invocation_id IS NULL) AND (installed_model_attempt_id IS NULL) AND (refusal_reason IS NOT NULL))) IS TRUE)),
     CONSTRAINT active_context_compactions_decision_position_check CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric))),
     CONSTRAINT active_context_compactions_install_state_check CHECK ((install_state = ANY (ARRAY['staged'::text, 'installed'::text, 'refused'::text]))),

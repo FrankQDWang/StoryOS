@@ -146,6 +146,7 @@ pub(crate) async fn summary_request(
         passage_resolution: None,
         passage_input: None,
         context: Vec::new(),
+        earlier_author_messages: Vec::new(),
         declared_targets: Vec::new(),
         selection_references: Vec::new(),
         previous_response_reference,

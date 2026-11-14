@@ -161,6 +161,7 @@ pub(super) async fn install_or_refuse(
         }
         insert_later_request(client, claim, run, &mut later).await?;
         super::stubs::record(client, claim, staged, &later).await?;
+        super::messages::record(client, claim, staged, &later).await?;
         return Ok(InstallOutcome::Installed);
     };
     refuse(client, claim, staged, refusal.code()).await?;

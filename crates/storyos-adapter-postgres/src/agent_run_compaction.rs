@@ -234,7 +234,8 @@ pub(crate) async fn load_compactions(
                     known_inputs::text, output_text, usage_kind, loss_facts::text,
                     refusal_reason, installed_run_step_id::text,
                     installed_model_invocation_id::text, installed_model_attempt_id::text,
-                    preserved_item_ids::text, admission::text, stub_tool_call_ids::text
+                    preserved_item_ids::text, admission::text, stub_tool_call_ids::text,
+                    kept_author_message_ids::text
                FROM storyos.active_context_compactions
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -346,12 +347,16 @@ pub(crate) mod summary;
 #[path = "agent_run_compaction_stubs.rs"]
 mod stubs;
 
+#[path = "agent_run_compaction_messages.rs"]
+mod messages;
+
 fn inspect_row(row: &tokio_postgres::Row) -> Result<ActiveCompactionInspect, CreateAgentRunError> {
     let known_inputs = parse_json(&row.get::<_, String>(11)).map_err(read_error)?;
     let loss_facts = parse_json(&row.get::<_, String>(14)).map_err(read_error)?;
     let preserved = parse_json(&row.get::<_, String>(19)).map_err(read_error)?;
     let admission = parse_json(&row.get::<_, String>(20)).map_err(read_error)?;
     let stubs = parse_json(&row.get::<_, String>(21)).map_err(read_error)?;
+    let kept = parse_json(&row.get::<_, String>(22)).map_err(read_error)?;
     Ok(ActiveCompactionInspect {
         compaction_id: row.get(0),
         install_state: match row.get::<_, String>(1).as_str() {
@@ -392,6 +397,7 @@ fn inspect_row(row: &tokio_postgres::Row) -> Result<ActiveCompactionInspect, Cre
         preserved_item_ids: string_array(&preserved)?,
         admission: admission_from_json(&admission)?,
         stub_tool_call_ids: string_array(&stubs)?,
+        kept_author_message_ids: string_array(&kept)?,
     })
 }
 
@@ -492,3 +498,7 @@ mod repeat_tests;
 #[cfg(test)]
 #[path = "agent_run_compaction_stub_tests.rs"]
 mod stub_tests;
+
+#[cfg(test)]
+#[path = "agent_run_compaction_messages_tests.rs"]
+mod messages_tests;

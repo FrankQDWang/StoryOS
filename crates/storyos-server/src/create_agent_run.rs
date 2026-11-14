@@ -546,6 +546,8 @@ fn inspect_active_compaction(
         },
         stub_tool_call_ids: (!compaction.stub_tool_call_ids.is_empty())
             .then(|| compaction.stub_tool_call_ids.clone()),
+        kept_author_message_ids: (!compaction.kept_author_message_ids.is_empty())
+            .then(|| compaction.kept_author_message_ids.clone()),
     }
 }
 

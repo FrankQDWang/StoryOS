@@ -121,8 +121,12 @@ pub struct CreateRequest {
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
-    /// The selected items of the active decision Context Assembly, in order.
+    /// The selected items of the active decision Context Assembly, in order, other than the
+    /// earlier author messages.
     pub context: Vec<RequestContextItem>,
+    /// The exact texts of the earlier author messages that the later request of a compaction
+    /// sends before the current input, oldest first (ADR 0093 section 6).
+    pub earlier_author_messages: Vec<String>,
     pub declared_targets: Vec<DeclaredTarget>,
     /// The exact text ranges that the author added to the message, in order.
     pub selection_references: Vec<storyos_core::AdmittedSelection>,

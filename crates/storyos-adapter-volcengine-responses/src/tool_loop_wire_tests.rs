@@ -1,13 +1,13 @@
 use serde_json::json;
 use storyos_application::{
-    CreateRequest, DestinationRequest, ModelProviderAdapter, RequestAttempt, RequestRoute,
-    ToolOutput, ToolOutputOrigin,
+    CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter, RequestAttempt,
+    RequestContextItem, RequestRoute, ToolOutput, ToolOutputOrigin,
 };
-use storyos_core::ToolChoice;
+use storyos_core::{ContextSourceClass, ToolChoice};
 
 use crate::AgentPlanResponses;
 use crate::tests::{CanaryResolver, create, route};
-use crate::wire::TOOL_LOOP_INSTRUCTIONS;
+use crate::wire::{SUMMARY_INSTRUCTIONS, TOOL_LOOP_INSTRUCTIONS};
 
 /// The body that `prepare` commits for `request`.
 async fn body(request: CreateRequest) -> serde_json::Value {
@@ -337,5 +337,79 @@ async fn the_later_request_sends_a_stub_as_the_output_of_its_call() {
             json!({"type": "function_call_output", "call_id": "call_read_tool_result",
                    "output": read}),
         ]
+    );
+}
+
+/// The Create request of `create` on the mapping `mapping`.
+fn request_of(mapping: &str) -> CreateRequest {
+    let route = RequestRoute {
+        mapping_revision: mapping.to_owned(),
+        ..route("http://127.0.0.1:9")
+    };
+    let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
+        unreachable!("create() makes a Create request")
+    };
+    request
+}
+
+/// ADR 0093 section 6: the later request of a compaction sends the earlier author messages in
+/// their exact words, oldest first, with their label, after the summary and before the current
+/// input.
+#[tokio::test]
+async fn the_later_request_sends_the_earlier_author_messages_before_the_current_input() {
+    let request = request_of(storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION);
+    let summary = RequestContextItem {
+        source_class: ContextSourceClass::ConversationSummary,
+        content: "The author keeps the rain.".to_owned(),
+    };
+    let later = body(CreateRequest {
+        context: [vec![summary], request.context.clone()].concat(),
+        earlier_author_messages: vec![
+            "Keep the rain.".to_owned(),
+            "Make Mara older.\nKeep her voice.".to_owned(),
+        ],
+        ..request
+    })
+    .await;
+
+    assert_eq!(
+        later["input"],
+        json!([{"role": "user", "content": [{"type": "input_text", "text":
+            "Summary of the earlier conversation:\nThe author keeps the rain.\n\nEarlier author \
+             messages, in the exact words of the author, from before the summary, oldest \
+             first:\n[message 1]\nKeep the rain.\n\n[message 2]\nMake Mara older.\nKeep her \
+             voice.\n\nAuthor request:\nTighten this paragraph.\n\nWorking text:\nThe rain \
+             fell hard.\n\nTarget blocks:\n[block_id: 018f0000-0000-7001-8000-0000000000b1]\n\
+             The rain fell hard on the old roof."}]}])
+    );
+}
+
+/// ADR 0093 section 6: the summary instruction of the mapping `v6` also names the Proposals that
+/// the author accepted or rejected, the story facts that the conversation fixed, and the research
+/// results with their sources. The mapping `v5` keeps its summary instruction.
+#[tokio::test]
+async fn the_v6_summary_instruction_names_three_more_topics_and_v5_keeps_its_instruction() {
+    let summary = |mapping: &str| CreateRequest {
+        purpose: CreatePurpose::CompactionSummary,
+        previous_response_reference: Some("resp_24".to_owned()),
+        ..request_of(mapping)
+    };
+    let v6 = body(summary(
+        storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION,
+    ))
+    .await;
+    let v5 = body(summary(storyos_core::AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION)).await;
+
+    assert_eq!(
+        (&v6["instructions"], &v5["instructions"]),
+        (
+            &json!(format!(
+                "{SUMMARY_INSTRUCTIONS}\n\nAlso keep these topics when the conversation shows \
+                 them: each Proposal that the author accepted or rejected; the story facts that \
+                 the conversation fixed, such as the characters, their relations, the rules of \
+                 the world, and the order of events; and each research result with its sources."
+            )),
+            &json!(SUMMARY_INSTRUCTIONS),
+        )
     );
 }

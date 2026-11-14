@@ -225,6 +225,10 @@ test("active context compaction summarizes the prior response, then installs or 
     assert.equal(records[1]?.prior_model_attempt_id, records[0]?.installed.kind === "present" ? records[0].installed.model_attempt_id : undefined);
     // The result of `finish` is short, so it keeps its exact form, and no record names a stub (ADR 0093).
     assert.deepEqual(records.map((record) => record.stub_tool_call_ids), [undefined, undefined]);
+    // Each compaction keeps the messages of the earlier completed Runs of the Conversation, oldest first. The Run that the
+    // long Chapter refused is not one of them (ADR 0093).
+    const earlier = [first, ordinary, happy.run, changed.run, restricted.run, stale.run].map((run) => run.effect.run_id);
+    assert.deepEqual(records.map((record) => record.kept_author_message_ids), [earlier, earlier]);
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     await stopRealServer(started.server);
