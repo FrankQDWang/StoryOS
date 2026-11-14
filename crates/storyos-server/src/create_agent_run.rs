@@ -203,7 +203,14 @@ pub(super) async fn get_agent_run(
         decision: inspect_decision(&record.decision),
         results: record.results,
         model_attempt: inspect_model(record.model.as_ref()),
-        active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
+        active_compaction: inspect_active_compaction(record.compactions.last()),
+        compactions: (!record.compactions.is_empty()).then(|| {
+            record
+                .compactions
+                .iter()
+                .map(|compaction| inspect_active_compaction(Some(compaction)))
+                .collect()
+        }),
         reference_recovery: match record.reference_recovery.as_ref() {
             None => contracts::OptionalReferenceRecoveryInspect::Absent,
             Some(recovery) => contracts::OptionalReferenceRecoveryInspect::Present {

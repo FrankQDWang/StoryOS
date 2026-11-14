@@ -826,7 +826,13 @@ pub struct GetAgentRunResponse {
     #[ts(optional)]
     pub results: Option<Vec<AgentRunResultInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
+    // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,
+    // Each compaction record of the Run in RunStep order, or no field when the Run has none
+    // (ADR 0093). Each item is `present`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compactions: Option<Vec<OptionalActiveCompactionInspect>>,
     pub reference_recovery: OptionalReferenceRecoveryInspect,
     pub original_result_retrieval: OptionalOriginalResultRetrievalInspect,
     pub unknown_create_successor: OptionalUnknownCreateSuccessorInspect,

@@ -2366,6 +2366,15 @@
     "captured_memory_settings": {
       "$ref": "#/$defs/CapturedMemorySettingsInspect"
     },
+    "compactions": {
+      "items": {
+        "$ref": "#/$defs/OptionalActiveCompactionInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "context": {
       "$ref": "#/$defs/AgentRunContextInspect"
     },
