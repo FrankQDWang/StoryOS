@@ -91,6 +91,29 @@ pub enum ToolResultForm {
     Stub,
 }
 
+impl ToolResultForm {
+    /// The form of a result in a decision request. A result that an installed compaction of the
+    /// Run sent as a stub stays a stub in each later full input.
+    pub fn in_decision_request(installed_stub: bool) -> Self {
+        match installed_stub {
+            true => Self::Stub,
+            false => Self::Exact,
+        }
+    }
+
+    /// The form of a result of the Decision `decision_id` in the later request of a compaction
+    /// whose summary request continued the response of the Decision `waiting_decision_id`. Each
+    /// result that an earlier decision request sent is a stub. The outputs of the calls of that
+    /// response wait for this request, so they keep their exact form.
+    pub fn in_later_request(
+        installed_stub: bool,
+        decision_id: &str,
+        waiting_decision_id: Option<&str>,
+    ) -> Self {
+        Self::in_decision_request(installed_stub || waiting_decision_id != Some(decision_id))
+    }
+}
+
 /// The text of one `tool_result` item and its token counts.
 pub(crate) struct ToolResultItem {
     pub content: String,

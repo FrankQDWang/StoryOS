@@ -32,7 +32,7 @@ struct StoredToolCall {
     /// The canonical arguments of the call.
     arguments: String,
     /// Whether an installed compaction of the Run sent this result as a stub (ADR 0093).
-    stubbed: bool,
+    installed_stub: bool,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -154,28 +154,30 @@ impl RunToolResults {
         stored_tool_calls(client, claim).await.map(Self)
     }
 
-    /// One `tool_result` Context Candidate for each ToolCall. A result that an installed
-    /// compaction sent as a stub stays a stub in each later full input (ADR 0093 section 5).
+    /// One `tool_result` Context Candidate for each ToolCall of a decision request. The Core
+    /// rule gives the form of each result from its stored facts (ADR 0093 section 5).
     pub(crate) fn candidates(&self) -> Vec<ToolResultCandidate<'_>> {
-        self.candidates_where(|call| call.stubbed)
+        self.candidates_in(|call| ToolResultForm::in_decision_request(call.installed_stub))
     }
 
     /// The candidates of the later request of a compaction whose summary request continued the
-    /// response of the Decision `waiting_decision_id`. Each result that an earlier decision
-    /// request sent is a stub. The outputs of the calls of that response wait for this request,
-    /// so they keep their exact form (ADR 0093 section 5).
+    /// response of the Decision `waiting_decision_id` (ADR 0093 section 5).
     pub(crate) fn later_request_candidates(
         &self,
         waiting_decision_id: Option<&str>,
     ) -> Vec<ToolResultCandidate<'_>> {
-        self.candidates_where(|call| {
-            call.stubbed || waiting_decision_id != Some(call.decision_id.as_str())
+        self.candidates_in(|call| {
+            ToolResultForm::in_later_request(
+                call.installed_stub,
+                &call.decision_id,
+                waiting_decision_id,
+            )
         })
     }
 
-    fn candidates_where(
+    fn candidates_in(
         &self,
-        stub: impl Fn(&StoredToolCall) -> bool,
+        form: impl Fn(&StoredToolCall) -> ToolResultForm,
     ) -> Vec<ToolResultCandidate<'_>> {
         self.0
             .iter()
@@ -193,10 +195,7 @@ impl RunToolResults {
                 output: call.output,
                 function_name: &call.function_name,
                 arguments: &call.arguments,
-                form: match stub(call) {
-                    true => ToolResultForm::Stub,
-                    false => ToolResultForm::Exact,
-                },
+                form: form(call),
             })
             .collect()
     }
@@ -262,7 +261,7 @@ async fn stored_tool_calls(
                 },
                 function_name: row.get(/*idx*/ 10),
                 arguments: canonical_arguments(row.get(/*idx*/ 11))?,
-                stubbed: row.get(/*idx*/ 12),
+                installed_stub: row.get(/*idx*/ 12),
             })
         })
         .collect()

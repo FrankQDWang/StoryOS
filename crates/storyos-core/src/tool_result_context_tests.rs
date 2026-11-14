@@ -381,3 +381,35 @@ fn only_a_long_research_result_or_read_in_the_stub_form_becomes_a_stub() {
         )
     );
 }
+
+#[test]
+fn the_form_of_a_result_follows_the_installed_stubs_and_the_waiting_decision() {
+    let decision = |installed_stub| ToolResultForm::in_decision_request(installed_stub);
+    let later = |installed_stub, waiting| {
+        ToolResultForm::in_later_request(installed_stub, "decision-1", waiting)
+    };
+
+    assert_eq!(
+        (
+            // A decision request: only a result that an installed compaction sent as a stub.
+            [decision(true), decision(false)],
+            // The later request of a compaction: each result that an earlier decision request
+            // sent, and the outputs of the response that the summary request continued wait.
+            [
+                later(false, Some("decision-0")),
+                later(false, Some("decision-1")),
+                later(true, Some("decision-1")),
+                later(false, None),
+            ],
+        ),
+        (
+            [ToolResultForm::Stub, ToolResultForm::Exact],
+            [
+                ToolResultForm::Stub,
+                ToolResultForm::Exact,
+                ToolResultForm::Stub,
+                ToolResultForm::Stub,
+            ],
+        )
+    );
+}
