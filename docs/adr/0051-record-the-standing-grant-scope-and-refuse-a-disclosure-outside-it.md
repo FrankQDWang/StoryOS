@@ -43,3 +43,8 @@ The author made this decision from the view of an author. The author writes all 
 - Migration 0090 adds the nullable `grant_scope` column to `project_destination_grants`. The Project archive export holds the new column.
 - [Approve One Exact Destination Disclosure Outside the Standing Grant](https://github.com/FrankQDWang/StoryOS/issues/1102) owns the one-shot Destination Disclosure Approval, its Wait, its `decideApproval` target, and its author decision. The first stage that adds a disclosure outside the grant delivers it. ADR 0040 keeps that author decision type for it. Stage 4 has no such decision.
 - A new Purpose, source class, or destination needs a new scope revision or that approval.
+
+## Amendment 2026-11-15: the scope project_writing_assistance_v4
+
+[ADR 0089](0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 4 ([#1528](https://github.com/FrankQDWang/StoryOS/issues/1528)) adds the scope revision `project_writing_assistance_v4`. It names each Purpose and each source class of `project_writing_assistance_v3` and the Skill source classes `skill_catalog`, `skill_instruction`, and `skill_resource`. The provision of a Skill by the operator of the deployment is the consent to send its text, so the Host makes the scope current with no action of the author. Each new grant records it. The scopes `project_writing_assistance_v1` to `v3` and `research_tool_v1` name no Skill source class, so a request with a Skill item under one of them refuses with `disclosure_outside_grant`. A Project whose current grant has an earlier scope gets new binding records at its next `createAgentRun`, and each earlier record stays unchanged. The two `grant_scope` CHECK lists of the Release 1 baseline have the new value (ADR 0079).
+

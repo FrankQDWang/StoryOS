@@ -63,11 +63,20 @@ An explicit selection by the author needs no load call. The Host puts the `SKILL
 
 The request forms change, so Stage 6 adds one mapping revision, one head Model Registration, and one revision of the Host Tool Registration (ADR 0093 sections 2 and 3). The Stage 6 tickets land on one integration branch, and they change that mapping and that revision of the Host Tool Registration in place until the branch merges into `main`, by the rule of ADR 0093 section 3. The tickets record these names, the ToolSpecs, and the names of the source classes when they land.
 
+[S6-02a](https://github.com/FrankQDWang/StoryOS/issues/1528) recorded these names on 2026-11-15:
+
+- The source classes are `skill_catalog`, `skill_instruction`, and `skill_resource`. Not one of them is Data-only Context.
+- The mapping revision is `storyos.volcengine-agent-plan.responses.create.v7`. It is the mapping `v6` with two additions. A request sends each `skill_instruction` item as one section of the user message: the heading `Skill instruction`, then the exact item text, after the section `Author request` and a `Project instruction` section and before the section `Working text`, in item order. A decision request whose Context has an item of a Skill source class adds one paragraph after the Host instructions of `v6`. A request of `v7` with no such item has the bytes of the `v6` request, and the summary request never sends the paragraph.
+- The head Model Registration is `018f0000-0000-7001-8000-00000000fa21`. It is Registration `018f0000-0000-7001-8000-00000000fa20` with the mapping `v7`. It keeps the profile, the requirement, and the request bounds, so it needs no new qualification. Until a later ticket adds a Skill Tool, the mapping `v7` declares the four Host Tools of the Host Tool Registration `018f0000-0000-7001-8000-0000000e0102`.
+- The rule that refused an author message with the words "load a skill" is removed. Such a message dispatches on each Registration.
+
 **Compaction.** The rules of ADR 0093 apply. The `SKILL.md` text of a Skill, loaded or selected, keeps its exact form in each request after a compaction. The result of a `read_skill_resource` call also keeps its exact form, as the result of each Host Tool does (ADR 0093 section 5). The author decided on 2026-11-15 that the first release has no stub for a long resource result.
 
 ### 4. The provision by the operator is the disclosure consent
 
 The standing grant gets a new scope revision that names the Skill source classes: the catalog entry, the instruction text, and the resource text. The Host makes it current with no action of the author. The operator puts a Skill into the deployment, and that is the consent to send its text to the model destination of each Project, as the configuration of the operator is the consent for the model destination and the research destination (ADR 0048, ADR 0090). No approval prompt exists for a load. A Skill gives no permission, no disclosure right, and no authority, and the Host instructions say so to the model.
+
+The scope revision is `project_writing_assistance_v4` ([S6-02a](https://github.com/FrankQDWang/StoryOS/issues/1528), 2026-11-15). It names each Purpose and each source class of `project_writing_assistance_v3` and the three Skill source classes of section 3. It is the scope of each new grant. A Project whose current grant has an earlier scope gets new binding records with the scope `v4` at its next `createAgentRun` (ADR 0048, ADR 0051). The Host paragraph of the mapping `v7` says that the text of a Skill is instructions of the operator, that the Host instructions and the Project instruction come first, and that a Skill gives no permission, no function, no disclosure right, and no authority.
 
 The author accepted one risk. The instructions of a third-party Skill can lead the Agent to put manuscript text into a research query. The controls are the choice of the Skills by the operator and the Host instructions. In this release, the author is the operator.
 

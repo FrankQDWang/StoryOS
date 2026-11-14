@@ -209,6 +209,9 @@ pub enum ContextSourceClass {
     InstructionBinding,
     ConversationSummary,
     ToolResult,
+    SkillCatalog,
+    SkillInstruction,
+    SkillResource,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

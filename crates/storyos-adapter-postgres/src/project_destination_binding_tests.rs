@@ -290,6 +290,105 @@ async fn a_binding_with_earlier_bounds_or_an_earlier_registration_gets_new_recor
         .unwrap();
 }
 
+/// ADR 0089 section 3 and ADR 0053: an AgentRun that pinned `fa20` refuses with Registration
+/// drift after the deployment offers `fa21`, and its Project gets new binding records with `fa21`
+/// at its next `createAgentRun`.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_run_that_pinned_fa20_refuses_with_drift_after_the_deployment_offers_fa21() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, drifted_run) = queued_run(&store, "b03", agent_plan()).await;
+    let stale_run = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "b04",
+        agent_plan(),
+        "Help with this passage.",
+    )
+    .await;
+    let pinned = storyos_core::AGENT_PLAN_READ_RESULT_REGISTRATION.revision;
+    // The Project bound `fa20` before the deployment offered `fa21`.
+    admin
+        .batch_execute(&format!(
+            "INSERT INTO storyos.model_registration_revisions
+               (model_registration_revision, model_kind, api_surface, provider_model_id,
+                capability_profile_revision)
+             SELECT '{pinned}', model_kind, api_surface, provider_model_id,
+                    capability_profile_revision
+               FROM storyos.model_registration_revisions
+              WHERE model_registration_revision = '{head}'
+             ON CONFLICT DO NOTHING;
+             SET session_replication_role = replica;
+             UPDATE storyos.project_external_use_binding_revisions
+                SET model_registration_revision = '{pinned}'
+              WHERE project_id = '{project}';
+             UPDATE storyos.agent_runs SET model_registration_revision = '{pinned}'
+              WHERE project_id = '{project}';
+             SET session_replication_role = DEFAULT;
+             UPDATE storyos.model_registration_heads
+                SET model_registration_revision = '{pinned}'
+              WHERE model_kind = 'volcengine_agent_plan_responses';",
+            head = AGENT_PLAN_REGISTRATION.revision,
+            project = scope.project_id.as_ref(),
+        ))
+        .await
+        .unwrap();
+    let earlier = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // The first createAgentRun of another Project on `fa21` makes `fa21` the head.
+    let (other_scope, _, _) = queued_run(&store, "b05", agent_plan()).await;
+    let drifted = refusal(&store, &admin, &scope, &drifted_run).await;
+    admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "b06",
+        agent_plan(),
+        "Help with this passage.",
+    )
+    .await;
+    let stale = refusal(&store, &admin, &scope, &stale_run).await;
+    let current = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        (
+            drifted.as_deref(),
+            stale.as_deref(),
+            earlier.model_registration_revision.as_str(),
+            current.model_registration_revision.as_str(),
+            current.project_model_use_binding_revision
+                == earlier.project_model_use_binding_revision,
+        ),
+        (
+            Some("model_registration_drift"),
+            Some("model_use_binding_stale"),
+            pinned,
+            AGENT_PLAN_REGISTRATION.revision,
+            false,
+        )
+    );
+    // The HTTP phases drain the queued Runs of the shared database, so the test parks its Runs.
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE project_id IN ($1::text::uuid, $2::text::uuid) AND status = 'queued'",
+            &[&scope.project_id.as_ref(), &other_scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+}
+
 const AUTHORITY_PAUSE: &str =
     r#"{"kind": "unknown_create_successor", "reason": "authority_unavailable"}"#;
 

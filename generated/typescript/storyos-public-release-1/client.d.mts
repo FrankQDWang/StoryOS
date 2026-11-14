@@ -389,7 +389,7 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource";
 
 export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 

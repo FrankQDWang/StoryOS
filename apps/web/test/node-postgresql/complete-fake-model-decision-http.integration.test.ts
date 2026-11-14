@@ -37,7 +37,6 @@ const REFUSALS = [
   ["Please run a research fetch.", "research"],
   ["Please embed this passage.", "embedding"],
   ["Please extract conversation memory.", "memory"],
-  ["Please load a skill for this.", "skill"],
   ["Please start a subrun now.", "subrun"],
   ["Please run an eval on this.", "eval"],
 ] as const;

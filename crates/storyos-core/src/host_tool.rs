@@ -43,11 +43,12 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
 };
 
 impl ModelRegistration {
-    /// The Host Tools that the request mapping declares. The Agent Plan mapping `v6` and the fake
-    /// tool loop mapping declare the current Host Tools, and each earlier mapping keeps the
-    /// first three (ADR 0053).
+    /// The Host Tools that the request mapping declares. The Agent Plan mappings `v6` and `v7`
+    /// and the fake tool loop mapping declare the current Host Tools, and each earlier mapping
+    /// keeps the first three (ADR 0053).
     pub fn host_tools(&self) -> &'static HostToolRegistration {
         if self.mapping_revision == crate::AGENT_PLAN_READ_RESULT_MAPPING_REVISION
+            || self.mapping_revision == crate::AGENT_PLAN_SKILL_MAPPING_REVISION
             || self.mapping_revision == crate::HOST_FAKE_TOOL_LOOP_MAPPING_REVISION
         {
             &HOST_TOOL_REGISTRATION
