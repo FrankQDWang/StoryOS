@@ -464,7 +464,10 @@ test("guidance adds its distinct references to the Run up to eight references", 
         availability: { kind: "current" } },
       { reference: added, manuscript_block_ids: [second!.current_revision.blocks[0]!.manuscript_block_id],
         availability: { kind: "current" } }]);
-    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    // The request that read the steering input sends its references. A later request with the same
+    // input sends only its Tool outputs (ADR 0085).
+    const read = await inspectRun(started.baseUrl, setup, queued.run_id, run.steering_inputs[0]?.model_attempt_id ?? "");
+    const sent = read.evidence.find((evidence) => evidence.kind === "sent_content");
     if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
     assert.deepEqual(JSON.parse(sent.content).selection_references.map(({ selected_text }: { selected_text: string }) => selected_text),
       ["lo \nWo", "lantern"]);
