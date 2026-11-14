@@ -96,6 +96,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                     .ok_or(PreDispatchRefusal::UnsupportedRequest)?
             }
             (CreatePurpose::CompactionSummary, Some(reference)) => wire::summary_body(
+                &route.mapping_revision,
                 reference,
                 &create.tool_outputs,
                 &create.unexecuted_call_ids,

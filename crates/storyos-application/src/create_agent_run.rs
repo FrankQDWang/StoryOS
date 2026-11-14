@@ -146,6 +146,8 @@ pub struct ActiveCompactionInspect {
     pub admission: AgentRunContinuationAdmission,
     /// Each ToolCall whose result the later request sends as a stub (ADR 0093).
     pub stub_tool_call_ids: Vec<String>,
+    /// Each earlier author message that the later request sends (ADR 0093).
+    pub kept_author_message_ids: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

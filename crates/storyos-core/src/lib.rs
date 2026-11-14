@@ -16,6 +16,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod deployment_destination;
+mod earlier_author_messages;
 mod finish_rule;
 mod function_calling;
 mod grant_scope;
@@ -142,6 +143,10 @@ pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_CREDENTIAL_REFERENCE, AGENT_PLAN_ELIGIBILITY_EVIDENCE,
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
+};
+pub use earlier_author_messages::{
+    EARLIER_AUTHOR_MESSAGES_TOKEN_LIMIT, EarlierAuthorMessage, EarlierAuthorMessageSource,
+    is_earlier_author_message, keep_earlier_author_messages,
 };
 pub use finish_rule::{
     FinishRuleOutcome, MAX_RUN_STEPS, PriorStepCall, RunStepLimit, ToolChoice,

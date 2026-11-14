@@ -55,6 +55,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
         payload["operation_requirement"]["cause"] = serde_json::json!("tool_result_continuation");
         payload["operation_requirement"]["tool_results"] = serde_json::json!(sources);
     }
+    if let Some(sources) = &record.operation_requirement.earlier_author_messages {
+        payload["operation_requirement"]["earlier_author_messages"] = serde_json::json!(sources);
+    }
     if let Some(resolution) = record.operation_requirement.ordinary_resolution {
         payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
             "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
@@ -138,6 +141,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .ok()?,
             tool_results: requirement
                 .get("tool_results")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
+            earlier_author_messages: requirement
+                .get("earlier_author_messages")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,

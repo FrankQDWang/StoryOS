@@ -126,6 +126,9 @@ pub struct OperationRequirementRecord {
     pub ordinary_resolution: Option<super::OrdinaryPassageResolution>,
     /// The ToolCall sources of a `tool_result_continuation`, in item order.
     pub tool_results: Option<Vec<super::ToolResultSource>>,
+    /// The earlier author messages that the later request of a compaction sends, oldest first
+    /// (ADR 0093 section 6).
+    pub earlier_author_messages: Option<Vec<super::EarlierAuthorMessageSource>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -283,6 +286,7 @@ pub fn assemble_current_passage_context(
             selection_references: None,
             ordinary_resolution: None,
             tool_results: None,
+            earlier_author_messages: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

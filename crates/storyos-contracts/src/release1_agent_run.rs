@@ -632,6 +632,8 @@ pub enum OptionalActiveCompactionInspect {
         admission: ContinuationAdmissionInspect,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stub_tool_call_ids: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kept_author_message_ids: Option<Vec<String>>,
     },
 }
 

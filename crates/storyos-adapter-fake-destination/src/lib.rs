@@ -279,6 +279,9 @@ fn current_input(create: &CreateRequest) -> serde_json::Value {
             serde_json::json!({"source_class": item.source_class.name(), "content": item.content})
         })
         .collect();
+    if !create.earlier_author_messages.is_empty() {
+        wire["earlier_author_messages"] = serde_json::json!(create.earlier_author_messages);
+    }
     wire["declared_targets"] = create
         .declared_targets
         .iter()

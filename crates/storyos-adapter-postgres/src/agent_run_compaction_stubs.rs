@@ -1,13 +1,18 @@
 //! The Tool result stubs of the later request of one compaction (ADR 0093 section 5).
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{CurrentPassageAssemblyRecord, later_request_record, stub_tool_call_ids};
+use storyos_core::{
+    CurrentPassageAssemblyRecord, keep_earlier_author_messages, later_request_record,
+    stub_tool_call_ids,
+};
 
 use super::{CompactionState, unavailable, work_error};
 
 /// The Context Assembly of the later request of `staged`. The summary request continued its
 /// prior response and sent the outputs of the calls of that response, so they keep their exact
 /// form. Each other result went to the model in an earlier decision request, so it is a stub.
+/// The recent author messages of the earlier Runs go before the current input (ADR 0093 section
+/// 6).
 pub(super) async fn later_record(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -21,12 +26,14 @@ pub(super) async fn later_record(
     )
     .await?;
     let results = crate::agent_run_tool_result::RunToolResults::load(client, claim).await?;
-    Ok(later_request_record(
+    let mut later = later_request_record(
         decision,
         &staged.compaction_id,
         &staged.output_text,
         &results.later_request_candidates(prior.decision_id()),
-    ))
+    );
+    keep_earlier_author_messages(&mut later, &super::messages::load(client, claim).await?);
+    Ok(later)
 }
 
 /// Records on the staged compaction each ToolCall whose result the later request `later` sends
