@@ -57,13 +57,13 @@ The glossary defined the Skill Load Request and the Skill Resource Load Request 
 
 The rules of a Host Tool apply: no external destination, no Destination Attempt, no Outbound Disclosure Event, a ToolCall record, and a result that returns to the model in the next RunStep. A refused call returns its reason, and the Run continues.
 
-The catalog is one Context item of each Run with a Skill: the name, the description, and the reference of each Skill. The loaded text is not Data-only Context. The catalog, the instruction text, and the resource text have their own Context source classes, and the instruction text keeps the instruction rank of the Context contract: below the Project Instruction and above Data-only Context. The Host loads the complete `SKILL.md` and never shortens it.
+The catalog is one Context item of each Run with a Skill: the name and the description of each Skill. The model names a Skill by its name, and the record of the item has the reference of each Skill. The two Skill Tools are in the Tool Exposure of a Run only when its catalog has a Skill, so a deployment with no Skill sends the same requests as before. The loaded text is not Data-only Context. The catalog, the instruction text, and the resource text have their own Context source classes, and the instruction text keeps the instruction rank of the Context contract: below the Project Instruction and above Data-only Context. The Host loads the complete `SKILL.md` and never shortens it. The output of a load or a read is the exact text of the file, with no tag and no escape. The Host instructions tell the model that the output of a `load_skill` call is the instruction text of a Skill, and not data from outside the novel.
 
 An explicit selection by the author needs no load call. The Host puts the `SKILL.md` of the selected Skill into the first RunStep.
 
-The request forms change, so Stage 6 adds one mapping revision, one head Model Registration, and one revision of the Host Tool Registration (ADR 0093 sections 2 and 3). The Stage 6 tickets land on one integration branch, and they change that mapping in place until the branch merges into `main`, by the rule of ADR 0093 section 3. The tickets record these names, the ToolSpecs, and the names of the source classes when they land.
+The request forms change, so Stage 6 adds one mapping revision, one head Model Registration, and one revision of the Host Tool Registration (ADR 0093 sections 2 and 3). The Stage 6 tickets land on one integration branch, and they change that mapping and that revision of the Host Tool Registration in place until the branch merges into `main`, by the rule of ADR 0093 section 3. The tickets record these names, the ToolSpecs, and the names of the source classes when they land.
 
-**Compaction.** The rules of ADR 0093 apply with two additions. The `SKILL.md` text of a Skill, loaded or selected, keeps its exact form in each request after a compaction. The result of a `read_skill_resource` call above the stub limit becomes a stub, as a research result does, and the model reads the resource again when it needs the text.
+**Compaction.** The rules of ADR 0093 apply. The `SKILL.md` text of a Skill, loaded or selected, keeps its exact form in each request after a compaction. The result of a `read_skill_resource` call also keeps its exact form, as the result of each Host Tool does (ADR 0093 section 5). The author decided on 2026-11-15 that the first release has no stub for a long resource result.
 
 ### 4. The provision by the operator is the disclosure consent
 
@@ -96,9 +96,10 @@ After a turn, the panel names each Skill that the turn used, in the place where 
 | One package | 1 MiB and 64 files |
 | `SKILL.md`, and each resource that the Agent can read | 32,000 tokens, UTF-8 text |
 | Skills of one deployment | 32 |
+| The catalog text of one deployment | 32,000 tokens |
 | One Run | 8 Skill loads and 16 resource reads |
 
-A package above its limit, and a `SKILL.md` above its limit, fail the validation at the start of the Server. A file that is not UTF-8 text, or that is above the token limit, stays in the package, and a read of it is a refused call. An explicit selection uses one of the 8 loads.
+A package above its limit, a `SKILL.md` above its limit, and a set of Skills above its limit or with a catalog text above its limit fail the validation at the start of the Server. A file that is not UTF-8 text, or that is above the token limit, stays in the package, and a read of it is a refused call. An explicit selection uses one of the 8 loads.
 
 ## Considered options
 
@@ -107,6 +108,7 @@ A package above its limit, and a `SKILL.md` above its limit, fail the validation
 - **Packages in the repository, compiled into the binaries.** Rejected. A new Skill needs a release, each Skill changes the request fixtures of the tests, and a private or third-party Skill must enter the repository.
 - **The Worker reads the directory.** Rejected. Two processes read the directory at two times, so a Run can pin a Skill that the Worker does not have. With the Snapshot in the Project, the Worker needs only the database.
 - **A Snapshot only at the first load of a Skill.** Rejected. An Agent load occurs in the Worker, so the Worker must read the directory.
+- **A stub for a long resource result after a compaction.** Deferred by the author on 2026-11-15. It was in the form of this ADR of 2026-11-14. A resource is small in each known package, and the stub needs a second stub rule beside ADR 0093 section 5.
 - **A script runtime.** Rejected for Stage 6. It needs a server sandbox and a Tool Approval. An approval prompt for each script is the interaction that the author refused in Stage 5.
 - **A new Agent Decision kind and a new continuation cause for a load.** Rejected. The tool loop of ADR 0091 already has the behavior: the model asks, the Host answers, the next RunStep reads the answer.
 - **A one-shot approval for each Skill load.** Rejected. The operator chooses the Skills, and the Agent decides when a Skill helps.
@@ -116,6 +118,7 @@ A package above its limit, and a `SKILL.md` above its limit, fail the validation
 
 - The Skill glossary changes with this ADR. The Skill Load Request and the Skill Resource Load Request are calls of Host Tools. The Skill Invocation has no ambiguous-name wait. SystemOfficial is the scope of a Skill that the deployment provides. Each deferred entry says so.
 - The user stories 1, 2, 9, 10, 11, and 12 of the Stage 6 parent are waived. The stories 7 and 13 are narrowed to the usage record and to a change by the operator that does not change active work.
+- A Run that reads many long resources can end with `conversation_too_long`, because a compaction does not make a resource result smaller. A later ticket can add the stub.
 - Each Project stores its own copy of each package of the deployment. The limits of section 9 bound it at 32 MiB for one catalog.
 - In a later deployment with more than one author, the operator chooses the Skills for each author. That release decides again what an author sees and controls.
 - A later Stage that adds a second scope or source decides how same-name packages coexist. A later Stage that adds a script runtime builds the Tool Approval first.
