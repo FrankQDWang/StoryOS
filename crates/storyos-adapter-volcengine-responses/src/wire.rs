@@ -95,7 +95,10 @@ fn input(request: &CreateRequest) -> serde_json::Value {
     let replaced = request.previous_response_reference.is_some()
         && request.prior_input == PriorInput::Replaced;
     let current = || match replaced {
-        true => message(format!("{REPLACED_INPUT_LABEL}\n\n{}", request_text(request))),
+        true => message(format!(
+            "{REPLACED_INPUT_LABEL}\n\n{}",
+            request_text(request)
+        )),
         false => message(request_text(request)),
     };
     let output = |call_id: &str, output: &str| serde_json::json!({"type": "function_call_output", "call_id": call_id, "output": output});
