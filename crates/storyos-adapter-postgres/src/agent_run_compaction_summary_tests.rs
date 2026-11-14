@@ -238,6 +238,18 @@ async fn compact_on_agent_plan(
     prefixes: [&str; 2],
     replies: Vec<Vec<serde_json::Value>>,
 ) -> String {
+    second_run_on_agent_plan(store, admin, prefixes, "Help again.", replies).await
+}
+
+/// Settles two AgentRuns of one Conversation as `compact_on_agent_plan` does. The second AgentRun
+/// has the author message `message`.
+async fn second_run_on_agent_plan(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefixes: [&str; 2],
+    message: &str,
+    replies: Vec<Vec<serde_json::Value>>,
+) -> String {
     let endpoint = scripted_stream_endpoint(replies).await;
     let destination = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: None,
@@ -264,7 +276,7 @@ async fn compact_on_agent_plan(
         &chapter_id,
         prefixes[1],
         destination,
-        "Help again.",
+        message,
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
@@ -669,4 +681,50 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
             Some("0".to_owned()),
         ]
     );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_later_run_step_counts_only_the_outputs_of_its_prior_response_in_the_expected_input() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // RunStep 1 of the second Run sends only the output of the `finish` call of RunStep 1. The
+    // reported usage of that response already has the author message of 4,800 tokens. The
+    // threshold is 812,646 tokens.
+    let message = "Help again. ".repeat(/*n*/ 400);
+    let cases = [
+        // 810,646 tokens and the short output are below the threshold.
+        (["811", "812"], 810_546, None),
+        // 812,646 tokens are at the threshold before the output.
+        (["813", "814"], 812_546, Some("installed")),
+    ];
+    for (prefixes, input_tokens, install_state) in cases {
+        let run_id = second_run_on_agent_plan(
+            &store,
+            &admin,
+            prefixes,
+            &message,
+            vec![
+                finish_events("resp_finish"),
+                streamed("resp_decision", ADVICE),
+                with_usage(finish_events("resp_again"), input_tokens, /*output*/ 100),
+                streamed("resp_closing", ADVICE),
+                streamed("resp_later_closing", ADVICE),
+            ],
+        )
+        .await;
+        let facts = compaction_facts(&admin, &run_id).await;
+
+        assert_eq!(
+            [&facts[0], &facts[2], &facts[3]],
+            [
+                &Some("completed".to_owned()),
+                &Some(u8::from(install_state.is_some()).to_string()),
+                &install_state.map(str::to_owned),
+            ],
+            "{prefixes:?}"
+        );
+    }
 }
