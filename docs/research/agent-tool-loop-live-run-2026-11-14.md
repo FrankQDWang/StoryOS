@@ -34,33 +34,33 @@ Final count: **19 model requests and 4 Exa exchanges, 23 of 36**, equal to the l
 
 ## Live request log
 
-Each row is one claim that the guard counted. The time is the claim time (UTC). The request ID of a model request is the response reference of the Provider. Usage is input / output tokens as the Provider reported them. `prev` is the end of the `previous_response_id` of the request. The mapping is the continuation input mapping.
+Each row is one claim that the guard counted. The time is the claim time (UTC). The request ID of a model request is the complete response reference of the Provider. The request ID of an Exa exchange is its ToolCall. Usage is input / output tokens as the Provider reported them. `prev` is the end of the `previous_response_id` of the request. The mapping is the continuation input mapping.
 
 | # | Time | Run, RunStep | Request ID | Mapping, `prev` | `tool_choice` | Result | Usage |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| M1 | 00:26:08 | 1, 0 | `resp_021794615968277a…b069df` | none, none | required | 2 `web_search` calls in one response | 1753 / 1464 |
-| E1 | 00:27:11 | 1, 0 | ToolCall `01a1d773-7879-…` | — | — | `web_search` settled, `confirmed`, 15,066 bytes | — |
-| E2 | 00:27:15 | 1, 0 | ToolCall `01a1d773-787e-…` | — | — | `web_search` settled, `confirmed`, 13,556 bytes | — |
-| M2 | 00:27:19 | 1, 1 | `resp_021794616039263c…c9740` | incremental, M1 | required | `submit_research` settled | 11153 / 616 |
-| M3 | 00:27:37 | 1, 2 | `resp_0217946160572238…ac499` | incremental, M2 | required | `finish` counted | 11838 / 40 |
-| M4 | 00:27:40 | 1, 3 | `resp_021794616060473f…a554` | incremental, M3 | none | final answer | 11926 / 207 |
-| M5 | 00:29:58 | 2, 0 | `resp_0217946161986366…038b1` | incremental, M4 | required | `finish` counted | 10836 / 155 |
-| M6 | 00:30:05 | 2, 1 | `resp_02179461620597824…711c4` | incremental, M5 | none | final answer | 11059 / 48 |
-| M7 | 00:30:29 | 3, 0 | `resp_0217946162294374…5bdb` | incremental, M6 | required | `propose_edit` refused `undeclared_block` | 11001 / 525 |
-| M8 | 00:30:48 | 3, 1 | `resp_021794616248432662…0c7` | incremental, M7 | required | `propose_edit` refused `undeclared_block` | 11613 / 556 |
-| M9 | 00:31:05 | 3, 2 | `resp_0217946162651986…d422850eb7` | incremental, M8 | required | `propose_edit` refused `undeclared_block` | 12236 / 890 |
-| M10 | 00:31:33 | 3, 3 | `resp_02179461629325473…7a59` | incremental, M9 | required | `finish` counted | 13194 / 723 |
-| M11 | 00:32:01 | 3, 4 | `resp_021794616321463c…94bbe` | incremental, M10 | none | final answer | 13966 / 237 |
-| M12 | 00:34:20 | 4, 0 | `resp_0217946164604242…225ec6` | incremental, M11 | required | `propose_edit` settled, Proposal opened | 12761 / 307 |
-| M13 | 00:34:30 | 4, 1 | `resp_021794616470202f…bc57771c` | **full, none** | required | `finish` counted | 2054 / 97 |
-| M14 | 00:34:36 | 4, 2 | `resp_0217946164771196…e9ca4412` | incremental, M13 | none | final answer | 2201 / 75 |
-| M15 | 00:35:05 | 5, 0 | `resp_021794616505994c…794659c3` | incremental, M14 | required | `web_search` | 2439 / 109 |
-| E3 | 00:35:10 | 5, 0 | ToolCall `01a1d77a-c7b2-…` | — | — | `web_search` settled, `confirmed`, 21,765 bytes | — |
-| M16 | 00:35:13 | 5, 1 | `resp_0217946165141128…cb755d6a93ab` | incremental, M15 | required | `web_fetch` of 2 URLs | 8319 / 134 |
-| E4 | 00:35:19 | 5, 1 | ToolCall `01a1d77a-eb51-…` | — | — | `web_fetch` settled, `confirmed`, 6,207 bytes | — |
-| M17 | 00:35:23 | 5, 2 | `resp_02179461652345861…cec60c7` | incremental, M16 | required | `submit_research` settled | 10165 / 1520 |
-| M18 | 00:36:04 | 5, 3 | `resp_0217946165645836…44192c5943` | incremental, M17 | required | `finish` counted | 11752 / 39 |
-| M19 | 00:36:07 | 5, 4 | `resp_02179461656748024…844ea682` | incremental, M18 | none | final answer | 11839 / 685 |
+| M1 | 00:26:08 | 1, 0 | `resp_021794615968277af71e85a49ed90f7564e7e8026279fe7b069df` | none, none | required | 2 `web_search` calls in one response | 1753 / 1464 |
+| E1 | 00:27:11 | 1, 0 | ToolCall `01a1d773-7879-72d2-8064-53c3d8ca2af4` | — | — | `web_search` settled, `confirmed`, 15,066 bytes | — |
+| E2 | 00:27:15 | 1, 0 | ToolCall `01a1d773-787e-7652-978d-64b29b3e1f49` | — | — | `web_search` settled, `confirmed`, 13,556 bytes | — |
+| M2 | 00:27:19 | 1, 1 | `resp_021794616039263c280e9bf492d190027beb8b799de38086c9740` | incremental, M1 | required | `submit_research` settled | 11153 / 616 |
+| M3 | 00:27:37 | 1, 2 | `resp_021794616057223841fc2298faf73f2fc5d524f9c961e71fac499` | incremental, M2 | required | `finish` counted | 11838 / 40 |
+| M4 | 00:27:40 | 1, 3 | `resp_021794616060473f4d7ae5d724d9e41b76430b6d79530bc94a554` | incremental, M3 | none | final answer | 11926 / 207 |
+| M5 | 00:29:58 | 2, 0 | `resp_0217946161986366b3b42eb0dccc67d054a95217969ba77d038b1` | incremental, M4 | required | `finish` counted | 10836 / 155 |
+| M6 | 00:30:05 | 2, 1 | `resp_02179461620597824e994d08a876ec3f4dc3077f2522d845711c4` | incremental, M5 | none | final answer | 11059 / 48 |
+| M7 | 00:30:29 | 3, 0 | `resp_0217946162294374f170dda172df2cc79a65077ac74d4048a5bdb` | incremental, M6 | required | `propose_edit` refused `undeclared_block` | 11001 / 525 |
+| M8 | 00:30:48 | 3, 1 | `resp_021794616248432662416cb134b03a75ced108817244360d230c7` | incremental, M7 | required | `propose_edit` refused `undeclared_block` | 11613 / 556 |
+| M9 | 00:31:05 | 3, 2 | `resp_0217946162651986d6c4a2c22a8ac0107afc732836cd422850eb7` | incremental, M8 | required | `propose_edit` refused `undeclared_block` | 12236 / 890 |
+| M10 | 00:31:33 | 3, 3 | `resp_02179461629325473b8dfe497f31d2aa905b6fe2ab6c6817e7a59` | incremental, M9 | required | `finish` counted | 13194 / 723 |
+| M11 | 00:32:01 | 3, 4 | `resp_021794616321463c280e9bf492d190027beb8b799de3808194bbe` | incremental, M10 | none | final answer | 13966 / 237 |
+| M12 | 00:34:20 | 4, 0 | `resp_0217946164604242f58812a10f9c6b8f25a472cef1ad3e5225ec6` | incremental, M11 | required | `propose_edit` settled, Proposal opened | 12761 / 307 |
+| M13 | 00:34:30 | 4, 1 | `resp_021794616470202f4d7ae5d724d9e41b76430b6d79530bc57771c` | **full, none** | required | `finish` counted | 2054 / 97 |
+| M14 | 00:34:36 | 4, 2 | `resp_0217946164771196216202cdc086c00ba26009437f217e9ca4412` | incremental, M13 | none | final answer | 2201 / 75 |
+| M15 | 00:35:05 | 5, 0 | `resp_021794616505994c35f1a31989945a684cc428e09e81c794659c3` | incremental, M14 | required | `web_search` | 2439 / 109 |
+| E3 | 00:35:10 | 5, 0 | ToolCall `01a1d77a-c7b2-7180-b20b-f76fe1f3c0b0` | — | — | `web_search` settled, `confirmed`, 21,765 bytes | — |
+| M16 | 00:35:13 | 5, 1 | `resp_0217946165141128b180e7ab5368500e338034e77cb755d6a93ab` | incremental, M15 | required | `web_fetch` of 2 URLs | 8319 / 134 |
+| E4 | 00:35:19 | 5, 1 | ToolCall `01a1d77a-eb51-7e62-acae-b7432dd847dc` | — | — | `web_fetch` settled, `confirmed`, 6,207 bytes | — |
+| M17 | 00:35:23 | 5, 2 | `resp_02179461652345861e61b6be4ea80d80d16a59ce3c2929cec60c7` | incremental, M16 | required | `submit_research` settled | 10165 / 1520 |
+| M18 | 00:36:04 | 5, 3 | `resp_0217946165645836e0aa4b8e2b3fc35d377306409bf44192c5943` | incremental, M17 | required | `finish` counted | 11752 / 39 |
+| M19 | 00:36:07 | 5, 4 | `resp_02179461656748024e994d08a876ec3f4dc3077f2522d844ea682` | incremental, M18 | none | final answer | 11839 / 685 |
 
 Usage total: 182,105 input tokens and 8,427 output tokens in 19 model requests.
 
@@ -68,11 +68,11 @@ Usage total: 182,105 input tokens and 8,427 output tokens in 19 model requests.
 
 | Run | Run ID | Author message (short) | Model requests | Usage in / out | Tool calls | End | `results` of the Run read |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `01a1d772-80d2-7640-86a8-ee59375305f4` | What can "一声长，两声短" mean? | 4 | 36,670 / 2,327 | 2 `web_search`, `submit_research`, `finish` | `completed` after a counted `finish` and a closing response with no call | `research_artifact` `01a1d773-dc72-…` (10 Source Snapshots, 0 gaps), then `answer` |
+| 1 | `01a1d772-80d2-7640-86a8-ee59375305f4` | What can "一声长，两声短" mean? | 4 | 36,670 / 2,327 | 2 `web_search`, `submit_research`, `finish` | `completed` after a counted `finish` and a closing response with no call | `research_artifact` `01a1d773-dc72-7a93-9a18-884cf5f65ebd` (10 Source Snapshots, 0 gaps), then `answer` |
 | 2 | `01a1d776-04d9-7b83-80e0-1fd4c680bf24` | Why does 林三 ring the bell? No web. | 2 | 21,895 / 203 | `finish` | `completed`, as Run 1 | `answer` |
-| 3 | `01a1d776-7d2d-7093-af91-051cad48f668` | "请修改第三段 …" | 5 | 62,010 / 2,931 | 3 `propose_edit` (refused), `finish` | `completed`, as Run 1 | `answer` that says the Host refused the change three times, with the suggested text |
-| 4 | `01a1d77a-037c-7df1-8c5f-878960d05868` | "把本章最后一段 … 写得更具体" | 3 | 17,016 / 479 | `propose_edit`, `finish` | `completed`, as Run 1 | `proposal` `01a1d77a-29b9-…` (1 location, block `01a1d772-18ba-…`, `opened`, `pending`), then `answer` |
-| 5 | `01a1d77a-b54a-7c20-95a8-c55fe912efb7` | Weight, interval, and drive of 19th-century fog bells | 5 | 44,514 / 2,487 | `web_search`, `web_fetch`, `submit_research`, `finish` | `completed`, as Run 1 | `research_artifact` `01a1d77b-9a3d-…` (10 Source Snapshots, 0 gaps, 4 claims), then `answer` |
+| 3 | `01a1d776-7d2d-7093-af91-051cad48f668` | "请修改第三段：把林三敲钟的动作写得更具体，写出他的手和呼吸，并按雾航规则的意思让他一直敲下去。只改这一段，不要联网。" | 5 | 62,010 / 2,931 | 3 `propose_edit` (refused), `finish` | `completed`, as Run 1 | `answer` that says the Host refused the change three times, with the suggested text |
+| 4 | `01a1d77a-037c-7df1-8c5f-878960d05868` | "把本章最后一段林三敲钟的动作写得更具体：写出他的手和呼吸，并按雾航规则的意思让他一直敲下去。只改这一段，不要联网。" | 3 | 17,016 / 479 | `propose_edit`, `finish` | `completed`, as Run 1 | `proposal` `01a1d77a-29b9-7421-aea3-4004b817ba38` (1 location, block `01a1d772-18ba-77ad-a14e-f4da491bb907`, `opened`, `pending`), then `answer` |
+| 5 | `01a1d77a-b54a-7c20-95a8-c55fe912efb7` | Weight, interval, and drive of 19th-century fog bells | 5 | 44,514 / 2,487 | `web_search`, `web_fetch`, `submit_research`, `finish` | `completed`, as Run 1 | `research_artifact` `01a1d77b-9a3d-7f92-91be-558bab4ac71b` (10 Source Snapshots, 0 gaps, 4 claims), then `answer` |
 
 - The panel showed the same results in the same order for each Run: the research turn with its sources, claims, citation list, and "用到故事里", then the answer text; for Run 4 the Host sentence "这次修改涉及 1 个章节、1 处文字", the change location, and the answer. The history turns of Runs 1 to 4 showed the same results as the current turn.
 - Each Run ended as the finish rule expects. Each request before a counted `finish` had `tool_choice: "required"`, each closing request had `tool_choice: "none"`, and no closing response held a function call. No Run completed with no result. No Run reached the limit of 24 RunSteps.
@@ -85,5 +85,5 @@ Usage total: 182,105 input tokens and 8,427 output tokens in 19 model requests.
 | ID | Finding | Effect | Owner |
 | --- | --- | --- | --- |
 | F1 | An author message that starts with "修改", "改写", "润色", or "精简" (also after "请") goes through `parse_ordinary_passage_request`, the passage parser of the Host-fake profile `storyos.host-fake.passage-resolution.v1`, also on the real route (`create_agent_run_context.rs`). The message of Run 3 had a clause with no Chapter reference after the split at "和", so the resolution was `clarification`. The Context Assembly then selected no working text and declared no target blocks (manifest: `working_target` 0 tokens). Before #1463 this disposition made a clarification question. Now the Run continues: the request has only the author message, and each `propose_edit` call is refused `undeclared_block`. The model used the block identities of the request of Run 2. | The author asked for an edit and got no Proposal after 5 requests. | Reported to the coordinator; no owner issue yet. |
-| F2 | After the `propose_edit` call of M12 opened the Proposal, the next RunStep was rebuilt with the Full mapping and no prior response (M13, `prior_continuation_binding_id` null, `known_prior_continuation_binding_id` `01a1d77a-29c9-…`; the rebuild path of `agent_run_attempt.rs`). M13 sent only the current author message, the working text, the target blocks, the call, and its output: 2,054 input tokens against 12,761 in M12. Its target blocks did not have the changed block. Runs 1 to 3 are thus not in the Provider conversation from M13, also for Run 5. | The model does not read the earlier turns after an edit in a Run. This is related to the known finding that each request after a steering RunStep uses the Full mapping (coordinator note 4). | Reported to the coordinator; no owner issue yet. |
+| F2 | After the `propose_edit` call of M12 opened the Proposal, the next RunStep was rebuilt with the Full mapping and no prior response (M13, `prior_continuation_binding_id` null, `known_prior_continuation_binding_id` `01a1d77a-29c9-7841-9d90-6e12875f549d`; the rebuild path of `agent_run_attempt.rs`). M13 sent only the current author message, the working text, the target blocks, the call, and its output: 2,054 input tokens against 12,761 in M12. Its target blocks did not have the changed block. Runs 1 to 3 are thus not in the Provider conversation from M13, also for Run 5. | The model does not read the earlier turns after an edit in a Run. This is related to the known finding that each request after a steering RunStep uses the Full mapping (coordinator note 4). | Reported to the coordinator; no owner issue yet. |
 | F3 | Run 1 asked a question, and the model used web research for it with no request of the author. | None: the model decides what a Run gives (ADR 0091 section 6). The plan changed for it. | Observation only. |
