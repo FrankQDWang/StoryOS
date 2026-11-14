@@ -11,6 +11,10 @@
 //! - `quiet`: as `once`, and the closing response has an empty text.
 //! - `propose`: one call, and in the next request a `propose_edit` call of the declared targets
 //!   and a `finish` call.
+//! - `late`: one call, a `read_tool_result` call of an unknown identity in the next request, and
+//!   then the calls of `once`.
+//!
+//! The script can follow the compaction prefix of the Host fake (ADR 0093).
 //!
 //! Each later request gets the usual script of the fake model.
 
@@ -24,9 +28,8 @@ const FETCH: &str = r#"{"urls":["https://example.org/c","https://example.org/d"]
 
 /// The scripted response of `request`, or `None` when the usual script applies.
 pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
-    let script = request
-        .author_message
-        .strip_prefix("SCRIPT:submit_research ")?;
+    let script =
+        crate::script_message(&request.author_message).strip_prefix("SCRIPT:submit_research ")?;
     let mut parts = script.splitn(3, ' ');
     let (variant, first, arguments) = (parts.next()?, parts.next()?, parts.next()?);
     if request.tool_choice == ToolChoice::None {
@@ -48,6 +51,12 @@ pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
             _ => function_call(ToolOperation::WebSearch, "", SEARCH),
         };
         vec![first]
+    } else if variant == "late" && !output(ToolOperation::ReadToolResult) {
+        vec![function_call(
+            ToolOperation::ReadToolResult,
+            "",
+            r#"{"call_id":"call_none"}"#,
+        )]
     } else if !output(ToolOperation::SubmitResearch) {
         let arguments = arguments
             .replace("$SOURCE", &first_tagged(request, "<source id=\""))

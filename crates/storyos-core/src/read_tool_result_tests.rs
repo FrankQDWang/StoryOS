@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
     CitedSource, CurrentPassageAssembly, InstructionBindingInput, ToolResultCandidate,
-    ToolResultOutput, assemble_current_passage_context, assemble_tool_result_continuation,
+    ToolResultForm, ToolResultOutput, assemble_current_passage_context,
+    assemble_tool_result_continuation,
 };
 
 fn passage() -> crate::CurrentPassageAssemblyRecord {
@@ -26,6 +27,7 @@ fn sources() -> Vec<CitableSource> {
         id: "snapshot-1".to_owned(),
         cited: CitedSource::Snapshot,
         locator: "https://example.org/harbour".to_owned(),
+        title: None,
         owner_user_id: "user-1".to_owned(),
         project_id: "proj-1".to_owned(),
         run_id: "run-1".to_owned(),
@@ -50,6 +52,9 @@ fn candidate<'a>(
         result_text: Some(result_text),
         sources,
         output,
+        function_name: "web_search",
+        arguments: "{}",
+        form: ToolResultForm::Exact,
     }
 }
 
@@ -88,7 +93,7 @@ fn a_read_gives_the_bounded_form_of_the_first_read_and_the_next_request_sends_it
             "call_web_search",
             &text,
             &sources,
-            ToolResultOutput::Projected,
+            ToolResultOutput::Research,
         )]);
         let read = read_tool_result(ReadTarget::SameRun(search(&text, &sources)), limit).unwrap();
         assert_eq!(vec![read.text.clone()], first);

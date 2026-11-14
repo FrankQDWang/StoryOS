@@ -29,14 +29,15 @@ pub(crate) async fn run_sources(
     let rows = client
         .query(
             "SELECT source.tool_call_id::text, source.id::text, source.reason, source.locator,
-                    source.owner_user_id::text, source.project_id::text, source.run_id::text
+                    source.owner_user_id::text, source.project_id::text, source.run_id::text,
+                    source.title
                FROM (SELECT owner_user_id, project_id, run_id, tool_call_id, 0 AS class,
                             entry_position AS position, source_snapshot_id AS id, locator,
-                            NULL::text AS reason
+                            NULL::text AS reason, title
                        FROM storyos.source_snapshots
                      UNION ALL
                      SELECT owner_user_id, project_id, run_id, tool_call_id, 1, gap_position,
-                            source_gap_id, locator, reason
+                            source_gap_id, locator, reason, NULL
                        FROM storyos.source_gaps) AS source
                JOIN storyos.tool_calls AS call
                  USING (owner_user_id, project_id, tool_call_id)
@@ -66,6 +67,7 @@ pub(crate) async fn run_sources(
                     id: row.get(/*idx*/ 1),
                     cited,
                     locator: row.get(/*idx*/ 3),
+                    title: row.get(/*idx*/ 7),
                     owner_user_id: row.get(/*idx*/ 4),
                     project_id: row.get(/*idx*/ 5),
                     run_id: row.get(/*idx*/ 6),

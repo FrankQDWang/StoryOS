@@ -178,7 +178,8 @@ async fn a_request_that_names_a_response_of_the_last_run_step_gives_each_of_its_
 }
 
 /// ADR 0093: the mapping `v6` declares `read_tool_result` and says in one paragraph what it
-/// does. A request of the mapping `v5` keeps three Host Tools and its instructions.
+/// does, and in one more paragraph what a stub is and when to read a stored result (ADR 0093
+/// section 5). A request of the mapping `v5` keeps three Host Tools and its instructions.
 #[tokio::test]
 async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_request() {
     let request = |mapping: &str, registration: &str| {
@@ -241,7 +242,12 @@ async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_r
                 "{TOOL_LOOP_INSTRUCTIONS}\n\nWhen you need the complete text of an earlier \
                  result of web_search or web_fetch in this work again, call read_tool_result \
                  with the identity in the source attribute of the tool_result tag of that \
-                 result."
+                 result.\n\nAfter a compaction of the conversation, an earlier result can be a \
+                 stub: a tool_result tag with form=\"stub\". A stub gives the function, its \
+                 arguments, and the sources of the result, but not the text of the result. You \
+                 can cite a source in the tool_sources tag of a stub. When you need the text of \
+                 the result, or a source that the stub does not give, call read_tool_result \
+                 with the call_id that the stub gives."
             )),
             vec![
                 "propose_edit".to_owned(),
@@ -275,5 +281,61 @@ async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_r
                 "finish".to_owned()
             ],
         )
+    );
+}
+
+/// ADR 0093 section 5: the later request of a compaction is a full input. It sends each call of
+/// the Run, the stub of each result that an earlier request sent, and the exact form of each
+/// result that waits for this request.
+#[tokio::test]
+async fn the_later_request_sends_a_stub_as_the_output_of_its_call() {
+    let route = RequestRoute {
+        mapping_revision: storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION.to_owned(),
+        ..route("http://127.0.0.1:9")
+    };
+    let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
+        unreachable!("create() makes a Create request")
+    };
+    let stub = "<tool_result source=\"call_web_search\" state=\"ok\" form=\"stub\">The Host \
+                replaced this result with a stub.</tool_result>";
+    let read = "<tool_result source=\"call_web_search\" state=\"ok\">High water.</tool_result>";
+    let output = |call_id: &str, name: &str, output: &str, origin| ToolOutput {
+        call_id: call_id.to_owned(),
+        name: name.to_owned(),
+        arguments: "{}".to_owned(),
+        output: output.to_owned(),
+        origin,
+    };
+    let later = body(CreateRequest {
+        tool_choice: ToolChoice::Required,
+        tool_outputs: vec![
+            output(
+                "call_web_search",
+                "web_search",
+                stub,
+                ToolOutputOrigin::EarlierStep,
+            ),
+            output(
+                "call_read_tool_result",
+                "read_tool_result",
+                read,
+                ToolOutputOrigin::PriorResponse,
+            ),
+        ],
+        ..request
+    })
+    .await;
+
+    assert_eq!(
+        &later["input"].as_array().unwrap()[1..],
+        &[
+            json!({"type": "function_call", "call_id": "call_web_search", "name": "web_search",
+                   "arguments": "{}"}),
+            json!({"type": "function_call", "call_id": "call_read_tool_result",
+                   "name": "read_tool_result", "arguments": "{}"}),
+            json!({"type": "function_call_output", "call_id": "call_web_search", "output": stub}),
+            json!({"type": "function_call_output", "call_id": "call_read_tool_result",
+                   "output": read}),
+        ]
     );
 }

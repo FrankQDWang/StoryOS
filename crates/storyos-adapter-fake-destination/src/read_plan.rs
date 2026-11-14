@@ -5,6 +5,7 @@
 //! with the `<identity>`. The request that carries the output of the read gets a `submit_research`
 //! call that cites the first source of that output and a `finish` call, or only a `finish` call
 //! when the output has no source. Each later request gets the usual script of the fake model.
+//! The script can follow the compaction prefix of the Host fake (ADR 0093).
 
 use storyos_application::CreateRequest;
 use storyos_core::{ToolChoice, ToolOperation};
@@ -14,9 +15,8 @@ use crate::research_plan::function_call;
 
 /// The scripted response of `request`, or `None` when the usual script applies.
 pub(crate) fn plan(request: &CreateRequest) -> Option<FakeCreate> {
-    let script = request
-        .author_message
-        .strip_prefix("SCRIPT:read_tool_result ")?;
+    let script =
+        crate::script_message(&request.author_message).strip_prefix("SCRIPT:read_tool_result ")?;
     let (first, identity) = script.split_once(' ')?;
     if request.tool_choice == ToolChoice::None {
         return None;

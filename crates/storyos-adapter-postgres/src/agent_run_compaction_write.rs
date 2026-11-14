@@ -3,7 +3,7 @@ use storyos_core::{
     CompactionInstallFacts, CompactionKnownInput, CompactionSource, ContextSufficiency,
     CurrentPassageAssembly, InstructionBindingInput, StagedCompaction, active_context_input_digest,
     assemble_current_passage_context, decide_compaction_install, encode_assembly_record,
-    later_request_record, later_request_too_long, summary_fits_item,
+    later_request_too_long, summary_fits_item,
 };
 use uuid::Uuid;
 
@@ -144,7 +144,7 @@ pub(super) async fn install_or_refuse(
         summary_within_item_limit: summary_fits_item(decision, &staged.output_text),
     });
     let Err(refusal) = checked else {
-        let mut later = later_request_record(decision, &staged.compaction_id, &staged.output_text);
+        let mut later = super::stubs::later_record(client, claim, decision, staged).await?;
         let targets: Vec<String> =
             crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
                 .await?
@@ -160,6 +160,7 @@ pub(super) async fn install_or_refuse(
             return Ok(InstallOutcome::TooLong);
         }
         insert_later_request(client, claim, run, &mut later).await?;
+        super::stubs::record(client, claim, staged, &later).await?;
         return Ok(InstallOutcome::Installed);
     };
     refuse(client, claim, staged, refusal.code()).await?;

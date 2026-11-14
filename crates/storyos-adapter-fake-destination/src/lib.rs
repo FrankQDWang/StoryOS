@@ -137,7 +137,8 @@ impl ModelProviderAdapter for FakeDestination {
             ),
         };
         let unanswered = recovery_plan::leaves_prior_calls_unanswered(create)
-            .then_some(recovery_plan::UNANSWERED_CALL_REASON);
+            .then_some(recovery_plan::UNANSWERED_CALL_REASON)
+            .or_else(|| stub_names_unsent_call(create).then_some(STUB_CALL_MISSING_REASON));
         let plan = match (unanswered.or(rejection), unknown) {
             (Some(reason), _) => FakePlan::Observed(Observation::Rejected {
                 reason: reason.to_owned(),
@@ -188,6 +189,53 @@ impl ModelProviderAdapter for FakeDestination {
             response_reference: Some(reference),
         })
     }
+}
+
+/// The author message after the compaction prefix of the Host fake and the sentence that names
+/// its RunStep positions, if any.
+fn script_message(message: &str) -> &str {
+    let Some(rest) = message.strip_prefix(storyos_core::ACTIVE_COMPACTION_REQUEST_PREFIX) else {
+        return message;
+    };
+    let rest = rest.trim_start();
+    match rest.strip_prefix(storyos_core::ACTIVE_COMPACTION_POSITIONS_PREFIX) {
+        Some(named) => named
+            .split_once('.')
+            .map_or("", |(_, after)| after.trim_start()),
+        None => rest,
+    }
+}
+
+/// The reason of the rejection of a request with a stub that names a call that the request does
+/// not send (#1507).
+const STUB_CALL_MISSING_REASON: &str = "stub_call_missing";
+
+/// Whether an output that `create` sends is a stub that names a call that the request does not
+/// send: as its own call, or as the call that a read stub read (ADR 0093 section 5). A full input
+/// sends the call of each output. A request with a prior response reference sends only the
+/// outputs of the calls of that response.
+fn stub_names_unsent_call(create: &CreateRequest) -> bool {
+    let sent: Vec<&storyos_application::ToolOutput> = create
+        .tool_outputs
+        .iter()
+        .filter(|output| {
+            create.previous_response_reference.is_none()
+                || output.origin == storyos_application::ToolOutputOrigin::PriorResponse
+        })
+        .collect();
+    let named = |text: &str, marker: &str| {
+        text.rsplit_once(marker)
+            .and_then(|(_, rest)| rest.split(['"', '.']).next())
+            .map(str::to_owned)
+    };
+    sent.iter()
+        .filter(|output| output.output.contains("form=\"stub\""))
+        .any(|output| {
+            let own = named(&output.output, "<tool_result source=\"");
+            let read = named(&output.output, "with the call_id ");
+            own.as_deref() != Some(output.call_id.as_str())
+                || !read.is_some_and(|read| sent.iter().any(|call| call.call_id == read))
+        })
 }
 
 /// The current input that a request sends, as the tool loop wire sends it: an incremental
@@ -302,3 +350,7 @@ fn wire_digest(wire: &serde_json::Value) -> String {
         storyos_core::hex_sha256(storyos_core::canonical_json(wire).as_bytes())
     )
 }
+
+#[cfg(test)]
+#[path = "stub_rejection_tests.rs"]
+mod stub_rejection_tests;

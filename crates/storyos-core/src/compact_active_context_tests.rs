@@ -193,7 +193,7 @@ fn the_later_request_selects_the_summary_first_as_a_derived_summary() {
         instruction: crate::InstructionBindingInput::Absent,
         destination_identity: "destination-1".to_owned(),
     });
-    let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.");
+    let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.", &[]);
     let first = &later.selected[0];
 
     assert_eq!(
@@ -486,7 +486,7 @@ fn a_later_request_whose_full_input_reaches_the_window_is_too_long() {
     let targets = ["Target.".to_owned()];
     // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
     let too_long = |revision, summary_tokens| {
-        let mut later = later_request_record(&decision, "compaction-1", "Summary.");
+        let mut later = later_request_record(&decision, "compaction-1", "Summary.", &[]);
         later.selected[0].token_count = summary_tokens;
         super::later_request_too_long(
             revision,

@@ -544,6 +544,8 @@ fn inspect_active_compaction(
                 .external_compatibility_decision
                 .clone(),
         },
+        stub_tool_call_ids: (!compaction.stub_tool_call_ids.is_empty())
+            .then(|| compaction.stub_tool_call_ids.clone()),
     }
 }
 
@@ -789,6 +791,9 @@ fn inspect_context(
                     }
                     storyos_core::ProjectionMode::DeterministicExcerpt => {
                         contracts::ProjectionMode::DeterministicExcerpt
+                    }
+                    storyos_core::ProjectionMode::ToolResultStub => {
+                        contracts::ProjectionMode::ToolResultStub
                     }
                 },
                 token_count: source.token_count.to_string(),

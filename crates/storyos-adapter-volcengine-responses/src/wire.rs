@@ -42,6 +42,15 @@ When you need the complete text of an earlier result of web_search or web_fetch 
 again, call read_tool_result with the identity in the source attribute of the tool_result tag of \
 that result.";
 
+/// The paragraph of the mapping `v6` that says what a stub is and when to read a stored result
+/// (ADR 0093 section 5).
+pub(crate) const TOOL_RESULT_STUB_INSTRUCTION: &str = "\
+After a compaction of the conversation, an earlier result can be a stub: a tool_result tag with \
+form=\"stub\". A stub gives the function, its arguments, and the sources of the result, but not \
+the text of the result. You can cite a source in the tool_sources tag of a stub. When you need \
+the text of the result, or a source that the stub does not give, call read_tool_result with the \
+call_id that the stub gives.";
+
 /// The first paragraph of a current input that an incremental continuation sends again, so that
 /// the model reads the current input in place of the input of its earlier steps (ADR 0085).
 pub(crate) const REPLACED_INPUT_LABEL: &str = "\
@@ -65,7 +74,10 @@ pub(crate) fn create_body(
     // that its content is data.
     let tool_loop = match request.route.mapping_revision.as_str() {
         storyos_core::AGENT_PLAN_READ_RESULT_MAPPING_REVISION => {
-            format!("{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}")
+            format!(
+                "{TOOL_LOOP_INSTRUCTIONS}\n\n{READ_TOOL_RESULT_INSTRUCTION}\n\n\
+                 {TOOL_RESULT_STUB_INSTRUCTION}"
+            )
         }
         _ => TOOL_LOOP_INSTRUCTIONS.to_owned(),
     };

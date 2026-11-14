@@ -10,5 +10,8 @@ storyos-application = { path = "../storyos-application" }
 storyos-core = { path = "../storyos-core" }
 tracing.workspace = true
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
 [lints]
 workspace = true

@@ -61,16 +61,34 @@ pub struct ToolResultCandidate<'a> {
     /// the settlement of the ToolCall captured.
     pub sources: &'a [crate::CitableSource],
     pub output: ToolResultOutput,
+    pub function_name: &'a str,
+    /// The canonical arguments of the call.
+    pub arguments: &'a str,
+    pub form: ToolResultForm,
 }
 
 /// How the continuation input gives the result of one ToolCall.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolResultOutput {
-    /// The bounded projection of the result text with its source tag and its citable sources.
-    Projected,
+    /// The bounded projection of the result of a research Tool with its source tag and its
+    /// citable sources.
+    Research,
+    /// The bounded projection of the result of a Host Tool. `read_tool_result` cannot read it, so
+    /// it keeps its exact form.
+    HostTool,
     /// The settled result of a `read_tool_result` call as it is: it already is the bounded form
     /// of the call that it read (ADR 0093). A refusal of the read is projected.
     StoredRead,
+}
+
+/// The form in which the request sends one result (ADR 0093 section 5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ToolResultForm {
+    /// The bounded exact form.
+    Exact,
+    /// A stub when the result is a research result or a read, and its exact form is larger than
+    /// the stub limit. Else the exact form.
+    Stub,
 }
 
 /// The text of one `tool_result` item and its token counts.
@@ -152,21 +170,8 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
-        let item = match (candidate.output, projection) {
-            // The result of a read is the stored bounded form of the call that it read.
-            (ToolResultOutput::StoredRead, ToolResultProjection::Ok(text)) => ToolResultItem {
-                content: text.to_owned(),
-                token_count: count_context_item_tokens(text),
-                source_tokens: count_context_item_tokens(text),
-                kept_result_tokens: None,
-            },
-            (ToolResultOutput::StoredRead | ToolResultOutput::Projected, _) => project_item(
-                candidate.call_id,
-                projection,
-                candidate.sources,
-                requirement.item_token_limit,
-            ),
-        };
+        let (item, projection_mode) =
+            candidate_item(candidate, projection, requirement.item_token_limit);
         let ToolResultItem {
             content,
             token_count,
@@ -200,10 +205,7 @@ pub fn assemble_tool_result_continuation(
         record.selected.push(SelectedProjection {
             source_class: ContextSourceClass::ToolResult,
             source_version: source_version.clone(),
-            projection_mode: match kept_result_tokens {
-                Some(_) => ProjectionMode::DeterministicExcerpt,
-                None => ProjectionMode::ExactRequired,
-            },
+            projection_mode,
             token_count,
             content,
         });
@@ -229,6 +231,125 @@ pub fn assemble_tool_result_continuation(
                 }
             };
     }
+}
+
+/// The item of `candidate` and its projection mode. A candidate in the stub form gives its stub
+/// when its exact item is larger than the stub limit (ADR 0093 section 5).
+fn candidate_item(
+    candidate: &ToolResultCandidate<'_>,
+    projection: ToolResultProjection<'_>,
+    item_token_limit: u64,
+) -> (ToolResultItem, ProjectionMode) {
+    let exact = match (candidate.output, projection) {
+        // The result of a read is the stored bounded form of the call that it read.
+        (ToolResultOutput::StoredRead, ToolResultProjection::Ok(text)) => ToolResultItem {
+            content: text.to_owned(),
+            token_count: count_context_item_tokens(text),
+            source_tokens: count_context_item_tokens(text),
+            kept_result_tokens: None,
+        },
+        (
+            ToolResultOutput::StoredRead | ToolResultOutput::Research | ToolResultOutput::HostTool,
+            _,
+        ) => project_item(
+            candidate.call_id,
+            projection,
+            candidate.sources,
+            item_token_limit,
+        ),
+    };
+    let exact_mode = match exact.kept_result_tokens {
+        Some(_) => ProjectionMode::DeterministicExcerpt,
+        None => ProjectionMode::ExactRequired,
+    };
+    let read_call_id = match candidate.output {
+        ToolResultOutput::StoredRead => {
+            let arguments: Option<serde_json::Value> =
+                serde_json::from_str(candidate.arguments).ok();
+            match arguments
+                .as_ref()
+                .and_then(|value| value.get("call_id")?.as_str())
+            {
+                Some(target) => Some(Some(target.to_owned())),
+                None => return (exact, exact_mode),
+            }
+        }
+        ToolResultOutput::Research => Some(None),
+        ToolResultOutput::HostTool => None,
+    };
+    let stub_applies = candidate.form == ToolResultForm::Stub
+        && matches!(projection, ToolResultProjection::Ok(_))
+        && exact.token_count > crate::TOOL_RESULT_STUB_TOKEN_LIMIT;
+    let Some(read_call_id) = read_call_id.filter(|_| stub_applies) else {
+        return (exact, exact_mode);
+    };
+    let content = crate::tool_result_stub::tool_result_stub(&crate::tool_result_stub::StubCall {
+        call_id: candidate.call_id,
+        tool_name: candidate.function_name,
+        arguments: candidate.arguments,
+        sources: candidate.sources,
+        read_call_id: read_call_id.as_deref(),
+    });
+    let stub = ToolResultItem {
+        token_count: count_context_item_tokens(&content),
+        source_tokens: exact.source_tokens,
+        kept_result_tokens: None,
+        content,
+    };
+    (stub, ProjectionMode::ToolResultStub)
+}
+
+/// Gives each selected `tool_result` item of `record` whose candidate has the stub form its stub
+/// (ADR 0093 section 5). The considered source keeps the size of the exact result.
+pub(crate) fn stub_selected_results(
+    record: &mut CurrentPassageAssemblyRecord,
+    candidates: &[ToolResultCandidate<'_>],
+) {
+    let limit = record.operation_requirement.item_token_limit;
+    let Some(sources) = record.operation_requirement.tool_results.as_mut() else {
+        return;
+    };
+    let items = record
+        .selected
+        .iter_mut()
+        .filter(|item| item.source_class == ContextSourceClass::ToolResult);
+    for (source, item) in sources.iter_mut().zip(items) {
+        let Some(candidate) = candidates.iter().find(|candidate| {
+            candidate.tool_call_id == source.tool_call_id && candidate.form == ToolResultForm::Stub
+        }) else {
+            continue;
+        };
+        let Some(projection) = ToolResultProjection::of(candidate.state, candidate.result_text)
+        else {
+            continue;
+        };
+        let (stub, ProjectionMode::ToolResultStub) = candidate_item(candidate, projection, limit)
+        else {
+            continue;
+        };
+        item.content = stub.content;
+        item.token_count = stub.token_count;
+        item.projection_mode = ProjectionMode::ToolResultStub;
+        source.kept_result_tokens = None;
+    }
+}
+
+/// The ToolCall identity of each selected `tool_result` item of `record` that is a stub, in item
+/// order.
+pub fn stub_tool_call_ids(record: &CurrentPassageAssemblyRecord) -> Vec<String> {
+    let items = record
+        .selected
+        .iter()
+        .filter(|item| item.source_class == ContextSourceClass::ToolResult);
+    record
+        .operation_requirement
+        .tool_results
+        .iter()
+        .flatten()
+        .zip(items)
+        .filter(|(_, item)| item.projection_mode == ProjectionMode::ToolResultStub)
+        .map(|(source, _)| source.tool_call_id.clone())
+        .collect()
 }
 
 #[cfg(test)]
