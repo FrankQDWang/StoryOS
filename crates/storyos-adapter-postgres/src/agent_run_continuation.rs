@@ -318,3 +318,7 @@ fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+#[path = "agent_run_continuation_tests.rs"]
+mod tests;
