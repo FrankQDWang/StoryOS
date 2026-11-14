@@ -52,6 +52,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 - Use deterministic coordination or controlled scheduling for concurrent work. Use a sleep only when no deterministic wait is available.
 - Use existing test helpers when they make a test shorter and easier to read.
 - Pass environment-derived flags or dependencies from above, in place of a change to the process environment in a test.
+- A fake of an external destination refuses each request that the real destination refuses by a rule of a tracked contract. A fake that accepts such a request hides the defect from each test that uses it.
 - In `storyos-adapter-postgres`, the first statement of each `#[ignore]` test of the lib target is `let _test_guard = ...AUTHOR_EDIT_TEST_LOCK.lock().await;`. Keep the guard to the end of the test. A damaged evidence test drops or disables a database check under this lock, so write it only in the lib target. `postgres_test_lock_tests.rs` checks this rule.
 - Put a new test module in a separate sibling file. Use an explicit `#[path = "..._tests.rs"]` attribute that gives the file a descriptive name:
 
@@ -81,6 +82,7 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 ## Contracts and generated artifacts
 
 - Treat a change to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as a contract change. Review its breaking and migration impact explicitly.
+- Request text or surface text that an ADR requires has one test that names the ADR. A change that removes or replaces the code of that text keeps the test.
 - Editable sources own deterministic generated artifacts. Change and stage a generated artifact with the editable source that produces it.
 - Regenerate it with the StoryOS-owned command, classify its diff separately from hand-written lines, and review the generated diff for drift.
 - Describe a public operation as one row of the operation table `OPERATION_TABLE` in `storyos-contracts` ([ADR 0081](docs/adr/0081-generate-the-contract-artifacts-from-one-operation-table.md)). Put only the hand fields in the row. Do not write OpenAPI, JSON Schema, TypeScript, or fixture code for one operation.
