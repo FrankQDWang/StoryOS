@@ -154,7 +154,10 @@ pub(crate) async fn load_run_phase(
 ) -> Result<RunPhaseRow, CompleteAgentRunError> {
     let Some(row) = client
         .query_opt(
-            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message) AS author_message,
+            // The current author message is the one `author_instruction` item that is not an
+            // earlier author message of a later request (ADR 0093 section 6).
+            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'
+                      AND NOT COALESCE(assembly.payload #> '{operation_requirement,earlier_author_messages}', '[]') @> jsonb_build_array(jsonb_build_object('message_id', item->'source_version'))),run.author_message) AS author_message,
                     run.chapter_id::text AS chapter_id, run.conversation_id::text AS conversation_id,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text AS assembly_manifest_id,
                     assembly.destination_context_manifest_id::text AS destination_manifest_id,

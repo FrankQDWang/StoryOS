@@ -1004,6 +1004,15 @@
             "installed": {
               "$ref": "#/$defs/OptionalCompactionInstallInspect"
             },
+            "kept_author_message_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "kind": {
               "const": "present",
               "type": "string"

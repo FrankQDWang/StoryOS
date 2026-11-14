@@ -1,4 +1,5 @@
-//! The Tool result stubs of the later request of one compaction (ADR 0093 section 5).
+//! The later request of one compaction: its Tool result stubs (ADR 0093 section 5) and its
+//! earlier author messages (section 6).
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
