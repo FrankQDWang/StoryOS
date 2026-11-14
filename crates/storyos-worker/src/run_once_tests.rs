@@ -30,11 +30,31 @@ fn serialization_failure_state(error: &(dyn std::error::Error + 'static)) -> Opt
         .map(|_| "40001".to_owned())
 }
 
-/// A store with one queued AgentRun. The first claims and the first completions fail with a
-/// serialization failure.
+#[derive(Debug)]
+struct ConnectionLost;
+
+impl std::fmt::Display for ConnectionLost {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("connection lost")
+    }
+}
+
+impl std::error::Error for ConnectionLost {}
+
+fn serialization_failure() -> CompleteAgentRunError {
+    CompleteAgentRunError::Unavailable(Box::new(SerializationFailure))
+}
+
+fn connection_lost() -> CompleteAgentRunError {
+    CompleteAgentRunError::Unavailable(Box::new(ConnectionLost))
+}
+
+/// A store with one queued AgentRun. The first claims fail with a serialization failure, and the
+/// first completions fail with `completion_failure`.
 struct RaceStore {
     claim_failures: Mutex<u64>,
     completion_failures: Mutex<u64>,
+    completion_failure: fn() -> CompleteAgentRunError,
     settled: Mutex<Vec<ClaimedAgentRun>>,
 }
 
@@ -122,9 +142,7 @@ impl ModelDispatchStore for RaceStore {
         let mut failures = self.completion_failures.lock().unwrap();
         if *failures > 0 {
             *failures -= 1;
-            return Err(CompleteAgentRunError::Unavailable(Box::new(
-                SerializationFailure,
-            )));
+            return Err((self.completion_failure)());
         }
         self.settled.lock().unwrap().push(claim.clone());
         Ok(NextDispatchWork::Settled(CompleteAgentRun::Settled))
@@ -197,6 +215,7 @@ async fn run_once_claims_again_after_a_serialization_failure() {
     let store = RaceStore {
         claim_failures: Mutex::new(1),
         completion_failures: Mutex::new(0),
+        completion_failure: serialization_failure,
         settled: Mutex::new(Vec::new()),
     };
     let destination = ModelDestination {
@@ -218,6 +237,7 @@ async fn run_once_completes_again_after_a_serialization_failure() {
     let store = RaceStore {
         claim_failures: Mutex::new(0),
         completion_failures: Mutex::new(1),
+        completion_failure: serialization_failure,
         settled: Mutex::new(Vec::new()),
     };
     let destination = ModelDestination {
@@ -231,4 +251,35 @@ async fn run_once_completes_again_after_a_serialization_failure() {
         .expect("the second completion should settle the AgentRun");
 
     assert_eq!(*store.settled.lock().unwrap(), vec![claim()]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn run_once_stops_after_one_failure_that_is_not_a_serialization_failure() {
+    storyos_application::register_sql_state(serialization_failure_state);
+    let store = RaceStore {
+        claim_failures: Mutex::new(0),
+        completion_failures: Mutex::new(2),
+        completion_failure: connection_lost,
+        settled: Mutex::new(Vec::new()),
+    };
+    let destination = ModelDestination {
+        adapter: NoDestination,
+        observer: NoContractFaults,
+        tools: storyos_application::NoToolDestination,
+    };
+
+    let result = run_once(&store, &destination).await;
+
+    assert_eq!(
+        (
+            result.map_err(|error| error.to_string()),
+            *store.completion_failures.lock().unwrap(),
+            store.settled.lock().unwrap().clone(),
+        ),
+        (
+            Err("AgentRun work is unavailable".to_owned()),
+            1,
+            Vec::new()
+        )
+    );
 }
