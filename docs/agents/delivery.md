@@ -44,6 +44,8 @@ The executor reads the current ticket, the current parent, the native dependenci
 
 To claim, assign the issue and post the [Claim](#claim). GitHub keeps the edit history of each issue body, so the Claim has no copy or hash of the body. When the coordinator changes the parent or the ticket, it tells the executor. The executor reads the changed body and posts a new Claim before it continues.
 
+A session that works gets a message only after its turn. Thus the coordinator puts each decision in the ticket body first, and then it sends the message. The executor reads the ticket body again before it opens the pull request and before the final report.
+
 Ask the coordinator only for a real decision. A product, contract, number, or waiver question goes to the author through the coordinator.
 
 ### 4. Implement
@@ -51,6 +53,7 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
 - Commit on the ticket branch. Before the final evidence, merge the current integration tip into the branch.
+- Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator. The coordinator splits the ticket.
 
 ### 5. Open the pull request
@@ -77,6 +80,8 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 - The links of the two verdict comments of the last round, and each coordinator review comment.
 - Each finding that the ticket does not fix, with its owner issue.
 - The state of the worktree: clean or dirty.
+
+After the final report, make no commit, push, or pull request for the ticket. When a message of the coordinator arrives after the report, reply with the facts only. A change after the report needs a new request of the coordinator.
 
 ### 8. Merge the ticket
 
@@ -226,7 +231,7 @@ FILE=test/browser-exact-dist/production-host.integration.test.ts sh -ec '
 
 Do not stop to ask before a live model request. The author gave a standing permission. [ADR 0049](../adr/0049-admit-an-author-authorized-runtime-qualification.md) gives the contract of a qualification request.
 
-1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count.
+1. Before the run, write the plan: the purpose and the planned number of requests. Automatic requests, for example a late retrieval or a recovery `Retrieve`, count. When the ticket names a token limit, the plan also gives the expected reported input of each request and the total. A request with a prior reference has the full conversation as its input. When the total is above the limit, send the plan to the coordinator and wait for the answer.
 2. Send the requests.
 3. Log each request: the time, the request ID, and the result.
 

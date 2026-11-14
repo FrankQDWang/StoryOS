@@ -14,6 +14,10 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 - `storage_activation.rs` is the maintenance owner. It runs on its own admin connection that never enters the pool, so these rules do not apply to it.
 - `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text. It does not read `execute` or `query` calls with a non-literal statement. `make check-fast` runs the check.
 
+## Decisions
+
+A rule that decides product behaviour is a function of `storyos-core` or `storyos-application`. Examples are the item that a request sends, the form of that item, and the next state of an AgentRun. This crate gives the stored facts to the function and stores its result. A ticket that changes an Agent Run phase first moves the decisions of that phase out of this crate ([ADR 0039](../../docs/adr/0039-open-the-model-gateway-seam-between-committed-dispatch-boundaries.md)).
+
 ## Run one PostgreSQL test locally
 
 The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project read `STORYOS_TEST_DATABASE_URL`, `STORYOS_TEST_ADMIN_DATABASE_URL`, and `STORYOS_TEST_POSTGRES_CONTAINER`. `make check` sets them. For one test, use the command-owned database:
