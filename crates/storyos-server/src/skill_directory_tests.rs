@@ -144,6 +144,23 @@ fn a_symbolic_link_is_an_unsupported_entry() {
 }
 
 #[test]
+fn empty_nested_directories_do_not_count_and_a_file_too_deep_is_unsafe() {
+    let directory = Directory::new();
+    let deep = vec!["d"; 16].join("/");
+    directory.write("plot-notes/SKILL.md", VALID);
+    fs::create_dir_all(directory.0.join("plot-notes").join(&deep)).unwrap();
+    assert_eq!(directory.read().map(|set| set.packages().len()), Ok(1));
+    directory.write(&format!("plot-notes/{deep}/x.md"), "x");
+    assert_eq!(
+        directory.read(),
+        Err(package_refusal(
+            "plot-notes",
+            SkillPackageRefusal::PathUnsafe
+        ))
+    );
+}
+
+#[test]
 fn the_reader_stops_at_the_file_limit_and_at_the_size_limit() {
     let directory = Directory::new();
     directory.write("many/SKILL.md", VALID);

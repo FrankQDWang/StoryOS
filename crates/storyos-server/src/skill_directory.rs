@@ -3,12 +3,12 @@
 
 use std::fmt;
 use std::fs;
-use std::io::{self, Read as _};
+use std::io::Read as _;
 use std::path::Path;
 
 use storyos_core::{
-    ARCHIVE_PATH_MAX_SEGMENTS, FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT,
-    SKILL_PACKAGE_FILE_LIMIT, SkillFileInput, SkillPackage, SkillPackageInput, SkillPackageRefusal,
+    FrontmatterValue, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT, SKILL_PACKAGE_FILE_LIMIT,
+    SKILL_SET_LIMIT, SkillFileInput, SkillPackage, SkillPackageInput, SkillPackageRefusal,
     SkillSet, admit_skill_package, skill_md_frontmatter,
 };
 use yaml_rust2::{Yaml, YamlLoader};
@@ -59,8 +59,7 @@ impl fmt::Display for SkillDirectoryRefusal {
             ),
             Self::SkillLimitExceeded => write!(
                 formatter,
-                "STORYOS_SKILLS_DIR: the Skill directory has more than {} packages: skill_limit_exceeded",
-                storyos_core::SKILL_SET_LIMIT
+                "STORYOS_SKILLS_DIR: the Skill directory has more than {SKILL_SET_LIMIT} packages: skill_limit_exceeded"
             ),
         }
     }
@@ -80,33 +79,34 @@ pub fn read_skill_directory(directory: Option<&Path>) -> Result<SkillSet, SkillD
         return Ok(SkillSet::default());
     };
     let unreadable = |_| SkillDirectoryRefusal::Unreadable { package: None };
-    let mut packages = Vec::new();
-    for (name, kind) in sorted_entries(directory).map_err(unreadable)? {
-        if (name.starts_with('.') && kind.is_dir()) || kind.is_file() {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(directory).map_err(unreadable)? {
+        let entry = entry.map_err(unreadable)?;
+        let kind = entry.file_type().map_err(unreadable)?;
+        let name = entry.file_name();
+        if kind.is_file() || (kind.is_dir() && name.as_encoded_bytes().starts_with(b".")) {
             continue;
         }
+        let Ok(name) = name.into_string() else {
+            return Err(SkillDirectoryRefusal::Package {
+                package: entry.file_name().to_string_lossy().into_owned(),
+                rule: SkillPackageRefusal::NameInvalid,
+            });
+        };
         if !kind.is_dir() {
             return Err(SkillDirectoryRefusal::EntryUnsupported { package: name });
         }
-        packages.push(read_package(&directory.join(&name), name)?);
+        if names.len() == SKILL_SET_LIMIT {
+            return Err(SkillDirectoryRefusal::SkillLimitExceeded);
+        }
+        names.push(name);
     }
+    names.sort();
+    let packages = names
+        .into_iter()
+        .map(|name| read_package(&directory.join(&name), name))
+        .collect::<Result<_, _>>()?;
     SkillSet::new(packages).map_err(|_| SkillDirectoryRefusal::SkillLimitExceeded)
-}
-
-/// The entries of one directory in name order, with the type of each entry itself, so that a
-/// symbolic link stays a symbolic link. A name that is not UTF-8 is `InvalidData`.
-fn sorted_entries(directory: &Path) -> io::Result<Vec<(String, fs::FileType)>> {
-    let mut entries = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
-        entries.push((name, entry.file_type()?));
-    }
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    Ok(entries)
 }
 
 fn read_package(root: &Path, package: String) -> Result<SkillPackage, SkillDirectoryRefusal> {
@@ -115,7 +115,7 @@ fn read_package(root: &Path, package: String) -> Result<SkillPackage, SkillDirec
         files: Vec::new(),
         remaining: SKILL_PACKAGE_BYTE_LIMIT,
     };
-    reader.read_directory(root, "", 0)?;
+    reader.read_directory(root, "")?;
     let PackageReader { package, files, .. } = reader;
     let frontmatter = files
         .iter()
@@ -151,38 +151,36 @@ impl PackageReader {
         }
     }
 
-    /// Stops at the 65th file and at the first byte above the size limit, so that a large tree
-    /// does not go into memory.
+    /// Reads one entry at a time, and stops at the 65th file and at the first byte above the
+    /// size limit, so that a large tree does not go into memory.
     fn read_directory(
         &mut self,
         directory: &Path,
         prefix: &str,
-        depth: usize,
     ) -> Result<(), SkillDirectoryRefusal> {
-        if depth >= ARCHIVE_PATH_MAX_SEGMENTS {
-            return Err(self.refused(SkillPackageRefusal::PathUnsafe));
-        }
-        let entries = sorted_entries(directory).map_err(|error| {
-            if error.kind() == io::ErrorKind::InvalidData {
-                self.refused(SkillPackageRefusal::PathUnsafe)
-            } else {
-                self.unreadable()
+        for entry in fs::read_dir(directory).map_err(|_| self.unreadable())? {
+            let entry = entry.map_err(|_| self.unreadable())?;
+            let kind = entry.file_type().map_err(|_| self.unreadable())?;
+            if kind.is_file() && entry.file_name() == SKIPPED_FILE {
+                continue;
             }
-        })?;
-        for (name, kind) in entries {
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| self.refused(SkillPackageRefusal::PathUnsafe))?;
             let path = format!("{prefix}{name}");
             if kind.is_dir() {
-                self.read_directory(&directory.join(&name), &format!("{path}/"), depth + 1)?;
+                self.read_directory(&entry.path(), &format!("{path}/"))?;
             } else if !kind.is_file() {
                 return Err(SkillDirectoryRefusal::EntryUnsupported {
                     package: self.package.clone(),
                 });
-            } else if name != SKIPPED_FILE {
+            } else {
                 if self.files.len() == SKILL_PACKAGE_FILE_LIMIT {
                     return Err(self.refused(SkillPackageRefusal::FileLimitExceeded));
                 }
                 let mut bytes = Vec::new();
-                fs::File::open(directory.join(&name))
+                fs::File::open(entry.path())
                     .and_then(|file| file.take(self.remaining + 1).read_to_end(&mut bytes))
                     .map_err(|_| self.unreadable())?;
                 self.remaining = self
