@@ -55,6 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .into());
     }
+    let model_destination = settings.model_destination()?;
+    let skills = storyos_server::read_skill_directory(settings.skills_dir.as_deref())?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
     or_exit(
         require_release1_storage_activation_proof(database_url.expose_secret()).await,
@@ -103,7 +105,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((handle, binding))
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
-    let model_destination = settings.model_destination()?;
     let config = storyos_server::ServerConfig {
         database_url: Some(database_url),
         session_bindings,
@@ -123,6 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         model_destination,
+        skills: std::sync::Arc::new(skills),
     };
     println!("STORYOS_SERVER_URL={printed_server_url}");
     or_exit(io::stdout().flush(), "startup_line");

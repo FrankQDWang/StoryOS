@@ -57,6 +57,7 @@ mod selection_references;
 mod session_bootstrap;
 mod set_current_chapter;
 mod settings;
+mod skill_directory;
 mod snapshot;
 mod steer_agent_run;
 mod takeover;
@@ -79,6 +80,7 @@ pub use session_bootstrap::{
     packaged_session_mappings,
 };
 pub use settings::ServerSettings;
+pub use skill_directory::{SkillDirectoryRefusal, read_skill_directory};
 pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
 pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
@@ -153,6 +155,8 @@ pub struct ServerConfig {
     pub session_cookie_secure: SessionCookieSecure,
     /// The one model destination that this deployment offers. `None` offers no assistance.
     pub model_destination: Option<storyos_core::DeploymentDestination>,
+    /// The Skills of the deployment, read one time at the start of the Server (ADR 0089).
+    pub skills: Arc<storyos_core::SkillSet>,
 }
 
 impl ServerConfig {
