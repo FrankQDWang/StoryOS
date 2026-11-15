@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetAgentRunResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AssistantContext, SentReferences } from "./writing-assistant-panel.tsx";
+import type { GetAgentRunResponse, SkillCatalogEntry }
+  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AssistantContext, SentReferences, SentSkills } from "./writing-assistant-panel.tsx";
 import { settledRun } from "./assistant-run-outcome.ts";
 import { clearResendRunControl, clearRunControl, freezeRunControl, readRunControl, saveRunControl,
   submitRunControl, type RunControlIntent } from "./run-control-intent.ts";
@@ -12,15 +13,19 @@ import {
   useReferenceDraft,
 } from "./selection-reference-draft.ts";
 import type { SelectionReference } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { useSkillPicker } from "./skill-picker.tsx";
 
-export function AssistantComposer({ context, available, sending, current, run, onSend, onRefresh, onStatus,
+export function AssistantComposer({ context, available, sending, current, run, skills, onSend, onRefresh, onStatus,
   onGuidanceRetained }: {
   context?: AssistantContext | undefined;
   available: boolean;
   sending: boolean;
   current?: { runId?: string; conversationId?: string } | undefined;
   run?: GetAgentRunResponse | undefined;
-  onSend: (message: string, acknowledged: () => void, frozen?: SentReferences, recorded?: () => void) => void;
+  /** The Skills of the deployment for the `$` picker, or `undefined` when the read failed. */
+  skills?: readonly SkillCatalogEntry[] | undefined;
+  onSend: (message: string, acknowledged: () => void, frozen?: SentReferences, recorded?: () => void,
+    selected?: SentSkills) => void;
   onRefresh: () => Promise<unknown>;
   onStatus: (status: string) => void;
   /** Keeps the labels and the references of a retained steering input for the history. */
@@ -45,6 +50,13 @@ export function AssistantComposer({ context, available, sending, current, run, o
     && run.conversation_id === current.conversationId;
   const active = known && !settledRun(run);
   const pause = active && run.status !== "paused" && message.trim().length === 0;
+  // The picker selects Skills only for a message that starts a new Run.
+  const picker = useSkillPicker({ skills, message, allowed: context !== undefined && !active
+    && (current === undefined || known), onMessage: (text) => {
+    setMessage(text);
+    edited.current = true;
+    if (context !== undefined) clearResendRunControl(context.scope);
+  } });
   const enabled = available && context?.canSubmit === true && context.chapterId !== undefined
     && !sending && !busy && pending === undefined && (current === undefined || known);
   // The cancellation ends the Run and needs no chapter, so it shows for each known Run that is not settled.
@@ -144,6 +156,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
   }, [context?.scope.owner_user_id, context?.scope.project_id, available]);
 
   return <div className="composer-dock">
+    {picker.list}
     <form className="composer" data-writing-assistant-composer="" onSubmit={(event) => {
       event.preventDefault();
       if (!enabled) return;
@@ -152,9 +165,16 @@ export function AssistantComposer({ context, available, sending, current, run, o
           pause ? { kind: "pause" } : { kind: "guidance", text: message.trim(),
             references: draft.entries.map((entry) => entry.reference), labels: draftLabels(draft.entries),
             keys: draft.entries.map((entry) => entry.key) }));
-      } else if (message.trim().length > 0) onSend(message.trim(), () => setMessage(""), undefined, recorded);
+      } else if (message.trim().length > 0) {
+        onSend(message.trim(), () => {
+          setMessage("");
+          picker.clear();
+        }, undefined, recorded, picker.selected.length === 0 ? undefined
+          : { references: picker.selected, unavailable: picker.clear });
+      }
     }}>
-      {draft.entries.length === 0 || context === undefined ? null : <ul className="composer-references">
+      {(draft.entries.length === 0 && picker.selected.length === 0) || context === undefined ? null
+        : <ul className="composer-references">
         {draft.entries.map((entry) => <li key={entry.key} data-selection-reference-label={draftLabels([entry])[0]}>
           {/* The text of a heading can be long, so only that part has an ellipsis. */}
           <span className="reference-label">{entry.label.part.kind === "heading"
@@ -164,10 +184,17 @@ export function AssistantComposer({ context, available, sending, current, run, o
           <button type="button" aria-label="移除引用" data-remove-selection-reference=""
             onClick={() => removeDraftReference(context.scope, entry.key)}>×</button>
         </li>)}
+        {picker.selected.map((skill) => <li key={`$${skill.name}`} data-skill-chip={skill.name}>
+          <span className="reference-label">${skill.name}</span>
+          <button type="button" aria-label="移除技能" data-remove-skill=""
+            onClick={() => picker.remove(skill.name)}>×</button>
+        </li>)}
       </ul>}
       <textarea name="assistant-message" aria-label="给写作助手的消息" rows={2} maxLength={4000}
+        {...picker.field}
         value={message} onChange={(event) => {
           setMessage(event.currentTarget.value);
+          picker.edited(event.currentTarget.value, event.currentTarget.selectionStart);
           edited.current = true;
           if (context !== undefined) clearResendRunControl(context.scope);
         }}
