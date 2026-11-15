@@ -37,6 +37,7 @@ mod editor_session;
 mod get_proposal;
 mod list_open_proposals;
 mod list_projects;
+mod list_skills;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
@@ -104,6 +105,7 @@ use editor_session::{create_editor_session, get_editor_session};
 use get_proposal::get_proposal;
 use list_open_proposals::list_chapter_open_proposals;
 use list_projects::list_projects;
+use list_skills::list_skills;
 use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
@@ -314,6 +316,10 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
                 method_filter(contracts::UPDATE_PROJECT_METHOD),
                 update_project,
             ),
+        )
+        .route(
+            contracts::LIST_SKILLS_PATH,
+            routing::on(method_filter(contracts::LIST_SKILLS_METHOD), list_skills),
         )
         .route(
             contracts::GET_PROJECT_ASSISTANCE_PATH,

@@ -519,6 +519,10 @@ export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: 
 
 export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
 
+export type SkillCatalogEntry = { reference: SkillPackageReference, description: string, };
+
+export type ListSkillsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, skills: Array<SkillCatalogEntry>, };
+
 export type SourceSnapshotKind = "search_result" | "page";
 
 export type SourceGapReason = "failed" | "empty" | "missing" | "unattributed";
@@ -718,6 +722,7 @@ export declare function digestPauseAgentRun(request: PauseAgentRunRequest, crypt
 export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;
 export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
+export declare function listSkills(options: StoryOSQueryOptions & { projectId: string }): Promise<ListSkillsResponse>;
 export declare function listResearchSources(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<ListResearchSourcesResponse>;
 export declare function getResearchSource(options: StoryOSQueryOptions & { projectId: string; sourceSnapshotId: string }): Promise<GetResearchSourceResponse>;
 export declare function getResearchArtifact(options: StoryOSQueryOptions & { projectId: string; researchArtifactId: string }): Promise<GetResearchArtifactResponse>;

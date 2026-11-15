@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
-  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance,
+  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance, listSkills,
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse,
-  ProjectScope, ProseChangeLocationInspect, SelectionReference,
+  ProjectScope, ProseChangeLocationInspect, SelectionReference, SkillCatalogEntry, SkillPackageReference,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -27,6 +27,7 @@ import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
 import { clearDraftReferences, draftEntries, draftLabels, setRunReferences } from "./selection-reference-draft.ts";
+import { SKILL_UNAVAILABLE_SENTENCE, skillSelectionUnavailable } from "./skill-selection.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,6 +42,7 @@ type TranscriptExchange = {
   result?: string;
   run?: GetAgentRunResponse;
   referenceLabels?: string[];
+  skillNames?: string[];
   guidance?: GuidanceReferences[];
 };
 
@@ -63,11 +65,16 @@ type RequestReference = {
   referenceLabels?: string[];
   /** The draft keys of the references, which go from the composer when the Host admitted the Run. */
   referenceKeys?: string[];
+  /** The names of the Skills that the message selected, for their labels. */
+  skillNames?: string[];
   guidance?: GuidanceReferences[];
 };
 
 /** The references of a message, their labels for the history, and their draft keys. */
 export type SentReferences = { references: SelectionReference[]; labels: string[]; keys: string[] };
+
+/** The Skills that a message selects, and the step that removes them when the deployment refuses them. */
+export type SentSkills = { references: SkillPackageReference[]; unavailable: () => void };
 
 /** Calls `refresh` later, and returns a function that cancels the call. */
 export type RefreshSchedule = (refresh: () => void) => () => void;
@@ -206,23 +213,28 @@ function shownProposals(run: GetAgentRunResponse): { decisionId: string; proposa
     ...(run.decision.opened_proposal.kind === "present" ? { proposalId: run.decision.opened_proposal.proposal_id } : {}) }];
 }
 
-/** The labels of the references that went with one message. */
-function ReferenceLabels({ labels }: { labels: readonly string[] | undefined }) {
-  return labels === undefined || labels.length === 0 ? null : <ul className="assistant-reference-labels">
-    {labels.map((label, index) => <li key={index} data-sent-reference-label="">{label}</li>)}
+/** The labels of the references and of the Skills that went with one message. */
+function ReferenceLabels({ labels, skills }: {
+  labels: readonly string[] | undefined;
+  skills?: readonly string[] | undefined;
+}) {
+  return (labels?.length ?? 0) + (skills?.length ?? 0) === 0 ? null : <ul className="assistant-reference-labels">
+    {labels?.map((label, index) => <li key={index} data-sent-reference-label="">{label}</li>)}
+    {skills?.map((name) => <li key={`$${name}`} data-sent-skill-label="">${name}</li>)}
   </ul>;
 }
 
 /** The author messages of an exchange: the request, then each steering input, with their labels. */
-function AuthorMessages({ message, labels, run, guidance }: {
+function AuthorMessages({ message, labels, skills, run, guidance }: {
   message: string;
   labels: readonly string[] | undefined;
+  skills: readonly string[] | undefined;
   run: GetAgentRunResponse | undefined;
   guidance: readonly GuidanceReferences[] | undefined;
 }) {
   return <>
     <p className="assistant-author-message">{message}</p>
-    <ReferenceLabels labels={labels} />
+    <ReferenceLabels labels={labels} skills={skills} />
     {run?.steering_inputs?.map((input) => <div key={input.steering_input_id}>
       <p className="assistant-author-message">{input.author_message}</p>
       <ReferenceLabels labels={guidance?.find((item) => item.steeringInputId === input.steering_input_id)?.labels} />
@@ -261,6 +273,9 @@ export function WritingAssistantPanel({
   const [resultUnavailable, setResultUnavailable] = useState(false);
   const inspectSequence = useRef(0);
   const [failedReads, setFailedReads] = useState(0);
+  const [skills, setSkills] = useState<SkillCatalogEntry[]>();
+  // A refused selection reads the Skills of the deployment again.
+  const [skillReads, setSkillReads] = useState(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -281,6 +296,18 @@ export function WritingAssistantPanel({
     });
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
+
+  useEffect(() => {
+    setSkills(undefined);
+    if (context === undefined) return;
+    let active = true;
+    void listSkills({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl, projectId: context.scope.project_id })
+      .then((response) => {
+        if (active && response.project_scope.owner_user_id === context.scope.owner_user_id
+          && response.project_scope.project_id === context.scope.project_id) setSkills(response.skills);
+      }, () => {});
+    return () => { active = false; };
+  }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id, skillReads]);
 
   const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
@@ -389,7 +416,8 @@ export function WritingAssistantPanel({
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
   /** `onRecorded` runs in the same step that stores the request record, before the request goes. */
-  const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences, onRecorded?: () => void) => {
+  const submit = (message: string, onAdmitted: () => void, frozen?: SentReferences, onRecorded?: () => void,
+    selected?: SentSkills) => {
     if (availability === "unavailable") {
       setRefused(true);
       return;
@@ -453,6 +481,7 @@ export function WritingAssistantPanel({
             runId: previousRun.run_id, run: previousRun,
             message: previous.message, status: previousRun.status,
             ...(previous.referenceLabels === undefined ? {} : { referenceLabels: previous.referenceLabels }),
+            ...(previous.skillNames === undefined ? {} : { skillNames: previous.skillNames }),
             ...(previous.guidance === undefined ? {} : { guidance: previous.guidance }),
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
           },
@@ -464,6 +493,7 @@ export function WritingAssistantPanel({
         current.referenceLabels = sent.labels;
         current.referenceKeys = sent.keys;
       }
+      if (selected !== undefined) current.skillNames = selected.references.map((skill) => skill.name);
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
@@ -474,6 +504,7 @@ export function WritingAssistantPanel({
             : { kind: "selection_references", source_chapter_id: current.chapterId, references },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
+          ...(selected === undefined ? {} : { skill_selections: selected.references }),
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
           security_policy_revision: SECURITY_POLICY_REVISION,
           correlation_id: current.correlationId,
@@ -507,6 +538,14 @@ export function WritingAssistantPanel({
       } catch (error) {
         if (historicalAcknowledgementUnavailable(error)) {
           setStatus(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+          return;
+        }
+        // The message and its references stay in the composer, and the author selects again or sends it.
+        if (skillSelectionUnavailable(error)) {
+          restorePrevious();
+          selected?.unavailable();
+          setSkillReads((count) => count + 1);
+          setStatus(SKILL_UNAVAILABLE_SENTENCE);
           return;
         }
         if (error instanceof StoryOSProtocolError
@@ -573,8 +612,8 @@ export function WritingAssistantPanel({
             <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <AuthorMessages message={exchange.message} labels={exchange.referenceLabels} run={exchange.run}
-                guidance={exchange.guidance} />
+              <AuthorMessages message={exchange.message} labels={exchange.referenceLabels}
+                skills={exchange.skillNames} run={exchange.run} guidance={exchange.guidance} />
               {/* The button "用到故事里" stays with the current Run, because it sends in the current Conversation. */}
               {exchange.run !== undefined && runResults(exchange.run) !== undefined
                 ? <RunResultList run={exchange.run} results={runResults(exchange.run)!} context={context} history
@@ -595,8 +634,8 @@ export function WritingAssistantPanel({
               {(reference.history?.length ?? 0) > 0
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
-              <AuthorMessages message={reference.message} labels={reference.referenceLabels} run={run}
-                guidance={reference.guidance} />
+              <AuthorMessages message={reference.message} labels={reference.referenceLabels}
+                skills={reference.skillNames} run={run} guidance={reference.guidance} />
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : runResults(run) !== undefined
                 ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
@@ -617,6 +656,7 @@ export function WritingAssistantPanel({
         </div>
         <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
           context={context} available={availability === "available"} sending={sending} current={reference} run={run}
+          skills={skills}
           onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
           onGuidanceRetained={(steeringInputId, labels, references) => {
             const latest = context === undefined ? undefined : readReference(context.scope);
