@@ -189,6 +189,8 @@ assert_stage5_research_facts_present() {
 
 # Stage 6 Skill records: the SkillPackage Snapshots with their files, the pinned catalogs, and the
 # ToolCalls of the two Skill Host Tools. Each line is a count and a digest of the ordered complete rows.
+# The four last lines are the Skill tables of the Project Export Archive of the Skill journey: the path,
+# the export, the immutable root, the size, and a digest of the payload.
 stage6_skill_facts() {
   facts_container=$1
   for facts_table in skill_package_snapshots skill_package_snapshot_files \
@@ -205,20 +207,6 @@ stage6_skill_facts() {
               ORDER BY row_to_json(record)::text), ''))
        FROM storyos.tool_calls AS record
       WHERE record.function_name IN ('load_skill', 'read_skill_resource')"
-}
-
-assert_stage6_skill_facts_present() {
-  if [ "$(printf '%s\n' "$1" | grep -c '|0|')" != "0" ] \
-    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "4" ]; then
-    echo "The recovery seed did not create each Stage 6 Skill record family: $1" >&2
-    exit 1
-  fi
-}
-
-# The Project Export Archive of the Skill journey: for each Skill table of the archive, the export, the
-# immutable root, the size, and a digest of the payload.
-stage6_skill_export_facts() {
-  facts_container=$1
   docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
     "SELECT entry.path || '|' || manifest.export_id || ':' || manifest.immutable_root || '|' ||
             length(entry.payload) || '|' || md5(entry.payload)
@@ -235,10 +223,11 @@ stage6_skill_export_facts() {
       ORDER BY entry.path"
 }
 
-assert_stage6_skill_export_facts_present() {
-  if [ "$(printf '%s\n' "$1" | grep -c '|[0-9a-f-]*:[^|]*|[1-9][0-9]*|[0-9a-f]\{32\}$')" != "4" ] \
-    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "4" ]; then
-    echo "The Skill journey did not export each Stage 6 Skill table: $1" >&2
+assert_stage6_skill_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -c '|0|')" != "0" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "8" ] \
+    || [ "$(printf '%s\n' "$1" | grep -c '^canonical/[a-z_]*\.json|[0-9a-f-]*:sha256:[0-9a-f]\{64\}|[1-9][0-9]*|[0-9a-f]\{32\}$')" != "4" ]; then
+    echo "The recovery seed did not create and export each Stage 6 Skill record family: $1" >&2
     exit 1
   fi
 }

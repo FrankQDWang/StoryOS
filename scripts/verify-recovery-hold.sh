@@ -214,8 +214,6 @@ stage5_before=$(stage5_research_facts "$primary")
 assert_stage5_research_facts_present "$stage5_before"
 stage6_before=$(stage6_skill_facts "$primary")
 assert_stage6_skill_facts_present "$stage6_before"
-stage6_export_before=$(stage6_skill_export_facts "$primary")
-assert_stage6_skill_export_facts_present "$stage6_export_before"
 stop_recovery_drill_server
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
@@ -706,10 +704,6 @@ if [ "$(stage5_research_facts "$hold")" != "$stage5_before" ]; then
 fi
 if [ "$(stage6_skill_facts "$hold")" != "$stage6_before" ]; then
   echo "Restored Stage 6 Skill records changed" >&2
-  exit 1
-fi
-if [ "$(stage6_skill_export_facts "$hold")" != "$stage6_export_before" ]; then
-  echo "Restored Project Export Archive of the Skill journey changed" >&2
   exit 1
 fi
 export STORYOS_PHYSICAL_DRILL=1
