@@ -91,6 +91,8 @@ pub struct AgentRunRecord {
     pub decision: AgentRunDecisionInspect,
     /// Each result of the Run in the order in which the model made it. Only the Run read has it.
     pub results: Option<Vec<storyos_contracts::AgentRunResultInspect>>,
+    /// Each Skill that the Run used (ADR 0089 section 8). Only the Run read has it.
+    pub skill_uses: Option<Vec<storyos_core::SkillUse>>,
     pub model: Option<AgentRunModelInspect>,
     /// Each compaction record of the Run, in RunStep order (ADR 0093).
     pub compactions: Vec<ActiveCompactionInspect>,

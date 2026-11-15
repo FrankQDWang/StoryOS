@@ -857,6 +857,11 @@ pub struct GetAgentRunResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub results: Option<Vec<AgentRunResultInspect>>,
+    // Only the Run read has it: each selected Skill in the order of the Skill names, then each
+    // settled load in item order. No field when the Run used no Skill (ADR 0089 section 8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub skill_uses: Option<Vec<crate::SkillUseInspect>>,
     pub model_attempt: OptionalModelAttemptInspect,
     // The last compaction record of the Run.
     pub active_compaction: OptionalActiveCompactionInspect,

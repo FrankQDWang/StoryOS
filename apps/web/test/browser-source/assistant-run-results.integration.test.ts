@@ -39,6 +39,10 @@ function completedRun(runId: string, results: readonly object[]) {
 }
 
 const ALL = completedRun(artifactFixture.artifact.lineage.run_id, [research, proposal, answer]);
+// ADR 0089 section 8: the Skills of the turn go after its first result, before the place of the research sources.
+const WITH_SKILLS = { ...ALL, skill_uses: [{ provenance: "author_selected", name: "dialogue-style-guide" },
+  { provenance: "agent_selected", name: "internal-comms", reason: "The request asks for an update." }] };
+const SKILL_LINES = ["使用了你选择的技能「dialogue-style-guide」", "使用了技能「internal-comms」：The request asks for an update."];
 const ARTIFACT_LINES = [
   "High water was at 10.42. The port log is not available.",
   "High water at Liverpool was at 10.42. [1]",
@@ -79,8 +83,9 @@ async function renderPanel(runs: readonly { run_id: string }[], stored: object) 
 
 /** The result lines of one exchange in their order, with the controls that go with them. */
 function shownResults(section: Element | null) {
-  return [...section?.querySelectorAll(".assistant-result, [data-assistant-research-artifact] p, "
-    + "[data-assistant-research-artifact] li, [data-assistant-use-research], [data-proposal-location]") ?? []]
+  return [...section?.querySelectorAll(".assistant-result, [data-assistant-skill-uses] li, "
+    + "[data-assistant-research-artifact] p, [data-assistant-research-artifact] li, [data-assistant-use-research], "
+    + "[data-proposal-location]") ?? []]
     .map(item => item.textContent);
 }
 
@@ -98,6 +103,8 @@ async function inActEnvironment(body: () => Promise<void>) {
 it.each([
   ["a Research Artifact, a Proposal, and a final answer text", ALL,
     [RESEARCH_SYNTHESIS_SENTENCE, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
+  ["a Research Artifact, a Proposal, a final answer text, and two Skills", WITH_SKILLS,
+    [RESEARCH_SYNTHESIS_SENTENCE, ...SKILL_LINES, ...ARTIFACT_LINES, "用到故事里", PROPOSAL_SENTENCE, LOCATION, ANSWER]],
   ["a Proposal and a final answer text", completedRun("018f0000-0000-7001-8000-000000000d31", [proposal, answer]),
     [PROPOSAL_SENTENCE, LOCATION, ANSWER]],
 ])("shows each result of a Run with %s in the order of the model", async (_, run, expected) => {

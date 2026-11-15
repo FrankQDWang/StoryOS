@@ -23,6 +23,7 @@ import {
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import { ResearchTurn, researchDecision } from "./research-turn.tsx";
 import { RunResultList } from "./run-result-list.tsx";
+import { SkillUseList } from "./skill-use-list.tsx";
 import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { mergeReferences } from "./selection-reference.ts";
@@ -621,6 +622,7 @@ export function WritingAssistantPanel({
                   onNavigate={onNavigateProposal} />
                 : <>
                   {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+                  {exchange.run === undefined ? null : <SkillUseList run={exchange.run} />}
                   {exchange.run === undefined || context === undefined || !researchDecision(exchange.run) ? null
                     : <ResearchTurn context={context} run={exchange.run} history />}
                   {exchange.run?.decision.kind !== "prose_change" ? null
@@ -641,6 +643,7 @@ export function WritingAssistantPanel({
                 ? <RunResultList run={run} results={runResults(run)!} context={context} history={false} tree={context?.tree}
                   sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal}>{useResearch}</RunResultList>
                 : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
+                  <SkillUseList run={run} />
                   {context === undefined ? null : <ResearchTurn context={context} run={run}>{useResearch}</ResearchTurn>}
                   {run.decision.kind !== "prose_change" ? null : <ProposalLocationLinks locations={run.decision.locations ?? []}
                     tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} />}</>}
