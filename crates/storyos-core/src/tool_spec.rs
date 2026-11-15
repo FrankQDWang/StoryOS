@@ -34,6 +34,8 @@ pub enum ToolOperation {
     ReadToolResult,
     /// The Host Tool with which the Agent loads one Skill of the catalog (ADR 0089).
     LoadSkill,
+    /// The Host Tool with which the Agent reads one file of a Skill that its Run has (ADR 0089).
+    ReadSkillResource,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -133,6 +135,7 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &crate::SUBMIT_RESEARCH_TOOL_SPEC,
         &crate::READ_TOOL_RESULT_TOOL_SPEC,
         &crate::LOAD_SKILL_TOOL_SPEC,
+        &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -160,6 +163,10 @@ pub enum ToolIntake {
     LoadSkill {
         skill: String,
         reason: String,
+    },
+    ReadSkillResource {
+        skill: String,
+        path: String,
     },
 }
 
@@ -246,6 +253,7 @@ impl ToolSpec {
             ToolOperation::SubmitResearch => crate::submit_research::intake(arguments),
             ToolOperation::ReadToolResult => crate::read_tool_result::intake(arguments),
             ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
+            ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
         }
     }
 }
@@ -302,7 +310,8 @@ impl ServerArguments {
                 | ToolIntake::ProposeEdit(_)
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
-                | ToolIntake::LoadSkill { .. },
+                | ToolIntake::LoadSkill { .. }
+                | ToolIntake::ReadSkillResource { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -311,7 +320,8 @@ impl ServerArguments {
                 | ToolIntake::ProposeEdit(_)
                 | ToolIntake::SubmitResearch { .. }
                 | ToolIntake::ReadToolResult { .. }
-                | ToolIntake::LoadSkill { .. },
+                | ToolIntake::LoadSkill { .. }
+                | ToolIntake::ReadSkillResource { .. },
             ) => {
                 return None;
             }

@@ -545,6 +545,7 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
                 arguments: r#"{"query":"tides","result_count":null}"#,
                 form,
                 skill: None,
+                resource_path: None,
             })
             .collect()
     };
@@ -572,10 +573,10 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
 }
 
 /// ADR 0056 and ADR 0089 section 3: the expected input counts the catalog item with the current
-/// input and each load output of the prior response. A later full input counts each load output
-/// in its exact form, because a load output has no stub.
+/// input and each load output and read output of the prior response. A later full input counts
+/// each such output in its exact form, because a load output and a read output have no stub.
 #[test]
-fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_output() {
+fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_and_read_output() {
     let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
         operation_requirement_id: "requirement-1".to_owned(),
         input_snapshot_id: "snapshot-1".to_owned(),
@@ -621,13 +622,13 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_output() {
         .sent_input_tokens
     }
     let first = sent(&decision, crate::PriorInput::Current);
-    // Two long loads of the prior response.
+    // One long load and one long read of the prior response.
     let texts = [
         "Keep each line short. ".repeat(1_400),
         "Name each place. ".repeat(1_800),
     ];
     let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
-        ["load-1", "load-2"]
+        ["load-1", "read-2"]
             .iter()
             .zip(&texts)
             .zip(&references)
@@ -647,6 +648,7 @@ fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_output() {
                 arguments: "{}",
                 form,
                 skill: Some(reference),
+                resource_path: (*id == "read-2").then_some("references/places.md"),
             })
             .collect()
     };

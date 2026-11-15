@@ -282,7 +282,8 @@ pub(crate) fn call_inspect(
         | storyos_core::ToolIntake::ProposeEdit(_)
         | storyos_core::ToolIntake::SubmitResearch { .. }
         | storyos_core::ToolIntake::ReadToolResult { .. }
-        | storyos_core::ToolIntake::LoadSkill { .. } => {
+        | storyos_core::ToolIntake::LoadSkill { .. }
+        | storyos_core::ToolIntake::ReadSkillResource { .. } => {
             return Err(damaged());
         }
     })

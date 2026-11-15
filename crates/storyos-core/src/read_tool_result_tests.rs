@@ -56,6 +56,7 @@ fn candidate<'a>(
         arguments: "{}",
         form: ToolResultForm::Exact,
         skill: None,
+        resource_path: None,
     }
 }
 

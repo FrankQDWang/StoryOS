@@ -134,12 +134,15 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             skill_catalog: true,
         })
     };
-    // The mapping `v7` and the fake tool loop mapping declare `load_skill` only for a Run whose
-    // pinned catalog has a Skill (ADR 0089 section 3).
+    // The mapping `v7` and the fake tool loop mapping declare `load_skill` and
+    // `read_skill_resource` only for a Run whose pinned catalog has a Skill (ADR 0089 section 3).
     let mut without_skill = host(&HOST_TOOL_REGISTRATION);
-    without_skill
-        .tools
-        .retain(|tool| tool.spec.operation != crate::ToolOperation::LoadSkill);
+    without_skill.tools.retain(|tool| {
+        !matches!(
+            tool.spec.operation,
+            crate::ToolOperation::LoadSkill | crate::ToolOperation::ReadSkillResource
+        )
+    });
     for revision in [
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
         AGENT_PLAN_REGISTRATION.revision,
@@ -177,6 +180,7 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "submit_research",
                 "read_tool_result",
                 "load_skill",
+                "read_skill_resource",
                 "finish"
             ]
         )
@@ -191,11 +195,32 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
             "018f0000-0000-7001-8000-0000000e0102"
         )
     );
+    let declared = host(&HOST_TOOL_REGISTRATION);
     assert_eq!(
-        host(&HOST_TOOL_REGISTRATION).tools[4]
-            .declaration()
-            .parameters,
-        json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
+        (
+            declared.tools[4].declaration().parameters,
+            declared.tools[5].declaration().parameters,
+        ),
+        (
+            json!({
+                "type": "object",
+                "properties": {
+                    "skill": {
+                        "type": "string",
+                        "description": "The name of a Skill that this work has."
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "The path of one file in the package of the Skill, \
+                                        relative to the root of the package, with / between the \
+                                        parts."
+                    }
+                },
+                "required": ["skill", "path"],
+                "additionalProperties": false
+            }),
+            json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false}),
+        )
     );
 }
 

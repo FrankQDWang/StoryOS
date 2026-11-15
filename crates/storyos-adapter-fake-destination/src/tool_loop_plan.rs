@@ -15,6 +15,7 @@
 //! - `SCRIPT:submit_research ...` gets the research script of `research_plan`.
 //! - `SCRIPT:read_tool_result ...` gets the read script of `read_plan`.
 //! - `SCRIPT:load_skill ...` gets the load script of `load_plan`.
+//! - `SCRIPT:read_skill_resource ...` gets the resource script of `skill_resource_plan`.
 //! - `SCRIPT:partial`, `SCRIPT:incomplete`, `SCRIPT:failed`, `SCRIPT:cancelled`,
 //!   `SCRIPT:unknown`, `SCRIPT:tool_partial`, and `SCRIPT:refusal` get the response outcome of
 //!   `create_plan::response_outcome` in the first request.
@@ -43,6 +44,9 @@ pub(crate) fn plan(request: &CreateRequest) -> FakeCreate {
         return planned;
     }
     if let Some(planned) = crate::load_plan::plan(request) {
+        return planned;
+    }
+    if let Some(planned) = crate::skill_resource_plan::plan(request) {
         return planned;
     }
     let message = request.author_message.as_str();

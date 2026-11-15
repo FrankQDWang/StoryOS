@@ -104,6 +104,7 @@ mod agent_run_load_skill;
 mod agent_run_observation;
 mod agent_run_prior_response;
 mod agent_run_propose_edit;
+mod agent_run_read_skill_resource;
 mod agent_run_read_tool_result;
 mod agent_run_recovery;
 mod agent_run_results;

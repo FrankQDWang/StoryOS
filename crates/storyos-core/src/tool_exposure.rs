@@ -94,6 +94,7 @@ impl ToolOperation {
             Self::SubmitResearch => "submit_research",
             Self::ReadToolResult => "read_tool_result",
             Self::LoadSkill => "load_skill",
+            Self::ReadSkillResource => "read_skill_resource",
         }
     }
 
@@ -116,6 +117,7 @@ impl ToolOperation {
             Self::SubmitResearch => crate::submit_research::DESCRIPTION,
             Self::ReadToolResult => crate::read_tool_result::DESCRIPTION,
             Self::LoadSkill => crate::load_skill::DESCRIPTION,
+            Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
         }
     }
 }
@@ -163,6 +165,7 @@ impl ExposedTool {
             ToolOperation::SubmitResearch => crate::submit_research::parameters(),
             ToolOperation::ReadToolResult => crate::read_tool_result::parameters(),
             ToolOperation::LoadSkill => crate::load_skill::parameters(),
+            ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -203,9 +206,9 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out. The Host Tools follow. `load_skill` is a Host
-    /// Tool only of a Run whose pinned catalog has a Skill, so a Run with no Skill declares the
-    /// Tools of before (ADR 0089 section 3).
+    /// second Tool of one function name stays out. The Host Tools follow. `load_skill` and
+    /// `read_skill_resource` are Host Tools only of a Run whose pinned catalog has a Skill, so a
+    /// Run with no Skill declares the Tools of before (ADR 0089 section 3).
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let Some(registration) =
             model_registration(facts.model_registration_revision).filter(|registration| {
@@ -244,7 +247,13 @@ impl ToolExposure {
         tools.extend(
             host.tools
                 .iter()
-                .filter(|spec| facts.skill_catalog || spec.operation != ToolOperation::LoadSkill)
+                .filter(|spec| {
+                    facts.skill_catalog
+                        || !matches!(
+                            spec.operation,
+                            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource
+                        )
+                })
                 .map(|spec| ExposedTool {
                     name: spec.operation.function_name(),
                     registration_id: host.id,

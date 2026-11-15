@@ -27,6 +27,7 @@ mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
 mod research_destination;
@@ -223,6 +224,10 @@ pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
 };
+pub use read_skill_resource::{
+    READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,
+    SkillResourceRefusal, admit_skill_resource_read,
+};
 pub use read_tool_result::{
     READ_TOOL_RESULT_TOOL_SPEC, ReadTarget, ReadToolResultRefusal, StoredCall, read_tool_result,
 };
@@ -337,9 +342,9 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    SKILL_LOAD_TRUST, TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput,
-    ToolResultSource, assemble_tool_result_continuation, function_outputs, is_function_output,
-    is_skill_load_output, stub_tool_call_ids,
+    SKILL_LOAD_TRUST, SKILL_RESOURCE_TRUST, TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm,
+    ToolResultOutput, ToolResultSource, assemble_tool_result_continuation, function_outputs,
+    is_function_output, is_skill_load_output, stub_tool_call_ids,
 };
 pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
