@@ -186,6 +186,21 @@ pub struct RequestContextItem {
     pub full_input_only: bool,
 }
 
+impl RequestContextItem {
+    /// The items of `selected` that a Create request sends. A request with the prior response
+    /// reference `previous_response_reference` continues a Provider conversation that holds each
+    /// `full_input_only` item, so it does not send such an item (ADR 0089 section 5).
+    pub fn sent(selected: Vec<Self>, previous_response_reference: Option<&str>) -> Vec<Self> {
+        match previous_response_reference {
+            Some(_) => selected
+                .into_iter()
+                .filter(|item| !item.full_input_only)
+                .collect(),
+            None => selected,
+        }
+    }
+}
+
 /// One admitted Proposal target that the request declares to the destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeclaredTarget {
@@ -649,3 +664,7 @@ pub trait GatewayClock: Sync {
     /// Completes when `delay` has elapsed.
     fn wait(&self, delay: Duration) -> impl Future<Output = ()> + Send;
 }
+
+#[cfg(test)]
+#[path = "model_gateway_ports_tests.rs"]
+mod tests;

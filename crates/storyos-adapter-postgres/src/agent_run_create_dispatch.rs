@@ -231,11 +231,8 @@ pub(crate) async fn create_request(
         Some(prior) => prior.unexecuted_calls(&tool_outputs)?,
         None => Vec::new(),
     };
-    let mut input = record_input(record, assembly, &run.author_message);
-    // The prior response holds the text of each Skill of the Conversation (ADR 0089 section 5).
-    if previous_response_reference.is_some() {
-        input.context.retain(|item| !item.full_input_only);
-    }
+    let input = record_input(record, assembly, &run.author_message);
+    let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
     Ok(CreateRequest {
         attempt,
         purpose: probe.map_or(CreatePurpose::Decision, |probe| {
@@ -246,7 +243,7 @@ pub(crate) async fn create_request(
         chapter_id: run.chapter_id.clone(),
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
-        context: input.context,
+        context,
         earlier_author_messages: input.earlier_author_messages,
         declared_targets,
         selection_references: input.selection_references,
