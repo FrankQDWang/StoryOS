@@ -24,7 +24,7 @@ pub(crate) async fn execute(
             .into_iter()
             .map(|entry| entry.reference)
             .collect();
-    let (selected, loaded) = held_skills(client, claim).await?;
+    let (selected, loaded) = held_skills(client, claim, CountedLoads::All).await?;
     let facts = SkillLoadFacts {
         catalog: &catalog,
         selected: &selected,
@@ -60,14 +60,28 @@ pub(crate) async fn execute(
     .await
 }
 
+/// The settled `load_skill` calls that `held_skills` gives.
+#[derive(Clone, Copy)]
+pub(crate) enum CountedLoads<'a> {
+    /// Each settled load of the Run.
+    All,
+    /// Each settled load of a response before the response of the ToolCall with this identity.
+    BeforeResponseOf(&'a str),
+}
+
 /// The name of each Skill that the author selected for the claimed Run, from the Operation
 /// Requirement of its first RunStep, and the Skill name of each settled `load_skill` call of the
-/// Run. The Tool Gateway settles the calls of one response in call order in one transaction, so
-/// each settled call counts for the calls after it.
-async fn held_skills(
+/// Run that `counted` names. The Tool Gateway settles the calls of one response in call order in
+/// one transaction, so each settled call counts for the calls after it.
+pub(crate) async fn held_skills(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    counted: CountedLoads<'_>,
 ) -> Result<(Vec<String>, Vec<String>), CompleteAgentRunError> {
+    let before_response_of = match counted {
+        CountedLoads::All => None,
+        CountedLoads::BeforeResponseOf(tool_call_id) => Some(tool_call_id),
+    };
     let row = client
         .query_one(
             "SELECT ARRAY(SELECT requirement ->> 'skill_name'
@@ -83,12 +97,18 @@ async fn held_skills(
                            WHERE call.owner_user_id = $1::text::uuid
                              AND call.project_id = $2::text::uuid
                              AND call.run_id = $3::text::uuid
-                             AND call.tool_spec_revision = $4 AND call.state = 'settled')",
+                             AND call.tool_spec_revision = $4 AND call.state = 'settled'
+                             AND ($5::text IS NULL OR call.decision_id IS DISTINCT FROM
+                                  (SELECT reader.decision_id FROM storyos.tool_calls AS reader
+                                    WHERE reader.owner_user_id = $1::text::uuid
+                                      AND reader.project_id = $2::text::uuid
+                                      AND reader.tool_call_id = $5::text::uuid)))",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &LOAD_SKILL_TOOL_SPEC.revision,
+                &before_response_of,
             ],
         )
         .await
@@ -98,7 +118,7 @@ async fn held_skills(
 
 #[cfg(test)]
 #[path = "agent_run_load_skill_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "agent_run_load_skill_limit_tests.rs"]

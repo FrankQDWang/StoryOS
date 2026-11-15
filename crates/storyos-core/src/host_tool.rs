@@ -4,8 +4,8 @@
 
 use crate::{
     FINISH_TOOL_SPEC, LOAD_SKILL_TOOL_SPEC, ModelRegistration, PROPOSE_EDIT_TOOL_SPEC,
-    READ_TOOL_RESULT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC, ToolIntake, ToolRegistrationKind,
-    ToolResultText, ToolSpec,
+    READ_SKILL_RESOURCE_TOOL_SPEC, READ_TOOL_RESULT_TOOL_SPEC, SUBMIT_RESEARCH_TOOL_SPEC,
+    ToolIntake, ToolRegistrationKind, ToolResultText, ToolSpec,
 };
 
 /// The Tool Registration of the Host Tools. It has no server, credential, or destination.
@@ -43,8 +43,9 @@ pub const READ_RESULT_HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolReg
     ..FIRST_HOST_TOOL_REGISTRATION
 };
 
-/// The current Host Tools: the four Host Tools of the mapping `v6` and `load_skill` (ADR 0089
-/// section 3). The Tool Exposure has `load_skill` only for a Run whose pinned catalog has a Skill.
+/// The current Host Tools: the four Host Tools of the mapping `v6`, `load_skill`, and
+/// `read_skill_resource` (ADR 0089 section 3). The Tool Exposure has the two Skill Tools only for
+/// a Run whose pinned catalog has a Skill.
 pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
     revision: "018f0000-0000-7001-8000-0000000e0103",
     tools: &[
@@ -52,6 +53,7 @@ pub const HOST_TOOL_REGISTRATION: HostToolRegistration = HostToolRegistration {
         &SUBMIT_RESEARCH_TOOL_SPEC,
         &READ_TOOL_RESULT_TOOL_SPEC,
         &LOAD_SKILL_TOOL_SPEC,
+        &READ_SKILL_RESOURCE_TOOL_SPEC,
         &FINISH_TOOL_SPEC,
     ],
     ..FIRST_HOST_TOOL_REGISTRATION
@@ -107,13 +109,15 @@ pub fn execute_host_tool(intake: &ToolIntake, refused_beside: bool) -> Option<To
         })),
         // The store executes `propose_edit`, because it opens a Proposal, `submit_research`,
         // because it records a Research Artifact, `read_tool_result`, because it reads a stored
-        // ToolCall, and `load_skill`, because it reads a SkillPackage Snapshot.
+        // ToolCall, and `load_skill` and `read_skill_resource`, because they read a SkillPackage
+        // Snapshot.
         ToolIntake::WebSearch { .. }
         | ToolIntake::WebFetch { .. }
         | ToolIntake::ProposeEdit(_)
         | ToolIntake::SubmitResearch { .. }
         | ToolIntake::ReadToolResult { .. }
-        | ToolIntake::LoadSkill { .. } => None,
+        | ToolIntake::LoadSkill { .. }
+        | ToolIntake::ReadSkillResource { .. } => None,
     }
 }
 

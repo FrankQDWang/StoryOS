@@ -33,8 +33,11 @@ struct StoredToolCall {
     arguments: String,
     /// Whether an installed compaction of the Run sent this result as a stub (ADR 0093).
     installed_stub: bool,
-    /// The Skill of the pinned catalog of the Run that a `load_skill` call names.
+    /// The Skill of the pinned catalog of the Run that a `load_skill` or a `read_skill_resource`
+    /// call names.
     skill: Option<storyos_core::SkillPackageReference>,
+    /// The path that a `read_skill_resource` call names.
+    resource_path: Option<String>,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -203,6 +206,7 @@ impl RunToolResults {
                 arguments: &call.arguments,
                 form: form(call),
                 skill: call.skill.as_ref(),
+                resource_path: call.resource_path.as_deref(),
             })
             .collect()
     }
@@ -223,13 +227,15 @@ async fn stored_tool_calls(
                                    (call.owner_user_id, call.project_id, call.run_id)
                                AND record.install_state = 'installed'
                                AND record.stub_tool_call_ids ? call.tool_call_id::text),
-                    entry.skill_name, entry.package_digest
+                    entry.skill_name, entry.package_digest,
+                    CASE WHEN call.tool_spec_revision = $5 THEN call.arguments ->> 'path' END
                FROM storyos.tool_calls AS call
-               -- The pinned catalog entry of the Skill that a `load_skill` call names.
+               -- The pinned catalog entry of the Skill that a `load_skill` or a
+               -- `read_skill_resource` call names.
                LEFT JOIN storyos.agent_run_skill_catalog_entries AS entry
                  ON (entry.owner_user_id, entry.project_id, entry.run_id) =
                     (call.owner_user_id, call.project_id, call.run_id)
-                AND call.tool_spec_revision = $4
+                AND call.tool_spec_revision IN ($4, $5)
                 AND entry.skill_name = call.arguments ->> 'skill'
               WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
                 AND call.run_id = $3::text::uuid
@@ -239,6 +245,7 @@ async fn stored_tool_calls(
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
                 &storyos_core::LOAD_SKILL_TOOL_SPEC.revision,
+                &storyos_core::READ_SKILL_RESOURCE_TOOL_SPEC.revision,
             ],
         )
         .await
@@ -284,6 +291,7 @@ async fn stored_tool_calls(
                         package_digest: row.get(/*idx*/ 14),
                     }
                 }),
+                resource_path: row.get(/*idx*/ 15),
             })
         })
         .collect()

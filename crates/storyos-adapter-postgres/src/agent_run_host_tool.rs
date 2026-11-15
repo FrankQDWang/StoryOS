@@ -34,6 +34,10 @@ pub(crate) async fn execute(
         ToolIntake::LoadSkill { skill, .. } => {
             return crate::agent_run_load_skill::execute(client, claim, row, skill).await;
         }
+        ToolIntake::ReadSkillResource { skill, path } => {
+            return crate::agent_run_read_skill_resource::execute(client, claim, row, skill, path)
+                .await;
+        }
         ToolIntake::WebSearch { .. } | ToolIntake::WebFetch { .. } | ToolIntake::Finish => {}
     }
     let refused_beside: bool = client

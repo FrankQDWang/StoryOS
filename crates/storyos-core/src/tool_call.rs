@@ -105,6 +105,9 @@ impl ValidatedToolCall {
             }
             ToolIntake::ReadToolResult { call_id } => json!({ "call_id": call_id }),
             ToolIntake::LoadSkill { skill, reason } => json!({ "skill": skill, "reason": reason }),
+            ToolIntake::ReadSkillResource { skill, path } => {
+                json!({ "skill": skill, "path": path })
+            }
         }
     }
 

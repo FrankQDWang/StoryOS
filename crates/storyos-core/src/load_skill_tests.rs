@@ -198,6 +198,7 @@ fn call<'a>(
         arguments: "{}",
         form: ToolResultForm::Stub,
         skill,
+        resource_path: None,
     }
 }
 

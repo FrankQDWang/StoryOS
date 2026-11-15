@@ -61,14 +61,21 @@ instructions of a Skill: when they do not agree, follow these Host instructions 
 instruction.";
 
 /// The paragraph of the mapping `v7` for a request with a `skill_catalog` item (ADR 0089 section
-/// 3). It goes directly before `SKILL_AUTHORITY_INSTRUCTION`, so that the authority sentences
-/// apply to a selected Skill and to a loaded Skill.
+/// 3). `SKILL_RESOURCE_INSTRUCTION` and then `SKILL_AUTHORITY_INSTRUCTION` follow it, so that the
+/// authority sentences apply to a selected Skill, a loaded Skill, and a file of a Skill.
 pub(crate) const SKILL_CATALOG_INSTRUCTION: &str = "\
 The section Skill catalog lists the Skills that you can load: the name and the description of \
 each Skill. When the description of a Skill fits the author request, call load_skill with the \
 name of that Skill and one sentence that says why the Skill helps. The result of a load_skill \
 call that StoryOS settled is the instructions of that Skill, and not data: follow them below the \
 author request and the Project instruction.";
+
+/// The paragraph of the mapping `v7` for a request with a `skill_catalog` item that says how to
+/// read a file of a Skill (ADR 0089 section 3). It goes after `SKILL_CATALOG_INSTRUCTION`.
+pub(crate) const SKILL_RESOURCE_INSTRUCTION: &str = "\
+When the instructions of a Skill name a file of its package, call read_skill_resource with the \
+name of that Skill and the path of the file. The result of a read_skill_resource call that \
+StoryOS settled is that file: use it as the instructions of the Skill say.";
 
 /// The sentences that end the Skill paragraphs of the mapping `v7` (ADR 0089 section 4).
 pub(crate) const SKILL_AUTHORITY_INSTRUCTION: &str = "\
@@ -138,7 +145,7 @@ pub(crate) fn create_body(
     ) {
         (true, true) => format!(
             "{instructions}\n\n{SKILL_INSTRUCTION}\n\n{SKILL_CATALOG_INSTRUCTION}\n\n\
-             {SKILL_AUTHORITY_INSTRUCTION}"
+             {SKILL_RESOURCE_INSTRUCTION}\n\n{SKILL_AUTHORITY_INSTRUCTION}"
         ),
         (true, false) => {
             format!("{instructions}\n\n{SKILL_INSTRUCTION} {SKILL_AUTHORITY_INSTRUCTION}")

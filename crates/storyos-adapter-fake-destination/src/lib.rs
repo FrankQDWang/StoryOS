@@ -7,6 +7,7 @@ mod prose_changes;
 mod read_plan;
 mod recovery_plan;
 mod research_plan;
+mod skill_resource_plan;
 mod tool_loop_plan;
 
 pub use load_plan::LOAD_REASON;

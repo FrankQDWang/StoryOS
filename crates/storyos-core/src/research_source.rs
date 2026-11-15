@@ -135,7 +135,8 @@ pub fn capture_research_sources(
         | ToolIntake::ProposeEdit(_)
         | ToolIntake::SubmitResearch { .. }
         | ToolIntake::ReadToolResult { .. }
-        | ToolIntake::LoadSkill { .. } => &[],
+        | ToolIntake::LoadSkill { .. }
+        | ToolIntake::ReadSkillResource { .. } => &[],
     };
     match (settlement.state, &settlement.result) {
         (ToolCallState::Settled, Some(result)) => match format {

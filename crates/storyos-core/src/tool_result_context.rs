@@ -3,9 +3,10 @@
 //! one candidate; its source version is its Source Snapshot ids, or its ToolCall identity when it
 //! captured no Snapshot. Its text ends with the citable identities of its Snapshots and Gaps
 //! (ADR 0087). The output of a settled `load_skill` call is a `skill_instruction` item with the
-//! exact `SKILL.md` text (ADR 0089 section 3). It crosses identity, Project
-//! Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the pinned grant
-//! decides its disclosure eligibility at Create admission (ADR 0051).
+//! exact `SKILL.md` text, and the output of a settled `read_skill_resource` call is a
+//! `skill_resource` item with the exact text of the file (ADR 0089 section 3). It crosses
+//! identity, Project Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the
+//! pinned grant decides its disclosure eligibility at Create admission (ADR 0051).
 
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +23,10 @@ pub const TOOL_RESULT_TRUST: &str = "data_only";
 /// The trust of the output of a settled `load_skill` call: the instructions of a Skill, below
 /// the Project Instruction and above Data-only Context (ADR 0089 section 3).
 pub const SKILL_LOAD_TRUST: &str = "skill_instruction";
+
+/// The trust of the output of a settled `read_skill_resource` call: a file of a Skill, which is
+/// not Data-only Context (ADR 0089 section 3).
+pub const SKILL_RESOURCE_TRUST: &str = "skill_resource";
 
 /// One selected `tool_result` source of a continuation, as the Operation Requirement records it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -41,9 +46,14 @@ pub struct ToolResultSource {
     /// that a record before S5-06 names, has none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_snapshot_ids: Vec<String>,
-    /// The Skill of a settled `load_skill` call. Its output is a `skill_instruction` item.
+    /// The Skill of a settled `load_skill` or `read_skill_resource` call. The output of a load
+    /// is a `skill_instruction` item, and the output of a read is a `skill_resource` item.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skill: Option<SkillPackageReference>,
+    /// The path of the file in the package of `skill` that a settled `read_skill_resource` call
+    /// read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_path: Option<String>,
 }
 
 impl ToolResultSource {
@@ -73,8 +83,11 @@ pub struct ToolResultCandidate<'a> {
     /// The canonical arguments of the call.
     pub arguments: &'a str,
     pub form: ToolResultForm,
-    /// The Skill of the pinned catalog of the Run that a `load_skill` call names, if any.
+    /// The Skill of the pinned catalog of the Run that a `load_skill` or a `read_skill_resource`
+    /// call names, if any.
     pub skill: Option<&'a SkillPackageReference>,
+    /// The path that a `read_skill_resource` call names. `None` for each other call.
+    pub resource_path: Option<&'a str>,
 }
 
 /// How the continuation input gives the result of one ToolCall.
@@ -203,15 +216,23 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
+        // The output of a Skill call is the exact stored text, also when it is empty or only
+        // white space (ADR 0089 section 3).
         let loaded = match (candidate.skill, candidate.state, projection) {
-            (Some(skill), ToolCallState::Settled, ToolResultProjection::Ok(text)) => {
-                Some((skill, text))
-            }
+            (
+                Some(skill),
+                ToolCallState::Settled,
+                ToolResultProjection::Ok(_) | ToolResultProjection::Empty,
+            ) => Some((skill, candidate.result_text.unwrap_or_default())),
             _ => None,
+        };
+        let (skill_class, skill_trust) = match candidate.resource_path {
+            Some(_) => (ContextSourceClass::SkillResource, SKILL_RESOURCE_TRUST),
+            None => (ContextSourceClass::SkillInstruction, SKILL_LOAD_TRUST),
         };
         let (source_class, (item, projection_mode)) = match loaded {
             Some((_, text)) => (
-                ContextSourceClass::SkillInstruction,
+                skill_class,
                 (
                     ToolResultItem {
                         content: text.to_owned(),
@@ -269,13 +290,14 @@ pub fn assemble_tool_result_continuation(
             decision_id: candidate.decision_id.to_owned(),
             state: projection.label().to_owned(),
             trust: match loaded {
-                Some(_) => SKILL_LOAD_TRUST,
+                Some(_) => skill_trust,
                 None => TOOL_RESULT_TRUST,
             }
             .to_owned(),
             kept_result_tokens,
             source_snapshot_ids: snapshot_ids,
             skill: loaded.map(|(skill, _)| skill.clone()),
+            resource_path: loaded.and(candidate.resource_path).map(str::to_owned),
         });
     }
     requirement.tool_results = Some(sources);
@@ -376,7 +398,7 @@ pub(crate) fn stub_selected_results(
     };
     for (source, index) in sources.iter_mut().zip(outputs) {
         let item = &mut record.selected[index];
-        // The output of a load keeps its exact form (ADR 0089 section 3).
+        // The output of a load or of a read keeps its exact form (ADR 0089 section 3).
         if source.skill.is_some() {
             continue;
         }
@@ -429,12 +451,15 @@ pub fn is_skill_load_output(
 }
 
 /// Whether the selected `item` of `record` is the output of a function call: a `tool_result`
-/// item or the output of a load.
+/// item, the output of a load, or a `skill_resource` item, which only a read gives.
 pub fn is_function_output(
     record: &CurrentPassageAssemblyRecord,
     item: &SelectedProjection,
 ) -> bool {
-    item.source_class == ContextSourceClass::ToolResult || is_skill_load_output(record, item)
+    matches!(
+        item.source_class,
+        ContextSourceClass::ToolResult | ContextSourceClass::SkillResource
+    ) || is_skill_load_output(record, item)
 }
 
 /// Each `tool_result` source of the Operation Requirement of `record` with its selected item, in

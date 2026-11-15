@@ -195,6 +195,7 @@ fn the_expected_input_counts_the_skill_and_catalog_text_only_when_the_request_se
             kept_result_tokens: None,
             source_snapshot_ids: Vec::new(),
             skill: None,
+            resource_path: None,
         }]);
     }
     let sent = |record: &CurrentPassageAssemblyRecord, prior_input| {
