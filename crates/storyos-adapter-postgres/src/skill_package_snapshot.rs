@@ -5,7 +5,10 @@
 use std::collections::BTreeSet;
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError, ProjectScope};
-use storyos_core::{SkillPackage, SkillPackageReference, SkillSet, plan_skill_catalog};
+use storyos_core::{
+    SKILL_MD_PATH, SkillInstructionSource, SkillPackage, SkillPackageReference, SkillRequirement,
+    SkillSet, plan_skill_catalog,
+};
 use tokio_postgres::Client;
 
 use crate::command_sequence::unavailable;
@@ -147,4 +150,41 @@ async fn insert_catalog(
         .await
         .map_err(unavailable)?;
     Ok(())
+}
+
+/// The `SKILL.md` bytes of the Snapshot of each requirement, in requirement order. The read
+/// takes only Snapshot rows of the Project, never a directory (ADR 0089 section 2).
+pub(crate) async fn skill_instruction_sources(
+    client: &Client,
+    scope: &ProjectScope,
+    requirements: &[SkillRequirement],
+) -> Result<Vec<SkillInstructionSource>, tokio_postgres::Error> {
+    let mut sources = Vec::with_capacity(requirements.len());
+    for requirement in requirements {
+        let row = client
+            .query_opt(
+                "SELECT file.bytes
+                   FROM storyos.skill_package_snapshots AS snapshot
+                   JOIN storyos.skill_package_snapshot_files AS file
+                     ON (file.owner_user_id, file.project_id, file.package_digest) =
+                        (snapshot.owner_user_id, snapshot.project_id, snapshot.package_digest)
+                  WHERE snapshot.owner_user_id = $1::text::uuid
+                    AND snapshot.project_id = $2::text::uuid
+                    AND snapshot.package_digest = $3 AND snapshot.skill_name = $4
+                    AND file.path = $5",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &requirement.package_digest,
+                    &requirement.skill_name,
+                    &SKILL_MD_PATH,
+                ],
+            )
+            .await?;
+        sources.push(SkillInstructionSource {
+            requirement: requirement.clone(),
+            skill_md: row.map(|row| row.get(/*idx*/ 0)),
+        });
+    }
+    Ok(sources)
 }

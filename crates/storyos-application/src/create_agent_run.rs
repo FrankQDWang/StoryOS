@@ -31,6 +31,8 @@ pub struct CreateAgentRunInput {
     /// The Skill set of the deployment, from Host configuration. The Project gets the Snapshot of
     /// each Skill, and the Run pins its catalog (ADR 0089). An empty set offers nothing.
     pub skills: std::sync::Arc<storyos_core::SkillSet>,
+    /// The Skills that the author selected for this Run. Empty: no selection (ADR 0089 section 5).
+    pub skill_selections: Vec<storyos_core::SkillPackageReference>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

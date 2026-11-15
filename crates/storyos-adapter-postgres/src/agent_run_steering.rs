@@ -288,6 +288,10 @@ pub(crate) async fn advance(
             decision_position: &position,
             passage_targets: requirement.passage_targets.as_deref(),
             candidate_target: requirement.candidate_target.as_ref(),
+            skill_requirements: requirement
+                .skill_requirements
+                .as_deref()
+                .unwrap_or_default(),
             selection_references: input.references.as_deref(),
             tool_results: (!candidates.is_empty()).then_some(candidates.as_slice()),
         },

@@ -85,6 +85,7 @@ fn run_command(
             destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
             research: None,
             skills: Default::default(),
+            skill_selections: Vec::new(),
         },
     )
 }

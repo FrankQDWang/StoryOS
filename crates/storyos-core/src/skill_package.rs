@@ -230,7 +230,7 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
 }
 
 /// 1 to 64 characters of `a-z`, `0-9`, and `-`, with no hyphen at an end and no double hyphen.
-fn is_skill_name(name: &str) -> bool {
+pub(crate) fn is_skill_name(name: &str) -> bool {
     (1..=NAME_MAX_CHARACTERS).contains(&name.len())
         && name
             .bytes()

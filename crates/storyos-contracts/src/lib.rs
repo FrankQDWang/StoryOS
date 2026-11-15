@@ -96,8 +96,9 @@ pub use release1_agent_run::{
     OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
     ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
     ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
-    SelectionReferenceInspect, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
-    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
+    SelectionReferenceInspect, SkillPackageReference, SourceAvailability,
+    TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
+    UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,

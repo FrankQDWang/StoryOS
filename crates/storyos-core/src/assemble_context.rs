@@ -136,6 +136,9 @@ pub struct OperationRequirementRecord {
     /// The earlier author messages that the later request of a compaction sends, oldest first
     /// (ADR 0093 section 6).
     pub earlier_author_messages: Option<Vec<super::EarlierAuthorMessageSource>>,
+    /// The Skill requirements of the Run, in the order of the Skill names. Each RunStep of the
+    /// Run copies them (ADR 0089 section 5).
+    pub skill_requirements: Option<Vec<super::SkillRequirement>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -294,6 +297,7 @@ pub fn assemble_current_passage_context(
             ordinary_resolution: None,
             tool_results: None,
             earlier_author_messages: None,
+            skill_requirements: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

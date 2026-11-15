@@ -97,7 +97,11 @@ impl ProjectCommand for CreateAgentRunInput {
     type Error = CreateAgentRunCommandError;
     type Profile = ActivityOnly;
     type Applied = ();
-    type Plan = (AssistancePlan, ResearchPlan);
+    type Plan = (
+        AssistancePlan,
+        ResearchPlan,
+        Vec<storyos_core::SkillRequirement>,
+    );
     type Settlement = CreateAgentRunSettlement;
 
     async fn classify(
@@ -133,6 +137,14 @@ impl ProjectCommand for CreateAgentRunInput {
             },
         })
         .map_err(RefusableCommandError::RefusedBeforeAdmission)?;
+        let skill_requirements =
+            storyos_core::admit_skill_selections(&self.skills, &self.skill_selections).map_err(
+                |storyos_core::SkillSelectionUnavailable| {
+                    RefusableCommandError::RefusedBeforeAdmission(
+                        CreateAgentRunRefusal::SkillSelectionUnavailable,
+                    )
+                },
+            )?;
         let destination =
             self.destination
                 .clone()
@@ -156,7 +168,7 @@ impl ProjectCommand for CreateAgentRunInput {
         };
         let research = research_plan(client, scope, self.research).await?;
         Ok(Classification {
-            outcome: outcome.map_applied(|()| ((), (assistance, research))),
+            outcome: outcome.map_applied(|()| ((), (assistance, research, skill_requirements))),
             admission: Admission::Project(ProjectActionClass::AgentRunStart),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
@@ -169,7 +181,11 @@ impl ProjectCommand for CreateAgentRunInput {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _sequences: &ActivitySequences,
-        (assistance, research): (AssistancePlan, ResearchPlan),
+        (assistance, research, skill_requirements): (
+            AssistancePlan,
+            ResearchPlan,
+            Vec<storyos_core::SkillRequirement>,
+        ),
         _applied: (),
     ) -> Result<CommandWrite<'_, Self>, ProjectCommandError> {
         if let ResearchPlan::Bind(offer) = research {
@@ -212,6 +228,7 @@ impl ProjectCommand for CreateAgentRunInput {
                 passage_targets: self.passage_targets.as_deref(),
                 candidate_target: None,
                 selection_references: self.selection_references.as_deref(),
+                skill_requirements: &skill_requirements,
                 tool_results: None,
             },
             &assistance.processing_destination_identity,

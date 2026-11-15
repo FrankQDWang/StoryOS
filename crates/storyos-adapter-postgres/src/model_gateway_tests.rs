@@ -436,6 +436,7 @@ async fn admit_with(
             destination: Some(destination),
             research,
             skills: Default::default(),
+            skill_selections: Vec::new(),
         },
     );
     store

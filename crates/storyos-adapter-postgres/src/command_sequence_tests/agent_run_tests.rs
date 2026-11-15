@@ -61,6 +61,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         destination: Some(storyos_core::DeploymentDestination::HostFakeToolLoop),
         research: Some(&storyos_core::RESEARCH_TOOL_OFFER),
         skills: Default::default(),
+        skill_selections: Vec::new(),
     }
 }
 
