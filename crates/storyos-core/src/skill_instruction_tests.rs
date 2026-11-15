@@ -1,7 +1,8 @@
 use super::{
     SkillInstructionSource, SkillInstructionUnavailable, SkillProvenance, SkillRequirement,
     SkillSelectionUnavailable, admit_skill_selections, assemble_skill_catalog,
-    assemble_skill_instructions, skill_reference_well_formed,
+    assemble_skill_instructions, conversation_skill_requirements, is_conversation_skill,
+    skill_reference_well_formed,
 };
 use crate::assemble_context::{SelectedProjection, count_context_item_tokens};
 use crate::{
@@ -37,6 +38,13 @@ fn requirement(package: &SkillPackage) -> SkillRequirement {
         skill_name: package.name.clone(),
         package_digest: package.package_digest.clone(),
         provenance: SkillProvenance::AuthorSelected,
+    }
+}
+
+fn with_provenance(package: &SkillPackage, provenance: SkillProvenance) -> SkillRequirement {
+    SkillRequirement {
+        provenance,
+        ..requirement(package)
     }
 }
 
@@ -265,6 +273,141 @@ fn the_pinned_catalog_adds_one_exact_catalog_item_after_the_skill_instruction_it
             Some(vec![alpha.reference(), beta.reference()]),
             Some(record.clone()),
             decision(),
+        )
+    );
+}
+
+/// ADR 0089 section 5: the Skills of the Conversation of a new Run.
+#[test]
+fn the_newest_selection_of_each_name_is_in_effect_for_at_most_eight_names() {
+    let names: Vec<SkillPackage> = (0..10)
+        .map(|index| package(&format!("skill-{index}")))
+        .collect();
+    let selected = |packages: &[&SkillPackage]| -> Vec<SkillRequirement> {
+        packages
+            .iter()
+            .map(|package| requirement(package))
+            .collect()
+    };
+    let (older, newer) = (package("alpha-voice"), package("beta-notes"));
+    // One name with two digests: the newer Run selected the other digest.
+    let renamed = SkillRequirement {
+        skill_name: older.name.clone(),
+        package_digest: newer.package_digest.clone(),
+        provenance: SkillProvenance::AuthorSelected,
+    };
+    let conversation = |requirements: &[&SkillRequirement]| -> Vec<SkillRequirement> {
+        requirements
+            .iter()
+            .map(|requirement| SkillRequirement {
+                provenance: SkillProvenance::ConversationSelected,
+                ..(*requirement).clone()
+            })
+            .collect()
+    };
+    let nine: Vec<Vec<SkillRequirement>> = names[..9]
+        .iter()
+        .map(|package| vec![requirement(package)])
+        .collect();
+    let all: Vec<&SkillPackage> = names[1..9].iter().collect();
+    let without_own: Vec<&SkillPackage> = names[2..8].iter().collect();
+    // A Run that got a Skill of the Conversation records it with the other provenance. That
+    // requirement is not a selection.
+    let carried = vec![with_provenance(
+        &names[9],
+        SkillProvenance::ConversationSelected,
+    )];
+
+    assert_eq!(
+        [
+            conversation_skill_requirements(
+                &[vec![requirement(&older)], vec![renamed.clone()]],
+                &[]
+            ),
+            conversation_skill_requirements(&nine, &[]),
+            conversation_skill_requirements(&nine, &selected(&[&names[8], &newer])),
+            conversation_skill_requirements(&[carried], &[]),
+            conversation_skill_requirements(&[], &selected(&[&older])),
+        ],
+        [
+            conversation(&[&renamed]),
+            conversation(&selected(&all).iter().collect::<Vec<_>>()),
+            conversation(&selected(&without_own).iter().collect::<Vec<_>>()),
+            Vec::new(),
+            Vec::new(),
+        ]
+    );
+}
+
+/// ADR 0056 and ADR 0089 section 5: a request that continues a prior response does not send the
+/// `SKILL.md` of a Skill of the Conversation, so its expected input does not count it. The full
+/// input of a later request sends it, so the check for `conversation_too_long` counts it.
+#[test]
+fn the_expected_input_counts_a_skill_of_the_conversation_only_in_a_full_input() {
+    let (alpha, beta) = (package("alpha-voice"), package("beta-notes"));
+    let alpha_tokens = count_context_item_tokens(&skill_md(&alpha.name));
+    let source = |package: &SkillPackage, provenance| SkillInstructionSource {
+        requirement: with_provenance(package, provenance),
+        skill_md: Some(skill_md(&package.name).into_bytes()),
+    };
+    let plain = decision();
+    let mut selected = decision();
+    assemble_skill_instructions(
+        &mut selected,
+        vec![source(&alpha, SkillProvenance::AuthorSelected)],
+    )
+    .unwrap();
+    let mut both = decision();
+    assemble_skill_instructions(
+        &mut both,
+        vec![
+            source(&alpha, SkillProvenance::AuthorSelected),
+            source(&beta, SkillProvenance::ConversationSelected),
+        ],
+    )
+    .unwrap();
+    let sent = |record: &CurrentPassageAssemblyRecord| {
+        crate::CompactionTrigger::from_facts(&crate::CompactionRequestFacts {
+            model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+            budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            author_message: "Help with this passage.",
+            decision: Some(record),
+            declared_target_texts: &[],
+            prior_reported_tokens: Some(1_000),
+            prior_decision_id: None,
+            prior_input: crate::PriorInput::Replaced,
+            decision_position: "0",
+            compacted_earlier: false,
+        })
+        .sent_input_tokens
+    };
+    // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens. The summary
+    // fills it to one token below the limit without the Skill of the Conversation.
+    let too_long = |record: &CurrentPassageAssemblyRecord| {
+        let mut later = crate::later_request_record(record, "compaction-1", "Summary.", &[]);
+        let others: u64 = selected.selected.iter().map(|item| item.token_count).sum();
+        later.selected[0].token_count = 1_015_808 - others - 1;
+        crate::later_request_too_long(
+            crate::AGENT_PLAN_REGISTRATION.revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &[],
+        )
+    };
+
+    assert_eq!(
+        (
+            both.selected
+                .iter()
+                .map(|item| is_conversation_skill(&both, item))
+                .collect::<Vec<_>>(),
+            [sent(&selected), sent(&both)],
+            [too_long(&selected), too_long(&both)],
+        ),
+        (
+            [vec![false; plain.selected.len()], vec![false, true]].concat(),
+            [sent(&plain) + alpha_tokens; 2],
+            [false, true],
         )
     );
 }

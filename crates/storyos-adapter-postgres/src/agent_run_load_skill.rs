@@ -71,7 +71,8 @@ pub(crate) enum CountedLoads<'a> {
 
 /// The name of each Skill that the author selected for the claimed Run, from the Operation
 /// Requirement of its first RunStep, and the Skill name of each settled `load_skill` call of the
-/// Run that `counted` names. The Tool Gateway settles the calls of one response in call order in
+/// Run that `counted` names. A Skill of the Project Conversation is not a selection of the Run,
+/// so the load and read rules do not count it (ADR 0089 section 5). The Tool Gateway settles the calls of one response in call order in
 /// one transaction, so each settled call counts for the calls after it.
 pub(crate) async fn held_skills(
     client: &tokio_postgres::Client,
@@ -92,7 +93,8 @@ pub(crate) async fn held_skills(
                              AND manifest.project_id = $2::text::uuid
                              AND manifest.run_id = $3::text::uuid
                              AND manifest.manifest_role = 'decision'
-                             AND manifest.decision_position = 0),
+                             AND manifest.decision_position = 0
+                             AND requirement ->> 'provenance' = 'author_selected'),
                     ARRAY(SELECT call.arguments ->> 'skill' FROM storyos.tool_calls AS call
                            WHERE call.owner_user_id = $1::text::uuid
                              AND call.project_id = $2::text::uuid

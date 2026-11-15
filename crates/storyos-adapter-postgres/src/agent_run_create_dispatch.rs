@@ -232,6 +232,7 @@ pub(crate) async fn create_request(
         None => Vec::new(),
     };
     let input = record_input(record, assembly, &run.author_message);
+    let context = RequestContextItem::sent(input.context, previous_response_reference.as_deref());
     Ok(CreateRequest {
         attempt,
         purpose: probe.map_or(CreatePurpose::Decision, |probe| {
@@ -242,7 +243,7 @@ pub(crate) async fn create_request(
         chapter_id: run.chapter_id.clone(),
         passage_resolution: input.passage_resolution,
         passage_input: input.passage_input,
-        context: input.context,
+        context,
         earlier_author_messages: input.earlier_author_messages,
         declared_targets,
         selection_references: input.selection_references,
@@ -284,6 +285,7 @@ pub(crate) fn record_input(
             .map(|item| RequestContextItem {
                 source_class: item.source_class,
                 content: item.content.clone(),
+                full_input_only: storyos_core::is_conversation_skill(&assembly, item),
             })
             .collect(),
         earlier_author_messages: earlier

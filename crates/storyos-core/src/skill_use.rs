@@ -27,12 +27,15 @@ pub struct StoredSkillLoad<'a> {
 pub fn skill_uses(selected: &[SkillRequirement], loads: &[StoredSkillLoad<'_>]) -> Vec<SkillUse> {
     let mut selected: Vec<&SkillRequirement> = selected.iter().collect();
     selected.sort_by(|left, right| left.skill_name.cmp(&right.skill_name));
+    // The turn of the selection names a Skill that the author selected. A later turn of the
+    // Conversation names only its own selections and loads (ADR 0089 section 5).
     let selected = selected
         .into_iter()
-        .map(|requirement| match requirement.provenance {
-            SkillProvenance::AuthorSelected => SkillUse::AuthorSelected {
+        .filter_map(|requirement| match requirement.provenance {
+            SkillProvenance::AuthorSelected => Some(SkillUse::AuthorSelected {
                 name: requirement.skill_name.clone(),
-            },
+            }),
+            SkillProvenance::ConversationSelected => None,
         });
     let loaded = loads.iter().filter_map(|load| match load.state {
         ToolCallState::Settled => match LOAD_SKILL_TOOL_SPEC.intake(load.arguments) {

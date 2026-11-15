@@ -162,6 +162,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
     let item = |source_class, content: &str| RequestContextItem {
         source_class,
         content: content.to_owned(),
+        full_input_only: false,
     };
     DestinationRequest::Create(CreateRequest {
         attempt,

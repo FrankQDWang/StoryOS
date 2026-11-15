@@ -65,6 +65,7 @@ fn item(source_class: ContextSourceClass, content: &str) -> RequestContextItem {
     RequestContextItem {
         source_class,
         content: content.to_owned(),
+        full_input_only: false,
     }
 }
 
