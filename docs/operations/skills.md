@@ -41,3 +41,7 @@ A resource file that is not UTF-8 text, or that is above 32,000 tokens, stays in
 The Server reads the directory one time, before it loads the Web assets and binds. A package that fails a rule stops the start. The process exits with code 1 and prints no `STORYOS_SERVER_URL=` line. The error names the package directory and the rule, for example `the Skill package "plot-notes" is refused: name_directory_mismatch`.
 
 A change to the directory has no effect until the next start of the Server. After a change, start the Server again.
+
+## The Snapshots of a Project
+
+Each `createAgentRun` gives the Skills of the Server to the Project. In the transaction of the Run, the Project gets a SkillPackage Snapshot of each Skill whose package digest it does not have: the complete package with the exact bytes of each file. The Run pins its catalog: the name and the package digest of each Skill. Each later step of the Run reads only these database rows, never the directory. An earlier Run keeps its catalog and its Snapshots after a change, and the Project Export Archive carries them.

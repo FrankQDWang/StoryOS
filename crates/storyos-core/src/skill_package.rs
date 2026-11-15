@@ -295,6 +295,35 @@ impl SkillSet {
     }
 }
 
+/// What one `createAgentRun` writes for the Skill set of the deployment (ADR 0089 section 2).
+#[derive(Debug, Eq, PartialEq)]
+pub struct SkillCatalogPlan<'a> {
+    /// Each offered package whose digest the Project does not have, in name order.
+    pub snapshots: Vec<&'a SkillPackage>,
+    /// The reference of each offered package, in name order: the catalog that the Run pins.
+    pub catalog: Vec<SkillPackageReference>,
+}
+
+/// The Snapshots to write and the catalog to pin for `offered` in a Project that has the
+/// Snapshots of `stored_digests`.
+pub fn plan_skill_catalog<'a>(
+    offered: &'a SkillSet,
+    stored_digests: &BTreeSet<String>,
+) -> SkillCatalogPlan<'a> {
+    SkillCatalogPlan {
+        snapshots: offered
+            .packages()
+            .iter()
+            .filter(|package| !stored_digests.contains(&package.package_digest))
+            .collect(),
+        catalog: offered
+            .packages()
+            .iter()
+            .map(SkillPackage::reference)
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 #[path = "skill_package_tests.rs"]
 mod tests;

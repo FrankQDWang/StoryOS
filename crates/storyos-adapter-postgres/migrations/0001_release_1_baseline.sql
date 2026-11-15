@@ -4236,6 +4236,79 @@ CREATE POLICY research_artifacts_exact_scope ON storyos.research_artifacts USING
 
 GRANT SELECT,INSERT ON TABLE storyos.research_artifacts TO storyos_runtime;
 
+-- SkillPackage Snapshots (S6-01b, ADR 0089 section 2)
+-- Each Snapshot is one complete package of the Skill set of the deployment, content-addressed by
+-- its package digest, a record of one Project. The createAgentRun that first offers the digest to
+-- the Project writes it. Each Run pins its Skill catalog: the name and the package digest of each
+-- offered Skill. The runtime role can only read and insert these rows.
+
+CREATE TABLE storyos.skill_package_snapshots (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    package_digest text NOT NULL,
+    skill_name text NOT NULL,
+    description text NOT NULL,
+    file_count integer NOT NULL,
+    byte_count integer NOT NULL,
+    receipt_id uuid NOT NULL,
+    CONSTRAINT skill_package_snapshots_pkey PRIMARY KEY (owner_user_id, project_id, package_digest),
+    CONSTRAINT skill_package_snapshots_reference_key UNIQUE (owner_user_id, project_id, package_digest, skill_name),
+    CONSTRAINT skill_package_snapshots_shape CHECK ((package_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (skill_name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND (char_length(skill_name) <= 64) AND (char_length(description) BETWEEN 1 AND 1024) AND (file_count BETWEEN 1 AND 64) AND (byte_count BETWEEN 0 AND 1048576)),
+    CONSTRAINT skill_package_snapshots_receipt_fkey FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
+);
+
+ALTER TABLE storyos.skill_package_snapshots ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.skill_package_snapshots FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY skill_package_snapshots_exact_scope ON storyos.skill_package_snapshots USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.skill_package_snapshots TO storyos_runtime;
+
+CREATE TABLE storyos.skill_package_snapshot_files (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    package_digest text NOT NULL,
+    path text NOT NULL,
+    bytes bytea NOT NULL,
+    byte_length integer NOT NULL,
+    sha256 text NOT NULL,
+    tokens bigint,
+    readable boolean NOT NULL,
+    CONSTRAINT skill_package_snapshot_files_pkey PRIMARY KEY (owner_user_id, project_id, package_digest, path),
+    CONSTRAINT skill_package_snapshot_files_shape CHECK ((char_length(path) BETWEEN 1 AND 4096) AND (byte_length = octet_length(bytes)) AND (sha256 ~ '^[0-9a-f]{64}$'::text) AND (tokens >= 0) AND ((NOT readable) OR (tokens IS NOT NULL))),
+    CONSTRAINT skill_package_snapshot_files_snapshot_fkey FOREIGN KEY (owner_user_id, project_id, package_digest) REFERENCES storyos.skill_package_snapshots(owner_user_id, project_id, package_digest) MATCH FULL
+);
+
+ALTER TABLE storyos.skill_package_snapshot_files ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.skill_package_snapshot_files FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY skill_package_snapshot_files_exact_scope ON storyos.skill_package_snapshot_files USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.skill_package_snapshot_files TO storyos_runtime;
+
+CREATE TABLE storyos.agent_run_skill_catalog_entries (
+    owner_user_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    skill_name text NOT NULL,
+    package_digest text NOT NULL,
+    CONSTRAINT agent_run_skill_catalog_entries_pkey PRIMARY KEY (owner_user_id, project_id, run_id, skill_name),
+    CONSTRAINT agent_run_skill_catalog_entries_run_fkey FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL,
+    CONSTRAINT agent_run_skill_catalog_entries_snapshot_fkey FOREIGN KEY (owner_user_id, project_id, package_digest, skill_name) REFERENCES storyos.skill_package_snapshots(owner_user_id, project_id, package_digest, skill_name) MATCH FULL
+);
+
+CREATE INDEX agent_run_skill_catalog_entries_snapshot_idx ON storyos.agent_run_skill_catalog_entries USING btree (owner_user_id, project_id, package_digest, skill_name);
+
+ALTER TABLE storyos.agent_run_skill_catalog_entries ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storyos.agent_run_skill_catalog_entries FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_run_skill_catalog_entries_exact_scope ON storyos.agent_run_skill_catalog_entries USING (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))) WITH CHECK (((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid)));
+
+GRANT SELECT,INSERT ON TABLE storyos.agent_run_skill_catalog_entries TO storyos_runtime;
+
 -- Proposals
 
 CREATE TABLE storyos.proposals (

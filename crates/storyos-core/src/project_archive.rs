@@ -192,10 +192,11 @@ pub fn require_delivered_families(
 }
 
 /// The tables that each Project Export Archive must carry.
-pub const PROJECT_EXPORT_TABLES: [&str; 62] = [
+pub const PROJECT_EXPORT_TABLES: [&str; 65] = [
     "acceptance_receipts",
     "acceptance_refusals",
     "agent_run_events",
+    "agent_run_skill_catalog_entries",
     "agent_runs",
     "author_action_entries",
     "author_command_admission_outcome_unknown_observations",
@@ -249,6 +250,8 @@ pub const PROJECT_EXPORT_TABLES: [&str; 62] = [
     "replay_generations",
     "research_artifacts",
     "scope_counters",
+    "skill_package_snapshot_files",
+    "skill_package_snapshots",
     "source_gaps",
     "source_snapshots",
     "tool_calls",

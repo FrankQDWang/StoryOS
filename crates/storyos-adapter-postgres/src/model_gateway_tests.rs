@@ -435,6 +435,7 @@ async fn admit_with(
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
             research,
+            skills: Default::default(),
         },
     );
     store
