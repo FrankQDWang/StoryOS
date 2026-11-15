@@ -1,0 +1,1 @@
+{"timestamp":"2026-11-15T08:11:53.102506Z","level":"INFO","fields":{"message":"close","time.busy":"13.9ms","time.idle":"61.5ms"},"target":"storyos_worker","span":{"attempt":1,"export_id":"01a1de43-44a7-7c60-8c8e-20f63da33614","fence_token":1,"outcome":"settled_ready","project_id":"01a1de36-9710-72e1-a55f-03e76fbfca89","name":"archive_export_claim"},"spans":[]}
