@@ -172,7 +172,10 @@ pub use host_tool::{
     HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
     execute_host_tool, host_tool, host_tool_result,
 };
-pub use load_skill::{LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, admit_skill_load, skill_load_result};
+pub use load_skill::{
+    LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
+    skill_load_result,
+};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,

@@ -157,9 +157,15 @@ pub(crate) fn mint_reference(wire_digest: &str, code: u8) -> String {
     )
 }
 
+/// The script suffix that makes the destination lose the reference of each response of the Run,
+/// so each later RunStep sends its full input again.
+pub(crate) const STEP_REFERENCE_EXPIRES: &str = "SCRIPT:step-reference-expires";
+
 /// The reference code of a create response that the author message scripts.
 pub(crate) fn continuation_code(author_message: &str) -> u8 {
-    if author_message.ends_with("SCRIPT:reference-expires") {
+    if author_message.ends_with("SCRIPT:reference-expires")
+        || author_message.ends_with(STEP_REFERENCE_EXPIRES)
+    {
         EXPIRED_CONTINUATION
     } else if author_message.ends_with("SCRIPT:reference-unusable") {
         UNUSABLE_CONTINUATION

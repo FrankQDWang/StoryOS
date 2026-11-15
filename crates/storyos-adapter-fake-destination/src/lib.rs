@@ -117,9 +117,13 @@ impl ModelProviderAdapter for FakeDestination {
             Some(bytes),
         );
         projection.mapping_revision = mapping_revision.to_owned();
-        // A continuation rejection applies only to the first RunStep of a Run, and a RunStep that
-        // continues from a recovered response is not lost again.
-        let later_step = !create.tool_outputs.is_empty();
+        // A continuation rejection applies only to the first RunStep of a Run, unless the script
+        // loses each reference, and a RunStep that continues from a recovered response is not
+        // lost again.
+        let later_step = !create.tool_outputs.is_empty()
+            && !create
+                .author_message
+                .ends_with(recovery_plan::STEP_REFERENCE_EXPIRES);
         let rejection = create
             .previous_response_reference
             .as_deref()

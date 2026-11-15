@@ -570,3 +570,126 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
         [true, false]
     );
 }
+
+/// ADR 0056 and ADR 0089 section 3: the expected input counts the catalog item with the current
+/// input and each load output of the prior response. A later full input counts each load output
+/// in its exact form, because a load output has no stub.
+#[test]
+fn the_expected_input_counts_the_skill_catalog_and_each_exact_load_output() {
+    let mut decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Write the quarrel.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Rain.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let without_catalog: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    let references = ["dialogue", "plot-notes"].map(|name| crate::SkillPackageReference {
+        name: name.to_owned(),
+        package_digest: format!("sha256:{}", "d".repeat(64)),
+    });
+    let catalog = references
+        .clone()
+        .map(|reference| crate::SkillCatalogEntry {
+            reference,
+            description: "Use it for a scene.".to_owned(),
+        });
+    crate::assemble_skill_catalog(&mut decision, &catalog);
+    let current: u64 = decision.selected.iter().map(|item| item.token_count).sum();
+    let catalog_tokens =
+        crate::assemble_context::count_context_item_tokens(&crate::skill_catalog_text(&catalog));
+    fn sent(decision: &crate::CurrentPassageAssemblyRecord, prior_input: crate::PriorInput) -> u64 {
+        CompactionTrigger::from_facts(&super::CompactionRequestFacts {
+            model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+            budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            author_message: "Write the quarrel.",
+            decision: Some(decision),
+            declared_target_texts: &[],
+            prior_reported_tokens: Some(0),
+            prior_decision_id: Some("decision-1"),
+            prior_input,
+            decision_position: "1",
+            compacted_earlier: false,
+        })
+        .sent_input_tokens
+    }
+    let first = sent(&decision, crate::PriorInput::Current);
+    // Two long loads of the prior response.
+    let texts = [
+        "Keep each line short. ".repeat(1_400),
+        "Name each place. ".repeat(1_800),
+    ];
+    let candidates = |form| -> Vec<crate::ToolResultCandidate<'_>> {
+        ["load-1", "load-2"]
+            .iter()
+            .zip(&texts)
+            .zip(&references)
+            .map(|((id, text), reference)| crate::ToolResultCandidate {
+                tool_call_id: id,
+                call_id: id,
+                owner_user_id: "owner-1",
+                project_id: "project-1",
+                run_id: "run-1",
+                model_attempt_id: "attempt-1",
+                decision_id: "decision-1",
+                state: crate::ToolCallState::Settled,
+                result_text: Some(text),
+                sources: &[],
+                output: crate::ToolResultOutput::HostTool,
+                function_name: "load_skill",
+                arguments: "{}",
+                form,
+                skill: Some(reference),
+            })
+            .collect()
+    };
+    crate::assemble_tool_result_continuation(
+        &mut decision,
+        &candidates(crate::ToolResultForm::Exact),
+    );
+    let loads: u64 = texts
+        .iter()
+        .map(|text| crate::assemble_context::count_context_item_tokens(text))
+        .sum();
+    // The window after the output bound is 1,048,576 - 32,768 = 1,015,808 tokens.
+    let too_long = |summary_tokens| {
+        let mut later = later_request_record(
+            &decision,
+            "compaction-1",
+            "Summary.",
+            &candidates(crate::ToolResultForm::Stub),
+        );
+        later.selected[0].token_count = summary_tokens;
+        super::later_request_too_long(
+            crate::AGENT_PLAN_REGISTRATION.revision,
+            crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+            &later,
+            &[],
+        )
+    };
+    let at_window = 1_015_808 - current - loads;
+
+    assert_eq!(
+        (
+            current - without_catalog,
+            first,
+            sent(&decision, crate::PriorInput::Current),
+            sent(&decision, crate::PriorInput::Replaced),
+            [too_long(at_window), too_long(at_window - 1)],
+        ),
+        (
+            catalog_tokens,
+            current,
+            loads,
+            current + loads,
+            [true, false]
+        )
+    );
+}

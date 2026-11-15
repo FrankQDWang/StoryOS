@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::{LoadSkillRefusal, admit_skill_load, skill_load_result};
+use super::{LoadSkillRefusal, SkillLoadFacts, admit_skill_load, skill_load_result};
 use crate::{
     CallValidationRefusal, ContextSourceClass, CurrentPassageAssembly,
     CurrentPassageAssemblyRecord, InstructionBindingInput, IntakeRefusal, LOAD_SKILL_TOOL_SPEC,
@@ -66,24 +66,74 @@ fn the_intake_refuses_a_reason_that_is_empty_too_long_or_with_a_control_characte
     );
 }
 
-/// ADR 0089 section 7: a name that is not in the pinned catalog is a refused call with its
-/// reason in one sentence. The result of an admitted load is the exact `SKILL.md` text.
+fn names(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| (*name).to_owned()).collect()
+}
+
+/// ADR 0089 sections 7 and 9: a load of a name that is not in the pinned catalog, of a Skill that
+/// the Run has, or above 8 Skills of the Run is a refused call, and the refusals apply in this
+/// order. The result of an admitted load is the exact `SKILL.md` text.
 #[test]
-fn a_load_admits_only_a_name_of_the_pinned_catalog_and_gives_the_exact_skill_md() {
-    let catalog = [reference("dialogue"), reference("plot-notes")];
+fn a_load_admits_a_new_catalog_skill_below_the_limit_and_gives_the_exact_skill_md() {
+    let catalog: Vec<_> = (0..10)
+        .map(|index| reference(&format!("s{index}")))
+        .collect();
     let text = "---\nname: dialogue\n---\nKeep <each> line & say \"no\".\n";
+    let admit = |selected: &[&str], loaded: &[&str], skill| {
+        let (selected, loaded) = (names(selected), names(loaded));
+        let facts = SkillLoadFacts {
+            catalog: &catalog,
+            selected: &selected,
+            loaded: &loaded,
+        };
+        admit_skill_load(&facts, skill).cloned()
+    };
+    let seven = ["s0", "s1", "s2", "s3", "s4", "s5", "s6"];
+    let eight = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"];
 
     assert_eq!(
-        (
-            admit_skill_load(&catalog, "plot-notes"),
-            admit_skill_load(&catalog, "Dialogue"),
-            admit_skill_load(&[], "dialogue"),
-        ),
-        (
-            Ok(&catalog[1]),
+        [
+            admit(&[], &[], "s9"),
+            admit(&[], &[], "S9"),
+            admit(&[], &eight, "unknown"),
+            admit(&["s1"], &[], "s1"),
+            admit(&[], &["s1"], "s1"),
+            admit(&[], &eight, "s7"),
+            admit(&["s0", "s1"], &eight[2..], "s8"),
+            admit(&[], &eight, "s8"),
+            admit(&[], &seven, "s8"),
+            admit(&["s0", "s1"], &seven[2..], "s8"),
+        ],
+        [
+            Ok(catalog[9].clone()),
             Err(LoadSkillRefusal::NotInCatalog),
             Err(LoadSkillRefusal::NotInCatalog),
-        )
+            Err(LoadSkillRefusal::AlreadyLoaded),
+            Err(LoadSkillRefusal::AlreadyLoaded),
+            Err(LoadSkillRefusal::AlreadyLoaded),
+            Err(LoadSkillRefusal::LoadLimit),
+            Err(LoadSkillRefusal::LoadLimit),
+            Ok(catalog[8].clone()),
+            Ok(catalog[8].clone()),
+        ]
+    );
+    assert_eq!(
+        [LoadSkillRefusal::AlreadyLoaded, LoadSkillRefusal::LoadLimit]
+            .map(|refusal| (refusal.label(), refusal.result().text)),
+        [
+            (
+                "skill_already_loaded",
+                "The Host refused this call because this run already has the instructions of \
+                 this Skill, so no result is available, and this is not an empty result."
+                    .to_owned()
+            ),
+            (
+                "skill_load_limit",
+                "The Host refused this call because this run already has the instructions of 8 \
+                 Skills, so no result is available, and this is not an empty result."
+                    .to_owned()
+            ),
+        ]
     );
     let refused = LoadSkillRefusal::NotInCatalog.result();
     assert_eq!(

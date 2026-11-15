@@ -70,11 +70,18 @@ pub(crate) fn intake(arguments: &Value) -> Result<ToolIntake, IntakeRefusal> {
     Ok(ToolIntake::LoadSkill { skill, reason })
 }
 
+/// The most Skills that one Run loads, the selected Skills included (ADR 0089 section 9).
+pub const SKILL_LOAD_LIMIT: usize = 8;
+
 /// Why the Host refused one validated `load_skill` call. The result gives the reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LoadSkillRefusal {
     /// The pinned catalog of the Run has no Skill with the name.
     NotInCatalog,
+    /// The Run loaded the Skill before, or the author selected it for the Run.
+    AlreadyLoaded,
+    /// The selected Skills and the settled loads of the Run are at the limit.
+    LoadLimit,
 }
 
 impl LoadSkillRefusal {
@@ -82,13 +89,21 @@ impl LoadSkillRefusal {
     pub fn label(self) -> &'static str {
         match self {
             Self::NotInCatalog => "skill_not_in_catalog",
+            Self::AlreadyLoaded => "skill_already_loaded",
+            Self::LoadLimit => "skill_load_limit",
         }
     }
 
     /// The result of the refused call: the reason in one sentence.
     pub fn result(self) -> ToolResultText {
         let reason = match self {
-            Self::NotInCatalog => "the section Skill catalog has no Skill with this name",
+            Self::NotInCatalog => {
+                "the section Skill catalog has no Skill with this name".to_owned()
+            }
+            Self::AlreadyLoaded => "this run already has the instructions of this Skill".to_owned(),
+            Self::LoadLimit => {
+                format!("this run already has the instructions of {SKILL_LOAD_LIMIT} Skills")
+            }
         };
         crate::host_tool_result(&format!(
             "The Host refused this call because {reason}, so no result is available, and this is \
@@ -97,16 +112,37 @@ impl LoadSkillRefusal {
     }
 }
 
-/// The reference of the Skill that a load of `skill` names in `catalog`, the pinned catalog of
-/// the Run. The name must be equal to the name of one Skill of the catalog.
+/// The stored facts of a Run that decide one `load_skill` call.
+#[derive(Clone, Copy, Debug)]
+pub struct SkillLoadFacts<'a> {
+    /// The pinned catalog of the Run.
+    pub catalog: &'a [SkillPackageReference],
+    /// The name of each Skill that the author selected for the Run.
+    pub selected: &'a [String],
+    /// The Skill name of each settled `load_skill` call of the Run before this call.
+    pub loaded: &'a [String],
+}
+
+/// The reference of the Skill that a load of `skill` names in the pinned catalog of the Run. The
+/// name must be equal to the name of one Skill of the catalog, the Run must not have the Skill,
+/// and the Run must have fewer than `SKILL_LOAD_LIMIT` Skills, in this order.
 pub fn admit_skill_load<'a>(
-    catalog: &'a [SkillPackageReference],
+    facts: &SkillLoadFacts<'a>,
     skill: &str,
 ) -> Result<&'a SkillPackageReference, LoadSkillRefusal> {
-    catalog
+    let reference = facts
+        .catalog
         .iter()
         .find(|reference| reference.name == skill)
-        .ok_or(LoadSkillRefusal::NotInCatalog)
+        .ok_or(LoadSkillRefusal::NotInCatalog)?;
+    let held = || facts.selected.iter().chain(facts.loaded);
+    if held().any(|name| name == skill) {
+        return Err(LoadSkillRefusal::AlreadyLoaded);
+    }
+    if held().count() >= SKILL_LOAD_LIMIT {
+        return Err(LoadSkillRefusal::LoadLimit);
+    }
+    Ok(reference)
 }
 
 /// The result of an admitted load: the exact `SKILL.md` text of the Snapshot, with no change.
