@@ -34,7 +34,7 @@ When a specification changes a request form of a real route, the live run is a t
 
 The coordinator uses the `implement-spec` skill for the whole specification. A ticket is ready when its blockers are satisfied. A blocker is satisfied when its ticket pull request merged into the integration branch and that merge commit is an ancestor of the integration tip, and the dependent contract permits integration delivery. A product release gate, an external acceptance, and an explicit `main`-only gate still require their specified final evidence. Keep the native edge until the aggregate pull request merges. Unknown or failed evidence blocks the dispatch.
 
-Before the release, the coordinator puts the ready tickets into at most three chains. A chain has the tickets that depend on each other or change the same files, in dependency order. When the author releases the execution, the coordinator starts each chain session in that turn. The brief names the ordered tickets, the integration tip, the files to read, and the items of earlier tickets. The coordinator adds a later ticket to the end of a running chain with one message. Only a ticket that no chain can take gets a new session. When a ticket stops on a question or a failure, the coordinator can move the later tickets of its chain to another chain with one message.
+Before the release, the coordinator puts the ready tickets into chains. At most three chains run at the same time. A chain has the tickets that depend on each other or change the same files, in dependency order. When the author releases the execution, the coordinator starts each chain session in that turn. The brief names the ordered tickets, the integration tip, the files to read, and the items of earlier tickets. The coordinator adds a later ticket to the end of a running chain with one message. Only a ticket that no chain can take gets a new chain, within that limit. When a ticket stops on a question or a failure, the coordinator can move the later tickets of its chain to another chain with one message.
 
 The ticket body is the only owner of the acceptance contract of the ticket. Before the coordinator sends a brief, it edits the ticket body with each decision that changes the scope or a criterion. The brief links to the ticket and does not give such a decision again.
 
@@ -81,7 +81,7 @@ End the work with one report to the coordinator. Do not merge the pull request. 
 - Each finding that the ticket does not fix, with its owner issue.
 - The state of the worktree: clean or dirty.
 
-Write the hand-over notes of the ticket for a later ticket and a retro. After the report, change the ticket only on a new request of the coordinator, and reply to a message with the facts only. After the merge, the coordinator sends the new integration tip in one message. Then start the next ticket of the chain at step 3, on a branch from that tip.
+Write the hand-over notes of the ticket for later tickets and a retro. After the report, change the ticket only on a new request of the coordinator, and reply to a message with the facts only. After the merge, the coordinator sends the new integration tip in one message. Then start the next ticket at step 3, on a branch from that tip.
 
 ### 8. Merge the ticket
 
