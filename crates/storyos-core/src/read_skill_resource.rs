@@ -104,7 +104,9 @@ impl SkillResourceRefusal {
                 "the package of this Skill has no file with this exact path".to_owned()
             }
             Self::NotReadable => {
-                "this file is not UTF-8 text or it is longer than 32,000 tokens".to_owned()
+                "this file is not UTF-8 text, it has the character U+0000, or it is longer than \
+                 32,000 tokens"
+                    .to_owned()
             }
         };
         crate::host_tool_result(&format!(
