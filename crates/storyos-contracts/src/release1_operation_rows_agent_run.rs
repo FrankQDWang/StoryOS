@@ -36,6 +36,7 @@ use crate::release1_route_catalog::{
 use crate::release1_selection_reference::{
     SelectionCoordinateProfile, SelectionPoint, SelectionReference, SelectionReferenceInspect,
 };
+use crate::release1_skill_use::SkillUseInspect;
 
 pub(super) const CREATE_AGENT_RUN_ROW: OperationRow = OperationRow {
     operation: RegisteredOperation::command(
@@ -180,6 +181,7 @@ pub(super) const GET_AGENT_RUN_ROW: OperationRow = OperationRow {
         ToolCallInspect::decl,
         OptionalDecisionInspect::decl,
         AgentRunResultInspect::decl,
+        SkillUseInspect::decl,
         ContinuationInputMappingInspect::decl,
         ContinuationAdmissionInspect::decl,
         OptionalModelAttemptInspect::decl,
@@ -478,6 +480,28 @@ const GET_AGENT_RUN_RESPONSE: &[Patch] = &[
             "/$defs/ContextSourceInspect/properties/token_count",
             "/$defs/TokenCountingProfileInspect/properties/item_token_limit",
         ],
+    ),
+    Patch(
+        Edit::Pattern("^[a-z0-9]+(-[a-z0-9]+)*$"),
+        &[
+            "/$defs/SkillUseInspect/oneOf/0/properties/name",
+            "/$defs/SkillUseInspect/oneOf/1/properties/name",
+        ],
+    ),
+    Patch(
+        Edit::MaxLength(64),
+        &[
+            "/$defs/SkillUseInspect/oneOf/0/properties/name",
+            "/$defs/SkillUseInspect/oneOf/1/properties/name",
+        ],
+    ),
+    Patch(
+        Edit::MinLength(1),
+        &["/$defs/SkillUseInspect/oneOf/1/properties/reason"],
+    ),
+    Patch(
+        Edit::MaxLength(512),
+        &["/$defs/SkillUseInspect/oneOf/1/properties/reason"],
     ),
     Patch(SCHEMA_ID, &["/properties/schema_id"]),
 ];
