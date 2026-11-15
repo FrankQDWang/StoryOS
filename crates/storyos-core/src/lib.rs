@@ -62,6 +62,7 @@ mod revision_comparison;
 mod set_current_chapter;
 mod skill_instruction;
 mod skill_package;
+mod skill_use;
 mod statistics_profile;
 mod take_over_project_writer;
 mod transition_outcome;
@@ -291,6 +292,7 @@ pub use skill_package::{
     SkillPackageReference, SkillPackageRefusal, SkillSet, SkillSetRefusal, admit_skill_package,
     plan_skill_catalog, skill_catalog_text, skill_md_frontmatter,
 };
+pub use skill_use::{SkillUse, StoredSkillLoad, skill_uses};
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };

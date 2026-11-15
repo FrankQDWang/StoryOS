@@ -207,6 +207,21 @@ pub(super) async fn get_agent_run(
         context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
         results: record.results,
+        skill_uses: record
+            .skill_uses
+            .filter(|uses| !uses.is_empty())
+            .map(|uses| {
+                uses.into_iter()
+                    .map(|skill_use| match skill_use {
+                        storyos_core::SkillUse::AuthorSelected { name } => {
+                            contracts::SkillUseInspect::AuthorSelected { name }
+                        }
+                        storyos_core::SkillUse::AgentSelected { name, reason } => {
+                            contracts::SkillUseInspect::AgentSelected { name, reason }
+                        }
+                    })
+                    .collect()
+            }),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.compactions.last()),
         compactions: (!record.compactions.is_empty()).then(|| {

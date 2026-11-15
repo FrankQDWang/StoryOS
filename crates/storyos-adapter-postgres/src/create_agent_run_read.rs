@@ -164,6 +164,7 @@ pub(super) async fn load_agent_run(
             row.get::<_, Option<String>>(12),
         ),
         results: None,
+        skill_uses: None,
         model,
         compactions: crate::agent_run_compaction::load_compactions(client, scope, run_id).await?,
         reference_recovery: crate::agent_run_expiry::load_reference_recovery(client, scope, run_id)
@@ -209,6 +210,7 @@ pub(super) async fn load_agent_run(
         record.results = Some(
             crate::agent_run_results::load(client, scope, run_id, status, &record.decision).await?,
         );
+        record.skill_uses = Some(crate::agent_run_skill_uses::load(client, scope, run_id).await?);
         crate::agent_run_propose_edit::public_decision(client, scope, run_id, &mut record.decision)
             .await?;
     }

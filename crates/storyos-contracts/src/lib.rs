@@ -39,6 +39,7 @@ mod release1_research_source;
 mod release1_route_catalog;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
+mod release1_skill_use;
 mod release1_snapshot;
 mod release1_takeover;
 mod release1_undo_latest_author_action;
@@ -275,6 +276,7 @@ pub use release1_set_current_chapter::{
     SetCurrentChapterConflictReason, SetCurrentChapterEffect, SetCurrentChapterNoEffectReason,
     SetCurrentChapterRefusalReason, SetCurrentChapterRequest, SetCurrentChapterResponse,
 };
+pub use release1_skill_use::SkillUseInspect;
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, CanonicalSnapshotMaps, GET_SNAPSHOT_METHOD,
     GET_SNAPSHOT_PATH, GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotResponse, SnapshotDescriptor,
