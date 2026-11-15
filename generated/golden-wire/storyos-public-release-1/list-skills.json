@@ -1,0 +1,17 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000e01",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.skills.response.v1",
+  "skills": [
+    {
+      "description": "Rules for the dialogue of a novel. Use it when the author asks for dialogue.",
+      "reference": {
+        "name": "dialogue-style-guide",
+        "package_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}

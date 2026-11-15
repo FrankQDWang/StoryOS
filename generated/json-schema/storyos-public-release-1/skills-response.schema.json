@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "SkillCatalogEntry": {
+      "additionalProperties": false,
+      "description": "One Skill of the deployment for the `$` picker: its reference and its description, with no file.",
+      "properties": {
+        "description": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/SkillPackageReference"
+        }
+      },
+      "required": [
+        "reference",
+        "description"
+      ],
+      "type": "object"
+    },
+    "SkillPackageReference": {
+      "additionalProperties": false,
+      "description": "The immutable reference to one Skill of the deployment: its name and its package digest.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        "package_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "package_digest"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.skills.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.query.skills.response.v1",
+      "type": "string"
+    },
+    "skills": {
+      "items": {
+        "$ref": "#/$defs/SkillCatalogEntry"
+      },
+      "maxItems": 32,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "skills"
+  ],
+  "title": "StoryOS Skills Response",
+  "type": "object"
+}

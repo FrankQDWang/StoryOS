@@ -474,6 +474,11 @@ export async function cancelAgentRun({ projectId, runId, request, idempotencyKey
   return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/cancel`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function listSkills({ projectId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listSkills requires projectId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/skills` });
+}
+
 export async function listResearchSources({ projectId, runId, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("listResearchSources requires projectId");
   if (typeof runId !== "string" || runId.length === 0) throw new TypeError("listResearchSources requires runId");
