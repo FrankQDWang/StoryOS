@@ -112,6 +112,17 @@ The author selects a Skill with the `$` picker, which lists the catalog of the d
 
 No record holds the Skills of a Project Conversation. In a later message, the model can still have the text from the Provider conversation, and the Agent loads the Skill again when it does not.
 
+The author changed this rule on 2026-11-15, after the Stage 6 release, for a Skill that the author selected. [The follow-up ticket](https://github.com/FrankQDWang/StoryOS/issues/1547) delivers the change, and the two paragraphs above tell the behavior until it merges.
+
+- A Skill that the author selected stays in effect for the later turns of the same Project Conversation. The author selects it one time.
+- While the Provider conversation continues, the Host sends nothing more, because the model has the text. When a request has a full input and no prior response (after a compaction, or after an expired prior reference), the Host sends the `SKILL.md` of that Skill again.
+- The text is the text of the Snapshot of the selection, also after the operator changed or removed the package.
+- The list of these Skills comes from the Skill requirements of the earlier Runs of the Conversation. No table is new. At most 8 Skills are in effect: the 8 names with the newest selections.
+- A Skill that the Agent loaded in an earlier turn does not get this rule. The catalog of each Run has its name and its description, and the Agent loads it again when the task needs it.
+- Inside one Run, the compaction rule of section 3 stays: the `SKILL.md` text of each Skill of the Run, loaded or selected, keeps its exact form after a compaction. The author confirmed this on 2026-11-15, because the Agent is at work with that text.
+- The usage record does not change. The turn of the selection names the Skill, and a later turn adds no line for it.
+- The author surface gets no new control. A new Project Conversation ends the effect.
+
 ### 6. Joint use
 
 Each loaded Skill is one separate, attributable Context item. The order of the items serves only reproducible serialization. The Host merges nothing and ranks nothing.
@@ -153,7 +164,7 @@ The review of the aggregate pull request recorded one more rule on 2026-11-15. T
 - **A script runtime.** Rejected for Stage 6. It needs a server sandbox and a Tool Approval. An approval prompt for each script is the interaction that the author refused in Stage 5.
 - **A new Agent Decision kind and a new continuation cause for a load.** Rejected. The tool loop of ADR 0091 already has the behavior: the model asks, the Host answers, the next RunStep reads the answer.
 - **A one-shot approval for each Skill load.** Rejected. The operator chooses the Skills, and the Agent decides when a Skill helps.
-- **A conversation-level list of Skills in effect.** Rejected for Stage 6. It needs a control to remove a Skill from the list and a rule to send the text again after each rebuild of the Provider conversation.
+- **A conversation-level list of Skills in effect.** Rejected for Stage 6. It needs a control to remove a Skill from the list and a rule to send the text again after each rebuild of the Provider conversation. The author accepted it on 2026-11-15 for a Skill that the author selected, with the rule of section 5 and with no control: a new Project Conversation ends the effect.
 
 ## Consequences
 
