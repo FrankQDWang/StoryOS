@@ -18,7 +18,9 @@ AXES = ("Standards", "Spec")
 # The heading of each verdict comment. The rounds of earlier pull requests use the same heading.
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 HEAD = re.compile(r"^(?:Head|Candidate: head) `([0-9a-f]{40})`(?:.*?tree `([0-9a-f]{40})`)?", re.M)
-EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s")
+# make check adds the field scope=documents for a change that has only documents. The match keeps the field.
+EVIDENCE = re.compile(r"Check Evidence Line: tier=(\S+) commit=([0-9a-f]{40}) tree=(\S+) result=(\S+) time=\S+ duration=\d+s"
+                      r"(?: scope=[a-z]+)?")
 PENDING = re.compile(r"\bpending\b", re.I)
 NO_EVIDENCE = "none for this head. The merge gate owns this line, so its absence is not a finding"
 # GitHub fills closingIssuesReferences only for a pull request into the default branch.

@@ -35,8 +35,14 @@ CHECK_FULL_STEPS = $(CHECK_STEPS); \
 check-fast:
 	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FAST_STEPS)'
 
+# A change that has only documents that no code names runs only the check-fast steps (scripts/check-scope.py).
 check:
-	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_STEPS)'
+	@if [ "$$(python3 scripts/check-scope.py $(BASE))" = documents ]; then \
+		echo "The change has only documents that no code names, so make check runs only the make check-fast steps."; \
+		scripts/check-evidence.sh $@ --scope documents sh -exc '$(CHECK_FAST_STEPS)'; \
+	else \
+		scripts/check-evidence.sh $@ sh -exc '$(CHECK_STEPS)'; \
+	fi
 
 check-full:
 	@scripts/check-evidence.sh $@ sh -exc '$(CHECK_FULL_STEPS)'

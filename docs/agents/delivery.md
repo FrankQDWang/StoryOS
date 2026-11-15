@@ -16,7 +16,7 @@ This document gives the rules to deliver a specification and its tickets. The ru
 - The ticket pull request goes into the integration branch. Its body starts with `Closes #<ticket>. Parent: #<specification>.`, so that `make review` finds the ticket. It carries the evidence of [Check Evidence Line](#check-evidence-line) and [Codex review](#codex-review).
 - After the last ticket merges, the coordinator opens one aggregate pull request from the integration branch to `main`. Its body has a `Closes #<issue>` line for the specification and for each delivered ticket. It has no closing reference for an unmet product stage gate or for another specification.
 - Implementation commits go to `main` only through the aggregate pull request. Each merge is an ordinary merge commit, unless the specification requires another method.
-- GitHub closes linked issues only for a pull request into the default branch. Thus a ticket issue stays open until the aggregate pull request merges.
+- GitHub closes linked issues only for a pull request into the default branch.
 
 ## Ticket life cycle
 
@@ -119,6 +119,7 @@ Check Evidence Line: tier=check commit=<40-character SHA> tree=<tree SHA> result
 
 - Only a line of `make check` or `make check-full` with `result=PASS` is merge evidence. A line of `make check-fast` is not.
 - `make check` and `make check-full` stop at the start when the working tree has changes. A line with `tree=DIRTY` is not evidence.
+- When each changed file is a document under `docs/` or at the root that no code names, `make check` runs only the `make check-fast` steps, and its line ends with `scope=documents`.
 - Copy the line into the pull request body exactly. The coordinator compares its commit with the head of the pull request. A review round does not need the line.
 - Each new head needs a new line. This includes a merge of the base branch.
 - Start a long tier in the background, and wait for the process to exit. The result is the line, its last output, and not a step that passed.
@@ -211,11 +212,11 @@ Before `make check` or `make check-full`, take one of three slots. Run `mkdir -p
 - `scripts/dev-postgres.sh with <command> ...` runs a command with a new database. The `run` form is the same. The command owns a unique database and gives its environment to the child. It removes the container and its anonymous volume on success, failure, or interruption. `make check` uses the `with` form.
 - For interactive development, use `up --interactive`, then `reload`, `env`, and `down`. These commands use the canonical checkout path. `down` also removes the anonymous data volume.
 - Do not share database environment variables between worktrees.
-- The old `storyos-dev-postgres` container stays. The new commands do not use or remove it. Move the data that you need before the author removes that container.
+- The new commands do not use or remove the old `storyos-dev-postgres` container.
 
 ### One exact-dist journey file
 
-These commands run one journey file. Change `FILE` to the journey under `apps/web/`. They need a clean tree, Docker, and Google Chrome Stable.
+Change `FILE` to the journey under `apps/web/`. They need a clean tree, Docker, and Google Chrome Stable.
 
 ```sh
 python3 scripts/package-release.py
