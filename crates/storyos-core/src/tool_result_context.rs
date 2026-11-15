@@ -4,9 +4,9 @@
 //! captured no Snapshot. Its text ends with the citable identities of its Snapshots and Gaps
 //! (ADR 0087). The output of a settled `load_skill` call is a `skill_instruction` item with the
 //! exact `SKILL.md` text, and the output of a settled `read_skill_resource` call is a
-//! `skill_resource` item with the exact text of the file (ADR 0089 section 3). It crosses identity, Project
-//! Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the pinned grant
-//! decides its disclosure eligibility at Create admission (ADR 0051).
+//! `skill_resource` item with the exact text of the file (ADR 0089 section 3). It crosses
+//! identity, Project Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the
+//! pinned grant decides its disclosure eligibility at Create admission (ADR 0051).
 
 use serde::{Deserialize, Serialize};
 
