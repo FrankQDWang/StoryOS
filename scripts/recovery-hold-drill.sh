@@ -186,3 +186,31 @@ assert_stage5_research_facts_present() {
     exit 1
   fi
 }
+
+# Stage 6 Skill records: the SkillPackage Snapshots with their files, the pinned catalogs, and the
+# ToolCalls of the two Skill Host Tools. Each line is a count and a digest of the ordered complete rows.
+stage6_skill_facts() {
+  facts_container=$1
+  for facts_table in skill_package_snapshots skill_package_snapshot_files \
+    agent_run_skill_catalog_entries; do
+    docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+      "SELECT '$facts_table|' || count(*) || '|' ||
+              md5(coalesce(string_agg(row_to_json(record)::text, ';'
+                ORDER BY row_to_json(record)::text), ''))
+         FROM storyos.$facts_table AS record"
+  done
+  docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT 'skill_tool_calls|' || count(*) || '|' ||
+            md5(coalesce(string_agg(row_to_json(record)::text, ';'
+              ORDER BY row_to_json(record)::text), ''))
+       FROM storyos.tool_calls AS record
+      WHERE record.function_name IN ('load_skill', 'read_skill_resource')"
+}
+
+assert_stage6_skill_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -c '|0|')" != "0" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "4" ]; then
+    echo "The recovery seed did not create each Stage 6 Skill record family: $1" >&2
+    exit 1
+  fi
+}

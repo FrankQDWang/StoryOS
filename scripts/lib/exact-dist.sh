@@ -63,7 +63,8 @@ reset_exact_dist_fixture() {
 # (ADR 0048). The other journeys use a deployment that offers the Contract-Faithful Fake Destination.
 exact_dist_ai_disabled_journeys="test/browser-exact-dist/s2-jrn-001.integration.test.ts test/browser-exact-dist/s2-workspace.integration.test.ts"
 
-# Starts one packaged Server. $1 is its model destination; an empty value offers none.
+# Starts one packaged Server. $1 is its model destination; an empty value offers none. $2, when it
+# is set, is the Skill directory of the Server.
 launch_exact_dist_server() {
   launched_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
   stage1_user_id="018f0000-0000-7001-8000-000000000001"
@@ -72,6 +73,9 @@ launch_exact_dist_server() {
       export STORYOS_MODEL_DESTINATION="$1"
     else
       unset STORYOS_MODEL_DESTINATION
+    fi
+    if [ -n "${2-}" ]; then
+      export STORYOS_SKILLS_DIR="$2"
     fi
     exec env STORYOS_WORKER=0 \
       STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
@@ -109,9 +113,10 @@ start_exact_dist_server() {
   export STORYOS_DEV_SERVER
 }
 
-# Starts a second Server without a model destination at STORYOS_AI_DISABLED_SERVER.
+# Starts a second Server without a model destination at STORYOS_AI_DISABLED_SERVER. It has the
+# Skill directory of the fixtures, so the Stage 2 journeys show that such a Server serves the editor.
 start_ai_disabled_exact_dist_server() {
-  launch_exact_dist_server ""
+  launch_exact_dist_server "" "$repository_root/fixtures/skill-packages"
   exact_dist_ai_disabled_log=$launched_log
   exact_dist_ai_disabled_pid=$launched_pid
   STORYOS_AI_DISABLED_SERVER=$launched_url
