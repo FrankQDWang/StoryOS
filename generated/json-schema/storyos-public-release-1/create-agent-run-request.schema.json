@@ -173,10 +173,7 @@
           },
           "maxItems": 8,
           "minItems": 1,
-          "type": [
-            "array",
-            "null"
-          ]
+          "type": "array"
         },
         "working_target": {
           "$ref": "#/$defs/AssistanceWorkingTarget"
