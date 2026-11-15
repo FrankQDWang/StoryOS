@@ -11,7 +11,7 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **User changes:** preserve unrelated user changes exactly as you find them.
 - **Language:** write all repository text in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Research reports under `docs/research/` are evidence records. The text of a Skill fixture package under `fixtures/skill-packages/` is test data, and this rule does not apply to it. Talk to the user in Simplified Chinese.
 - **Glossary and domain:** use the terms of [GLOSSARY.md](GLOSSARY.md), and read only the area files that you need. Before domain exploration or design, read [Domain docs](docs/agents/domain.md).
-- **Checks:** use the StoryOS-owned repository commands. After each product or test edit, run `make check-fast`. Before a pull request, run `make check` on a clean tree, and put its Check Evidence Line in the body. Run `make check-full` only when the ticket or an explicit request requires it ([ADR 0070](docs/adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
+- **Checks:** use the StoryOS-owned repository commands. After each product or test edit, run `make check-fast`. Open a pull request after `make check-fast` passes. After a review round passes, merge the current base, run `make check` one time on that clean head, and put its Check Evidence Line in the body. Run `make check-full` only when the ticket or an explicit request requires it ([ADR 0070](docs/adr/0070-verify-locally-with-one-check-command-and-keep-github-checks-cheap.md)).
 
 ## Delivery
 

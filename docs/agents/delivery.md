@@ -52,23 +52,23 @@ Ask the coordinator only for a real decision. A product, contract, number, or wa
 
 - Use the `tdd` skill at the approved public seams.
 - After each product or test edit, run `make check-fast`.
-- Commit on the ticket branch. Before the final evidence, merge the current integration tip into the branch.
+- Commit on the ticket branch.
 - Wait for `make check`, `make check-full`, and `make review` in the turn that starts the command. Do not end a turn while one of them runs: the end of a turn can stop the Codex jobs of the session.
 - When the counted lines will exceed the [change size](../../CODING_STANDARDS.md#change-size) limit, stop and report to the coordinator. The coordinator splits the ticket.
 
 ### 5. Open the pull request
 
-Push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. Then run `make check` on the clean head, and put its Check Evidence Line in the body. When the ticket or a request requires `make check-full`, run only `make check-full` on the head. Its line is the Check Evidence Line of the head. The GitHub `verify` check runs on each push.
-
-When `make check-full` exits, report its result to the coordinator at once. Send this report before any change to the pull request: a push, a body edit, or a comment.
+When `make check-fast` and the tests that the ticket adds or changes pass, push the branch and open the pull request into the integration branch. Use the `pr` skill for the body. The GitHub `verify` check runs on each push.
 
 ### 6. Review
 
 Before round 1, complete each evidence record that an acceptance criterion requires, for example a live request record.
 
-Run the [Codex review](#codex-review). Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
+Run the [Codex review](#codex-review) rounds until a round passes. Handle each Sourcery review thread: fix the finding, or reply with the reason. Then resolve the thread.
 
 When a finding says that the contract does not ask for a change, ask the coordinator to change the ticket body before the next round. Then post a new Claim, as [section 3](#3-read-then-claim) requires.
+
+After a round passes, merge the current integration tip into the branch. Then run the required tier one time on that head: `make check`, or only `make check-full` when the ticket or a request requires it. Put its Check Evidence Line in the body. Report the result of `make check-full` to the coordinator before any push, body edit, or comment.
 
 ### 7. Final report
 
@@ -145,7 +145,7 @@ Then it sends the [review prompt](review-prompt.md) and a request to one new rea
 
 - A pull request gets at most three rounds.
 - Only a blocking finding fails a round. A finding on format, lint, names, or ASD-STE100 wording never fails a round.
-- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier, `make check` or `make check-full`, at the same time as a round, or after the round passes. The [merge gate](#merge-gate) still needs a line for the final head.
+- After a failed round, fix each blocking finding, commit, push, and run `make review` again. Run the required tier only after a round passes: a fix or a base merge replaces the head of an earlier heavy run, and a round beside `make check-full` can lose its Codex job. The [merge gate](#merge-gate) still needs a line for the final head.
 - After a passed round, a new round starts only after a change to the diff of the ticket. The command refuses a round when the tree did not change.
 - A merge of the base branch after a passed round needs no new round when it does not change the diff of the ticket. Compare `git diff <base>...<head>` before and after the merge. Send the Check Evidence Line of the new head and the GitHub `verify` check to the coordinator. The coordinator accepts the merge with this evidence.
 
@@ -243,7 +243,7 @@ Stop and report to the coordinator only for an anomaly: an unexpected status, mo
 Before the session ends, stop each process that you started:
 
 - Each background wait.
-- Each Codex broker and app server of a manual Codex call. `make review` stops the brokers of its own jobs.
+- Each Codex broker and app server of a manual Codex call.
 - Each development server.
 - Each disposable database, and each heavy-run slot.
 
