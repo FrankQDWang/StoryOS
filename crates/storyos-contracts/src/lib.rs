@@ -16,6 +16,7 @@ mod release1_create_volume;
 mod release1_delete_chapter;
 mod release1_delete_volume;
 mod release1_list_projects;
+mod release1_list_skills;
 mod release1_manuscript_search;
 mod release1_manuscript_statistics;
 mod release1_manuscript_tree;
@@ -160,6 +161,10 @@ pub use release1_delete_volume::{
 };
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectListItem,
+};
+pub use release1_list_skills::{
+    LIST_SKILLS_METHOD, LIST_SKILLS_PATH, LIST_SKILLS_RESPONSE_SCHEMA_ID, ListSkillsResponse,
+    SkillCatalogEntry,
 };
 pub use release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
