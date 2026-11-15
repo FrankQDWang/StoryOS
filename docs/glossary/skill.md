@@ -65,7 +65,7 @@ The structured, attributable model context containing the exact full `SKILL.md` 
 _Avoid_: Skill Catalog Entry, prompt merge, StoryOS Skill Extension dump, package resource bundle
 
 **Skill Context Composition**:
-The immutable model-visible collection of separate Skill Instruction Context items used by one RunStep, ordered solely for reproducible serialization: each Skill that the author selected in the order of its name, and each Skill that the Agent loaded in the item order of its `load_skill` call ([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 6). Items remain semantic peers, are never merged into a synthetic Skill or ranked by position, and their compatible Outcome Obligations compose as a union; any incompatible combination follows Skill Conflict handling.
+The immutable model-visible collection of separate Skill Instruction Context items used by one RunStep. The order is solely for reproducible serialization ([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 6). The Skills that the author selected are in the order of their names. The Skills that the Agent loaded are in the item order of their `load_skill` calls. Items remain semantic peers, are never merged into a synthetic Skill or ranked by position, and their compatible Outcome Obligations compose as a union; any incompatible combination follows Skill Conflict handling.
 _Avoid_: Concatenated prompt, Primary Skill, list precedence, synthesized SkillPackage
 
 **Skill Applicability Contract**:

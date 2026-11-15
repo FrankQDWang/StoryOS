@@ -102,12 +102,15 @@ pub enum SkillPackageRefusal {
     SizeLimitExceeded,
     PathUnsafe,
     SkillMdMissing,
+    /// The `SKILL.md` is not UTF-8 text, or it has U+0000.
     SkillMdNotText,
     SkillMdTooLong,
     FrontmatterInvalid,
     NameInvalid,
     NameDirectoryMismatch,
+    /// Also a decoded description with U+0000.
     DescriptionInvalid,
+    /// Also a decoded optional text, metadata key, or metadata value with U+0000.
     OptionalFieldInvalid,
 }
 
@@ -173,6 +176,9 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
         .ok_or(SkillPackageRefusal::SkillMdMissing)?;
     let text =
         std::str::from_utf8(&skill_md.bytes).map_err(|_| SkillPackageRefusal::SkillMdNotText)?;
+    if !is_storable_text(text) {
+        return Err(SkillPackageRefusal::SkillMdNotText);
+    }
     if count_context_item_tokens(text) > CONTEXT_ITEM_TOKEN_LIMIT {
         return Err(SkillPackageRefusal::SkillMdTooLong);
     }
@@ -194,7 +200,8 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
     }
     let description = match field("description") {
         Some(FrontmatterValue::Text(text))
-            if (1..=DESCRIPTION_MAX_CHARACTERS).contains(&text.chars().count()) =>
+            if (1..=DESCRIPTION_MAX_CHARACTERS).contains(&text.chars().count())
+                && is_storable_text(text) =>
         {
             text.clone()
         }
@@ -202,7 +209,9 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
     };
     let optional_text = |key: &str, max_characters: usize| match field(key) {
         None => Ok(None),
-        Some(FrontmatterValue::Text(text)) if text.chars().count() <= max_characters => {
+        Some(FrontmatterValue::Text(text))
+            if text.chars().count() <= max_characters && is_storable_text(text) =>
+        {
             Ok(Some(text.clone()))
         }
         Some(_) => Err(SkillPackageRefusal::OptionalFieldInvalid),
@@ -215,10 +224,12 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
         Some(FrontmatterValue::Mapping(entries)) => entries
             .iter()
             .map(|(key, value)| match value {
-                FrontmatterValue::Text(text) => Ok((key.clone(), text.clone())),
-                FrontmatterValue::Mapping(_) | FrontmatterValue::Other => {
-                    Err(SkillPackageRefusal::OptionalFieldInvalid)
+                FrontmatterValue::Text(text) if is_storable_text(key) && is_storable_text(text) => {
+                    Ok((key.clone(), text.clone()))
                 }
+                FrontmatterValue::Text(_)
+                | FrontmatterValue::Mapping(_)
+                | FrontmatterValue::Other => Err(SkillPackageRefusal::OptionalFieldInvalid),
             })
             .collect::<Result<_, _>>()?,
         Some(FrontmatterValue::Text(_) | FrontmatterValue::Other) => {
@@ -237,6 +248,13 @@ pub fn admit_skill_package(input: SkillPackageInput) -> Result<SkillPackage, Ski
         allowed_tools,
         files,
     })
+}
+
+/// Text without U+0000. The record of a Run keeps the `SKILL.md` text and each decoded
+/// frontmatter text as database text, and database text cannot hold U+0000. A YAML escape
+/// can decode to U+0000 when the `SKILL.md` bytes do not have it.
+fn is_storable_text(text: &str) -> bool {
+    !text.contains('\0')
 }
 
 /// 1 to 64 characters of `a-z`, `0-9`, and `-`, with no hyphen at an end and no double hyphen.

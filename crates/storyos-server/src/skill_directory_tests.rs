@@ -221,6 +221,32 @@ fn block_quoted_and_plain_scalars_decode_to_the_description() {
 }
 
 #[test]
+fn a_yaml_escape_that_decodes_to_u0000_refuses_the_package() {
+    for (frontmatter, rule) in [
+        (
+            "name: a\ndescription: \"Use it for\\0plot notes.\"\n",
+            SkillPackageRefusal::DescriptionInvalid,
+        ),
+        (
+            "name: a\ndescription: Use it.\nlicense: \"Apache\\x00\"\n",
+            SkillPackageRefusal::OptionalFieldInvalid,
+        ),
+        (
+            "name: a\ndescription: Use it.\nmetadata:\n  author: \"Story\\0OS\"\n",
+            SkillPackageRefusal::OptionalFieldInvalid,
+        ),
+    ] {
+        let directory = Directory::new();
+        directory.write("a/SKILL.md", format!("---\n{frontmatter}---\n"));
+        assert_eq!(
+            directory.read(),
+            Err(package_refusal("a", rule)),
+            "{frontmatter:?}"
+        );
+    }
+}
+
+#[test]
 fn frontmatter_that_is_not_one_mapping_of_text_keys_is_invalid() {
     for frontmatter in [
         "name: a\nname: a\n",

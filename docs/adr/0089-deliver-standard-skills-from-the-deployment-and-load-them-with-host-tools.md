@@ -138,6 +138,8 @@ After a turn, the panel names each Skill that the turn used, in the place where 
 
 A package above its limit, a `SKILL.md` above its limit, and a set of Skills above its limit or with a catalog text above its limit fail the validation at the start of the Server. A file that is not UTF-8 text, or that is above the token limit, stays in the package, and a read of it is a refused call. An explicit selection uses one of the 8 loads.
 
+The review of the aggregate pull request recorded one more rule on 2026-11-15. The record of a Run keeps the `SKILL.md` text and each decoded text of its YAML mapping as database text, and database text cannot hold the character U+0000. Thus `admit_skill_package` refuses a `SKILL.md` with U+0000 (`skill_md_not_text`), a decoded description with U+0000 (`description_invalid`), and a decoded optional text, metadata key, or metadata value with U+0000 (`optional_field_invalid`). A YAML escape can give U+0000 when the bytes of the file do not have it. The validation at the start of the Server fails for such a package.
+
 [S6-03c](https://github.com/FrankQDWang/StoryOS/issues/1531) recorded the load refusals on 2026-11-15. The Core function `admit_skill_load` decides them from the pinned catalog, the selected Skills, and the settled loads of the Run, in this order: `skill_not_in_catalog`, `skill_already_loaded` (a settled load of the Run or a selected Skill has the name), and `skill_load_limit` (the selected Skills and the settled loads are 8). The Host executes the calls of one response in call order, so each settled load counts for the calls after it.
 
 ## Considered options

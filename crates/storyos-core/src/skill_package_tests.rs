@@ -181,6 +181,12 @@ fn skill_md_is_text_of_at_most_the_token_limit_directly_in_the_package() {
         refusal(input(vec![file(SKILL_MD_PATH, &[b'-', 0xc3, 0x28])])),
         SkillPackageRefusal::SkillMdNotText
     );
+    let mut with_nul = SKILL_MD.to_vec();
+    with_nul.extend_from_slice(b"Rule\0one.\n");
+    assert_eq!(
+        refusal(input(vec![file(SKILL_MD_PATH, &with_nul)])),
+        SkillPackageRefusal::SkillMdNotText
+    );
     let long = |extra: usize| {
         let mut bytes = SKILL_MD.to_vec();
         bytes.resize(CONTEXT_ITEM_TOKEN_LIMIT as usize + extra, b'x');
@@ -258,6 +264,7 @@ fn the_description_is_text_of_1_to_1024_characters() {
     for value in [
         text(""),
         text(&"a".repeat(1025)),
+        text("Use it for\0plot notes."),
         FrontmatterValue::Other,
         FrontmatterValue::Mapping(Vec::new()),
     ] {
@@ -311,6 +318,17 @@ fn an_optional_field_of_the_wrong_form_refuses_the_package() {
         (
             "metadata",
             FrontmatterValue::Mapping(vec![("version".to_owned(), FrontmatterValue::Other)]),
+        ),
+        ("license", text("Apache\0-2.0")),
+        ("compatibility", text("\0")),
+        ("allowed-tools", text("Read\0")),
+        (
+            "metadata",
+            FrontmatterValue::Mapping(vec![("author".to_owned(), text("Story\0OS"))]),
+        ),
+        (
+            "metadata",
+            FrontmatterValue::Mapping(vec![("au\0thor".to_owned(), text("StoryOS"))]),
         ),
     ];
     for (key, value) in invalid {

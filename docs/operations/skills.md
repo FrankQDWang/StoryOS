@@ -21,6 +21,7 @@ Set `STORYOS_SKILLS_DIR` in the environment of `storyos-server` to the absolute 
 
 - Each child directory is one package. Its name is the Skill name.
 - `SKILL.md` is directly in the package directory. It starts with one YAML mapping between two `---` lines. `name` is the same as the directory name: 1 to 64 characters of `a-z`, `0-9`, and `-`, with no hyphen at the start or the end and no double hyphen. `description` is text of 1 to 1024 characters. `license`, `compatibility` (at most 500 characters), `metadata` (a mapping from text to text), and `allowed-tools` are optional. `allowed-tools` grants nothing.
+- The `SKILL.md` text, and each text of its YAML mapping after the decoding, has no character U+0000. A YAML escape such as `"\0"` gives this character. Such a package stops the start with the rule `skill_md_not_text`, `description_invalid`, or `optional_field_invalid`.
 - The Server skips a top-level file, a top-level directory whose name starts with `.`, and a `.DS_Store` file in a package.
 - A symbolic link, and each entry that is not a file or a directory, stops the start. Copy the files into the directory.
 - Each file path is ASCII and has no `.` or `..` segment. Two paths that differ only in letter case stop the start.
@@ -31,13 +32,13 @@ Set `STORYOS_SKILLS_DIR` in the environment of `storyos-server` to the absolute 
 | Item | Limit |
 | --- | --- |
 | One package | 1 to 64 files, and at most 1,048,576 bytes |
-| `SKILL.md` | UTF-8 text of at most 32,000 tokens |
+| `SKILL.md` | UTF-8 text of at most 32,000 tokens, with no U+0000 |
 | Skills of one deployment | 32 |
 | The catalog text of one deployment | 32,000 tokens |
 
 The catalog text has one line for each Skill, with its name and its description. A set of Skills whose catalog text is above the limit stops the start with the rule `skill_catalog_limit_exceeded`.
 
-A resource file that is not UTF-8 text, or that is above 32,000 tokens, stays in the package, but the Agent cannot read it.
+A resource file that is not UTF-8 text, that has the character U+0000, or that is above 32,000 tokens, stays in the package, but the Agent cannot read it.
 
 ## The start
 
