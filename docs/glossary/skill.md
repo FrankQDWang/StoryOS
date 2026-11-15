@@ -93,7 +93,7 @@ The immutable, attributable set of exact SkillPackage References consulted for o
 _Avoid_: Active Skill, Primary Skill, Supporting Skill, mutable Run-wide Skill list
 
 **Run Skill Requirement**:
-An author-originated, reference-bound requirement that one AgentRun honor an explicitly selected SkillPackage across its remaining work. It persists through RunSteps, Waits, and Holds until prospectively superseded by Steering Input, but grants no capability, need not be consulted by every RunStep, and never carries into a new AgentRun.
+An author-originated, reference-bound requirement that one AgentRun honor an explicitly selected SkillPackage across its remaining work. It persists through RunSteps, Waits, and Holds until prospectively superseded by Steering Input, but grants no capability and need not be consulted by every RunStep. The requirement of one AgentRun never moves into a new AgentRun. By the decision of the author of 2026-11-15 ([ADR 0089](../adr/0089-deliver-standard-skills-from-the-deployment-and-load-them-with-host-tools.md) section 5), a later AgentRun of the same Project Conversation records its own requirement for each Skill that the author selected in an earlier AgentRun of that Conversation. Its provenance tells it from a selection of that AgentRun. A new Project Conversation has no such requirement.
 _Avoid_: Skill Selection Set, permanent project Skill, Capability Grant, implicit inheritance
 
 **Skill Eligibility**:

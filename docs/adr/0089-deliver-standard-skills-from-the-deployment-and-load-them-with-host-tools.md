@@ -115,9 +115,9 @@ No record holds the Skills of a Project Conversation. In a later message, the mo
 The author changed this rule on 2026-11-15, after the Stage 6 release, for a Skill that the author selected. [The follow-up ticket](https://github.com/FrankQDWang/StoryOS/issues/1547) delivers the change, and the two paragraphs above tell the behavior until it merges.
 
 - A Skill that the author selected stays in effect for the later turns of the same Project Conversation. The author selects it one time.
-- While the Provider conversation continues, the Host sends nothing more, because the model has the text. When a request has a full input and no prior response (after a compaction, or after an expired prior reference), the Host sends the `SKILL.md` of that Skill again.
+- While the Provider conversation continues, the Host sends nothing more, because the model has the text. A request after a compaction, or after an expired prior reference, has a full input and no prior response. In such a request, the Host sends the `SKILL.md` of that Skill again.
 - The text is the text of the Snapshot of the selection, also after the operator changed or removed the package.
-- The list of these Skills comes from the Skill requirements of the earlier Runs of the Conversation. No table is new. At most 8 Skills are in effect: the 8 names with the newest selections.
+- The list of these Skills comes from the Skill requirements of the earlier Runs of the Conversation. The later Run records its own Run Skill Requirement for each of them, with a provenance that is not `author_selected` (glossary area "Skill"). No table is new. At most 8 Skills are in effect: the 8 names with the newest selections.
 - A Skill that the Agent loaded in an earlier turn does not get this rule. The catalog of each Run has its name and its description, and the Agent loads it again when the task needs it.
 - Inside one Run, the compaction rule of section 3 stays: the `SKILL.md` text of each Skill of the Run, loaded or selected, keeps its exact form after a compaction. The author confirmed this on 2026-11-15, because the Agent is at work with that text.
 - The usage record does not change. The turn of the selection names the Skill, and a later turn adds no line for it.
