@@ -784,7 +784,10 @@
         "working_target",
         "instruction_binding",
         "conversation_summary",
-        "tool_result"
+        "tool_result",
+        "skill_catalog",
+        "skill_instruction",
+        "skill_resource"
       ],
       "type": "string"
     },
@@ -2219,6 +2222,57 @@
       ],
       "type": "object"
     },
+    "SkillUseInspect": {
+      "description": "One Skill that a Run used (ADR 0089 section 8). No entry has a digest or a ToolCall identity.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The author selected the Skill in the message of the Run.",
+          "properties": {
+            "name": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "provenance": {
+              "const": "author_selected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "provenance",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The Agent loaded the Skill with a settled `load_skill` call that gave `reason`.",
+          "properties": {
+            "name": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "provenance": {
+              "const": "agent_selected",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "provenance",
+            "name",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "SourceAvailability": {
       "oneOf": [
         {
@@ -2459,6 +2513,15 @@
     "schema_id": {
       "const": "storyos.query.agent-run.response.v2",
       "type": "string"
+    },
+    "skill_uses": {
+      "items": {
+        "$ref": "#/$defs/SkillUseInspect"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
     },
     "status": {
       "$ref": "#/$defs/AgentRunStatus"

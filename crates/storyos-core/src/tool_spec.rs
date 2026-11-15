@@ -32,6 +32,10 @@ pub enum ToolOperation {
     SubmitResearch,
     /// The Host Tool with which the Agent reads a stored research result again (ADR 0093).
     ReadToolResult,
+    /// The Host Tool with which the Agent loads one Skill of the catalog (ADR 0089).
+    LoadSkill,
+    /// The Host Tool with which the Agent reads one file of a Skill that its Run has (ADR 0089).
+    ReadSkillResource,
 }
 
 /// One field that a destination may receive. A destination receives no Ambient Context.
@@ -130,6 +134,8 @@ pub fn tool_spec(revision: &str) -> Option<&'static ToolSpec> {
         &PROPOSE_EDIT_TOOL_SPEC,
         &crate::SUBMIT_RESEARCH_TOOL_SPEC,
         &crate::READ_TOOL_RESULT_TOOL_SPEC,
+        &crate::LOAD_SKILL_TOOL_SPEC,
+        &crate::READ_SKILL_RESOURCE_TOOL_SPEC,
     ]
     .into_iter()
     .find(|spec| spec.revision == revision)
@@ -154,6 +160,14 @@ pub enum ToolIntake {
     ReadToolResult {
         call_id: String,
     },
+    LoadSkill {
+        skill: String,
+        reason: String,
+    },
+    ReadSkillResource {
+        skill: String,
+        path: String,
+    },
 }
 
 /// Why the arguments of a function call do not fit the typed intake.
@@ -167,6 +181,8 @@ pub enum IntakeRefusal {
     Url,
     /// A text of the arguments has U+0000, which the store cannot keep in a `jsonb` value.
     UnstorableText,
+    /// The `reason` of a load is empty, has more than 512 characters, or has a control character.
+    Reason,
 }
 
 #[derive(Deserialize)]
@@ -236,6 +252,8 @@ impl ToolSpec {
                 .map_err(|_| IntakeRefusal::Malformed),
             ToolOperation::SubmitResearch => crate::submit_research::intake(arguments),
             ToolOperation::ReadToolResult => crate::read_tool_result::intake(arguments),
+            ToolOperation::LoadSkill => crate::load_skill::intake(arguments),
+            ToolOperation::ReadSkillResource => crate::read_skill_resource::intake(arguments),
         }
     }
 }
@@ -291,7 +309,9 @@ impl ServerArguments {
                 | ToolIntake::Finish
                 | ToolIntake::ProposeEdit(_)
                 | ToolIntake::SubmitResearch { .. }
-                | ToolIntake::ReadToolResult { .. },
+                | ToolIntake::ReadToolResult { .. }
+                | ToolIntake::LoadSkill { .. }
+                | ToolIntake::ReadSkillResource { .. },
             )
             | (
                 Self::Fetch { .. },
@@ -299,7 +319,9 @@ impl ServerArguments {
                 | ToolIntake::Finish
                 | ToolIntake::ProposeEdit(_)
                 | ToolIntake::SubmitResearch { .. }
-                | ToolIntake::ReadToolResult { .. },
+                | ToolIntake::ReadToolResult { .. }
+                | ToolIntake::LoadSkill { .. }
+                | ToolIntake::ReadSkillResource { .. },
             ) => {
                 return None;
             }

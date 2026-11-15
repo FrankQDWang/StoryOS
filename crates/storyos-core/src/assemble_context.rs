@@ -62,6 +62,13 @@ pub enum ContextSourceClass {
     ConversationSummary,
     /// The projected result of one resolved ToolCall of the Run. It is Data-only Context.
     ToolResult,
+    /// The name and the description of each Skill of the catalog of the Run (ADR 0089).
+    SkillCatalog,
+    /// The `SKILL.md` text of one Skill. It has the instruction rank below the Project
+    /// Instruction, and it is not Data-only Context (ADR 0089 section 3).
+    SkillInstruction,
+    /// The text of one resource file of a Skill (ADR 0089 section 3).
+    SkillResource,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,6 +136,12 @@ pub struct OperationRequirementRecord {
     /// The earlier author messages that the later request of a compaction sends, oldest first
     /// (ADR 0093 section 6).
     pub earlier_author_messages: Option<Vec<super::EarlierAuthorMessageSource>>,
+    /// The Skill requirements of the Run, in the order of the Skill names. Each RunStep of the
+    /// Run copies them (ADR 0089 section 5).
+    pub skill_requirements: Option<Vec<super::SkillRequirement>>,
+    /// The SkillPackage Reference of each Skill of the catalog that the Run pinned, in the order
+    /// of the Skill names (ADR 0089 section 3).
+    pub skill_catalog: Option<Vec<super::SkillPackageReference>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -287,6 +300,8 @@ pub fn assemble_current_passage_context(
             ordinary_resolution: None,
             tool_results: None,
             earlier_author_messages: None,
+            skill_requirements: None,
+            skill_catalog: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

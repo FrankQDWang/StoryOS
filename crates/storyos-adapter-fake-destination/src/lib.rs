@@ -1,13 +1,16 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
 mod create_plan;
+mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
 mod read_plan;
 mod recovery_plan;
 mod research_plan;
+mod skill_resource_plan;
 mod tool_loop_plan;
 
+pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
 
 use storyos_application::{
@@ -115,9 +118,13 @@ impl ModelProviderAdapter for FakeDestination {
             Some(bytes),
         );
         projection.mapping_revision = mapping_revision.to_owned();
-        // A continuation rejection applies only to the first RunStep of a Run, and a RunStep that
-        // continues from a recovered response is not lost again.
-        let later_step = !create.tool_outputs.is_empty();
+        // A continuation rejection applies only to the first RunStep of a Run, unless the script
+        // loses each reference, and a RunStep that continues from a recovered response is not
+        // lost again.
+        let later_step = !create.tool_outputs.is_empty()
+            && !create
+                .author_message
+                .ends_with(recovery_plan::STEP_REFERENCE_EXPIRES);
         let rejection = create
             .previous_response_reference
             .as_deref()

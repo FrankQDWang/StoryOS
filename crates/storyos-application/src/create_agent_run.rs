@@ -28,6 +28,11 @@ pub struct CreateAgentRunInput {
     /// The research destination of the deployment, from Host configuration. The Project gets
     /// its current research records before the Run is admitted (ADR 0090). `None` offers none.
     pub research: Option<&'static storyos_core::ResearchToolOffer>,
+    /// The Skill set of the deployment, from Host configuration. The Project gets the Snapshot of
+    /// each Skill, and the Run pins its catalog (ADR 0089). An empty set offers nothing.
+    pub skills: std::sync::Arc<storyos_core::SkillSet>,
+    /// The Skills that the author selected for this Run. Empty: no selection (ADR 0089 section 5).
+    pub skill_selections: Vec<storyos_core::SkillPackageReference>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,6 +91,8 @@ pub struct AgentRunRecord {
     pub decision: AgentRunDecisionInspect,
     /// Each result of the Run in the order in which the model made it. Only the Run read has it.
     pub results: Option<Vec<storyos_contracts::AgentRunResultInspect>>,
+    /// Each Skill that the Run used (ADR 0089 section 8). Only the Run read has it.
+    pub skill_uses: Option<Vec<storyos_core::SkillUse>>,
     pub model: Option<AgentRunModelInspect>,
     /// Each compaction record of the Run, in RunStep order (ADR 0093).
     pub compactions: Vec<ActiveCompactionInspect>,

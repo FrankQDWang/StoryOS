@@ -54,6 +54,8 @@ pub struct ExposureFacts<'a> {
     pub bound: &'a [BoundTool],
     /// The Model Registration revision that the AgentRun pinned.
     pub model_registration_revision: &'a str,
+    /// Whether the pinned catalog of the Run has a Skill (ADR 0089 section 3).
+    pub skill_catalog: bool,
 }
 
 /// One Tool that the request declares.
@@ -91,6 +93,8 @@ impl ToolOperation {
             Self::ProposeEdit => "propose_edit",
             Self::SubmitResearch => "submit_research",
             Self::ReadToolResult => "read_tool_result",
+            Self::LoadSkill => "load_skill",
+            Self::ReadSkillResource => "read_skill_resource",
         }
     }
 
@@ -112,6 +116,8 @@ impl ToolOperation {
             }
             Self::SubmitResearch => crate::submit_research::DESCRIPTION,
             Self::ReadToolResult => crate::read_tool_result::DESCRIPTION,
+            Self::LoadSkill => crate::load_skill::DESCRIPTION,
+            Self::ReadSkillResource => crate::read_skill_resource::DESCRIPTION,
         }
     }
 }
@@ -158,6 +164,8 @@ impl ExposedTool {
             ToolOperation::ProposeEdit => crate::propose_edit_parameters(),
             ToolOperation::SubmitResearch => crate::submit_research::parameters(),
             ToolOperation::ReadToolResult => crate::read_tool_result::parameters(),
+            ToolOperation::LoadSkill => crate::load_skill::parameters(),
+            ToolOperation::ReadSkillResource => crate::read_skill_resource::parameters(),
             ToolOperation::WebSearch | ToolOperation::WebFetch | ToolOperation::Finish => json!({
                 "type": "object",
                 "properties": properties,
@@ -198,7 +206,9 @@ impl ToolExposure {
     /// The Exposure of the facts. A binding exposes its Tools only when the Registration
     /// revision is active and known, the Decision is compatible, and the pinned Model
     /// Registration has qualified function calling. Each other binding exposes nothing, and a
-    /// second Tool of one function name stays out. The Host Tools follow.
+    /// second Tool of one function name stays out. The Host Tools follow. `load_skill` and
+    /// `read_skill_resource` are Host Tools only of a Run whose pinned catalog has a Skill, so a
+    /// Run with no Skill declares the Tools of before (ADR 0089 section 3).
     pub fn compute(facts: &ExposureFacts<'_>) -> Self {
         let Some(registration) =
             model_registration(facts.model_registration_revision).filter(|registration| {
@@ -234,12 +244,23 @@ impl ToolExposure {
             }
         }
         let host = registration.host_tools();
-        tools.extend(host.tools.iter().map(|spec| ExposedTool {
-            name: spec.operation.function_name(),
-            registration_id: host.id,
-            registration_revision: host.revision,
-            spec,
-        }));
+        tools.extend(
+            host.tools
+                .iter()
+                .filter(|spec| {
+                    facts.skill_catalog
+                        || !matches!(
+                            spec.operation,
+                            ToolOperation::LoadSkill | ToolOperation::ReadSkillResource
+                        )
+                })
+                .map(|spec| ExposedTool {
+                    name: spec.operation.function_name(),
+                    registration_id: host.id,
+                    registration_revision: host.revision,
+                    spec,
+                }),
+        );
         Self { tools }
     }
 

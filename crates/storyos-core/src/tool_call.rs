@@ -104,6 +104,10 @@ impl ValidatedToolCall {
                 crate::submit_research::arguments(summary, claims)
             }
             ToolIntake::ReadToolResult { call_id } => json!({ "call_id": call_id }),
+            ToolIntake::LoadSkill { skill, reason } => json!({ "skill": skill, "reason": reason }),
+            ToolIntake::ReadSkillResource { skill, path } => {
+                json!({ "skill": skill, "path": path })
+            }
         }
     }
 
@@ -193,6 +197,7 @@ impl CallValidationRefusal {
             Self::Intake(IntakeRefusal::UrlCount) => "intake_url_count",
             Self::Intake(IntakeRefusal::Url) => "intake_url",
             Self::Intake(IntakeRefusal::UnstorableText) => "unstorable_text",
+            Self::Intake(IntakeRefusal::Reason) => "intake_reason",
             Self::ProposeEdit(refusal) => refusal.label(),
         }
     }
@@ -216,6 +221,9 @@ impl CallValidationRefusal {
             }
             Self::Intake(IntakeRefusal::UnstorableText) => {
                 "a text of its arguments has the character U+0000"
+            }
+            Self::Intake(IntakeRefusal::Reason) => {
+                "its reason is empty, has more than 512 characters, or has a control character"
             }
             Self::ProposeEdit(refusal) => return refusal.result_text(),
         };

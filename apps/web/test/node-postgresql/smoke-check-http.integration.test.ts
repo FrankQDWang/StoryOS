@@ -537,6 +537,7 @@ const READS: Record<string, ReadRow> = {
   getProjectAssistance: {
     call: ({ story }, fetchImpl) => client.getProjectAssistance({ ...scope(story), fetchImpl }),
   },
+  listSkills: { call: ({ story }, fetchImpl) => client.listSkills({ ...scope(story), fetchImpl }) },
   getEditorSession: {
     call: ({ story, session }, fetchImpl) => client.getEditorSession({ ...scope(story), fetchImpl,
       editorSessionId: session.editor_session.editor_session_id }),

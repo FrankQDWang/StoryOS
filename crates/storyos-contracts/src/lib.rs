@@ -16,6 +16,7 @@ mod release1_create_volume;
 mod release1_delete_chapter;
 mod release1_delete_volume;
 mod release1_list_projects;
+mod release1_list_skills;
 mod release1_manuscript_search;
 mod release1_manuscript_statistics;
 mod release1_manuscript_tree;
@@ -38,6 +39,7 @@ mod release1_research_source;
 mod release1_route_catalog;
 mod release1_selection_reference;
 mod release1_set_current_chapter;
+mod release1_skill_use;
 mod release1_snapshot;
 mod release1_takeover;
 mod release1_undo_latest_author_action;
@@ -96,8 +98,9 @@ pub use release1_agent_run::{
     OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
     ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
     ReferenceRecoveryDisposition, SelectionCoordinateProfile, SelectionPoint, SelectionReference,
-    SelectionReferenceInspect, SourceAvailability, TokenCountingProfileInspect, ToolCallInspect,
-    ToolCallOutcomeInspect, UnknownCreateSuccessorDisposition,
+    SelectionReferenceInspect, SkillPackageReference, SourceAvailability,
+    TokenCountingProfileInspect, ToolCallInspect, ToolCallOutcomeInspect,
+    UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
@@ -159,6 +162,10 @@ pub use release1_delete_volume::{
 };
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectListItem,
+};
+pub use release1_list_skills::{
+    LIST_SKILLS_METHOD, LIST_SKILLS_PATH, LIST_SKILLS_RESPONSE_SCHEMA_ID, ListSkillsResponse,
+    SkillCatalogEntry,
 };
 pub use release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
@@ -269,6 +276,7 @@ pub use release1_set_current_chapter::{
     SetCurrentChapterConflictReason, SetCurrentChapterEffect, SetCurrentChapterNoEffectReason,
     SetCurrentChapterRefusalReason, SetCurrentChapterRequest, SetCurrentChapterResponse,
 };
+pub use release1_skill_use::SkillUseInspect;
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, CanonicalSnapshotMaps, GET_SNAPSHOT_METHOD,
     GET_SNAPSHOT_PATH, GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotResponse, SnapshotDescriptor,

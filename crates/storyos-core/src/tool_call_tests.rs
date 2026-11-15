@@ -20,6 +20,7 @@ fn pinned() -> ExposureSnapshot {
             compatibility: Some(ToolCompatibilityDecision::Compatible),
         }],
         model_registration_revision: crate::AGENT_PLAN_REGISTRATION.revision,
+        skill_catalog: false,
     });
     ExposureSnapshot::decode(Some(&exposure.snapshot())).unwrap()
 }

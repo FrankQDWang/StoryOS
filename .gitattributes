@@ -1,2 +1,4 @@
 # Patch files keep their whitespace: it is part of the recorded change.
 *.patch -whitespace
+# Skill fixture packages keep their exact bytes (ADR 0089).
+fixtures/skill-packages/** -text -whitespace

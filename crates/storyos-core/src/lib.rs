@@ -22,10 +22,12 @@ mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
 mod host_tool;
+mod load_skill;
 mod manuscript_payload;
 mod model_output;
 mod model_registration;
 mod ordinary_passage_request;
+mod read_skill_resource;
 mod read_tool_result;
 mod rebuild_expired_reference;
 mod research_destination;
@@ -59,6 +61,9 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
+mod skill_instruction;
+mod skill_package;
+mod skill_use;
 mod statistics_profile;
 mod take_over_project_writer;
 mod transition_outcome;
@@ -165,7 +170,12 @@ pub use host_fake_profile::{
 };
 pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
-    HostToolRegistration, execute_host_tool, host_tool, host_tool_result,
+    HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
+    execute_host_tool, host_tool, host_tool_result,
+};
+pub use load_skill::{
+    LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, SKILL_LOAD_LIMIT, SkillLoadFacts, admit_skill_load,
+    skill_load_result,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
@@ -213,6 +223,10 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use read_skill_resource::{
+    READ_SKILL_RESOURCE_TOOL_SPEC, SKILL_RESOURCE_READ_LIMIT, SkillResourceReadFacts,
+    SkillResourceRefusal, admit_skill_resource_read,
 };
 pub use read_tool_result::{
     READ_TOOL_RESULT_TOOL_SPEC, ReadTarget, ReadToolResultRefusal, StoredCall, read_tool_result,
@@ -271,6 +285,19 @@ pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
 };
+pub use skill_instruction::{
+    SKILL_SELECTION_LIMIT, SkillInstructionSource, SkillInstructionUnavailable, SkillProvenance,
+    SkillRequirement, SkillSelectionUnavailable, admit_skill_selections, assemble_skill_catalog,
+    assemble_skill_instructions, skill_reference_well_formed,
+};
+pub use skill_package::{
+    FrontmatterValue, SKILL_CATALOG_TOKEN_LIMIT, SKILL_MD_PATH, SKILL_PACKAGE_BYTE_LIMIT,
+    SKILL_PACKAGE_FILE_LIMIT, SKILL_PACKAGE_INVENTORY_PROFILE, SKILL_SET_LIMIT, SkillCatalogEntry,
+    SkillCatalogPlan, SkillFile, SkillFileInput, SkillPackage, SkillPackageInput,
+    SkillPackageReference, SkillPackageRefusal, SkillSet, SkillSetRefusal, admit_skill_package,
+    plan_skill_catalog, skill_catalog_text, skill_md_frontmatter,
+};
+pub use skill_use::{SkillUse, StoredSkillLoad, skill_uses};
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };
@@ -301,7 +328,8 @@ pub use tool_exposure::{
     requests_function, response_disposition,
 };
 pub use tool_loop_profile::{
-    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    AGENT_PLAN_READ_RESULT_MAPPING_REVISION, AGENT_PLAN_READ_RESULT_REGISTRATION,
+    AGENT_PLAN_REGISTRATION, AGENT_PLAN_SKILL_MAPPING_REVISION,
     AGENT_PLAN_TOOL_LOOP_MAPPING_REVISION, AGENT_PLAN_TOOL_LOOP_REGISTRATION,
     HOST_FAKE_TOOL_LOOP_CAPABILITY_PROFILE, HOST_FAKE_TOOL_LOOP_MAPPING_REVISION,
     HOST_FAKE_TOOL_LOOP_REGISTRATION,
@@ -314,8 +342,9 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput, ToolResultSource,
-    assemble_tool_result_continuation, stub_tool_call_ids,
+    SKILL_LOAD_TRUST, SKILL_RESOURCE_TRUST, TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm,
+    ToolResultOutput, ToolResultSource, assemble_tool_result_continuation, function_outputs,
+    is_function_output, is_skill_load_output, stub_tool_call_ids,
 };
 pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{

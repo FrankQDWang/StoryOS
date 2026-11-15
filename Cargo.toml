@@ -47,6 +47,8 @@ tracing-subscriber = { version = "=0.3.23", default-features = false, features =
 ts-rs = { version = "=12.0.1", features = ["no-serde-warnings"] }
 url = "=2.5.8"
 uuid = { version = "=1.18.1", features = ["v7"] }
+# ADR 0089: only storyos-server decodes the YAML frontmatter of a SkillPackage.
+yaml-rust2 = { version = "=0.13.0", default-features = false }
 [workspace.lints.rust]
 unsafe_code = "forbid"
 [workspace.lints.clippy]

@@ -66,5 +66,9 @@ if any(tool_crates & names for names in dependencies.values()):
 transport = {"reqwest", "hyper", "rustls", "native-tls", "openssl"}
 if transport & closure("storyos-adapter-postgres"):
     problems.append("storyos-adapter-postgres depends on an HTTP or TLS client")
+# ADR 0089: only the Server decodes the YAML frontmatter of a SkillPackage.
+for name in dependencies:
+    if name != "storyos-server" and "yaml-rust2" in closure(name):
+        problems.append(f"{name} links yaml-rust2")
 if problems:
     raise SystemExit("; ".join(problems))

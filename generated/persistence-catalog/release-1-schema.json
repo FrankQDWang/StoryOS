@@ -555,6 +555,65 @@
       },
       "triggers": {}
     },
+    "agent_run_skill_catalog_entries": {
+      "columns": {
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "package_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "run_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "skill_name": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "agent_run_skill_catalog_entries_pkey": "PRIMARY KEY (owner_user_id, project_id, run_id, skill_name)",
+        "agent_run_skill_catalog_entries_run_fkey": "FOREIGN KEY (owner_user_id, project_id, run_id) REFERENCES storyos.agent_runs(owner_user_id, project_id, run_id) MATCH FULL",
+        "agent_run_skill_catalog_entries_snapshot_fkey": "FOREIGN KEY (owner_user_id, project_id, package_digest, skill_name) REFERENCES storyos.skill_package_snapshots(owner_user_id, project_id, package_digest, skill_name) MATCH FULL"
+      },
+      "indexes": {
+        "agent_run_skill_catalog_entries_pkey": "CREATE UNIQUE INDEX agent_run_skill_catalog_entries_pkey ON storyos.agent_run_skill_catalog_entries USING btree (owner_user_id, project_id, run_id, skill_name)",
+        "agent_run_skill_catalog_entries_snapshot_idx": "CREATE INDEX agent_run_skill_catalog_entries_snapshot_idx ON storyos.agent_run_skill_catalog_entries USING btree (owner_user_id, project_id, package_digest, skill_name)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "agent_run_skill_catalog_entries_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
     "agent_runs": {
       "columns": {
         "active_decision_position": {
@@ -2009,7 +2068,7 @@
       "constraints": {
         "context_assembly_manifests_decision_position_check": "CHECK (((decision_position >= (0)::numeric) AND (decision_position <= '18446744073709551615'::numeric)))",
         "context_assembly_manifests_destination_pair": "CHECK (((((destination_context_manifest_id IS NULL) AND (outbound_disclosure_manifest_id IS NULL)) OR ((destination_context_manifest_id IS NOT NULL) AND (outbound_disclosure_manifest_id IS NOT NULL))) IS TRUE))",
-        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'research_tool_v1'::text])))",
+        "context_assembly_manifests_disclosure_grant_scope_check": "CHECK ((disclosure_grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text])))",
         "context_assembly_manifests_disclosure_grant_shape": "CHECK (((disclosure_grant_id IS NULL) = (disclosure_grant_scope IS NULL)))",
         "context_assembly_manifests_manifest_role_check": "CHECK ((manifest_role = ANY (ARRAY['decision'::text, 'compaction'::text, 'later_request'::text, 'retrieval'::text, 'successor'::text, 'tool_call'::text])))",
         "context_assembly_manifests_owner_user_id_project_id_operat_fkey": "FOREIGN KEY (owner_user_id, project_id, operation_requirement_id) REFERENCES storyos.operation_requirements(owner_user_id, project_id, operation_requirement_id) MATCH FULL",
@@ -4494,7 +4553,7 @@
         }
       },
       "constraints": {
-        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'research_tool_v1'::text])))",
+        "project_destination_grants_grant_scope_check": "CHECK ((grant_scope = ANY (ARRAY['project_writing_assistance_v1'::text, 'project_writing_assistance_v2'::text, 'project_writing_assistance_v3'::text, 'project_writing_assistance_v4'::text, 'research_tool_v1'::text])))",
         "project_destination_grants_kind_check": "CHECK ((grant_kind = ANY (ARRAY['host_fake_use'::text, 'volcengine_agent_plan_use'::text, 'research_tool_use'::text])))",
         "project_destination_grants_owner_user_id_project_id_proces_fkey": "FOREIGN KEY (owner_user_id, project_id, processing_destination_identity) REFERENCES storyos.processing_destination_identities(owner_user_id, project_id, processing_destination_identity) MATCH FULL",
         "project_destination_grants_pkey": "PRIMARY KEY (owner_user_id, project_id, grant_id)",
@@ -6942,6 +7001,159 @@
       "privileges": [
         "storyos_owner=arwdDxt/storyos_owner",
         "storyos_runtime=arw/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "skill_package_snapshot_files": {
+      "columns": {
+        "byte_length": {
+          "default": null,
+          "nullable": false,
+          "type": "integer"
+        },
+        "bytes": {
+          "default": null,
+          "nullable": false,
+          "type": "bytea"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "package_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "path": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "readable": {
+          "default": null,
+          "nullable": false,
+          "type": "boolean"
+        },
+        "sha256": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "tokens": {
+          "default": null,
+          "nullable": true,
+          "type": "bigint"
+        }
+      },
+      "constraints": {
+        "skill_package_snapshot_files_pkey": "PRIMARY KEY (owner_user_id, project_id, package_digest, path)",
+        "skill_package_snapshot_files_shape": "CHECK ((((char_length(path) >= 1) AND (char_length(path) <= 4096)) AND (byte_length = octet_length(bytes)) AND (sha256 ~ '^[0-9a-f]{64}$'::text) AND (tokens >= 0) AND ((NOT readable) OR (tokens IS NOT NULL))))",
+        "skill_package_snapshot_files_snapshot_fkey": "FOREIGN KEY (owner_user_id, project_id, package_digest) REFERENCES storyos.skill_package_snapshots(owner_user_id, project_id, package_digest) MATCH FULL"
+      },
+      "indexes": {
+        "skill_package_snapshot_files_pkey": "CREATE UNIQUE INDEX skill_package_snapshot_files_pkey ON storyos.skill_package_snapshot_files USING btree (owner_user_id, project_id, package_digest, path)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "skill_package_snapshot_files_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
+      ],
+      "row_level_security": {
+        "enabled": true,
+        "forced": true
+      },
+      "triggers": {}
+    },
+    "skill_package_snapshots": {
+      "columns": {
+        "byte_count": {
+          "default": null,
+          "nullable": false,
+          "type": "integer"
+        },
+        "description": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "file_count": {
+          "default": null,
+          "nullable": false,
+          "type": "integer"
+        },
+        "owner_user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "package_digest": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        },
+        "project_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "receipt_id": {
+          "default": null,
+          "nullable": false,
+          "type": "uuid"
+        },
+        "skill_name": {
+          "default": null,
+          "nullable": false,
+          "type": "text"
+        }
+      },
+      "constraints": {
+        "skill_package_snapshots_pkey": "PRIMARY KEY (owner_user_id, project_id, package_digest)",
+        "skill_package_snapshots_receipt_fkey": "FOREIGN KEY (owner_user_id, project_id, receipt_id) REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL",
+        "skill_package_snapshots_reference_key": "UNIQUE (owner_user_id, project_id, package_digest, skill_name)",
+        "skill_package_snapshots_shape": "CHECK (((package_digest ~ '^sha256:[0-9a-f]{64}$'::text) AND (skill_name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND (char_length(skill_name) <= 64) AND ((char_length(description) >= 1) AND (char_length(description) <= 1024)) AND ((file_count >= 1) AND (file_count <= 64)) AND ((byte_count >= 0) AND (byte_count <= 1048576))))"
+      },
+      "indexes": {
+        "skill_package_snapshots_pkey": "CREATE UNIQUE INDEX skill_package_snapshots_pkey ON storyos.skill_package_snapshots USING btree (owner_user_id, project_id, package_digest)",
+        "skill_package_snapshots_reference_key": "CREATE UNIQUE INDEX skill_package_snapshots_reference_key ON storyos.skill_package_snapshots USING btree (owner_user_id, project_id, package_digest, skill_name)"
+      },
+      "owner": "storyos_owner",
+      "policies": {
+        "skill_package_snapshots_exact_scope": {
+          "command": "ALL",
+          "permissive": "PERMISSIVE",
+          "roles": [
+            "public"
+          ],
+          "using": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))",
+          "with_check": "((owner_user_id = (current_setting('storyos.owner_user_id'::text))::uuid) AND (project_id = (current_setting('storyos.project_id'::text))::uuid))"
+        }
+      },
+      "privileges": [
+        "storyos_owner=arwdDxt/storyos_owner",
+        "storyos_runtime=ar/storyos_owner"
       ],
       "row_level_security": {
         "enabled": true,

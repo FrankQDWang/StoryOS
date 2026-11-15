@@ -41,6 +41,8 @@ fn candidate<'a>(
         function_name: "web_search",
         arguments: "{}",
         form: ToolResultForm::Exact,
+        skill: None,
+        resource_path: None,
     }
 }
 
@@ -54,6 +56,8 @@ fn source(tool_call_id: &str, state: &str, kept_result_tokens: Option<u64>) -> T
         trust: "data_only".to_owned(),
         kept_result_tokens,
         source_snapshot_ids: Vec::new(),
+        skill: None,
+        resource_path: None,
     }
 }
 

@@ -31,13 +31,14 @@ pub(super) async fn create_agent_run(
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
     let destination = state.config.model_destination.clone();
+    let skills = Arc::clone(&state.config.skills);
     let admitted = admit(
         &state,
         &project_id,
         &[],
         request,
         &CREATE_AGENT_RUN,
-        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination),
+        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination, skills),
     )
     .await?;
     let message = &admitted.input.author_message;
@@ -91,6 +92,7 @@ pub(super) async fn create_agent_run(
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
     destination: Option<storyos_core::DeploymentDestination>,
+    skills: Arc<storyos_core::SkillSet>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
     let conversation_id = match &input.conversation {
@@ -119,6 +121,7 @@ fn create_agent_run_input(
         }
     };
     valid_uuid(chapter_id)?;
+    let skill_selections = super::skill_selections::resolve(input.skill_selections.as_deref())?;
     Ok(CreateAgentRunInput {
         conversation: match &input.conversation {
             contracts::ConversationSelection::New => ConversationSelection::New,
@@ -141,6 +144,8 @@ fn create_agent_run_input(
             .as_ref()
             .map(|_| &storyos_core::RESEARCH_TOOL_OFFER),
         destination,
+        skills,
+        skill_selections,
     })
 }
 
@@ -202,6 +207,21 @@ pub(super) async fn get_agent_run(
         context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
         results: record.results,
+        skill_uses: record
+            .skill_uses
+            .filter(|uses| !uses.is_empty())
+            .map(|uses| {
+                uses.into_iter()
+                    .map(|skill_use| match skill_use {
+                        storyos_core::SkillUse::AuthorSelected { name } => {
+                            contracts::SkillUseInspect::AuthorSelected { name }
+                        }
+                        storyos_core::SkillUse::AgentSelected { name, reason } => {
+                            contracts::SkillUseInspect::AgentSelected { name, reason }
+                        }
+                    })
+                    .collect()
+            }),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.compactions.last()),
         compactions: (!record.compactions.is_empty()).then(|| {
@@ -895,6 +915,15 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
             contracts::ContextSourceClass::ConversationSummary
         }
         storyos_core::ContextSourceClass::ToolResult => contracts::ContextSourceClass::ToolResult,
+        storyos_core::ContextSourceClass::SkillCatalog => {
+            contracts::ContextSourceClass::SkillCatalog
+        }
+        storyos_core::ContextSourceClass::SkillInstruction => {
+            contracts::ContextSourceClass::SkillInstruction
+        }
+        storyos_core::ContextSourceClass::SkillResource => {
+            contracts::ContextSourceClass::SkillResource
+        }
     }
 }
 
@@ -914,6 +943,11 @@ fn refusal_problem(refusal: CreateAgentRunRefusal) -> ApiError {
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_chapter_join",
             "The Working Target Chapter is invalid.",
+        ),
+        CreateAgentRunRefusal::SkillSelectionUnavailable => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "skill_selection_unavailable",
+            "A selected Skill is not available. Send the message again without it.",
         ),
         CreateAgentRunRefusal::InaccessibleConversation | CreateAgentRunRefusal::MissingProject => {
             resource_unavailable()

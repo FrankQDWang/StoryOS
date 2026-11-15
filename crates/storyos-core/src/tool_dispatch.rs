@@ -77,7 +77,9 @@ impl ToolEffectRequest {
             ToolIntake::Finish
             | ToolIntake::ProposeEdit(_)
             | ToolIntake::SubmitResearch { .. }
-            | ToolIntake::ReadToolResult { .. } => Vec::new(),
+            | ToolIntake::ReadToolResult { .. }
+            | ToolIntake::LoadSkill { .. }
+            | ToolIntake::ReadSkillResource { .. } => Vec::new(),
         };
         Some(Self {
             external_read: envelope.external_read,
@@ -128,7 +130,8 @@ impl GrantScope {
             }
             Self::ProjectWritingAssistanceV1
             | Self::ProjectWritingAssistanceV2
-            | Self::ProjectWritingAssistanceV3 => false,
+            | Self::ProjectWritingAssistanceV3
+            | Self::ProjectWritingAssistanceV4 => false,
         }
     }
 }

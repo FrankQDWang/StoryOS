@@ -375,7 +375,9 @@ export type InstructionBinding = { "kind": "absent" };
 
 export type AssistanceCause = { "kind": "author_request" };
 
-export type CreateAgentRunInput = { conversation: ConversationSelection, author_message: AuthorMessage, working_target: AssistanceWorkingTarget, instruction: InstructionBinding, cause: AssistanceCause, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type SkillPackageReference = { name: string, package_digest: string, };
+
+export type CreateAgentRunInput = { conversation: ConversationSelection, author_message: AuthorMessage, working_target: AssistanceWorkingTarget, instruction: InstructionBinding, cause: AssistanceCause, skill_selections?: Array<SkillPackageReference>, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateAgentRunRequest = { command_schema: string, create_agent_run_input: CreateAgentRunInput, };
 
@@ -389,7 +391,7 @@ export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "comp
 
 export type ContextPurpose = "current_passage_assistance";
 
-export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result";
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary" | "tool_result" | "skill_catalog" | "skill_instruction" | "skill_resource";
 
 export type ProjectionMode = "exact_required" | "derived_summary" | "deterministic_excerpt" | "tool_result_stub";
 
@@ -443,6 +445,8 @@ export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "executio
 
 export type AgentRunResultInspect = { "kind": "proposal", decision_id: string, proposal_id: string, locations: Array<ProseChangeLocationInspect>, } | { "kind": "research_artifact", decision_id: string, research_artifact_id: string, } | { "kind": "answer", decision_id: string, text: string, };
 
+export type SkillUseInspect = { "provenance": "author_selected", name: string, } | { "provenance": "agent_selected", name: string, reason: string, };
+
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
 export type ContinuationAdmissionInspect = { processing_destination_identity: string, evidence_revision: string, model_registration_revision: string, adapter_mapping: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
@@ -475,7 +479,7 @@ export type CapturedMemorySettingsInspect = { "kind": "available", memory_settin
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, results?: Array<AgentRunResultInspect>, skill_uses?: Array<SkillUseInspect>, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, compactions?: Array<OptionalActiveCompactionInspect>, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
@@ -516,6 +520,10 @@ export type CancelAgentRunConflictReason = "terminal_run";
 export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: AgentRunStatus, fence_generation: string, project_activity_position: string, } | { "kind": "no_effect", reason: CancelAgentRunNoEffectReason, } | { "kind": "conflicted", reason: CancelAgentRunConflictReason, };
 
 export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
+
+export type SkillCatalogEntry = { reference: SkillPackageReference, description: string, };
+
+export type ListSkillsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, skills: Array<SkillCatalogEntry>, };
 
 export type SourceSnapshotKind = "search_result" | "page";
 
@@ -716,6 +724,7 @@ export declare function digestPauseAgentRun(request: PauseAgentRunRequest, crypt
 export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;
 export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
+export declare function listSkills(options: StoryOSQueryOptions & { projectId: string }): Promise<ListSkillsResponse>;
 export declare function listResearchSources(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<ListResearchSourcesResponse>;
 export declare function getResearchSource(options: StoryOSQueryOptions & { projectId: string; sourceSnapshotId: string }): Promise<GetResearchSourceResponse>;
 export declare function getResearchArtifact(options: StoryOSQueryOptions & { projectId: string; researchArtifactId: string }): Promise<GetResearchArtifactResponse>;

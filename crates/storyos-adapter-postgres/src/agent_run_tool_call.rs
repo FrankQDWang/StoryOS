@@ -35,10 +35,7 @@ pub(crate) async fn insert_tool_calls(
     calls: &[RequestedToolCall],
 ) -> Result<(), CompleteAgentRunError> {
     // The global row of a Host Tool Registration appears at its first ToolCall.
-    for registration in [
-        &storyos_core::FIRST_HOST_TOOL_REGISTRATION,
-        &storyos_core::HOST_TOOL_REGISTRATION,
-    ] {
+    for registration in storyos_core::HOST_TOOL_REGISTRATIONS {
         if calls.iter().any(|call| {
             matches!(call, RequestedToolCall::Validated(call)
                 if call.registration_revision == registration.revision)
@@ -284,7 +281,9 @@ pub(crate) fn call_inspect(
         storyos_core::ToolIntake::Finish
         | storyos_core::ToolIntake::ProposeEdit(_)
         | storyos_core::ToolIntake::SubmitResearch { .. }
-        | storyos_core::ToolIntake::ReadToolResult { .. } => {
+        | storyos_core::ToolIntake::ReadToolResult { .. }
+        | storyos_core::ToolIntake::LoadSkill { .. }
+        | storyos_core::ToolIntake::ReadSkillResource { .. } => {
             return Err(damaged());
         }
     })

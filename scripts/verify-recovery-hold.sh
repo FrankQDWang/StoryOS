@@ -197,6 +197,11 @@ STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
     test/browser-exact-dist/research-journey.integration.test.ts
+# The Skill journey writes each Stage 6 Skill record family before the backup.
+STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+  pnpm --dir apps/web exec vitest run --project browser-exact-dist \
+    test/browser-exact-dist/skill-journey.integration.test.ts
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
 # Both modes retain two single-Operation conditions and three partial-Acceptance histories.
 # A partial-Acceptance history and a packaged journey Acceptance on an earlier base apply, so
@@ -207,6 +212,8 @@ stage4_before=$(stage4_model_facts "$primary")
 assert_stage4_model_facts_present "$stage4_before"
 stage5_before=$(stage5_research_facts "$primary")
 assert_stage5_research_facts_present "$stage5_before"
+stage6_before=$(stage6_skill_facts "$primary")
+assert_stage6_skill_facts_present "$stage6_before"
 stop_recovery_drill_server
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
@@ -693,6 +700,10 @@ if [ "$(stage4_model_facts "$hold")" != "$stage4_before" ]; then
 fi
 if [ "$(stage5_research_facts "$hold")" != "$stage5_before" ]; then
   echo "Restored Stage 5 research records changed" >&2
+  exit 1
+fi
+if [ "$(stage6_skill_facts "$hold")" != "$stage6_before" ]; then
+  echo "Restored Stage 6 Skill records changed" >&2
   exit 1
 fi
 export STORYOS_PHYSICAL_DRILL=1

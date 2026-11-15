@@ -124,7 +124,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
 
     assert_eq!(
         grant_scope.as_deref(),
-        Some("project_writing_assistance_v3")
+        Some("project_writing_assistance_v4")
     );
     // The `finish` RunStep and the closing RunStep.
     assert_eq!(
@@ -133,7 +133,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
     );
     let admitted = serde_json::json!({
         "grant_id": grant_id,
-        "grant_scope": "project_writing_assistance_v3"
+        "grant_scope": "project_writing_assistance_v4"
     });
     assert_eq!(
         grant_evidence(&admin, &run_id).await,
@@ -188,10 +188,134 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         }
     );
     assert_ne!(new_grant, old_grant);
-    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v3"));
+    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v4"));
     let admitted = serde_json::json!({
         "grant_id": new_grant,
-        "grant_scope": "project_writing_assistance_v3"
+        "grant_scope": "project_writing_assistance_v4"
+    });
+    assert_eq!(
+        grant_evidence(&admin, &rebound_run).await,
+        ("completed".to_owned(), Some(admitted.clone()), admitted)
+    );
+}
+
+/// The identity, grant, binding, and Decision rows that `record` names, as JSON.
+async fn binding_rows(
+    admin: &Client,
+    record: &storyos_application::ProjectAssistanceRecord,
+) -> serde_json::Value {
+    let text: String = admin
+        .query_one(
+            "SELECT jsonb_build_array(
+                      (SELECT to_jsonb(row) FROM storyos.processing_destination_identities AS row
+                        WHERE row.processing_destination_identity = $1::text::uuid),
+                      (SELECT to_jsonb(row) FROM storyos.project_destination_grants AS row
+                        WHERE row.grant_id = $2::text::uuid),
+                      (SELECT to_jsonb(row) FROM storyos.project_external_use_binding_revisions
+                         AS row WHERE row.project_model_use_binding_revision = $3::text::uuid),
+                      (SELECT to_jsonb(row)
+                         FROM storyos.external_contract_compatibility_decisions AS row
+                        WHERE row.external_compatibility_decision = $4::text::uuid))::text",
+            &[
+                &record.processing_destination_identity,
+                &record.grant_id,
+                &record.project_model_use_binding_revision,
+                &record.external_compatibility_decision,
+            ],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    serde_json::from_str(&text).unwrap()
+}
+
+/// ADR 0089 section 4 and ADR 0051: a grant with the third scope gets new binding records with
+/// the fourth scope at the next `createAgentRun`, with no action of the author.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_grant_with_the_third_scope_gets_new_records_with_the_fourth_scope_at_the_next_run() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, pinned_run) =
+        queued_run(&store, "b01", DeploymentDestination::HostFakeToolLoop).await;
+    let earlier = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.project_destination_grants
+                SET grant_scope = 'project_writing_assistance_v3'
+              WHERE grant_id = $1::text::uuid",
+            &[&earlier.grant_id],
+        )
+        .await
+        .unwrap();
+    let earlier_rows = binding_rows(&admin, &earlier).await;
+
+    let rebound_run = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "b02",
+        DeploymentDestination::HostFakeToolLoop,
+        "Help with this passage.",
+    )
+    .await;
+    let current = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+    let pinned: (String, String) = {
+        let row = admin
+            .query_one(
+                "SELECT grant_id::text, project_model_use_binding_revision::text
+                   FROM storyos.agent_runs WHERE run_id = $1::text::uuid",
+                &[&rebound_run],
+            )
+            .await
+            .unwrap();
+        (row.get(/*idx*/ 0), row.get(/*idx*/ 1))
+    };
+    let stale = settle(&store, &admin, &FakeDestination, &scope, &pinned_run).await;
+    settle(&store, &admin, &FakeDestination, &scope, &rebound_run).await;
+
+    assert_eq!(
+        (
+            current_grant(&store, &admin, &scope).await.1,
+            pinned,
+            binding_rows(&admin, &earlier).await,
+            stale.settlement,
+        ),
+        (
+            Some("project_writing_assistance_v4".to_owned()),
+            (
+                current.grant_id.clone(),
+                current.project_model_use_binding_revision.clone()
+            ),
+            earlier_rows,
+            Some(
+                r#"{"kind": "execution_refused", "capability": "model_use_binding_stale"}"#
+                    .to_owned()
+            ),
+        )
+    );
+    assert!(
+        [
+            current.processing_destination_identity != earlier.processing_destination_identity,
+            current.grant_id != earlier.grant_id,
+            current.project_model_use_binding_revision
+                != earlier.project_model_use_binding_revision,
+            current.external_compatibility_decision != earlier.external_compatibility_decision,
+        ]
+        .iter()
+        .all(|changed| *changed)
+    );
+    let admitted = serde_json::json!({
+        "grant_id": current.grant_id,
+        "grant_scope": "project_writing_assistance_v4"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,

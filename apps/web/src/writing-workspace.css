@@ -477,5 +477,10 @@ li[data-chapter-id] { position: relative; }
 .composer-references .reference-label { min-width: 0; overflow: hidden; white-space: nowrap; }
 .composer-references .reference-heading { display: inline-block; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .composer-references button { margin: 0; padding: 0 4px; border: 0; background: transparent; color: #8a8780; font-size: 13px; }
+.skill-picker { position: absolute; right: 20px; bottom: calc(100% + 4px); left: 20px; z-index: 2; max-height: 240px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid #dfdcd7; border-radius: 10px; background: white; box-shadow: 0 10px 30px rgba(54, 51, 46, 0.12); list-style: none; }
+.skill-picker li { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.skill-picker li[aria-selected="true"] { background: #efede9; }
+.skill-picker .skill-name { color: #3f3d38; font-size: 12px; }
+.skill-picker .skill-description { overflow: hidden; color: #8a8780; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .assistant-reference-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
 .assistant-reference-labels li { overflow: hidden; max-width: 100%; padding: 1px 8px; border-radius: 10px; background: #efede9; color: #6f6c66; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

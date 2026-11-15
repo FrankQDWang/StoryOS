@@ -270,9 +270,11 @@ pub(crate) fn record_input(
     assembly: storyos_core::CurrentPassageAssemblyRecord,
     author_message: &str,
 ) -> RecordInput {
+    // A function output goes with its call, never in the user message (ADR 0089 section 3).
     let (earlier, current): (Vec<_>, Vec<_>) = assembly
         .selected
         .iter()
+        .filter(|item| !storyos_core::is_function_output(&assembly, item))
         .partition(|item| storyos_core::is_earlier_author_message(&assembly, item));
     RecordInput {
         passage_resolution: assembly.operation_requirement.ordinary_resolution,

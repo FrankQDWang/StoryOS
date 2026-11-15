@@ -2,9 +2,11 @@
 //! durable function request Decision (ADR 0005, ADR 0084). Each resolved ToolCall of the Run is
 //! one candidate; its source version is its Source Snapshot ids, or its ToolCall identity when it
 //! captured no Snapshot. Its text ends with the citable identities of its Snapshots and Gaps
-//! (ADR 0087). It crosses identity, Project
-//! Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the pinned grant
-//! decides its disclosure eligibility at Create admission (ADR 0051).
+//! (ADR 0087). The output of a settled `load_skill` call is a `skill_instruction` item with the
+//! exact `SKILL.md` text, and the output of a settled `read_skill_resource` call is a
+//! `skill_resource` item with the exact text of the file (ADR 0089 section 3). It crosses
+//! identity, Project Scope, lifecycle, trust, and Bounded Projection here; the grant scope of the
+//! pinned grant decides its disclosure eligibility at Create admission (ADR 0051).
 
 use serde::{Deserialize, Serialize};
 
@@ -12,11 +14,19 @@ use crate::assemble_context::count_context_item_tokens;
 use crate::assemble_context::{ConsideredSource, ContextCause, RejectedSource, SelectedProjection};
 use crate::{
     ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssemblyRecord,
-    ProjectionMode, RejectionReason, ToolCallState, ToolResultProjection,
+    ProjectionMode, RejectionReason, SkillPackageReference, ToolCallState, ToolResultProjection,
 };
 
 /// The trust of each `tool_result` source: data with no Instruction Authority.
 pub const TOOL_RESULT_TRUST: &str = "data_only";
+
+/// The trust of the output of a settled `load_skill` call: the instructions of a Skill, below
+/// the Project Instruction and above Data-only Context (ADR 0089 section 3).
+pub const SKILL_LOAD_TRUST: &str = "skill_instruction";
+
+/// The trust of the output of a settled `read_skill_resource` call: a file of a Skill, which is
+/// not Data-only Context (ADR 0089 section 3).
+pub const SKILL_RESOURCE_TRUST: &str = "skill_resource";
 
 /// One selected `tool_result` source of a continuation, as the Operation Requirement records it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -36,6 +46,14 @@ pub struct ToolResultSource {
     /// that a record before S5-06 names, has none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_snapshot_ids: Vec<String>,
+    /// The Skill of a settled `load_skill` or `read_skill_resource` call. The output of a load
+    /// is a `skill_instruction` item, and the output of a read is a `skill_resource` item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<SkillPackageReference>,
+    /// The path of the file in the package of `skill` that a settled `read_skill_resource` call
+    /// read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_path: Option<String>,
 }
 
 impl ToolResultSource {
@@ -65,6 +83,11 @@ pub struct ToolResultCandidate<'a> {
     /// The canonical arguments of the call.
     pub arguments: &'a str,
     pub form: ToolResultForm,
+    /// The Skill of the pinned catalog of the Run that a `load_skill` or a `read_skill_resource`
+    /// call names, if any.
+    pub skill: Option<&'a SkillPackageReference>,
+    /// The path that a `read_skill_resource` call names. `None` for each other call.
+    pub resource_path: Option<&'a str>,
 }
 
 /// How the continuation input gives the result of one ToolCall.
@@ -193,8 +216,38 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
-        let (item, projection_mode) =
-            candidate_item(candidate, projection, requirement.item_token_limit);
+        // The output of a Skill call is the exact stored text, also when it is empty or only
+        // white space (ADR 0089 section 3).
+        let loaded = match (candidate.skill, candidate.state, projection) {
+            (
+                Some(skill),
+                ToolCallState::Settled,
+                ToolResultProjection::Ok(_) | ToolResultProjection::Empty,
+            ) => Some((skill, candidate.result_text.unwrap_or_default())),
+            _ => None,
+        };
+        let (skill_class, skill_trust) = match candidate.resource_path {
+            Some(_) => (ContextSourceClass::SkillResource, SKILL_RESOURCE_TRUST),
+            None => (ContextSourceClass::SkillInstruction, SKILL_LOAD_TRUST),
+        };
+        let (source_class, (item, projection_mode)) = match loaded {
+            Some((_, text)) => (
+                skill_class,
+                (
+                    ToolResultItem {
+                        content: text.to_owned(),
+                        token_count: count_context_item_tokens(text),
+                        source_tokens: count_context_item_tokens(text),
+                        kept_result_tokens: None,
+                    },
+                    ProjectionMode::ExactRequired,
+                ),
+            ),
+            None => (
+                ContextSourceClass::ToolResult,
+                candidate_item(candidate, projection, requirement.item_token_limit),
+            ),
+        };
         let ToolResultItem {
             content,
             token_count,
@@ -205,20 +258,18 @@ pub fn assemble_tool_result_continuation(
         // blocks the continuation, because a cut identity cannot be cited.
         let fits = token_count <= requirement.item_token_limit;
         record.considered.push(ConsideredSource {
-            source_class: ContextSourceClass::ToolResult,
+            source_class,
             source_version: source_version.clone(),
             token_count: source_tokens,
             eligible: fits,
         });
         if !fits {
-            let reason = ContextBlockReason::ExactRequiredOverLimit {
-                source_class: ContextSourceClass::ToolResult,
-            };
+            let reason = ContextBlockReason::ExactRequiredOverLimit { source_class };
             if !blocks.contains(&reason) {
                 blocks.push(reason);
             }
             record.rejected.push(RejectedSource {
-                source_class: ContextSourceClass::ToolResult,
+                source_class,
                 source_version: source_version.clone(),
                 token_count,
                 reason: RejectionReason::OverItemTokenLimit,
@@ -226,7 +277,7 @@ pub fn assemble_tool_result_continuation(
             continue;
         }
         record.selected.push(SelectedProjection {
-            source_class: ContextSourceClass::ToolResult,
+            source_class,
             source_version: source_version.clone(),
             projection_mode,
             token_count,
@@ -238,9 +289,15 @@ pub fn assemble_tool_result_continuation(
             model_attempt_id: candidate.model_attempt_id.to_owned(),
             decision_id: candidate.decision_id.to_owned(),
             state: projection.label().to_owned(),
-            trust: TOOL_RESULT_TRUST.to_owned(),
+            trust: match loaded {
+                Some(_) => skill_trust,
+                None => TOOL_RESULT_TRUST,
+            }
+            .to_owned(),
             kept_result_tokens,
             source_snapshot_ids: snapshot_ids,
+            skill: loaded.map(|(skill, _)| skill.clone()),
+            resource_path: loaded.and(candidate.resource_path).map(str::to_owned),
         });
     }
     requirement.tool_results = Some(sources);
@@ -333,14 +390,18 @@ pub(crate) fn stub_selected_results(
     candidates: &[ToolResultCandidate<'_>],
 ) {
     let limit = record.operation_requirement.item_token_limit;
+    let outputs: Vec<usize> = (0..record.selected.len())
+        .filter(|index| is_function_output(record, &record.selected[*index]))
+        .collect();
     let Some(sources) = record.operation_requirement.tool_results.as_mut() else {
         return;
     };
-    let items = record
-        .selected
-        .iter_mut()
-        .filter(|item| item.source_class == ContextSourceClass::ToolResult);
-    for (source, item) in sources.iter_mut().zip(items) {
+    for (source, index) in sources.iter_mut().zip(outputs) {
+        let item = &mut record.selected[index];
+        // The output of a load or of a read keeps its exact form (ADR 0089 section 3).
+        if source.skill.is_some() {
+            continue;
+        }
         let Some(candidate) = candidates.iter().find(|candidate| {
             candidate.tool_call_id == source.tool_call_id && candidate.form == ToolResultForm::Stub
         }) else {
@@ -364,18 +425,58 @@ pub(crate) fn stub_selected_results(
 /// The ToolCall identity of each selected `tool_result` item of `record` that is a stub, in item
 /// order.
 pub fn stub_tool_call_ids(record: &CurrentPassageAssemblyRecord) -> Vec<String> {
+    function_outputs(record)
+        .into_iter()
+        .filter(|(_, item)| item.projection_mode == ProjectionMode::ToolResultStub)
+        .map(|(source, _)| source.tool_call_id.clone())
+        .collect()
+}
+
+/// Whether the selected `item` of `record` is the output of a settled `load_skill` call, and not
+/// a Skill that the author selected (ADR 0089 section 3). The Operation Requirement records the
+/// ToolCall of a load with its Skill, and the item has the source version of that ToolCall. A
+/// request sends a load output as the output of its call, never as a section of the user
+/// message.
+pub fn is_skill_load_output(
+    record: &CurrentPassageAssemblyRecord,
+    item: &SelectedProjection,
+) -> bool {
+    item.source_class == ContextSourceClass::SkillInstruction
+        && record
+            .operation_requirement
+            .tool_results
+            .iter()
+            .flatten()
+            .any(|source| source.skill.is_some() && source.source_version() == item.source_version)
+}
+
+/// Whether the selected `item` of `record` is the output of a function call: a `tool_result`
+/// item, the output of a load, or a `skill_resource` item, which only a read gives.
+pub fn is_function_output(
+    record: &CurrentPassageAssemblyRecord,
+    item: &SelectedProjection,
+) -> bool {
+    matches!(
+        item.source_class,
+        ContextSourceClass::ToolResult | ContextSourceClass::SkillResource
+    ) || is_skill_load_output(record, item)
+}
+
+/// Each `tool_result` source of the Operation Requirement of `record` with its selected item, in
+/// item order. Each place that finds the output of a call uses it.
+pub fn function_outputs(
+    record: &CurrentPassageAssemblyRecord,
+) -> Vec<(&ToolResultSource, &SelectedProjection)> {
     let items = record
         .selected
         .iter()
-        .filter(|item| item.source_class == ContextSourceClass::ToolResult);
+        .filter(|item| is_function_output(record, item));
     record
         .operation_requirement
         .tool_results
         .iter()
         .flatten()
         .zip(items)
-        .filter(|(_, item)| item.projection_mode == ProjectionMode::ToolResultStub)
-        .map(|(source, _)| source.tool_call_id.clone())
         .collect()
 }
 

@@ -35,6 +35,8 @@ mod research_artifact_rows;
 mod research_source_rows;
 #[path = "release1_operation_rows_run_control.rs"]
 mod run_control_rows;
+#[path = "release1_operation_rows_skill.rs"]
+mod skill_rows;
 #[path = "release1_operation_rows_stream.rs"]
 mod stream_rows;
 #[path = "release1_operation_rows_volume.rs"]
@@ -357,6 +359,7 @@ pub(super) const OPERATION_TABLE: &[&OperationRow] = &[
     &run_control_rows::STEER_AGENT_RUN_ROW,
     &run_control_rows::PAUSE_AGENT_RUN_ROW,
     &run_control_rows::CANCEL_AGENT_RUN_ROW,
+    &skill_rows::LIST_SKILLS_ROW,
     &research_source_rows::LIST_RESEARCH_SOURCES_ROW,
     &research_source_rows::GET_RESEARCH_SOURCE_ROW,
     &research_artifact_rows::GET_RESEARCH_ARTIFACT_ROW,

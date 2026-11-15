@@ -218,6 +218,7 @@ pub(crate) fn research_exposure() -> storyos_core::ToolExposure {
             compatibility: Some(storyos_core::ToolCompatibilityDecision::Compatible),
         }],
         model_registration_revision: storyos_core::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision,
+        skill_catalog: false,
     })
 }
 

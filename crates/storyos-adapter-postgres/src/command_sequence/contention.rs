@@ -57,6 +57,7 @@ impl RefusalCode for CreateAgentRunRefusal {
             Self::InaccessibleConversation => "inaccessible_conversation",
             Self::ConversationBusy => "conversation_busy",
             Self::InvalidChapterJoin => "invalid_chapter_join",
+            Self::SkillSelectionUnavailable => "skill_selection_unavailable",
         }
     }
 }

@@ -13,7 +13,6 @@ pub enum ExecutionCapability {
     Research,
     Embedding,
     Memory,
-    Skill,
     Subrun,
     Eval,
 }
@@ -27,7 +26,6 @@ pub fn requested_execution_capability(author_message: &str) -> Option<ExecutionC
         ("run a research fetch", ExecutionCapability::Research),
         ("embed this passage", ExecutionCapability::Embedding),
         ("extract conversation memory", ExecutionCapability::Memory),
-        ("load a skill", ExecutionCapability::Skill),
         ("start a subrun", ExecutionCapability::Subrun),
         ("run an eval", ExecutionCapability::Eval),
     ]

@@ -15,7 +15,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, DeploymentDestination, NativeStreamItem, ResearchToolOffer,
-    SelectionReference, StreamItemRole, StreamItemState,
+    SelectionReference, SkillPackageReference, SkillSet, StreamItemRole, StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -371,6 +371,7 @@ pub(crate) async fn admit_run_in(
         destination,
         author_message,
         input,
+        Default::default(),
     )
     .await
 }
@@ -395,10 +396,39 @@ pub(crate) async fn admit_referenced_run(
         destination,
         author_message,
         input,
+        Default::default(),
     )
     .await
 }
 
+/// Admits one queued AgentRun of `conversation` of the tool loop profile, as `admit_run` does,
+/// in a deployment that offers `skills`, with the Skill selections `selections`.
+pub(crate) async fn admit_selected_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    author_message: &str,
+    conversation: ConversationSelection,
+    skills: (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
+) -> String {
+    admit_with(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        DeploymentDestination::HostFakeToolLoop,
+        author_message,
+        (conversation, None, None),
+        skills,
+    )
+    .await
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each input of one createAgentRun is a test input"
+)]
 async fn admit_with(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
@@ -411,6 +441,7 @@ async fn admit_with(
         Option<&'static ResearchToolOffer>,
         Option<Vec<SelectionReference>>,
     ),
+    (skills, skill_selections): (std::sync::Arc<SkillSet>, Vec<SkillPackageReference>),
 ) -> String {
     let run = command_issue(
         scope,
@@ -435,6 +466,8 @@ async fn admit_with(
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
             destination: Some(destination),
             research,
+            skills,
+            skill_selections,
         },
     );
     store
