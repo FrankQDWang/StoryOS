@@ -320,8 +320,8 @@ def review(pr, wait):
     for axis, (result, _, url, _) in results.items():
         print(f"{axis}: {result} {url}")
     if all(result == "PASS" for result, _, _, _ in results.values()):
-        print("Next: merge the current base into the branch. Then run make check, or make check-full when the ticket "
-              "requires it, one time on that head, put its Check Evidence Line in the PR body, and send the PR link and "
+        print("Next: merge the current base into the branch. Then run make check one time on that head, or make "
+              "check-full when the ticket requires it. Put its Check Evidence Line in the PR body. Send the PR link and "
               f"the verdict links to the coordinator session. {BASE_MERGE}")
     elif number < ROUNDS:
         print(f"Next: fix the blocking findings, commit, push, and run make review PR={pr} again. Run no make check "
