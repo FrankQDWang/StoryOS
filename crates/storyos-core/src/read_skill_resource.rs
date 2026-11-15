@@ -74,7 +74,7 @@ pub enum SkillResourceRefusal {
     ReadLimit,
     /// No file of the Snapshot of the Skill has the exact path.
     NotFound,
-    /// The file is not UTF-8 text, or it is above the token limit.
+    /// The file is not UTF-8 text, it has U+0000, or it is above the token limit.
     NotReadable,
 }
 
@@ -133,7 +133,8 @@ pub struct SkillResourceReadFacts<'a> {
 /// The result of a read of `path` in the Skill `skill`: the exact text of the file. The Run must
 /// have the Skill, it must have fewer than `SKILL_RESOURCE_READ_LIMIT` settled reads, a file of
 /// the Snapshot must have the exact path, and the file must be UTF-8 text of at most
-/// `CONTEXT_ITEM_TOKEN_LIMIT` counted tokens, in this order.
+/// `CONTEXT_ITEM_TOKEN_LIMIT` counted tokens, in this order. Text with U+0000 is not readable,
+/// because the ToolCall row keeps the result as PostgreSQL `text`.
 pub fn admit_skill_resource_read(
     facts: &SkillResourceReadFacts<'_>,
     skill: &str,
@@ -162,7 +163,9 @@ pub fn admit_skill_resource_read(
         .ok_or(SkillResourceRefusal::NotFound)?;
     let text = std::str::from_utf8(file)
         .ok()
-        .filter(|text| count_context_item_tokens(text) <= CONTEXT_ITEM_TOKEN_LIMIT)
+        .filter(|text| {
+            !text.contains('\0') && count_context_item_tokens(text) <= CONTEXT_ITEM_TOKEN_LIMIT
+        })
         .ok_or(SkillResourceRefusal::NotReadable)?;
     Ok(crate::host_tool_result(text))
 }

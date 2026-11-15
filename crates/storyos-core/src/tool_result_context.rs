@@ -216,10 +216,14 @@ pub fn assemble_tool_result_continuation(
             });
             continue;
         };
+        // The output of a Skill call is the exact stored text, also when it is empty or only
+        // white space (ADR 0089 section 3).
         let loaded = match (candidate.skill, candidate.state, projection) {
-            (Some(skill), ToolCallState::Settled, ToolResultProjection::Ok(text)) => {
-                Some((skill, text))
-            }
+            (
+                Some(skill),
+                ToolCallState::Settled,
+                ToolResultProjection::Ok(_) | ToolResultProjection::Empty,
+            ) => Some((skill, candidate.result_text.unwrap_or_default())),
             _ => None,
         };
         let (skill_class, skill_trust) = match candidate.resource_path {

@@ -103,6 +103,14 @@ fn a_read_is_decided_in_the_order_of_the_refusal_table() {
             ),
             read(
                 SkillResourceReadFacts {
+                    file: Some(b"a\0b"),
+                    ..base
+                },
+                "comms",
+                "a"
+            ),
+            read(
+                SkillResourceReadFacts {
                     file: Some(long.as_bytes()),
                     ..base
                 },
@@ -125,6 +133,7 @@ fn a_read_is_decided_in_the_order_of_the_refusal_table() {
             Err(SkillResourceRefusal::NotFound),
             Err(SkillResourceRefusal::NotFound),
             Err(SkillResourceRefusal::NotFound),
+            Err(SkillResourceRefusal::NotReadable),
             Err(SkillResourceRefusal::NotReadable),
             Err(SkillResourceRefusal::NotReadable),
         ]

@@ -271,6 +271,7 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
         vec![
             ("assets/mark.bin", vec![0xff, 0xfe, 0x00]),
             ("references/long.md", "a".repeat(32_001).into_bytes()),
+            ("references/nul.md", b"Line one.\0Line two.".to_vec()),
         ],
     );
     let skills = || set(vec![comms.clone(), odd.clone()]);
@@ -305,7 +306,8 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
         &store,
         &admin,
         ["22b", "22c"],
-        "SCRIPT:read_skill_resource load odd-files assets/mark.bin references/long.md",
+        "SCRIPT:read_skill_resource load odd-files assets/mark.bin references/long.md \
+         references/nul.md",
         skills(),
     )
     .await;
@@ -336,7 +338,10 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
                     finish()
                 ]
             ]),
-            json!(["completed", [load(&odd), unreadable, unreadable, finish()]]),
+            json!([
+                "completed",
+                [load(&odd), unreadable, unreadable, unreadable, finish()]
+            ]),
         ]
     );
     // The output of a refused read stays a `tool_result` item.
@@ -352,6 +357,72 @@ async fn each_refused_read_gives_its_reason_and_the_run_continues() {
         ]])
     );
     assert_eq!(read_record(&admin, &unknown, 1).await, json!([[], []]));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_read_of_an_empty_file_or_a_file_of_white_space_gives_its_exact_text() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let blank = with_files(
+        "blank-files",
+        vec![("empty.md", Vec::new()), ("blank.md", b" \n".to_vec())],
+    );
+    let (_, run_id) = loaded_run(
+        &store,
+        &admin,
+        ["235", "236"],
+        "SCRIPT:read_skill_resource load blank-files empty.md blank.md",
+        set(vec![blank.clone()]),
+    )
+    .await;
+
+    // Each read settles, and the request after the reads sends the exact text of each file as
+    // a `skill_resource` item, not the tagged form of an empty result.
+    assert_eq!(
+        calls(&admin, &run_id).await,
+        json!([
+            "completed",
+            [
+                settled("load_skill", &skill_md(&blank)),
+                settled("read_skill_resource", ""),
+                settled("read_skill_resource", " \n"),
+                finish(),
+            ]
+        ])
+    );
+    assert_eq!(
+        sent(&admin, &run_id).await[2][3],
+        json!([
+            ["call_load_skill_0", skill_md(&blank)],
+            ["call_read_skill_resource_0", ""],
+            ["call_read_skill_resource_1", " \n"],
+        ])
+    );
+    let record = read_record(&admin, &run_id, 2).await;
+    let kept: Vec<Value> = record[0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(record[1].as_array().unwrap())
+        .map(|(source, item)| {
+            json!([
+                source["resource_path"],
+                source["trust"],
+                item["projection_mode"],
+                item["content"]
+            ])
+        })
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            json!(["empty.md", "skill_resource", "exact_required", ""]),
+            json!(["blank.md", "skill_resource", "exact_required", " \n"]),
+        ]
+    );
 }
 
 #[tokio::test]
