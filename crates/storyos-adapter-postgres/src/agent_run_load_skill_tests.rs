@@ -11,8 +11,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ACTIVE_COMPACTION_POSITIONS_PREFIX, ACTIVE_COMPACTION_REQUEST_PREFIX, CallValidationRefusal,
-    IntakeRefusal, LoadSkillRefusal, SKILL_MD_PATH, SkillFileInput, SkillPackage, SkillSet,
-    count_stored_text,
+    FINISH_DOES_NOT_COUNT_RESULT, IntakeRefusal, LoadSkillRefusal, SKILL_MD_PATH, SkillFileInput,
+    SkillPackage, SkillSet, count_stored_text,
 };
 use tokio_postgres::Client;
 
@@ -182,7 +182,11 @@ async fn a_load_settles_with_the_exact_skill_md_and_the_next_request_sends_it_as
     // response of the load with an unchanged input: it sends only the output, the exact text
     // with no tag. The closing request sends the output of `finish`.
     let output = json!({"call_id": "call_load_skill_0", "output": text});
-    let finish = json!({"call_id": "call_finish", "output": ""});
+    let finish = json!({
+        "call_id": "call_finish",
+        "output": "<tool_result source=\"call_finish\" state=\"empty\">The tool answered with no \
+                   entry.</tool_result>",
+    });
     assert_eq!(
         (
             calls(&admin, &run_id).await,
@@ -295,6 +299,13 @@ async fn each_refused_load_gives_its_reason_and_a_run_with_no_skill_declares_no_
                 "completed",
                 [
                     ["load_skill", "refused", "intake_reason", reason, true],
+                    [
+                        "finish",
+                        "settled",
+                        null,
+                        FINISH_DOES_NOT_COUNT_RESULT,
+                        true
+                    ],
                     finish,
                 ]
             ]),
@@ -375,6 +386,35 @@ async fn the_summary_request_of_a_compaction_at_the_step_of_the_load_sends_the_l
             json!([output]),
             vec![json!("decision"), json!(1), json!(TOOLS), json!([output])],
         )
+    );
+    // The current input of the later full input has no load item, so the load output is not a
+    // part of the current input digest (ADR 0085).
+    let context = admin
+        .query_one(
+            "SELECT ((payload #>> '{wire,serialized_payload}')::jsonb -> 'context')::text
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'
+                AND decision_position = 1",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(/*idx*/ 0);
+    let context: Value = serde_json::from_str(&context).unwrap();
+    let classes: Vec<_> = context
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["source_class"].clone())
+        .collect();
+    assert_eq!(
+        classes,
+        [
+            "conversation_summary",
+            "author_instruction",
+            "working_target",
+            "skill_catalog"
+        ]
     );
     let summary = record(&admin, &run_id, "compaction", 1).await;
     assert_eq!(
