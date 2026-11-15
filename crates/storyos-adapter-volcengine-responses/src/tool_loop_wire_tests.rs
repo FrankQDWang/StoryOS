@@ -194,6 +194,7 @@ async fn the_mapping_v6_declares_read_tool_result_and_the_mapping_v5_keeps_its_r
             tool_exposure: storyos_core::ToolExposure::compute(&storyos_core::ExposureFacts {
                 bound: &[],
                 model_registration_revision: registration,
+                skill_catalog: false,
             }),
             tool_choice: ToolChoice::Required,
             ..request

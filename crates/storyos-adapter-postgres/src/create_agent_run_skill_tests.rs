@@ -56,7 +56,7 @@ pub(crate) fn fixture(name: &str) -> SkillPackage {
 }
 
 /// Admits one package. Each frontmatter line `key: value` is one text field.
-fn package(name: &str, files: Vec<SkillFileInput>) -> SkillPackage {
+pub(crate) fn package(name: &str, files: Vec<SkillFileInput>) -> SkillPackage {
     let skill_md = files
         .iter()
         .find(|file| file.path == SKILL_MD_PATH)

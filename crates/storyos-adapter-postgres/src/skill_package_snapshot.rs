@@ -161,32 +161,46 @@ pub(crate) async fn skill_instruction_sources(
 ) -> Result<Vec<SkillInstructionSource>, tokio_postgres::Error> {
     let mut sources = Vec::with_capacity(requirements.len());
     for requirement in requirements {
-        let row = client
-            .query_opt(
-                "SELECT file.bytes
-                   FROM storyos.skill_package_snapshots AS snapshot
-                   JOIN storyos.skill_package_snapshot_files AS file
-                     ON (file.owner_user_id, file.project_id, file.package_digest) =
-                        (snapshot.owner_user_id, snapshot.project_id, snapshot.package_digest)
-                  WHERE snapshot.owner_user_id = $1::text::uuid
-                    AND snapshot.project_id = $2::text::uuid
-                    AND snapshot.package_digest = $3 AND snapshot.skill_name = $4
-                    AND file.path = $5",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &requirement.package_digest,
-                    &requirement.skill_name,
-                    &SKILL_MD_PATH,
-                ],
-            )
-            .await?;
+        let reference = SkillPackageReference {
+            name: requirement.skill_name.clone(),
+            package_digest: requirement.package_digest.clone(),
+        };
         sources.push(SkillInstructionSource {
             requirement: requirement.clone(),
-            skill_md: row.map(|row| row.get(/*idx*/ 0)),
+            skill_md: skill_md(client, scope, &reference).await?,
         });
     }
     Ok(sources)
+}
+
+/// The `SKILL.md` bytes of the Snapshot of `reference` in the Project, or `None` when the
+/// Snapshot has no such file. The read takes only Snapshot rows (ADR 0089 section 2).
+pub(crate) async fn skill_md(
+    client: &Client,
+    scope: &ProjectScope,
+    reference: &SkillPackageReference,
+) -> Result<Option<Vec<u8>>, tokio_postgres::Error> {
+    let row = client
+        .query_opt(
+            "SELECT file.bytes
+               FROM storyos.skill_package_snapshots AS snapshot
+               JOIN storyos.skill_package_snapshot_files AS file
+                 ON (file.owner_user_id, file.project_id, file.package_digest) =
+                    (snapshot.owner_user_id, snapshot.project_id, snapshot.package_digest)
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.package_digest = $3 AND snapshot.skill_name = $4
+                AND file.path = $5",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &reference.package_digest,
+                &reference.name,
+                &SKILL_MD_PATH,
+            ],
+        )
+        .await?;
+    Ok(row.map(|row| row.get(/*idx*/ 0)))
 }
 
 /// The pinned catalog of `run_id`, with the description of the Snapshot of each entry, in the

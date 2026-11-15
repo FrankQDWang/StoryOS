@@ -7,8 +7,8 @@
 
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ToolOutput, ToolOutputOrigin};
 use storyos_core::{
-    ContextSourceClass, CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate,
-    ToolResultForm, ToolResultOutput,
+    CurrentPassageAssemblyRecord, ToolCallState, ToolResultCandidate, ToolResultForm,
+    ToolResultOutput,
 };
 
 use crate::agent_run_tool_authority::damaged;
@@ -33,6 +33,8 @@ struct StoredToolCall {
     arguments: String,
     /// Whether an installed compaction of the Run sent this result as a stub (ADR 0093).
     installed_stub: bool,
+    /// The Skill of the pinned catalog of the Run that a `load_skill` call names.
+    skill: Option<storyos_core::SkillPackageReference>,
 }
 
 /// Opens the continuation RunStep after the last ToolCall of the active Decision resolved: binds
@@ -200,6 +202,7 @@ impl RunToolResults {
                 function_name: &call.function_name,
                 arguments: &call.arguments,
                 form: form(call),
+                skill: call.skill.as_ref(),
             })
             .collect()
     }
@@ -211,22 +214,31 @@ async fn stored_tool_calls(
 ) -> Result<Vec<StoredToolCall>, CompleteAgentRunError> {
     let rows = client
         .query(
-            "SELECT tool_call_id::text, call_id, owner_user_id::text, project_id::text,
-                    run_id::text, model_attempt_id::text, decision_id::text, state, result_text,
-                    tool_spec_revision, function_name, arguments::text,
+            "SELECT call.tool_call_id::text, call.call_id, call.owner_user_id::text,
+                    call.project_id::text, call.run_id::text, call.model_attempt_id::text,
+                    call.decision_id::text, call.state, call.result_text,
+                    call.tool_spec_revision, call.function_name, call.arguments::text,
                     EXISTS (SELECT 1 FROM storyos.active_context_compactions AS record
                              WHERE (record.owner_user_id, record.project_id, record.run_id) =
                                    (call.owner_user_id, call.project_id, call.run_id)
                                AND record.install_state = 'installed'
-                               AND record.stub_tool_call_ids ? call.tool_call_id::text)
+                               AND record.stub_tool_call_ids ? call.tool_call_id::text),
+                    entry.skill_name, entry.package_digest
                FROM storyos.tool_calls AS call
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-              ORDER BY decision_position, call_position",
+               -- The pinned catalog entry of the Skill that a `load_skill` call names.
+               LEFT JOIN storyos.agent_run_skill_catalog_entries AS entry
+                 ON (entry.owner_user_id, entry.project_id, entry.run_id) =
+                    (call.owner_user_id, call.project_id, call.run_id)
+                AND call.tool_spec_revision = $4
+                AND entry.skill_name = call.arguments ->> 'skill'
+              WHERE call.owner_user_id = $1::text::uuid AND call.project_id = $2::text::uuid
+                AND call.run_id = $3::text::uuid
+              ORDER BY call.decision_position, call.call_position",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &storyos_core::LOAD_SKILL_TOOL_SPEC.revision,
             ],
         )
         .await
@@ -266,12 +278,19 @@ async fn stored_tool_calls(
                 function_name: row.get(/*idx*/ 10),
                 arguments: canonical_arguments(row.get(/*idx*/ 11))?,
                 installed_stub: row.get(/*idx*/ 12),
+                skill: row.get::<_, Option<String>>(/*idx*/ 13).map(|name| {
+                    storyos_core::SkillPackageReference {
+                        name,
+                        package_digest: row.get(/*idx*/ 14),
+                    }
+                }),
             })
         })
         .collect()
 }
 
-/// The function outputs of the selected `tool_result` items of `assembly`, in item order. The
+/// The function outputs of `assembly`, in item order: each selected `tool_result` item and each
+/// output of a load, by the Core role rule (ADR 0089 section 3). The
 /// call of each output is the stored ToolCall that the item names. The outputs of the Decision
 /// `prior_decision_id` of the prior response answer that response; the others belong to earlier
 /// RunSteps (ADR 0085 section 3).
@@ -281,14 +300,7 @@ pub(crate) async fn tool_outputs(
     assembly: &CurrentPassageAssemblyRecord,
     prior_decision_id: Option<&str>,
 ) -> Result<Vec<ToolOutput>, CompleteAgentRunError> {
-    let Some(sources) = &assembly.operation_requirement.tool_results else {
-        return Ok(Vec::new());
-    };
-    let selected = assembly
-        .selected
-        .iter()
-        .filter(|item| item.source_class == ContextSourceClass::ToolResult);
-    let pairs: Vec<_> = sources.iter().zip(selected).collect();
+    let pairs = storyos_core::function_outputs(assembly);
     if pairs.is_empty() {
         return Ok(Vec::new());
     }

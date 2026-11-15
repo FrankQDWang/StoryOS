@@ -26,6 +26,7 @@ fn exposure(bound: &[BoundTool], model_registration_revision: &str) -> ToolExpos
     ToolExposure::compute(&ExposureFacts {
         bound,
         model_registration_revision,
+        skill_catalog: false,
     })
 }
 
@@ -126,21 +127,42 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
     let names = |exposure: ToolExposure| -> Vec<&str> {
         exposure.tools.iter().map(|tool| tool.name).collect()
     };
-    // The mappings `v6` and `v7` declare the same Host Tools (ADR 0089 section 3).
+    let with_catalog = |revision: &str| {
+        ToolExposure::compute(&ExposureFacts {
+            bound: &[],
+            model_registration_revision: revision,
+            skill_catalog: true,
+        })
+    };
+    // The mapping `v7` and the fake tool loop mapping declare `load_skill` only for a Run whose
+    // pinned catalog has a Skill (ADR 0089 section 3).
+    let mut without_skill = host(&HOST_TOOL_REGISTRATION);
+    without_skill
+        .tools
+        .retain(|tool| tool.spec.operation != crate::ToolOperation::LoadSkill);
     for revision in [
         HOST_FAKE_TOOL_LOOP_REGISTRATION.revision,
-        crate::AGENT_PLAN_READ_RESULT_REGISTRATION.revision,
         AGENT_PLAN_REGISTRATION.revision,
     ] {
-        assert_eq!(exposure(&[], revision), host(&HOST_TOOL_REGISTRATION));
+        assert_eq!(with_catalog(revision), host(&HOST_TOOL_REGISTRATION));
+        assert_eq!(exposure(&[], revision), without_skill);
     }
-    // A Run that pinned the Registration of the mapping `v5` keeps three Host Tools (ADR 0093).
-    let pinned = exposure(&[], crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision);
-    assert_eq!(pinned, host(&crate::FIRST_HOST_TOOL_REGISTRATION));
+    // A Run that pinned the Registration of the mapping `v6` keeps four Host Tools, and a Run
+    // that pinned the Registration of the mapping `v5` keeps three (ADR 0093).
+    let v6 = crate::AGENT_PLAN_READ_RESULT_REGISTRATION.revision;
+    let v5 = crate::AGENT_PLAN_TOOL_LOOP_REGISTRATION.revision;
+    for (revision, registration) in [
+        (v6, &crate::READ_RESULT_HOST_TOOL_REGISTRATION),
+        (v5, &crate::FIRST_HOST_TOOL_REGISTRATION),
+    ] {
+        assert_eq!(exposure(&[], revision), host(registration));
+        assert_eq!(with_catalog(revision), host(registration));
+    }
     assert_eq!(
         (
-            names(pinned),
-            names(exposure(&[], AGENT_PLAN_REGISTRATION.revision))
+            names(exposure(&[], v5)),
+            names(exposure(&[], v6)),
+            names(with_catalog(AGENT_PLAN_REGISTRATION.revision)),
         ),
         (
             vec!["propose_edit", "submit_research", "finish"],
@@ -149,11 +171,28 @@ fn a_registration_of_the_tool_loop_profile_declares_the_host_tools_of_its_mappin
                 "submit_research",
                 "read_tool_result",
                 "finish"
+            ],
+            vec![
+                "propose_edit",
+                "submit_research",
+                "read_tool_result",
+                "load_skill",
+                "finish"
             ]
         )
     );
     assert_eq!(
-        host(&HOST_TOOL_REGISTRATION).tools[3]
+        (
+            HOST_TOOL_REGISTRATION.revision,
+            crate::READ_RESULT_HOST_TOOL_REGISTRATION.revision
+        ),
+        (
+            "018f0000-0000-7001-8000-0000000e0103",
+            "018f0000-0000-7001-8000-0000000e0102"
+        )
+    );
+    assert_eq!(
+        host(&HOST_TOOL_REGISTRATION).tools[4]
             .declaration()
             .parameters,
         json!({"type": "object", "properties": {}, "required": [], "additionalProperties": false})
