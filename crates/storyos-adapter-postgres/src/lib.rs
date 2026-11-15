@@ -100,6 +100,7 @@ mod agent_run_expiry;
 mod agent_run_finish_rule;
 mod agent_run_host_tool;
 mod agent_run_lease;
+mod agent_run_load_skill;
 mod agent_run_observation;
 mod agent_run_prior_response;
 mod agent_run_propose_edit;

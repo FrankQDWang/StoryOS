@@ -1,6 +1,7 @@
 //! The Model Provider Adapter of the Contract-Faithful Fake Destination.
 
 mod create_plan;
+mod load_plan;
 mod propose_edit_plan;
 mod prose_changes;
 mod read_plan;
@@ -8,6 +9,7 @@ mod recovery_plan;
 mod research_plan;
 mod tool_loop_plan;
 
+pub use load_plan::LOAD_REASON;
 pub use tool_loop_plan::LIMIT_ANSWER;
 
 use storyos_application::{

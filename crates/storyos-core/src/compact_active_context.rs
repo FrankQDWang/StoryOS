@@ -235,16 +235,13 @@ fn sent_input_tokens(
     record: &crate::CurrentPassageAssemblyRecord,
     facts: &CompactionRequestFacts<'_>,
 ) -> u64 {
-    let (tool_results, current): (Vec<_>, Vec<_>) = record
+    let current = record
         .selected
         .iter()
-        .partition(|item| item.source_class == crate::ContextSourceClass::ToolResult);
-    let outputs: u64 = record
-        .operation_requirement
-        .tool_results
+        .filter(|item| !crate::is_function_output(record, item));
+    let tool_results = crate::function_outputs(record);
+    let outputs: u64 = tool_results
         .iter()
-        .flatten()
-        .zip(&tool_results)
         .filter(|(source, _)| facts.prior_decision_id == Some(source.decision_id.as_str()))
         .map(|(_, item)| item.token_count)
         .sum();
@@ -518,9 +515,16 @@ pub fn compaction_assembly_record(
         .iter()
         .map(crate::ToolResultSource::source_version)
         .collect();
-    let is_sent = |class: crate::ContextSourceClass, version: &String| {
-        class == crate::ContextSourceClass::ToolResult && versions.contains(version)
-    };
+    // The output of a load that waits for this request is a `skill_instruction` item.
+    let outputs: Vec<(crate::ContextSourceClass, &String)> = decision
+        .selected
+        .iter()
+        .filter(|item| crate::is_function_output(decision, item))
+        .filter(|item| versions.contains(&item.source_version))
+        .map(|item| (item.source_class, &item.source_version))
+        .collect();
+    let is_sent =
+        |class: crate::ContextSourceClass, version: &String| outputs.contains(&(class, version));
     record
         .considered
         .retain(|item| is_sent(item.source_class, &item.source_version));

@@ -55,6 +55,7 @@ fn candidate<'a>(
         function_name: "web_search",
         arguments: "{}",
         form: ToolResultForm::Exact,
+        skill: None,
     }
 }
 

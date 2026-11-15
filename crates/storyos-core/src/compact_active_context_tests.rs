@@ -544,6 +544,7 @@ fn the_full_input_of_a_later_request_counts_each_stub_and_not_its_exact_result()
                 function_name: "web_search",
                 arguments: r#"{"query":"tides","result_count":null}"#,
                 form,
+                skill: None,
             })
             .collect()
     };

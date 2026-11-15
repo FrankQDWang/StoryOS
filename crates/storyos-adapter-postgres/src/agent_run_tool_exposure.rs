@@ -57,9 +57,25 @@ pub(crate) async fn tool_exposure(
             compatibility: ToolCompatibilityDecision::parse(row.get(/*idx*/ 0)),
         });
     }
+    // The pinned catalog of the Run decides the Skill Tool (ADR 0089 section 3).
+    let skill_catalog: bool = client
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM storyos.agent_run_skill_catalog_entries
+                             WHERE owner_user_id = $1::text::uuid
+                               AND project_id = $2::text::uuid AND run_id = $3::text::uuid)",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .get(/*idx*/ 0);
     Ok(ToolExposure::compute(&ExposureFacts {
         bound: &bound,
         model_registration_revision: &run.model_registration_revision,
+        skill_catalog,
     }))
 }
 

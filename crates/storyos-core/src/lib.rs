@@ -22,6 +22,7 @@ mod function_calling;
 mod grant_scope;
 mod host_fake_profile;
 mod host_tool;
+mod load_skill;
 mod manuscript_payload;
 mod model_output;
 mod model_registration;
@@ -167,8 +168,10 @@ pub use host_fake_profile::{
 };
 pub use host_tool::{
     FINISH_DOES_NOT_COUNT_RESULT, FIRST_HOST_TOOL_REGISTRATION, HOST_TOOL_REGISTRATION,
-    HostToolRegistration, execute_host_tool, host_tool, host_tool_result,
+    HOST_TOOL_REGISTRATIONS, HostToolRegistration, READ_RESULT_HOST_TOOL_REGISTRATION,
+    execute_host_tool, host_tool, host_tool_result,
 };
+pub use load_skill::{LOAD_SKILL_TOOL_SPEC, LoadSkillRefusal, admit_skill_load, skill_load_result};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
     COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
@@ -329,8 +332,9 @@ pub use tool_result::{
     BoundedToolResult, TOOL_RESULT_SOURCE_TAG_INSTRUCTION, ToolResultProjection, Unavailability,
 };
 pub use tool_result_context::{
-    TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput, ToolResultSource,
-    assemble_tool_result_continuation, stub_tool_call_ids,
+    SKILL_LOAD_TRUST, TOOL_RESULT_TRUST, ToolResultCandidate, ToolResultForm, ToolResultOutput,
+    ToolResultSource, assemble_tool_result_continuation, function_outputs, is_function_output,
+    is_skill_load_output, stub_tool_call_ids,
 };
 pub use tool_result_stub::TOOL_RESULT_STUB_TOKEN_LIMIT;
 pub use tool_spec::{
