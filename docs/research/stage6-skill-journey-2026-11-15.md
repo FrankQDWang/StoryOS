@@ -49,7 +49,26 @@ Each row is one Model Attempt that the guard counted. The time is the claim time
 | 19 | 08:09:28 | R-F, 2 | `resp_0217947301690407f7defdca68741f744da3a9cb51804c44fe0bc` | `finish` | 5,449 / 263 |
 | 20 | 08:09:37 | R-F, 3 | `resp_0217947301780123a5ef8b5d1eba84c17b54858e5dd40fdae4409` | final answer | 5,759 / 287 |
 
-Total: **20 model requests (plan 19, cap 25), 111,254 reported input tokens (plan about 107,000), 11,075 output tokens, 0 Exa exchanges, no Retrieve, no recovery.** Each Model Attempt is `settled`. No anomaly occurred: step 1 used two requests more than its plan, step 4 used two less, and step 7 used one more (the refused load). Step 6 used its planned four, one of them the cancelled first send.
+Total: **20 model requests (plan 19, cap 25), 111,254 reported input tokens (plan about 107,000), 11,075 output tokens, 0 Exa exchanges, no Retrieve, no recovery.** Each Model Attempt is `settled`.
+
+**Anomaly: one request more than the plan.** The delivery document ("Live model requests") makes a request count above the plan an anomaly.
+
+| Step | Planned | Sent | Requests |
+| --- | --- | --- | --- |
+| 1. Select and run (R-A) | 3 | 5 | 1 to 5; two more because of finding F1 |
+| 2 and 3. Load and read (R-B) | 4 | 4 | 6 to 9 |
+| 4. Two Skills in one turn (R-C) | 5 | 3 | 10 to 12; no read and no extra Tool call |
+| 6. A change by the operator (first send, R-D) | 4 | 4 | 13 to 16; request 13 is the cancelled first send (finding F2) |
+| 7. Continue without the Skill (R-F) | 3 | 4 | 17 to 20 |
+| **Total** | **19** | **20** | |
+
+Steps 0a, 0b, 5, and 6a send no request, as planned.
+
+The one more request is request 17, `resp_0217947301063054e0d847e114bd906533eadfa024bfe6dcdb0bc`: the refused `load_skill` call of the removed `internal-comms` in step 7 (finding F5). The totals stayed below the guard cap of 25 and the ticket limits of 30 requests and 400,000 reported input tokens. The executor reported the anomaly to the coordinator after Spec review round 1.
+
+Disposition of the coordinator, 2026-11-15, in the body of #415:
+
+> the journey sent 20 requests against a plan of 19 (111,254 reported input tokens against about 107,000). The one more request is the refused `load_skill` call of the removed Skill in the step "Continue without the Skill". The executor reported it as the anomaly that the delivery document names. It is accepted with no second run: the totals are inside the limits of this criterion (30 requests, 400,000 tokens) and inside the guard of the plan (25 requests), each request is in the log, and the cause is a choice of the model that the record gives as a finding. The record states the planned count, the sent count, and this disposition.
 
 Run identifiers: R-A `01a1de37-ac70-7e51-bd98-f1f1ceaf9ad6`, R-B `01a1de3a-3a6d-7e10-8575-1c05719da4d9`, R-C `01a1de3a-f85c-7ef2-aaa6-a1a09bbaeab1`, first send of step 6 `01a1de3c-a5ce-7a51-84f3-65ab88f2bfa9` (cancelled), R-D `01a1de3d-e03a-77d0-a93a-96a438805f64`, R-F `01a1de40-13d1-72c2-9f03-907c824e1d63`. R-A to the first send of step 6 are in Conversation `01a1de37-ac70-7e51-bd98-f1efbbf95539`; R-D and R-F are in the new Conversation `01a1de3d-e03a-77d0-a93a-969e17e42ff7`.
 
@@ -91,11 +110,11 @@ In the exact-dist journey and in steps 1 and 4 of the live journey, the author s
 2. In that one Run the fake model loads `dialogue-style-guide` and reads `references/examples.md`. Both ToolCalls are `settled` with no Destination Attempt. RunStep 0 selects the exact `SKILL.md` of `internal-comms` with its package digest. RunStep 2 selects both `SKILL.md` texts and the exact file. After a reload the panel shows 使用了你选择的技能「internal-comms」 and 使用了技能「dialogue-style-guide」：<reason>.
 3. A `load_skill` of `no-such-skill` is refused with `skill_not_in_catalog`, the Run completes with no `skill_uses`, and only the history turn of the first Run has Skill lines.
 4. The picker shows an earlier digest of `dialogue-style-guide` (the list read of the panel is changed, as after a change by the operator). A chip with it gives HTTP 422, the one sentence, the same text in the composer, and no chip. The same text sent again completes a Run.
-5. The Project Receipts are exactly the actions of the journey.
+5. The Project Export Archive and the Project Receipts. The public `exportProjectArchive` command and the Worker export the archive. Its tables hold 2 SkillPackage Snapshots (the two fixture digests), 8 Snapshot files, 6 pinned catalog entries (two for each of the three Runs), and the 3 Skill ToolCalls, the same counts as the database. The Project Receipts are exactly the actions of the journey.
 
 The limits (8 loads, 16 reads, 32 Skills) and the restart with a changed directory stay with the tests of their owners (ADR 0075).
 
-The physical recovery drill (`scripts/verify-recovery-hold.sh`, in `make check-full`) now runs this journey on the primary database before the backup. The fact function `stage6_skill_facts` records the count and a digest of the SkillPackage Snapshots, their files, the pinned catalogs, and the ToolCalls of `load_skill` and `read_skill_resource`. It refuses an empty family and compares them after the restore.
+The physical recovery drill (`scripts/verify-recovery-hold.sh`, in `make check-full`) now runs this journey on the primary database before the backup. The fact function `stage6_skill_facts` records the count and a digest of the SkillPackage Snapshots, their files, the pinned catalogs, and the ToolCalls of `load_skill` and `read_skill_resource`. It refuses an empty family and compares them after the restore. The fact function `stage6_skill_export_facts` records the export, the immutable root, the size, and a digest of the four Skill tables of the Project Export Archive of this journey (`skill_package_snapshots`, `skill_package_snapshot_files`, `agent_run_skill_catalog_entries`, `tool_calls`). It refuses a missing table and compares them after the restore.
 
 The Stage 2 AI-disabled journeys (`s2-jrn-001` and `s2-workspace`) run in `make check-full` against a Server with no model destination. That Server now has `STORYOS_SKILLS_DIR` on the fixtures (`start_ai_disabled_exact_dist_server`), so they show that such a Server starts and serves the manual editor in each state.
 
