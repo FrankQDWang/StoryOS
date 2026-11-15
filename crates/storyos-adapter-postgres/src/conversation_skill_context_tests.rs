@@ -80,7 +80,7 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
     // The prior reference expires, and the deployment no longer has the two Skills. The text
     // comes from the Snapshots of the selections.
     let (outline, without) = other_set();
-    let (scope, expired) = later_run(
+    let (expired_scope, expired) = later_run(
         &store,
         &admin,
         ["ca1", "ca2", "ca3"],
@@ -91,7 +91,7 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
         (without, Vec::new()),
     )
     .await;
-    complete(&store, &admin, &scope, &expired).await;
+    complete(&store, &admin, &expired_scope, &expired).await;
     let compacting = format!(
         "{ACTIVE_COMPACTION_REQUEST_PREFIX} {ACTIVE_COMPACTION_POSITIONS_PREFIX} 1. Help again."
     );
@@ -134,11 +134,11 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
         of_conversation(&packages[..1]).as_array().unwrap().clone(),
     ]
     .concat();
-    let uses = |run_id: String| {
-        let (store, scope) = (&store, &scope);
+    let uses = |scope: ProjectScope, run_id: String| {
+        let store = &store;
         async move {
             store
-                .read_agent_run(scope, &run_id, &AgentRunReadSelection::Current)
+                .read_agent_run(&scope, &run_id, &AgentRunReadSelection::Current)
                 .await
                 .unwrap()
                 .unwrap()
@@ -146,31 +146,32 @@ async fn a_later_run_sends_each_skill_of_the_conversation_only_with_a_full_input
         }
     };
 
+    let outline = std::slice::from_ref(&outline);
+    let (other_catalog, other_pinned) = ([super::catalog(outline)], pinned(outline));
+
     assert_eq!(
         (
+            uses(expired_scope, expired.clone()).await,
             sent(&admin, &expired).await,
             requirements(&admin, &expired).await,
             sent(&admin, &compacted).await,
             sent(&admin, &steered).await,
             requirements(&admin, &steered).await,
-            uses(steered.clone()).await,
+            uses(scope.clone(), steered.clone()).await,
         ),
         (
+            // A full input that sends a Skill of the Conversation again adds no Skill use.
+            Some(Vec::new()),
             // The first request continues the prior response and sends no text of a Skill of the
             // Conversation. The full input after the expired reference sends it.
             json!([
-                [
-                    "rejected_create",
-                    0,
-                    [],
-                    [super::catalog(&[outline.clone()])]
-                ],
-                ["decision", 0, text, [super::catalog(&[outline.clone()])]],
+                ["rejected_create", 0, [], other_catalog],
+                ["decision", 0, text, other_catalog],
                 ["decision", 1, [], []],
             ]),
             json!([
-                [0, of_conversation(&packages), pinned(&[outline.clone()])],
-                [1, of_conversation(&packages), pinned(&[outline])],
+                [0, of_conversation(&packages), other_pinned],
+                [1, of_conversation(&packages), other_pinned],
             ]),
             // The summary request sends no project content. The later request has a full input.
             json!([

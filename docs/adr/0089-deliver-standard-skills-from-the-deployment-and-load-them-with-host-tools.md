@@ -112,7 +112,7 @@ The author selects a Skill with the `$` picker, which lists the catalog of the d
 
 No record holds the Skills of a Project Conversation. In a later message, the model can still have the text from the Provider conversation, and the Agent loads the Skill again when it does not.
 
-The author changed this rule on 2026-11-15, after the Stage 6 release, for a Skill that the author selected. [The follow-up ticket](https://github.com/FrankQDWang/StoryOS/issues/1547) delivers the change, and the two paragraphs above tell the behavior until it merges.
+The author changed this rule on 2026-11-15, after the Stage 6 release, for a Skill that the author selected. [The follow-up ticket](https://github.com/FrankQDWang/StoryOS/issues/1547) delivers the change. The two paragraphs above stay true for a Skill that the Agent loaded.
 
 - A Skill that the author selected stays in effect for the later turns of the same Project Conversation. The author selects it one time.
 - While the Provider conversation continues, the Host sends nothing more, because the model has the text. A request after a compaction, or after an expired prior reference, has a full input and no prior response. In such a request, the Host sends the `SKILL.md` of that Skill again.
@@ -122,6 +122,14 @@ The author changed this rule on 2026-11-15, after the Stage 6 release, for a Ski
 - Inside one Run, the compaction rule of section 3 stays: the `SKILL.md` text of each Skill of the Run, loaded or selected, keeps its exact form after a compaction. The author confirmed this on 2026-11-15, because the Agent is at work with that text.
 - The usage record does not change. The turn of the selection names the Skill, and a later turn adds no line for it.
 - The author surface gets no new control. A new Project Conversation ends the effect.
+
+[#1547](https://github.com/FrankQDWang/StoryOS/issues/1547) recorded these names on 2026-11-15:
+
+- The provenance of the Run Skill Requirement of a Skill of the Conversation is `conversation_selected`. The Operation Requirement of each RunStep of the later Run records it in `skill_requirements`, after the `author_selected` requirements of the Run, in the order of the Skill names.
+- The Core function `conversation_skill_requirements` gives these requirements from the Skill requirements of the earlier Runs of the Conversation, oldest Run first. Only an `author_selected` requirement is a selection, so a Run passes on only the Skills that the author selected in it. The 8 names with the newest selections include the names that the new Run selects, because they are the newest selections. Thus at most 8 Skills that the author selected are in effect in one Run (`CONVERSATION_SKILL_LIMIT`). The store reads the requirements of the first RunStep of each earlier Run of the Conversation in the order of the Run identities, also of a cancelled or failed Run.
+- The Core role rule `is_conversation_skill` tells the `skill_instruction` item of such a Skill. The item has the exact `SKILL.md` of the Snapshot with the digest of the selection, the digest as its source version, and the projection mode `exact_required`. The mapping `v7` sends it as one `Skill instruction` section, after the sections of the Skills that the Run selects itself, so the request form does not change.
+- A request with a prior response does not send the item. The item is not a part of the current input digest (ADR 0085), and the expected input of a request that continues a prior response does not count it (ADR 0056). The full input of the later request of a compaction counts it.
+- The load rules and `skill_uses` count only the `author_selected` requirements. A `load_skill` call for the name of a Skill of the Conversation, and a `read_skill_resource` call for a file of it, are decided as for a Skill that the Run does not have.
 
 ### 6. Joint use
 
