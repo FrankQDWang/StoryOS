@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 import type { BrowserContext, Page } from "playwright";
 import { expect } from "playwright/test";
 
-import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { digestExportProjectArchive, exportProjectArchive, getChapter, getExportOperation }
+  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, ListSkillsResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { USER_A, drainLeftoverWork, inspectRun, prepare, settleRun } from "./acceptance.ts";
+import { BINDING, USER_A, challenged, drainLeftoverWork, id, inspectRun, prepare, settleOnce, settleRun }
+  from "./acceptance.ts";
+import { zipStoreFiles } from "./archive.ts";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration.ts";
 import { assertProjectReceipts } from "./project-receipts.ts";
 
@@ -48,6 +51,37 @@ function attemptAt(runId: string, position: number) {
 function skillItems(run: GetAgentRunResponse) {
   return run.context.selected.filter((item) => item.source_class.startsWith("skill_"))
     .map((item) => [item.source_class, item.source_version, item.content]);
+}
+
+/** The number of rows of the Project in one table. */
+async function projectRowCount(table: string, projectId: string) {
+  return Number(await queryStoryOSPostgres(
+    `SELECT count(*)::text FROM storyos.${table} WHERE project_id = '${projectId}'::uuid`));
+}
+
+/**
+ * Exports the Project Export Archive through the public command and the Worker, and returns its canonical tables.
+ * The recovery drill compares this export before and after the restore.
+ */
+async function exportedTables(baseUrl: string, setup: Awaited<ReturnType<typeof prepare>>) {
+  const request = { command_schema: "storyos.command.export-project-archive.request.v1" as const,
+    export_project_archive_input: { ...BINDING, correlation_id: id("6e0a17"),
+      archive_profile: "storyos.project-export.v1" as const,
+      archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" as const } };
+  const key = id("6e0a18");
+  const { projectId, fetchImpl } = setup;
+  const admitted = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/exports",
+    request.command_schema, await digestExportProjectArchive(request), key,
+    (antiForgery) => exportProjectArchive({ baseUrl, projectId, fetchImpl, idempotencyKey: key, antiForgery, request }));
+  assert.ok(admitted.effect.kind === "admitted");
+  const exportId = admitted.effect.export_id;
+  await settleOnce();
+  assert.equal((await getExportOperation({ baseUrl, projectId, exportId, fetchImpl })).status, "ready");
+  const download = await fetchImpl(`${baseUrl}/api/v1/projects/${projectId}/exports/${exportId}`,
+    { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+  assert.equal(download.status, 200);
+  const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+  return (table: string) => JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`))) as unknown[];
 }
 
 /**
@@ -174,8 +208,24 @@ export async function verifyProductionSkillJourney(context: BrowserContext): Pro
     assert.equal(plain.status, "completed");
     assert.equal(Object.hasOwn(plain, "skill_uses"), false);
     assert.deepEqual(errors, []);
+
+    // The Project Export Archive holds each Skill record of the journey: both Snapshots with their eight files, the
+    // pinned catalog of each of the three Runs, and the three Skill ToolCalls.
+    const archived = await exportedTables(server.baseUrl, setup);
+    const skillTools = (rows: unknown[]) => rows.filter((row) =>
+      ["load_skill", "read_skill_resource"].includes((row as { function_name: string }).function_name));
+    for (const [table, count] of [["skill_package_snapshots", 2], ["skill_package_snapshot_files", 8],
+      ["agent_run_skill_catalog_entries", 6]] as const) {
+      assert.equal(archived(table).length, count, table);
+      assert.equal(await projectRowCount(table, setup.projectId), count, table);
+    }
+    assert.deepEqual((archived("skill_package_snapshots") as { package_digest: string }[])
+      .map((row) => row.package_digest).sort(), [COMMS.package_digest, DIALOGUE.package_digest].sort());
+    assert.equal(skillTools(archived("tool_calls")).length, 3);
+    assert.equal(archived("tool_calls").length, await projectRowCount("tool_calls", setup.projectId));
     await assertProjectReceipts([setup.projectId], { projects: 1, receipts: { createProject: 1, updateProjectAssistance: 1,
-      createVolume: 1, createChapter: 1, applyAuthorEdit: 1, createAgentRun: 3 }, authorActions: 3 });
+      createVolume: 1, createChapter: 1, applyAuthorEdit: 1, createAgentRun: 3, exportProjectArchive: 1 },
+      authorActions: 3 });
   } finally {
     for (const close of started.reverse()) await close();
   }

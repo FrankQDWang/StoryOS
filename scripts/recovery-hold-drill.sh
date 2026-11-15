@@ -214,3 +214,31 @@ assert_stage6_skill_facts_present() {
     exit 1
   fi
 }
+
+# The Project Export Archive of the Skill journey: for each Skill table of the archive, the export, the
+# immutable root, the size, and a digest of the payload.
+stage6_skill_export_facts() {
+  facts_container=$1
+  docker exec "$facts_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT entry.path || '|' || manifest.export_id || ':' || manifest.immutable_root || '|' ||
+            length(entry.payload) || '|' || md5(entry.payload)
+       FROM storyos.projects AS project
+       JOIN storyos.project_export_manifests AS manifest
+         ON (manifest.owner_user_id, manifest.project_id) = (project.owner_user_id, project.project_id)
+       JOIN storyos.project_export_entries AS entry
+         ON (entry.owner_user_id, entry.project_id, entry.export_id) =
+            (manifest.owner_user_id, manifest.project_id, manifest.export_id)
+      WHERE project.title = 'Skill journey'
+        AND entry.path IN ('canonical/skill_package_snapshots.json',
+          'canonical/skill_package_snapshot_files.json', 'canonical/agent_run_skill_catalog_entries.json',
+          'canonical/tool_calls.json')
+      ORDER BY entry.path"
+}
+
+assert_stage6_skill_export_facts_present() {
+  if [ "$(printf '%s\n' "$1" | grep -c '|[0-9a-f-]*:[^|]*|[1-9][0-9]*|[0-9a-f]\{32\}$')" != "4" ] \
+    || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != "4" ]; then
+    echo "The Skill journey did not export each Stage 6 Skill table: $1" >&2
+    exit 1
+  fi
+}
